@@ -1,6 +1,14 @@
 (function(exports) {
     "use strict";
 
+    function fetch(path, responseType) {
+        var request = new XMLHttpRequest();
+        request.open("GET", path, true);
+        request.responseType = (responseType || "arraybuffer");
+        request.send();
+        return request;
+    }
+
     // A dumb hack to have "multiline strings".
     function M(X) { return X.join('\n'); }
 
@@ -271,16 +279,15 @@
             viewer.resetCamera();
         };
         viewer.loadScene = function(filename) {
-            fetch(filename).then(function(r) {
-                return r.arrayBuffer();
-            }).then(function(r) {
+            fetch(filename).onload = function() {
                 var textures = document.querySelector('#textures');
                 textures.innerHTML = '';
 
+                var r = this.response;
                 var decompressed = LZ77.decompress(r);
                 var bmd = BMD.parse(decompressed);
                 viewer.setBMD(bmd);
-            });
+            };
         };
 
         var keysDown = {};
