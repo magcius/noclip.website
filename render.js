@@ -359,6 +359,13 @@
                 amt = mult;
             tmp[12] = amt;
 
+            amt = 0;
+            if (isKeyDown('Q'))
+                amt = -mult;
+            else if (isKeyDown('E'))
+                amt = mult;
+            tmp[13] = amt;
+
             if (isKeyDown('B'))
                 mat4.identity(camera);
             if (isKeyDown('C'))
