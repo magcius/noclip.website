@@ -145,24 +145,7 @@ namespace NITRO_BMD {
         return material;
     }
 
-    function textureToCanvas(texture:Texture) {
-        const canvas = document.createElement("canvas");
-        canvas.width = texture.width;
-        canvas.height = texture.height;
-
-        const ctx = canvas.getContext("2d");
-        const imgData = ctx.createImageData(canvas.width, canvas.height);
-
-        for (let i = 0; i < imgData.data.length; i++)
-            imgData.data[i] = texture.pixels[i];
-
-        canvas.title = texture.name;
-
-        ctx.putImageData(imgData, 0, 0);
-        return canvas;
-    }
-
-    class Texture {
+    export class Texture {
         id: number;
         name: string;
 
@@ -204,11 +187,10 @@ namespace NITRO_BMD {
 
         texture.pixels = NITRO_Tex.readTexture(texture.format, texture.width, texture.height, texData, palData, color0);
 
-        if (texture.pixels)
-            document.querySelector('#textures').appendChild(textureToCanvas(texture));
-
         texture.isTranslucent = (texture.format === NITRO_Tex.Format.Tex_A5I3 ||
                                  texture.format === NITRO_Tex.Format.Tex_A3I5);
+
+        bmd.textures.push(texture);
 
         return texture;
     }
@@ -216,6 +198,7 @@ namespace NITRO_BMD {
     export class BMD {
         scaleFactor: number;
         models: Model[];
+        textures: Texture[];
 
         modelCount: number;
         modelOffsBase: number;
@@ -247,6 +230,7 @@ namespace NITRO_BMD {
         bmd.materialCount = view.getUint32(0x24, true);
         bmd.materialOffsBase = view.getUint32(0x28, true);
 
+        bmd.textures = [];
         bmd.models = [];
         for (var i = 0; i < bmd.modelCount; i++)
             bmd.models.push(parseModel(bmd, view, i));

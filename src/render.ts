@@ -76,6 +76,30 @@ namespace Render {
         TRANSLUCENT = 0x02,
     };
 
+    class Texture implements Viewer.Texture {
+        bmdTex:NITRO_BMD.Texture;
+        title:string;
+
+        constructor(bmdTex:NITRO_BMD.Texture) {
+            this.bmdTex = bmdTex;
+        }
+
+        toCanvas() {
+            const canvas = document.createElement("canvas");
+            canvas.width = this.bmdTex.width;
+            canvas.height = this.bmdTex.height;
+
+            const ctx = canvas.getContext("2d");
+            const imgData = ctx.createImageData(canvas.width, canvas.height);
+
+            for (let i = 0; i < imgData.data.length; i++)
+                imgData.data[i] = this.bmdTex.pixels[i];
+
+            ctx.putImageData(imgData, 0, 0);
+            return canvas;
+        }
+    }
+
     export class Scene implements Viewer.Scene {
         path:string;
         textures:Viewer.Texture[];
@@ -87,6 +111,9 @@ namespace Render {
             this.program = new NITRO_Program();
             this.bmd = bmd;
 
+            this.textures = bmd.textures.map((texture) => {
+                return new Texture(texture);
+            });
             this.modelFuncs = bmd.models.map((bmdm) => this.translateModel(gl, bmdm));
         }
 
