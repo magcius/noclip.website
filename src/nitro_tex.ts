@@ -2,22 +2,22 @@ namespace NITRO_Tex {
 
     // Read DS texture formats.
 
-    export var Format = {
-        Tex_None:       0x00,
-        Tex_A3I5:       0x01,
-        Tex_Palette4:   0x02,
-        Tex_Palette16:  0x03,
-        Tex_Palette256: 0x04,
-        Tex_CMPR_4x4:   0x05,
-        Tex_A5I3:       0x06,
-        Tex_Direct:     0x07,
+    export enum Format {
+        Tex_None =       0x00,
+        Tex_A3I5 =       0x01,
+        Tex_Palette4 =   0x02,
+        Tex_Palette16 =  0x03,
+        Tex_Palette256 = 0x04,
+        Tex_CMPR_4x4 =   0x05,
+        Tex_A5I3 =       0x06,
+        Tex_Direct =     0x07,
     };
 
     function color(a, r, g, b) {
         return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
-    function rgb5(pixel, alpha) {
+    function rgb5(pixel:number, alpha:number) {
         var r, g, b;
         r = (pixel & 0x7c00) >>> 10;
         r = (r << (8-5)) | (r >>> (10-8));
@@ -31,7 +31,7 @@ namespace NITRO_Tex {
         return color(alpha, r, g, b);
     }
 
-    function writeColor(pixels, dstPixel, pixel) {
+    function writeColor(pixels:Uint8Array, dstPixel:number, pixel:number) {
         var dstOffs = dstPixel * 4;
         var a = ((pixel >>> 24) & 0xFF);
         var r = ((pixel >>> 16) & 0xFF);
@@ -43,7 +43,7 @@ namespace NITRO_Tex {
         pixels[dstOffs++] = a;
     }
 
-    function readTexture_A3I5(width, height, texData, palData) {
+    function readTexture_A3I5(width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer) {
         var pixels = new Uint8Array(width * height * 4);
         var texView = new DataView(texData);
         var palView = new DataView(palData);
@@ -64,7 +64,7 @@ namespace NITRO_Tex {
         return pixels;
     }
 
-    function readTexture_Palette16(width, height, texData, palData, color0) {
+    function readTexture_Palette16(width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer, color0:boolean) {
         var pixels = new Uint8Array(width * height * 4);
         var texView = new DataView(texData);
         var palView = new DataView(palData);
@@ -85,7 +85,7 @@ namespace NITRO_Tex {
         return pixels;
     }
 
-    function readTexture_CMPR_4x4(width, height, texData, palData) {
+    function readTexture_CMPR_4x4(width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer) {
         function mix(p1, p2) {
             var a = (((p1 >>> 24) & 0xFF) + ((p2 >>> 24) & 0xFF)) >>> 1;
             var r = (((p1 >>> 16) & 0xFF) + ((p2 >>> 16) & 0xFF)) >>> 1;
@@ -178,7 +178,7 @@ namespace NITRO_Tex {
         return pixels;
     }
 
-    function readTexture_A5I3(width, height, texData, palData) {
+    function readTexture_A5I3(width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer) {
         var pixels = new Uint8Array(width * height * 4);
         var texView = new DataView(texData);
         var palView = new DataView(palData);
@@ -199,7 +199,7 @@ namespace NITRO_Tex {
         return pixels;
     }
 
-    function readTexture_Direct(width, height, texData) {
+    function readTexture_Direct(width:number, height:number, texData:ArrayBuffer) {
         var pixels = new Uint8Array(width * height * 4);
         var texView = new DataView(texData);
         var srcOffs = 0;
@@ -214,7 +214,7 @@ namespace NITRO_Tex {
         return pixels;
     }
 
-    export function readTexture(format, width, height, texData, palData, color0):Uint8Array {
+    export function readTexture(format:Format, width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer, color0:boolean) {
         switch (format) {
         case Format.Tex_A3I5:      return readTexture_A3I5(width, height, texData, palData);
         case Format.Tex_Palette16: return readTexture_Palette16(width, height, texData, palData, color0);
