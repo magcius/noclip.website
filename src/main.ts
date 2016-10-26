@@ -1,6 +1,6 @@
 
 import { Viewer, Scene, SceneDesc } from 'viewer';
-import * as SM64DS from 'sm64ds';
+import * as SM64DS from 'sm64ds/scenes';
 
 export class Main {
     viewer:Viewer;

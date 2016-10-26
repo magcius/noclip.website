@@ -1,8 +1,10 @@
 
-/// <reference path="decl.d.ts" />
+/// <reference path="../decl.d.ts" />
 
 import * as LZ77 from 'lz77';
 import * as Viewer from 'viewer';
+import * as NITRO_BMD from './nitro_bmd';
+import * as NITRO_GX from './nitro_gx';
 
 var DL_VERT_SHADER_SOURCE = `
     precision mediump float;
