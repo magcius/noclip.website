@@ -1039,6 +1039,7 @@ var Render;
     var Texture = (function () {
         function Texture(bmdTex) {
             this.bmdTex = bmdTex;
+            this.title = bmdTex.name;
         }
         Texture.prototype.toCanvas = function () {
             var canvas = document.createElement("canvas");

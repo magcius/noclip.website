@@ -82,6 +82,7 @@ namespace Render {
 
         constructor(bmdTex:NITRO_BMD.Texture) {
             this.bmdTex = bmdTex;
+            this.title = bmdTex.name;
         }
 
         toCanvas() {
