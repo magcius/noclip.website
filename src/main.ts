@@ -1,20 +1,20 @@
 
-import { Viewer, Scene, SceneDesc } from 'viewer';
+import { Viewer, Scene, SceneDesc, SceneGroup } from 'viewer';
 import * as SM64DS from 'sm64ds/scenes';
 
 export class Main {
     viewer:Viewer;
-    sceneDescs: SceneDesc[];
+    groups:SceneGroup[];
 
     constructor() {
         const canvas = document.querySelector('canvas');
         this.viewer = new Viewer(canvas);
         this.viewer.start();
 
-        this.sceneDescs = [];
+        this.groups = [];
 
         // The "plugin" part of this.
-        this.sceneDescs = this.sceneDescs.concat(SM64DS.loadSceneDescs());
+        this.groups.push(SM64DS.sceneGroup);
 
         this.makeUI();
     }
@@ -39,16 +39,24 @@ export class Main {
         const pl = document.querySelector('#pl');
 
         const select = document.createElement('select');
-        this.sceneDescs.forEach(function(entry) {
-            const option = document.createElement('option');
-            option.textContent = entry.name;
-            select.appendChild(option);
+        this.groups.forEach((group:SceneGroup) => {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = group.name;
+            select.appendChild(optgroup);
+
+            group.sceneDescs.forEach((sceneDesc) => {
+                const option = document.createElement('option');
+                option.textContent = sceneDesc.name;
+                (<any> option).sceneDesc = sceneDesc;
+                optgroup.appendChild(option);
+            });
         });
         pl.appendChild(select);
         const button = document.createElement('button');
         button.textContent = 'Load';
         button.addEventListener('click', () => {
-            const sceneDesc = this.sceneDescs[select.selectedIndex];
+            const option = select.options[select.selectedIndex];
+            const sceneDesc = (<any> option).sceneDesc;
             this.loadSceneDesc(sceneDesc);
         });
         pl.appendChild(button);
