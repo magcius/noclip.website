@@ -1,36 +1,18 @@
 
+/// <reference path="viewer.ts" />
+
 // Workaround for not having gl-matrix typings available.
 interface Window {
     mat4: any;
     vec3: any;
 }
 
-/// <reference path="nitro_bmd.ts">
+// Workaround for no Promise in stdlib.
+interface Window {
+    Promise: any;
+}
 
 namespace Render {
-
-    function fetch(path, responseType="arraybuffer") {
-        var request = new XMLHttpRequest();
-        request.open("GET", path, true);
-        request.responseType = responseType;
-        request.send();
-        return request;
-    }
-
-    function compileShader(gl, str, type) {
-        var shader = gl.createShader(type);
-
-        gl.shaderSource(shader, str);
-        gl.compileShader(shader);
-
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            console.error(gl.getShaderInfoLog(shader));
-            return null;
-        }
-
-        return shader;
-    }
-
     var DL_VERT_SHADER_SOURCE = `
         precision mediump float;
         uniform mat4 u_modelView;
@@ -64,89 +46,103 @@ namespace Render {
         }
     `;
 
-    function createProgram_DL(gl) {
-        var vertShader = compileShader(gl, DL_VERT_SHADER_SOURCE, gl.VERTEX_SHADER);
-        var fragShader = compileShader(gl, DL_FRAG_SHADER_SOURCE, gl.FRAGMENT_SHADER);
-        var prog = gl.createProgram();
-        gl.attachShader(prog, vertShader);
-        gl.attachShader(prog, fragShader);
-        gl.linkProgram(prog);
-        prog.modelViewLocation = gl.getUniformLocation(prog, "u_modelView");
-        prog.projectionLocation = gl.getUniformLocation(prog, "u_projection");
-        prog.localMatrixLocation = gl.getUniformLocation(prog, "u_localMatrix");
-        prog.texCoordMatLocation = gl.getUniformLocation(prog, "u_texCoordMat");
-        prog.txsLocation = gl.getUniformLocation(prog, "u_txs");
-        prog.positionLocation = gl.getAttribLocation(prog, "a_position");
-        prog.colorLocation = gl.getAttribLocation(prog, "a_color");
-        prog.uvLocation = gl.getAttribLocation(prog, "a_uv");
-        return prog;
+    class NITRO_Program extends Viewer.Program {
+        localMatrixLocation:WebGLUniformLocation;
+        texCoordMatLocation:WebGLUniformLocation;
+        positionLocation:number;
+        colorLocation:number;
+        uvLocation:number;
+
+        vert = DL_VERT_SHADER_SOURCE;
+        frag = DL_FRAG_SHADER_SOURCE;
+
+        bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
+            super.bind(gl, prog);
+
+            this.localMatrixLocation = gl.getUniformLocation(prog, "u_localMatrix");
+            this.texCoordMatLocation = gl.getUniformLocation(prog, "u_texCoordMat");
+            this.positionLocation = gl.getAttribLocation(prog, "a_position");
+            this.colorLocation = gl.getAttribLocation(prog, "a_color");
+            this.uvLocation = gl.getAttribLocation(prog, "a_uv");
+        }
     }
 
     // 3 pos + 4 color + 2 uv
     var VERTEX_SIZE = 9;
     var VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-    function translateBMD(gl, bmd) {
-        var model:any = {};
+    enum RenderPass {
+        OPAQUE = 0x01,
+        TRANSLUCENT = 0x02,
+    };
 
-        var RenderPass = {
-            OPAQUE: 0x01,
-            TRANSLUCENT: 0x02,
-        };
+    export class Scene implements Viewer.Scene {
+        path:string;
+        textures:Viewer.Texture[];
+        modelFuncs:Function[];
+        program:NITRO_Program;
+        bmd:NITRO_BMD.BMD;
 
-        function translatePacket(packet) {
-            var vertBuffer = gl.createBuffer();
+        constructor(gl:WebGLRenderingContext, bmd:NITRO_BMD.BMD) {
+            this.program = new NITRO_Program();
+            this.bmd = bmd;
+
+            this.modelFuncs = bmd.models.map((bmdm) => this.translateModel(gl, bmdm));
+        }
+
+        translatePacket(gl:WebGLRenderingContext, packet:NITRO_GX.Packet) {
+            const vertBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
             gl.bufferData(gl.ARRAY_BUFFER, packet.vertData, gl.STATIC_DRAW);
 
-            var idxBuffer = gl.createBuffer();
+            const idxBuffer = gl.createBuffer();
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
             gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, packet.idxData, gl.STATIC_DRAW);
 
-            return function() {
-                var prog = gl.currentProgram;
+            return () => {
                 gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
                 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-                gl.vertexAttribPointer(prog.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-                gl.vertexAttribPointer(prog.colorLocation, 4, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-                gl.vertexAttribPointer(prog.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 7 * Float32Array.BYTES_PER_ELEMENT);
-                gl.enableVertexAttribArray(prog.positionLocation);
-                gl.enableVertexAttribArray(prog.colorLocation);
-                gl.enableVertexAttribArray(prog.uvLocation);
+                gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+                gl.vertexAttribPointer(this.program.colorLocation, 4, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+                gl.vertexAttribPointer(this.program.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 7 * Float32Array.BYTES_PER_ELEMENT);
+                gl.enableVertexAttribArray(this.program.positionLocation);
+                gl.enableVertexAttribArray(this.program.colorLocation);
+                gl.enableVertexAttribArray(this.program.uvLocation);
                 gl.drawElements(gl.TRIANGLES, packet.idxData.length, gl.UNSIGNED_SHORT, 0);
-                gl.disableVertexAttribArray(prog.positionLocation);
-                gl.disableVertexAttribArray(prog.colorLocation);
-                gl.disableVertexAttribArray(prog.uvLocation);
+                gl.disableVertexAttribArray(this.program.positionLocation);
+                gl.disableVertexAttribArray(this.program.colorLocation);
+                gl.disableVertexAttribArray(this.program.uvLocation);
             };
         }
 
-        function translatePoly(poly) {
-            var funcs = poly.packets.map(translatePacket);
-            return function(state) {
-                funcs.forEach(function(f) { f(state); });
+        translatePoly(gl:WebGLRenderingContext, poly:NITRO_BMD.Poly) {
+            const funcs = poly.packets.map((packet) => this.translatePacket(gl, packet));
+            return () => {
+                funcs.forEach((f) => { f(); });
             };
         }
 
-        function translateMaterial(material) {
-            var texture = material.texture;
+        translateMaterial(gl:WebGLRenderingContext, material:any) {
+            const texture = material.texture;
+            let texId;
+
+            function wrapMode(repeat, flip) {
+                if (repeat)
+                    return flip ? gl.MIRRORED_REPEAT : gl.REPEAT;
+                else
+                    return gl.CLAMP_TO_EDGE; 
+            }
 
             if (texture !== null) {
-                var texId = gl.createTexture();
+                texId = gl.createTexture();
                 gl.bindTexture(gl.TEXTURE_2D, texId);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-                var repeatS = (material.texParams >> 16) & 0x01;
-                var repeatT = (material.texParams >> 17) & 0x01;
-                var flipS = (material.texParams >> 18) & 0x01;
-                var flipT = (material.texParams >> 19) & 0x01;
-
-                function wrapMode(repeat, flip) {
-                    if (repeat)
-                        return flip ? gl.MIRRORED_REPEAT : gl.REPEAT;
-                    else
-                        return gl.CLAMP_TO_EDGE; 
-                }
+                const repeatS = (material.texParams >> 16) & 0x01;
+                const repeatT = (material.texParams >> 17) & 0x01;
+                const flipS = (material.texParams >> 18) & 0x01;
+                const flipT = (material.texParams >> 19) & 0x01;
 
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapMode(repeatS, flipS));
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapMode(repeatT, flipT));
@@ -155,9 +151,9 @@ namespace Render {
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
             }
 
-            return function(state) {
+            return () => {
                 if (texture !== null) {
-                    gl.uniformMatrix4fv(gl.currentProgram.texCoordMatLocation, false, material.texCoordMat);
+                    gl.uniformMatrix4fv(this.program.texCoordMatLocation, false, material.texCoordMat);
                     gl.bindTexture(gl.TEXTURE_2D, texId);
                 }
 
@@ -165,300 +161,144 @@ namespace Render {
             };
         }
 
-        function translateBatch(batch) {
-            var batchPass = batch.material.isTranslucent ? RenderPass.TRANSLUCENT : RenderPass.OPAQUE;
+        translateBatch(gl:WebGLRenderingContext, batch:NITRO_BMD.Batch) {
+            const batchPass = batch.material.isTranslucent ? RenderPass.TRANSLUCENT : RenderPass.OPAQUE;
 
-            var applyMaterial = translateMaterial(batch.material);
-            var renderPoly = translatePoly(batch.poly);
-            return function(state) {
-                if (state.renderPass != batchPass)
+            const applyMaterial = this.translateMaterial(gl, batch.material);
+            const renderPoly = this.translatePoly(gl, batch.poly);
+            return (pass:RenderPass) => {
+                if (pass != batchPass)
                     return;
-                applyMaterial(state);
-                renderPoly(state);
+                applyMaterial();
+                renderPoly();
             };
         }
 
-        function translateModel(bmdm) {
-            var localMatrix = window.mat4.create();
+        translateModel(gl:WebGLRenderingContext, bmdm:NITRO_BMD.Model) {
+            const localMatrix = window.mat4.create();
+            const bmd = this.bmd;
+
             window.mat4.scale(localMatrix, localMatrix, [bmd.scaleFactor, bmd.scaleFactor, bmd.scaleFactor]);
-            var batches = bmdm.batches.map(translateBatch);
-            return function(state) {
-                gl.uniformMatrix4fv(gl.currentProgram.localMatrixLocation, false, localMatrix);
-                batches.forEach(function(f) { f(state); });
+            const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
+            return (pass:RenderPass) => {
+                gl.uniformMatrix4fv(this.program.localMatrixLocation, false, localMatrix);
+                batches.forEach((f) => { f(pass); });
             };
         }
 
-        var modelFuncs = bmd.models.map(translateModel);
-        function renderModels(state) {
-            modelFuncs.forEach(function(f) { f(state); });
+        renderModels(pass:RenderPass) {
+            return this.modelFuncs.forEach((func) => {
+                func(pass);
+            })
         }
 
-        model.render = function(state) {
-            state.useProgram(state.programs_DL);
+        render(state:Viewer.RenderState) {
+            const gl = state.viewport.gl;
+
+            state.useProgram(this.program);
             gl.enable(gl.DEPTH_TEST);
             gl.enable(gl.BLEND);
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
             // First pass, opaque.
-            state.renderPass = RenderPass.OPAQUE;
-            renderModels(state);
+            this.renderModels(RenderPass.OPAQUE);
 
             // Second pass, translucent.
-            state.renderPass = RenderPass.TRANSLUCENT;
-            renderModels(state);
-        };
-
-        return model;
-    }
-
-    function createSceneGraph(gl) {
-        var projection = window.mat4.create();
-        window.mat4.perspective(projection, Math.PI / 4, gl.viewportWidth / gl.viewportHeight, 0.2, 50000);
-
-        var view = window.mat4.create();
-
-        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-        gl.clearColor(200/255, 50/255, 153/255, 1);
-
-        var models = [];
-        var scene:any = {};
-
-        var state:any = {};
-        state.gl = gl;
-        state.programs_DL = createProgram_DL(gl);
-        state.useProgram = function(prog) {
-            gl.currentProgram = prog;
-            gl.useProgram(prog);
-            gl.uniformMatrix4fv(prog.projectionLocation, false, projection);
-            gl.uniformMatrix4fv(prog.modelViewLocation, false, view);
-            return prog;
-        };
-
-        function renderModel(model) {
-            model.render(state);
+            this.renderModels(RenderPass.TRANSLUCENT);
         }
-
-        function render() {
-            gl.depthMask(true);
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-            models.forEach(renderModel);
-        }
-
-        scene.setModels = function(models_) {
-            models = models_;
-            render();
-        };
-        scene.setCamera = function(matrix) {
-            window.mat4.invert(view, matrix);
-            render();
-        };
-        scene.render = function() {
-            render();
-        };
-
-        return scene;
     }
+};
 
-    function createViewer() {
-        var canvas = document.querySelector("canvas");
-        var gl = canvas.getContext("webgl", { alpha: false });
+namespace SM64DS {
+    function fetch(path):PromiseLike<ArrayBuffer> {
+        var request = new XMLHttpRequest();
+        request.open("GET", path, true);
+        request.responseType = "arraybuffer";
+        request.send();
 
-        (<any> gl).viewportWidth = canvas.width;
-        (<any> gl).viewportHeight = canvas.height;
-
-        var scene = createSceneGraph(gl);
-
-        var camera = window.mat4.create();
-        var filename = '';
-
-        var viewer:any = {};
-        viewer.gl = gl;
-        viewer.resetCamera = function() {
-            window.mat4.identity(camera);
-            scene.setCamera(camera);
-        };
-        viewer.setBMD = function(bmd) {
-            var model = translateBMD(gl, bmd);
-            scene.setModels([model]);
-
-            viewer.resetCamera();
-        };
-        viewer.loadScene = function(filename) {
-            fetch(filename).onload = function() {
-                var textures = document.querySelector('#textures');
-                textures.innerHTML = '';
-
-                var r = this.response;
-                var decompressed = LZ77.decompress(r);
-                var bmd = NITRO_BMD.parse(decompressed);
-                viewer.setBMD(bmd);
+        return new window.Promise((resolve, reject) => {
+            request.onload = () => {
+                resolve(request.response);
             };
-        };
+            request.onerror = () => {
+                reject();
+            };
+        });
+    }
 
-        var keysDown = {};
-        var SHIFT = 16;
+    class SceneDesc implements Viewer.SceneDesc {
+        name:string;
+        path:string;
 
-        function isKeyDown(key) {
-            return !!keysDown[key.charCodeAt(0)];
+        constructor(name:string, path:string) {
+            this.name = name;
+            this.path = path;
         }
 
-        window.addEventListener('keydown', function(e) {
-            keysDown[e.keyCode] = true;
-        });
-        window.addEventListener('keyup', function(e) {
-            delete keysDown[e.keyCode];
-        });
-
-        function elemDragger(elem, callback) {
-            var lx, ly;
-
-            function mousemove(e) {
-                var dx = e.pageX - lx, dy = e.pageY - ly;
-                lx = e.pageX; ly = e.pageY;
-                callback(dx, dy);
-            }
-            function mouseup(e) {
-                document.removeEventListener('mouseup', mouseup);
-                document.removeEventListener('mousemove', mousemove);
-                document.body.classList.remove('grabbing');
-            }
-            elem.addEventListener('mousedown', function(e) {
-                lx = e.pageX; ly = e.pageY;
-                document.addEventListener('mouseup', mouseup);
-                document.addEventListener('mousemove', mousemove);
-                document.body.classList.add('grabbing');
-                e.preventDefault();
+        createScene(gl:WebGLRenderingContext):PromiseLike<Render.Scene> {
+            return fetch(this.path).then((result:ArrayBuffer) => {
+                let decompressed = LZ77.decompress(result);
+                let bmd = NITRO_BMD.parse(decompressed);
+                return new Render.Scene(gl, bmd);
             });
         }
-
-        elemDragger(canvas, function(dx, dy) {
-            var cu = [camera[1], camera[5], camera[9]];
-            window.vec3.normalize(cu, cu);
-            window.mat4.rotate(camera, camera, -dx / 500, cu);
-            window.mat4.rotate(camera, camera, -dy / 500, [1, 0, 0]);
-        });
-
-        var tmp = window.mat4.create();
-        var t = 0;
-        function update(nt) {
-            var dt = nt - t;
-            t = nt;
-
-            var mult = .1;
-            if (keysDown[SHIFT])
-                mult *= 5;
-            mult *= (dt / 16.0);
-
-            var amt;
-            amt = 0;
-            if (isKeyDown('W'))
-                amt = -mult;
-            else if (isKeyDown('S'))
-                amt = mult;
-            tmp[14] = amt;
-
-            amt = 0;
-            if (isKeyDown('A'))
-                amt = -mult;
-            else if (isKeyDown('D'))
-                amt = mult;
-            tmp[12] = amt;
-
-            amt = 0;
-            if (isKeyDown('Q'))
-                amt = -mult;
-            else if (isKeyDown('E'))
-                amt = mult;
-            tmp[13] = amt;
-
-            if (isKeyDown('B'))
-                window.mat4.identity(camera);
-            if (isKeyDown('C'))
-                console.log(camera);
-
-            window.mat4.multiply(camera, camera, tmp);
-
-            scene.setCamera(camera);
-            window.requestAnimationFrame(update);
-        }
-        update(0);
-
-        return viewer;
     }
 
-    var manifest = [
-        { filename: 'data/sm64ds/battan_king_map_all.bmd', },
-        { filename: 'data/sm64ds/bombhei_map_all.bmd', },
-        { filename: 'data/sm64ds/castle_1f_all.bmd', },
-        { filename: 'data/sm64ds/castle_2f_all.bmd', },
-        { filename: 'data/sm64ds/castle_b1_all.bmd', },
-        { filename: 'data/sm64ds/cave_all.bmd', },
-        { filename: 'data/sm64ds/clock_tower_all.bmd', },
-        { filename: 'data/sm64ds/desert_land_all.bmd', },
-        { filename: 'data/sm64ds/desert_py_all.bmd', },
-        { filename: 'data/sm64ds/ex_l_map_all.bmd', },
-        { filename: 'data/sm64ds/ex_luigi_all.bmd', },
-        { filename: 'data/sm64ds/ex_m_map_all.bmd', },
-        { filename: 'data/sm64ds/ex_mario_all.bmd', },
-        { filename: 'data/sm64ds/ex_w_map_all.bmd', },
-        { filename: 'data/sm64ds/ex_wario_all.bmd', },
-        { filename: 'data/sm64ds/fire_land_all.bmd', },
-        { filename: 'data/sm64ds/fire_mt_all.bmd', },
-        { filename: 'data/sm64ds/habatake_all.bmd', },
-        { filename: 'data/sm64ds/high_mt_all.bmd', },
-        { filename: 'data/sm64ds/high_slider_all.bmd', },
-        { filename: 'data/sm64ds/horisoko_all.bmd', },
-        { filename: 'data/sm64ds/kaizoku_irie_all.bmd', },
-        { filename: 'data/sm64ds/kaizoku_ship_all.bmd', },
-        { filename: 'data/sm64ds/koopa1_boss_all.bmd', },
-        { filename: 'data/sm64ds/koopa1_map_all.bmd', },
-        { filename: 'data/sm64ds/koopa2_boss_all.bmd', },
-        { filename: 'data/sm64ds/koopa2_map_all.bmd', },
-        { filename: 'data/sm64ds/koopa3_boss_all.bmd', },
-        { filename: 'data/sm64ds/koopa3_map_all.bmd', },
-        { filename: 'data/sm64ds/main_castle_all.bmd', },
-        { filename: 'data/sm64ds/main_garden_all.bmd', },
-        { filename: 'data/sm64ds/metal_switch_all.bmd', },
-        { filename: 'data/sm64ds/playroom_all.bmd', },
-        { filename: 'data/sm64ds/rainbow_cruise_all.bmd', },
-        { filename: 'data/sm64ds/rainbow_mario_all.bmd', },
-        { filename: 'data/sm64ds/snow_kama_all.bmd', },
-        { filename: 'data/sm64ds/snow_land_all.bmd', },
-        { filename: 'data/sm64ds/snow_mt_all.bmd', },
-        { filename: 'data/sm64ds/snow_slider_all.bmd', },
-        { filename: 'data/sm64ds/suisou_all.bmd', },
-        { filename: 'data/sm64ds/teresa_house_all.bmd', },
-        { filename: 'data/sm64ds/test_map_all.bmd', },
-        { filename: 'data/sm64ds/test_map_b_all.bmd', },
-        { filename: 'data/sm64ds/tibi_deka_d_all.bmd', },
-        { filename: 'data/sm64ds/tibi_deka_in_all.bmd', },
-        { filename: 'data/sm64ds/tibi_deka_t_all.bmd', },
-        { filename: 'data/sm64ds/water_city_all.bmd', },
-        { filename: 'data/sm64ds/water_land_all.bmd', },
-    ];
-
-    function sceneCombo(gl, viewer) {
-        var pl = document.querySelector('#pl');
-
-        var select = document.createElement('select');
-        manifest.forEach(function(entry) {
-            var option = document.createElement('option');
-            option.textContent = entry.filename;
-            (<any>option).filename = entry.filename;
-            select.appendChild(option);
-        });
-        pl.appendChild(select);
-        var button = document.createElement('button');
-        button.textContent = 'Load';
-        button.addEventListener('click', function() {
-            var option = select.childNodes[select.selectedIndex];
-            viewer.loadScene((<any>option).filename);
-        });
-        pl.appendChild(button);
-    }
-
-    window.addEventListener('load', function() {
-        var viewer = createViewer();
-        sceneCombo(viewer.gl, viewer);
+    const sceneDescs:SceneDesc[] = [
+        'battan_king_map_all.bmd',
+        'bombhei_map_all.bmd',
+        'castle_1f_all.bmd',
+        'castle_2f_all.bmd',
+        'castle_b1_all.bmd',
+        'cave_all.bmd',
+        'clock_tower_all.bmd',
+        'desert_land_all.bmd',
+        'desert_py_all.bmd',
+        'ex_l_map_all.bmd',
+        'ex_luigi_all.bmd',
+        'ex_m_map_all.bmd',
+        'ex_mario_all.bmd',
+        'ex_w_map_all.bmd',
+        'ex_wario_all.bmd',
+        'fire_land_all.bmd',
+        'fire_mt_all.bmd',
+        'habatake_all.bmd',
+        'high_mt_all.bmd',
+        'high_slider_all.bmd',
+        'horisoko_all.bmd',
+        'kaizoku_irie_all.bmd',
+        'kaizoku_ship_all.bmd',
+        'koopa1_boss_all.bmd',
+        'koopa1_map_all.bmd',
+        'koopa2_boss_all.bmd',
+        'koopa2_map_all.bmd',
+        'koopa3_boss_all.bmd',
+        'koopa3_map_all.bmd',
+        'main_castle_all.bmd',
+        'main_garden_all.bmd',
+        'metal_switch_all.bmd',
+        'playroom_all.bmd',
+        'rainbow_cruise_all.bmd',
+        'rainbow_mario_all.bmd',
+        'snow_kama_all.bmd',
+        'snow_land_all.bmd',
+        'snow_mt_all.bmd',
+        'snow_slider_all.bmd',
+        'suisou_all.bmd',
+        'teresa_house_all.bmd',
+        'test_map_all.bmd',
+        'test_map_b_all.bmd',
+        'tibi_deka_d_all.bmd',
+        'tibi_deka_in_all.bmd',
+        'tibi_deka_t_all.bmd',
+        'water_city_all.bmd',
+        'water_land_all.bmd',
+    ].map((filename:string):SceneDesc => {
+        const path = 'data/sm64ds/' + filename;
+        return new SceneDesc(filename, path);
     });
-};
+
+    export function loadSceneDescs():SceneDesc[] {
+        return sceneDescs;
+    }
+}

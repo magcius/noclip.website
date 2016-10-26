@@ -22,16 +22,16 @@ namespace NITRO_BMD {
         return S;
     }
 
-    class Poly {
+    export class Poly {
         packets: NITRO_GX.Packet[];
     }
 
-    class Batch {
+    export class Batch {
         material: any;
-        poly: any;
+        poly: Poly;
     };
 
-    class Model {
+    export class Model {
         id: number;
         name: string;
         parentID: number;
@@ -213,7 +213,7 @@ namespace NITRO_BMD {
         return texture;
     }
 
-    class BMD {
+    export class BMD {
         scaleFactor: number;
         models: Model[];
 
