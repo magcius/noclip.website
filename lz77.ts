@@ -1,4 +1,5 @@
 // Nintendo DS LZ77 (LZ10) format.
+
 // Header (8 bytes):
 //   Magic: "LZ77\x10" (5 bytes)
 //   Uncompressed size (3 bytes, little endian)
@@ -12,12 +13,12 @@
 //         Copy Length+3 bytes from Offset back in the output buffer.
 //     If flag is 0:
 //       Literal: copy one byte from src to dest.
-var LZ77;
-(function (LZ77) {
+
+namespace LZ77 {
     function assert(b) {
-        if (!b)
-            throw new Error("Assert fail");
+        if (!b) throw new Error("Assert fail");
     }
+
     function readString(buffer, offs, length) {
         var buf = new Uint8Array(buffer, offs, length);
         var S = '';
@@ -28,13 +29,17 @@ var LZ77;
         }
         return S;
     }
-    function decompress(srcBuffer) {
+
+    export function decompress(srcBuffer):ArrayBuffer {
         var srcView = new DataView(srcBuffer);
         assert(readString(srcBuffer, 0x00, 0x05) == 'LZ77\x10');
+
         var uncompressedSize = srcView.getUint32(0x04, true) >> 8;
         var dstBuffer = new Uint8Array(uncompressedSize);
+
         var srcOffs = 0x08;
-        var dstOffs = 0x00;
+        var dstOffs = 0x00; 
+
         while (true) {
             var commandByte = srcView.getUint8(srcOffs++);
             var i = 8;
@@ -42,23 +47,24 @@ var LZ77;
                 if (commandByte & (1 << i)) {
                     var tmp = srcView.getUint16(srcOffs, false);
                     srcOffs += 2;
+
                     var windowOffset = (tmp & 0x0FFF) + 1;
                     var windowLength = (tmp >> 12) + 3;
+
                     var copyOffs = dstOffs - windowOffset;
+
                     uncompressedSize -= windowLength;
                     while (windowLength--)
                         dstBuffer[dstOffs++] = dstBuffer[copyOffs++];
-                }
-                else {
+                } else {
                     // Literal.
                     uncompressedSize--;
                     dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
                 }
+
                 if (uncompressedSize <= 0)
                     return dstBuffer.buffer;
             }
         }
     }
-    LZ77.decompress = decompress;
-})(LZ77 || (LZ77 = {}));
-//# sourceMappingURL=lz77.js.map
+}

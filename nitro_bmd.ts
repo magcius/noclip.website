@@ -1,7 +1,12 @@
-(function(exports) {
-    "use strict";
 
-    // SM64 .bmd format
+// Workaround for not having gl-matrix typings available.
+interface Window {
+    mat4: any;
+}
+
+namespace NITRO_BMD {
+
+    // Super Mario 64 DS .bmd format
 
     function readString(buffer, offs, length) {
         var buf = new Uint8Array(buffer, offs, length);
@@ -17,7 +22,7 @@
     function parseModel(bmd, view, idx) {
         var offs = bmd.modelOffsBase + idx * 0x40;
 
-        var model = {};
+        var model:any = {};
         model.id = view.getUint32(offs + 0x00, true);
         model.name = readString(view.buffer, view.getUint32(offs + 0x04, true), 0xFF);
 
@@ -69,9 +74,9 @@
     function parseMaterial(bmd, view, idx) {
         var offs = bmd.materialOffsBase + idx * 0x30;
 
-        var material = {};
+        var material:any = {};
         material.name = readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
-        material.texCoordMat = mat4.create();
+        material.texCoordMat = window.mat4.create();
 
         var textureIdx = view.getUint32(offs + 0x04, true);
         if (textureIdx !== 0xFFFFFFFF) {
@@ -84,10 +89,10 @@
                 var scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
                 var transS = view.getInt32(offs + 0x18, true) / 4096.0;
                 var transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-                mat4.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-                mat4.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
+                window.mat4.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
+                window.mat4.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
             }
-            mat4.scale(material.texCoordMat, material.texCoordMat, [1/material.texture.width, 1/material.texture.height, 1]);
+            window.mat4.scale(material.texCoordMat, material.texCoordMat, [1/material.texture.width, 1/material.texture.height, 1]);
         } else {
             material.texture = null;
             material.texParams = 0;
@@ -141,7 +146,7 @@
     function parseTexture(bmd, view, texIdx, palIdx) {
         var texOffs = bmd.textureOffsBase + texIdx * 0x14;
 
-        var texture = {};
+        var texture:any = {};
         texture.id = texIdx;
         texture.name = readString(view.buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
 
@@ -175,11 +180,10 @@
         return texture;
     }
 
-    var BMD = {};
-    BMD.parse = function(buffer) {
+    export function parse(buffer) {
         var view = new DataView(buffer);
 
-        var bmd = {};
+        var bmd:any = {};
 
         bmd.scaleFactor = (1 << view.getUint32(0x00, true));
 
@@ -200,6 +204,5 @@
 
         return bmd;
     };
-    exports.BMD = BMD;
 
-})(window);
+}
