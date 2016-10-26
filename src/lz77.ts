@@ -15,14 +15,14 @@
 //       Literal: copy one byte from src to dest.
 
 namespace LZ77 {
-    function assert(b) {
+    function assert(b:boolean) {
         if (!b) throw new Error("Assert fail");
     }
 
-    function readString(buffer, offs, length) {
-        var buf = new Uint8Array(buffer, offs, length);
-        var S = '';
-        for (var i = 0; i < length; i++) {
+    function readString(buffer:ArrayBuffer, offs:number, length:number):string {
+        const buf = new Uint8Array(buffer, offs, length);
+        let S = '';
+        for (let i = 0; i < length; i++) {
             if (buf[i] === 0)
                 break;
             S += String.fromCharCode(buf[i]);
@@ -30,28 +30,28 @@ namespace LZ77 {
         return S;
     }
 
-    export function decompress(srcBuffer):ArrayBuffer {
-        var srcView = new DataView(srcBuffer);
+    export function decompress(srcBuffer:ArrayBuffer) {
+        const srcView = new DataView(srcBuffer);
         assert(readString(srcBuffer, 0x00, 0x05) == 'LZ77\x10');
 
-        var uncompressedSize = srcView.getUint32(0x04, true) >> 8;
-        var dstBuffer = new Uint8Array(uncompressedSize);
+        let uncompressedSize = srcView.getUint32(0x04, true) >> 8;
+        const dstBuffer = new Uint8Array(uncompressedSize);
 
-        var srcOffs = 0x08;
-        var dstOffs = 0x00; 
+        let srcOffs = 0x08;
+        let dstOffs = 0x00; 
 
         while (true) {
-            var commandByte = srcView.getUint8(srcOffs++);
-            var i = 8;
+            const commandByte = srcView.getUint8(srcOffs++);
+            let i = 8;
             while (i--) {
                 if (commandByte & (1 << i)) {
-                    var tmp = srcView.getUint16(srcOffs, false);
+                    const tmp = srcView.getUint16(srcOffs, false);
                     srcOffs += 2;
 
-                    var windowOffset = (tmp & 0x0FFF) + 1;
-                    var windowLength = (tmp >> 12) + 3;
+                    const windowOffset = (tmp & 0x0FFF) + 1;
+                    let windowLength = (tmp >> 12) + 3;
 
-                    var copyOffs = dstOffs - windowOffset;
+                    let copyOffs = dstOffs - windowOffset;
 
                     uncompressedSize -= windowLength;
                     while (windowLength--)
