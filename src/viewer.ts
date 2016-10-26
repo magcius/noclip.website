@@ -264,6 +264,14 @@ namespace Viewer {
 
             sceneDesc.createScene(gl).then((result:Scene) => {
                 this.viewer.setScene(result);
+
+                const textures = document.querySelector('#textures');
+                textures.innerHTML = '';
+                result.textures.forEach((tex) => {
+                    const canvas = tex.toCanvas();
+                    canvas.title = tex.title;
+                    textures.appendChild(canvas);
+                });
             });
         }
 

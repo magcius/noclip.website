@@ -713,23 +713,12 @@ var NITRO_BMD;
         material.alpha = alpha;
         return material;
     }
-    function textureToCanvas(texture) {
-        var canvas = document.createElement("canvas");
-        canvas.width = texture.width;
-        canvas.height = texture.height;
-        var ctx = canvas.getContext("2d");
-        var imgData = ctx.createImageData(canvas.width, canvas.height);
-        for (var i = 0; i < imgData.data.length; i++)
-            imgData.data[i] = texture.pixels[i];
-        canvas.title = texture.name;
-        ctx.putImageData(imgData, 0, 0);
-        return canvas;
-    }
     var Texture = (function () {
         function Texture() {
         }
         return Texture;
     }());
+    NITRO_BMD.Texture = Texture;
     function parseTexture(bmd, view, texIdx, palIdx) {
         var texOffs = bmd.textureOffsBase + texIdx * 0x14;
         var texture = new Texture();
@@ -752,10 +741,9 @@ var NITRO_BMD;
             palData = view.buffer.slice(palDataOffs, palDataOffs + palDataSize);
         }
         texture.pixels = NITRO_Tex.readTexture(texture.format, texture.width, texture.height, texData, palData, color0);
-        if (texture.pixels)
-            document.querySelector('#textures').appendChild(textureToCanvas(texture));
         texture.isTranslucent = (texture.format === NITRO_Tex.Format.Tex_A5I3 ||
             texture.format === NITRO_Tex.Format.Tex_A3I5);
+        bmd.textures.push(texture);
         return texture;
     }
     var BMD = (function () {
@@ -778,6 +766,7 @@ var NITRO_BMD;
         bmd.paletteOffsBase = view.getUint32(0x20, true);
         bmd.materialCount = view.getUint32(0x24, true);
         bmd.materialOffsBase = view.getUint32(0x28, true);
+        bmd.textures = [];
         bmd.models = [];
         for (var i = 0; i < bmd.modelCount; i++)
             bmd.models.push(parseModel(bmd, view, i));
@@ -981,6 +970,13 @@ var Viewer;
             var gl = this.viewer.sceneGraph.renderState.viewport.gl;
             sceneDesc.createScene(gl).then(function (result) {
                 _this.viewer.setScene(result);
+                var textures = document.querySelector('#textures');
+                textures.innerHTML = '';
+                result.textures.forEach(function (tex) {
+                    var canvas = tex.toCanvas();
+                    canvas.title = tex.title;
+                    textures.appendChild(canvas);
+                });
             });
         };
         Main.prototype.makeUI = function () {
@@ -1040,11 +1036,31 @@ var Render;
         RenderPass[RenderPass["TRANSLUCENT"] = 2] = "TRANSLUCENT";
     })(RenderPass || (RenderPass = {}));
     ;
+    var Texture = (function () {
+        function Texture(bmdTex) {
+            this.bmdTex = bmdTex;
+        }
+        Texture.prototype.toCanvas = function () {
+            var canvas = document.createElement("canvas");
+            canvas.width = this.bmdTex.width;
+            canvas.height = this.bmdTex.height;
+            var ctx = canvas.getContext("2d");
+            var imgData = ctx.createImageData(canvas.width, canvas.height);
+            for (var i = 0; i < imgData.data.length; i++)
+                imgData.data[i] = this.bmdTex.pixels[i];
+            ctx.putImageData(imgData, 0, 0);
+            return canvas;
+        };
+        return Texture;
+    }());
     var Scene = (function () {
         function Scene(gl, bmd) {
             var _this = this;
             this.program = new NITRO_Program();
             this.bmd = bmd;
+            this.textures = bmd.textures.map(function (texture) {
+                return new Texture(texture);
+            });
             this.modelFuncs = bmd.models.map(function (bmdm) { return _this.translateModel(gl, bmdm); });
         }
         Scene.prototype.translatePacket = function (gl, packet) {
