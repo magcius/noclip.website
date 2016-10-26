@@ -788,8 +788,6 @@ var Render;
         request.send();
         return request;
     }
-    // A dumb hack to have "multiline strings".
-    function M(X) { return X.join('\n'); }
     function compileShader(gl, str, type) {
         var shader = gl.createShader(type);
         gl.shaderSource(shader, str);
@@ -800,37 +798,8 @@ var Render;
         }
         return shader;
     }
-    var DL_VERT_SHADER_SOURCE = M([
-        'precision mediump float;',
-        'uniform mat4 u_modelView;',
-        'uniform mat4 u_localMatrix;',
-        'uniform mat4 u_projection;',
-        'uniform mat4 u_texCoordMat;',
-        'attribute vec3 a_position;',
-        'attribute vec2 a_uv;',
-        'attribute vec4 a_color;',
-        'varying vec4 v_color;',
-        'varying vec2 v_uv;',
-        '',
-        'void main() {',
-        '    gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);',
-        '    v_color = a_color;',
-        '    v_uv = (u_texCoordMat * vec4(a_uv, 1.0, 1.0)).st;',
-        '}',
-    ]);
-    var DL_FRAG_SHADER_SOURCE = M([
-        'precision mediump float;',
-        'varying vec2 v_uv;',
-        'varying vec4 v_color;',
-        'uniform sampler2D u_texture;',
-        '',
-        'void main() {',
-        '    gl_FragColor = texture2D(u_texture, v_uv);',
-        '    gl_FragColor *= v_color;',
-        '    if (gl_FragColor.a == 0.0)',
-        '        discard;',
-        '}',
-    ]);
+    var DL_VERT_SHADER_SOURCE = "\n        precision mediump float;\n        uniform mat4 u_modelView;\n        uniform mat4 u_localMatrix;\n        uniform mat4 u_projection;\n        uniform mat4 u_texCoordMat;\n        attribute vec3 a_position;\n        attribute vec2 a_uv;\n        attribute vec4 a_color;\n        varying vec4 v_color;\n        varying vec2 v_uv;\n        \n        void main() {\n            gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);\n            v_color = a_color;\n            v_uv = (u_texCoordMat * vec4(a_uv, 1.0, 1.0)).st;\n        }\n    ";
+    var DL_FRAG_SHADER_SOURCE = "\n        precision mediump float;\n        varying vec2 v_uv;\n        varying vec4 v_color;\n        uniform sampler2D u_texture;\n        \n        void main() {\n            gl_FragColor = texture2D(u_texture, v_uv);\n            gl_FragColor *= v_color;\n            if (gl_FragColor.a == 0.0)\n                discard;\n        }\n    ";
     function createProgram_DL(gl) {
         var vertShader = compileShader(gl, DL_VERT_SHADER_SOURCE, gl.VERTEX_SHADER);
         var fragShader = compileShader(gl, DL_FRAG_SHADER_SOURCE, gl.FRAGMENT_SHADER);
