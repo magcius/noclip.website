@@ -1207,17 +1207,14 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_7, context_
     "use strict";
     var __moduleName = context_7 && context_7.id;
     var render_1;
-    var sceneDescs;
-    function loadSceneDescs() {
-        return sceneDescs;
-    }
-    exports_7("loadSceneDescs", loadSceneDescs);
+    var name, sceneDescs, sceneGroup;
     return {
         setters:[
             function (render_1_1) {
                 render_1 = render_1_1;
             }],
         execute: function() {
+            name = "Super Mario 64 DS";
             sceneDescs = [
                 'battan_king_map_all.bmd',
                 'bombhei_map_all.bmd',
@@ -1271,6 +1268,7 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_7, context_
                 var path = 'data/sm64ds/' + filename;
                 return new render_1.SceneDesc(filename, path);
             });
+            exports_7("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
         }
     }
 });
@@ -1293,9 +1291,9 @@ System.register("main", ["viewer", "sm64ds/scenes"], function(exports_8, context
                     var canvas = document.querySelector('canvas');
                     this.viewer = new viewer_1.Viewer(canvas);
                     this.viewer.start();
-                    this.sceneDescs = [];
+                    this.groups = [];
                     // The "plugin" part of this.
-                    this.sceneDescs = this.sceneDescs.concat(SM64DS.loadSceneDescs());
+                    this.groups.push(SM64DS.sceneGroup);
                     this.makeUI();
                 }
                 Main.prototype.loadSceneDesc = function (sceneDesc) {
@@ -1316,16 +1314,23 @@ System.register("main", ["viewer", "sm64ds/scenes"], function(exports_8, context
                     var _this = this;
                     var pl = document.querySelector('#pl');
                     var select = document.createElement('select');
-                    this.sceneDescs.forEach(function (entry) {
-                        var option = document.createElement('option');
-                        option.textContent = entry.name;
-                        select.appendChild(option);
+                    this.groups.forEach(function (group) {
+                        var optgroup = document.createElement('optgroup');
+                        optgroup.label = group.name;
+                        select.appendChild(optgroup);
+                        group.sceneDescs.forEach(function (sceneDesc) {
+                            var option = document.createElement('option');
+                            option.textContent = sceneDesc.name;
+                            option.sceneDesc = sceneDesc;
+                            optgroup.appendChild(option);
+                        });
                     });
                     pl.appendChild(select);
                     var button = document.createElement('button');
                     button.textContent = 'Load';
                     button.addEventListener('click', function () {
-                        var sceneDesc = _this.sceneDescs[select.selectedIndex];
+                        var option = select.options[select.selectedIndex];
+                        var sceneDesc = option.sceneDesc;
                         _this.loadSceneDesc(sceneDesc);
                     });
                     pl.appendChild(button);

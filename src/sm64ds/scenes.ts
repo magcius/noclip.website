@@ -1,6 +1,8 @@
 
 import { SceneDesc } from 'render';
+import { SceneGroup } from '../viewer';
 
+const name = "Super Mario 64 DS";
 const sceneDescs:SceneDesc[] = [
     'battan_king_map_all.bmd',
     'bombhei_map_all.bmd',
@@ -55,6 +57,4 @@ const sceneDescs:SceneDesc[] = [
     return new SceneDesc(filename, path);
 });
 
-export function loadSceneDescs():SceneDesc[] {
-    return sceneDescs;
-}
+export const sceneGroup:SceneGroup = { name, sceneDescs };

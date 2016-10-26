@@ -230,3 +230,8 @@ export interface SceneDesc {
     name:string;
     createScene(gl:WebGLRenderingContext):PromiseLike<Scene>;
 }
+
+export interface SceneGroup {
+    name:string;
+    sceneDescs:SceneDesc[];
+}
