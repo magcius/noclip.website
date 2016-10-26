@@ -262,375 +262,11 @@ System.register("viewer", [], function(exports_2, context_2) {
         }
     }
 });
-/// <reference path="decl.d.ts" />
-System.register("render", ["lz77", "viewer"], function(exports_3, context_3) {
+// Read DS Geometry Engine commands.
+System.register("sm64ds/nitro_gx", [], function(exports_3, context_3) {
     "use strict";
     var __moduleName = context_3 && context_3.id;
-    var LZ77, Viewer;
-    var DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Texture, Scene, SceneDesc;
-    function fetch(path) {
-        var request = new XMLHttpRequest();
-        request.open("GET", path, true);
-        request.responseType = "arraybuffer";
-        request.send();
-        return new window.Promise(function (resolve, reject) {
-            request.onload = function () {
-                resolve(request.response);
-            };
-            request.onerror = function () {
-                reject();
-            };
-        });
-    }
-    return {
-        setters:[
-            function (LZ77_1) {
-                LZ77 = LZ77_1;
-            },
-            function (Viewer_1) {
-                Viewer = Viewer_1;
-            }],
-        execute: function() {
-            DL_VERT_SHADER_SOURCE = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform mat4 u_texCoordMat;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n    \n    void main() {\n        gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);\n        v_color = a_color;\n        v_uv = (u_texCoordMat * vec4(a_uv, 1.0, 1.0)).st;\n    }\n";
-            DL_FRAG_SHADER_SOURCE = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n    \n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (gl_FragColor.a == 0.0)\n            discard;\n    }\n";
-            NITRO_Program = (function (_super) {
-                __extends(NITRO_Program, _super);
-                function NITRO_Program() {
-                    _super.apply(this, arguments);
-                    this.vert = DL_VERT_SHADER_SOURCE;
-                    this.frag = DL_FRAG_SHADER_SOURCE;
-                }
-                NITRO_Program.prototype.bind = function (gl, prog) {
-                    _super.prototype.bind.call(this, gl, prog);
-                    this.localMatrixLocation = gl.getUniformLocation(prog, "u_localMatrix");
-                    this.texCoordMatLocation = gl.getUniformLocation(prog, "u_texCoordMat");
-                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
-                    this.colorLocation = gl.getAttribLocation(prog, "a_color");
-                    this.uvLocation = gl.getAttribLocation(prog, "a_uv");
-                };
-                return NITRO_Program;
-            }(Viewer.Program));
-            // 3 pos + 4 color + 2 uv
-            VERTEX_SIZE = 9;
-            VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
-            (function (RenderPass) {
-                RenderPass[RenderPass["OPAQUE"] = 1] = "OPAQUE";
-                RenderPass[RenderPass["TRANSLUCENT"] = 2] = "TRANSLUCENT";
-            })(RenderPass || (RenderPass = {}));
-            ;
-            Texture = (function () {
-                function Texture(bmdTex) {
-                    this.bmdTex = bmdTex;
-                    this.title = bmdTex.name;
-                }
-                Texture.prototype.toCanvas = function () {
-                    var canvas = document.createElement("canvas");
-                    canvas.width = this.bmdTex.width;
-                    canvas.height = this.bmdTex.height;
-                    var ctx = canvas.getContext("2d");
-                    var imgData = ctx.createImageData(canvas.width, canvas.height);
-                    for (var i = 0; i < imgData.data.length; i++)
-                        imgData.data[i] = this.bmdTex.pixels[i];
-                    ctx.putImageData(imgData, 0, 0);
-                    return canvas;
-                };
-                return Texture;
-            }());
-            Scene = (function () {
-                function Scene(gl, bmd) {
-                    var _this = this;
-                    this.program = new NITRO_Program();
-                    this.bmd = bmd;
-                    this.textures = bmd.textures.map(function (texture) {
-                        return new Texture(texture);
-                    });
-                    this.modelFuncs = bmd.models.map(function (bmdm) { return _this.translateModel(gl, bmdm); });
-                }
-                Scene.prototype.translatePacket = function (gl, packet) {
-                    var _this = this;
-                    var vertBuffer = gl.createBuffer();
-                    gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-                    gl.bufferData(gl.ARRAY_BUFFER, packet.vertData, gl.STATIC_DRAW);
-                    var idxBuffer = gl.createBuffer();
-                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-                    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, packet.idxData, gl.STATIC_DRAW);
-                    return function () {
-                        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-                        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-                        gl.vertexAttribPointer(_this.program.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-                        gl.vertexAttribPointer(_this.program.colorLocation, 4, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-                        gl.vertexAttribPointer(_this.program.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 7 * Float32Array.BYTES_PER_ELEMENT);
-                        gl.enableVertexAttribArray(_this.program.positionLocation);
-                        gl.enableVertexAttribArray(_this.program.colorLocation);
-                        gl.enableVertexAttribArray(_this.program.uvLocation);
-                        gl.drawElements(gl.TRIANGLES, packet.idxData.length, gl.UNSIGNED_SHORT, 0);
-                        gl.disableVertexAttribArray(_this.program.positionLocation);
-                        gl.disableVertexAttribArray(_this.program.colorLocation);
-                        gl.disableVertexAttribArray(_this.program.uvLocation);
-                    };
-                };
-                Scene.prototype.translatePoly = function (gl, poly) {
-                    var _this = this;
-                    var funcs = poly.packets.map(function (packet) { return _this.translatePacket(gl, packet); });
-                    return function () {
-                        funcs.forEach(function (f) { f(); });
-                    };
-                };
-                Scene.prototype.translateMaterial = function (gl, material) {
-                    var _this = this;
-                    var texture = material.texture;
-                    var texId;
-                    function wrapMode(repeat, flip) {
-                        if (repeat)
-                            return flip ? gl.MIRRORED_REPEAT : gl.REPEAT;
-                        else
-                            return gl.CLAMP_TO_EDGE;
-                    }
-                    if (texture !== null) {
-                        texId = gl.createTexture();
-                        gl.bindTexture(gl.TEXTURE_2D, texId);
-                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-                        var repeatS = (material.texParams >> 16) & 0x01;
-                        var repeatT = (material.texParams >> 17) & 0x01;
-                        var flipS = (material.texParams >> 18) & 0x01;
-                        var flipT = (material.texParams >> 19) & 0x01;
-                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapMode(repeatS, flipS));
-                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapMode(repeatT, flipT));
-                        gl.bindTexture(gl.TEXTURE_2D, texId);
-                        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
-                    }
-                    return function () {
-                        if (texture !== null) {
-                            gl.uniformMatrix4fv(_this.program.texCoordMatLocation, false, material.texCoordMat);
-                            gl.bindTexture(gl.TEXTURE_2D, texId);
-                        }
-                        gl.depthMask(material.depthWrite);
-                    };
-                };
-                Scene.prototype.translateBatch = function (gl, batch) {
-                    var batchPass = batch.material.isTranslucent ? RenderPass.TRANSLUCENT : RenderPass.OPAQUE;
-                    var applyMaterial = this.translateMaterial(gl, batch.material);
-                    var renderPoly = this.translatePoly(gl, batch.poly);
-                    return function (pass) {
-                        if (pass != batchPass)
-                            return;
-                        applyMaterial();
-                        renderPoly();
-                    };
-                };
-                Scene.prototype.translateModel = function (gl, bmdm) {
-                    var _this = this;
-                    var localMatrix = window.mat4.create();
-                    var bmd = this.bmd;
-                    window.mat4.scale(localMatrix, localMatrix, [bmd.scaleFactor, bmd.scaleFactor, bmd.scaleFactor]);
-                    var batches = bmdm.batches.map(function (batch) { return _this.translateBatch(gl, batch); });
-                    return function (pass) {
-                        gl.uniformMatrix4fv(_this.program.localMatrixLocation, false, localMatrix);
-                        batches.forEach(function (f) { f(pass); });
-                    };
-                };
-                Scene.prototype.renderModels = function (pass) {
-                    return this.modelFuncs.forEach(function (func) {
-                        func(pass);
-                    });
-                };
-                Scene.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
-                    state.useProgram(this.program);
-                    gl.enable(gl.DEPTH_TEST);
-                    gl.enable(gl.BLEND);
-                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-                    // First pass, opaque.
-                    this.renderModels(RenderPass.OPAQUE);
-                    // Second pass, translucent.
-                    this.renderModels(RenderPass.TRANSLUCENT);
-                };
-                return Scene;
-            }());
-            SceneDesc = (function () {
-                function SceneDesc(name, path) {
-                    this.name = name;
-                    this.path = path;
-                }
-                SceneDesc.prototype.createScene = function (gl) {
-                    return fetch(this.path).then(function (result) {
-                        var decompressed = LZ77.decompress(result);
-                        var bmd = NITRO_BMD.parse(decompressed);
-                        return new Scene(gl, bmd);
-                    });
-                };
-                return SceneDesc;
-            }());
-            exports_3("SceneDesc", SceneDesc);
-        }
-    }
-});
-System.register("sm64ds", ["render"], function(exports_4, context_4) {
-    "use strict";
-    var __moduleName = context_4 && context_4.id;
-    var render_1;
-    var sceneDescs;
-    function loadSceneDescs() {
-        return sceneDescs;
-    }
-    exports_4("loadSceneDescs", loadSceneDescs);
-    return {
-        setters:[
-            function (render_1_1) {
-                render_1 = render_1_1;
-            }],
-        execute: function() {
-            sceneDescs = [
-                'battan_king_map_all.bmd',
-                'bombhei_map_all.bmd',
-                'castle_1f_all.bmd',
-                'castle_2f_all.bmd',
-                'castle_b1_all.bmd',
-                'cave_all.bmd',
-                'clock_tower_all.bmd',
-                'desert_land_all.bmd',
-                'desert_py_all.bmd',
-                'ex_l_map_all.bmd',
-                'ex_luigi_all.bmd',
-                'ex_m_map_all.bmd',
-                'ex_mario_all.bmd',
-                'ex_w_map_all.bmd',
-                'ex_wario_all.bmd',
-                'fire_land_all.bmd',
-                'fire_mt_all.bmd',
-                'habatake_all.bmd',
-                'high_mt_all.bmd',
-                'high_slider_all.bmd',
-                'horisoko_all.bmd',
-                'kaizoku_irie_all.bmd',
-                'kaizoku_ship_all.bmd',
-                'koopa1_boss_all.bmd',
-                'koopa1_map_all.bmd',
-                'koopa2_boss_all.bmd',
-                'koopa2_map_all.bmd',
-                'koopa3_boss_all.bmd',
-                'koopa3_map_all.bmd',
-                'main_castle_all.bmd',
-                'main_garden_all.bmd',
-                'metal_switch_all.bmd',
-                'playroom_all.bmd',
-                'rainbow_cruise_all.bmd',
-                'rainbow_mario_all.bmd',
-                'snow_kama_all.bmd',
-                'snow_land_all.bmd',
-                'snow_mt_all.bmd',
-                'snow_slider_all.bmd',
-                'suisou_all.bmd',
-                'teresa_house_all.bmd',
-                'test_map_all.bmd',
-                'test_map_b_all.bmd',
-                'tibi_deka_d_all.bmd',
-                'tibi_deka_in_all.bmd',
-                'tibi_deka_t_all.bmd',
-                'water_city_all.bmd',
-                'water_land_all.bmd',
-            ].map(function (filename) {
-                var path = 'data/sm64ds/' + filename;
-                return new render_1.SceneDesc(filename, path);
-            });
-        }
-    }
-});
-System.register("main", ["viewer", "sm64ds"], function(exports_5, context_5) {
-    "use strict";
-    var __moduleName = context_5 && context_5.id;
-    var viewer_1, SM64DS;
-    var Main;
-    return {
-        setters:[
-            function (viewer_1_1) {
-                viewer_1 = viewer_1_1;
-            },
-            function (SM64DS_1) {
-                SM64DS = SM64DS_1;
-            }],
-        execute: function() {
-            Main = (function () {
-                function Main() {
-                    var canvas = document.querySelector('canvas');
-                    this.viewer = new viewer_1.Viewer(canvas);
-                    this.viewer.start();
-                    this.sceneDescs = [];
-                    // The "plugin" part of this.
-                    this.sceneDescs = this.sceneDescs.concat(SM64DS.loadSceneDescs());
-                    this.makeUI();
-                }
-                Main.prototype.loadSceneDesc = function (sceneDesc) {
-                    var _this = this;
-                    var gl = this.viewer.sceneGraph.renderState.viewport.gl;
-                    sceneDesc.createScene(gl).then(function (result) {
-                        _this.viewer.setScene(result);
-                        var textures = document.querySelector('#textures');
-                        textures.innerHTML = '';
-                        result.textures.forEach(function (tex) {
-                            var canvas = tex.toCanvas();
-                            canvas.title = tex.title;
-                            textures.appendChild(canvas);
-                        });
-                    });
-                };
-                Main.prototype.makeUI = function () {
-                    var _this = this;
-                    var pl = document.querySelector('#pl');
-                    var select = document.createElement('select');
-                    this.sceneDescs.forEach(function (entry) {
-                        var option = document.createElement('option');
-                        option.textContent = entry.name;
-                        select.appendChild(option);
-                    });
-                    pl.appendChild(select);
-                    var button = document.createElement('button');
-                    button.textContent = 'Load';
-                    button.addEventListener('click', function () {
-                        var sceneDesc = _this.sceneDescs[select.selectedIndex];
-                        _this.loadSceneDesc(sceneDesc);
-                    });
-                    pl.appendChild(button);
-                };
-                return Main;
-            }());
-            exports_5("Main", Main);
-            window.addEventListener('load', function () {
-                window.main = new Main();
-            });
-        }
-    }
-});
-var NITRO_GX;
-(function (NITRO_GX) {
-    // Read DS Geometry Engine commands.
-    var CmdType;
-    (function (CmdType) {
-        CmdType[CmdType["MTX_RESTORE"] = 20] = "MTX_RESTORE";
-        CmdType[CmdType["COLOR"] = 32] = "COLOR";
-        CmdType[CmdType["NORMAL"] = 33] = "NORMAL";
-        CmdType[CmdType["TEXCOORD"] = 34] = "TEXCOORD";
-        CmdType[CmdType["VTX_16"] = 35] = "VTX_16";
-        CmdType[CmdType["VTX_10"] = 36] = "VTX_10";
-        CmdType[CmdType["VTX_XY"] = 37] = "VTX_XY";
-        CmdType[CmdType["VTX_XZ"] = 38] = "VTX_XZ";
-        CmdType[CmdType["VTX_YZ"] = 39] = "VTX_YZ";
-        CmdType[CmdType["VTX_DIFF"] = 40] = "VTX_DIFF";
-        CmdType[CmdType["DIF_AMB"] = 48] = "DIF_AMB";
-        CmdType[CmdType["BEGIN_VTXS"] = 64] = "BEGIN_VTXS";
-        CmdType[CmdType["END_VTXS"] = 65] = "END_VTXS";
-    })(CmdType || (CmdType = {}));
-    var PolyType;
-    (function (PolyType) {
-        PolyType[PolyType["TRIANGLES"] = 0] = "TRIANGLES";
-        PolyType[PolyType["QUADS"] = 1] = "QUADS";
-        PolyType[PolyType["TRIANGLE_STRIP"] = 2] = "TRIANGLE_STRIP";
-        PolyType[PolyType["QUAD_STRIP"] = 3] = "QUAD_STRIP";
-    })(PolyType || (PolyType = {}));
-    // 3 pos + 4 color + 2 uv
-    var VERTEX_SIZE = 9;
-    var VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+    var CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, Packet, Color, TexCoord, Point, Vertex, Context, ContextInternal;
     function rgb5(pixel) {
         var r, g, b;
         r = (pixel & 0x7c00) >> 10;
@@ -641,7 +277,7 @@ var NITRO_GX;
         b = (b << (8 - 5)) | (b >> (10 - 8));
         return { r: r, g: g, b: b };
     }
-    NITRO_GX.rgb5 = rgb5;
+    exports_3("rgb5", rgb5);
     function cmd_MTX_RESTORE(ctx) {
         // XXX: We don't implement the matrix stack yet.
         ctx.readParam();
@@ -761,13 +397,6 @@ var NITRO_GX;
         ctx.s_polyType = polyType;
         ctx.vtxs = [];
     }
-    var Packet = (function () {
-        function Packet() {
-        }
-        return Packet;
-    }());
-    NITRO_GX.Packet = Packet;
-    ;
     function cmd_END_VTXS(ctx) {
         var nVerts = ctx.vtxs.length;
         var vtxBuffer = new Float32Array(nVerts * VERTEX_SIZE);
@@ -856,57 +485,6 @@ var NITRO_GX;
             default: console.warn("Missing command", cmd.toString(16));
         }
     }
-    var Color = (function () {
-        function Color() {
-        }
-        return Color;
-    }());
-    ;
-    var TexCoord = (function () {
-        function TexCoord() {
-        }
-        return TexCoord;
-    }());
-    ;
-    var Point = (function () {
-        function Point() {
-        }
-        return Point;
-    }());
-    ;
-    var Vertex = (function () {
-        function Vertex() {
-        }
-        return Vertex;
-    }());
-    ;
-    var Context = (function () {
-        function Context() {
-        }
-        return Context;
-    }());
-    NITRO_GX.Context = Context;
-    ;
-    var ContextInternal = (function () {
-        function ContextInternal(buffer, baseCtx) {
-            this.offs = 0;
-            this.s_texCoord = new TexCoord();
-            this.alpha = baseCtx.alpha;
-            this.s_color = baseCtx.color;
-            this.view = new DataView(buffer);
-            this.s_texCoord = new TexCoord();
-            this.packets = [];
-        }
-        ContextInternal.prototype.readParam = function () {
-            return this.view.getUint32((this.offs += 4) - 4, true);
-        };
-        ContextInternal.prototype.vtx = function (x, y, z) {
-            this.s_vtx = { x: x, y: y, z: z };
-            this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord });
-        };
-        return ContextInternal;
-    }());
-    ;
     function readCmds(buffer, baseCtx) {
         var ctx = new ContextInternal(buffer, baseCtx);
         while (ctx.offs < buffer.byteLength) {
@@ -922,23 +500,100 @@ var NITRO_GX;
         }
         return ctx.packets;
     }
-    NITRO_GX.readCmds = readCmds;
-})(NITRO_GX || (NITRO_GX = {}));
-var NITRO_Tex;
-(function (NITRO_Tex) {
-    // Read DS texture formats.
-    (function (Format) {
-        Format[Format["Tex_None"] = 0] = "Tex_None";
-        Format[Format["Tex_A3I5"] = 1] = "Tex_A3I5";
-        Format[Format["Tex_Palette4"] = 2] = "Tex_Palette4";
-        Format[Format["Tex_Palette16"] = 3] = "Tex_Palette16";
-        Format[Format["Tex_Palette256"] = 4] = "Tex_Palette256";
-        Format[Format["Tex_CMPR_4x4"] = 5] = "Tex_CMPR_4x4";
-        Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
-        Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
-    })(NITRO_Tex.Format || (NITRO_Tex.Format = {}));
-    var Format = NITRO_Tex.Format;
-    ;
+    exports_3("readCmds", readCmds);
+    return {
+        setters:[],
+        execute: function() {
+            (function (CmdType) {
+                CmdType[CmdType["MTX_RESTORE"] = 20] = "MTX_RESTORE";
+                CmdType[CmdType["COLOR"] = 32] = "COLOR";
+                CmdType[CmdType["NORMAL"] = 33] = "NORMAL";
+                CmdType[CmdType["TEXCOORD"] = 34] = "TEXCOORD";
+                CmdType[CmdType["VTX_16"] = 35] = "VTX_16";
+                CmdType[CmdType["VTX_10"] = 36] = "VTX_10";
+                CmdType[CmdType["VTX_XY"] = 37] = "VTX_XY";
+                CmdType[CmdType["VTX_XZ"] = 38] = "VTX_XZ";
+                CmdType[CmdType["VTX_YZ"] = 39] = "VTX_YZ";
+                CmdType[CmdType["VTX_DIFF"] = 40] = "VTX_DIFF";
+                CmdType[CmdType["DIF_AMB"] = 48] = "DIF_AMB";
+                CmdType[CmdType["BEGIN_VTXS"] = 64] = "BEGIN_VTXS";
+                CmdType[CmdType["END_VTXS"] = 65] = "END_VTXS";
+            })(CmdType || (CmdType = {}));
+            (function (PolyType) {
+                PolyType[PolyType["TRIANGLES"] = 0] = "TRIANGLES";
+                PolyType[PolyType["QUADS"] = 1] = "QUADS";
+                PolyType[PolyType["TRIANGLE_STRIP"] = 2] = "TRIANGLE_STRIP";
+                PolyType[PolyType["QUAD_STRIP"] = 3] = "QUAD_STRIP";
+            })(PolyType || (PolyType = {}));
+            // 3 pos + 4 color + 2 uv
+            VERTEX_SIZE = 9;
+            VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+            Packet = (function () {
+                function Packet() {
+                }
+                return Packet;
+            }());
+            exports_3("Packet", Packet);
+            ;
+            Color = (function () {
+                function Color() {
+                }
+                return Color;
+            }());
+            ;
+            TexCoord = (function () {
+                function TexCoord() {
+                }
+                return TexCoord;
+            }());
+            ;
+            Point = (function () {
+                function Point() {
+                }
+                return Point;
+            }());
+            ;
+            Vertex = (function () {
+                function Vertex() {
+                }
+                return Vertex;
+            }());
+            ;
+            Context = (function () {
+                function Context() {
+                }
+                return Context;
+            }());
+            exports_3("Context", Context);
+            ;
+            ContextInternal = (function () {
+                function ContextInternal(buffer, baseCtx) {
+                    this.offs = 0;
+                    this.s_texCoord = new TexCoord();
+                    this.alpha = baseCtx.alpha;
+                    this.s_color = baseCtx.color;
+                    this.view = new DataView(buffer);
+                    this.s_texCoord = new TexCoord();
+                    this.packets = [];
+                }
+                ContextInternal.prototype.readParam = function () {
+                    return this.view.getUint32((this.offs += 4) - 4, true);
+                };
+                ContextInternal.prototype.vtx = function (x, y, z) {
+                    this.s_vtx = { x: x, y: y, z: z };
+                    this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord });
+                };
+                return ContextInternal;
+            }());
+            ;
+        }
+    }
+});
+// Read DS texture formats.
+System.register("sm64ds/nitro_tex", [], function(exports_4, context_4) {
+    "use strict";
+    var __moduleName = context_4 && context_4.id;
+    var Format;
     function color(a, r, g, b) {
         return (a << 24) | (r << 16) | (g << 8) | b;
     }
@@ -1128,12 +783,31 @@ var NITRO_Tex;
             default: return console.warn("Unsupported texture format", format), null;
         }
     }
-    NITRO_Tex.readTexture = readTexture;
-})(NITRO_Tex || (NITRO_Tex = {}));
-/// <reference path="nitro_gx.ts" />
-/// <reference path="nitro_tex.ts" />
-var NITRO_BMD;
-(function (NITRO_BMD) {
+    exports_4("readTexture", readTexture);
+    return {
+        setters:[],
+        execute: function() {
+            (function (Format) {
+                Format[Format["Tex_None"] = 0] = "Tex_None";
+                Format[Format["Tex_A3I5"] = 1] = "Tex_A3I5";
+                Format[Format["Tex_Palette4"] = 2] = "Tex_Palette4";
+                Format[Format["Tex_Palette16"] = 3] = "Tex_Palette16";
+                Format[Format["Tex_Palette256"] = 4] = "Tex_Palette256";
+                Format[Format["Tex_CMPR_4x4"] = 5] = "Tex_CMPR_4x4";
+                Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
+                Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
+            })(Format || (Format = {}));
+            exports_4("Format", Format);
+            ;
+        }
+    }
+});
+/// <reference path="../decl.d.ts" />
+System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], function(exports_5, context_5) {
+    "use strict";
+    var __moduleName = context_5 && context_5.id;
+    var NITRO_GX, NITRO_Tex;
+    var Poly, Batch, Model, Texture, BMD;
     // Super Mario 64 DS .bmd format
     function readString(buffer, offs, length) {
         var buf = new Uint8Array(buffer, offs, length);
@@ -1145,26 +819,6 @@ var NITRO_BMD;
         }
         return S;
     }
-    var Poly = (function () {
-        function Poly() {
-        }
-        return Poly;
-    }());
-    NITRO_BMD.Poly = Poly;
-    var Batch = (function () {
-        function Batch() {
-        }
-        return Batch;
-    }());
-    NITRO_BMD.Batch = Batch;
-    ;
-    var Model = (function () {
-        function Model() {
-        }
-        return Model;
-    }());
-    NITRO_BMD.Model = Model;
-    ;
     function parseModel(bmd, view, idx) {
         var offs = bmd.modelOffsBase + idx * 0x40;
         var model = new Model();
@@ -1249,12 +903,6 @@ var NITRO_BMD;
         material.alpha = alpha;
         return material;
     }
-    var Texture = (function () {
-        function Texture() {
-        }
-        return Texture;
-    }());
-    NITRO_BMD.Texture = Texture;
     function parseTexture(bmd, view, texIdx, palIdx) {
         var texOffs = bmd.textureOffsBase + texIdx * 0x14;
         var texture = new Texture();
@@ -1282,12 +930,6 @@ var NITRO_BMD;
         bmd.textures.push(texture);
         return texture;
     }
-    var BMD = (function () {
-        function BMD() {
-        }
-        return BMD;
-    }());
-    NITRO_BMD.BMD = BMD;
     function parse(buffer) {
         var view = new DataView(buffer);
         var bmd = new BMD();
@@ -1308,7 +950,393 @@ var NITRO_BMD;
             bmd.models.push(parseModel(bmd, view, i));
         return bmd;
     }
-    NITRO_BMD.parse = parse;
-    ;
-})(NITRO_BMD || (NITRO_BMD = {}));
+    exports_5("parse", parse);
+    return {
+        setters:[
+            function (NITRO_GX_1) {
+                NITRO_GX = NITRO_GX_1;
+            },
+            function (NITRO_Tex_1) {
+                NITRO_Tex = NITRO_Tex_1;
+            }],
+        execute: function() {
+            Poly = (function () {
+                function Poly() {
+                }
+                return Poly;
+            }());
+            exports_5("Poly", Poly);
+            Batch = (function () {
+                function Batch() {
+                }
+                return Batch;
+            }());
+            exports_5("Batch", Batch);
+            ;
+            Model = (function () {
+                function Model() {
+                }
+                return Model;
+            }());
+            exports_5("Model", Model);
+            ;
+            Texture = (function () {
+                function Texture() {
+                }
+                return Texture;
+            }());
+            exports_5("Texture", Texture);
+            BMD = (function () {
+                function BMD() {
+                }
+                return BMD;
+            }());
+            exports_5("BMD", BMD);
+            ;
+        }
+    }
+});
+/// <reference path="../decl.d.ts" />
+System.register("sm64ds/render", ["lz77", "viewer", "sm64ds/nitro_bmd"], function(exports_6, context_6) {
+    "use strict";
+    var __moduleName = context_6 && context_6.id;
+    var LZ77, Viewer, NITRO_BMD;
+    var DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Texture, Scene, SceneDesc;
+    function fetch(path) {
+        var request = new XMLHttpRequest();
+        request.open("GET", path, true);
+        request.responseType = "arraybuffer";
+        request.send();
+        return new window.Promise(function (resolve, reject) {
+            request.onload = function () {
+                resolve(request.response);
+            };
+            request.onerror = function () {
+                reject();
+            };
+        });
+    }
+    return {
+        setters:[
+            function (LZ77_1) {
+                LZ77 = LZ77_1;
+            },
+            function (Viewer_1) {
+                Viewer = Viewer_1;
+            },
+            function (NITRO_BMD_1) {
+                NITRO_BMD = NITRO_BMD_1;
+            }],
+        execute: function() {
+            DL_VERT_SHADER_SOURCE = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform mat4 u_texCoordMat;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n    \n    void main() {\n        gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);\n        v_color = a_color;\n        v_uv = (u_texCoordMat * vec4(a_uv, 1.0, 1.0)).st;\n    }\n";
+            DL_FRAG_SHADER_SOURCE = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n    \n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (gl_FragColor.a == 0.0)\n            discard;\n    }\n";
+            NITRO_Program = (function (_super) {
+                __extends(NITRO_Program, _super);
+                function NITRO_Program() {
+                    _super.apply(this, arguments);
+                    this.vert = DL_VERT_SHADER_SOURCE;
+                    this.frag = DL_FRAG_SHADER_SOURCE;
+                }
+                NITRO_Program.prototype.bind = function (gl, prog) {
+                    _super.prototype.bind.call(this, gl, prog);
+                    this.localMatrixLocation = gl.getUniformLocation(prog, "u_localMatrix");
+                    this.texCoordMatLocation = gl.getUniformLocation(prog, "u_texCoordMat");
+                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
+                    this.colorLocation = gl.getAttribLocation(prog, "a_color");
+                    this.uvLocation = gl.getAttribLocation(prog, "a_uv");
+                };
+                return NITRO_Program;
+            }(Viewer.Program));
+            // 3 pos + 4 color + 2 uv
+            VERTEX_SIZE = 9;
+            VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+            (function (RenderPass) {
+                RenderPass[RenderPass["OPAQUE"] = 1] = "OPAQUE";
+                RenderPass[RenderPass["TRANSLUCENT"] = 2] = "TRANSLUCENT";
+            })(RenderPass || (RenderPass = {}));
+            ;
+            Texture = (function () {
+                function Texture(bmdTex) {
+                    this.bmdTex = bmdTex;
+                    this.title = bmdTex.name;
+                }
+                Texture.prototype.toCanvas = function () {
+                    var canvas = document.createElement("canvas");
+                    canvas.width = this.bmdTex.width;
+                    canvas.height = this.bmdTex.height;
+                    var ctx = canvas.getContext("2d");
+                    var imgData = ctx.createImageData(canvas.width, canvas.height);
+                    for (var i = 0; i < imgData.data.length; i++)
+                        imgData.data[i] = this.bmdTex.pixels[i];
+                    ctx.putImageData(imgData, 0, 0);
+                    return canvas;
+                };
+                return Texture;
+            }());
+            Scene = (function () {
+                function Scene(gl, bmd) {
+                    var _this = this;
+                    this.program = new NITRO_Program();
+                    this.bmd = bmd;
+                    this.textures = bmd.textures.map(function (texture) {
+                        return new Texture(texture);
+                    });
+                    this.modelFuncs = bmd.models.map(function (bmdm) { return _this.translateModel(gl, bmdm); });
+                }
+                Scene.prototype.translatePacket = function (gl, packet) {
+                    var _this = this;
+                    var vertBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+                    gl.bufferData(gl.ARRAY_BUFFER, packet.vertData, gl.STATIC_DRAW);
+                    var idxBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+                    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, packet.idxData, gl.STATIC_DRAW);
+                    return function () {
+                        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+                        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+                        gl.vertexAttribPointer(_this.program.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+                        gl.vertexAttribPointer(_this.program.colorLocation, 4, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+                        gl.vertexAttribPointer(_this.program.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 7 * Float32Array.BYTES_PER_ELEMENT);
+                        gl.enableVertexAttribArray(_this.program.positionLocation);
+                        gl.enableVertexAttribArray(_this.program.colorLocation);
+                        gl.enableVertexAttribArray(_this.program.uvLocation);
+                        gl.drawElements(gl.TRIANGLES, packet.idxData.length, gl.UNSIGNED_SHORT, 0);
+                        gl.disableVertexAttribArray(_this.program.positionLocation);
+                        gl.disableVertexAttribArray(_this.program.colorLocation);
+                        gl.disableVertexAttribArray(_this.program.uvLocation);
+                    };
+                };
+                Scene.prototype.translatePoly = function (gl, poly) {
+                    var _this = this;
+                    var funcs = poly.packets.map(function (packet) { return _this.translatePacket(gl, packet); });
+                    return function () {
+                        funcs.forEach(function (f) { f(); });
+                    };
+                };
+                Scene.prototype.translateMaterial = function (gl, material) {
+                    var _this = this;
+                    var texture = material.texture;
+                    var texId;
+                    function wrapMode(repeat, flip) {
+                        if (repeat)
+                            return flip ? gl.MIRRORED_REPEAT : gl.REPEAT;
+                        else
+                            return gl.CLAMP_TO_EDGE;
+                    }
+                    if (texture !== null) {
+                        texId = gl.createTexture();
+                        gl.bindTexture(gl.TEXTURE_2D, texId);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                        var repeatS = (material.texParams >> 16) & 0x01;
+                        var repeatT = (material.texParams >> 17) & 0x01;
+                        var flipS = (material.texParams >> 18) & 0x01;
+                        var flipT = (material.texParams >> 19) & 0x01;
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapMode(repeatS, flipS));
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapMode(repeatT, flipT));
+                        gl.bindTexture(gl.TEXTURE_2D, texId);
+                        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
+                    }
+                    return function () {
+                        if (texture !== null) {
+                            gl.uniformMatrix4fv(_this.program.texCoordMatLocation, false, material.texCoordMat);
+                            gl.bindTexture(gl.TEXTURE_2D, texId);
+                        }
+                        gl.depthMask(material.depthWrite);
+                    };
+                };
+                Scene.prototype.translateBatch = function (gl, batch) {
+                    var batchPass = batch.material.isTranslucent ? RenderPass.TRANSLUCENT : RenderPass.OPAQUE;
+                    var applyMaterial = this.translateMaterial(gl, batch.material);
+                    var renderPoly = this.translatePoly(gl, batch.poly);
+                    return function (pass) {
+                        if (pass != batchPass)
+                            return;
+                        applyMaterial();
+                        renderPoly();
+                    };
+                };
+                Scene.prototype.translateModel = function (gl, bmdm) {
+                    var _this = this;
+                    var localMatrix = window.mat4.create();
+                    var bmd = this.bmd;
+                    window.mat4.scale(localMatrix, localMatrix, [bmd.scaleFactor, bmd.scaleFactor, bmd.scaleFactor]);
+                    var batches = bmdm.batches.map(function (batch) { return _this.translateBatch(gl, batch); });
+                    return function (pass) {
+                        gl.uniformMatrix4fv(_this.program.localMatrixLocation, false, localMatrix);
+                        batches.forEach(function (f) { f(pass); });
+                    };
+                };
+                Scene.prototype.renderModels = function (pass) {
+                    return this.modelFuncs.forEach(function (func) {
+                        func(pass);
+                    });
+                };
+                Scene.prototype.render = function (state) {
+                    var gl = state.viewport.gl;
+                    state.useProgram(this.program);
+                    gl.enable(gl.DEPTH_TEST);
+                    gl.enable(gl.BLEND);
+                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                    // First pass, opaque.
+                    this.renderModels(RenderPass.OPAQUE);
+                    // Second pass, translucent.
+                    this.renderModels(RenderPass.TRANSLUCENT);
+                };
+                return Scene;
+            }());
+            SceneDesc = (function () {
+                function SceneDesc(name, path) {
+                    this.name = name;
+                    this.path = path;
+                }
+                SceneDesc.prototype.createScene = function (gl) {
+                    return fetch(this.path).then(function (result) {
+                        var decompressed = LZ77.decompress(result);
+                        var bmd = NITRO_BMD.parse(decompressed);
+                        return new Scene(gl, bmd);
+                    });
+                };
+                return SceneDesc;
+            }());
+            exports_6("SceneDesc", SceneDesc);
+        }
+    }
+});
+System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_7, context_7) {
+    "use strict";
+    var __moduleName = context_7 && context_7.id;
+    var render_1;
+    var sceneDescs;
+    function loadSceneDescs() {
+        return sceneDescs;
+    }
+    exports_7("loadSceneDescs", loadSceneDescs);
+    return {
+        setters:[
+            function (render_1_1) {
+                render_1 = render_1_1;
+            }],
+        execute: function() {
+            sceneDescs = [
+                'battan_king_map_all.bmd',
+                'bombhei_map_all.bmd',
+                'castle_1f_all.bmd',
+                'castle_2f_all.bmd',
+                'castle_b1_all.bmd',
+                'cave_all.bmd',
+                'clock_tower_all.bmd',
+                'desert_land_all.bmd',
+                'desert_py_all.bmd',
+                'ex_l_map_all.bmd',
+                'ex_luigi_all.bmd',
+                'ex_m_map_all.bmd',
+                'ex_mario_all.bmd',
+                'ex_w_map_all.bmd',
+                'ex_wario_all.bmd',
+                'fire_land_all.bmd',
+                'fire_mt_all.bmd',
+                'habatake_all.bmd',
+                'high_mt_all.bmd',
+                'high_slider_all.bmd',
+                'horisoko_all.bmd',
+                'kaizoku_irie_all.bmd',
+                'kaizoku_ship_all.bmd',
+                'koopa1_boss_all.bmd',
+                'koopa1_map_all.bmd',
+                'koopa2_boss_all.bmd',
+                'koopa2_map_all.bmd',
+                'koopa3_boss_all.bmd',
+                'koopa3_map_all.bmd',
+                'main_castle_all.bmd',
+                'main_garden_all.bmd',
+                'metal_switch_all.bmd',
+                'playroom_all.bmd',
+                'rainbow_cruise_all.bmd',
+                'rainbow_mario_all.bmd',
+                'snow_kama_all.bmd',
+                'snow_land_all.bmd',
+                'snow_mt_all.bmd',
+                'snow_slider_all.bmd',
+                'suisou_all.bmd',
+                'teresa_house_all.bmd',
+                'test_map_all.bmd',
+                'test_map_b_all.bmd',
+                'tibi_deka_d_all.bmd',
+                'tibi_deka_in_all.bmd',
+                'tibi_deka_t_all.bmd',
+                'water_city_all.bmd',
+                'water_land_all.bmd',
+            ].map(function (filename) {
+                var path = 'data/sm64ds/' + filename;
+                return new render_1.SceneDesc(filename, path);
+            });
+        }
+    }
+});
+System.register("main", ["viewer", "sm64ds/scenes"], function(exports_8, context_8) {
+    "use strict";
+    var __moduleName = context_8 && context_8.id;
+    var viewer_1, SM64DS;
+    var Main;
+    return {
+        setters:[
+            function (viewer_1_1) {
+                viewer_1 = viewer_1_1;
+            },
+            function (SM64DS_1) {
+                SM64DS = SM64DS_1;
+            }],
+        execute: function() {
+            Main = (function () {
+                function Main() {
+                    var canvas = document.querySelector('canvas');
+                    this.viewer = new viewer_1.Viewer(canvas);
+                    this.viewer.start();
+                    this.sceneDescs = [];
+                    // The "plugin" part of this.
+                    this.sceneDescs = this.sceneDescs.concat(SM64DS.loadSceneDescs());
+                    this.makeUI();
+                }
+                Main.prototype.loadSceneDesc = function (sceneDesc) {
+                    var _this = this;
+                    var gl = this.viewer.sceneGraph.renderState.viewport.gl;
+                    sceneDesc.createScene(gl).then(function (result) {
+                        _this.viewer.setScene(result);
+                        var textures = document.querySelector('#textures');
+                        textures.innerHTML = '';
+                        result.textures.forEach(function (tex) {
+                            var canvas = tex.toCanvas();
+                            canvas.title = tex.title;
+                            textures.appendChild(canvas);
+                        });
+                    });
+                };
+                Main.prototype.makeUI = function () {
+                    var _this = this;
+                    var pl = document.querySelector('#pl');
+                    var select = document.createElement('select');
+                    this.sceneDescs.forEach(function (entry) {
+                        var option = document.createElement('option');
+                        option.textContent = entry.name;
+                        select.appendChild(option);
+                    });
+                    pl.appendChild(select);
+                    var button = document.createElement('button');
+                    button.textContent = 'Load';
+                    button.addEventListener('click', function () {
+                        var sceneDesc = _this.sceneDescs[select.selectedIndex];
+                        _this.loadSceneDesc(sceneDesc);
+                    });
+                    pl.appendChild(button);
+                };
+                return Main;
+            }());
+            exports_8("Main", Main);
+            window.addEventListener('load', function () {
+                window.main = new Main();
+            });
+        }
+    }
+});
 //# sourceMappingURL=main.js.map
