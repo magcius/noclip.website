@@ -17,7 +17,11 @@
     <canvas id="scene" width="1280" height="800"></canvas>
 
     <script src="https://cdn.rawgit.com/toji/gl-matrix/master/dist/gl-matrix-min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/systemjs/0.19.40/system.src.js"></script>
     <script src="build/main.js"></script>
+    <script>
+      System.import('main');
+    </script>
 
     <p>Use WASD to move around, hold shift to go faster. Click to rotate, and press B to reset the camera.</p>
     <h2>Textures</h2>
