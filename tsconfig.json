@@ -2,6 +2,7 @@
     "compilerOptions": {
         "target": "es5",
         "sourceMap": true,
+        "module": "system",
         "outFile": "build/main.js"
     }
 }

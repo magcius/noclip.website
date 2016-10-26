@@ -14,57 +14,55 @@
 //     If flag is 0:
 //       Literal: copy one byte from src to dest.
 
-namespace LZ77 {
-    function assert(b:boolean) {
-        if (!b) throw new Error("Assert fail");
+function assert(b:boolean) {
+    if (!b) throw new Error("Assert fail");
+}
+
+function readString(buffer:ArrayBuffer, offs:number, length:number):string {
+    const buf = new Uint8Array(buffer, offs, length);
+    let S = '';
+    for (let i = 0; i < length; i++) {
+        if (buf[i] === 0)
+            break;
+        S += String.fromCharCode(buf[i]);
     }
+    return S;
+}
 
-    function readString(buffer:ArrayBuffer, offs:number, length:number):string {
-        const buf = new Uint8Array(buffer, offs, length);
-        let S = '';
-        for (let i = 0; i < length; i++) {
-            if (buf[i] === 0)
-                break;
-            S += String.fromCharCode(buf[i]);
-        }
-        return S;
-    }
+export function decompress(srcBuffer:ArrayBuffer) {
+    const srcView = new DataView(srcBuffer);
+    assert(readString(srcBuffer, 0x00, 0x05) == 'LZ77\x10');
 
-    export function decompress(srcBuffer:ArrayBuffer) {
-        const srcView = new DataView(srcBuffer);
-        assert(readString(srcBuffer, 0x00, 0x05) == 'LZ77\x10');
+    let uncompressedSize = srcView.getUint32(0x04, true) >> 8;
+    const dstBuffer = new Uint8Array(uncompressedSize);
 
-        let uncompressedSize = srcView.getUint32(0x04, true) >> 8;
-        const dstBuffer = new Uint8Array(uncompressedSize);
+    let srcOffs = 0x08;
+    let dstOffs = 0x00; 
 
-        let srcOffs = 0x08;
-        let dstOffs = 0x00; 
+    while (true) {
+        const commandByte = srcView.getUint8(srcOffs++);
+        let i = 8;
+        while (i--) {
+            if (commandByte & (1 << i)) {
+                const tmp = srcView.getUint16(srcOffs, false);
+                srcOffs += 2;
 
-        while (true) {
-            const commandByte = srcView.getUint8(srcOffs++);
-            let i = 8;
-            while (i--) {
-                if (commandByte & (1 << i)) {
-                    const tmp = srcView.getUint16(srcOffs, false);
-                    srcOffs += 2;
+                const windowOffset = (tmp & 0x0FFF) + 1;
+                let windowLength = (tmp >> 12) + 3;
 
-                    const windowOffset = (tmp & 0x0FFF) + 1;
-                    let windowLength = (tmp >> 12) + 3;
+                let copyOffs = dstOffs - windowOffset;
 
-                    let copyOffs = dstOffs - windowOffset;
-
-                    uncompressedSize -= windowLength;
-                    while (windowLength--)
-                        dstBuffer[dstOffs++] = dstBuffer[copyOffs++];
-                } else {
-                    // Literal.
-                    uncompressedSize--;
-                    dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
-                }
-
-                if (uncompressedSize <= 0)
-                    return dstBuffer.buffer;
+                uncompressedSize -= windowLength;
+                while (windowLength--)
+                    dstBuffer[dstOffs++] = dstBuffer[copyOffs++];
+            } else {
+                // Literal.
+                uncompressedSize--;
+                dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
             }
+
+            if (uncompressedSize <= 0)
+                return dstBuffer.buffer;
         }
     }
 }
