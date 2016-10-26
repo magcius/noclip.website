@@ -201,8 +201,8 @@ namespace NITRO_GX {
     }
 
     export class Packet {
-        vertData: WebGLBuffer;
-        idxData: WebGLBuffer;
+        vertData: Float32Array;
+        idxData: Uint16Array;
         polyType: PolyType;
     };
 
