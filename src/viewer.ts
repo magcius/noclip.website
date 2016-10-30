@@ -6,11 +6,6 @@ class Viewport {
     gl:WebGLRenderingContext;
 }
 
-export interface Texture {
-    toCanvas():HTMLCanvasElement;
-    title:string;
-}
-
 function compileShader(gl:WebGLRenderingContext, str:string, type:number) {
     var shader = gl.createShader(type);
 
@@ -83,7 +78,7 @@ export class RenderState {
 
 export interface Scene {
     render(state:RenderState);
-    textures:Texture[];
+    textures:HTMLCanvasElement[];
 }
 
 class SceneGraph {

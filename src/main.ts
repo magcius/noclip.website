@@ -29,9 +29,7 @@ export class Main {
 
             const textures = document.querySelector('#textures');
             textures.innerHTML = '';
-            result.textures.forEach((tex) => {
-                const canvas = tex.toCanvas();
-                canvas.title = tex.title;
+            result.textures.forEach((canvas) => {
                 textures.appendChild(canvas);
             });
         });

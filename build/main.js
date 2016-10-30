@@ -1026,7 +1026,19 @@ System.register("sm64ds/render", ["lz77", "viewer", "sm64ds/nitro_bmd", "util"],
     "use strict";
     var __moduleName = context_7 && context_7.id;
     var LZ77, Viewer, NITRO_BMD, util_1;
-    var DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Texture, Scene, SceneDesc;
+    var DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Scene, SceneDesc;
+    function textureToCanvas(bmdTex) {
+        var canvas = document.createElement("canvas");
+        canvas.width = bmdTex.width;
+        canvas.height = bmdTex.height;
+        canvas.title = bmdTex.name;
+        var ctx = canvas.getContext("2d");
+        var imgData = ctx.createImageData(canvas.width, canvas.height);
+        for (var i = 0; i < imgData.data.length; i++)
+            imgData.data[i] = bmdTex.pixels[i];
+        ctx.putImageData(imgData, 0, 0);
+        return canvas;
+    }
     return {
         setters:[
             function (LZ77_1) {
@@ -1069,31 +1081,13 @@ System.register("sm64ds/render", ["lz77", "viewer", "sm64ds/nitro_bmd", "util"],
                 RenderPass[RenderPass["TRANSLUCENT"] = 2] = "TRANSLUCENT";
             })(RenderPass || (RenderPass = {}));
             ;
-            Texture = (function () {
-                function Texture(bmdTex) {
-                    this.bmdTex = bmdTex;
-                    this.title = bmdTex.name;
-                }
-                Texture.prototype.toCanvas = function () {
-                    var canvas = document.createElement("canvas");
-                    canvas.width = this.bmdTex.width;
-                    canvas.height = this.bmdTex.height;
-                    var ctx = canvas.getContext("2d");
-                    var imgData = ctx.createImageData(canvas.width, canvas.height);
-                    for (var i = 0; i < imgData.data.length; i++)
-                        imgData.data[i] = this.bmdTex.pixels[i];
-                    ctx.putImageData(imgData, 0, 0);
-                    return canvas;
-                };
-                return Texture;
-            }());
             Scene = (function () {
                 function Scene(gl, bmd) {
                     var _this = this;
                     this.program = new NITRO_Program();
                     this.bmd = bmd;
                     this.textures = bmd.textures.map(function (texture) {
-                        return new Texture(texture);
+                        return textureToCanvas(texture);
                     });
                     this.modelFuncs = bmd.models.map(function (bmdm) { return _this.translateModel(gl, bmdm); });
                 }
@@ -1294,7 +1288,7 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_8, context_
 System.register("zelview/f3dex2", [], function(exports_9, context_9) {
     "use strict";
     var __moduleName = context_9 && context_9.id;
-    var vec3, mat4, UCodeCommands, UCodeNames, name, VERTEX_SIZE, VERTEX_BYTES, N, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
+    var vec3, mat4, UCodeCommands, UCodeNames, name, VERTEX_SIZE, VERTEX_BYTES, N, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL, State;
     function readVertex(state, which, addr) {
         var rom = state.rom;
         var offs = state.lookupAddress(addr);
@@ -1573,38 +1567,6 @@ System.register("zelview/f3dex2", [], function(exports_9, context_9) {
             tile.wrapT = otherTile.wrapT;
         }
     }
-    function textureToCanvas(texture) {
-        var canvas = document.createElement("canvas");
-        canvas.width = texture.width;
-        canvas.height = texture.height;
-        var ctx = canvas.getContext("2d");
-        var imgData = ctx.createImageData(canvas.width, canvas.height);
-        if (texture.dstFormat == "i8") {
-            for (var si = 0, di = 0; di < imgData.data.length; si++, di += 4) {
-                imgData.data[di + 0] = texture.pixels[si];
-                imgData.data[di + 1] = texture.pixels[si];
-                imgData.data[di + 2] = texture.pixels[si];
-                imgData.data[di + 3] = 255;
-            }
-        }
-        else if (texture.dstFormat == "i8_a8") {
-            for (var si = 0, di = 0; di < imgData.data.length; si += 2, di += 4) {
-                imgData.data[di + 0] = texture.pixels[si];
-                imgData.data[di + 1] = texture.pixels[si];
-                imgData.data[di + 2] = texture.pixels[si];
-                imgData.data[di + 3] = texture.pixels[si + 1];
-            }
-        }
-        else if (texture.dstFormat == "rgba8") {
-            for (var i = 0; i < imgData.data.length; i++)
-                imgData.data[i] = texture.pixels[i];
-        }
-        canvas.title = '0x' + texture.addr.toString(16) + '  ' + texture.format.toString(16) + '  ' + texture.dstFormat;
-        ctx.putImageData(imgData, 0, 0);
-        var textures = document.querySelector('#textures');
-        textures.appendChild(canvas);
-        return canvas;
-    }
     function convert_CI4(state, texture) {
         var srcOffs = state.lookupAddress(texture.addr);
         var nBytes = texture.width * texture.height * 4;
@@ -1755,6 +1717,36 @@ System.register("zelview/f3dex2", [], function(exports_9, context_9) {
         }
         texture.pixels = dst;
     }
+    function textureToCanvas(texture) {
+        var canvas = document.createElement("canvas");
+        canvas.width = texture.width;
+        canvas.height = texture.height;
+        var ctx = canvas.getContext("2d");
+        var imgData = ctx.createImageData(canvas.width, canvas.height);
+        if (texture.dstFormat == "i8") {
+            for (var si = 0, di = 0; di < imgData.data.length; si++, di += 4) {
+                imgData.data[di + 0] = texture.pixels[si];
+                imgData.data[di + 1] = texture.pixels[si];
+                imgData.data[di + 2] = texture.pixels[si];
+                imgData.data[di + 3] = 255;
+            }
+        }
+        else if (texture.dstFormat == "i8_a8") {
+            for (var si = 0, di = 0; di < imgData.data.length; si += 2, di += 4) {
+                imgData.data[di + 0] = texture.pixels[si];
+                imgData.data[di + 1] = texture.pixels[si];
+                imgData.data[di + 2] = texture.pixels[si];
+                imgData.data[di + 3] = texture.pixels[si + 1];
+            }
+        }
+        else if (texture.dstFormat == "rgba8") {
+            for (var i = 0; i < imgData.data.length; i++)
+                imgData.data[i] = texture.pixels[i];
+        }
+        canvas.title = '0x' + texture.addr.toString(16) + '  ' + texture.format.toString(16) + '  ' + texture.dstFormat;
+        ctx.putImageData(imgData, 0, 0);
+        return canvas;
+    }
     function translateTexture(state, texture) {
         var gl = state.gl;
         calcTextureSize(texture);
@@ -1807,9 +1799,9 @@ System.register("zelview/f3dex2", [], function(exports_9, context_9) {
             glFormat = gl.LUMINANCE_ALPHA;
         else if (texture.dstFormat == "rgba8")
             glFormat = gl.RGBA;
-        textureToCanvas(texture);
         gl.texImage2D(gl.TEXTURE_2D, 0, glFormat, texture.width, texture.height, 0, glFormat, gl.UNSIGNED_BYTE, texture.pixels);
         texture.textureId = texId;
+        state.textures.push(textureToCanvas(texture));
     }
     function calcTextureDestFormat(texture) {
         switch (texture.format & 0xE0) {
@@ -1974,20 +1966,19 @@ System.register("zelview/f3dex2", [], function(exports_9, context_9) {
         }
     }
     function readDL(gl, rom, banks, startAddr) {
-        var state = {};
+        var state = new State;
         state.gl = gl;
         state.cmds = [];
+        state.textures = [];
         state.mtx = mat4.create();
         state.mtxStack = [state.mtx];
         state.vertexBuffer = new Float32Array(32 * VERTEX_SIZE);
         state.verticesDirty = [];
         state.paletteTile = {};
         state.rom = rom;
-        state.lookupAddress = function (addr) {
-            return rom.lookupAddress(banks, addr);
-        };
+        state.banks = banks;
         runDL(state, startAddr);
-        return new DL(state.cmds);
+        return new DL(state.cmds, state.textures);
     }
     exports_9("readDL", readDL);
     return {
@@ -2058,12 +2049,22 @@ System.register("zelview/f3dex2", [], function(exports_9, context_9) {
             CommandDispatch[UCodeCommands.SETTILESIZE] = cmd_SETTILESIZE;
             F3DEX2 = {};
             DL = (function () {
-                function DL(cmds) {
+                function DL(cmds, textures) {
                     this.cmds = cmds;
+                    this.textures = textures;
                 }
                 return DL;
             }());
             exports_9("DL", DL);
+            State = (function () {
+                function State() {
+                }
+                State.prototype.lookupAddress = function (addr) {
+                    return this.rom.lookupAddress(this.banks, addr);
+                };
+                ;
+                return State;
+            }());
         }
     }
 });
@@ -2137,8 +2138,8 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_10, con
             var vertsAddr = rom.view.getUint32(offs + 0x10, false);
             var verts = readVerts(vertsN, vertsAddr);
             function readPolys(N, addr) {
-                var offs = rom.lookupAddress(banks, addr);
                 var polys = new Uint16Array(N * 3);
+                var offs = rom.lookupAddress(banks, addr);
                 for (var i = 0; i < N; i++) {
                     polys[i * 3 + 0] = rom.view.getUint16(offs + 0x02, false) & 0x0FFF;
                     polys[i * 3 + 1] = rom.view.getUint16(offs + 0x04, false) & 0x0FFF;
@@ -2319,6 +2320,9 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_10, con
             }
             mesh.opaque = mesh.opaque.filter(function (dl) { return !!dl; });
             mesh.transparent = mesh.transparent.filter(function (dl) { return !!dl; });
+            mesh.textures = [];
+            mesh.opaque.forEach(function (dl) { mesh.textures = mesh.textures.concat(dl.textures); });
+            mesh.transparent.forEach(function (dl) { mesh.textures = mesh.textures.concat(dl.textures); });
             return mesh;
         }
         headers.rooms = [];
@@ -2528,6 +2532,7 @@ System.register("zelview/render", ["zelview/zelview0", "viewer", "util"], functi
             }(Viewer.Program));
             Scene = (function () {
                 function Scene(gl, zelview0) {
+                    var _this = this;
                     this.zelview0 = zelview0;
                     this.textures = [];
                     this.program_BG = new BG_Program();
@@ -2535,6 +2540,9 @@ System.register("zelview/render", ["zelview/zelview0", "viewer", "util"], functi
                     this.program_DL = new DL_Program();
                     this.program_WATERS = new WATERS_Program();
                     var mainScene = zelview0.loadMainScene(gl);
+                    mainScene.rooms.forEach(function (room) {
+                        _this.textures = _this.textures.concat(room.mesh.textures);
+                    });
                     var renderScene = this.translateScene(gl, mainScene);
                     var renderCollision = this.translateCollision(gl, mainScene);
                     var renderWaterBoxes = this.translateWaterBoxes(gl, mainScene);
@@ -3147,9 +3155,7 @@ System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes"], function(
                         _this.viewer.setScene(result);
                         var textures = document.querySelector('#textures');
                         textures.innerHTML = '';
-                        result.textures.forEach(function (tex) {
-                            var canvas = tex.toCanvas();
-                            canvas.title = tex.title;
+                        result.textures.forEach(function (canvas) {
                             textures.appendChild(canvas);
                         });
                     });
