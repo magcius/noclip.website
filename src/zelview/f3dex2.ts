@@ -397,40 +397,6 @@ function loadTile(state, tile) {
     }
 }
 
-function textureToCanvas(texture) {
-    var canvas = document.createElement("canvas");
-    canvas.width = texture.width;
-    canvas.height = texture.height;
-
-    var ctx = canvas.getContext("2d");
-    var imgData = ctx.createImageData(canvas.width, canvas.height);
-
-    if (texture.dstFormat == "i8") {
-        for (var si = 0, di = 0; di < imgData.data.length; si++, di += 4) {
-            imgData.data[di+0] = texture.pixels[si];
-            imgData.data[di+1] = texture.pixels[si];
-            imgData.data[di+2] = texture.pixels[si];
-            imgData.data[di+3] = 255;
-        }
-    } else if (texture.dstFormat == "i8_a8") {
-        for (var si = 0, di = 0; di < imgData.data.length; si += 2, di += 4) {
-            imgData.data[di+0] = texture.pixels[si];
-            imgData.data[di+1] = texture.pixels[si];
-            imgData.data[di+2] = texture.pixels[si];
-            imgData.data[di+3] = texture.pixels[si + 1];
-        }
-    } else if (texture.dstFormat == "rgba8") {
-        for (var i = 0; i < imgData.data.length; i++)
-            imgData.data[i] = texture.pixels[i];
-    }
-
-    canvas.title = '0x' + texture.addr.toString(16) + '  ' + texture.format.toString(16) + '  ' + texture.dstFormat;
-    ctx.putImageData(imgData, 0, 0);
-    var textures = document.querySelector('#textures');
-    textures.appendChild(canvas);
-    return canvas;
-}
-
 function convert_CI4(state, texture) {
     var srcOffs = state.lookupAddress(texture.addr);
     var nBytes = texture.width * texture.height * 4;
@@ -613,8 +579,40 @@ function convert_IA16(state, texture) {
     texture.pixels = dst;
 }
 
+function textureToCanvas(texture) {
+    var canvas = document.createElement("canvas");
+    canvas.width = texture.width;
+    canvas.height = texture.height;
+
+    var ctx = canvas.getContext("2d");
+    var imgData = ctx.createImageData(canvas.width, canvas.height);
+
+    if (texture.dstFormat == "i8") {
+        for (var si = 0, di = 0; di < imgData.data.length; si++, di += 4) {
+            imgData.data[di+0] = texture.pixels[si];
+            imgData.data[di+1] = texture.pixels[si];
+            imgData.data[di+2] = texture.pixels[si];
+            imgData.data[di+3] = 255;
+        }
+    } else if (texture.dstFormat == "i8_a8") {
+        for (var si = 0, di = 0; di < imgData.data.length; si += 2, di += 4) {
+            imgData.data[di+0] = texture.pixels[si];
+            imgData.data[di+1] = texture.pixels[si];
+            imgData.data[di+2] = texture.pixels[si];
+            imgData.data[di+3] = texture.pixels[si + 1];
+        }
+    } else if (texture.dstFormat == "rgba8") {
+        for (var i = 0; i < imgData.data.length; i++)
+            imgData.data[i] = texture.pixels[i];
+    }
+
+    canvas.title = '0x' + texture.addr.toString(16) + '  ' + texture.format.toString(16) + '  ' + texture.dstFormat;
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+}
+
 function translateTexture(state, texture) {
-    var gl = state.gl;
+    const gl = state.gl;
 
     calcTextureSize(texture);
 
@@ -637,7 +635,7 @@ function translateTexture(state, texture) {
 
     texture.dstFormat = calcTextureDestFormat(texture);
 
-    var srcOffs = state.lookupAddress(texture.addr);
+    const srcOffs = state.lookupAddress(texture.addr);
     if (srcOffs !== null)
         convertTexturePixels();
 
@@ -662,12 +660,12 @@ function translateTexture(state, texture) {
     texture.wrapT = translateWrap(texture.cmt);
     texture.wrapS = translateWrap(texture.cms);
 
-    var texId = gl.createTexture();
+    const texId = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texId);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    var glFormat;
+    let glFormat;
     if (texture.dstFormat == "i8")
         glFormat = gl.LUMINANCE;
     else if (texture.dstFormat == "i8_a8")
@@ -675,10 +673,10 @@ function translateTexture(state, texture) {
     else if (texture.dstFormat == "rgba8")
         glFormat = gl.RGBA;
 
-    textureToCanvas(texture);
-
     gl.texImage2D(gl.TEXTURE_2D, 0, glFormat, texture.width, texture.height, 0, glFormat, gl.UNSIGNED_BYTE, texture.pixels);
     texture.textureId = texId;
+
+    state.textures.push(textureToCanvas(texture));
 }
 
 function calcTextureDestFormat(texture) {
@@ -839,16 +837,41 @@ function runDL(state, addr) {
 
 export class DL {
     cmds:Function[];
-    constructor(cmds:Function[]) {
+    textures:HTMLCanvasElement[];
+
+    constructor(cmds:Function[], textures:HTMLCanvasElement[]) {
         this.cmds = cmds;
+        this.textures = textures;
     }
 }
 
+class State {
+    gl:WebGLRenderingContext;
+
+    cmds:Function[];
+    textures:HTMLCanvasElement[];
+
+    mtx:any;
+    mtxStack:any[];
+
+    vertexBuffer:Float32Array;
+    verticesDirty:number[];
+
+    paletteTile:{};
+    rom:any;
+    banks:any;
+
+    lookupAddress(addr) {
+        return this.rom.lookupAddress(this.banks, addr);
+    };
+}
+
 export function readDL(gl:WebGLRenderingContext, rom, banks, startAddr):DL {
-    var state:any = {};
+    var state = new State;
 
     state.gl = gl;
     state.cmds = [];
+    state.textures = [];
 
     state.mtx = mat4.create();
     state.mtxStack = [state.mtx];
@@ -858,10 +881,8 @@ export function readDL(gl:WebGLRenderingContext, rom, banks, startAddr):DL {
 
     state.paletteTile = {};
     state.rom = rom;
-    state.lookupAddress = function(addr) {
-        return rom.lookupAddress(banks, addr);
-    };
+    state.banks = banks;
 
     runDL(state, startAddr);
-    return new DL(state.cmds);
+    return new DL(state.cmds, state.textures);
 }

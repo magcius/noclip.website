@@ -70,33 +70,24 @@ enum RenderPass {
     TRANSLUCENT = 0x02,
 };
 
-class Texture implements Viewer.Texture {
-    bmdTex:NITRO_BMD.Texture;
-    title:string;
+function textureToCanvas(bmdTex:NITRO_BMD.Texture) {
+    const canvas = document.createElement("canvas");
+    canvas.width = bmdTex.width;
+    canvas.height = bmdTex.height;
+    canvas.title = bmdTex.name;
 
-    constructor(bmdTex:NITRO_BMD.Texture) {
-        this.bmdTex = bmdTex;
-        this.title = bmdTex.name;
-    }
+    const ctx = canvas.getContext("2d");
+    const imgData = ctx.createImageData(canvas.width, canvas.height);
 
-    toCanvas() {
-        const canvas = document.createElement("canvas");
-        canvas.width = this.bmdTex.width;
-        canvas.height = this.bmdTex.height;
+    for (let i = 0; i < imgData.data.length; i++)
+        imgData.data[i] = bmdTex.pixels[i];
 
-        const ctx = canvas.getContext("2d");
-        const imgData = ctx.createImageData(canvas.width, canvas.height);
-
-        for (let i = 0; i < imgData.data.length; i++)
-            imgData.data[i] = this.bmdTex.pixels[i];
-
-        ctx.putImageData(imgData, 0, 0);
-        return canvas;
-    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
 }
 
 class Scene implements Viewer.Scene {
-    textures:Viewer.Texture[];
+    textures:HTMLCanvasElement[];
     modelFuncs:Function[];
     program:NITRO_Program;
     bmd:NITRO_BMD.BMD;
@@ -106,7 +97,7 @@ class Scene implements Viewer.Scene {
         this.bmd = bmd;
 
         this.textures = bmd.textures.map((texture) => {
-            return new Texture(texture);
+            return textureToCanvas(texture);
         });
         this.modelFuncs = bmd.models.map((bmdm) => this.translateModel(gl, bmdm));
     }
@@ -214,7 +205,7 @@ class Scene implements Viewer.Scene {
     renderModels(pass:RenderPass) {
         return this.modelFuncs.forEach((func) => {
             func(pass);
-        })
+        });
     }
 
     render(state:Viewer.RenderState) {

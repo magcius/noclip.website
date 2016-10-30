@@ -161,7 +161,7 @@ class WATERS_Program extends Viewer.Program {
 }
 
 class Scene implements Viewer.Scene {
-    textures:Viewer.Texture[];
+    textures:HTMLCanvasElement[];
     zelview0:ZELVIEW0.ZELVIEW0;
     program_BG:BG_Program;
     program_COLL:COLL_Program;
@@ -179,6 +179,9 @@ class Scene implements Viewer.Scene {
         this.program_WATERS = new WATERS_Program();
 
         const mainScene = zelview0.loadMainScene(gl);
+        mainScene.rooms.forEach((room) => {
+            this.textures = this.textures.concat(room.mesh.textures);
+        });
 
         const renderScene = this.translateScene(gl, mainScene);
         const renderCollision = this.translateCollision(gl, mainScene);

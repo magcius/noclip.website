@@ -70,7 +70,8 @@ export class ZELVIEW0 {
 class Mesh {
     opaque:F3DEX2.DL[] = [];
     transparent:F3DEX2.DL[] = [];
-    bg:any;
+    bg:Function;
+    textures:HTMLCanvasElement[];
 }
 
 export class Headers {
@@ -160,14 +161,14 @@ function readHeaders(gl, rom, offs, banks) {
             }
             return verts;
         }
-        var vertsN = rom.view.getUint16(offs + 0x0C, false);
-        var vertsAddr = rom.view.getUint32(offs + 0x10, false);
-        var verts = readVerts(vertsN, vertsAddr);
+        const vertsN = rom.view.getUint16(offs + 0x0C, false);
+        const vertsAddr = rom.view.getUint32(offs + 0x10, false);
+        const verts = readVerts(vertsN, vertsAddr);
 
         function readPolys(N, addr) {
-            var offs = rom.lookupAddress(banks, addr);
-            var polys = new Uint16Array(N * 3);
-            for (var i = 0; i < N; i++) {
+            const polys = new Uint16Array(N * 3);
+            let offs = rom.lookupAddress(banks, addr);
+            for (let i = 0; i < N; i++) {
                 polys[i*3+0] = rom.view.getUint16(offs + 0x02, false) & 0x0FFF;
                 polys[i*3+1] = rom.view.getUint16(offs + 0x04, false) & 0x0FFF;
                 polys[i*3+2] = rom.view.getUint16(offs + 0x06, false) & 0x0FFF;
@@ -175,23 +176,23 @@ function readHeaders(gl, rom, offs, banks) {
             }
             return polys;
         }
-        var polysN = rom.view.getUint16(offs + 0x14, false);
-        var polysAddr = rom.view.getUint32(offs + 0x18, false);
-        var polys = readPolys(polysN, polysAddr);
+        const polysN = rom.view.getUint16(offs + 0x14, false);
+        const polysAddr = rom.view.getUint32(offs + 0x18, false);
+        const polys = readPolys(polysN, polysAddr);
 
         function readWaters(N, addr) {
             // XXX: While we should probably keep the actual stuff about
             // water boxes, I'm just drawing them, so let's just record
             // a quad.
-            var offs = rom.lookupAddress(banks, addr);
-            var waters = new Uint16Array(N * 3 * 4);
+            let offs = rom.lookupAddress(banks, addr);
+            const waters = new Uint16Array(N * 3 * 4);
 
-            for (var i = 0; i < N; i++) {
-                var x = rom.view.getInt16(offs + 0x00, false);
-                var y = rom.view.getInt16(offs + 0x02, false);
-                var z = rom.view.getInt16(offs + 0x04, false);
-                var sx = rom.view.getInt16(offs + 0x06, false);
-                var sz = rom.view.getInt16(offs + 0x08, false);
+            for (let i = 0; i < N; i++) {
+                const x = rom.view.getInt16(offs + 0x00, false);
+                const y = rom.view.getInt16(offs + 0x02, false);
+                const z = rom.view.getInt16(offs + 0x04, false);
+                const sx = rom.view.getInt16(offs + 0x06, false);
+                const sz = rom.view.getInt16(offs + 0x08, false);
                 waters[i*3*4+0] = x;
                 waters[i*3*4+1] = y;
                 waters[i*3*4+2] = z;
@@ -209,22 +210,22 @@ function readHeaders(gl, rom, offs, banks) {
             return waters;
         }
 
-        var watersN = rom.view.getUint16(offs + 0x24, false);
-        var watersAddr = rom.view.getUint32(offs + 0x28, false);
-        var waters = readWaters(watersN, watersAddr);
+        const watersN = rom.view.getUint16(offs + 0x24, false);
+        const watersAddr = rom.view.getUint32(offs + 0x28, false);
+        const waters = readWaters(watersN, watersAddr);
 
         function readCamera(addr) {
-            var skyboxCamera = loadAddress(addr + 0x04);
-            var offs = rom.lookupAddress(banks, skyboxCamera);
-            var x = rom.view.getInt16(offs + 0x00, false);
-            var y = rom.view.getInt16(offs + 0x02, false);
-            var z = rom.view.getInt16(offs + 0x04, false);
-            var a = rom.view.getUint16(offs + 0x06, false) / 0xFFFF * (Math.PI * 2);
-            var b = rom.view.getUint16(offs + 0x08, false) / 0xFFFF * (Math.PI * 2) + Math.PI;
-            var c = rom.view.getUint16(offs + 0x0A, false) / 0xFFFF * (Math.PI * 2);
-            var d = rom.view.getUint16(offs + 0x0C, false);
+            const skyboxCamera = loadAddress(addr + 0x04);
+            const offs = rom.lookupAddress(banks, skyboxCamera);
+            const x = rom.view.getInt16(offs + 0x00, false);
+            const y = rom.view.getInt16(offs + 0x02, false);
+            const z = rom.view.getInt16(offs + 0x04, false);
+            const a = rom.view.getUint16(offs + 0x06, false) / 0xFFFF * (Math.PI * 2);
+            const b = rom.view.getUint16(offs + 0x08, false) / 0xFFFF * (Math.PI * 2) + Math.PI;
+            const c = rom.view.getUint16(offs + 0x0A, false) / 0xFFFF * (Math.PI * 2);
+            const d = rom.view.getUint16(offs + 0x0C, false);
 
-            var mtx = mat4.create();
+            const mtx = mat4.create();
             mat4.translate(mtx, mtx, [x, y, z]);
             mat4.rotateZ(mtx, mtx, c);
             mat4.rotateY(mtx, mtx, b);
@@ -232,8 +233,8 @@ function readHeaders(gl, rom, offs, banks) {
             return mtx;
         }
 
-        var cameraAddr = rom.view.getUint32(offs + 0x20, false);
-        var camera = readCamera(cameraAddr);
+        const cameraAddr = rom.view.getUint32(offs + 0x20, false);
+        const camera = readCamera(cameraAddr);
 
         return { verts: verts, polys: polys, waters: waters, camera: camera };
     }
@@ -377,6 +378,10 @@ function readHeaders(gl, rom, offs, banks) {
 
         mesh.opaque = mesh.opaque.filter(function(dl) { return !!dl; });
         mesh.transparent = mesh.transparent.filter(function(dl) { return !!dl; });
+
+        mesh.textures = [];
+        mesh.opaque.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); })
+        mesh.transparent.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); })
 
         return mesh;
     }
