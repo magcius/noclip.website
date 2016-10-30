@@ -206,7 +206,7 @@ class Scene implements Viewer.Scene {
             const renderMesh = (mesh) => {
                 if (mesh.bg) {
                     state.useProgram(this.program_BG);
-                    mesh.bg(gl);
+                    mesh.bg(state);
                 }
 
                 state.useProgram(this.program_DL);

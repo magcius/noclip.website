@@ -2267,8 +2267,9 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_10, con
             // 3 pos + 2 uv
             var VERTEX_SIZE = 5;
             var VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
-            return function (gl) {
-                var prog = gl.currentProgram;
+            return function (renderState) {
+                var gl = renderState.gl;
+                var prog = renderState.currentProgram;
                 gl.disable(gl.BLEND);
                 gl.disable(gl.DEPTH_TEST);
                 gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
@@ -2566,7 +2567,7 @@ System.register("zelview/render", ["zelview/zelview0", "viewer", "util"], functi
                         var renderMesh = function (mesh) {
                             if (mesh.bg) {
                                 state.useProgram(_this.program_BG);
-                                mesh.bg(gl);
+                                mesh.bg(state);
                             }
                             state.useProgram(_this.program_DL);
                             mesh.opaque.forEach(renderDL);

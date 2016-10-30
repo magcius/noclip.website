@@ -260,9 +260,9 @@ function readHeaders(gl, rom, offs, banks) {
 
     function loadImage(gl, src) {
         const canvas = document.createElement('canvas');
-        var ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d');
 
-        var texId = gl.createTexture();
+        const texId = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texId);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -270,32 +270,32 @@ function readHeaders(gl, rom, offs, banks) {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        var img = document.createElement('img');
+        const img = document.createElement('img');
         img.src = src;
 
-        var aspect = 1;
+        const aspect = 1;
 
         img.onload = function() {
             canvas.width = img.width;
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
 
-            var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
             gl.bindTexture(gl.TEXTURE_2D, texId);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, imgData.width, imgData.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, imgData.data);
         };
 
         // XXX: Should pull this dynamically at runtime.
-        var imgWidth = 320;
-        var imgHeight = 240;
+        const imgWidth = 320;
+        const imgHeight = 240;
 
-        var imgAspect = imgWidth / imgHeight;
-        var viewportAspect = gl.viewportWidth / gl.viewportHeight;
+        const imgAspect = imgWidth / imgHeight;
+        const viewportAspect = gl.viewportWidth / gl.viewportHeight;
 
-        var x = imgAspect / viewportAspect;
+        const x = imgAspect / viewportAspect;
 
-        var vertData = new Float32Array([
+        const vertData = new Float32Array([
             /* x   y   z   u  v */
               -x, -1,  0,  0, 1,
                x, -1,  0,  1, 1,
@@ -303,24 +303,25 @@ function readHeaders(gl, rom, offs, banks) {
                x,  1,  0,  1, 0,
         ]);
 
-        var vertBuffer = gl.createBuffer();
+        const vertBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, vertData, gl.STATIC_DRAW);
 
-        var idxData = new Uint8Array([
+        const idxData = new Uint8Array([
             0, 1, 2, 3,
         ]);
 
-        var idxBuffer = gl.createBuffer();
+        const idxBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxData, gl.STATIC_DRAW);
 
         // 3 pos + 2 uv
-        var VERTEX_SIZE = 5;
-        var VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+        const VERTEX_SIZE = 5;
+        const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-        return function(gl) {
-            var prog = gl.currentProgram;
+        return function(renderState) {
+            const gl = renderState.gl;
+            const prog = renderState.currentProgram;
             gl.disable(gl.BLEND);
             gl.disable(gl.DEPTH_TEST);
             gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
