@@ -142,6 +142,8 @@ System.register("viewer", [], function(exports_2, context_2) {
                     this.scenes = [];
                     this.renderState = new RenderState(viewport);
                     var gl = this.renderState.viewport.gl;
+                    // Enable EXT_frag_depth
+                    gl.getExtension('EXT_frag_depth');
                     gl.viewport(0, 0, viewport.canvas.width, viewport.canvas.height);
                     gl.clearColor(200 / 255, 50 / 255, 153 / 255, 1);
                 }
