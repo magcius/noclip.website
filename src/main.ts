@@ -1,6 +1,7 @@
 
 import { Viewer, Scene, SceneDesc, SceneGroup } from 'viewer';
 import * as SM64DS from 'sm64ds/scenes';
+import * as ZELVIEW from 'zelview/scenes';
 
 export class Main {
     viewer:Viewer;
@@ -15,6 +16,7 @@ export class Main {
 
         // The "plugin" part of this.
         this.groups.push(SM64DS.sceneGroup);
+        this.groups.push(ZELVIEW.sceneGroup);
 
         this.makeUI();
     }
