@@ -5,8 +5,9 @@ import * as LZ77 from 'lz77';
 import * as Viewer from 'viewer';
 import * as NITRO_BMD from './nitro_bmd';
 import * as NITRO_GX from './nitro_gx';
+import { fetch } from 'util'; 
 
-var DL_VERT_SHADER_SOURCE = `
+const DL_VERT_SHADER_SOURCE = `
     precision mediump float;
     uniform mat4 u_modelView;
     uniform mat4 u_localMatrix;
@@ -25,7 +26,7 @@ var DL_VERT_SHADER_SOURCE = `
     }
 `;
 
-var DL_FRAG_SHADER_SOURCE = `
+const DL_FRAG_SHADER_SOURCE = `
     precision mediump float;
     varying vec2 v_uv;
     varying vec4 v_color;
@@ -61,8 +62,8 @@ class NITRO_Program extends Viewer.Program {
 }
 
 // 3 pos + 4 color + 2 uv
-var VERTEX_SIZE = 9;
-var VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+const VERTEX_SIZE = 9;
+const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
 enum RenderPass {
     OPAQUE = 0x01,
@@ -95,7 +96,6 @@ class Texture implements Viewer.Texture {
 }
 
 class Scene implements Viewer.Scene {
-    path:string;
     textures:Viewer.Texture[];
     modelFuncs:Function[];
     program:NITRO_Program;
@@ -199,7 +199,11 @@ class Scene implements Viewer.Scene {
         const localMatrix = window.mat4.create();
         const bmd = this.bmd;
 
-        window.mat4.scale(localMatrix, localMatrix, [bmd.scaleFactor, bmd.scaleFactor, bmd.scaleFactor]);
+        // Local fudge factor so that all the models in the viewer "line up".
+        const localScaleFactor = 100;
+        const scaleFactor = bmd.scaleFactor * localScaleFactor;
+
+        window.mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
         const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
         return (pass:RenderPass) => {
             gl.uniformMatrix4fv(this.program.localMatrixLocation, false, localMatrix);
@@ -227,22 +231,6 @@ class Scene implements Viewer.Scene {
         // Second pass, translucent.
         this.renderModels(RenderPass.TRANSLUCENT);
     }
-}
-
-function fetch(path):PromiseLike<ArrayBuffer> {
-    var request = new XMLHttpRequest();
-    request.open("GET", path, true);
-    request.responseType = "arraybuffer";
-    request.send();
-
-    return new window.Promise((resolve, reject) => {
-        request.onload = () => {
-            resolve(request.response);
-        };
-        request.onerror = () => {
-            reject();
-        };
-    });
 }
 
 export class SceneDesc implements Viewer.SceneDesc {

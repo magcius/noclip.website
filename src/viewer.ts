@@ -19,7 +19,7 @@ function compileShader(gl:WebGLRenderingContext, str:string, type:number) {
 
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
         console.error(gl.getShaderInfoLog(shader));
-        return null;
+        throw new Error();
     }
 
     return shader;
@@ -56,6 +56,7 @@ export class Program {
 }
 
 export class RenderState {
+    gl:WebGLRenderingContext;
     viewport:Viewport;
     currentProgram:Program = null;
 
@@ -64,6 +65,7 @@ export class RenderState {
 
     constructor(viewport:Viewport) {
         this.viewport = viewport;
+        this.gl = this.viewport.gl;
 
         this.projection = window.mat4.create();
         window.mat4.perspective(this.projection, Math.PI / 4, viewport.canvas.width / viewport.canvas.height, 0.2, 50000);
@@ -185,7 +187,7 @@ export class Viewer {
             var dt = nt - t;
             t = nt;
 
-            var mult = .1;
+            var mult = 10;
             if (keysDown[SHIFT])
                 mult *= 5;
             mult *= (dt / 16.0);

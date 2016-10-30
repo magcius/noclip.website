@@ -53,7 +53,7 @@ const sceneDescs:SceneDesc[] = [
     'water_city_all.bmd',
     'water_land_all.bmd',
 ].map((filename:string):SceneDesc => {
-    const path = 'data/sm64ds/' + filename;
+    const path = `data/sm64ds/${filename}`;
     return new SceneDesc(filename, path);
 });
 
