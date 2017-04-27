@@ -170,7 +170,6 @@ export class Texture {
 }
 
 function parseTexture(bmd:BMD, view:DataView, key:TextureKey):Texture {
-    console.log(key.toString());
     if (bmd.textureCache.has(key.toString()))
         return bmd.textureCache.get(key.toString());
 
