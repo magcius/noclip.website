@@ -95,7 +95,8 @@ function parseMaterial(bmd:BMD, view:DataView, idx:number) {
     const textureIdx = view.getUint32(offs + 0x04, true);
     if (textureIdx !== 0xFFFFFFFF) {
         const paletteIdx = view.getUint32(offs + 0x08, true);
-        material.texture = parseTexture(bmd, view, textureIdx, paletteIdx);
+        const textureKey = new TextureKey(textureIdx, paletteIdx);
+        material.texture = parseTexture(bmd, view, textureKey);
         material.texParams = material.texture.params | view.getUint32(offs + 0x20, true);
 
         if (material.texParams >> 30) {
@@ -140,6 +141,20 @@ function parseMaterial(bmd:BMD, view:DataView, idx:number) {
     return material;
 }
 
+class TextureKey {
+    texIdx: number;
+    palIdx: number;
+
+    constructor(texIdx:number, palIdx:number) {
+        this.texIdx = texIdx;
+        this.palIdx = palIdx;
+    }
+
+    toString() {
+        return `TextureKey ${this.texIdx} ${this.palIdx}`;
+    }
+}
+
 export class Texture {
     id: number;
     name: string;
@@ -154,11 +169,15 @@ export class Texture {
     isTranslucent: boolean;
 }
 
-function parseTexture(bmd:BMD, view:DataView, texIdx, palIdx) {
-    const texOffs = bmd.textureOffsBase + texIdx * 0x14;
+function parseTexture(bmd:BMD, view:DataView, key:TextureKey):Texture {
+    console.log(key.toString());
+    if (bmd.textureCache.has(key.toString()))
+        return bmd.textureCache.get(key.toString());
+
+    const texOffs = bmd.textureOffsBase + key.texIdx * 0x14;
 
     const texture = new Texture();
-    texture.id = texIdx;
+    texture.id = key.texIdx;
     texture.name = readString(view.buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
 
     const texDataOffs = view.getUint32(texOffs + 0x04, true);
@@ -172,8 +191,8 @@ function parseTexture(bmd:BMD, view:DataView, texIdx, palIdx) {
     const color0 = !!((texture.params >> 29) & 0x01);
 
     let palData = null;
-    if (palIdx != 0xFFFFFFFF) {
-        const palOffs = bmd.paletteOffsBase + palIdx * 0x10;
+    if (key.palIdx != 0xFFFFFFFF) {
+        const palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
         texture.paletteName = readString(view.buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
         const palDataOffs = view.getUint32(palOffs + 0x04, true);
         const palDataSize = view.getUint32(palOffs + 0x08, true);
@@ -186,6 +205,7 @@ function parseTexture(bmd:BMD, view:DataView, texIdx, palIdx) {
                                 texture.format === NITRO_Tex.Format.Tex_A3I5);
 
     bmd.textures.push(texture);
+    bmd.textureCache.set(key.toString(), texture);
 
     return texture;
 }
@@ -194,6 +214,7 @@ export class BMD {
     scaleFactor: number;
     models: Model[];
     textures: Texture[];
+    textureCache: Map<string, Texture>;
 
     modelCount: number;
     modelOffsBase: number;
@@ -225,6 +246,7 @@ export function parse(buffer:ArrayBuffer) {
     bmd.materialCount = view.getUint32(0x24, true);
     bmd.materialOffsBase = view.getUint32(0x28, true);
 
+    bmd.textureCache = new Map<string, Texture>();
     bmd.textures = [];
     bmd.models = [];
     for (var i = 0; i < bmd.modelCount; i++)
