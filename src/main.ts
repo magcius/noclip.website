@@ -2,6 +2,7 @@
 import { Viewer, Scene, SceneDesc, SceneGroup } from 'viewer';
 import * as SM64DS from 'sm64ds/scenes';
 import * as ZELVIEW from 'zelview/scenes';
+import * as OOT3D from 'oot3d/scenes';
 
 export class Main {
     viewer:Viewer;
@@ -15,8 +16,9 @@ export class Main {
         this.groups = [];
 
         // The "plugin" part of this.
-        this.groups.push(SM64DS.sceneGroup);
-        this.groups.push(ZELVIEW.sceneGroup);
+        // this.groups.push(SM64DS.sceneGroup);
+        // this.groups.push(ZELVIEW.sceneGroup);
+        this.groups.push(OOT3D.sceneGroup);
 
         this.makeUI();
     }

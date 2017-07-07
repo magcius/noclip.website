@@ -810,7 +810,7 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
     "use strict";
     var __moduleName = context_5 && context_5.id;
     var NITRO_GX, NITRO_Tex;
-    var Poly, Batch, Model, Texture, BMD;
+    var Poly, Batch, Model, TextureKey, Texture, BMD;
     // Super Mario 64 DS .bmd format
     function readString(buffer, offs, length) {
         var buf = new Uint8Array(buffer, offs, length);
@@ -869,7 +869,8 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
         var textureIdx = view.getUint32(offs + 0x04, true);
         if (textureIdx !== 0xFFFFFFFF) {
             var paletteIdx = view.getUint32(offs + 0x08, true);
-            material.texture = parseTexture(bmd, view, textureIdx, paletteIdx);
+            var textureKey = new TextureKey(textureIdx, paletteIdx);
+            material.texture = parseTexture(bmd, view, textureKey);
             material.texParams = material.texture.params | view.getUint32(offs + 0x20, true);
             if (material.texParams >> 30) {
                 var scaleS = view.getInt32(offs + 0x0C, true) / 4096.0;
@@ -906,10 +907,12 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
         material.alpha = alpha;
         return material;
     }
-    function parseTexture(bmd, view, texIdx, palIdx) {
-        var texOffs = bmd.textureOffsBase + texIdx * 0x14;
+    function parseTexture(bmd, view, key) {
+        if (bmd.textureCache.has(key.toString()))
+            return bmd.textureCache.get(key.toString());
+        var texOffs = bmd.textureOffsBase + key.texIdx * 0x14;
         var texture = new Texture();
-        texture.id = texIdx;
+        texture.id = key.texIdx;
         texture.name = readString(view.buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
         var texDataOffs = view.getUint32(texOffs + 0x04, true);
         var texDataSize = view.getUint32(texOffs + 0x08, true);
@@ -920,8 +923,8 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
         texture.height = 8 << ((texture.params >> 23) & 0x07);
         var color0 = !!((texture.params >> 29) & 0x01);
         var palData = null;
-        if (palIdx != 0xFFFFFFFF) {
-            var palOffs = bmd.paletteOffsBase + palIdx * 0x10;
+        if (key.palIdx != 0xFFFFFFFF) {
+            var palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
             texture.paletteName = readString(view.buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
             var palDataOffs = view.getUint32(palOffs + 0x04, true);
             var palDataSize = view.getUint32(palOffs + 0x08, true);
@@ -931,6 +934,7 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
         texture.isTranslucent = (texture.format === NITRO_Tex.Format.Tex_A5I3 ||
             texture.format === NITRO_Tex.Format.Tex_A3I5);
         bmd.textures.push(texture);
+        bmd.textureCache.set(key.toString(), texture);
         return texture;
     }
     function parse(buffer) {
@@ -947,6 +951,7 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
         bmd.paletteOffsBase = view.getUint32(0x20, true);
         bmd.materialCount = view.getUint32(0x24, true);
         bmd.materialOffsBase = view.getUint32(0x28, true);
+        bmd.textureCache = new Map();
         bmd.textures = [];
         bmd.models = [];
         for (var i = 0; i < bmd.modelCount; i++)
@@ -983,6 +988,16 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
             }());
             exports_5("Model", Model);
             ;
+            TextureKey = (function () {
+                function TextureKey(texIdx, palIdx) {
+                    this.texIdx = texIdx;
+                    this.palIdx = palIdx;
+                }
+                TextureKey.prototype.toString = function () {
+                    return "TextureKey " + this.texIdx + " " + this.palIdx;
+                };
+                return TextureKey;
+            }());
             Texture = (function () {
                 function Texture() {
                 }
@@ -1007,7 +1022,7 @@ System.register("util", [], function(exports_6, context_6) {
         request.open("GET", path, true);
         request.responseType = "arraybuffer";
         request.send();
-        return new window.Promise(function (resolve, reject) {
+        return new Promise(function (resolve, reject) {
             request.onload = function () {
                 resolve(request.response);
             };
@@ -3123,21 +3138,1053 @@ System.register("zelview/scenes", ["zelview/render"], function(exports_12, conte
         }
     }
 });
-System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes"], function(exports_13, context_13) {
+System.register("oot3d/cmb", [], function(exports_13, context_13) {
     "use strict";
     var __moduleName = context_13 && context_13.id;
-    var viewer_1, SM64DS, ZELVIEW;
+    var VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
+    function readString(buffer, offs, length) {
+        var buf = new Uint8Array(buffer, offs, length);
+        var S = '';
+        for (var i = 0; i < length; i++) {
+            if (buf[i] === 0)
+                break;
+            S += String.fromCharCode(buf[i]);
+        }
+        return S;
+    }
+    function assert(b) {
+        if (!b)
+            throw new Error("Assert fail");
+    }
+    function readMatsChunk(cmb, buffer) {
+        var view = new DataView(buffer);
+        assert(readString(buffer, 0x00, 0x04) === 'mats');
+        var count = view.getUint32(0x08, true);
+        var offs = 0x0C;
+        for (var i = 0; i < count; i++) {
+            var mat = new Material();
+            var bindingOffs = offs + 0x10;
+            for (var j = 0; j < 3; j++) {
+                var binding = new TextureBinding();
+                binding.textureIdx = view.getInt16(bindingOffs + 0x00, true);
+                binding.minFilter = view.getUint16(bindingOffs + 0x04, true);
+                binding.magFilter = view.getUint16(bindingOffs + 0x06, true);
+                binding.wrapS = view.getUint16(bindingOffs + 0x08, true);
+                binding.wrapT = view.getUint16(bindingOffs + 0x0A, true);
+                mat.textureBindings.push(binding);
+                bindingOffs += 0x18;
+            }
+            mat.alphaTestEnable = !!view.getUint8(offs + 0x130);
+            cmb.materials.push(mat);
+            offs += 0x15C;
+        }
+    }
+    function expand4to8(n) {
+        return (n << 4) | n;
+    }
+    function expand5to8(n) {
+        return (n << (8 - 5)) | (n >>> (10 - 8));
+    }
+    function expand6to8(n) {
+        return (n << (8 - 6)) | (n >>> (12 - 8));
+    }
+    function download(buffer, filename) {
+        var blob = new Blob([buffer], { type: 'application/octet-stream' });
+        var url = window.URL.createObjectURL(blob);
+        var elem = document.createElement('a');
+        elem.setAttribute('href', url);
+        elem.setAttribute('download', filename);
+        document.body.appendChild(elem);
+        elem.click();
+        document.body.removeChild(elem);
+    }
+    function pad8(n) {
+        n = (n >>> 0).toString(16);
+        while (n.length < 8)
+            n = '0' + n;
+        return '0x' + n;
+    }
+    function decodeTexture_ETC1_4x4_Color(dst, w1, w2, dstOffs, stride) {
+        // w1 = Upper 32-bit word, "control" data
+        // w2 = Lower 32-bit word, "pixel" data
+        // Table 3.17.2 -- Intensity tables for each codeword.
+        var intensityTableMap = [
+            [-8, -2, 2, 8,],
+            [-17, -5, 5, 17,],
+            [-29, -9, 9, 29,],
+            [-42, -13, 13, 42,],
+            [-60, -18, 18, 60,],
+            [-80, -24, 24, 80,],
+            [-106, -33, 33, 106,],
+            [-183, -47, 48, 183,],
+        ];
+        // Table 3.17.3 -- MSB/LSB colors to modifiers.
+        //
+        //  msb lsb
+        //  --- ---
+        //   0  0   small colitive value (2nd intensity)
+        //   0  1   large positive value (3rd intensity)
+        //   1  0   small negative value (1st intensity)
+        //   1  1   large negative value (0th intensity)
+        //
+        // Why the spec doesn't lay out the intensity map in this order,
+        // I'll never know...
+        var pixelToColorIndex = [2, 3, 1, 0];
+        var diff = (w1 & 2);
+        var flip = (w1 & 1);
+        // Intensity tables for each block.
+        var intensityIndex1 = (w1 >> 5) & 0x7;
+        var intensityIndex2 = (w1 >> 2) & 0x7;
+        var intensityTable1 = intensityTableMap[intensityIndex1];
+        var intensityTable2 = intensityTableMap[intensityIndex2];
+        function signed3(n) {
+            // Sign-extend.
+            return n << 29 >> 29;
+        }
+        function clamp(n) {
+            if (n < 0)
+                return 0;
+            if (n > 255)
+                return 255;
+            return n;
+        }
+        // Get the color table for a given block.
+        function getColors(colors, r, g, b, intensityMap) {
+            for (var i = 0; i < 4; i++) {
+                colors[(i * 3) + 0] = clamp(r + intensityMap[i]);
+                colors[(i * 3) + 1] = clamp(g + intensityMap[i]);
+                colors[(i * 3) + 2] = clamp(b + intensityMap[i]);
+            }
+        }
+        var colors1 = new Uint8Array(3 * 4);
+        var colors2 = new Uint8Array(3 * 4);
+        if (diff) {
+            var baseR1a = (w1 >>> 27) & 0x1F;
+            var baseR2d = signed3((w1 >>> 24) & 0x07);
+            var baseG1a = (w1 >>> 19) & 0x1F;
+            var baseG2d = signed3((w1 >>> 16) & 0x07);
+            var baseB1a = (w1 >>> 11) & 0x1F;
+            var baseB2d = signed3((w1 >>> 8) & 0x07);
+            var baseR1 = expand5to8(baseR1a);
+            var baseR2 = expand5to8(baseR1a + baseR2d);
+            var baseG1 = expand5to8(baseG1a);
+            var baseG2 = expand5to8(baseG1a + baseG2d);
+            var baseB1 = expand5to8(baseB1a);
+            var baseB2 = expand5to8(baseB1a + baseB2d);
+            getColors(colors1, baseR1, baseG1, baseB1, intensityTable1);
+            getColors(colors2, baseR2, baseG2, baseB2, intensityTable2);
+        }
+        else {
+            var baseR1 = expand4to8((w1 >>> 28) & 0x0F);
+            var baseR2 = expand4to8((w1 >>> 24) & 0x0F);
+            var baseG1 = expand4to8((w1 >>> 20) & 0x0F);
+            var baseG2 = expand4to8((w1 >>> 16) & 0x0F);
+            var baseB1 = expand4to8((w1 >>> 12) & 0x0F);
+            var baseB2 = expand4to8((w1 >>> 8) & 0x0F);
+            getColors(colors1, baseR1, baseG1, baseB1, intensityTable1);
+            getColors(colors2, baseR2, baseG2, baseB2, intensityTable2);
+        }
+        // Go through each pixel and copy the color into the right spot...
+        for (var i = 0; i < 16; i++) {
+            var lsb = (w2 >>> i) & 0x01;
+            var msb = (w2 >>> (16 + i)) & 0x01;
+            var lookup = (msb << 1) | lsb;
+            var colorsIndex = pixelToColorIndex[lookup];
+            // Indexes march down and to the right here.
+            var y = i & 0x03, x = i >> 2;
+            var dstIndex = dstOffs + ((y * stride) + x) * 4;
+            // Whether we're in block 1 or block 2;
+            var whichBlock = void 0;
+            // If flipbit=0, the block is divided into two 2x4
+            // subblocks side-by-side.
+            if (flip === 0)
+                whichBlock = x & 2;
+            else
+                whichBlock = y & 2;
+            var colors = whichBlock ? colors2 : colors1;
+            dst[dstIndex + 0] = colors[(colorsIndex * 3) + 0];
+            dst[dstIndex + 1] = colors[(colorsIndex * 3) + 1];
+            dst[dstIndex + 2] = colors[(colorsIndex * 3) + 2];
+        }
+    }
+    function decodeTexture_ETC1_4x4_Alpha(dst, a1, a2, dstOffs, stride) {
+        for (var ax = 0; ax < 2; ax++) {
+            for (var ay = 0; ay < 4; ay++) {
+                var dstIndex = dstOffs + ((ay * stride) + ax) * 4;
+                dst[dstIndex + 3] = expand4to8(a2 & 0x0F);
+                a2 >>= 4;
+            }
+        }
+        for (var ax = 2; ax < 4; ax++) {
+            for (var ay = 0; ay < 4; ay++) {
+                var dstIndex = dstOffs + ((ay * stride) + ax) * 4;
+                dst[dstIndex + 3] = expand4to8(a1 & 0x0F);
+                a1 >>= 4;
+            }
+        }
+    }
+    function decodeTexture_ETC1(texture, texData, alpha) {
+        var pixels = new Uint8Array(texture.width * texture.height * 4);
+        var stride = texture.width;
+        var src = new DataView(texData);
+        var offs = 0;
+        for (var yy = 0; yy < texture.height; yy += 8) {
+            for (var xx = 0; xx < texture.width; xx += 8) {
+                // Order of each set of 4 blocks: top left, top right, bottom left, bottom right...
+                for (var y = 0; y < 8; y += 4) {
+                    for (var x = 0; x < 8; x += 4) {
+                        var dstOffs = ((yy + y) * stride + (xx + x)) * 4;
+                        var a1 = void 0, a2 = void 0;
+                        if (alpha) {
+                            // In ETC1A4 mode, we have 8 bytes of per-pixel alpha data preceeding the tile.
+                            a2 = src.getUint32(offs + 0x00, true);
+                            a1 = src.getUint32(offs + 0x04, true);
+                            offs += 0x08;
+                        }
+                        else {
+                            a2 = 0xFFFFFFFF;
+                            a1 = 0xFFFFFFFF;
+                        }
+                        decodeTexture_ETC1_4x4_Alpha(pixels, a1, a2, dstOffs, stride);
+                        var w2 = src.getUint32(offs + 0x00, true);
+                        var w1 = src.getUint32(offs + 0x04, true);
+                        decodeTexture_ETC1_4x4_Color(pixels, w1, w2, dstOffs, stride);
+                        offs += 0x08;
+                    }
+                }
+            }
+        }
+        return pixels;
+    }
+    function decodeTexture_Tiled(texture, texData, decoder) {
+        var pixels = new Uint8Array(texture.width * texture.height * 4);
+        var stride = texture.width;
+        function morton7(n) {
+            // 0a0b0c => 000abc
+            return ((n >> 2) & 0x04) | ((n >> 1) & 0x02) | (n & 0x01);
+        }
+        for (var yy = 0; yy < texture.height; yy += 8) {
+            for (var xx = 0; xx < texture.width; xx += 8) {
+                // Iterate in Morton order inside each tile.
+                for (var i = 0; i < 0x40; i++) {
+                    var x = morton7(i);
+                    var y = morton7(i >> 1);
+                    var dstOffs = ((yy + y) * stride + xx + x) * 4;
+                    decoder(pixels, dstOffs);
+                }
+            }
+        }
+        return pixels;
+    }
+    function decodeTexture_RGBA5551(texture, texData) {
+        var src = new DataView(texData);
+        var srcOffs = 0;
+        return decodeTexture_Tiled(texture, texData, function (pixels, dstOffs) {
+            var p = src.getUint16(srcOffs, true);
+            pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
+            pixels[dstOffs + 1] = expand5to8((p >> 6) & 0x1F);
+            pixels[dstOffs + 2] = expand5to8((p >> 1) & 0x1F);
+            pixels[dstOffs + 3] = (p & 0x01) ? 0xFF : 0x00;
+            srcOffs += 2;
+        });
+    }
+    function decodeTexture_RGB565(texture, texData) {
+        var src = new DataView(texData);
+        var srcOffs = 0;
+        return decodeTexture_Tiled(texture, texData, function (pixels, dstOffs) {
+            var p = src.getUint16(srcOffs, true);
+            pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
+            pixels[dstOffs + 1] = expand6to8((p >> 5) & 0x3F);
+            pixels[dstOffs + 2] = expand5to8(p & 0x1F);
+            pixels[dstOffs + 3] = 0xFF;
+            srcOffs += 2;
+        });
+    }
+    function decodeTexture_A8(texture, texData) {
+        var src = new DataView(texData);
+        var srcOffs = 0;
+        return decodeTexture_Tiled(texture, texData, function (pixels, dstOffs) {
+            var A = src.getUint8(srcOffs++);
+            pixels[dstOffs + 0] = 0xFF;
+            pixels[dstOffs + 1] = 0xFF;
+            pixels[dstOffs + 2] = 0xFF;
+            pixels[dstOffs + 3] = A;
+        });
+    }
+    function decodeTexture_L8(texture, texData) {
+        var src = new DataView(texData);
+        var srcOffs = 0;
+        return decodeTexture_Tiled(texture, texData, function (pixels, dstOffs) {
+            var L = src.getUint8(srcOffs++);
+            pixels[dstOffs + 0] = L;
+            pixels[dstOffs + 1] = L;
+            pixels[dstOffs + 2] = L;
+            pixels[dstOffs + 3] = L;
+        });
+    }
+    function decodeTexture_LA8(texture, texData) {
+        var src = new DataView(texData);
+        var srcOffs = 0;
+        return decodeTexture_Tiled(texture, texData, function (pixels, dstOffs) {
+            var L = src.getUint8(srcOffs++);
+            var A = src.getUint8(srcOffs++);
+            pixels[dstOffs + 0] = L;
+            pixels[dstOffs + 1] = L;
+            pixels[dstOffs + 2] = L;
+            pixels[dstOffs + 3] = A;
+        });
+    }
+    function decodeTexture(texture, texData) {
+        switch (texture.format) {
+            case TextureFormat.ETC1:
+                return decodeTexture_ETC1(texture, texData, false);
+            case TextureFormat.ETC1A4:
+                return decodeTexture_ETC1(texture, texData, true);
+            case TextureFormat.RGBA5551:
+                return decodeTexture_RGBA5551(texture, texData);
+            case TextureFormat.RGB565:
+                return decodeTexture_RGB565(texture, texData);
+            case TextureFormat.A8:
+                return decodeTexture_A8(texture, texData);
+            case TextureFormat.L8:
+                return decodeTexture_L8(texture, texData);
+            case TextureFormat.LA8:
+                return decodeTexture_LA8(texture, texData);
+            default:
+                throw new Error("Unsupported texture type! " + texture.format);
+        }
+    }
+    function readTexChunk(cmb, buffer, texData) {
+        var view = new DataView(buffer);
+        assert(readString(buffer, 0x00, 0x04) === 'tex ');
+        var count = view.getUint32(0x08, true);
+        var offs = 0x0C;
+        for (var i = 0; i < count; i++) {
+            var texture = new Texture();
+            var size = view.getUint32(offs + 0x00, true);
+            texture.width = view.getUint16(offs + 0x08, true);
+            texture.height = view.getUint16(offs + 0x0A, true);
+            texture.format = view.getUint32(offs + 0x0C, true);
+            var dataOffs = view.getUint32(offs + 0x10, true);
+            texture.name = readString(buffer, offs + 0x14, 0x10);
+            texture.name = texture.name + "  (" + texture.format + ")";
+            offs += 0x24;
+            texture.pixels = decodeTexture(texture, texData.slice(dataOffs, dataOffs + size));
+            cmb.textures.push(texture);
+        }
+    }
+    function readVatrChunk(cmb, buffer) {
+        var view = new DataView(buffer);
+        assert(readString(buffer, 0x00, 0x04) === 'vatr');
+        cmb.vertexBufferSlices = new VertexBufferSlices();
+        var posSize = view.getUint32(0x0C, true);
+        var posOffs = view.getUint32(0x10, true);
+        cmb.vertexBufferSlices.posBuffer = buffer.slice(posOffs, posOffs + posSize);
+        var nrmSize = view.getUint32(0x14, true);
+        var nrmOffs = view.getUint32(0x18, true);
+        cmb.vertexBufferSlices.nrmBuffer = buffer.slice(nrmOffs, nrmOffs + nrmSize);
+        var colSize = view.getUint32(0x1C, true);
+        var colOffs = view.getUint32(0x20, true);
+        cmb.vertexBufferSlices.colBuffer = buffer.slice(colOffs, colOffs + colSize);
+        var txcSize = view.getUint32(0x24, true);
+        var txcOffs = view.getUint32(0x28, true);
+        cmb.vertexBufferSlices.txcBuffer = buffer.slice(txcOffs, txcOffs + txcSize);
+    }
+    function readMshsChunk(cmb, buffer) {
+        var view = new DataView(buffer);
+        assert(readString(buffer, 0x00, 0x04) === 'mshs');
+        var count = view.getUint32(0x08, true);
+        var offs = 0x10;
+        for (var i = 0; i < count; i++) {
+            var mesh = new Mesh();
+            mesh.sepdIdx = view.getUint16(offs, true);
+            mesh.matsIdx = view.getUint8(offs + 2);
+            cmb.meshs.push(mesh);
+            offs += 0x04;
+        }
+    }
+    function readPrmChunk(cmb, buffer) {
+        var view = new DataView(buffer);
+        assert(readString(buffer, 0x00, 0x04) === 'prm ');
+        var prm = new Prm();
+        prm.indexType = view.getUint32(0x10, true);
+        prm.count = view.getUint16(0x14, true);
+        prm.offset = view.getUint16(0x16, true);
+        return prm;
+    }
+    function readPrmsChunk(cmb, buffer) {
+        var view = new DataView(buffer);
+        assert(readString(buffer, 0x00, 0x04) === 'prms');
+        var prmOffs = view.getUint32(0x14, true);
+        return readPrmChunk(cmb, buffer.slice(prmOffs));
+    }
+    function readSepdChunk(cmb, buffer) {
+        var view = new DataView(buffer);
+        assert(readString(buffer, 0x00, 0x04) === 'sepd');
+        var count = view.getUint16(0x08, true);
+        var sepd = new Sepd();
+        var offs = 0x108;
+        for (var i = 0; i < count; i++) {
+            var prmsOffs = view.getUint32(offs, true);
+            sepd.prms.push(readPrmsChunk(cmb, buffer.slice(prmsOffs)));
+            offs += 0x02;
+        }
+        sepd.posStart = view.getUint32(0x24, true);
+        sepd.posScale = view.getFloat32(0x28, true);
+        sepd.posType = view.getUint16(0x2C, true);
+        sepd.nrmStart = view.getUint32(0x40, true);
+        sepd.nrmScale = view.getFloat32(0x44, true);
+        sepd.nrmType = view.getUint16(0x48, true);
+        sepd.colStart = view.getUint32(0x5C, true);
+        sepd.colScale = view.getFloat32(0x60, true);
+        sepd.colType = view.getUint16(0x64, true);
+        sepd.txcStart = view.getUint32(0x78, true);
+        sepd.txcScale = view.getFloat32(0x7C, true);
+        sepd.txcType = view.getUint16(0x80, true);
+        return sepd;
+    }
+    function readShpChunk(cmb, buffer) {
+        var view = new DataView(buffer);
+        assert(readString(buffer, 0x00, 0x04) === 'shp ');
+        var count = view.getUint32(0x08, true);
+        var offs = 0x10;
+        for (var i = 0; i < count; i++) {
+            var sepdOffs = view.getUint16(offs, true);
+            var sepd = readSepdChunk(cmb, buffer.slice(sepdOffs));
+            cmb.sepds.push(sepd);
+            offs += 0x02;
+        }
+    }
+    function readSklmChunk(cmb, buffer) {
+        var view = new DataView(buffer);
+        assert(readString(buffer, 0x00, 0x04) === 'sklm');
+        var mshsChunkOffs = view.getUint32(0x08, true);
+        readMshsChunk(cmb, buffer.slice(mshsChunkOffs));
+        var shpChunkOffs = view.getUint32(0x0C, true);
+        readShpChunk(cmb, buffer.slice(shpChunkOffs));
+    }
+    function parse(buffer) {
+        var view = new DataView(buffer);
+        var cmb = new CMB();
+        assert(readString(buffer, 0x00, 0x04) === 'cmb ');
+        var size = view.getUint32(0x04, true);
+        cmb.name = readString(buffer, 0x10, 0x10);
+        var matsChunkOffs = view.getUint32(0x28, true);
+        readMatsChunk(cmb, buffer.slice(matsChunkOffs));
+        var texDataOffs = view.getUint32(0x40, true);
+        var texChunkOffs = view.getUint32(0x2C, true);
+        readTexChunk(cmb, buffer.slice(texChunkOffs), buffer.slice(texDataOffs));
+        var vatrChunkOffs = view.getUint32(0x38, true);
+        readVatrChunk(cmb, buffer.slice(vatrChunkOffs));
+        var sklmChunkOffs = view.getUint32(0x30, true);
+        readSklmChunk(cmb, buffer.slice(sklmChunkOffs));
+        var idxDataOffs = view.getUint32(0x3C, true);
+        var idxDataCount = view.getUint32(0x20, true);
+        cmb.indexBuffer = buffer.slice(idxDataOffs, idxDataOffs + idxDataCount * 2);
+        return cmb;
+    }
+    exports_13("parse", parse);
+    return {
+        setters:[],
+        execute: function() {
+            VertexBufferSlices = (function () {
+                function VertexBufferSlices() {
+                }
+                return VertexBufferSlices;
+            }());
+            CMB = (function () {
+                function CMB() {
+                    this.textures = [];
+                    this.materials = [];
+                    this.sepds = [];
+                    this.meshs = [];
+                }
+                return CMB;
+            }());
+            exports_13("CMB", CMB);
+            (function (TextureFilter) {
+                TextureFilter[TextureFilter["NEAREST"] = 9728] = "NEAREST";
+                TextureFilter[TextureFilter["LINEAR"] = 9729] = "LINEAR";
+                TextureFilter[TextureFilter["NEAREST_MIPMAP_NEAREST"] = 9984] = "NEAREST_MIPMAP_NEAREST";
+                TextureFilter[TextureFilter["LINEAR_MIPMAP_NEAREST"] = 9985] = "LINEAR_MIPMAP_NEAREST";
+                TextureFilter[TextureFilter["NEAREST_MIPMIP_LINEAR"] = 9986] = "NEAREST_MIPMIP_LINEAR";
+                TextureFilter[TextureFilter["LINEAR_MIPMAP_LINEAR"] = 9987] = "LINEAR_MIPMAP_LINEAR";
+            })(TextureFilter || (TextureFilter = {}));
+            exports_13("TextureFilter", TextureFilter);
+            (function (TextureWrapMode) {
+                TextureWrapMode[TextureWrapMode["CLAMP"] = 10496] = "CLAMP";
+                TextureWrapMode[TextureWrapMode["REPEAT"] = 10497] = "REPEAT";
+            })(TextureWrapMode || (TextureWrapMode = {}));
+            exports_13("TextureWrapMode", TextureWrapMode);
+            TextureBinding = (function () {
+                function TextureBinding() {
+                }
+                return TextureBinding;
+            }());
+            Material = (function () {
+                function Material() {
+                    this.textureBindings = [];
+                }
+                return Material;
+            }());
+            exports_13("Material", Material);
+            (function (TextureFormat) {
+                TextureFormat[TextureFormat["ETC1"] = 26458] = "ETC1";
+                TextureFormat[TextureFormat["ETC1A4"] = 26459] = "ETC1A4";
+                TextureFormat[TextureFormat["RGBA5551"] = 2150917970] = "RGBA5551";
+                TextureFormat[TextureFormat["RGB565"] = 2204329812] = "RGB565";
+                TextureFormat[TextureFormat["A8"] = 335636310] = "A8";
+                TextureFormat[TextureFormat["L8"] = 335636311] = "L8";
+                TextureFormat[TextureFormat["LA8"] = 335636312] = "LA8";
+            })(TextureFormat || (TextureFormat = {}));
+            Texture = (function () {
+                function Texture() {
+                }
+                return Texture;
+            }());
+            exports_13("Texture", Texture);
+            Mesh = (function () {
+                function Mesh() {
+                }
+                return Mesh;
+            }());
+            exports_13("Mesh", Mesh);
+            (function (DataType) {
+                DataType[DataType["Byte"] = 5120] = "Byte";
+                DataType[DataType["UByte"] = 5121] = "UByte";
+                DataType[DataType["Short"] = 5122] = "Short";
+                DataType[DataType["UShort"] = 5123] = "UShort";
+                DataType[DataType["Int"] = 5124] = "Int";
+                DataType[DataType["UInt"] = 5125] = "UInt";
+                DataType[DataType["Float"] = 5126] = "Float";
+            })(DataType || (DataType = {}));
+            exports_13("DataType", DataType);
+            ;
+            Prm = (function () {
+                function Prm() {
+                }
+                return Prm;
+            }());
+            exports_13("Prm", Prm);
+            Sepd = (function () {
+                function Sepd() {
+                    this.prms = [];
+                }
+                return Sepd;
+            }());
+            exports_13("Sepd", Sepd);
+        }
+    }
+});
+System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_14, context_14) {
+    "use strict";
+    var __moduleName = context_14 && context_14.id;
+    var CMB;
+    var ZSI, HeaderCommands, Mesh;
+    function readString(buffer, offs, length) {
+        var buf = new Uint8Array(buffer, offs, length);
+        var S = '';
+        for (var i = 0; i < length; i++) {
+            if (buf[i] === 0)
+                break;
+            S += String.fromCharCode(buf[i]);
+        }
+        return S;
+    }
+    function assert(b) {
+        if (!b)
+            throw new Error("Assert fail");
+    }
+    function readRooms(view, nRooms, offs) {
+        var rooms = [];
+        for (var i = 0; i < nRooms; i++) {
+            rooms.push(readString(view.buffer, offs, 0x44));
+            offs += 0x44;
+        }
+        return rooms;
+    }
+    function readMesh(view, offs) {
+        var mesh = new Mesh();
+        var hdr = view.getUint32(offs);
+        var type = (hdr >> 24);
+        var nEntries = (hdr >> 16) & 0xFF;
+        var entriesAddr = view.getUint32(offs + 4, true);
+        assert(type === 0x02);
+        assert(nEntries === 0x01);
+        var opaqueAddr = view.getUint32(entriesAddr + 0x08, true);
+        var transparentAddr = view.getUint32(entriesAddr + 0x0C, true);
+        if (opaqueAddr !== 0)
+            mesh.opaque = CMB.parse(view.buffer.slice(opaqueAddr));
+        if (transparentAddr !== 0)
+            mesh.transparent = CMB.parse(view.buffer.slice(transparentAddr));
+        mesh.textures = [];
+        if (mesh.opaque)
+            mesh.textures = mesh.textures.concat(mesh.opaque.textures);
+        if (mesh.transparent)
+            mesh.textures = mesh.textures.concat(mesh.transparent.textures);
+        return mesh;
+    }
+    // ZSI headers are a slight modification of the original Z64 headers.
+    function readHeaders(buffer) {
+        var view = new DataView(buffer);
+        var offs = 0;
+        var zsi = new ZSI();
+        while (true) {
+            var cmd1 = view.getUint32(offs, false);
+            var cmd2 = view.getUint32(offs + 4, true);
+            offs += 8;
+            var cmdType = cmd1 >> 24;
+            if (cmdType == HeaderCommands.End)
+                break;
+            switch (cmdType) {
+                case HeaderCommands.Rooms:
+                    var nRooms = (cmd1 >> 16) & 0xFF;
+                    zsi.rooms = readRooms(view, nRooms, cmd2);
+                    break;
+                case HeaderCommands.Mesh:
+                    zsi.mesh = readMesh(view, cmd2);
+                    break;
+            }
+        }
+        return zsi;
+    }
+    function parse(buffer) {
+        assert(readString(buffer, 0x00, 0x04) === 'ZSI\x01');
+        var name = readString(buffer, 0x04, 0x0C);
+        // ZSI header is done. It's that simple! Now for the actual data.
+        var headersBuf = buffer.slice(0x10);
+        return readHeaders(headersBuf);
+    }
+    exports_14("parse", parse);
+    return {
+        setters:[
+            function (CMB_1) {
+                CMB = CMB_1;
+            }],
+        execute: function() {
+            ZSI = (function () {
+                function ZSI() {
+                }
+                return ZSI;
+            }());
+            exports_14("ZSI", ZSI);
+            // Subset of Z64 command types.
+            (function (HeaderCommands) {
+                HeaderCommands[HeaderCommands["Rooms"] = 4] = "Rooms";
+                HeaderCommands[HeaderCommands["Mesh"] = 10] = "Mesh";
+                HeaderCommands[HeaderCommands["End"] = 20] = "End";
+            })(HeaderCommands || (HeaderCommands = {}));
+            Mesh = (function () {
+                function Mesh() {
+                }
+                return Mesh;
+            }());
+            exports_14("Mesh", Mesh);
+        }
+    }
+});
+/// <reference path="../decl.d.ts" />
+System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], function(exports_15, context_15) {
+    "use strict";
+    var __moduleName = context_15 && context_15.id;
+    var ZSI, CMB, Viewer, util_3;
+    var DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, OoT3D_Program, Scene, MultiScene, SceneDesc;
+    function textureToCanvas(texture) {
+        var canvas = document.createElement("canvas");
+        canvas.width = texture.width;
+        canvas.height = texture.height;
+        canvas.title = texture.name;
+        var ctx = canvas.getContext("2d");
+        var imgData = ctx.createImageData(canvas.width, canvas.height);
+        for (var i = 0; i < imgData.data.length; i++)
+            imgData.data[i] = texture.pixels[i];
+        ctx.putImageData(imgData, 0, 0);
+        return canvas;
+    }
+    function dirname(path) {
+        var parts = path.split('/');
+        parts.pop();
+        return parts.join('/');
+    }
+    return {
+        setters:[
+            function (ZSI_1) {
+                ZSI = ZSI_1;
+            },
+            function (CMB_2) {
+                CMB = CMB_2;
+            },
+            function (Viewer_3) {
+                Viewer = Viewer_3;
+            },
+            function (util_3_1) {
+                util_3 = util_3_1;
+            }],
+        execute: function() {
+            DL_VERT_SHADER_SOURCE = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform float u_posScale;\n    uniform float u_uvScale;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n\n    void main() {\n        gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;\n        v_color = a_color;\n        v_uv = a_uv * u_uvScale;\n        v_uv.t = 1.0 - v_uv.t;\n    }\n";
+            DL_FRAG_SHADER_SOURCE = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n    uniform bool u_alphaTest;\n    \n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (u_alphaTest && gl_FragColor.a <= 0.8)\n            discard;\n    }\n";
+            OoT3D_Program = (function (_super) {
+                __extends(OoT3D_Program, _super);
+                function OoT3D_Program() {
+                    _super.apply(this, arguments);
+                    this.vert = DL_VERT_SHADER_SOURCE;
+                    this.frag = DL_FRAG_SHADER_SOURCE;
+                }
+                OoT3D_Program.prototype.bind = function (gl, prog) {
+                    _super.prototype.bind.call(this, gl, prog);
+                    this.posScaleLocation = gl.getUniformLocation(prog, "u_posScale");
+                    this.uvScaleLocation = gl.getUniformLocation(prog, "u_uvScale");
+                    this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
+                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
+                    this.colorLocation = gl.getAttribLocation(prog, "a_color");
+                    this.uvLocation = gl.getAttribLocation(prog, "a_uv");
+                };
+                return OoT3D_Program;
+            }(Viewer.Program));
+            Scene = (function () {
+                function Scene(gl, zsi) {
+                    this.program = new OoT3D_Program();
+                    this.textures = zsi.mesh.textures.map(function (texture) {
+                        return textureToCanvas(texture);
+                    });
+                    this.zsi = zsi;
+                    this.model = this.translateModel(gl, zsi.mesh);
+                }
+                Scene.prototype.translateDataType = function (gl, dataType) {
+                    switch (dataType) {
+                        case CMB.DataType.Byte: return gl.BYTE;
+                        case CMB.DataType.UByte: return gl.UNSIGNED_BYTE;
+                        case CMB.DataType.Short: return gl.SHORT;
+                        case CMB.DataType.UShort: return gl.UNSIGNED_SHORT;
+                        case CMB.DataType.Int: return gl.INT;
+                        case CMB.DataType.UInt: return gl.UNSIGNED_INT;
+                        case CMB.DataType.Float: return gl.FLOAT;
+                        default: throw new Error();
+                    }
+                };
+                Scene.prototype.dataTypeSize = function (dataType) {
+                    switch (dataType) {
+                        case CMB.DataType.Byte: return 1;
+                        case CMB.DataType.UByte: return 1;
+                        case CMB.DataType.Short: return 2;
+                        case CMB.DataType.UShort: return 2;
+                        case CMB.DataType.Int: return 4;
+                        case CMB.DataType.UInt: return 4;
+                        case CMB.DataType.Float: return 4;
+                        default: throw new Error();
+                    }
+                };
+                Scene.prototype.translateSepd = function (gl, cmbContext, sepd) {
+                    var _this = this;
+                    return function () {
+                        gl.uniform1f(_this.program.uvScaleLocation, sepd.txcScale);
+                        gl.uniform1f(_this.program.posScaleLocation, sepd.posScale);
+                        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
+                        gl.vertexAttribPointer(_this.program.positionLocation, 3, _this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
+                        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
+                        gl.vertexAttribPointer(_this.program.colorLocation, 4, _this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
+                        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
+                        gl.vertexAttribPointer(_this.program.uvLocation, 2, _this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
+                        gl.enableVertexAttribArray(_this.program.positionLocation);
+                        gl.enableVertexAttribArray(_this.program.colorLocation);
+                        gl.enableVertexAttribArray(_this.program.uvLocation);
+                        for (var _i = 0, _a = sepd.prms; _i < _a.length; _i++) {
+                            var prm = _a[_i];
+                            gl.drawElements(gl.TRIANGLES, prm.count, _this.translateDataType(gl, prm.indexType), prm.offset * _this.dataTypeSize(prm.indexType));
+                        }
+                        gl.disableVertexAttribArray(_this.program.positionLocation);
+                        gl.disableVertexAttribArray(_this.program.colorLocation);
+                        gl.disableVertexAttribArray(_this.program.uvLocation);
+                    };
+                };
+                Scene.prototype.translateTexture = function (gl, texture) {
+                    var texId = gl.createTexture();
+                    gl.bindTexture(gl.TEXTURE_2D, texId);
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
+                    return texId;
+                };
+                Scene.prototype.translateMaterial = function (gl, cmbContext, material) {
+                    var _this = this;
+                    function translateWrapMode(wrapMode) {
+                        switch (wrapMode) {
+                            case CMB.TextureWrapMode.CLAMP: return gl.CLAMP_TO_EDGE;
+                            case CMB.TextureWrapMode.REPEAT: return gl.REPEAT;
+                            default: throw new Error();
+                        }
+                    }
+                    function translateTextureFilter(filter) {
+                        switch (filter) {
+                            case CMB.TextureFilter.LINEAR: return gl.LINEAR;
+                            case CMB.TextureFilter.NEAREST: return gl.NEAREST;
+                            case CMB.TextureFilter.LINEAR_MIPMAP_LINEAR: return gl.NEAREST;
+                            case CMB.TextureFilter.LINEAR_MIPMAP_NEAREST: return gl.NEAREST;
+                            case CMB.TextureFilter.NEAREST_MIPMAP_NEAREST: return gl.NEAREST;
+                            case CMB.TextureFilter.NEAREST_MIPMIP_LINEAR: return gl.NEAREST;
+                            default: throw new Error();
+                        }
+                    }
+                    return function () {
+                        for (var i = 0; i < 1; i++) {
+                            var binding = material.textureBindings[i];
+                            if (binding.textureIdx === -1)
+                                continue;
+                            gl.uniform1i(_this.program.alphaTestLocation, material.alphaTestEnable ? 1 : 0);
+                            gl.activeTexture(gl.TEXTURE0 + i);
+                            gl.bindTexture(gl.TEXTURE_2D, cmbContext.textures[binding.textureIdx]);
+                            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, translateTextureFilter(binding.minFilter));
+                            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, translateTextureFilter(binding.magFilter));
+                            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, translateWrapMode(binding.wrapS));
+                            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, translateWrapMode(binding.wrapT));
+                        }
+                    };
+                };
+                Scene.prototype.translateMesh = function (gl, cmbContext, mesh) {
+                    var mat = cmbContext.matFuncs[mesh.matsIdx];
+                    var sepd = cmbContext.sepdFuncs[mesh.sepdIdx];
+                    return function () {
+                        mat(mesh);
+                        sepd();
+                    };
+                };
+                Scene.prototype.translateCmb = function (gl, cmb) {
+                    var _this = this;
+                    if (!cmb)
+                        return function () { };
+                    var posBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+                    gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.posBuffer, gl.STATIC_DRAW);
+                    var colBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
+                    gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.colBuffer, gl.STATIC_DRAW);
+                    var nrmBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ARRAY_BUFFER, nrmBuffer);
+                    gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.nrmBuffer, gl.STATIC_DRAW);
+                    var txcBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ARRAY_BUFFER, txcBuffer);
+                    gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.txcBuffer, gl.STATIC_DRAW);
+                    var textures = cmb.textures.map(function (texture) {
+                        return _this.translateTexture(gl, texture);
+                    });
+                    var cmbContext = {
+                        posBuffer: posBuffer,
+                        colBuffer: colBuffer,
+                        nrmBuffer: nrmBuffer,
+                        txcBuffer: txcBuffer,
+                        textures: textures,
+                    };
+                    cmbContext.sepdFuncs = cmb.sepds.map(function (sepd) { return _this.translateSepd(gl, cmbContext, sepd); });
+                    cmbContext.matFuncs = cmb.materials.map(function (material) { return _this.translateMaterial(gl, cmbContext, material); });
+                    var meshFuncs = cmb.meshs.map(function (mesh) { return _this.translateMesh(gl, cmbContext, mesh); });
+                    var idxBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+                    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer, gl.STATIC_DRAW);
+                    return function () {
+                        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+                        for (var _i = 0, meshFuncs_1 = meshFuncs; _i < meshFuncs_1.length; _i++) {
+                            var func = meshFuncs_1[_i];
+                            func();
+                        }
+                    };
+                };
+                Scene.prototype.translateModel = function (gl, mesh) {
+                    var opaque = this.translateCmb(gl, mesh.opaque);
+                    var transparent = this.translateCmb(gl, mesh.transparent);
+                    return function () {
+                        opaque();
+                        // transparent();
+                    };
+                };
+                Scene.prototype.render = function (state) {
+                    var gl = state.viewport.gl;
+                    state.useProgram(this.program);
+                    gl.enable(gl.DEPTH_TEST);
+                    gl.enable(gl.BLEND);
+                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                    this.model();
+                };
+                return Scene;
+            }());
+            MultiScene = (function () {
+                function MultiScene(scenes) {
+                    this.scenes = scenes;
+                    this.textures = [];
+                    for (var _i = 0, _a = this.scenes; _i < _a.length; _i++) {
+                        var scene = _a[_i];
+                        this.textures = this.textures.concat(scene.textures);
+                    }
+                }
+                MultiScene.prototype.render = function (renderState) {
+                    this.scenes.forEach(function (scene) { return scene.render(renderState); });
+                };
+                return MultiScene;
+            }());
+            SceneDesc = (function () {
+                function SceneDesc(name, path) {
+                    this.name = name;
+                    this.path = path;
+                }
+                SceneDesc.prototype._createSceneFromData = function (gl, result) {
+                    var _this = this;
+                    var zsi = ZSI.parse(result);
+                    if (zsi.mesh) {
+                        return Promise.resolve(new Scene(gl, zsi));
+                    }
+                    else if (zsi.rooms) {
+                        var basePath_1 = dirname(this.path);
+                        var roomFilenames = zsi.rooms.map(function (romPath) {
+                            var filename = romPath.split('/').pop();
+                            return basePath_1 + '/' + filename;
+                        });
+                        return Promise.all(roomFilenames.map(function (filename) {
+                            return util_3.fetch(filename).then(function (result) { return _this._createSceneFromData(gl, result); });
+                        })).then(function (scenes) {
+                            return new MultiScene(scenes);
+                        });
+                    }
+                };
+                SceneDesc.prototype.createScene = function (gl) {
+                    var _this = this;
+                    return util_3.fetch(this.path).then(function (result) {
+                        return _this._createSceneFromData(gl, result);
+                    });
+                };
+                return SceneDesc;
+            }());
+            exports_15("SceneDesc", SceneDesc);
+        }
+    }
+});
+System.register("oot3d/scenes", ["oot3d/render"], function(exports_16, context_16) {
+    "use strict";
+    var __moduleName = context_16 && context_16.id;
+    var render_3;
+    var name, sceneDescs, sceneGroup;
+    return {
+        setters:[
+            function (render_3_1) {
+                render_3 = render_3_1;
+            }],
+        execute: function() {
+            name = "Ocarina of Time 3D";
+            sceneDescs = [
+                { name: "Inside the Deku Tree", filename: "ydan_info.zsi" },
+                { name: "Inside the Deku Tree (Boss)", filename: "ydan_boss_info.zsi" },
+                { name: "Dodongo's Cavern", filename: "ddan_info.zsi" },
+                { name: "Dodongo's Cavern (Boss)", filename: "ddan_boss_info.zsi" },
+                { name: "Jabu-Jabu's Belly", filename: 'bdan_info.zsi' },
+                { name: "Jabu-Jabu's Belly (Boss)", filename: 'bdan_boss_info.zsi' },
+                { name: "Forest Temple", filename: 'bmori1_info.zsi' },
+                { name: "Forest Temple (Boss)", filename: "moriboss_info.zsi" },
+                { name: "Fire Temple", filename: "hidan_info.zsi" },
+                { name: "Fire Temple (Boss)", filename: "fire_bs_info.zsi" },
+                { name: "Water Temple", filename: "mizusin_info.zsi" },
+                { name: "Water Temple (Boss)", filename: "mizusin_boss_info.zsi" },
+                { name: "Spirit Temple", filename: "jyasinzou_info.zsi" },
+                { name: "Spirit Temple (Mid-Boss)", filename: "jyasinzou_boss_info.zsi" },
+                { name: "Shadow Temple", filename: "hakadan_info.zsi" },
+                { name: "Shadow Temple (Boss)", filename: "hakadan_boss_info.zsi" },
+                { name: "Bottom of the Well", filename: "hakadan_ch_info.zsi" },
+                { name: "Ice Cavern", filename: "ice_doukutu_info.zsi" },
+                { name: "Gerudo Training Grounds", filename: "men_info.zsi" },
+                { name: "Thieve's Hideout", filename: "gerudoway_info.zsi" },
+                { name: "Ganon's Castle", filename: "ganontika_info.zsi" },
+                { name: "Ganon's Castle (Crumbling)", filename: "ganontikasonogo_info.zsi" },
+                { name: "Ganon's Castle (Outside)", filename: "ganon_tou_info.zsi" },
+                { name: "Ganon's Castle Tower", filename: "ganon_info.zsi" },
+                { name: "Ganon's Castle Tower (Crumbling)", filename: "ganon_sonogo_info.zsi" },
+                { name: "Second-To-Last Boss Ganondorf", filename: "ganon_boss_info.zsi" },
+                { name: "Final Battle Against Ganon", filename: "ganon_demo_info.zsi" },
+                { name: "Ganondorf's Death", filename: "ganon_final_info.zsi" },
+                { name: "Hyrule Field", filename: "spot00_info.zsi" },
+                { name: "Kakariko Village", filename: "spot01_info.zsi" },
+                { name: "Kakariko Graveyard", filename: "spot02_info.zsi" },
+                { name: "Zora's River", filename: "spot03_info.zsi" },
+                { name: "Kokiri Firest", filename: "spot04_info.zsi" },
+                { name: "Sacred Forest Meadow", filename: "spot05_info.zsi" },
+                { name: "Lake Hylia", filename: "spot06_info.zsi" },
+                { name: "Zora's Domain", filename: "spot07_info.zsi" },
+                { name: "Zora's Fountain", filename: "spot08_info.zsi" },
+                { name: "Gerudo Valley", filename: "spot09_info.zsi" },
+                { name: "Lost Woods", filename: "spot10_info.zsi" },
+                { name: "Desert Colossus", filename: "spot11_info.zsi" },
+                { name: "Gerudo's Fortress", filename: "spot12_info.zsi" },
+                { name: "Haunted Wasteland", filename: "spot13_info.zsi" },
+                { name: "Hyrule Castle", filename: "spot15_info.zsi" },
+                { name: "Death Mountain", filename: "spot16_info.zsi" },
+                { name: "Death Mountain Crater", filename: "spot17_info.zsi" },
+                { name: "Goron City", filename: "spot18_info.zsi" },
+                { name: "Lon Lon Ranch", filename: "spot20_info.zsi" },
+                { name: "", filename: "spot99_info.zsi" },
+                { name: "Market Entrance (Day)", filename: "entra_day_info.zsi" },
+                { name: "Market Entrance (Night)", filename: "entra_night_info.zsi" },
+                { name: "Market Entrance (Ruins)", filename: "entra_ruins_info.zsi" },
+                { name: "Market (Day)", filename: "market_day_info.zsi" },
+                { name: "Market (Night)", filename: "market_night_info.zsi" },
+                { name: "Market (Ruins)", filename: "market_ruins_info.zsi" },
+                { name: "Market Back-Alley (Day)", filename: "market_alley_info.zsi" },
+                { name: "Market Back-Alley (Night)", filename: "market_alley_n_info.zsi" },
+                { name: "Lots'o'Pots", filename: "miharigoya_info.zsi" },
+                { name: "Bombchu Bowling Alley", filename: 'bowling_info.zsi' },
+                { name: "Temple of Time (Outside, Day)", filename: "shrine_info.zsi" },
+                { name: "Temple of Time (Outside, Night)", filename: "shrine_n_info.zsi" },
+                { name: "Temple of Time (Outside, Adult)", filename: "shrine_r_info.zsi" },
+                { name: "Temple of Time (Interior)", filename: "tokinoma_info.zsi" },
+                { name: "Chamber of Sages", filename: "kenjyanoma_info.zsi" },
+                { name: "Zora Shop", filename: "zoora_info.zsi" },
+                { name: "Dampe's Hut", filename: "hut_info.zsi" },
+                { name: "Great Fairy Fountain", filename: "daiyousei_izumi_info.zsi" },
+                { name: "Small Fairy Fountain", filename: "yousei_izumi_tate_info.zsi" },
+                { name: "Magic Fairy Fountain", filename: "yousei_izumi_yoko_info.zsi" },
+                { name: "Castle Courtyard", filename: "hairal_niwa_info.zsi" },
+                { name: "Castle Courtyard (Night)", filename: "hairal_niwa_n_info.zsi" },
+                { name: '', filename: "hakaana_info.zsi" },
+                { name: "Grottos", filename: "kakusiana_info.zsi" },
+                { name: "Royal Family's Tomb", filename: "hakaana_ouke_info.zsi" },
+                { name: "Dampe's Grave & Windmill Hut", filename: "hakasitarelay_info.zsi" },
+                { name: "Cutscene Map", filename: "hiral_demo_info.zsi" },
+                { name: "Hylia Lakeside Laboratory", filename: "hylia_labo_info.zsi" },
+                { name: "Puppy Woman's House", filename: "kakariko_impa_info.zsi" },
+                { name: "Skulltula House", filename: "kinsuta_info.zsi" },
+                { name: "Impa's House", filename: "labo_info.zsi" },
+                { name: "Granny's Potion Shop", filename: "mahouya_info.zsi" },
+                { name: "Zelda's Courtyard", filename: "nakaniwa_info.zsi" },
+                { name: "Market Potion Shop", filename: "shop_alley_info.zsi" },
+                { name: "Kakariko Potion Shop", filename: "shop_drag_info.zsi" },
+                { name: "Happy Mask Shop", filename: "shop_face_info.zsi" },
+                { name: "Goron Shop", filename: "shop_golon_info.zsi" },
+                { name: "Bombchu Shop", filename: "shop_night_info.zsi" },
+                { name: "Talon's House", filename: "souko_info.zsi" },
+                { name: "Stables", filename: "stable_info.zsi" },
+                { name: "Shooting Gallery", filename: "syatekijyou_info.zsi" },
+                { name: "Treasure Chest Game", filename: "takaraya_info.zsi" },
+                { name: "Carpenter's Tent", filename: "tent_info.zsi" },
+                { name: '', filename: "k_home_info.zsi" },
+                { name: '', filename: "kakariko_info.zsi" },
+                { name: '', filename: "kokiri_info.zsi" },
+                { name: '', filename: "link_info.zsi" },
+                { name: '', filename: "shop_info.zsi" },
+                { name: "Fishing Pond", filename: "turibori_info.zsi" },
+            ].map(function (entry) {
+                var path = "data/oot3d/" + entry.filename;
+                var name = entry.name || entry.filename;
+                return new render_3.SceneDesc(name, path);
+            });
+            exports_16("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+        }
+    }
+});
+System.register("main", ["viewer", "oot3d/scenes"], function(exports_17, context_17) {
+    "use strict";
+    var __moduleName = context_17 && context_17.id;
+    var viewer_1, OOT3D;
     var Main;
     return {
         setters:[
             function (viewer_1_1) {
                 viewer_1 = viewer_1_1;
             },
-            function (SM64DS_1) {
-                SM64DS = SM64DS_1;
-            },
-            function (ZELVIEW_1) {
-                ZELVIEW = ZELVIEW_1;
+            function (OOT3D_1) {
+                OOT3D = OOT3D_1;
             }],
         execute: function() {
             Main = (function () {
@@ -3147,8 +4194,9 @@ System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes"], function(
                     this.viewer.start();
                     this.groups = [];
                     // The "plugin" part of this.
-                    this.groups.push(SM64DS.sceneGroup);
-                    this.groups.push(ZELVIEW.sceneGroup);
+                    // this.groups.push(SM64DS.sceneGroup);
+                    // this.groups.push(ZELVIEW.sceneGroup);
+                    this.groups.push(OOT3D.sceneGroup);
                     this.makeUI();
                 }
                 Main.prototype.loadSceneDesc = function (sceneDesc) {
@@ -3190,7 +4238,7 @@ System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes"], function(
                 };
                 return Main;
             }());
-            exports_13("Main", Main);
+            exports_17("Main", Main);
             window.addEventListener('load', function () {
                 window.main = new Main();
             });
