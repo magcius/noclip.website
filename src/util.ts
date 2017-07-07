@@ -5,7 +5,7 @@ export function fetch(path):PromiseLike<ArrayBuffer> {
     request.responseType = "arraybuffer";
     request.send();
 
-    return new window.Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
         request.onload = () => {
             resolve(request.response);
         };

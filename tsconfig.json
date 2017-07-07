@@ -1,6 +1,11 @@
 {
     "compilerOptions": {
         "target": "es5",
+        "lib": [
+            "es2015",
+            "es2015.promise",
+            "dom"
+        ],
         "sourceMap": true,
         "module": "system",
         "outFile": "build/main.js"
