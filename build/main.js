@@ -4173,15 +4173,21 @@ System.register("oot3d/scenes", ["oot3d/render"], function(exports_16, context_1
         }
     }
 });
-System.register("main", ["viewer", "oot3d/scenes"], function(exports_17, context_17) {
+System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes", "oot3d/scenes"], function(exports_17, context_17) {
     "use strict";
     var __moduleName = context_17 && context_17.id;
-    var viewer_1, OOT3D;
+    var viewer_1, SM64DS, ZELVIEW, OOT3D;
     var Main;
     return {
         setters:[
             function (viewer_1_1) {
                 viewer_1 = viewer_1_1;
+            },
+            function (SM64DS_1) {
+                SM64DS = SM64DS_1;
+            },
+            function (ZELVIEW_1) {
+                ZELVIEW = ZELVIEW_1;
             },
             function (OOT3D_1) {
                 OOT3D = OOT3D_1;
@@ -4194,8 +4200,8 @@ System.register("main", ["viewer", "oot3d/scenes"], function(exports_17, context
                     this.viewer.start();
                     this.groups = [];
                     // The "plugin" part of this.
-                    // this.groups.push(SM64DS.sceneGroup);
-                    // this.groups.push(ZELVIEW.sceneGroup);
+                    this.groups.push(SM64DS.sceneGroup);
+                    this.groups.push(ZELVIEW.sceneGroup);
                     this.groups.push(OOT3D.sceneGroup);
                     this.makeUI();
                 }
