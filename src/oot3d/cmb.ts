@@ -119,24 +119,6 @@ function expand6to8(n:number) {
     return (n << (8-6)) | (n >>> (12-8));
 }
 
-function download(buffer:ArrayBuffer, filename:string) {
-    const blob = new Blob([buffer], { type: 'application/octet-stream' });
-    const url = window.URL.createObjectURL(blob);
-    const elem = document.createElement('a');
-    elem.setAttribute('href', url);
-    elem.setAttribute('download', filename);
-    document.body.appendChild(elem);
-    elem.click();
-    document.body.removeChild(elem);
-}
-
-function pad8(n) {
-    n = (n >>> 0).toString(16);
-    while (n.length < 8)
-        n = '0' + n;
-    return '0x' + n;
-}
-
 function decodeTexture_ETC1_4x4_Color(dst:Uint8Array, w1:number, w2:number, dstOffs:number, stride:number):void {
     // w1 = Upper 32-bit word, "control" data
     // w2 = Lower 32-bit word, "pixel" data

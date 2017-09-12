@@ -1,6 +1,4 @@
 
-/// <reference path="../decl.d.ts" />
-
 import * as NITRO_GX from './nitro_gx';
 import * as NITRO_Tex from './nitro_tex';
 
