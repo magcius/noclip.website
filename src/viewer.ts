@@ -54,6 +54,7 @@ export class RenderState {
     gl:WebGLRenderingContext;
     viewport:Viewport;
     currentProgram:Program = null;
+    time:number;
 
     projection:Float32Array;
     modelView:Float32Array;
@@ -61,6 +62,7 @@ export class RenderState {
     constructor(viewport:Viewport) {
         this.viewport = viewport;
         this.gl = this.viewport.gl;
+        this.time = 0;
 
         this.projection = window.mat4.create();
         window.mat4.perspective(this.projection, Math.PI / 4, viewport.canvas.width / viewport.canvas.height, 0.2, 50000);
@@ -76,9 +78,17 @@ export class RenderState {
     }
 }
 
+interface CameraController {
+    update(camera:any, inputManager:InputManager, dt:number):void;
+}
+
+// XXX: Is there any way to do this properly and reference the interface?
+type CameraControllerClass = typeof FPSCameraController | typeof OrbitCameraController;
+
 export interface Scene {
     render(state:RenderState);
     textures:HTMLCanvasElement[];
+    cameraController:CameraControllerClass;
 }
 
 class SceneGraph {
@@ -94,7 +104,7 @@ class SceneGraph {
         gl.getExtension('EXT_frag_depth');
 
         gl.viewport(0, 0, viewport.canvas.width, viewport.canvas.height);
-        gl.clearColor(200/255, 50/255, 153/255, 1);
+        gl.clearColor(0.88, 0.88, 0.88, 1);
     }
 
     render() {
@@ -106,17 +116,234 @@ class SceneGraph {
 
     setScenes(scenes) {
         this.scenes = scenes;
-        this.render();
     }
     setCamera(matrix) {
-        window.mat4.invert(this.renderState.modelView, matrix);
-        this.render();
+        window.mat4.copy(this.renderState.modelView, matrix);
+    }
+}
+
+// XXX: Port to a class at some point.
+function elemDragger(elem:HTMLElement, callback:(dx:number, dy:number) => void):void {
+    let lastX, lastY;
+
+    function mousemove(e) {
+        const dx = e.pageX - lastX, dy = e.pageY - lastY;
+        lastX = e.pageX;
+        lastY = e.pageY;
+        callback(dx, dy);
+    }
+    function mouseup(e) {
+        document.removeEventListener('mouseup', mouseup);
+        document.removeEventListener('mousemove', mousemove);
+        document.body.classList.remove('grabbing');
+    }
+    elem.addEventListener('mousedown', function(e) {
+        lastX = e.pageX;
+        lastY = e.pageY;
+        document.addEventListener('mouseup', mouseup);
+        document.addEventListener('mousemove', mousemove);
+        document.body.classList.add('grabbing');
+        e.preventDefault();
+    });
+}
+
+class InputManager {
+    toplevel:HTMLElement;
+    keysDown:Map<number, boolean>;
+    dx:number;
+    dy:number;
+    dz:number;
+
+    constructor(toplevel) {
+        this.toplevel = toplevel;
+
+        this.keysDown = new Map<number, boolean>();
+        window.addEventListener('keydown', this._onKeyDown.bind(this));
+        window.addEventListener('keyup', this._onKeyUp.bind(this));
+        window.addEventListener('wheel', this._onWheel.bind(this));
+
+        this.resetMouse();
+
+        elemDragger(this.toplevel, this._onElemDragger.bind(this));
+    }
+
+    isKeyDown(key:string) {
+        return !!this.keysDown[key.charCodeAt(0)];
+    }
+    isKeyDownRaw(keyCode:number) {
+        return !!this.keysDown[keyCode];
+    }
+    isDragging() {
+        // XXX: Should be an explicit flag.
+        return this.toplevel.classList.contains('grabbing');
+    }
+
+    _onKeyDown(e:KeyboardEvent) {
+        this.keysDown[e.keyCode] = true;
+    }
+    _onKeyUp(e:KeyboardEvent) {
+        delete this.keysDown[e.keyCode];
+    }
+
+    _onElemDragger(dx, dy) {
+        this.dx += dx;
+        this.dy += dy;
+    }
+    _onWheel(e:WheelEvent) {
+        this.dz += Math.sign(e.deltaY) * -4;
+        // XXX: How can I convince Chrome to let me use wheel events without it complaining...
+        e.preventDefault();
+    }
+
+    resetMouse() {
+        this.dx = 0;
+        this.dy = 0;
+        this.dz = 0;
+    }
+}
+
+export class FPSCameraController implements CameraController {
+    _tmp:any;
+    _camera:any;
+
+    constructor() {
+        this._tmp = window.mat4.create();
+        this._camera = window.mat4.create();
+    }
+
+    update(outCamera, inputManager, dt):void {
+        const SHIFT = 16;
+        const tmp = this._tmp;
+        const camera = this._camera;
+
+        let mult = 10;
+        if (inputManager.isKeyDownRaw(SHIFT))
+            mult *= 5;
+        mult *= (dt / 16.0);
+
+        var amt;
+        amt = 0;
+        if (inputManager.isKeyDown('W'))
+            amt = -mult;
+        else if (inputManager.isKeyDown('S'))
+            amt = mult;
+        tmp[14] = amt;
+
+        amt = 0;
+        if (inputManager.isKeyDown('A'))
+            amt = -mult;
+        else if (inputManager.isKeyDown('D'))
+            amt = mult;
+        tmp[12] = amt;
+
+        amt = 0;
+        if (inputManager.isKeyDown('Q'))
+            amt = -mult;
+        else if (inputManager.isKeyDown('E'))
+            amt = mult;
+        tmp[13] = amt;
+
+        if (inputManager.isKeyDown('B'))
+            window.mat4.identity(camera);
+        if (inputManager.isKeyDown('C'))
+            console.log(camera);
+
+        const cu = [camera[1], camera[5], camera[9]];
+        window.vec3.normalize(cu, cu);
+        window.mat4.rotate(camera, camera, -inputManager.dx / 500, cu);
+        window.mat4.rotate(camera, camera, -inputManager.dy / 500, [1, 0, 0]);
+
+        window.mat4.multiply(camera, camera, tmp);
+        // XXX: Is there any way to do this without the expensive inverse?
+        window.mat4.invert(outCamera, camera);
+    }
+}
+
+function clamp(v:number, min:number, max:number):number {
+    return Math.max(min, Math.min(v, max));
+}
+
+function clampRange(v:number, lim:number):number {
+    return clamp(v, -lim, lim);
+}
+
+export class OrbitCameraController implements CameraController {
+    x:number;
+    y:number;
+    z:number;
+
+    xVel:number;
+    yVel:number;
+    zVel:number;
+
+    constructor() {
+        this.x = 0.15;
+        this.y = 0.35;
+        this.z = -150;
+        this.xVel = 0;
+        this.yVel = 0;
+        this.zVel = 0;
+    }
+
+    update(camera:any, inputManager:InputManager, dt:number):void {
+        // Get new velocities from inputs.
+        this.xVel += inputManager.dx / 200;
+        this.yVel += inputManager.dy / 200;
+        this.zVel += inputManager.dz;
+        if (inputManager.isKeyDown('A'))
+            this.xVel += 0.05;
+        if (inputManager.isKeyDown('D'))
+            this.xVel -= 0.05;
+        if (inputManager.isKeyDown('W'))
+            this.yVel += 0.05;
+        if (inputManager.isKeyDown('S'))
+            this.yVel -= 0.05;
+
+        // Apply velocities.
+        this.xVel = clampRange(this.xVel, 2);
+        this.yVel = clampRange(this.yVel, 2);
+        const drag = inputManager.isDragging() ? 0.92 : 0.96;
+
+        this.x += this.xVel / 10;
+        this.xVel *= drag;
+
+        this.y += this.yVel / 10;
+        this.yVel *= drag;
+        if (this.y < 0.04) {
+            this.y = 0.04;
+            this.yVel = 0;
+        }
+        if (this.y > 1.50) {
+            this.y = 1.50;
+            this.yVel = 0;
+        }
+
+        this.z += this.zVel;
+        this.zVel *= 0.8;
+        if (this.z > -10) {
+            this.z = -10;
+            this.zVel = 0;
+        }
+
+        // Calculate new camera from new x/y/z.
+        const sinX = Math.sin(this.x);
+        const cosX = Math.cos(this.x);
+        const sinY = Math.sin(this.y);
+        const cosY = Math.cos(this.y);
+        window.mat4.copy(camera, [
+            cosX, sinY*sinX, -cosY*sinX, 0,
+            0, cosY, sinY, 0,
+            sinX, -sinY*cosX, cosY*cosX, 0,
+            0, 0, this.z, 1,
+        ]);
     }
 }
 
 export class Viewer {
-    sceneGraph: SceneGraph;
-    camera: Float32Array;
+    sceneGraph:SceneGraph;
+    camera:Float32Array;
+    inputManager:InputManager;
+    cameraController:CameraController;
 
     constructor(canvas:HTMLCanvasElement) {
         const gl = canvas.getContext("webgl", { alpha: false });
@@ -124,12 +351,15 @@ export class Viewer {
 
         this.sceneGraph = new SceneGraph(viewport);
         this.camera = window.mat4.create();
+        this.inputManager = new InputManager(this.sceneGraph.renderState.viewport.canvas);
+        this.cameraController = null;
     }
     resetCamera() {
         window.mat4.identity(this.camera);
     }
     setScene(scene:Scene) {
         this.sceneGraph.setScenes([scene]);
+        this.cameraController = new scene.cameraController();
         this.resetCamera();
     }
 
@@ -137,90 +367,19 @@ export class Viewer {
         const camera = this.camera;
         const canvas = this.sceneGraph.renderState.viewport.canvas;
 
-        const keysDown = {};
-        const SHIFT = 16;
-
-        function isKeyDown(key) {
-            return !!keysDown[key.charCodeAt(0)];
-        }
-
-        window.addEventListener('keydown', function(e) {
-            keysDown[e.keyCode] = true;
-        });
-        window.addEventListener('keyup', function(e) {
-            delete keysDown[e.keyCode];
-        });
-
-        function elemDragger(elem, callback) {
-            var lx, ly;
-
-            function mousemove(e) {
-                var dx = e.pageX - lx, dy = e.pageY - ly;
-                lx = e.pageX; ly = e.pageY;
-                callback(dx, dy);
-            }
-            function mouseup(e) {
-                document.removeEventListener('mouseup', mouseup);
-                document.removeEventListener('mousemove', mousemove);
-                document.body.classList.remove('grabbing');
-            }
-            elem.addEventListener('mousedown', function(e) {
-                lx = e.pageX; ly = e.pageY;
-                document.addEventListener('mouseup', mouseup);
-                document.addEventListener('mousemove', mousemove);
-                document.body.classList.add('grabbing');
-                e.preventDefault();
-            });
-        }
-
-        elemDragger(canvas, function(dx, dy) {
-            var cu = [camera[1], camera[5], camera[9]];
-            window.vec3.normalize(cu, cu);
-            window.mat4.rotate(camera, camera, -dx / 500, cu);
-            window.mat4.rotate(camera, camera, -dy / 500, [1, 0, 0]);
-        });
-
-        var tmp = window.mat4.create();
-        var t = 0;
+        let t = 0;
         const update = (nt) => {
             var dt = nt - t;
             t = nt;
 
-            var mult = 10;
-            if (keysDown[SHIFT])
-                mult *= 5;
-            mult *= (dt / 16.0);
+            if (this.cameraController)
+                this.cameraController.update(camera, this.inputManager, dt);
 
-            var amt;
-            amt = 0;
-            if (isKeyDown('W'))
-                amt = -mult;
-            else if (isKeyDown('S'))
-                amt = mult;
-            tmp[14] = amt;
-
-            amt = 0;
-            if (isKeyDown('A'))
-                amt = -mult;
-            else if (isKeyDown('D'))
-                amt = mult;
-            tmp[12] = amt;
-
-            amt = 0;
-            if (isKeyDown('Q'))
-                amt = -mult;
-            else if (isKeyDown('E'))
-                amt = mult;
-            tmp[13] = amt;
-
-            if (isKeyDown('B'))
-                window.mat4.identity(camera);
-            if (isKeyDown('C'))
-                console.log(camera);
-
-            window.mat4.multiply(camera, camera, tmp);
+            this.inputManager.resetMouse();
 
             this.sceneGraph.setCamera(camera);
+            this.sceneGraph.renderState.time += dt;
+            this.sceneGraph.render();
             window.requestAnimationFrame(update);
         }
         update(0);

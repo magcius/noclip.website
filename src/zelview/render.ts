@@ -161,6 +161,7 @@ class WATERS_Program extends Viewer.Program {
 }
 
 class Scene implements Viewer.Scene {
+    cameraController = Viewer.FPSCameraController;
     textures:HTMLCanvasElement[];
     zelview0:ZELVIEW0.ZELVIEW0;
     program_BG:BG_Program;

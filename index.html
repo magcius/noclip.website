@@ -7,13 +7,12 @@
     button, select { font-size: 150%; }
     canvas#scene { cursor: grab; cursor: -webkit-grab; }
     .grabbing { cursor: grabbing; cursor: -webkit-grabbing; }
-    .grabbing canvas { cursor: inherit; }
+    .grabbing canvas#scene { cursor: inherit; }
     </style>
   </head>
   <body>
     <center>
     <div id="pl"></div>
-
     <canvas id="scene" width="1280" height="800"></canvas>
 
     <script src="https://cdn.rawgit.com/toji/gl-matrix/master/dist/gl-matrix-min.js"></script>
@@ -23,7 +22,6 @@
       System.import('main');
     </script>
 
-    <p>Use WASD to move around, hold shift to go faster. Click to rotate, and press B to reset the camera.</p>
     <h2>Textures</h2>
     <div id="textures"></div>
   </body>
