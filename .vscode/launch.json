@@ -2,10 +2,10 @@
     "version": "0.1.0",
     "configurations": [
         {
-            "name": "Launch index.html",
             "type": "chrome",
-            "request": "launch",
-            "url": "http://localhost:8000/index.html",
+            "request": "attach",
+            "name": "Attach to Chrome",
+            "port": 9222,
             "webRoot": "${workspaceRoot}",
             "sourceMaps": true
         }

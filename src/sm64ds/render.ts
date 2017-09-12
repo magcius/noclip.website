@@ -87,6 +87,7 @@ function textureToCanvas(bmdTex:NITRO_BMD.Texture) {
 }
 
 class Scene implements Viewer.Scene {
+    cameraController = Viewer.FPSCameraController;
     textures:HTMLCanvasElement[];
     modelFuncs:Function[];
     program:NITRO_Program;

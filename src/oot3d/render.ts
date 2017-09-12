@@ -82,6 +82,7 @@ function textureToCanvas(texture:CMB.Texture) {
 }
 
 class Scene implements Viewer.Scene {
+    cameraController = Viewer.FPSCameraController;
     textures:HTMLCanvasElement[];
     program:OoT3D_Program;
     zsi:ZSI.ZSI;
@@ -277,6 +278,7 @@ class Scene implements Viewer.Scene {
 }
 
 class MultiScene implements Viewer.Scene {
+    cameraController = Viewer.FPSCameraController;    
     scenes:Viewer.Scene[];
     textures:HTMLCanvasElement[];
     constructor(scenes:Viewer.Scene[]) {
