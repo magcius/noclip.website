@@ -886,7 +886,7 @@ System.register("viewer", [], function(exports_4, context_4) {
                 };
                 InputManager.prototype.isDragging = function () {
                     // XXX: Should be an explicit flag.
-                    return this.toplevel.classList.contains('grabbing');
+                    return document.body.classList.contains('grabbing');
                 };
                 InputManager.prototype._onKeyDown = function (e) {
                     this.keysDown[e.keyCode] = true;
@@ -1148,10 +1148,19 @@ System.register("j3d/scenes", ["j3d/render"], function(exports_7, context_7) {
         }
     }
 });
-// Read DS Geometry Engine commands.
-System.register("sm64ds/nitro_gx", [], function(exports_8, context_8) {
+System.register("j3d/texture", [], function(exports_8, context_8) {
     "use strict";
     var __moduleName = context_8 && context_8.id;
+    return {
+        setters:[],
+        execute: function() {
+        }
+    }
+});
+// Read DS Geometry Engine commands.
+System.register("sm64ds/nitro_gx", [], function(exports_9, context_9) {
+    "use strict";
+    var __moduleName = context_9 && context_9.id;
     var CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, Packet, Color, TexCoord, Point, Vertex, Context, ContextInternal;
     function rgb5(pixel) {
         var r, g, b;
@@ -1163,7 +1172,7 @@ System.register("sm64ds/nitro_gx", [], function(exports_8, context_8) {
         b = (b << (8 - 5)) | (b >> (10 - 8));
         return { r: r, g: g, b: b };
     }
-    exports_8("rgb5", rgb5);
+    exports_9("rgb5", rgb5);
     function cmd_MTX_RESTORE(ctx) {
         // XXX: We don't implement the matrix stack yet.
         ctx.readParam();
@@ -1386,7 +1395,7 @@ System.register("sm64ds/nitro_gx", [], function(exports_8, context_8) {
         }
         return ctx.packets;
     }
-    exports_8("readCmds", readCmds);
+    exports_9("readCmds", readCmds);
     return {
         setters:[],
         execute: function() {
@@ -1419,7 +1428,7 @@ System.register("sm64ds/nitro_gx", [], function(exports_8, context_8) {
                 }
                 return Packet;
             }());
-            exports_8("Packet", Packet);
+            exports_9("Packet", Packet);
             ;
             Color = (function () {
                 function Color() {
@@ -1450,7 +1459,7 @@ System.register("sm64ds/nitro_gx", [], function(exports_8, context_8) {
                 }
                 return Context;
             }());
-            exports_8("Context", Context);
+            exports_9("Context", Context);
             ;
             ContextInternal = (function () {
                 function ContextInternal(buffer, baseCtx) {
@@ -1476,9 +1485,9 @@ System.register("sm64ds/nitro_gx", [], function(exports_8, context_8) {
     }
 });
 // Read DS texture formats.
-System.register("sm64ds/nitro_tex", [], function(exports_9, context_9) {
+System.register("sm64ds/nitro_tex", [], function(exports_10, context_10) {
     "use strict";
-    var __moduleName = context_9 && context_9.id;
+    var __moduleName = context_10 && context_10.id;
     var Format;
     function color(a, r, g, b) {
         return (a << 24) | (r << 16) | (g << 8) | b;
@@ -1675,7 +1684,7 @@ System.register("sm64ds/nitro_tex", [], function(exports_9, context_9) {
                 throw new Error("Unsupported texture type! " + format);
         }
     }
-    exports_9("readTexture", readTexture);
+    exports_10("readTexture", readTexture);
     return {
         setters:[],
         execute: function() {
@@ -1689,14 +1698,14 @@ System.register("sm64ds/nitro_tex", [], function(exports_9, context_9) {
                 Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
                 Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
             })(Format || (Format = {}));
-            exports_9("Format", Format);
+            exports_10("Format", Format);
             ;
         }
     }
 });
-System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], function(exports_10, context_10) {
+System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], function(exports_11, context_11) {
     "use strict";
-    var __moduleName = context_10 && context_10.id;
+    var __moduleName = context_11 && context_11.id;
     var NITRO_GX, NITRO_Tex;
     var Poly, Batch, Model, TextureKey, Texture, BMD;
     // Super Mario 64 DS .bmd format
@@ -1846,7 +1855,7 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
             bmd.models.push(parseModel(bmd, view, i));
         return bmd;
     }
-    exports_10("parse", parse);
+    exports_11("parse", parse);
     return {
         setters:[
             function (NITRO_GX_1) {
@@ -1861,20 +1870,20 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
                 }
                 return Poly;
             }());
-            exports_10("Poly", Poly);
+            exports_11("Poly", Poly);
             Batch = (function () {
                 function Batch() {
                 }
                 return Batch;
             }());
-            exports_10("Batch", Batch);
+            exports_11("Batch", Batch);
             ;
             Model = (function () {
                 function Model() {
                 }
                 return Model;
             }());
-            exports_10("Model", Model);
+            exports_11("Model", Model);
             ;
             TextureKey = (function () {
                 function TextureKey(texIdx, palIdx) {
@@ -1891,21 +1900,21 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
                 }
                 return Texture;
             }());
-            exports_10("Texture", Texture);
+            exports_11("Texture", Texture);
             BMD = (function () {
                 function BMD() {
                 }
                 return BMD;
             }());
-            exports_10("BMD", BMD);
+            exports_11("BMD", BMD);
             ;
         }
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("sm64ds/render", ["lz77", "viewer", "sm64ds/nitro_bmd", "util"], function(exports_11, context_11) {
+System.register("sm64ds/render", ["lz77", "viewer", "sm64ds/nitro_bmd", "util"], function(exports_12, context_12) {
     "use strict";
-    var __moduleName = context_11 && context_11.id;
+    var __moduleName = context_12 && context_12.id;
     var LZ77, Viewer, NITRO_BMD, util_2;
     var DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Scene, SceneDesc;
     function textureToCanvas(bmdTex) {
@@ -2092,13 +2101,13 @@ System.register("sm64ds/render", ["lz77", "viewer", "sm64ds/nitro_bmd", "util"],
                 };
                 return SceneDesc;
             }());
-            exports_11("SceneDesc", SceneDesc);
+            exports_12("SceneDesc", SceneDesc);
         }
     }
 });
-System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_12, context_12) {
+System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_13, context_13) {
     "use strict";
-    var __moduleName = context_12 && context_12.id;
+    var __moduleName = context_13 && context_13.id;
     var render_2;
     var name, sceneDescs, sceneGroup;
     return {
@@ -2162,14 +2171,14 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_12, context
                 var name = entry.name || entry.filename;
                 return new render_2.SceneDesc(name, path);
             });
-            exports_12("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_13("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
         }
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("zelview/f3dex2", [], function(exports_13, context_13) {
+System.register("zelview/f3dex2", [], function(exports_14, context_14) {
     "use strict";
-    var __moduleName = context_13 && context_13.id;
+    var __moduleName = context_14 && context_14.id;
     var vec3, mat4, UCodeCommands, UCodeNames, name, VERTEX_SIZE, VERTEX_BYTES, N, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL, State;
     function readVertex(state, which, addr) {
         var rom = state.rom;
@@ -2862,7 +2871,7 @@ System.register("zelview/f3dex2", [], function(exports_13, context_13) {
         runDL(state, startAddr);
         return new DL(state.cmds, state.textures);
     }
-    exports_13("readDL", readDL);
+    exports_14("readDL", readDL);
     return {
         setters:[],
         execute: function() {
@@ -2937,7 +2946,7 @@ System.register("zelview/f3dex2", [], function(exports_13, context_13) {
                 }
                 return DL;
             }());
-            exports_13("DL", DL);
+            exports_14("DL", DL);
             State = (function () {
                 function State() {
                 }
@@ -2951,9 +2960,9 @@ System.register("zelview/f3dex2", [], function(exports_13, context_13) {
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_14, context_14) {
+System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_15, context_15) {
     "use strict";
-    var __moduleName = context_14 && context_14.id;
+    var __moduleName = context_15 && context_15.id;
     var F3DEX2;
     var mat4, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
     function read0String(buffer, offs, length) {
@@ -2997,7 +3006,7 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_14, con
         zelview0.view = view;
         return zelview0;
     }
-    exports_14("readZELVIEW0", readZELVIEW0);
+    exports_15("readZELVIEW0", readZELVIEW0);
     function readHeaders(gl, rom, offs, banks) {
         var headers = new Headers();
         function loadAddress(addr) {
@@ -3290,7 +3299,7 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_14, con
                 };
                 return ZELVIEW0;
             }());
-            exports_14("ZELVIEW0", ZELVIEW0);
+            exports_15("ZELVIEW0", ZELVIEW0);
             Mesh = (function () {
                 function Mesh() {
                     this.opaque = [];
@@ -3304,7 +3313,7 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_14, con
                 }
                 return Headers;
             }());
-            exports_14("Headers", Headers);
+            exports_15("Headers", Headers);
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Spawns"] = 0] = "Spawns";
                 HeaderCommands[HeaderCommands["Actors"] = 1] = "Actors";
@@ -3330,9 +3339,9 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_14, con
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("zelview/render", ["zelview/zelview0", "viewer", "util"], function(exports_15, context_15) {
+System.register("zelview/render", ["zelview/zelview0", "viewer", "util"], function(exports_16, context_16) {
     "use strict";
-    var __moduleName = context_15 && context_15.id;
+    var __moduleName = context_16 && context_16.id;
     var ZELVIEW0, Viewer, util_3;
     var BG_VERT_SHADER_SOURCE, BG_FRAG_SHADER_SOURCE, BG_Program, DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, DL_Program, COLL_VERT_SHADER_SOURCE, COLL_FRAG_SHADER_SOURCE, COLL_Program, WATERS_VERT_SHADER_SOURCE, WATERS_FRAG_SHADER_SOURCE, WATERS_Program, Scene, SceneDesc;
     return {
@@ -3539,13 +3548,13 @@ System.register("zelview/render", ["zelview/zelview0", "viewer", "util"], functi
                 };
                 return SceneDesc;
             }());
-            exports_15("SceneDesc", SceneDesc);
+            exports_16("SceneDesc", SceneDesc);
         }
     }
 });
-System.register("zelview/scenes", ["zelview/render"], function(exports_16, context_16) {
+System.register("zelview/scenes", ["zelview/render"], function(exports_17, context_17) {
     "use strict";
-    var __moduleName = context_16 && context_16.id;
+    var __moduleName = context_17 && context_17.id;
     var render_3;
     var name, sceneDescs, sceneGroup;
     return {
@@ -4000,13 +4009,13 @@ System.register("zelview/scenes", ["zelview/render"], function(exports_16, conte
                 var path = "data/zelview/" + entry.filename + ".zelview0";
                 return new render_3.SceneDesc(entry.label, path);
             });
-            exports_16("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_17("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
         }
     }
 });
-System.register("oot3d/cmb", [], function(exports_17, context_17) {
+System.register("oot3d/cmb", [], function(exports_18, context_18) {
     "use strict";
-    var __moduleName = context_17 && context_17.id;
+    var __moduleName = context_18 && context_18.id;
     var VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
     function readString(buffer, offs, length) {
         var buf = new Uint8Array(buffer, offs, length);
@@ -4433,7 +4442,7 @@ System.register("oot3d/cmb", [], function(exports_17, context_17) {
         cmb.indexBuffer = buffer.slice(idxDataOffs, idxDataOffs + idxDataCount * 2);
         return cmb;
     }
-    exports_17("parse", parse);
+    exports_18("parse", parse);
     return {
         setters:[],
         execute: function() {
@@ -4451,7 +4460,7 @@ System.register("oot3d/cmb", [], function(exports_17, context_17) {
                 }
                 return CMB;
             }());
-            exports_17("CMB", CMB);
+            exports_18("CMB", CMB);
             (function (TextureFilter) {
                 TextureFilter[TextureFilter["NEAREST"] = 9728] = "NEAREST";
                 TextureFilter[TextureFilter["LINEAR"] = 9729] = "LINEAR";
@@ -4460,12 +4469,12 @@ System.register("oot3d/cmb", [], function(exports_17, context_17) {
                 TextureFilter[TextureFilter["NEAREST_MIPMIP_LINEAR"] = 9986] = "NEAREST_MIPMIP_LINEAR";
                 TextureFilter[TextureFilter["LINEAR_MIPMAP_LINEAR"] = 9987] = "LINEAR_MIPMAP_LINEAR";
             })(TextureFilter || (TextureFilter = {}));
-            exports_17("TextureFilter", TextureFilter);
+            exports_18("TextureFilter", TextureFilter);
             (function (TextureWrapMode) {
                 TextureWrapMode[TextureWrapMode["CLAMP"] = 10496] = "CLAMP";
                 TextureWrapMode[TextureWrapMode["REPEAT"] = 10497] = "REPEAT";
             })(TextureWrapMode || (TextureWrapMode = {}));
-            exports_17("TextureWrapMode", TextureWrapMode);
+            exports_18("TextureWrapMode", TextureWrapMode);
             TextureBinding = (function () {
                 function TextureBinding() {
                 }
@@ -4477,7 +4486,7 @@ System.register("oot3d/cmb", [], function(exports_17, context_17) {
                 }
                 return Material;
             }());
-            exports_17("Material", Material);
+            exports_18("Material", Material);
             (function (TextureFormat) {
                 TextureFormat[TextureFormat["ETC1"] = 26458] = "ETC1";
                 TextureFormat[TextureFormat["ETC1A4"] = 26459] = "ETC1A4";
@@ -4492,13 +4501,13 @@ System.register("oot3d/cmb", [], function(exports_17, context_17) {
                 }
                 return Texture;
             }());
-            exports_17("Texture", Texture);
+            exports_18("Texture", Texture);
             Mesh = (function () {
                 function Mesh() {
                 }
                 return Mesh;
             }());
-            exports_17("Mesh", Mesh);
+            exports_18("Mesh", Mesh);
             (function (DataType) {
                 DataType[DataType["Byte"] = 5120] = "Byte";
                 DataType[DataType["UByte"] = 5121] = "UByte";
@@ -4508,27 +4517,27 @@ System.register("oot3d/cmb", [], function(exports_17, context_17) {
                 DataType[DataType["UInt"] = 5125] = "UInt";
                 DataType[DataType["Float"] = 5126] = "Float";
             })(DataType || (DataType = {}));
-            exports_17("DataType", DataType);
+            exports_18("DataType", DataType);
             ;
             Prm = (function () {
                 function Prm() {
                 }
                 return Prm;
             }());
-            exports_17("Prm", Prm);
+            exports_18("Prm", Prm);
             Sepd = (function () {
                 function Sepd() {
                     this.prms = [];
                 }
                 return Sepd;
             }());
-            exports_17("Sepd", Sepd);
+            exports_18("Sepd", Sepd);
         }
     }
 });
-System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_18, context_18) {
+System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_19, context_19) {
     "use strict";
-    var __moduleName = context_18 && context_18.id;
+    var __moduleName = context_19 && context_19.id;
     var CMB;
     var ZSI, HeaderCommands, Mesh;
     function readString(buffer, offs, length) {
@@ -4605,7 +4614,7 @@ System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_18, context_18) {
         var headersBuf = buffer.slice(0x10);
         return readHeaders(headersBuf);
     }
-    exports_18("parse", parse);
+    exports_19("parse", parse);
     return {
         setters:[
             function (CMB_1) {
@@ -4617,7 +4626,7 @@ System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_18, context_18) {
                 }
                 return ZSI;
             }());
-            exports_18("ZSI", ZSI);
+            exports_19("ZSI", ZSI);
             // Subset of Z64 command types.
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Rooms"] = 4] = "Rooms";
@@ -4629,14 +4638,14 @@ System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_18, context_18) {
                 }
                 return Mesh;
             }());
-            exports_18("Mesh", Mesh);
+            exports_19("Mesh", Mesh);
         }
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], function(exports_19, context_19) {
+System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], function(exports_20, context_20) {
     "use strict";
-    var __moduleName = context_19 && context_19.id;
+    var __moduleName = context_20 && context_20.id;
     var ZSI, CMB, Viewer, util_4;
     var DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, OoT3D_Program, Scene, MultiScene, SceneDesc;
     function textureToCanvas(texture) {
@@ -4902,13 +4911,13 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                 };
                 return SceneDesc;
             }());
-            exports_19("SceneDesc", SceneDesc);
+            exports_20("SceneDesc", SceneDesc);
         }
     }
 });
-System.register("oot3d/scenes", ["oot3d/render"], function(exports_20, context_20) {
+System.register("oot3d/scenes", ["oot3d/render"], function(exports_21, context_21) {
     "use strict";
-    var __moduleName = context_20 && context_20.id;
+    var __moduleName = context_21 && context_21.id;
     var render_4;
     var name, sceneDescs, sceneGroup;
     return {
@@ -5021,13 +5030,13 @@ System.register("oot3d/scenes", ["oot3d/render"], function(exports_20, context_2
                 var name = entry.name || entry.filename;
                 return new render_4.SceneDesc(name, path);
             });
-            exports_20("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_21("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
         }
     }
 });
-System.register("mdl0/mdl0", [], function(exports_21, context_21) {
+System.register("mdl0/mdl0", [], function(exports_22, context_22) {
     "use strict";
-    var __moduleName = context_21 && context_21.id;
+    var __moduleName = context_22 && context_22.id;
     function assert(b) {
         if (!b)
             throw new Error("Assert fail");
@@ -5101,16 +5110,16 @@ System.register("mdl0/mdl0", [], function(exports_21, context_21) {
         assert(offs == buffer.byteLength);
         return { clrData: clrData, idxData: idxData, vtxData: vtxData, animCount: animCount, animSize: animSize, vertCount: vertCount, vertSize: vertSize };
     }
-    exports_21("parse", parse);
+    exports_22("parse", parse);
     return {
         setters:[],
         execute: function() {
         }
     }
 });
-System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function(exports_22, context_22) {
+System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function(exports_23, context_23) {
     "use strict";
-    var __moduleName = context_22 && context_22.id;
+    var __moduleName = context_23 && context_23.id;
     var MDL0, Viewer, util_5;
     var MDL0_VERT_SHADER_SOURCE, MDL0_FRAG_SHADER_SOURCE, MDL0_Program, Scene, SceneDesc;
     return {
@@ -5190,13 +5199,13 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function(exports
                 };
                 return SceneDesc;
             }());
-            exports_22("SceneDesc", SceneDesc);
+            exports_23("SceneDesc", SceneDesc);
         }
     }
 });
-System.register("mdl0/scenes", ["mdl0/render"], function(exports_23, context_23) {
+System.register("mdl0/scenes", ["mdl0/render"], function(exports_24, context_24) {
     "use strict";
-    var __moduleName = context_23 && context_23.id;
+    var __moduleName = context_24 && context_24.id;
     var render_5;
     var name, sceneDescs, sceneGroup;
     return {
@@ -5261,13 +5270,13 @@ System.register("mdl0/scenes", ["mdl0/render"], function(exports_23, context_23)
                 var name = filename;
                 return new render_5.SceneDesc(name, path);
             });
-            exports_23("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_24("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
         }
     }
 });
-System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes", "oot3d/scenes", "mdl0/scenes"], function(exports_24, context_24) {
+System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes", "oot3d/scenes", "mdl0/scenes"], function(exports_25, context_25) {
     "use strict";
-    var __moduleName = context_24 && context_24.id;
+    var __moduleName = context_25 && context_25.id;
     var viewer_1, SM64DS, ZELVIEW, OOT3D, MDL0;
     var Main;
     return {
@@ -5341,7 +5350,7 @@ System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes", "oot3d/sce
                 };
                 return Main;
             }());
-            exports_24("Main", Main);
+            exports_25("Main", Main);
             window.addEventListener('load', function () {
                 window.main = new Main();
             });
