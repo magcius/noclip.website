@@ -6,6 +6,8 @@ Currently, I support:
 
  * Super Mario 64 DS
  * The Legend of Zelda: Ocarina of Time (original N64 release)
+ * The Legend of Zelda: Ocarina of Time 3DS (3DS remaster with brand new art)
+ * Sonic Mania's MDL0 models
 
 Other tools I've written:
 
