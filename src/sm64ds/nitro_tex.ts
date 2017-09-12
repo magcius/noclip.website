@@ -214,11 +214,17 @@ function readTexture_Direct(width:number, height:number, texData:ArrayBuffer) {
 
 export function readTexture(format:Format, width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer, color0:boolean) {
     switch (format) {
-    case Format.Tex_A3I5:      return readTexture_A3I5(width, height, texData, palData);
-    case Format.Tex_Palette16: return readTexture_Palette16(width, height, texData, palData, color0);
-    case Format.Tex_CMPR_4x4:  return readTexture_CMPR_4x4(width, height, texData, palData);
-    case Format.Tex_A5I3:      return readTexture_A5I3(width, height, texData, palData);
-    case Format.Tex_Direct:    return readTexture_Direct(width, height, texData);
-    default: return console.warn("Unsupported texture format", format), null;
+    case Format.Tex_A3I5:
+        return readTexture_A3I5(width, height, texData, palData);
+    case Format.Tex_Palette16:
+        return readTexture_Palette16(width, height, texData, palData, color0);
+    case Format.Tex_CMPR_4x4:
+        return readTexture_CMPR_4x4(width, height, texData, palData);
+    case Format.Tex_A5I3:
+        return readTexture_A5I3(width, height, texData, palData);
+    case Format.Tex_Direct:
+        return readTexture_Direct(width, height, texData);
+    default:
+        throw new Error(`Unsupported texture type! ${format}`);
     }
 }
