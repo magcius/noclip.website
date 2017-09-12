@@ -175,7 +175,7 @@ class InputManager {
     }
     isDragging() {
         // XXX: Should be an explicit flag.
-        return this.toplevel.classList.contains('grabbing');
+        return document.body.classList.contains('grabbing');
     }
 
     _onKeyDown(e:KeyboardEvent) {
