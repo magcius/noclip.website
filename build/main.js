@@ -1148,266 +1148,10 @@ System.register("j3d/scenes", ["j3d/render"], function(exports_7, context_7) {
         }
     }
 });
-System.register("j3d/texture", ["j3d/gx"], function(exports_8, context_8) {
+// Read DS Geometry Engine commands.
+System.register("sm64ds/nitro_gx", [], function(exports_8, context_8) {
     "use strict";
     var __moduleName = context_8 && context_8.id;
-    var GX;
-    function expand3to8(n) {
-        return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
-    }
-    function expand4to8(n) {
-        return (n << 4) | n;
-    }
-    function expand5to8(n) {
-        return (n << (8 - 5)) | (n >>> (10 - 8));
-    }
-    function expand6to8(n) {
-        return (n << (8 - 6)) | (n >>> (12 - 8));
-    }
-    // GX uses a HW approximation of 3/8 + 5/8 instead of 1/3 + 2/3.
-    function s3tcblend(a, b) {
-        // return (a*3 + b*5) / 8;
-        return ((a << 1 + a) + (b << 2) + b) >>> 8;
-    }
-    // GX's CMPR format is S3TC but using GX's tiled addressing.
-    function decode_CMPR_to_S3TC(texture) {
-        // CMPR goes in 2x2 "macro-blocks" of four S3TC normal blocks.
-        function reverseByte(v) {
-            // Reverse the order of the four half-nibbles.
-            return ((v & 0x03) << 6) | ((v & 0x0c) << 2) | ((v & 0x30) >>> 2) | ((v & 0xc0) >>> 6);
-        }
-        var pixels = new Uint8Array(texture.width * texture.height / 2);
-        var view = new DataView(texture.pixels);
-        // "Macroblocks"
-        var w4 = texture.width >>> 2;
-        var srcOffs = 0;
-        for (var yy = 0; yy < texture.height; yy += 8) {
-            for (var xx = 0; xx < texture.width; xx += 8) {
-                // S3TC blocks.
-                for (var y = 0; y < 2; y++) {
-                    for (var x = 0; x < 2; x++) {
-                        var dstBlock = (yy + y) * w4 + xx + x;
-                        var dstOffs = dstBlock * 8;
-                        pixels[dstOffs + 0] = view.getUint8(srcOffs + 1);
-                        pixels[dstOffs + 1] = view.getUint8(srcOffs + 0);
-                        pixels[dstOffs + 2] = view.getUint8(srcOffs + 2);
-                        pixels[dstOffs + 3] = view.getUint8(srcOffs + 3);
-                        pixels[dstOffs + 0] = reverseByte(view.getUint8(srcOffs + 0));
-                        pixels[dstOffs + 1] = reverseByte(view.getUint8(srcOffs + 1));
-                        pixels[dstOffs + 2] = reverseByte(view.getUint8(srcOffs + 2));
-                        pixels[dstOffs + 3] = reverseByte(view.getUint8(srcOffs + 3));
-                    }
-                }
-                srcOffs += 8;
-            }
-        }
-        return { type: "S3TC", pixels: pixels.buffer, width: texture.width, height: texture.height };
-    }
-    function decode_S3TC(texture) {
-        var pixels = new Uint8Array(texture.width * texture.height * 4);
-        var view = new DataView(texture.pixels);
-        var colorTable = new Uint8Array(16);
-        var srcOffs = 0;
-        for (var yy = 0; yy < texture.height; yy += 4) {
-            for (var xx = 0; xx < texture.width; xx += 4) {
-                var color1 = view.getUint16(srcOffs + 0x00, true);
-                var color2 = view.getUint16(srcOffs + 0x02, true);
-                // Fill in first two colors in color table.
-                colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
-                colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
-                colorTable[2] = expand5to8(color1 & 0x1F);
-                colorTable[3] = 0xFF;
-                colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
-                colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
-                colorTable[6] = expand5to8(color2 & 0x1F);
-                colorTable[7] = 0xFF;
-                if (color1 > color2) {
-                    // Predict gradients.
-                    colorTable[8] = s3tcblend(colorTable[4], colorTable[0]);
-                    colorTable[9] = s3tcblend(colorTable[5], colorTable[1]);
-                    colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
-                    colorTable[11] = 0xFF;
-                    colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
-                    colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
-                    colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
-                    colorTable[15] = 0xFF;
-                }
-                else {
-                    colorTable[8] = (colorTable[0] + colorTable[4]) >>> 1;
-                    colorTable[9] = (colorTable[1] + colorTable[5]) >>> 1;
-                    colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
-                    colorTable[11] = 0xFF;
-                    // GC difference: GC fills with an alpha 0 midway point here.
-                    colorTable[12] = colorTable[8];
-                    colorTable[13] = colorTable[9];
-                    colorTable[14] = colorTable[10];
-                    colorTable[15] = 0x00;
-                }
-                var bits = view.getUint32(srcOffs + 0x04, true);
-                for (var y = 0; y < 4; y++) {
-                    for (var x = 0; x < 4; x++) {
-                        var dstPx = (yy + y) * texture.width + xx + x;
-                        var dstOffs = dstPx * 4;
-                        var colorIdx = bits & 0x03;
-                        pixels[dstOffs + 0] = colorTable[colorIdx + 0];
-                        pixels[dstOffs + 1] = colorTable[colorIdx + 1];
-                        pixels[dstOffs + 2] = colorTable[colorIdx + 2];
-                        pixels[dstOffs + 3] = colorTable[colorIdx + 3];
-                        bits >>= 2;
-                    }
-                }
-                srcOffs += 8;
-            }
-        }
-        return { type: "RGBA", pixels: pixels.buffer, width: texture.width, height: texture.height };
-    }
-    function decode_Tiled(texture, decoder) {
-        var pixels = new Uint8Array(texture.width * texture.height * 4);
-        for (var yy = 0; yy < texture.height; yy += 8) {
-        }
-        return { type: "RGBA", pixels: pixels.buffer, width: texture.width, height: texture.height };
-    }
-    function decode_RGB565(texture) {
-        var view = new DataView(texture.pixels);
-        var srcOffs = 0;
-        return decode_Tiled(texture, function (pixels, dstOffs) {
-            var p = view.getUint16(srcOffs, true);
-            pixels[0] = expand5to8((p >> 11) & 0x1F);
-            pixels[1] = expand6to8((p >> 5) & 0x3F);
-            pixels[2] = expand5to8(p & 0x1F);
-            pixels[3] = 0xFF;
-            srcOffs += 2;
-        });
-    }
-    function decode_RGB5A3(texture) {
-        var view = new DataView(texture.pixels);
-        var srcOffs = 0;
-        return decode_Tiled(texture, function (pixels, dstOffs) {
-            var p = view.getUint16(srcOffs, true);
-            if (p & 0x8000) {
-                // RGB5
-                pixels[0] = expand5to8(p >> 11);
-                pixels[1] = expand5to8((p >> 5) & 0x1F);
-                pixels[2] = expand5to8(p & 0x1F);
-                pixels[3] = 0xFF;
-            }
-            else {
-                // A3RGB4
-                pixels[3] = expand3to8(p >> 12);
-                pixels[0] = expand4to8((p >> 8) & 0x0F);
-                pixels[1] = expand4to8((p >> 4) & 0x0F);
-                pixels[2] = expand4to8(p & 0x0F);
-            }
-            srcOffs += 2;
-        });
-    }
-    function decode_RGBA8(texture) {
-        var view = new DataView(texture.pixels);
-        var srcOffs = 0;
-        return decode_Tiled(texture, function (pixels, dstOffs) {
-            pixels[dstOffs + 0] = view.getUint8(srcOffs + 0);
-            pixels[dstOffs + 1] = view.getUint8(srcOffs + 1);
-            pixels[dstOffs + 2] = view.getUint8(srcOffs + 2);
-            pixels[dstOffs + 3] = view.getUint8(srcOffs + 3);
-            srcOffs += 4;
-        });
-    }
-    function decode_I4(texture) {
-        var view = new DataView(texture.pixels);
-        var srcOffs = 0;
-        return decode_Tiled(texture, function (pixels, dstOffs) {
-            var ii = view.getUint8(srcOffs >> 1);
-            var i4 = ii >>> ((srcOffs & 1) ? 0 : 4) & 0x0F;
-            var i = expand4to8(i4);
-            pixels[dstOffs + 0] = i;
-            pixels[dstOffs + 1] = i;
-            pixels[dstOffs + 2] = i;
-            pixels[dstOffs + 3] = i;
-            srcOffs++;
-        });
-    }
-    function decode_I8(texture) {
-        var view = new DataView(texture.pixels);
-        var srcOffs = 0;
-        return decode_Tiled(texture, function (pixels, dstOffs) {
-            var i = view.getUint8(srcOffs);
-            pixels[dstOffs + 0] = i;
-            pixels[dstOffs + 1] = i;
-            pixels[dstOffs + 2] = i;
-            pixels[dstOffs + 3] = i;
-            srcOffs++;
-        });
-    }
-    function decode_IA4(texture) {
-        var view = new DataView(texture.pixels);
-        var srcOffs = 0;
-        return decode_Tiled(texture, function (pixels, dstOffs) {
-            var ia = view.getUint8(srcOffs);
-            var i = expand4to8(ia >>> 4);
-            var a = expand4to8(ia & 0x0F);
-            pixels[dstOffs + 0] = i;
-            pixels[dstOffs + 1] = i;
-            pixels[dstOffs + 2] = i;
-            pixels[dstOffs + 3] = a;
-            srcOffs++;
-        });
-    }
-    function decode_IA8(texture) {
-        var view = new DataView(texture.pixels);
-        var srcOffs = 0;
-        return decode_Tiled(texture, function (pixels, dstOffs) {
-            var i = view.getUint8(srcOffs + 0);
-            var a = view.getUint8(srcOffs + 1);
-            pixels[dstOffs + 0] = i;
-            pixels[dstOffs + 1] = i;
-            pixels[dstOffs + 2] = i;
-            pixels[dstOffs + 3] = a;
-            srcOffs += 2;
-        });
-    }
-    function decodeTexture(texture, supportsS3TC) {
-        switch (texture.format) {
-            case GX.TexFormat.CMPR:
-                var s3tc = decode_CMPR_to_S3TC(texture);
-                if (supportsS3TC)
-                    return s3tc;
-                else
-                    return decode_S3TC(s3tc);
-            case GX.TexFormat.RGB565:
-                return decode_RGB565(texture);
-            case GX.TexFormat.RGB5A3:
-                return decode_RGB5A3(texture);
-            case GX.TexFormat.RGBA8:
-                return decode_RGBA8(texture);
-            case GX.TexFormat.I4:
-                return decode_I4(texture);
-            case GX.TexFormat.I8:
-                return decode_I8(texture);
-            case GX.TexFormat.IA4:
-                return decode_IA4(texture);
-            case GX.TexFormat.IA8:
-                return decode_IA8(texture);
-            case GX.TexFormat.CI4:
-            case GX.TexFormat.CI8:
-            case GX.TexFormat.CI14:
-                throw new Error("Unsupported texture format " + texture.format);
-            default: var m_ = texture.format;
-        }
-    }
-    exports_8("decodeTexture", decodeTexture);
-    return {
-        setters:[
-            function (GX_2) {
-                GX = GX_2;
-            }],
-        execute: function() {
-        }
-    }
-});
-// Read DS Geometry Engine commands.
-System.register("sm64ds/nitro_gx", [], function(exports_9, context_9) {
-    "use strict";
-    var __moduleName = context_9 && context_9.id;
     var CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, Packet, Color, TexCoord, Point, Vertex, Context, ContextInternal;
     function rgb5(pixel) {
         var r, g, b;
@@ -1419,7 +1163,7 @@ System.register("sm64ds/nitro_gx", [], function(exports_9, context_9) {
         b = (b << (8 - 5)) | (b >> (10 - 8));
         return { r: r, g: g, b: b };
     }
-    exports_9("rgb5", rgb5);
+    exports_8("rgb5", rgb5);
     function cmd_MTX_RESTORE(ctx) {
         // XXX: We don't implement the matrix stack yet.
         ctx.readParam();
@@ -1642,7 +1386,7 @@ System.register("sm64ds/nitro_gx", [], function(exports_9, context_9) {
         }
         return ctx.packets;
     }
-    exports_9("readCmds", readCmds);
+    exports_8("readCmds", readCmds);
     return {
         setters:[],
         execute: function() {
@@ -1675,7 +1419,7 @@ System.register("sm64ds/nitro_gx", [], function(exports_9, context_9) {
                 }
                 return Packet;
             }());
-            exports_9("Packet", Packet);
+            exports_8("Packet", Packet);
             ;
             Color = (function () {
                 function Color() {
@@ -1706,7 +1450,7 @@ System.register("sm64ds/nitro_gx", [], function(exports_9, context_9) {
                 }
                 return Context;
             }());
-            exports_9("Context", Context);
+            exports_8("Context", Context);
             ;
             ContextInternal = (function () {
                 function ContextInternal(buffer, baseCtx) {
@@ -1732,9 +1476,9 @@ System.register("sm64ds/nitro_gx", [], function(exports_9, context_9) {
     }
 });
 // Read DS texture formats.
-System.register("sm64ds/nitro_tex", [], function(exports_10, context_10) {
+System.register("sm64ds/nitro_tex", [], function(exports_9, context_9) {
     "use strict";
-    var __moduleName = context_10 && context_10.id;
+    var __moduleName = context_9 && context_9.id;
     var Format;
     function color(a, r, g, b) {
         return (a << 24) | (r << 16) | (g << 8) | b;
@@ -1931,7 +1675,7 @@ System.register("sm64ds/nitro_tex", [], function(exports_10, context_10) {
                 throw new Error("Unsupported texture type! " + format);
         }
     }
-    exports_10("readTexture", readTexture);
+    exports_9("readTexture", readTexture);
     return {
         setters:[],
         execute: function() {
@@ -1945,14 +1689,14 @@ System.register("sm64ds/nitro_tex", [], function(exports_10, context_10) {
                 Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
                 Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
             })(Format || (Format = {}));
-            exports_10("Format", Format);
+            exports_9("Format", Format);
             ;
         }
     }
 });
-System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], function(exports_11, context_11) {
+System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], function(exports_10, context_10) {
     "use strict";
-    var __moduleName = context_11 && context_11.id;
+    var __moduleName = context_10 && context_10.id;
     var NITRO_GX, NITRO_Tex;
     var Poly, Batch, Model, TextureKey, Texture, BMD;
     // Super Mario 64 DS .bmd format
@@ -2102,7 +1846,7 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
             bmd.models.push(parseModel(bmd, view, i));
         return bmd;
     }
-    exports_11("parse", parse);
+    exports_10("parse", parse);
     return {
         setters:[
             function (NITRO_GX_1) {
@@ -2117,20 +1861,20 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
                 }
                 return Poly;
             }());
-            exports_11("Poly", Poly);
+            exports_10("Poly", Poly);
             Batch = (function () {
                 function Batch() {
                 }
                 return Batch;
             }());
-            exports_11("Batch", Batch);
+            exports_10("Batch", Batch);
             ;
             Model = (function () {
                 function Model() {
                 }
                 return Model;
             }());
-            exports_11("Model", Model);
+            exports_10("Model", Model);
             ;
             TextureKey = (function () {
                 function TextureKey(texIdx, palIdx) {
@@ -2147,21 +1891,21 @@ System.register("sm64ds/nitro_bmd", ["sm64ds/nitro_gx", "sm64ds/nitro_tex"], fun
                 }
                 return Texture;
             }());
-            exports_11("Texture", Texture);
+            exports_10("Texture", Texture);
             BMD = (function () {
                 function BMD() {
                 }
                 return BMD;
             }());
-            exports_11("BMD", BMD);
+            exports_10("BMD", BMD);
             ;
         }
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("sm64ds/render", ["lz77", "viewer", "sm64ds/nitro_bmd", "util"], function(exports_12, context_12) {
+System.register("sm64ds/render", ["lz77", "viewer", "sm64ds/nitro_bmd", "util"], function(exports_11, context_11) {
     "use strict";
-    var __moduleName = context_12 && context_12.id;
+    var __moduleName = context_11 && context_11.id;
     var LZ77, Viewer, NITRO_BMD, util_2;
     var DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Scene, SceneDesc;
     function textureToCanvas(bmdTex) {
@@ -2348,13 +2092,13 @@ System.register("sm64ds/render", ["lz77", "viewer", "sm64ds/nitro_bmd", "util"],
                 };
                 return SceneDesc;
             }());
-            exports_12("SceneDesc", SceneDesc);
+            exports_11("SceneDesc", SceneDesc);
         }
     }
 });
-System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_13, context_13) {
+System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_12, context_12) {
     "use strict";
-    var __moduleName = context_13 && context_13.id;
+    var __moduleName = context_12 && context_12.id;
     var render_2;
     var name, sceneDescs, sceneGroup;
     return {
@@ -2418,14 +2162,14 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function(exports_13, context
                 var name = entry.name || entry.filename;
                 return new render_2.SceneDesc(name, path);
             });
-            exports_13("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_12("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
         }
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("zelview/f3dex2", [], function(exports_14, context_14) {
+System.register("zelview/f3dex2", [], function(exports_13, context_13) {
     "use strict";
-    var __moduleName = context_14 && context_14.id;
+    var __moduleName = context_13 && context_13.id;
     var vec3, mat4, UCodeCommands, UCodeNames, name, VERTEX_SIZE, VERTEX_BYTES, N, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL, State;
     function readVertex(state, which, addr) {
         var rom = state.rom;
@@ -3118,7 +2862,7 @@ System.register("zelview/f3dex2", [], function(exports_14, context_14) {
         runDL(state, startAddr);
         return new DL(state.cmds, state.textures);
     }
-    exports_14("readDL", readDL);
+    exports_13("readDL", readDL);
     return {
         setters:[],
         execute: function() {
@@ -3193,7 +2937,7 @@ System.register("zelview/f3dex2", [], function(exports_14, context_14) {
                 }
                 return DL;
             }());
-            exports_14("DL", DL);
+            exports_13("DL", DL);
             State = (function () {
                 function State() {
                 }
@@ -3207,9 +2951,9 @@ System.register("zelview/f3dex2", [], function(exports_14, context_14) {
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_15, context_15) {
+System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_14, context_14) {
     "use strict";
-    var __moduleName = context_15 && context_15.id;
+    var __moduleName = context_14 && context_14.id;
     var F3DEX2;
     var mat4, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
     function read0String(buffer, offs, length) {
@@ -3253,7 +2997,7 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_15, con
         zelview0.view = view;
         return zelview0;
     }
-    exports_15("readZELVIEW0", readZELVIEW0);
+    exports_14("readZELVIEW0", readZELVIEW0);
     function readHeaders(gl, rom, offs, banks) {
         var headers = new Headers();
         function loadAddress(addr) {
@@ -3546,7 +3290,7 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_15, con
                 };
                 return ZELVIEW0;
             }());
-            exports_15("ZELVIEW0", ZELVIEW0);
+            exports_14("ZELVIEW0", ZELVIEW0);
             Mesh = (function () {
                 function Mesh() {
                     this.opaque = [];
@@ -3560,7 +3304,7 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_15, con
                 }
                 return Headers;
             }());
-            exports_15("Headers", Headers);
+            exports_14("Headers", Headers);
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Spawns"] = 0] = "Spawns";
                 HeaderCommands[HeaderCommands["Actors"] = 1] = "Actors";
@@ -3586,9 +3330,9 @@ System.register("zelview/zelview0", ["zelview/f3dex2"], function(exports_15, con
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("zelview/render", ["zelview/zelview0", "viewer", "util"], function(exports_16, context_16) {
+System.register("zelview/render", ["zelview/zelview0", "viewer", "util"], function(exports_15, context_15) {
     "use strict";
-    var __moduleName = context_16 && context_16.id;
+    var __moduleName = context_15 && context_15.id;
     var ZELVIEW0, Viewer, util_3;
     var BG_VERT_SHADER_SOURCE, BG_FRAG_SHADER_SOURCE, BG_Program, DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, DL_Program, COLL_VERT_SHADER_SOURCE, COLL_FRAG_SHADER_SOURCE, COLL_Program, WATERS_VERT_SHADER_SOURCE, WATERS_FRAG_SHADER_SOURCE, WATERS_Program, Scene, SceneDesc;
     return {
@@ -3795,13 +3539,13 @@ System.register("zelview/render", ["zelview/zelview0", "viewer", "util"], functi
                 };
                 return SceneDesc;
             }());
-            exports_16("SceneDesc", SceneDesc);
+            exports_15("SceneDesc", SceneDesc);
         }
     }
 });
-System.register("zelview/scenes", ["zelview/render"], function(exports_17, context_17) {
+System.register("zelview/scenes", ["zelview/render"], function(exports_16, context_16) {
     "use strict";
-    var __moduleName = context_17 && context_17.id;
+    var __moduleName = context_16 && context_16.id;
     var render_3;
     var name, sceneDescs, sceneGroup;
     return {
@@ -4256,13 +4000,13 @@ System.register("zelview/scenes", ["zelview/render"], function(exports_17, conte
                 var path = "data/zelview/" + entry.filename + ".zelview0";
                 return new render_3.SceneDesc(entry.label, path);
             });
-            exports_17("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_16("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
         }
     }
 });
-System.register("oot3d/cmb", [], function(exports_18, context_18) {
+System.register("oot3d/cmb", [], function(exports_17, context_17) {
     "use strict";
-    var __moduleName = context_18 && context_18.id;
+    var __moduleName = context_17 && context_17.id;
     var VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
     function readString(buffer, offs, length) {
         var buf = new Uint8Array(buffer, offs, length);
@@ -4689,7 +4433,7 @@ System.register("oot3d/cmb", [], function(exports_18, context_18) {
         cmb.indexBuffer = buffer.slice(idxDataOffs, idxDataOffs + idxDataCount * 2);
         return cmb;
     }
-    exports_18("parse", parse);
+    exports_17("parse", parse);
     return {
         setters:[],
         execute: function() {
@@ -4707,7 +4451,7 @@ System.register("oot3d/cmb", [], function(exports_18, context_18) {
                 }
                 return CMB;
             }());
-            exports_18("CMB", CMB);
+            exports_17("CMB", CMB);
             (function (TextureFilter) {
                 TextureFilter[TextureFilter["NEAREST"] = 9728] = "NEAREST";
                 TextureFilter[TextureFilter["LINEAR"] = 9729] = "LINEAR";
@@ -4716,12 +4460,12 @@ System.register("oot3d/cmb", [], function(exports_18, context_18) {
                 TextureFilter[TextureFilter["NEAREST_MIPMIP_LINEAR"] = 9986] = "NEAREST_MIPMIP_LINEAR";
                 TextureFilter[TextureFilter["LINEAR_MIPMAP_LINEAR"] = 9987] = "LINEAR_MIPMAP_LINEAR";
             })(TextureFilter || (TextureFilter = {}));
-            exports_18("TextureFilter", TextureFilter);
+            exports_17("TextureFilter", TextureFilter);
             (function (TextureWrapMode) {
                 TextureWrapMode[TextureWrapMode["CLAMP"] = 10496] = "CLAMP";
                 TextureWrapMode[TextureWrapMode["REPEAT"] = 10497] = "REPEAT";
             })(TextureWrapMode || (TextureWrapMode = {}));
-            exports_18("TextureWrapMode", TextureWrapMode);
+            exports_17("TextureWrapMode", TextureWrapMode);
             TextureBinding = (function () {
                 function TextureBinding() {
                 }
@@ -4733,7 +4477,7 @@ System.register("oot3d/cmb", [], function(exports_18, context_18) {
                 }
                 return Material;
             }());
-            exports_18("Material", Material);
+            exports_17("Material", Material);
             (function (TextureFormat) {
                 TextureFormat[TextureFormat["ETC1"] = 26458] = "ETC1";
                 TextureFormat[TextureFormat["ETC1A4"] = 26459] = "ETC1A4";
@@ -4748,13 +4492,13 @@ System.register("oot3d/cmb", [], function(exports_18, context_18) {
                 }
                 return Texture;
             }());
-            exports_18("Texture", Texture);
+            exports_17("Texture", Texture);
             Mesh = (function () {
                 function Mesh() {
                 }
                 return Mesh;
             }());
-            exports_18("Mesh", Mesh);
+            exports_17("Mesh", Mesh);
             (function (DataType) {
                 DataType[DataType["Byte"] = 5120] = "Byte";
                 DataType[DataType["UByte"] = 5121] = "UByte";
@@ -4764,27 +4508,27 @@ System.register("oot3d/cmb", [], function(exports_18, context_18) {
                 DataType[DataType["UInt"] = 5125] = "UInt";
                 DataType[DataType["Float"] = 5126] = "Float";
             })(DataType || (DataType = {}));
-            exports_18("DataType", DataType);
+            exports_17("DataType", DataType);
             ;
             Prm = (function () {
                 function Prm() {
                 }
                 return Prm;
             }());
-            exports_18("Prm", Prm);
+            exports_17("Prm", Prm);
             Sepd = (function () {
                 function Sepd() {
                     this.prms = [];
                 }
                 return Sepd;
             }());
-            exports_18("Sepd", Sepd);
+            exports_17("Sepd", Sepd);
         }
     }
 });
-System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_19, context_19) {
+System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_18, context_18) {
     "use strict";
-    var __moduleName = context_19 && context_19.id;
+    var __moduleName = context_18 && context_18.id;
     var CMB;
     var ZSI, HeaderCommands, Mesh;
     function readString(buffer, offs, length) {
@@ -4861,7 +4605,7 @@ System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_19, context_19) {
         var headersBuf = buffer.slice(0x10);
         return readHeaders(headersBuf);
     }
-    exports_19("parse", parse);
+    exports_18("parse", parse);
     return {
         setters:[
             function (CMB_1) {
@@ -4873,7 +4617,7 @@ System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_19, context_19) {
                 }
                 return ZSI;
             }());
-            exports_19("ZSI", ZSI);
+            exports_18("ZSI", ZSI);
             // Subset of Z64 command types.
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Rooms"] = 4] = "Rooms";
@@ -4885,14 +4629,14 @@ System.register("oot3d/zsi", ["oot3d/cmb"], function(exports_19, context_19) {
                 }
                 return Mesh;
             }());
-            exports_19("Mesh", Mesh);
+            exports_18("Mesh", Mesh);
         }
     }
 });
 /// <reference path="../decl.d.ts" />
-System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], function(exports_20, context_20) {
+System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], function(exports_19, context_19) {
     "use strict";
-    var __moduleName = context_20 && context_20.id;
+    var __moduleName = context_19 && context_19.id;
     var ZSI, CMB, Viewer, util_4;
     var DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, OoT3D_Program, Scene, MultiScene, SceneDesc;
     function textureToCanvas(texture) {
@@ -5158,13 +4902,13 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                 };
                 return SceneDesc;
             }());
-            exports_20("SceneDesc", SceneDesc);
+            exports_19("SceneDesc", SceneDesc);
         }
     }
 });
-System.register("oot3d/scenes", ["oot3d/render"], function(exports_21, context_21) {
+System.register("oot3d/scenes", ["oot3d/render"], function(exports_20, context_20) {
     "use strict";
-    var __moduleName = context_21 && context_21.id;
+    var __moduleName = context_20 && context_20.id;
     var render_4;
     var name, sceneDescs, sceneGroup;
     return {
@@ -5277,13 +5021,13 @@ System.register("oot3d/scenes", ["oot3d/render"], function(exports_21, context_2
                 var name = entry.name || entry.filename;
                 return new render_4.SceneDesc(name, path);
             });
-            exports_21("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_20("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
         }
     }
 });
-System.register("mdl0/mdl0", [], function(exports_22, context_22) {
+System.register("mdl0/mdl0", [], function(exports_21, context_21) {
     "use strict";
-    var __moduleName = context_22 && context_22.id;
+    var __moduleName = context_21 && context_21.id;
     function assert(b) {
         if (!b)
             throw new Error("Assert fail");
@@ -5357,16 +5101,16 @@ System.register("mdl0/mdl0", [], function(exports_22, context_22) {
         assert(offs == buffer.byteLength);
         return { clrData: clrData, idxData: idxData, vtxData: vtxData, animCount: animCount, animSize: animSize, vertCount: vertCount, vertSize: vertSize };
     }
-    exports_22("parse", parse);
+    exports_21("parse", parse);
     return {
         setters:[],
         execute: function() {
         }
     }
 });
-System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function(exports_23, context_23) {
+System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function(exports_22, context_22) {
     "use strict";
-    var __moduleName = context_23 && context_23.id;
+    var __moduleName = context_22 && context_22.id;
     var MDL0, Viewer, util_5;
     var MDL0_VERT_SHADER_SOURCE, MDL0_FRAG_SHADER_SOURCE, MDL0_Program, Scene, SceneDesc;
     return {
@@ -5446,13 +5190,13 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function(exports
                 };
                 return SceneDesc;
             }());
-            exports_23("SceneDesc", SceneDesc);
+            exports_22("SceneDesc", SceneDesc);
         }
     }
 });
-System.register("mdl0/scenes", ["mdl0/render"], function(exports_24, context_24) {
+System.register("mdl0/scenes", ["mdl0/render"], function(exports_23, context_23) {
     "use strict";
-    var __moduleName = context_24 && context_24.id;
+    var __moduleName = context_23 && context_23.id;
     var render_5;
     var name, sceneDescs, sceneGroup;
     return {
@@ -5517,13 +5261,13 @@ System.register("mdl0/scenes", ["mdl0/render"], function(exports_24, context_24)
                 var name = filename;
                 return new render_5.SceneDesc(name, path);
             });
-            exports_24("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_23("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
         }
     }
 });
-System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes", "oot3d/scenes", "mdl0/scenes"], function(exports_25, context_25) {
+System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes", "oot3d/scenes", "mdl0/scenes"], function(exports_24, context_24) {
     "use strict";
-    var __moduleName = context_25 && context_25.id;
+    var __moduleName = context_24 && context_24.id;
     var viewer_1, SM64DS, ZELVIEW, OOT3D, MDL0;
     var Main;
     return {
@@ -5597,7 +5341,7 @@ System.register("main", ["viewer", "sm64ds/scenes", "zelview/scenes", "oot3d/sce
                 };
                 return Main;
             }());
-            exports_25("Main", Main);
+            exports_24("Main", Main);
             window.addEventListener('load', function () {
                 window.main = new Main();
             });
