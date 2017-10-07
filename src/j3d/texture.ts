@@ -35,18 +35,18 @@ function expand4to8(n:number):number {
     return (n << 4) | n;
 }
 
-function expand5to8(n:number) {
+function expand5to8(n:number):number {
     return (n << (8-5)) | (n >>> (10-8));
 }
 
-function expand6to8(n:number) {
+function expand6to8(n:number):number {
     return (n << (8-6)) | (n >>> (12-8));
 }
 
 // GX uses a HW approximation of 3/8 + 5/8 instead of 1/3 + 2/3.
-function s3tcblend(a:number, b:number) {
+function s3tcblend(a:number, b:number):number {
     // return (a*3 + b*5) / 8;
-    return ((a << 1 + a) + (b << 2) + b) >>> 8;
+    return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
 }
 
 // GX's CMPR format is S3TC but using GX's tiled addressing.
@@ -89,6 +89,7 @@ function decode_CMPR_to_S3TC(texture:Texture):DecodedTextureS3TC {
     return { type: "S3TC", pixels: pixels.buffer, width: texture.width, height: texture.height };
 }
 
+// Software decodes from standard S3TC (not CMPR!) to RGBA.
 function decode_S3TC(texture:DecodedTextureS3TC):DecodedTextureRGBA {
     const pixels = new Uint8Array(texture.width * texture.height * 4)
     const view = new DataView(texture.pixels);
@@ -128,7 +129,7 @@ function decode_S3TC(texture:DecodedTextureS3TC):DecodedTextureRGBA {
                 colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
                 colorTable[11] = 0xFF;
 
-                // GC difference: GC fills with an alpha 0 midway point here.
+                // GX difference: GX fills with an alpha 0 midway point here.
                 colorTable[12] = colorTable[8];
                 colorTable[13] = colorTable[9];
                 colorTable[14] = colorTable[10];
@@ -141,10 +142,10 @@ function decode_S3TC(texture:DecodedTextureS3TC):DecodedTextureRGBA {
                     const dstPx = (yy+y)*texture.width + xx+x;
                     const dstOffs = dstPx * 4;
                     const colorIdx = bits & 0x03;
-                    pixels[dstOffs+0] = colorTable[colorIdx+0];
-                    pixels[dstOffs+1] = colorTable[colorIdx+1];
-                    pixels[dstOffs+2] = colorTable[colorIdx+2];
-                    pixels[dstOffs+3] = colorTable[colorIdx+3];
+                    pixels[dstOffs+0] = colorTable[colorIdx*4+0];
+                    pixels[dstOffs+1] = colorTable[colorIdx*4+1];
+                    pixels[dstOffs+2] = colorTable[colorIdx*4+2];
+                    pixels[dstOffs+3] = colorTable[colorIdx*4+3];
                     bits >>= 2;
                 }
             }
