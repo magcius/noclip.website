@@ -4,25 +4,17 @@
     <meta charset="utf8">
     <title>Jasper's Model Viewer</title>
     <style>
-    button, select { font-size: 150%; }
+    html, body { margin: 0; overflow: hidden; }
+    button, select { font-size: 120%; }
     canvas#scene { cursor: grab; cursor: -webkit-grab; }
     .grabbing { cursor: grabbing; cursor: -webkit-grabbing; }
     .grabbing canvas#scene { cursor: inherit; }
     </style>
   </head>
   <body>
-    <center>
-    <div id="pl"></div>
-    <canvas id="scene" width="1280" height="800"></canvas>
-
     <script src="https://cdn.rawgit.com/toji/gl-matrix/master/dist/gl-matrix-min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/systemjs/0.19.40/system.src.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/systemjs/0.20.19/system-production.js"></script>
     <script src="build/main.js"></script>
-    <script>
-      System.import('main');
-    </script>
-
-    <h2>Textures</h2>
-    <div id="textures"></div>
+    <script> System.import('main'); </script>
   </body>
 </html>

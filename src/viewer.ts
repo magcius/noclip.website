@@ -65,8 +65,12 @@ export class RenderState {
         this.time = 0;
 
         this.projection = window.mat4.create();
-        window.mat4.perspective(this.projection, Math.PI / 4, viewport.canvas.width / viewport.canvas.height, 0.2, 50000);
         this.modelView = window.mat4.create();
+    }
+
+    checkResize() {
+        const canvas = this.viewport.canvas;
+        window.mat4.perspective(this.projection, Math.PI / 4, canvas.width / canvas.height, 0.2, 50000);
     }
 
     useProgram(prog:Program) {
@@ -102,8 +106,6 @@ class SceneGraph {
 
         // Enable EXT_frag_depth
         gl.getExtension('EXT_frag_depth');
-
-        gl.viewport(0, 0, viewport.canvas.width, viewport.canvas.height);
         gl.clearColor(0.88, 0.88, 0.88, 1);
     }
 
@@ -112,6 +114,13 @@ class SceneGraph {
         gl.depthMask(true);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         this.scenes.forEach((scene) => scene.render(this.renderState));
+    }
+
+    checkResize() {
+        const canvas = this.renderState.viewport.canvas;
+        const gl = this.renderState.viewport.gl;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        this.renderState.checkResize();
     }
 
     setScenes(scenes) {
@@ -371,6 +380,8 @@ export class Viewer {
         const update = (nt) => {
             var dt = nt - t;
             t = nt;
+
+            this.sceneGraph.checkResize();
 
             if (this.cameraController)
                 this.cameraController.update(camera, this.inputManager, dt);
