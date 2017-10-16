@@ -135,6 +135,12 @@ class SceneGraph {
 function elemDragger(elem:HTMLElement, callback:(dx:number, dy:number) => void):void {
     let lastX, lastY;
 
+    function setGrabbing(v) {
+        (<any> elem).grabbing = v;
+        elem.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
+        elem.style.cursor = v ? 'grabbing' : 'grab';
+    }
+
     function mousemove(e) {
         const dx = e.pageX - lastX, dy = e.pageY - lastY;
         lastX = e.pageX;
@@ -144,16 +150,18 @@ function elemDragger(elem:HTMLElement, callback:(dx:number, dy:number) => void):
     function mouseup(e) {
         document.removeEventListener('mouseup', mouseup);
         document.removeEventListener('mousemove', mousemove);
-        document.body.classList.remove('grabbing');
+        setGrabbing(false);
     }
     elem.addEventListener('mousedown', function(e) {
         lastX = e.pageX;
         lastY = e.pageY;
         document.addEventListener('mouseup', mouseup);
         document.addEventListener('mousemove', mousemove);
-        document.body.classList.add('grabbing');
+        setGrabbing(true);
         e.preventDefault();
     });
+
+    setGrabbing(false);
 }
 
 class InputManager {
@@ -182,9 +190,9 @@ class InputManager {
     isKeyDownRaw(keyCode:number) {
         return !!this.keysDown[keyCode];
     }
-    isDragging() {
+    isDragging():boolean {
         // XXX: Should be an explicit flag.
-        return document.body.classList.contains('grabbing');
+        return (<any> this.toplevel).grabbing;
     }
 
     _onKeyDown(e:KeyboardEvent) {

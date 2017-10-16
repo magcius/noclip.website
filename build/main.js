@@ -766,6 +766,11 @@ System.register("viewer", [], function(exports_4, context_4) {
     // XXX: Port to a class at some point.
     function elemDragger(elem, callback) {
         var lastX, lastY;
+        function setGrabbing(v) {
+            elem.grabbing = v;
+            elem.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
+            elem.style.cursor = v ? 'grabbing' : 'grab';
+        }
         function mousemove(e) {
             var dx = e.pageX - lastX, dy = e.pageY - lastY;
             lastX = e.pageX;
@@ -775,16 +780,17 @@ System.register("viewer", [], function(exports_4, context_4) {
         function mouseup(e) {
             document.removeEventListener('mouseup', mouseup);
             document.removeEventListener('mousemove', mousemove);
-            document.body.classList.remove('grabbing');
+            setGrabbing(false);
         }
         elem.addEventListener('mousedown', function (e) {
             lastX = e.pageX;
             lastY = e.pageY;
             document.addEventListener('mouseup', mouseup);
             document.addEventListener('mousemove', mousemove);
-            document.body.classList.add('grabbing');
+            setGrabbing(true);
             e.preventDefault();
         });
+        setGrabbing(false);
     }
     function clamp(v, min, max) {
         return Math.max(min, Math.min(v, max));
@@ -894,7 +900,7 @@ System.register("viewer", [], function(exports_4, context_4) {
                 };
                 InputManager.prototype.isDragging = function () {
                     // XXX: Should be an explicit flag.
-                    return document.body.classList.contains('grabbing');
+                    return this.toplevel.grabbing;
                 };
                 InputManager.prototype._onKeyDown = function (e) {
                     this.keysDown[e.keyCode] = true;
