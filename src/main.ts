@@ -4,6 +4,7 @@ import * as SM64DS from 'sm64ds/scenes';
 import * as ZELVIEW from 'zelview/scenes';
 import * as OOT3D from 'oot3d/scenes';
 import * as MDL0 from 'mdl0/scenes';
+import * as J3D from 'j3d/scenes';
 
 class Main {
     canvas:HTMLCanvasElement;
@@ -151,6 +152,4 @@ class Main {
     }
 }
 
-window.onload = function() {
-    window.main = new Main();
-};
+window.main = new Main();

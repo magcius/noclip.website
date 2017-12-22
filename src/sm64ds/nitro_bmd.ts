@@ -1,4 +1,6 @@
 
+import { mat4 } from 'gl-matrix';
+
 import * as NITRO_GX from './nitro_gx';
 import * as NITRO_Tex from './nitro_tex';
 
@@ -88,7 +90,7 @@ function parseMaterial(bmd:BMD, view:DataView, idx:number) {
 
     const material:any = {};
     material.name = readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
-    material.texCoordMat = window.mat4.create();
+    material.texCoordMat = mat4.create();
 
     const textureIdx = view.getUint32(offs + 0x04, true);
     if (textureIdx !== 0xFFFFFFFF) {
@@ -102,10 +104,10 @@ function parseMaterial(bmd:BMD, view:DataView, idx:number) {
             const scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
             const transS = view.getInt32(offs + 0x18, true) / 4096.0;
             const transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-            window.mat4.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-            window.mat4.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
+            mat4.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
+            mat4.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
         }
-        window.mat4.scale(material.texCoordMat, material.texCoordMat, [1/material.texture.width, 1/material.texture.height, 1]);
+        mat4.scale(material.texCoordMat, material.texCoordMat, [1/material.texture.width, 1/material.texture.height, 1]);
     } else {
         material.texture = null;
         material.texParams = 0;

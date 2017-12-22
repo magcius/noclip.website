@@ -9,9 +9,18 @@
     </style>
   </head>
   <body>
-    <script src="https://cdn.rawgit.com/toji/gl-matrix/master/dist/gl-matrix-min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/systemjs/0.20.19/system-production.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/systemjs/0.20.19/system.js"></script>
     <script src="build/main.js"></script>
-    <script> System.import('main'); </script>
+    <script>
+      System.config({
+        meta: {
+          'gl-matrix': { 'format': 'cjs' },
+        },
+        map: {
+          'gl-matrix': 'https://cdn.rawgit.com/toji/gl-matrix/master/dist/gl-matrix-min.js',
+        }
+      });
+      System.import('main');
+    </script>
   </body>
 </html>

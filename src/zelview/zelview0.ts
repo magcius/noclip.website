@@ -1,11 +1,9 @@
 
-/// <reference path="../decl.d.ts" />
+import { mat4 } from 'gl-matrix';
 
 import * as F3DEX2 from './f3dex2';
 
 // Loads the ZELVIEW0 format.
-
-const mat4 = window.mat4;
 
 function read0String(buffer, offs, length) {
     const buf = new Uint8Array(buffer, offs, length);

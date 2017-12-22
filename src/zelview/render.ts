@@ -1,6 +1,4 @@
 
-/// <reference path="../decl.d.ts" />
-
 import * as ZELVIEW0 from 'zelview0';
 import * as Viewer from 'viewer';
 import { fetch } from 'util'; 
