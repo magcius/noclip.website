@@ -1,5 +1,5 @@
 
-/// <reference path="../decl.d.ts" />
+import { mat4 } from 'gl-matrix';
 
 import * as LZ77 from 'lz77';
 import * as Viewer from 'viewer';
@@ -188,14 +188,14 @@ class Scene implements Viewer.Scene {
     }
 
     translateModel(gl:WebGLRenderingContext, bmdm:NITRO_BMD.Model) {
-        const localMatrix = window.mat4.create();
+        const localMatrix = mat4.create();
         const bmd = this.bmd;
 
         // Local fudge factor so that all the models in the viewer "line up".
         const localScaleFactor = 100;
         const scaleFactor = bmd.scaleFactor * localScaleFactor;
 
-        window.mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+        mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
         const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
         return (pass:RenderPass) => {
             gl.uniformMatrix4fv(this.program.localMatrixLocation, false, localMatrix);

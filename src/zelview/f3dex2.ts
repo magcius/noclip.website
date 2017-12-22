@@ -1,10 +1,7 @@
 
-/// <reference path="../decl.d.ts" />
+import { vec3, mat4 } from 'gl-matrix';
 
 import * as ZELVIEW0 from 'zelview0';
-
-const vec3 = window.vec3;
-const mat4 = window.mat4;
 
 // Zelda uses the F3DEX2 display list format. This implements
 // a simple (and probably wrong!) HLE renderer for it.
@@ -37,9 +34,12 @@ var UCodeCommands = {
     RDPPIPESYNC: 0xE7,
 };
 
+// Latest TypeScript broke for...in: https://github.com/Microsoft/TypeScript/issues/19203
+/*
 var UCodeNames = {};
 for (var name in UCodeCommands)
     UCodeNames[UCodeCommands[name]] = name;
+*/
 
 // 3 pos + 2 uv + 4 color/nrm
 var VERTEX_SIZE = 9;

@@ -1,6 +1,4 @@
 
-/// <reference path="../decl.d.ts" />
-
 import * as ZSI from 'zsi';
 import * as CMB from 'cmb';
 import * as Viewer from 'viewer';

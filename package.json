@@ -1,0 +1,7 @@
+{
+  "name": "@jstpierre/model-viewer",
+  "private": true,
+  "devDependencies": {
+    "gl-matrix": "^2.4.0"
+  }
+}

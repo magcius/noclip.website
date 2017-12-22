@@ -1,10 +1,5 @@
 
-// Workaround for not having gl-matrix typings available.
-declare interface Window {
-    mat4: any;
-    vec3: any;
-}
-
+// Define our expando entrypoint for debugging.
 declare interface Window {
     main: any;
 }

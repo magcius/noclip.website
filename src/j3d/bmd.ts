@@ -1,14 +1,16 @@
 
 import * as GX from 'gx';
+import * as Texture from 'texture';
 
 function assert(b:boolean) {
     if (!b) throw new Error("Assert fail");
 }
 
 function readString(buffer:ArrayBuffer, offs:number, length:number):string {
-    const buf = new Uint8Array(buffer, offs, length);
+    const length2 = Math.min(length, buffer.byteLength - offs);
+    const buf = new Uint8Array(buffer, offs, length2);
     let S = '';
-    for (let i = 0; i < length; i++) {
+    for (let i = 0; i < buf.byteLength; i++) {
         if (buf[i] === 0)
             break;
         S += String.fromCharCode(buf[i]);
@@ -36,26 +38,36 @@ function memcpy(dst:ArrayBuffer, dstOffs:number, src:ArrayBuffer, srcOffs:number
     new Uint8Array(dst).set(new Uint8Array(src, srcOffs, length), dstOffs);
 }
 
-enum HierarchyType {
+export enum HierarchyType {
     End = 0x00,
     Open = 0x01,
     Close = 0x02,
     Joint = 0x10,
     Material = 0x11,
-    Batch = 0x12,
+    Shape = 0x12,
 }
 
 // Build the scene graph.
-interface HierarchyLeafNode {
-    type:HierarchyType;
-    value:number;
-}
-interface HierarchyTreeNode {
+// XXX: Nintendo doesn't seem to actually use this as a tree,
+// because they make some super deep stuff... we should linearize this...
+
+export interface HierarchyTreeNode {
     type:HierarchyType.Open;
-    parent:HierarchyTreeNode;
     children:HierarchyNode[];
 }
-type HierarchyNode = HierarchyLeafNode | HierarchyTreeNode;
+export interface HierarchyShapeNode {
+    type:HierarchyType.Shape;
+    shapeIdx:number;
+}
+export interface HierarchyJointNode {
+    type:HierarchyType.Joint;
+    jointIdx:number;
+}
+export interface HierarchyMaterialNode {
+    type:HierarchyType.Material;
+    materialIdx:number;
+}
+export type HierarchyNode = HierarchyTreeNode | HierarchyShapeNode | HierarchyJointNode | HierarchyMaterialNode;
 
 export interface INF1 {
     sceneGraph:HierarchyNode;
@@ -68,7 +80,8 @@ function readINF1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
 
-    let node:HierarchyNode = { type: HierarchyType.Open, parent: null, children: [] };
+    const parentStack:HierarchyTreeNode[] = [];
+    let node:HierarchyTreeNode = { type: HierarchyType.Open, children: [] };
     let offs = hierarchyOffs;
 
     outer:
@@ -81,21 +94,25 @@ function readINF1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
         case HierarchyType.End:
             break outer;
         case HierarchyType.Open:
-            node = { type: HierarchyType.Open, parent: node, children: [] };
-            node.parent.children.push(node);
+            parentStack.push(node);
+            node.children.push(node = { type: HierarchyType.Open, children: [] });
             break;
         case HierarchyType.Close:
-            node = node.parent;
+            node = parentStack.pop();
             break;
         case HierarchyType.Joint:
+            node.children.push({ type, jointIdx: value });
+            break;
         case HierarchyType.Material:
-        case HierarchyType.Batch:
-            node.children.push({ type, value });
+            node.children.push({ type, materialIdx: value });
+            break;
+        case HierarchyType.Shape:
+            node.children.push({ type, shapeIdx: value });
             break;
         }
     }
 
-    assert(node.parent === null);
+    assert(parentStack.length === 0);
     bmd.inf1 = { sceneGraph: node };
 }
 
@@ -212,15 +229,23 @@ function readVTX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
 }
 
 export interface Shape {
-    // The vertex data. Converted to a GL buffer per-shape.
+    // The vertex data. Converted to a modern-esque buffer per-shape.
     packedData:ArrayBuffer;
-    // The layout of the packed data, effectively.
-    vertexAttributes:VertexAttribute[];
+    // The size of an individual vertex.
+    packedVertexSize:number;
+    packedVertexAttributes:PackedVertexAttribute[];
     // The draw calls.
     drawCalls:DrawCall[];
 }
 
-export interface DrawCall {
+// Describes an individual vertex attribute in the packed data.
+export interface PackedVertexAttribute {
+    vtxAttrib:GX.VertexAttribute;
+    indexDataType:GX.CompType;
+    offset:number;
+}
+
+interface DrawCall {
     primType:GX.PrimitiveType;
     vertexCount:number;
     // The "index" of the vertex into the packedData.
@@ -233,22 +258,14 @@ export interface SHP1 {
     shapes:Shape[];
 }
 
-export interface VertexAttribute {
-    vtxAttrib:GX.VertexAttribute;
-    indexDataType:GX.CompType;
-    indexDataSize:number;
-}
-
 function readIndex(view:DataView, offs:number, type:GX.CompType) {
     switch (type) {
     case GX.CompType.U8:
-        return view.getUint8(offs);
     case GX.CompType.S8:
-        return view.getInt8(offs);
+        return view.getUint8(offs);
     case GX.CompType.U16:
-        return view.getUint16(offs);
     case GX.CompType.S16:
-        return view.getInt16(offs);
+        return view.getUint16(offs);
     default:
         throw new Error(`Unknown index data type ${type}!`);
     }
@@ -270,10 +287,11 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
     // arrays, one per vertex.
     //
     // Instead of one global index per draw call like OGL and some amount of packed
-    // vertex data, we have a number of different indices, one per buffer. This means
-    // that it's difficult to map the data directly to OGL. What we end up doing
-    // is loading the data into one giant buffer and packing vertices tightly in a
-    // shape-specific format. Not ideal, but neither is the data in the BMD format.
+    // vertex data, the GX instead allows specifying separate indices per attribute.
+    // So you can have POS's indexes be 0 1 2 3 and NRM's indexes be 0 0 0 0.
+    //
+    // What we end up doing is similar to what Dolphin does with its vertex loader
+    // JIT. We construct buffers for each of the components that are shape-specific.
 
     const shapes:Shape[] = [];
     let shapeIdx = shapeTableOffs;
@@ -285,7 +303,7 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
         const firstPacket = view.getUint16(shapeIdx + 0x08);
 
         // Go parse out what attributes are required for this shape.
-        const vertexAttributes:VertexAttribute[] = [];
+        const packedVertexAttributes:PackedVertexAttribute[] = [];
         let attribIdx = attribTableOffs + attribOffs;
         let vertexIndexSize = 0;
         let packedVertexSize = 0;
@@ -295,7 +313,8 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
                 break;
             const indexDataType:GX.CompType = view.getUint32(attribIdx + 0x04);
             const indexDataSize = getComponentSize(indexDataType);
-            vertexAttributes.push({ vtxAttrib, indexDataType, indexDataSize });
+            const offset = packedVertexSize;
+            packedVertexAttributes.push({ vtxAttrib, indexDataType, offset });
             attribIdx += 0x08;
 
             vertexIndexSize += indexDataSize;
@@ -312,8 +331,6 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
         for (let j = 0; j < packetCount; j++) {
             const packetSize = view.getUint32(packetIdx + 0x00);
             const packetStart = primDataOffs + view.getUint32(packetIdx + 0x04);
-
-            console.log(packetStart - primDataOffs, packetSize);
 
             // XXX: We need an "update matrix table" command here in the draw call list.
 
@@ -346,9 +363,10 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
             let drawCallIdx = drawCall.srcOffs;
             for (let j = 0; j < drawCall.vertexCount; j++) {
                 const packedDataOffs_ = packedDataOffs;
-                for (const attrib of vertexAttributes) {
+                for (const attrib of packedVertexAttributes) {
                     const index = readIndex(view, drawCallIdx, attrib.indexDataType);
-                    drawCallIdx += attrib.indexDataSize;
+                    const indexDataSize = getComponentSize(attrib.indexDataType);
+                    drawCallIdx += indexDataSize;
 
                     const vertexArray:VertexArray = bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
                     const attribDataSize = vertexArray.compSize * vertexArray.compCount;
@@ -361,7 +379,7 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
         }
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ packedData, vertexAttributes, drawCalls });
+        shapes.push({ packedData, packedVertexSize, packedVertexAttributes, drawCalls });
 
         shapeIdx += 0x28;
     }
@@ -371,9 +389,45 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
 }
 
 function readMAT3Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize:number) {
+    const view = new DataView(buffer, chunkStart, chunkSize);
+    const materialCount = view.getUint16(0x08);
+
+    const indexToMatIndexTableOffs = view.getUint16(0x10);
+    const indexToMatIndexTable = [];
+    for (let i = 0; i < materialCount; i++)
+        indexToMatIndexTable[i] = view.getUint16(indexToMatIndexTableOffs + i * 0x02);
+
+    const maxIndex = Math.max.apply(null, indexToMatIndexTable);
+
+    const nameTableOffs = view.getUint32(0x14);
+    const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
+
+    const materialEntries = [];
+    let materialEntryIdx = view.getUint16(0x0C);
+    for (let i = 0; i < maxIndex + 1; i++) {
+        const flags = view.getUint8(materialEntryIdx + 0x00);
+        const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
+        const numChansIndex = view.getUint8(materialEntryIdx + 0x02);
+        const texGenCountIndex = view.getUint8(materialEntryIdx + 0x03);
+        const tevCount = view.getUint8(materialEntryIdx + 0x04);
+        // unk
+        const zModeIndex = view.getUint8(materialEntryIdx + 0x06);
+        // unk
+        const color1_Index0 = view.getUint16(materialEntryIdx + 0x08);
+        const color1_Index1 = view.getUint16(materialEntryIdx + 0x0A);
+        const chanControlsIndex0 = view.getUint16(materialEntryIdx + 0x0C);
+        const chanControlsIndex1 = view.getUint16(materialEntryIdx + 0x0E);
+        const chanControlsIndex2 = view.getUint16(materialEntryIdx + 0x10);
+        const chanControlsIndex3 = view.getUint16(materialEntryIdx + 0x12);
+        const color2_Index0 = view.getUint16(materialEntryIdx + 0x14);
+        const color2_Index1 = view.getUint16(materialEntryIdx + 0x16);
+        // uint16_t lights[8];
+
+        const cullMode = view.getUint32(0x18 + cullModeIndex * 0x04);
+    }
 }
 
-export interface Texture {
+interface TEX1_Texture {
     name:string;
     format:GX.TexFormat;
     width:number;
@@ -382,18 +436,11 @@ export interface Texture {
     wrapT:boolean;
     minFilter:GX.TexFilter;
     magFilter:GX.TexFilter;
-    pixels:ArrayBuffer;
+    decodedTexture:Texture.DecodedTexture;
 }
 
 export interface TEX1 {
-    textures:Texture[];
-}
-
-function decodeTexture(format:GX.TexFormat, width:number, height:number, data:ArrayBuffer):ArrayBuffer {
-    switch (format) {
-    default:
-        throw new Error(`Unknown texture format ${format}`);
-    }
+    textures:TEX1_Texture[];
 }
 
 export function readTEX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize:number) {
@@ -403,7 +450,7 @@ export function readTEX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, ch
     const nameTableOffs = view.getUint32(0x10);
     const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
 
-    const textures:Texture[] = [];
+    const textures:TEX1_Texture[] = [];
     let textureIdx = textureHeaderOffs;
     for (let i = 0; i < textureCount; i++) {
         const name = nameTable[i];
@@ -420,9 +467,12 @@ export function readTEX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, ch
         const mipCount = view.getUint16(textureIdx + 0x18);
         const dataOffs = view.getUint32(textureIdx + 0x1C);
 
+        // TODO(jstpierre): WEBGL_compressed_texture_s3tc
+        const supportsS3TC = false;
         const data = buffer.slice(textureIdx + dataOffs);
-        const pixels = decodeTexture(format, width, height, data);
-        textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, pixels });
+        const decodedTexture:Texture.DecodedTexture = Texture.decodeTexture({ format, width, height, data }, false);
+
+        textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, decodedTexture });
         textureIdx += 0x20;
     }
 

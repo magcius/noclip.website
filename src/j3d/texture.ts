@@ -3,29 +3,27 @@ import * as GX from 'gx';
 
 // Decode GX textures
 
-interface Texture {
+export interface Texture {
     format:GX.TexFormat;
     width:number;
     height:number;
-    pixels:ArrayBuffer;
-    paletteFormat:GX.TexPalette;
-    palette:ArrayBuffer;
+    data:ArrayBuffer;
 }
 
-interface DecodedTextureS3TC {
+export interface DecodedTextureS3TC {
     type:"S3TC";
     pixels:ArrayBuffer;
     width:number;
     height:number;
 }
-interface DecodedTextureRGBA {
+export interface DecodedTextureRGBA {
     type:"RGBA";
     pixels:ArrayBuffer;
     width:number;
     height:number;
 }
 
-type DecodedTexture = DecodedTextureS3TC | DecodedTextureRGBA;
+export type DecodedTexture = DecodedTextureS3TC | DecodedTextureRGBA;
 
 function expand3to8(n:number):number {
     return (n << (8-3)) | (n << (8-6)) | (n >>> (9-8));
@@ -59,7 +57,7 @@ function decode_CMPR_to_S3TC(texture:Texture):DecodedTextureS3TC {
     }
 
     const pixels = new Uint8Array(texture.width * texture.height / 2);
-    const view = new DataView(texture.pixels);
+    const view = new DataView(texture.data);
     
     // "Macroblocks"
     const w4 = texture.width >>> 2;
@@ -165,7 +163,7 @@ function decode_Tiled(texture:Texture, decoder:(pixels:Uint8Array, dstOffs:numbe
 }
 
 function decode_RGB565(texture:Texture):DecodedTexture {
-    const view = new DataView(texture.pixels);
+    const view = new DataView(texture.data);
     let srcOffs = 0;
     return decode_Tiled(texture, (pixels:Uint8Array, dstOffs:number):void => {
         const p = view.getUint16(srcOffs, true);
@@ -178,7 +176,7 @@ function decode_RGB565(texture:Texture):DecodedTexture {
 }
 
 function decode_RGB5A3(texture:Texture):DecodedTexture {
-    const view = new DataView(texture.pixels);
+    const view = new DataView(texture.data);
     let srcOffs = 0;
     return decode_Tiled(texture, (pixels:Uint8Array, dstOffs:number):void => {
         const p = view.getUint16(srcOffs, true);
@@ -200,7 +198,7 @@ function decode_RGB5A3(texture:Texture):DecodedTexture {
 }
 
 function decode_RGBA8(texture:Texture):DecodedTexture {
-    const view = new DataView(texture.pixels);
+    const view = new DataView(texture.data);
     let srcOffs = 0;
     return decode_Tiled(texture, (pixels:Uint8Array, dstOffs:number):void => {
         pixels[dstOffs+0] = view.getUint8(srcOffs+0);
@@ -212,7 +210,7 @@ function decode_RGBA8(texture:Texture):DecodedTexture {
 }
 
 function decode_I4(texture:Texture):DecodedTexture {
-    const view = new DataView(texture.pixels);
+    const view = new DataView(texture.data);
     let srcOffs = 0;
     return decode_Tiled(texture, (pixels:Uint8Array, dstOffs:number):void => {
         const ii = view.getUint8(srcOffs >> 1);
@@ -227,7 +225,7 @@ function decode_I4(texture:Texture):DecodedTexture {
 }
 
 function decode_I8(texture:Texture):DecodedTexture {
-    const view = new DataView(texture.pixels);
+    const view = new DataView(texture.data);
     let srcOffs = 0;
     return decode_Tiled(texture, (pixels:Uint8Array, dstOffs:number):void => {
         const i = view.getUint8(srcOffs);
@@ -240,7 +238,7 @@ function decode_I8(texture:Texture):DecodedTexture {
 }
 
 function decode_IA4(texture:Texture):DecodedTexture {
-    const view = new DataView(texture.pixels);
+    const view = new DataView(texture.data);
     let srcOffs = 0;
     return decode_Tiled(texture, (pixels:Uint8Array, dstOffs:number):void => {
         const ia = view.getUint8(srcOffs);
@@ -255,7 +253,7 @@ function decode_IA4(texture:Texture):DecodedTexture {
 }
 
 function decode_IA8(texture:Texture):DecodedTexture {
-    const view = new DataView(texture.pixels);
+    const view = new DataView(texture.data);
     let srcOffs = 0;
     return decode_Tiled(texture, (pixels:Uint8Array, dstOffs:number):void => {
         const i = view.getUint8(srcOffs+0);

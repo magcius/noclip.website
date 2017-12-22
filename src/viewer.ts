@@ -1,5 +1,5 @@
 
-/// <reference path="decl.d.ts" />
+import { mat4, vec3 } from 'gl-matrix';
 
 class Viewport {
     canvas:HTMLCanvasElement;
@@ -56,21 +56,21 @@ export class RenderState {
     currentProgram:Program = null;
     time:number;
 
-    projection:Float32Array;
-    modelView:Float32Array;
+    projection:mat4;
+    modelView:mat4;
 
     constructor(viewport:Viewport) {
         this.viewport = viewport;
         this.gl = this.viewport.gl;
         this.time = 0;
 
-        this.projection = window.mat4.create();
-        this.modelView = window.mat4.create();
+        this.projection = mat4.create();
+        this.modelView = mat4.create();
     }
 
     checkResize() {
         const canvas = this.viewport.canvas;
-        window.mat4.perspective(this.projection, Math.PI / 4, canvas.width / canvas.height, 0.2, 50000);
+        mat4.perspective(this.projection, Math.PI / 4, canvas.width / canvas.height, 0.2, 50000);
     }
 
     useProgram(prog:Program) {
@@ -127,7 +127,7 @@ class SceneGraph {
         this.scenes = scenes;
     }
     setCamera(matrix) {
-        window.mat4.copy(this.renderState.modelView, matrix);
+        mat4.copy(this.renderState.modelView, matrix);
     }
 }
 
@@ -224,8 +224,8 @@ export class FPSCameraController implements CameraController {
     _camera:any;
 
     constructor() {
-        this._tmp = window.mat4.create();
-        this._camera = window.mat4.create();
+        this._tmp = mat4.create();
+        this._camera = mat4.create();
     }
 
     update(outCamera, inputManager, dt):void {
@@ -261,18 +261,18 @@ export class FPSCameraController implements CameraController {
         tmp[13] = amt;
 
         if (inputManager.isKeyDown('B'))
-            window.mat4.identity(camera);
+            mat4.identity(camera);
         if (inputManager.isKeyDown('C'))
             console.log(camera);
 
-        const cu = [camera[1], camera[5], camera[9]];
-        window.vec3.normalize(cu, cu);
-        window.mat4.rotate(camera, camera, -inputManager.dx / 500, cu);
-        window.mat4.rotate(camera, camera, -inputManager.dy / 500, [1, 0, 0]);
+        const cu = vec3.fromValues(camera[1], camera[5], camera[9]);
+        vec3.normalize(cu, cu);
+        mat4.rotate(camera, camera, -inputManager.dx / 500, cu);
+        mat4.rotate(camera, camera, -inputManager.dy / 500, [1, 0, 0]);
 
-        window.mat4.multiply(camera, camera, tmp);
+        mat4.multiply(camera, camera, tmp);
         // XXX: Is there any way to do this without the expensive inverse?
-        window.mat4.invert(outCamera, camera);
+        mat4.invert(outCamera, camera);
     }
 }
 
@@ -347,18 +347,18 @@ export class OrbitCameraController implements CameraController {
         const cosX = Math.cos(this.x);
         const sinY = Math.sin(this.y);
         const cosY = Math.cos(this.y);
-        window.mat4.copy(camera, [
+        mat4.copy(camera, mat4.fromValues(
             cosX, sinY*sinX, -cosY*sinX, 0,
             0, cosY, sinY, 0,
             sinX, -sinY*cosX, cosY*cosX, 0,
             0, 0, this.z, 1,
-        ]);
+        ));
     }
 }
 
 export class Viewer {
     sceneGraph:SceneGraph;
-    camera:Float32Array;
+    camera:mat4;
     inputManager:InputManager;
     cameraController:CameraController;
 
@@ -367,12 +367,12 @@ export class Viewer {
         const viewport = { canvas, gl };
 
         this.sceneGraph = new SceneGraph(viewport);
-        this.camera = window.mat4.create();
+        this.camera = mat4.create();
         this.inputManager = new InputManager(this.sceneGraph.renderState.viewport.canvas);
         this.cameraController = null;
     }
     resetCamera() {
-        window.mat4.identity(this.camera);
+        mat4.identity(this.camera);
     }
     setScene(scene:Scene) {
         this.sceneGraph.setScenes([scene]);
