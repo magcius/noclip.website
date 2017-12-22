@@ -95,6 +95,7 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
         gl.shaderSource(shader, str);
         gl.compileShader(shader);
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            console.error(str);
             console.error(gl.getShaderInfoLog(shader));
             throw new Error();
         }
@@ -201,7 +202,9 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                     var gl = this.renderState.viewport.gl;
                     // Enable EXT_frag_depth
                     gl.getExtension('EXT_frag_depth');
+                    gl.getExtension('OES_standard_derivatives');
                     gl.clearColor(0.88, 0.88, 0.88, 1);
+                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
                 }
                 SceneGraph.prototype.render = function () {
                     var _this = this;
@@ -4436,7 +4439,7 @@ System.register("mdl0/mdl0", [], function (exports_17, context_17) {
 System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (exports_18, context_18) {
     "use strict";
     var __moduleName = context_18 && context_18.id;
-    var MDL0, Viewer, util_4, MDL0_VERT_SHADER_SOURCE, MDL0_FRAG_SHADER_SOURCE, MDL0_Program, Scene, SceneDesc;
+    var MDL0, Viewer, util_4, FancyGrid_Program, FancyGrid, MDL0_Program, Scene, SceneDesc;
     return {
         setters: [
             function (MDL0_1) {
@@ -4450,14 +4453,61 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (export
             }
         ],
         execute: function () {
-            MDL0_VERT_SHADER_SOURCE = "\nprecision mediump float;\n\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\n\nattribute vec3 a_position;\nattribute vec4 a_color;\nvarying vec4 v_color;\n\nvoid main() {\n    v_color = a_color.bgra;\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n}\n";
-            MDL0_FRAG_SHADER_SOURCE = "\nprecision mediump float;\n\nvarying vec4 v_color;\n\nvoid main() {\n    gl_FragColor = v_color;\n}\n";
+            FancyGrid_Program = /** @class */ (function (_super) {
+                __extends(FancyGrid_Program, _super);
+                function FancyGrid_Program() {
+                    var _this = _super !== null && _super.apply(this, arguments) || this;
+                    _this.vert = "\nprecision mediump float;\n\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\n\nattribute vec3 a_position;\nvarying float v_eyeFade;\nvarying vec2 v_surfCoord;\n\nvoid main() {\n    v_surfCoord = a_position.xz;\n\n    float scale = 200.0;\n    gl_Position = u_projection * u_modelView * vec4(a_position * scale, 1.0);\n\n    vec3 V = (vec4(0.0, 0.0, 1.0, 0.0) * u_modelView).xyz;\n    vec3 N = vec3(0.0, 1.0, 0.0);\n    v_eyeFade = dot(V, N);\n}\n";
+                    _this.frag = "\n#extension GL_EXT_frag_depth : enable\n#extension GL_OES_standard_derivatives : enable\n    \nprecision highp float;\nvarying float v_eyeFade;\nvarying vec2 v_surfCoord;\n\nvoid main() {\n    float distFromCenter = distance(v_surfCoord, vec2(0.0));\n    vec2 uv = (v_surfCoord + 1.0) * 0.5;\n\n    vec4 color;\n    color.a = 1.0;\n\n    // Base Grid color.\n    color.rgb = mix(vec3(0.8, 0.0, 0.8), vec3(0.4, 0.2, 0.8), clamp(distFromCenter * 1.5, 0.0, 1.0));\n    color.a *= clamp(mix(2.0, 0.0, distFromCenter), 0.0, 1.0);\n\n    // Grid lines mask.\n    uv *= 80.0;\n    float sharpDx = clamp(1.0 / min(abs(dFdx(uv.x)), abs(dFdy(uv.y))), 2.0, 20.0);\n    float sharpMult = sharpDx * 10.0;\n    float sharpOffs = sharpDx * 4.40;\n    vec2 gridM = (abs(fract(uv) - 0.5)) * sharpMult - sharpOffs;\n    float gridMask = max(gridM.x, gridM.y);\n    color.a *= clamp(gridMask, 0.0, 1.0);\n\n    color.a += (1.0 - clamp(distFromCenter * 1.2, 0.0, 1.0)) * 0.5 * v_eyeFade;\n\n    // Eye fade.\n    color.a *= clamp(v_eyeFade, 0.3, 1.0);\n    gl_FragColor = color;\n\n    gl_FragDepthEXT = gl_FragCoord.z + 1e-6;\n}\n";
+                    return _this;
+                }
+                FancyGrid_Program.prototype.bind = function (gl, prog) {
+                    _super.prototype.bind.call(this, gl, prog);
+                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
+                };
+                return FancyGrid_Program;
+            }(Viewer.Program));
+            FancyGrid = /** @class */ (function () {
+                function FancyGrid(gl) {
+                    this.program = new FancyGrid_Program;
+                    this._createBuffers(gl);
+                }
+                FancyGrid.prototype._createBuffers = function (gl) {
+                    this._vtxBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ARRAY_BUFFER, this._vtxBuffer);
+                    var vtx = new Float32Array(4 * 3);
+                    vtx[0] = -1;
+                    vtx[1] = 0;
+                    vtx[2] = -1;
+                    vtx[3] = 1;
+                    vtx[4] = 0;
+                    vtx[5] = -1;
+                    vtx[6] = -1;
+                    vtx[7] = 0;
+                    vtx[8] = 1;
+                    vtx[9] = 1;
+                    vtx[10] = 0;
+                    vtx[11] = 1;
+                    gl.bufferData(gl.ARRAY_BUFFER, vtx, gl.STATIC_DRAW);
+                };
+                FancyGrid.prototype.render = function (state) {
+                    var gl = state.viewport.gl;
+                    state.useProgram(this.program);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, this._vtxBuffer);
+                    gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(this.program.positionLocation);
+                    gl.enable(gl.BLEND);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    gl.disable(gl.BLEND);
+                };
+                return FancyGrid;
+            }());
             MDL0_Program = /** @class */ (function (_super) {
                 __extends(MDL0_Program, _super);
                 function MDL0_Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = MDL0_VERT_SHADER_SOURCE;
-                    _this.frag = MDL0_FRAG_SHADER_SOURCE;
+                    _this.vert = "\nprecision mediump float;\n\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\n\nattribute vec3 a_position;\nattribute vec4 a_color;\nvarying vec4 v_color;\n\nvoid main() {\n    v_color = a_color.bgra;\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n}\n";
+                    _this.frag = "\nprecision mediump float;\n\nvarying vec4 v_color;\n\nvoid main() {\n    gl_FragColor = v_color;\n}\n";
                     return _this;
                 }
                 MDL0_Program.prototype.bind = function (gl, prog) {
@@ -4471,6 +4521,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (export
                 function Scene(gl, mdl0) {
                     this.cameraController = Viewer.OrbitCameraController;
                     this.textures = [];
+                    this.fancyGrid = new FancyGrid(gl);
                     this.program = new MDL0_Program();
                     this.mdl0 = mdl0;
                     this._createBuffers(gl);
@@ -4500,6 +4551,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (export
                     gl.enableVertexAttribArray(this.program.positionLocation);
                     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this._idxBuffer);
                     gl.drawElements(gl.TRIANGLES, this.mdl0.idxData.length, gl.UNSIGNED_SHORT, 0);
+                    this.fancyGrid.render(state);
                 };
                 return Scene;
             }());
@@ -4533,7 +4585,6 @@ System.register("mdl0/scenes", ["mdl0/render"], function (exports_19, context_19
         execute: function () {
             name = "Sonic Mania";
             sceneDescs = [
-                'test.bin',
                 'Meshes/Continue/Count0.bin',
                 'Meshes/Continue/Count1.bin',
                 'Meshes/Continue/Count2.bin',

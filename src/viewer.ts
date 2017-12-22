@@ -13,6 +13,7 @@ function compileShader(gl:WebGLRenderingContext, str:string, type:number) {
     gl.compileShader(shader);
 
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error(str);
         console.error(gl.getShaderInfoLog(shader));
         throw new Error();
     }
@@ -106,7 +107,9 @@ class SceneGraph {
 
         // Enable EXT_frag_depth
         gl.getExtension('EXT_frag_depth');
+        gl.getExtension('OES_standard_derivatives');
         gl.clearColor(0.88, 0.88, 0.88, 1);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
 
     render() {

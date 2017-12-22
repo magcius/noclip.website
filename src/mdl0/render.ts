@@ -3,7 +3,129 @@ import * as MDL0 from 'mdl0';
 import * as Viewer from '../viewer';
 import { fetch } from 'util'; 
 
-const MDL0_VERT_SHADER_SOURCE = `
+class FancyGrid_Program extends Viewer.Program {
+    positionLocation:number;
+
+    vert = `
+precision mediump float;
+
+uniform mat4 u_modelView;
+uniform mat4 u_projection;
+
+attribute vec3 a_position;
+varying float v_eyeFade;
+varying vec2 v_surfCoord;
+
+void main() {
+    v_surfCoord = a_position.xz;
+
+    float scale = 200.0;
+    gl_Position = u_projection * u_modelView * vec4(a_position * scale, 1.0);
+
+    vec3 V = (vec4(0.0, 0.0, 1.0, 0.0) * u_modelView).xyz;
+    vec3 N = vec3(0.0, 1.0, 0.0);
+    v_eyeFade = dot(V, N);
+}
+`;
+
+    frag = `
+#extension GL_EXT_frag_depth : enable
+#extension GL_OES_standard_derivatives : enable
+    
+precision highp float;
+varying float v_eyeFade;
+varying vec2 v_surfCoord;
+
+void main() {
+    float distFromCenter = distance(v_surfCoord, vec2(0.0));
+    vec2 uv = (v_surfCoord + 1.0) * 0.5;
+
+    vec4 color;
+    color.a = 1.0;
+
+    // Base Grid color.
+    color.rgb = mix(vec3(0.8, 0.0, 0.8), vec3(0.4, 0.2, 0.8), clamp(distFromCenter * 1.5, 0.0, 1.0));
+    color.a *= clamp(mix(2.0, 0.0, distFromCenter), 0.0, 1.0);
+
+    // Grid lines mask.
+    uv *= 80.0;
+    float sharpDx = clamp(1.0 / min(abs(dFdx(uv.x)), abs(dFdy(uv.y))), 2.0, 20.0);
+    float sharpMult = sharpDx * 10.0;
+    float sharpOffs = sharpDx * 4.40;
+    vec2 gridM = (abs(fract(uv) - 0.5)) * sharpMult - sharpOffs;
+    float gridMask = max(gridM.x, gridM.y);
+    color.a *= clamp(gridMask, 0.0, 1.0);
+
+    color.a += (1.0 - clamp(distFromCenter * 1.2, 0.0, 1.0)) * 0.5 * v_eyeFade;
+
+    // Eye fade.
+    color.a *= clamp(v_eyeFade, 0.3, 1.0);
+    gl_FragColor = color;
+
+    gl_FragDepthEXT = gl_FragCoord.z + 1e-6;
+}
+`;
+
+    bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
+        super.bind(gl, prog);
+
+        this.positionLocation = gl.getAttribLocation(prog, "a_position");
+    }
+}
+
+class FancyGrid {
+    program:FancyGrid_Program;
+
+    _vtxBuffer:WebGLBuffer;
+    _idxBuffer:WebGLBuffer;
+
+    constructor(gl:WebGLRenderingContext) {
+        this.program = new FancyGrid_Program;
+        this._createBuffers(gl);
+    }
+
+    _createBuffers(gl:WebGLRenderingContext) {
+        this._vtxBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this._vtxBuffer);
+
+        const vtx = new Float32Array(4 * 3);
+
+        vtx[0]  = -1;
+        vtx[1]  = 0;
+        vtx[2]  = -1;
+        vtx[3]  = 1;
+        vtx[4]  = 0;
+        vtx[5]  = -1;
+        vtx[6]  = -1;
+        vtx[7]  = 0;
+        vtx[8]  = 1;
+        vtx[9]  = 1;
+        vtx[10] = 0;
+        vtx[11] = 1;
+
+        gl.bufferData(gl.ARRAY_BUFFER, vtx, gl.STATIC_DRAW);
+    }
+
+    render(state:Viewer.RenderState) {
+        const gl = state.viewport.gl;
+
+        state.useProgram(this.program);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this._vtxBuffer);
+        gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(this.program.positionLocation);
+
+        gl.enable(gl.BLEND);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.disable(gl.BLEND);
+    }
+}
+
+class MDL0_Program extends Viewer.Program {
+    positionLocation:number;
+    colorLocation:number;
+
+    vert = `
 precision mediump float;
 
 uniform mat4 u_modelView;
@@ -19,7 +141,7 @@ void main() {
 }
 `;
 
-const MDL0_FRAG_SHADER_SOURCE = `
+    frag = `
 precision mediump float;
 
 varying vec4 v_color;
@@ -28,13 +150,6 @@ void main() {
     gl_FragColor = v_color;
 }
 `;
-
-class MDL0_Program extends Viewer.Program {
-    positionLocation:number;
-    colorLocation:number;
-
-    vert = MDL0_VERT_SHADER_SOURCE;
-    frag = MDL0_FRAG_SHADER_SOURCE;
 
     bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
         super.bind(gl, prog);
@@ -49,12 +164,14 @@ class Scene implements Viewer.Scene {
     textures:HTMLCanvasElement[] = [];
     program:MDL0_Program;
     mdl0:MDL0.MDL0;
+    fancyGrid:FancyGrid;
 
     _clrBuffer:WebGLBuffer;
     _vtxBuffer:WebGLBuffer;
     _idxBuffer:WebGLBuffer;
 
     constructor(gl:WebGLRenderingContext, mdl0:MDL0.MDL0) {
+        this.fancyGrid = new FancyGrid(gl);
         this.program = new MDL0_Program();
         this.mdl0 = mdl0;
         this._createBuffers(gl);
@@ -93,6 +210,8 @@ class Scene implements Viewer.Scene {
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this._idxBuffer);
         gl.drawElements(gl.TRIANGLES, this.mdl0.idxData.length, gl.UNSIGNED_SHORT, 0);
+
+        this.fancyGrid.render(state);
     }
 }
 
