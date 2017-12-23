@@ -3,7 +3,7 @@ import { SceneDesc } from 'render';
 import { SceneGroup } from '../viewer';
 
 const name = "Super Mario 64 DS";
-const sceneDescs:SceneDesc[] = [
+const sceneDescs: SceneDesc[] = [
     { name: "Princess Peach's Castle - Gardens", filename: 'main_castle_all.bmd' },
     { name: "Princess Peach's Castle - 1st Floor", filename: 'castle_1f_all.bmd' },
     { name: "Princess Peach's Castle - 2nd Floor", filename: 'castle_2f_all.bmd' },
@@ -52,10 +52,10 @@ const sceneDescs:SceneDesc[] = [
     { name: "Princess Peach's Castle - Playroom", filename: 'playroom_all.bmd' },
     { name: "Test Map A", filename: 'test_map_all.bmd' },
     { name: "Test Map B", filename: 'test_map_b_all.bmd' },
-].map((entry):SceneDesc => {
+].map((entry): SceneDesc => {
     const path = `data/sm64ds/${entry.filename}`;
-    const name = entry.name || entry.filename;
-    return new SceneDesc(name, path);
+    const sceneName = entry.name || entry.filename;
+    return new SceneDesc(sceneName, path);
 });
 
-export const sceneGroup:SceneGroup = { name, sceneDescs };
+export const sceneGroup: SceneGroup = { name, sceneDescs };

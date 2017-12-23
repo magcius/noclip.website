@@ -1,13 +1,15 @@
 
+// tslint:disable:no-console
+
 import { mat4, vec3 } from 'gl-matrix';
 
 class Viewport {
-    canvas:HTMLCanvasElement;
-    gl:WebGLRenderingContext;
+    public canvas: HTMLCanvasElement;
+    public gl: WebGLRenderingContext;
 }
 
-function compileShader(gl:WebGLRenderingContext, str:string, type:number) {
-    var shader = gl.createShader(type);
+function compileShader(gl: WebGLRenderingContext, str: string, type: number) {
+    const shader: WebGLShader = gl.createShader(type);
 
     gl.shaderSource(shader, str);
     gl.compileShader(shader);
@@ -22,17 +24,17 @@ function compileShader(gl:WebGLRenderingContext, str:string, type:number) {
 }
 
 export class Program {
-    _glProg:WebGLProgram;
+    public vert: string;
+    public frag: string;
 
-    vert:string;
-    frag:string;
+    public projectionLocation: WebGLUniformLocation;
+    public modelViewLocation: WebGLUniformLocation;
 
-    projectionLocation:WebGLUniformLocation;
-    modelViewLocation:WebGLUniformLocation;
+    private glProg: WebGLProgram;
 
-    compile(gl:WebGLRenderingContext) {
-        if (this._glProg)
-            return this._glProg;
+    public compile(gl: WebGLRenderingContext) {
+        if (this.glProg)
+            return this.glProg;
 
         const vertShader = compileShader(gl, this.vert, gl.VERTEX_SHADER);
         const fragShader = compileShader(gl, this.frag, gl.FRAGMENT_SHADER);
@@ -40,27 +42,27 @@ export class Program {
         gl.attachShader(prog, vertShader);
         gl.attachShader(prog, fragShader);
         gl.linkProgram(prog);
-        this._glProg = prog;
+        this.glProg = prog;
         this.bind(gl, prog);
-        return this._glProg;
+        return this.glProg;
     }
 
-    bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
+    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
         this.modelViewLocation = gl.getUniformLocation(prog, "u_modelView");
         this.projectionLocation = gl.getUniformLocation(prog, "u_projection");
     }
 }
 
 export class RenderState {
-    gl:WebGLRenderingContext;
-    viewport:Viewport;
-    currentProgram:Program = null;
-    time:number;
+    public gl: WebGLRenderingContext;
+    public viewport: Viewport;
+    public currentProgram: Program = null;
+    public time: number;
 
-    projection:mat4;
-    modelView:mat4;
+    public projection: mat4;
+    public modelView: mat4;
 
-    constructor(viewport:Viewport) {
+    constructor(viewport: Viewport) {
         this.viewport = viewport;
         this.gl = this.viewport.gl;
         this.time = 0;
@@ -69,12 +71,12 @@ export class RenderState {
         this.modelView = mat4.create();
     }
 
-    checkResize() {
+    public checkResize() {
         const canvas = this.viewport.canvas;
         mat4.perspective(this.projection, Math.PI / 4, canvas.width / canvas.height, 0.2, 50000);
     }
 
-    useProgram(prog:Program) {
+    public useProgram(prog: Program) {
         const gl = this.viewport.gl;
         this.currentProgram = prog;
         gl.useProgram(prog.compile(gl));
@@ -84,23 +86,23 @@ export class RenderState {
 }
 
 interface CameraController {
-    update(camera:any, inputManager:InputManager, dt:number):void;
+    update(camera: mat4, inputManager: InputManager, dt: number): void;
 }
 
 // XXX: Is there any way to do this properly and reference the interface?
 type CameraControllerClass = typeof FPSCameraController | typeof OrbitCameraController;
 
 export interface Scene {
-    render(state:RenderState);
-    textures:HTMLCanvasElement[];
-    cameraController:CameraControllerClass;
+    textures: HTMLCanvasElement[];
+    cameraController: CameraControllerClass;
+    render(state: RenderState);
 }
 
 class SceneGraph {
-    renderState:RenderState;
-    scenes:Scene[] = [];
+    public renderState: RenderState;
+    public scenes: Scene[] = [];
 
-    constructor(viewport:Viewport) {
+    constructor(viewport: Viewport) {
         this.renderState = new RenderState(viewport);
 
         const gl = this.renderState.viewport.gl;
@@ -112,31 +114,32 @@ class SceneGraph {
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
 
-    render() {
+    public render() {
         const gl = this.renderState.viewport.gl;
         gl.depthMask(true);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         this.scenes.forEach((scene) => scene.render(this.renderState));
     }
 
-    checkResize() {
+    public checkResize() {
         const canvas = this.renderState.viewport.canvas;
         const gl = this.renderState.viewport.gl;
         gl.viewport(0, 0, canvas.width, canvas.height);
         this.renderState.checkResize();
     }
 
-    setScenes(scenes) {
+    public setScenes(scenes: Scene[]) {
         this.scenes = scenes;
     }
-    setCamera(matrix) {
+    public setCamera(matrix: mat4) {
         mat4.copy(this.renderState.modelView, matrix);
     }
 }
 
 // XXX: Port to a class at some point.
-function elemDragger(elem:HTMLElement, callback:(dx:number, dy:number) => void):void {
-    let lastX, lastY;
+function elemDragger(elem: HTMLElement, callback: (dx: number, dy: number) => void): void {
+    let lastX;
+    let lastY;
 
     function setGrabbing(v) {
         (<any> elem).grabbing = v;
@@ -145,7 +148,8 @@ function elemDragger(elem:HTMLElement, callback:(dx:number, dy:number) => void):
     }
 
     function mousemove(e) {
-        const dx = e.pageX - lastX, dy = e.pageY - lastY;
+        const dx = e.pageX - lastX;
+        const dy = e.pageY - lastY;
         lastX = e.pageX;
         lastY = e.pageY;
         callback(dx, dy);
@@ -155,7 +159,7 @@ function elemDragger(elem:HTMLElement, callback:(dx:number, dy:number) => void):
         document.removeEventListener('mousemove', mousemove);
         setGrabbing(false);
     }
-    elem.addEventListener('mousedown', function(e) {
+    elem.addEventListener('mousedown', (e) => {
         lastX = e.pageX;
         lastY = e.pageY;
         document.addEventListener('mouseup', mouseup);
@@ -168,11 +172,11 @@ function elemDragger(elem:HTMLElement, callback:(dx:number, dy:number) => void):
 }
 
 class InputManager {
-    toplevel:HTMLElement;
-    keysDown:Map<number, boolean>;
-    dx:number;
-    dy:number;
-    dz:number;
+    public toplevel: HTMLElement;
+    public keysDown: Map<number, boolean>;
+    public dx: number;
+    public dy: number;
+    public dz: number;
 
     constructor(toplevel) {
         this.toplevel = toplevel;
@@ -187,86 +191,90 @@ class InputManager {
         elemDragger(this.toplevel, this._onElemDragger.bind(this));
     }
 
-    isKeyDown(key:string) {
+    public isKeyDown(key: string) {
         return !!this.keysDown[key.charCodeAt(0)];
     }
-    isKeyDownRaw(keyCode:number) {
+    public isKeyDownRaw(keyCode: number) {
         return !!this.keysDown[keyCode];
     }
-    isDragging():boolean {
+    public isDragging(): boolean {
         // XXX: Should be an explicit flag.
         return (<any> this.toplevel).grabbing;
     }
-
-    _onKeyDown(e:KeyboardEvent) {
-        this.keysDown[e.keyCode] = true;
-    }
-    _onKeyUp(e:KeyboardEvent) {
-        delete this.keysDown[e.keyCode];
-    }
-
-    _onElemDragger(dx, dy) {
-        this.dx += dx;
-        this.dy += dy;
-    }
-    _onWheel(e:WheelEvent) {
-        this.dz += Math.sign(e.deltaY) * -4;
-        // XXX: How can I convince Chrome to let me use wheel events without it complaining...
-        e.preventDefault();
-    }
-
-    resetMouse() {
+    public resetMouse() {
         this.dx = 0;
         this.dy = 0;
         this.dz = 0;
     }
+
+    private _onKeyDown(e: KeyboardEvent) {
+        this.keysDown[e.keyCode] = true;
+    }
+    private _onKeyUp(e: KeyboardEvent) {
+        delete this.keysDown[e.keyCode];
+    }
+
+    private _onElemDragger(dx: number, dy: number) {
+        this.dx += dx;
+        this.dy += dy;
+    }
+    private _onWheel(e: WheelEvent) {
+        this.dz += Math.sign(e.deltaY) * -4;
+        // XXX: How can I convince Chrome to let me use wheel events without it complaining...
+        e.preventDefault();
+    }
 }
 
 export class FPSCameraController implements CameraController {
-    _tmp:any;
-    _camera:any;
+    private tmp: mat4;
+    private camera: mat4;
 
     constructor() {
-        this._tmp = mat4.create();
-        this._camera = mat4.create();
+        this.tmp = mat4.create();
+        this.camera = mat4.create();
     }
 
-    update(outCamera, inputManager, dt):void {
+    public update(outCamera: mat4, inputManager: InputManager, dt: number): void {
         const SHIFT = 16;
-        const tmp = this._tmp;
-        const camera = this._camera;
+        const tmp = this.tmp;
+        const camera = this.camera;
 
         let mult = 10;
         if (inputManager.isKeyDownRaw(SHIFT))
             mult *= 5;
         mult *= (dt / 16.0);
 
-        var amt;
+        let amt;
         amt = 0;
-        if (inputManager.isKeyDown('W'))
+        if (inputManager.isKeyDown('W')) {
             amt = -mult;
-        else if (inputManager.isKeyDown('S'))
+        } else if (inputManager.isKeyDown('S')) {
             amt = mult;
+        }
         tmp[14] = amt;
 
         amt = 0;
-        if (inputManager.isKeyDown('A'))
+        if (inputManager.isKeyDown('A')) {
             amt = -mult;
-        else if (inputManager.isKeyDown('D'))
+        } else if (inputManager.isKeyDown('D')) {
             amt = mult;
+        }
         tmp[12] = amt;
 
         amt = 0;
-        if (inputManager.isKeyDown('Q'))
+        if (inputManager.isKeyDown('Q')) {
             amt = -mult;
-        else if (inputManager.isKeyDown('E'))
+        } else if (inputManager.isKeyDown('E')) {
             amt = mult;
+        }
         tmp[13] = amt;
 
-        if (inputManager.isKeyDown('B'))
+        if (inputManager.isKeyDown('B')) {
             mat4.identity(camera);
-        if (inputManager.isKeyDown('C'))
+        }
+        if (inputManager.isKeyDown('C')) {
             console.log(camera);
+        }
 
         const cu = vec3.fromValues(camera[1], camera[5], camera[9]);
         vec3.normalize(cu, cu);
@@ -279,22 +287,22 @@ export class FPSCameraController implements CameraController {
     }
 }
 
-function clamp(v:number, min:number, max:number):number {
+function clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(v, max));
 }
 
-function clampRange(v:number, lim:number):number {
+function clampRange(v: number, lim: number): number {
     return clamp(v, -lim, lim);
 }
 
 export class OrbitCameraController implements CameraController {
-    x:number;
-    y:number;
-    z:number;
+    public x: number;
+    public y: number;
+    public z: number;
 
-    xVel:number;
-    yVel:number;
-    zVel:number;
+    public xVel: number;
+    public yVel: number;
+    public zVel: number;
 
     constructor() {
         this.x = 0.15;
@@ -305,19 +313,23 @@ export class OrbitCameraController implements CameraController {
         this.zVel = 0;
     }
 
-    update(camera:any, inputManager:InputManager, dt:number):void {
+    public update(camera: mat4, inputManager: InputManager, dt: number): void {
         // Get new velocities from inputs.
         this.xVel += inputManager.dx / 200;
         this.yVel += inputManager.dy / 200;
         this.zVel += inputManager.dz;
-        if (inputManager.isKeyDown('A'))
+        if (inputManager.isKeyDown('A')) {
             this.xVel += 0.05;
-        if (inputManager.isKeyDown('D'))
+        }
+        if (inputManager.isKeyDown('D')) {
             this.xVel -= 0.05;
-        if (inputManager.isKeyDown('W'))
+        }
+        if (inputManager.isKeyDown('W')) {
             this.yVel += 0.05;
-        if (inputManager.isKeyDown('S'))
+        }
+        if (inputManager.isKeyDown('S')) {
             this.yVel -= 0.05;
+        }
 
         // Apply velocities.
         this.xVel = clampRange(this.xVel, 2);
@@ -351,21 +363,21 @@ export class OrbitCameraController implements CameraController {
         const sinY = Math.sin(this.y);
         const cosY = Math.cos(this.y);
         mat4.copy(camera, mat4.fromValues(
-            cosX, sinY*sinX, -cosY*sinX, 0,
+            cosX, sinY * sinX, -cosY * sinX, 0,
             0, cosY, sinY, 0,
-            sinX, -sinY*cosX, cosY*cosX, 0,
+            sinX, -sinY * cosX, cosY * cosX, 0,
             0, 0, this.z, 1,
         ));
     }
 }
 
 export class Viewer {
-    sceneGraph:SceneGraph;
-    camera:mat4;
-    inputManager:InputManager;
-    cameraController:CameraController;
+    public sceneGraph: SceneGraph;
+    public camera: mat4;
+    public inputManager: InputManager;
+    public cameraController: CameraController;
 
-    constructor(canvas:HTMLCanvasElement) {
+    constructor(canvas: HTMLCanvasElement) {
         const gl = canvas.getContext("webgl", { alpha: false });
         const viewport = { canvas, gl };
 
@@ -374,28 +386,29 @@ export class Viewer {
         this.inputManager = new InputManager(this.sceneGraph.renderState.viewport.canvas);
         this.cameraController = null;
     }
-    resetCamera() {
+    public resetCamera() {
         mat4.identity(this.camera);
     }
-    setScene(scene:Scene) {
+    public setScene(scene: Scene) {
         this.sceneGraph.setScenes([scene]);
         this.cameraController = new scene.cameraController();
         this.resetCamera();
     }
 
-    start() {
+    public start() {
         const camera = this.camera;
         const canvas = this.sceneGraph.renderState.viewport.canvas;
 
         let t = 0;
         const update = (nt) => {
-            var dt = nt - t;
+            const dt = nt - t;
             t = nt;
 
             this.sceneGraph.checkResize();
 
-            if (this.cameraController)
+            if (this.cameraController) {
                 this.cameraController.update(camera, this.inputManager, dt);
+            }
 
             this.inputManager.resetMouse();
 
@@ -403,17 +416,17 @@ export class Viewer {
             this.sceneGraph.renderState.time += dt;
             this.sceneGraph.render();
             window.requestAnimationFrame(update);
-        }
+        };
         update(0);
     }
 }
 
 export interface SceneDesc {
-    name:string;
-    createScene(gl:WebGLRenderingContext):PromiseLike<Scene>;
+    name: string;
+    createScene(gl: WebGLRenderingContext): PromiseLike<Scene>;
 }
 
 export interface SceneGroup {
-    name:string;
-    sceneDescs:SceneDesc[];
+    name: string;
+    sceneDescs: SceneDesc[];
 }

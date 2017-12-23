@@ -9,22 +9,22 @@ export enum Format {
     Tex_CMPR_4x4 =   0x05,
     Tex_A5I3 =       0x06,
     Tex_Direct =     0x07,
-};
-
-function expand3to8(n:number):number {
-    return (n << (8-3)) | (n << (8-6)) | (n >>> (9-8));
 }
 
-function expand5to8(n:number):number {
-    return (n << (8-5)) | (n >>> (10-8));
+function expand3to8(n: number): number {
+    return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
 }
 
-function s3tcblend(a:number, b:number):number {
+function expand5to8(n: number): number {
+    return (n << (8 - 5)) | (n >>> (10 - 8));
+}
+
+function s3tcblend(a: number, b: number): number {
     // return (a*3 + b*5) / 8;
     return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
 }
 
-function readTexture_A3I5(width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer) {
+function readTexture_A3I5(width: number, height: number, texData: ArrayBuffer, palData: ArrayBuffer): Uint8Array {
     const pixels = new Uint8Array(width * height * 4);
     const texView = new DataView(texData);
     const palView = new DataView(palData);
@@ -36,16 +36,17 @@ function readTexture_A3I5(width:number, height:number, texData:ArrayBuffer, palD
             const alpha = texBlock >>> 5;
             const p = palView.getUint16(palIdx, true);
             const dstOffs = 4 * ((y * width) + x);
-            pixels[dstOffs+0] = expand5to8(p & 0x1F);
-            pixels[dstOffs+1] = expand5to8((p >>> 5) & 0x1F);
-            pixels[dstOffs+2] = expand5to8((p >>> 10) & 0x1F);
-            pixels[dstOffs+3] = expand3to8(alpha);
+            pixels[dstOffs + 0] = expand5to8(p & 0x1F);
+            pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
+            pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
+            pixels[dstOffs + 3] = expand3to8(alpha);
         }
     }
     return pixels;
 }
 
-function readTexture_Palette16(width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer, color0:boolean) {
+function readTexture_Palette16(width: number, height: number, texData: ArrayBuffer,
+                               palData: ArrayBuffer, color0: boolean) {
     const pixels = new Uint8Array(width * height * 4);
     const texView = new DataView(texData);
     const palView = new DataView(palData);
@@ -54,14 +55,14 @@ function readTexture_Palette16(width:number, height:number, texData:ArrayBuffer,
         for (let xx = 0; xx < width; xx += 4) {
             let texBlock = texView.getUint16(srcOffs, true);
             srcOffs += 2;
-            for (var x = 0; x < 4; x++) {
+            for (let x = 0; x < 4; x++) {
                 const palIdx = texBlock & 0x0F;
                 const p = palView.getUint16(palIdx, true);
                 const dstOffs = 4 * ((y * width) + xx + x);
-                pixels[dstOffs+0] = expand5to8(p & 0x1F);
-                pixels[dstOffs+1] = expand5to8((p >>> 5) & 0x1F);
-                pixels[dstOffs+2] = expand5to8((p >>> 10) & 0x1F);
-                pixels[dstOffs+3] = color0 ? 0x00 : 0xFF;
+                pixels[dstOffs + 0] = expand5to8(p & 0x1F);
+                pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
+                pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
+                pixels[dstOffs + 3] = color0 ? 0x00 : 0xFF;
                 texBlock >>= 4;
             }
         }
@@ -69,7 +70,7 @@ function readTexture_Palette16(width:number, height:number, texData:ArrayBuffer,
     return pixels;
 }
 
-function readTexture_CMPR_4x4(width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer) {
+function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBuffer, palData: ArrayBuffer) {
     function buildColorTable(palBlock) {
         const palMode = palBlock >> 14;
         const palOffs = (palBlock & 0x3FFF) << 2;
@@ -149,10 +150,10 @@ function readTexture_CMPR_4x4(width:number, height:number, texData:ArrayBuffer, 
                 for (let x = 0; x < 4; x++) {
                     const colorIdx = texBlock & 0x03;
                     const dstOffs = 4 * (((yy + y) * width) + xx + x);
-                    pixels[dstOffs+0] = colorTable[colorIdx*4+0];
-                    pixels[dstOffs+1] = colorTable[colorIdx*4+1];
-                    pixels[dstOffs+2] = colorTable[colorIdx*4+2];
-                    pixels[dstOffs+3] = colorTable[colorIdx*4+3];
+                    pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
+                    pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
+                    pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
+                    pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
                     texBlock >>= 2;
                 }
             }
@@ -163,46 +164,47 @@ function readTexture_CMPR_4x4(width:number, height:number, texData:ArrayBuffer, 
     return pixels;
 }
 
-function readTexture_A5I3(width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer) {
+function readTexture_A5I3(width: number, height: number, texData: ArrayBuffer, palData: ArrayBuffer) {
     const pixels = new Uint8Array(width * height * 4);
     const texView = new DataView(texData);
     const palView = new DataView(palData);
     let srcOffs = 0;
-    for (var y = 0; y < height; y++) {
-        for (var x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
             const texBlock = texView.getUint8(srcOffs++);
             const palIdx = (texBlock & 0x03) << 1;
             const alpha = texBlock >>> 3;
             const p = palView.getUint16(palIdx, true);
             const dstOffs = 4 * ((y * width) + x);
-            pixels[dstOffs+0] = expand5to8(p & 0x1F);
-            pixels[dstOffs+1] = expand5to8((p >>> 5) & 0x1F);
-            pixels[dstOffs+2] = expand5to8((p >>> 10) & 0x1F);
-            pixels[dstOffs+3] = expand5to8(alpha);
+            pixels[dstOffs + 0] = expand5to8(p & 0x1F);
+            pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
+            pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
+            pixels[dstOffs + 3] = expand5to8(alpha);
         }
     }
     return pixels;
 }
 
-function readTexture_Direct(width:number, height:number, texData:ArrayBuffer) {
+function readTexture_Direct(width: number, height: number, texData: ArrayBuffer) {
     const pixels = new Uint8Array(width * height * 4);
     const texView = new DataView(texData);
     let srcOffs = 0;
-    for (var y = 0; y < height; y++) {
-        for (var x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
             const p = texView.getUint16(srcOffs, true);
             const dstOffs = 4 * ((y * width) + x);
-            pixels[dstOffs+0] = expand5to8(p & 0x1F);
-            pixels[dstOffs+1] = expand5to8((p >>> 5) & 0x1F);
-            pixels[dstOffs+2] = expand5to8((p >>> 10) & 0x1F);
-            pixels[dstOffs+3] = 0xFF;
+            pixels[dstOffs + 0] = expand5to8(p & 0x1F);
+            pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
+            pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
+            pixels[dstOffs + 3] = 0xFF;
             srcOffs += 2;
         }
     }
     return pixels;
 }
 
-export function readTexture(format:Format, width:number, height:number, texData:ArrayBuffer, palData:ArrayBuffer, color0:boolean) {
+export function readTexture(format: Format, width: number, height: number, texData: ArrayBuffer,
+                            palData: ArrayBuffer, color0: boolean) {
     switch (format) {
     case Format.Tex_A3I5:
         return readTexture_A3I5(width, height, texData, palData);

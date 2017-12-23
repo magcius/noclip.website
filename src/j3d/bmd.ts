@@ -2,11 +2,11 @@
 import * as GX from 'gx';
 import * as Texture from 'texture';
 
-function assert(b:boolean) {
+function assert(b: boolean) {
     if (!b) throw new Error("Assert fail");
 }
 
-function readString(buffer:ArrayBuffer, offs:number, length:number):string {
+function readString(buffer: ArrayBuffer, offs: number, length: number): string {
     const length2 = Math.min(length, buffer.byteLength - offs);
     const buf = new Uint8Array(buffer, offs, length2);
     let S = '';
@@ -18,7 +18,7 @@ function readString(buffer:ArrayBuffer, offs:number, length:number):string {
     return S;
 }
 
-function readStringTable(buffer:ArrayBuffer, offs:number):string[] {
+function readStringTable(buffer: ArrayBuffer, offs: number): string[] {
     const view = new DataView(buffer, offs);
     const stringCount = view.getUint16(0x00);
 
@@ -26,15 +26,15 @@ function readStringTable(buffer:ArrayBuffer, offs:number):string[] {
     const strings = [];
     for (let i = 0; i < stringCount; i++) {
         const stringOffs = view.getUint16(tableIdx);
-        const string = readString(buffer, offs + stringOffs, 255);
-        strings.push(string);
+        const str = readString(buffer, offs + stringOffs, 255);
+        strings.push(str);
         tableIdx += 0x04;
     }
 
     return strings;
 }
 
-function memcpy(dst:ArrayBuffer, dstOffs:number, src:ArrayBuffer, srcOffs:number, length:number) {
+function memcpy(dst: ArrayBuffer, dstOffs: number, src: ArrayBuffer, srcOffs: number, length: number) {
     new Uint8Array(dst).set(new Uint8Array(src, srcOffs, length), dstOffs);
 }
 
@@ -52,42 +52,42 @@ export enum HierarchyType {
 // because they make some super deep stuff... we should linearize this...
 
 export interface HierarchyTreeNode {
-    type:HierarchyType.Open;
-    children:HierarchyNode[];
+    type: HierarchyType.Open;
+    children: HierarchyNode[];
 }
 export interface HierarchyShapeNode {
-    type:HierarchyType.Shape;
-    shapeIdx:number;
+    type: HierarchyType.Shape;
+    shapeIdx: number;
 }
 export interface HierarchyJointNode {
-    type:HierarchyType.Joint;
-    jointIdx:number;
+    type: HierarchyType.Joint;
+    jointIdx: number;
 }
 export interface HierarchyMaterialNode {
-    type:HierarchyType.Material;
-    materialIdx:number;
+    type: HierarchyType.Material;
+    materialIdx: number;
 }
 export type HierarchyNode = HierarchyTreeNode | HierarchyShapeNode | HierarchyJointNode | HierarchyMaterialNode;
 
 export interface INF1 {
-    sceneGraph:HierarchyNode;
+    sceneGraph: HierarchyNode;
 }
 
-function readINF1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize:number) {
+function readINF1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
     const view = new DataView(buffer, chunkStart, chunkSize);
     // unk
     const packetCount = view.getUint32(0x0C);
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
 
-    const parentStack:HierarchyTreeNode[] = [];
-    let node:HierarchyTreeNode = { type: HierarchyType.Open, children: [] };
+    const parentStack: HierarchyTreeNode[] = [];
+    let node: HierarchyTreeNode = { type: HierarchyType.Open, children: [] };
     let offs = hierarchyOffs;
 
     outer:
     while (true) {
-        const type:HierarchyType = view.getUint16(offs + 0x00);
-        const value:number = view.getUint16(offs + 0x02);
+        const type: HierarchyType = view.getUint16(offs + 0x00);
+        const value: number = view.getUint16(offs + 0x02);
 
         offs += 0x04;
         switch (type) {
@@ -116,7 +116,7 @@ function readINF1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
     bmd.inf1 = { sceneGraph: node };
 }
 
-function getComponentSize(dataType:GX.CompType) {
+function getComponentSize(dataType: GX.CompType) {
     switch (dataType) {
     case GX.CompType.U8:
     case GX.CompType.S8:
@@ -130,20 +130,20 @@ function getComponentSize(dataType:GX.CompType) {
     }
 }
 
-function getNumComponents(vtxAttrib:GX.VertexAttribute, componentCount:GX.CompCnt) {
+function getNumComponents(vtxAttrib: GX.VertexAttribute, componentCount: GX.CompCnt) {
     switch (vtxAttrib) {
     case GX.VertexAttribute.POS:
-        if (componentCount == GX.CompCnt.POS_XY)
+        if (componentCount === GX.CompCnt.POS_XY)
             return 2;
-        else if (componentCount == GX.CompCnt.POS_XYZ)
+        else if (componentCount === GX.CompCnt.POS_XYZ)
             return 3;
     case GX.VertexAttribute.NRM:
         return 3;
     case GX.VertexAttribute.CLR0:
     case GX.VertexAttribute.CLR1:
-        if (componentCount == GX.CompCnt.CLR_RGB)
+        if (componentCount === GX.CompCnt.CLR_RGB)
             return 3;
-        else if (componentCount == GX.CompCnt.CLR_RGBA)
+        else if (componentCount === GX.CompCnt.CLR_RGBA)
             return 4;
     case GX.VertexAttribute.TEX0:
     case GX.VertexAttribute.TEX1:
@@ -153,9 +153,9 @@ function getNumComponents(vtxAttrib:GX.VertexAttribute, componentCount:GX.CompCn
     case GX.VertexAttribute.TEX5:
     case GX.VertexAttribute.TEX6:
     case GX.VertexAttribute.TEX7:
-        if (componentCount == GX.CompCnt.TEX_S)
+        if (componentCount === GX.CompCnt.TEX_S)
             return 1;
-        else if (componentCount == GX.CompCnt.TEX_ST)
+        else if (componentCount === GX.CompCnt.TEX_ST)
             return 2;
     default:
         throw new Error(`Unknown vertex attribute ${vtxAttrib}`);
@@ -163,20 +163,20 @@ function getNumComponents(vtxAttrib:GX.VertexAttribute, componentCount:GX.CompCn
 }
 
 export interface VertexArray {
-    vtxAttrib:GX.VertexAttribute;
-    compType:GX.CompType;
-    compCount:number;
-    compSize:number;
-    dataOffs:number;
-    dataSize:number;
+    vtxAttrib: GX.VertexAttribute;
+    compType: GX.CompType;
+    compCount: number;
+    compSize: number;
+    dataOffs: number;
+    dataSize: number;
 }
 
 export interface VTX1 {
-    vertexArrays:Map<GX.VertexAttribute, VertexArray>;
-    buffer:ArrayBuffer;
+    vertexArrays: Map<GX.VertexAttribute, VertexArray>;
+    buffer: ArrayBuffer;
 }
 
-function readVTX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize:number) {
+function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
     const view = new DataView(buffer, chunkStart, chunkSize);
     const formatOffs = view.getUint32(0x08);
     const dataOffsLookupTable = 0x0C;
@@ -187,13 +187,13 @@ function readVTX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
     while (true) {
         // Parse out the vertex formats.
         const formatIdx = i++;
-        const vtxAttrib:GX.VertexAttribute = view.getUint32(offs + 0x00);
+        const vtxAttrib: GX.VertexAttribute = view.getUint32(offs + 0x00);
         if (vtxAttrib === GX.VertexAttribute.NULL)
             break;
 
-        const compCnt:GX.CompCnt = view.getUint32(offs + 0x04);
-        const compType:GX.CompType = view.getUint32(offs + 0x08);
-        const decimalPoint:number = view.getUint8(offs + 0x0C);
+        const compCnt: GX.CompCnt = view.getUint32(offs + 0x04);
+        const compType: GX.CompType = view.getUint32(offs + 0x08);
+        const decimalPoint: number = view.getUint8(offs + 0x0C);
         offs += 0x10;
 
         // Each attrib in the VTX1 chunk also has a corresponding data chunk containing
@@ -202,11 +202,11 @@ function readVTX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
         // BMD doesn't tell us how big each data chunk is, but we need to know to figure
         // out how much data to upload. We assume the data offset lookup table is sorted
         // in order, and can figure it out by finding the next offset above us.
-        const dataOffsLookupTableEntry:number = dataOffsLookupTable + formatIdx*0x04;
-        const dataStart:number = view.getUint32(dataOffsLookupTableEntry);
-        const dataEnd:number = getDataEnd(dataOffsLookupTableEntry);
-        const dataOffs:number = offs + dataStart;
-        const dataSize:number = dataEnd - dataStart;
+        const dataOffsLookupTableEntry: number = dataOffsLookupTable + formatIdx*0x04;
+        const dataStart: number = view.getUint32(dataOffsLookupTableEntry);
+        const dataEnd: number = getDataEnd(dataOffsLookupTableEntry);
+        const dataOffs: number = offs + dataStart;
+        const dataSize: number = dataEnd - dataStart;
         const compCount = getNumComponents(vtxAttrib, compCnt);
         const compSize = getComponentSize(compType);
         const vertexArray = { vtxAttrib, compType, compCount, compSize, dataOffs, dataSize };
@@ -218,8 +218,8 @@ function readVTX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
     function getDataEnd(dataOffsLookupTableEntry) {
         let offs = dataOffsLookupTableEntry + 0x04;
         while (offs < dataOffsLookupTableEntry) {
-            let dataOffs = view.getUint32(offs);
-            if (dataOffs != 0)
+            const dataOffs = view.getUint32(offs);
+            if (dataOffs !== 0)
                 return dataOffs;
             offs += 0x04;
         }
@@ -230,35 +230,35 @@ function readVTX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
 
 export interface Shape {
     // The vertex data. Converted to a modern-esque buffer per-shape.
-    packedData:ArrayBuffer;
+    packedData: ArrayBuffer;
     // The size of an individual vertex.
-    packedVertexSize:number;
-    packedVertexAttributes:PackedVertexAttribute[];
+    packedVertexSize: number;
+    packedVertexAttributes: PackedVertexAttribute[];
     // The draw calls.
-    drawCalls:DrawCall[];
+    drawCalls: DrawCall[];
 }
 
 // Describes an individual vertex attribute in the packed data.
 export interface PackedVertexAttribute {
-    vtxAttrib:GX.VertexAttribute;
-    indexDataType:GX.CompType;
-    offset:number;
+    vtxAttrib: GX.VertexAttribute;
+    indexDataType: GX.CompType;
+    offset: number;
 }
 
 interface DrawCall {
-    primType:GX.PrimitiveType;
-    vertexCount:number;
+    primType: GX.PrimitiveType;
+    vertexCount: number;
     // The "index" of the vertex into the packedData.
-    first:number;
+    first: number;
     // For internal use while building.
-    srcOffs:number;
+    srcOffs: number;
 }
 
 export interface SHP1 {
-    shapes:Shape[];
+    shapes: Shape[];
 }
 
-function readIndex(view:DataView, offs:number, type:GX.CompType) {
+function readIndex(view: DataView, offs: number, type: GX.CompType) {
     switch (type) {
     case GX.CompType.U8:
     case GX.CompType.S8:
@@ -271,7 +271,7 @@ function readIndex(view:DataView, offs:number, type:GX.CompType) {
     }
 }
 
-function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize:number) {
+function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
     const view = new DataView(buffer, chunkStart, chunkSize);
     const shapeCount = view.getUint16(0x08);
     const shapeTableOffs = view.getUint32(0x0C);
@@ -293,7 +293,7 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
     // What we end up doing is similar to what Dolphin does with its vertex loader
     // JIT. We construct buffers for each of the components that are shape-specific.
 
-    const shapes:Shape[] = [];
+    const shapes: Shape[] = [];
     let shapeIdx = shapeTableOffs;
     for (let i = 0; i < shapeCount; i++) {
         const matrixType = view.getUint8(shapeIdx + 0x00);
@@ -303,15 +303,15 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
         const firstPacket = view.getUint16(shapeIdx + 0x08);
 
         // Go parse out what attributes are required for this shape.
-        const packedVertexAttributes:PackedVertexAttribute[] = [];
+        const packedVertexAttributes: PackedVertexAttribute[] = [];
         let attribIdx = attribTableOffs + attribOffs;
         let vertexIndexSize = 0;
         let packedVertexSize = 0;
         while (true) {
-            const vtxAttrib:GX.VertexAttribute = view.getUint32(attribIdx + 0x00);
-            if (vtxAttrib == GX.VertexAttribute.NULL)
+            const vtxAttrib: GX.VertexAttribute = view.getUint32(attribIdx + 0x00);
+            if (vtxAttrib === GX.VertexAttribute.NULL)
                 break;
-            const indexDataType:GX.CompType = view.getUint32(attribIdx + 0x04);
+            const indexDataType: GX.CompType = view.getUint32(attribIdx + 0x04);
             const indexDataSize = getComponentSize(indexDataType);
             const offset = packedVertexSize;
             packedVertexAttributes.push({ vtxAttrib, indexDataType, offset });
@@ -319,13 +319,13 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
 
             vertexIndexSize += indexDataSize;
 
-            const vertexArray:VertexArray = bmd.vtx1.vertexArrays.get(vtxAttrib);
+            const vertexArray: VertexArray = bmd.vtx1.vertexArrays.get(vtxAttrib);
             packedVertexSize += vertexArray.compSize * vertexArray.compCount;
         }
 
         // Now parse out the packets.
         let packetIdx = packetTableOffs + (firstPacket * 0x08);
-        const drawCalls:DrawCall[] = [];
+        const drawCalls: DrawCall[] = [];
 
         let totalVertexCount = 0;
         for (let j = 0; j < packetCount; j++) {
@@ -339,8 +339,8 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
             while (true) {
                 if (drawCallIdx > drawCallEnd)
                     break;
-                const primType:GX.PrimitiveType = view.getUint8(drawCallIdx);
-                if (primType == 0)
+                const primType: GX.PrimitiveType = view.getUint8(drawCallIdx);
+                if (primType === 0)
                     break;
                 const vertexCount = view.getUint16(drawCallIdx + 0x01);
                 drawCallIdx += 0x03;
@@ -368,13 +368,13 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
                     const indexDataSize = getComponentSize(attrib.indexDataType);
                     drawCallIdx += indexDataSize;
 
-                    const vertexArray:VertexArray = bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
+                    const vertexArray: VertexArray = bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
                     const attribDataSize = vertexArray.compSize * vertexArray.compCount;
                     const srcOffs = vertexArray.dataOffs + (attribDataSize * index);
                     memcpy(packedData, packedDataOffs, bmd.vtx1.buffer, srcOffs, attribDataSize);
                     packedDataOffs += attribDataSize;
                 }
-                assert((packedDataOffs - packedDataOffs_) == packedVertexSize);
+                assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
             }
         }
 
@@ -388,7 +388,7 @@ function readSHP1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
     bmd.shp1 = shp1;
 }
 
-function readMAT3Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize:number) {
+function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
     const view = new DataView(buffer, chunkStart, chunkSize);
     const materialCount = view.getUint16(0x08);
 
@@ -403,7 +403,7 @@ function readMAT3Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
     const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
 
     const materialEntries = [];
-    let materialEntryIdx = view.getUint16(0x0C);
+    const materialEntryIdx = view.getUint16(0x0C);
     for (let i = 0; i < maxIndex + 1; i++) {
         const flags = view.getUint8(materialEntryIdx + 0x00);
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
@@ -428,33 +428,33 @@ function readMAT3Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize
 }
 
 interface TEX1_Texture {
-    name:string;
-    format:GX.TexFormat;
-    width:number;
-    height:number;
-    wrapS:boolean;
-    wrapT:boolean;
-    minFilter:GX.TexFilter;
-    magFilter:GX.TexFilter;
-    decodedTexture:Texture.DecodedTexture;
+    name: string;
+    format: GX.TexFormat;
+    width: number;
+    height: number;
+    wrapS: boolean;
+    wrapT: boolean;
+    minFilter: GX.TexFilter;
+    magFilter: GX.TexFilter;
+    decodedTexture: Texture.DecodedTexture;
 }
 
 export interface TEX1 {
-    textures:TEX1_Texture[];
+    textures: TEX1_Texture[];
 }
 
-export function readTEX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, chunkSize:number) {
+export function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
     const view = new DataView(buffer, chunkStart, chunkSize);
     const textureCount = view.getUint16(0x08);
     const textureHeaderOffs = view.getUint32(0x0C);
     const nameTableOffs = view.getUint32(0x10);
     const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
 
-    const textures:TEX1_Texture[] = [];
+    const textures: TEX1_Texture[] = [];
     let textureIdx = textureHeaderOffs;
     for (let i = 0; i < textureCount; i++) {
         const name = nameTable[i];
-        const format:GX.TexFormat = view.getUint8(textureIdx + 0x00);
+        const format: GX.TexFormat = view.getUint8(textureIdx + 0x00);
         const width = view.getUint16(textureIdx + 0x02);
         const height = view.getUint16(textureIdx + 0x04);
         const wrapS = !!view.getUint8(textureIdx + 0x06);
@@ -470,7 +470,7 @@ export function readTEX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, ch
         // TODO(jstpierre): WEBGL_compressed_texture_s3tc
         const supportsS3TC = false;
         const data = buffer.slice(textureIdx + dataOffs);
-        const decodedTexture:Texture.DecodedTexture = Texture.decodeTexture({ format, width, height, data }, false);
+        const decodedTexture: Texture.DecodedTexture = Texture.decodeTexture({ format, width, height, data }, false);
 
         textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, decodedTexture });
         textureIdx += 0x20;
@@ -480,13 +480,13 @@ export function readTEX1Chunk(bmd:BMD, buffer:ArrayBuffer, chunkStart:number, ch
 }
 
 export class BMD {
-    inf1:INF1;
-    vtx1:VTX1;
-    shp1:SHP1;
-    tex1:TEX1;
+    public inf1: INF1;
+    public vtx1: VTX1;
+    public shp1: SHP1;
+    public tex1: TEX1;
 }
 
-export function parse(buffer:ArrayBuffer) {
+export function parse(buffer: ArrayBuffer) {
     const bmd = new BMD();
 
     const view = new DataView(buffer);
@@ -498,14 +498,14 @@ export function parse(buffer:ArrayBuffer) {
     let offs = 0x20;
 
     const parseFuncs = {
-        'INF1': readINF1Chunk,
-        'VTX1': readVTX1Chunk,
-        'EVP1': null,
-        'DRW1': null,
-        'JNT1': null,
-        'SHP1': readSHP1Chunk,
-        'MAT3': readMAT3Chunk,
-        'TEX1': readTEX1Chunk,
+        INF1: readINF1Chunk,
+        VTX1: readVTX1Chunk,
+        EVP1: null,
+        DRW1: null,
+        JNT1: null,
+        SHP1: readSHP1Chunk,
+        MAT3: readMAT3Chunk,
+        TEX1: readTEX1Chunk,
     };
 
     for (let i = 0; i < numChunks; i++) {
@@ -519,7 +519,7 @@ export function parse(buffer:ArrayBuffer) {
 
         if (parseFunc !== null)
             parseFunc(bmd, buffer, chunkStart, chunkSize);
-        
+
         offs += chunkSize;
     }
 

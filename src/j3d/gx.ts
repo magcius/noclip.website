@@ -47,7 +47,7 @@ export enum CompType {
     S16 = 3,
     F32 = 4,
     RGBA8 = 5,
-};
+}
 
 export enum CompareType {
     NEVER = 0,
@@ -58,21 +58,21 @@ export enum CompareType {
     NEQUAL = 5,
     GEQUAL = 6,
     ALWAYS = 7,
-};
+}
 
 export enum AlphaOp {
     AND = 0,
     OR = 1,
     XOR = 2,
     XNOR = 3,
-};
+}
 
 export enum CullMode {
     NONE = 0, /*!< Do not cull any primitives. */
     FRONT = 1, /*!< Cull front-facing primitives. */
     BACK = 2, /*!< Cull back-facing primitives. */
     ALL = 3, /*!< Cull all primitives. */
-};
+}
 
 export enum BlendMode {
     ZERO = 0, /*!< 0.0 */
@@ -83,7 +83,7 @@ export enum BlendMode {
     INVSRCALPHA = 5, /*!< 1.0 - (source alpha) */
     DSTALPHA = 6, /*!< framebuffer alpha */
     INVDSTALPHA = 7, /*!< 1.0 - (FB alpha) */
-};
+}
 
 export enum TevOp {
     ADD = 0,
@@ -96,20 +96,20 @@ export enum TevOp {
     COMP_BGR24_EQ = 13,
     COMP_RGB8_GT = 14,
     COMP_RGB8_EQ = 15,
-};
+}
 
 export enum TevBias {
     ZERO = 0,
     ADDHALF = 1,
     SUBHALF = 2,
-};
+}
 
 export enum TevScale {
     SCALE_1 = 0,
     SCALE_2 = 1,
     SCALE_4 = 2,
     DIVIDE_2 = 3,
-};
+}
 
 export enum CombineColorInput {
     CPREV = 0, /*!< Use the color value from previous TEV stage */
@@ -128,7 +128,7 @@ export enum CombineColorInput {
     HALF = 13,
     KONST = 14,
     ZERO = 15, /*!< Use to pass zero value */
-};
+}
 
 export enum CombineAlphaInput {
     APREV = 0, /*!< Use the alpha value from previous TEV stage */
@@ -139,7 +139,7 @@ export enum CombineAlphaInput {
     RASA = 5, /*!< Use the alpha value from rasterizer */
     KONST = 6,
     ZERO = 7, /*!< Use to pass zero value */
-};
+}
 
 export enum KonstColorSel {
     KCSEL_1 = 0x00, /*!< constant 1.0 */
@@ -170,7 +170,7 @@ export enum KonstColorSel {
     KCSEL_K1_A = 0x1D, /*!< K1[AAA] register */
     KCSEL_K2_A = 0x1E, /*!< K2[AAA] register */
     KCSEL_K3_A = 0x1F, /*!< K3[AAA] register */
-};
+}
 
 export enum KonstAlphaSel {
     KASEL_1 = 0x00, /*!< constant 1.0 */
@@ -197,7 +197,7 @@ export enum KonstAlphaSel {
     KASEL_K1_A = 0x1D, /*!< K1[A] register */
     KASEL_K2_A = 0x1E, /*!< K2[A] register */
     KASEL_K3_A = 0x1F, /*!< K3[A] register */
-};
+}
 
 export enum TexFormat {
     I4 = 0x0,
@@ -211,13 +211,13 @@ export enum TexFormat {
     CI8 = 0x9,
     CI14 = 0xa,
     CMPR = 0xE, /*!< Compressed */
-};
+}
 
 export enum TexPalette {
     IA8 = 0x00,
     RGB565 = 0x01,
     RGB5A3 = 0x02,
-};
+}
 
 export enum TexFilter {
     NEAR = 0, /*!< Point sampling, no mipmap */
@@ -226,18 +226,18 @@ export enum TexFilter {
     LIN_MIP_NEAR = 3, /*!< Bilinear filtering, discrete mipmap */
     NEAR_MIP_LIN = 4, /*!< Point sampling, linear mipmap */
     LIN_MIP_LIN = 5, /*!< Trilinear filtering */
-};
+}
 
 export enum WrapMode {
     CLAMP = 0,
     REPEAT = 1,
     MIRROR = 2,
-};
+}
 
 export enum ColorSrc {
     REG = 0,
     VTX = 1,
-};
+}
 
 export enum TexGenSrc {
     POS = 0,
@@ -252,7 +252,7 @@ export enum TexGenSrc {
     TEX5 = 9,
     TEX6 = 10,
     TEX7 = 11,
-};
+}
 
 export enum TexGenType {
     MTX3x4 = 0,
@@ -266,7 +266,7 @@ export enum TexGenType {
     BUMP6 = 8,
     BUMP7 = 9,
     SRTG = 10,
-};
+}
 
 export enum TexGenMatrix {
     IDENTITY = 60,
@@ -280,4 +280,4 @@ export enum TexGenMatrix {
     TEXMTX7 = 51,
     TEXMTX8 = 54,
     TEXMTX9 = 57,
-};
+}

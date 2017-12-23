@@ -5,7 +5,8 @@ import * as LZ77 from 'lz77';
 import * as Viewer from 'viewer';
 import * as NITRO_BMD from './nitro_bmd';
 import * as NITRO_GX from './nitro_gx';
-import { fetch } from 'util'; 
+
+import { fetch } from 'util';
 
 const DL_VERT_SHADER_SOURCE = `
     precision mediump float;
@@ -18,7 +19,7 @@ const DL_VERT_SHADER_SOURCE = `
     attribute vec4 a_color;
     varying vec4 v_color;
     varying vec2 v_uv;
-    
+
     void main() {
         gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);
         v_color = a_color;
@@ -31,7 +32,7 @@ const DL_FRAG_SHADER_SOURCE = `
     varying vec2 v_uv;
     varying vec4 v_color;
     uniform sampler2D u_texture;
-    
+
     void main() {
         gl_FragColor = texture2D(u_texture, v_uv);
         gl_FragColor *= v_color;
@@ -41,16 +42,16 @@ const DL_FRAG_SHADER_SOURCE = `
 `;
 
 class NITRO_Program extends Viewer.Program {
-    localMatrixLocation:WebGLUniformLocation;
-    texCoordMatLocation:WebGLUniformLocation;
-    positionLocation:number;
-    colorLocation:number;
-    uvLocation:number;
+    public localMatrixLocation: WebGLUniformLocation;
+    public texCoordMatLocation: WebGLUniformLocation;
+    public positionLocation: number;
+    public colorLocation: number;
+    public uvLocation: number;
 
-    vert = DL_VERT_SHADER_SOURCE;
-    frag = DL_FRAG_SHADER_SOURCE;
+    public vert = DL_VERT_SHADER_SOURCE;
+    public frag = DL_FRAG_SHADER_SOURCE;
 
-    bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
+    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.localMatrixLocation = gl.getUniformLocation(prog, "u_localMatrix");
@@ -68,9 +69,9 @@ const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 enum RenderPass {
     OPAQUE = 0x01,
     TRANSLUCENT = 0x02,
-};
+}
 
-function textureToCanvas(bmdTex:NITRO_BMD.Texture) {
+function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
     const canvas = document.createElement("canvas");
     canvas.width = bmdTex.width;
     canvas.height = bmdTex.height;
@@ -87,13 +88,13 @@ function textureToCanvas(bmdTex:NITRO_BMD.Texture) {
 }
 
 class Scene implements Viewer.Scene {
-    cameraController = Viewer.FPSCameraController;
-    textures:HTMLCanvasElement[];
-    modelFuncs:Function[];
-    program:NITRO_Program;
-    bmd:NITRO_BMD.BMD;
+    public cameraController = Viewer.FPSCameraController;
+    public textures: HTMLCanvasElement[];
+    public modelFuncs: Array<(pass: RenderPass) => void>;
+    public program: NITRO_Program;
+    public bmd: NITRO_BMD.BMD;
 
-    constructor(gl:WebGLRenderingContext, bmd:NITRO_BMD.BMD) {
+    constructor(gl: WebGLRenderingContext, bmd: NITRO_BMD.BMD) {
         this.program = new NITRO_Program();
         this.bmd = bmd;
 
@@ -103,7 +104,7 @@ class Scene implements Viewer.Scene {
         this.modelFuncs = bmd.models.map((bmdm) => this.translateModel(gl, bmdm));
     }
 
-    translatePacket(gl:WebGLRenderingContext, packet:NITRO_GX.Packet) {
+    public translatePacket(gl: WebGLRenderingContext, packet: NITRO_GX.Packet) {
         const vertBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, packet.vertData, gl.STATIC_DRAW);
@@ -128,14 +129,14 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    translatePoly(gl:WebGLRenderingContext, poly:NITRO_BMD.Poly) {
+    public translatePoly(gl: WebGLRenderingContext, poly: NITRO_BMD.Poly) {
         const funcs = poly.packets.map((packet) => this.translatePacket(gl, packet));
         return () => {
             funcs.forEach((f) => { f(); });
         };
     }
 
-    translateMaterial(gl:WebGLRenderingContext, material:any) {
+    public translateMaterial(gl: WebGLRenderingContext, material: any) {
         const texture = material.texture;
         let texId;
 
@@ -143,7 +144,7 @@ class Scene implements Viewer.Scene {
             if (repeat)
                 return flip ? gl.MIRRORED_REPEAT : gl.REPEAT;
             else
-                return gl.CLAMP_TO_EDGE; 
+                return gl.CLAMP_TO_EDGE;
         }
 
         if (texture !== null) {
@@ -174,20 +175,20 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    translateBatch(gl:WebGLRenderingContext, batch:NITRO_BMD.Batch) {
+    public translateBatch(gl: WebGLRenderingContext, batch: NITRO_BMD.Batch) {
         const batchPass = batch.material.isTranslucent ? RenderPass.TRANSLUCENT : RenderPass.OPAQUE;
 
         const applyMaterial = this.translateMaterial(gl, batch.material);
         const renderPoly = this.translatePoly(gl, batch.poly);
-        return (pass:RenderPass) => {
-            if (pass != batchPass)
+        return (pass: RenderPass) => {
+            if (pass !== batchPass)
                 return;
             applyMaterial();
             renderPoly();
         };
     }
 
-    translateModel(gl:WebGLRenderingContext, bmdm:NITRO_BMD.Model) {
+    public translateModel(gl: WebGLRenderingContext, bmdm: NITRO_BMD.Model) {
         const localMatrix = mat4.create();
         const bmd = this.bmd;
 
@@ -197,19 +198,19 @@ class Scene implements Viewer.Scene {
 
         mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
         const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
-        return (pass:RenderPass) => {
+        return (pass: RenderPass) => {
             gl.uniformMatrix4fv(this.program.localMatrixLocation, false, localMatrix);
             batches.forEach((f) => { f(pass); });
         };
     }
 
-    renderModels(pass:RenderPass) {
+    public renderModels(pass: RenderPass) {
         return this.modelFuncs.forEach((func) => {
             func(pass);
         });
     }
 
-    render(state:Viewer.RenderState) {
+    public render(state: Viewer.RenderState) {
         const gl = state.viewport.gl;
 
         state.useProgram(this.program);
@@ -226,18 +227,18 @@ class Scene implements Viewer.Scene {
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
-    name:string;
-    path:string;
+    public name: string;
+    public path: string;
 
-    constructor(name:string, path:string) {
+    constructor(name: string, path: string) {
         this.name = name;
         this.path = path;
     }
 
-    createScene(gl:WebGLRenderingContext):PromiseLike<Scene> {
-        return fetch(this.path).then((result:ArrayBuffer) => {
-            let decompressed = LZ77.decompress(result);
-            let bmd = NITRO_BMD.parse(decompressed);
+    public createScene(gl: WebGLRenderingContext): PromiseLike<Scene> {
+        return fetch(this.path).then((result: ArrayBuffer) => {
+            const decompressed = LZ77.decompress(result);
+            const bmd = NITRO_BMD.parse(decompressed);
             return new Scene(gl, bmd);
         });
     }

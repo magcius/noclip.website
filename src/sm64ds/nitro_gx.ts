@@ -1,6 +1,8 @@
 
 // Read DS Geometry Engine commands.
 
+// tslint:disable:variable-name
+
 enum CmdType {
     MTX_RESTORE = 0x14,
 
@@ -32,34 +34,34 @@ const VERTEX_SIZE = 9;
 const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
 export function rgb5(pixel) {
-    let r, g, b;
+    let r; let g; let b;
     r = (pixel & 0x7c00) >> 10;
-    r = (r << (8-5)) | (r >> (10-8));
+    r = (r << (8 - 5)) | (r >> (10 - 8));
 
     g = (pixel & 0x3e0) >> 5;
-    g = (g << (8-5)) | (g >> (10-8));
+    g = (g << (8 - 5)) | (g >> (10 - 8));
 
     b = pixel & 0x1f;
-    b = (b << (8-5)) | (b >> (10-8));
+    b = (b << (8 - 5)) | (b >> (10 - 8));
 
     return { r, g, b };
 }
 
-function cmd_MTX_RESTORE(ctx:ContextInternal) {
+function cmd_MTX_RESTORE(ctx: ContextInternal) {
     // XXX: We don't implement the matrix stack yet.
     ctx.readParam();
 }
 
-function cmd_COLOR(ctx:ContextInternal) {
+function cmd_COLOR(ctx: ContextInternal) {
     const param = ctx.readParam();
     ctx.s_color = rgb5(param);
 }
 
-function cmd_NORMAL(ctx:ContextInternal) {
+function cmd_NORMAL(ctx: ContextInternal) {
     const param = ctx.readParam();
 }
 
-function cmd_TEXCOORD(ctx:ContextInternal) {
+function cmd_TEXCOORD(ctx: ContextInternal) {
     const param = ctx.readParam();
     let s = param & 0xFFFF;
     let t = param >> 16;
@@ -75,7 +77,7 @@ function cmd_TEXCOORD(ctx:ContextInternal) {
     ctx.s_texCoord = { s, t };
 }
 
-function cmd_VTX_16(ctx:ContextInternal) {
+function cmd_VTX_16(ctx: ContextInternal) {
     const param1 = ctx.readParam();
     let x = (param1 & 0xFFFF);
     let y = (param1 >> 16) & 0xFFFF;
@@ -95,7 +97,7 @@ function cmd_VTX_16(ctx:ContextInternal) {
     ctx.vtx(x, y, z);
 }
 
-function cmd_VTX_10(ctx:ContextInternal) {
+function cmd_VTX_10(ctx: ContextInternal) {
     const param = ctx.readParam();
     let x = (param & 0x03FF);
     let y = (param >> 10) & 0x03FF;
@@ -114,7 +116,7 @@ function cmd_VTX_10(ctx:ContextInternal) {
     ctx.vtx(x, y, z);
 }
 
-function cmd_VTX_XY(ctx:ContextInternal) {
+function cmd_VTX_XY(ctx: ContextInternal) {
     const param = ctx.readParam();
     let x = (param & 0xFFFF);
     let y = (param >> 16) & 0xFFFF;
@@ -130,7 +132,7 @@ function cmd_VTX_XY(ctx:ContextInternal) {
     ctx.vtx(x, y, ctx.s_vtx.z);
 }
 
-function cmd_VTX_XZ(ctx:ContextInternal) {
+function cmd_VTX_XZ(ctx: ContextInternal) {
     const param = ctx.readParam();
     let x = (param & 0xFFFF);
     let z = (param >> 16) & 0xFFFF;
@@ -146,7 +148,7 @@ function cmd_VTX_XZ(ctx:ContextInternal) {
     ctx.vtx(x, ctx.s_vtx.y, z);
 }
 
-function cmd_VTX_YZ(ctx:ContextInternal) {
+function cmd_VTX_YZ(ctx: ContextInternal) {
     const param = ctx.readParam();
     let y = (param & 0xFFFF);
     let z = (param >> 16) & 0xFFFF;
@@ -162,7 +164,7 @@ function cmd_VTX_YZ(ctx:ContextInternal) {
     ctx.vtx(ctx.s_vtx.x, y, z);
 }
 
-function cmd_VTX_DIFF(ctx:ContextInternal) {
+function cmd_VTX_DIFF(ctx: ContextInternal) {
     const param = ctx.readParam();
 
     let x = (param & 0x03FF);
@@ -187,12 +189,12 @@ function cmd_VTX_DIFF(ctx:ContextInternal) {
     ctx.vtx(x, y, z);
 }
 
-function cmd_DIF_AMB(ctx:ContextInternal) {
+function cmd_DIF_AMB(ctx: ContextInternal) {
     const param = ctx.readParam();
     // TODO: lighting
 }
 
-function cmd_BEGIN_VTXS(ctx:ContextInternal) {
+function cmd_BEGIN_VTXS(ctx: ContextInternal) {
     const param = ctx.readParam();
     const polyType = param & 0x03;
     ctx.s_polyType = polyType;
@@ -200,16 +202,16 @@ function cmd_BEGIN_VTXS(ctx:ContextInternal) {
 }
 
 export class Packet {
-    vertData: Float32Array;
-    idxData: Uint16Array;
-    polyType: PolyType;
-};
+    public vertData: Float32Array;
+    public idxData: Uint16Array;
+    public polyType: PolyType;
+}
 
-function cmd_END_VTXS(ctx:ContextInternal) {
+function cmd_END_VTXS(ctx: ContextInternal) {
     const nVerts = ctx.vtxs.length;
     const vtxBuffer = new Float32Array(nVerts * VERTEX_SIZE);
 
-    for (var i = 0; i < nVerts; i++) {
+    for (let i = 0; i < nVerts; i++) {
         const v = ctx.vtxs[i];
         const vtxArray = new Float32Array(vtxBuffer.buffer, i * VERTEX_BYTES, VERTEX_SIZE);
 
@@ -236,37 +238,37 @@ function cmd_END_VTXS(ctx:ContextInternal) {
         idxBuffer = new Uint16Array(nVerts / 4 * 6);
         let dst = 0;
         for (let i = 0; i < nVerts; i += 4) {
-            idxBuffer[dst++] = i+0;
-            idxBuffer[dst++] = i+1;
-            idxBuffer[dst++] = i+2;
-            idxBuffer[dst++] = i+2;
-            idxBuffer[dst++] = i+3;
-            idxBuffer[dst++] = i+0;
+            idxBuffer[dst++] = i + 0;
+            idxBuffer[dst++] = i + 1;
+            idxBuffer[dst++] = i + 2;
+            idxBuffer[dst++] = i + 2;
+            idxBuffer[dst++] = i + 3;
+            idxBuffer[dst++] = i + 0;
         }
     } else if (ctx.s_polyType === PolyType.TRIANGLE_STRIP) {
         idxBuffer = new Uint16Array((nVerts - 2) * 3);
         let dst = 0;
         for (let i = 0; i < nVerts - 2; i++) {
             if (i % 2 === 0) {
-                idxBuffer[dst++] = i+0;
-                idxBuffer[dst++] = i+1;
-                idxBuffer[dst++] = i+2;
+                idxBuffer[dst++] = i + 0;
+                idxBuffer[dst++] = i + 1;
+                idxBuffer[dst++] = i + 2;
             } else {
-                idxBuffer[dst++] = i+1;
-                idxBuffer[dst++] = i+0;
-                idxBuffer[dst++] = i+2;
+                idxBuffer[dst++] = i + 1;
+                idxBuffer[dst++] = i + 0;
+                idxBuffer[dst++] = i + 2;
             }
         }
     } else if (ctx.s_polyType === PolyType.QUAD_STRIP) {
         idxBuffer = new Uint16Array(((nVerts - 2) / 2) * 6);
         let dst = 0;
         for (let i = 0; i < nVerts; i += 2) {
-            idxBuffer[dst++] = i+0;
-            idxBuffer[dst++] = i+1;
-            idxBuffer[dst++] = i+3;
-            idxBuffer[dst++] = i+3;
-            idxBuffer[dst++] = i+2;
-            idxBuffer[dst++] = i+0;
+            idxBuffer[dst++] = i + 0;
+            idxBuffer[dst++] = i + 1;
+            idxBuffer[dst++] = i + 3;
+            idxBuffer[dst++] = i + 3;
+            idxBuffer[dst++] = i + 2;
+            idxBuffer[dst++] = i + 0;
         }
     }
 
@@ -300,44 +302,49 @@ function runCmd(ctx, cmd) {
 }
 
 class Color {
-    r: number; g: number; b: number;
-};
+    public r: number;
+    public g: number;
+    public b: number;
+}
 
 class TexCoord {
-    s: number; t: number;
-};
+    public s: number;
+    public t: number;
+}
 
 class Point {
-    x: number; y: number; z: number;
-};
+    public x: number;
+    public y: number;
+    public z: number;
+}
 
 class Vertex {
-    pos: Point;
-    nrm: Point;
-    color: Color;
-    uv: TexCoord;
-};
+    public pos: Point;
+    public nrm: Point;
+    public color: Color;
+    public uv: TexCoord;
+}
 
 export class Context {
-    color: Color;
-    alpha: number;
-};
+    public color: Color;
+    public alpha: number;
+}
 
 class ContextInternal {
-    view: DataView;
-    offs: number = 0;
+    public view: DataView;
+    public offs: number = 0;
 
-    alpha: number;
-    s_color: Color;
-    s_texCoord: TexCoord = new TexCoord();
-    s_vtx: Point;
-    s_nrm: Point;
-    s_polyType: PolyType;
+    public alpha: number;
+    public s_color: Color;
+    public s_texCoord: TexCoord = new TexCoord();
+    public s_vtx: Point;
+    public s_nrm: Point;
+    public s_polyType: PolyType;
 
-    vtxs: Vertex[];
-    packets: Packet[];
+    public vtxs: Vertex[];
+    public packets: Packet[];
 
-    constructor(buffer:ArrayBuffer, baseCtx:Context) {
+    constructor(buffer: ArrayBuffer, baseCtx: Context) {
         this.alpha = baseCtx.alpha;
         this.s_color = baseCtx.color;
         this.view = new DataView(buffer);
@@ -345,17 +352,17 @@ class ContextInternal {
         this.packets = [];
     }
 
-    readParam():number {
+    public readParam(): number {
         return this.view.getUint32((this.offs += 4) - 4, true);
     }
-    vtx(x, y, z) {
+    public vtx(x, y, z) {
         this.s_vtx = { x, y, z };
         this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord });
     }
-};
+}
 
-export function readCmds(buffer:ArrayBuffer, baseCtx:Context) {
-    const ctx:ContextInternal = new ContextInternal(buffer, baseCtx);
+export function readCmds(buffer: ArrayBuffer, baseCtx: Context) {
+    const ctx = new ContextInternal(buffer, baseCtx);
 
     while (ctx.offs < buffer.byteLength) {
         // Commands are packed 4 at a time...
