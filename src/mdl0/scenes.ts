@@ -1,9 +1,9 @@
 
-import { SceneDesc } from 'render';
 import { SceneGroup } from '../viewer';
+import { SceneDesc } from './render';
 
 const name = "Sonic Mania";
-const sceneDescs:SceneDesc[] = [
+const sceneDescs: SceneDesc[] = [
     'Meshes/Continue/Count0.bin',
     'Meshes/Continue/Count1.bin',
     'Meshes/Continue/Count2.bin',
@@ -53,10 +53,10 @@ const sceneDescs:SceneDesc[] = [
     'Meshes/SSZ/EggTower.bin',
     'Meshes/TMZ/MonarchBG.bin',
     'Meshes/TMZ/OrbNet.bin',
-].map((filename):SceneDesc => {
+].map((filename): SceneDesc => {
     const path = `data/mdl0/${filename}`;
     const name = filename;
     return new SceneDesc(name, path);
 });
 
-export const sceneGroup:SceneGroup = { name, sceneDescs };
+export const sceneGroup: SceneGroup = { name, sceneDescs };

@@ -14,11 +14,11 @@
 //     If flag is 0:
 //       Literal: copy one byte from src to dest.
 
-function assert(b:boolean) {
+function assert(b: boolean) {
     if (!b) throw new Error("Assert fail");
 }
 
-function readString(buffer:ArrayBuffer, offs:number, length:number):string {
+function readString(buffer: ArrayBuffer, offs: number, length: number): string {
     const buf = new Uint8Array(buffer, offs, length);
     let S = '';
     for (let i = 0; i < length; i++) {
@@ -29,15 +29,15 @@ function readString(buffer:ArrayBuffer, offs:number, length:number):string {
     return S;
 }
 
-export function decompress(srcBuffer:ArrayBuffer) {
+export function decompress(srcBuffer: ArrayBuffer) {
     const srcView = new DataView(srcBuffer);
-    assert(readString(srcBuffer, 0x00, 0x05) == 'LZ77\x10');
+    assert(readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
 
     let uncompressedSize = srcView.getUint32(0x04, true) >> 8;
     const dstBuffer = new Uint8Array(uncompressedSize);
 
     let srcOffs = 0x08;
-    let dstOffs = 0x00; 
+    let dstOffs = 0x00;
 
     while (true) {
         const commandByte = srcView.getUint8(srcOffs++);

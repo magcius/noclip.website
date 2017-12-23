@@ -2,15 +2,16 @@
 import { mat4 } from 'gl-matrix';
 
 import * as F3DEX2 from './f3dex2';
+import * as Render from './render';
 
 // Loads the ZELVIEW0 format.
 
 function read0String(buffer, offs, length) {
     const buf = new Uint8Array(buffer, offs, length);
     const L = new Array(length);
-    for (var i = 0; i < length; i++) {
-        var elem = buf[i];
-        if (elem == 0)
+    for (let i = 0; i < length; i++) {
+        const elem = buf[i];
+        if (elem === 0)
             break;
         L.push(String.fromCharCode(elem));
     }
@@ -18,72 +19,73 @@ function read0String(buffer, offs, length) {
 }
 
 class VFSEntry {
-    filename:string;
-    pStart:number; pEnd:number;
-    vStart:number; vEnd:number;
+    public filename: string;
+    public pStart: number;
+    public pEnd: number;
+    public vStart: number;
+    public vEnd: number;
 }
 
 export class ZELVIEW0 {
-    entries:VFSEntry[];
-    sceneFile:string;
-    view:DataView;
+    public entries: VFSEntry[];
+    public sceneFile: string;
+    public view: DataView;
 
-    lookupFile(pStart) {
-        for (var i = 0; i < this.entries.length; i++) {
-            var entry = this.entries[i];
+    public lookupFile(pStart): VFSEntry {
+        for (const entry of this.entries)
             if (entry.pStart === pStart)
                 return entry;
-        }
+        return null;
     }
-    lookupAddress(banks, addr) {
-        var bankIdx = addr >>> 24;
-        var offs = addr & 0x00FFFFFF;
-        function findBank(bankIdx) {
+    public lookupAddress(banks, addr): number {
+        const bankIdx = addr >>> 24;
+        const offs = addr & 0x00FFFFFF;
+        function findBank() {
             switch (bankIdx) {
                 case 0x02: return banks.scene;
                 case 0x03: return banks.room;
                 default: return null;
             }
         }
-        var bank = findBank(bankIdx);
+        const bank = findBank();
         if (bank === null)
             return null;
-        var absOffs = bank.vStart + offs;
+        const absOffs = bank.vStart + offs;
         if (absOffs > bank.vEnd)
             return null;
         return absOffs;
     }
-    loadAddress(banks, addr) {
-        var offs = this.lookupAddress(banks, addr);
+    public loadAddress(banks, addr) {
+        const offs = this.lookupAddress(banks, addr);
         return this.view.getUint32(offs);
     }
-    loadScene(gl, scene):Headers {
+    public loadScene(gl, scene): Headers {
         return readScene(gl, this, scene);
     }
-    loadMainScene(gl) {
+    public loadMainScene(gl) {
         return this.loadScene(gl, this.sceneFile);
     }
 }
 
 class Mesh {
-    opaque:F3DEX2.DL[] = [];
-    transparent:F3DEX2.DL[] = [];
-    bg:Function;
-    textures:HTMLCanvasElement[];
+    public opaque: F3DEX2.DL[] = [];
+    public transparent: F3DEX2.DL[] = [];
+    public bg: Render.RenderFunc;
+    public textures: HTMLCanvasElement[];
 }
 
 export class Headers {
-    filename:string;
-    collision:any;
-    mesh:Mesh;
-    rooms:Headers[] = [];
+    public filename: string;
+    public collision: any;
+    public mesh: Mesh;
+    public rooms: Headers[] = [];
 }
 
-export function readZELVIEW0(buffer:ArrayBuffer):ZELVIEW0 {
+export function readZELVIEW0(buffer: ArrayBuffer): ZELVIEW0 {
     const view = new DataView(buffer);
 
     const MAGIC = "ZELVIEW0";
-    if (read0String(buffer, 0, MAGIC.length) != MAGIC)
+    if (read0String(buffer, 0, MAGIC.length) !== MAGIC)
         throw new Error("Invalid ZELVIEW0 file");
 
     let offs = 0x08;
@@ -92,8 +94,8 @@ export function readZELVIEW0(buffer:ArrayBuffer):ZELVIEW0 {
     const mainFile = view.getUint8(offs);
     offs += 0x04;
 
-    function readVFSEntry():VFSEntry {
-        const entry:VFSEntry = new VFSEntry();
+    function readVFSEntry(): VFSEntry {
+        const entry: VFSEntry = new VFSEntry();
         entry.filename = read0String(buffer, offs, 0x30);
         offs += 0x30;
         entry.pStart = view.getUint32(offs, true);
@@ -146,15 +148,15 @@ function readHeaders(gl, rom, offs, banks) {
     }
 
     function readCollision(collisionAddr) {
-        let offs = rom.lookupAddress(banks, collisionAddr);
+        const offs = rom.lookupAddress(banks, collisionAddr);
 
         function readVerts(N, addr) {
             let offs = rom.lookupAddress(banks, addr);
             const verts = new Uint16Array(N * 3);
             for (let i = 0; i < N; i++) {
-                verts[i*3+0] = rom.view.getInt16(offs + 0x00, false);
-                verts[i*3+1] = rom.view.getInt16(offs + 0x02, false);
-                verts[i*3+2] = rom.view.getInt16(offs + 0x04, false);
+                verts[i * 3 + 0] = rom.view.getInt16(offs + 0x00, false);
+                verts[i * 3 + 1] = rom.view.getInt16(offs + 0x02, false);
+                verts[i * 3 + 2] = rom.view.getInt16(offs + 0x04, false);
                 offs += 0x06;
             }
             return verts;
@@ -164,12 +166,12 @@ function readHeaders(gl, rom, offs, banks) {
         const verts = readVerts(vertsN, vertsAddr);
 
         function readPolys(N, addr) {
-            const polys = new Uint16Array(N * 3);
             let offs = rom.lookupAddress(banks, addr);
+            const polys = new Uint16Array(N * 3);
             for (let i = 0; i < N; i++) {
-                polys[i*3+0] = rom.view.getUint16(offs + 0x02, false) & 0x0FFF;
-                polys[i*3+1] = rom.view.getUint16(offs + 0x04, false) & 0x0FFF;
-                polys[i*3+2] = rom.view.getUint16(offs + 0x06, false) & 0x0FFF;
+                polys[i * 3 + 0] = rom.view.getUint16(offs + 0x02, false) & 0x0FFF;
+                polys[i * 3 + 1] = rom.view.getUint16(offs + 0x04, false) & 0x0FFF;
+                polys[i * 3 + 2] = rom.view.getUint16(offs + 0x06, false) & 0x0FFF;
                 offs += 0x10;
             }
             return polys;
@@ -234,7 +236,7 @@ function readHeaders(gl, rom, offs, banks) {
         const cameraAddr = rom.view.getUint32(offs + 0x20, false);
         const camera = readCamera(cameraAddr);
 
-        return { verts: verts, polys: polys, waters: waters, camera: camera };
+        return { verts, polys, waters, camera };
     }
 
     function readRoom(file) {
@@ -273,7 +275,7 @@ function readHeaders(gl, rom, offs, banks) {
 
         const aspect = 1;
 
-        img.onload = function() {
+        img.onload = () => {
             canvas.width = img.width;
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
@@ -317,7 +319,7 @@ function readHeaders(gl, rom, offs, banks) {
         const VERTEX_SIZE = 5;
         const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-        return function(renderState) {
+        return (renderState) => {
             const gl = renderState.gl;
             const prog = renderState.currentProgram;
             gl.disable(gl.BLEND);
@@ -375,12 +377,12 @@ function readHeaders(gl, rom, offs, banks) {
             }
         }
 
-        mesh.opaque = mesh.opaque.filter(function(dl) { return !!dl; });
-        mesh.transparent = mesh.transparent.filter(function(dl) { return !!dl; });
+        mesh.opaque = mesh.opaque.filter((dl) => !!dl);
+        mesh.transparent = mesh.transparent.filter((dl) => !!dl);
 
         mesh.textures = [];
-        mesh.opaque.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); })
-        mesh.transparent.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); })
+        mesh.opaque.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); });
+        mesh.transparent.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); });
 
         return mesh;
     }
@@ -388,7 +390,7 @@ function readHeaders(gl, rom, offs, banks) {
     headers.rooms = [];
     headers.mesh = null;
 
-    let startOffs = offs;
+    const startOffs = offs;
 
     while (true) {
         const cmd1 = rom.view.getUint32(offs, false);
@@ -397,7 +399,7 @@ function readHeaders(gl, rom, offs, banks) {
 
         const cmdType = cmd1 >> 24;
 
-        if (cmdType == HeaderCommands.End)
+        if (cmdType === HeaderCommands.End)
             break;
 
         switch (cmdType) {
@@ -416,7 +418,7 @@ function readHeaders(gl, rom, offs, banks) {
     return headers;
 }
 
-function readScene(gl, zelview0, file):Headers {
+function readScene(gl, zelview0, file): Headers {
     const banks = { scene: file };
     return readHeaders(gl, zelview0, file.vStart, banks);
 }

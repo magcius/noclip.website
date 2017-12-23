@@ -1,20 +1,21 @@
 
-import { Viewer, Scene, SceneDesc, SceneGroup } from 'viewer';
+import { Scene, SceneDesc, SceneGroup, Viewer } from 'viewer';
+
+import * as J3D from 'j3d/scenes';
+import * as MDL0 from 'mdl0/scenes';
+import * as OOT3D from 'oot3d/scenes';
 import * as SM64DS from 'sm64ds/scenes';
 import * as ZELVIEW from 'zelview/scenes';
-import * as OOT3D from 'oot3d/scenes';
-import * as MDL0 from 'mdl0/scenes';
-import * as J3D from 'j3d/scenes';
 
 class Main {
-    canvas:HTMLCanvasElement;
-    viewer:Viewer;
-    groups:SceneGroup[];
+    public canvas: HTMLCanvasElement;
+    public viewer: Viewer;
+    public groups: SceneGroup[];
 
-    groupSelect:HTMLSelectElement;
-    sceneSelect:HTMLSelectElement;
-    gearSettings:HTMLElement;
-    _selectedGroup:SceneGroup;
+    private groupSelect: HTMLSelectElement;
+    private sceneSelect: HTMLSelectElement;
+    private gearSettings: HTMLElement;
+    private selectedGroup: SceneGroup;
 
     constructor() {
         this.canvas = document.createElement('canvas');
@@ -40,15 +41,15 @@ class Main {
         this._loadSceneGroup(this.groups[0]);
     }
 
-    _onResize() {
+    private _onResize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
     }
 
-    _loadSceneDesc(sceneDesc:SceneDesc) {
+    private _loadSceneDesc(sceneDesc: SceneDesc) {
         const gl = this.viewer.sceneGraph.renderState.viewport.gl;
 
-        sceneDesc.createScene(gl).then((result:Scene) => {
+        sceneDesc.createScene(gl).then((result: Scene) => {
             this.viewer.setScene(result);
 
             // XXX: Provide a UI for textures eventually?
@@ -68,20 +69,20 @@ class Main {
         this.canvas.focus();
     }
 
-    _onGearButtonClicked() {
+    private _onGearButtonClicked() {
         this.gearSettings.style.display = 'block';
     }
-    _onGroupSelectChange() {
+    private _onGroupSelectChange() {
         const option = this.groupSelect.selectedOptions.item(0);
-        const group:SceneGroup = (<any> option).group;
+        const group: SceneGroup = (<any> option).group;
         this._loadSceneGroup(group);
     }
 
-    _loadSceneGroup(group:SceneGroup) {
-        if (this._selectedGroup === group)
+    private _loadSceneGroup(group: SceneGroup) {
+        if (this.selectedGroup === group)
             return;
 
-        this._selectedGroup = group;
+        this.selectedGroup = group;
 
         // Clear.
         this.sceneSelect.innerHTML = '';
@@ -95,13 +96,13 @@ class Main {
         // Load default.
         this._loadSceneDesc(group.sceneDescs[0]);
     }
-    _onSceneSelectChange() {
+    private _onSceneSelectChange() {
         const option = this.sceneSelect.selectedOptions.item(0);
-        const sceneDesc:SceneDesc = (<any> option).sceneDesc;
+        const sceneDesc: SceneDesc = (<any> option).sceneDesc;
         this._loadSceneDesc(sceneDesc);
     }
 
-    _makeUI() {
+    private _makeUI() {
         const uiContainerL = document.createElement('div');
         uiContainerL.style.position = 'absolute';
         uiContainerL.style.left = '2em';

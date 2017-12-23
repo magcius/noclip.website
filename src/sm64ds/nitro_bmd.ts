@@ -6,10 +6,10 @@ import * as NITRO_Tex from './nitro_tex';
 
 // Super Mario 64 DS .bmd format
 
-function readString(buffer:ArrayBuffer, offs:number, length:number):string {
-    var buf = new Uint8Array(buffer, offs, length);
-    var S = '';
-    for (var i = 0; i < length; i++) {
+function readString(buffer: ArrayBuffer, offs: number, length: number): string {
+    const buf = new Uint8Array(buffer, offs, length);
+    let S = '';
+    for (let i = 0; i < length; i++) {
         if (buf[i] === 0)
             break;
         S += String.fromCharCode(buf[i]);
@@ -18,22 +18,22 @@ function readString(buffer:ArrayBuffer, offs:number, length:number):string {
 }
 
 export class Poly {
-    packets: NITRO_GX.Packet[];
+    public packets: NITRO_GX.Packet[];
 }
 
 export class Batch {
-    material: any;
-    poly: Poly;
-};
+    public material: any;
+    public poly: Poly;
+}
 
 export class Model {
-    id: number;
-    name: string;
-    parentID: number;
-    batches: Batch[];
-};
+    public id: number;
+    public name: string;
+    public parentID: number;
+    public batches: Batch[];
+}
 
-function parseModel(bmd:BMD, view:DataView, idx:number) {
+function parseModel(bmd: BMD, view: DataView, idx: number) {
     const offs = bmd.modelOffsBase + idx * 0x40;
 
     const model = new Model();
@@ -67,13 +67,13 @@ function parseModel(bmd:BMD, view:DataView, idx:number) {
         const polyIdx = view.getUint8(batchPolyOffs + i);
         const poly = parsePoly(bmd, view, polyIdx, baseCtx);
 
-        model.batches.push({ material: material, poly: poly });
+        model.batches.push({ material, poly });
     }
 
     return model;
 }
 
-function parsePoly(bmd:BMD, view:DataView, idx:number, baseCtx:NITRO_GX.Context) {
+function parsePoly(bmd: BMD, view: DataView, idx: number, baseCtx: NITRO_GX.Context) {
     const offs = view.getUint32((bmd.polyOffsBase + idx * 0x08) + 0x04, true);
 
     const gxCmdSize = view.getUint32(offs + 0x08, true);
@@ -81,14 +81,14 @@ function parsePoly(bmd:BMD, view:DataView, idx:number, baseCtx:NITRO_GX.Context)
 
     const gxCmdBuf = view.buffer.slice(gxCmdOffs, gxCmdOffs + gxCmdSize);
 
-    const poly:Poly = { packets: NITRO_GX.readCmds(gxCmdBuf, baseCtx) };
-    return poly;
+    const packets = NITRO_GX.readCmds(gxCmdBuf, baseCtx);
+    return { packets };
 }
 
-function parseMaterial(bmd:BMD, view:DataView, idx:number) {
+function parseMaterial(bmd: BMD, view: DataView, idx: number) {
     const offs = bmd.materialOffsBase + idx * 0x30;
 
-    const material:any = {};
+    const material: any = {};
     material.name = readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
     material.texCoordMat = mat4.create();
 
@@ -107,7 +107,8 @@ function parseMaterial(bmd:BMD, view:DataView, idx:number) {
             mat4.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
             mat4.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
         }
-        mat4.scale(material.texCoordMat, material.texCoordMat, [1/material.texture.width, 1/material.texture.height, 1]);
+        const texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
+        mat4.scale(material.texCoordMat, material.texCoordMat, texScale);
     } else {
         material.texture = null;
         material.texParams = 0;
@@ -115,7 +116,7 @@ function parseMaterial(bmd:BMD, view:DataView, idx:number) {
 
     const polyAttribs = view.getUint32(offs + 0x24, true);
     let alpha = (polyAttribs >> 16) & 0x1F;
-    alpha = (alpha << (8-5)) | (alpha >>> (10-8));  
+    alpha = (alpha << (8 - 5)) | (alpha >>> (10 - 8));
 
     // NITRO's Rendering Engine uses two passes. Opaque, then Transparent.
     // A transparent polygon is one that has an alpha of < 0xFF, or uses
@@ -142,34 +143,34 @@ function parseMaterial(bmd:BMD, view:DataView, idx:number) {
 }
 
 class TextureKey {
-    texIdx: number;
-    palIdx: number;
+    public texIdx: number;
+    public palIdx: number;
 
-    constructor(texIdx:number, palIdx:number) {
+    constructor(texIdx: number, palIdx: number) {
         this.texIdx = texIdx;
         this.palIdx = palIdx;
     }
 
-    toString() {
+    public toString() {
         return `TextureKey ${this.texIdx} ${this.palIdx}`;
     }
 }
 
 export class Texture {
-    id: number;
-    name: string;
+    public id: number;
+    public name: string;
 
-    params: number;
-    format: NITRO_Tex.Format;
-    width: number;
-    height: number;
+    public params: number;
+    public format: NITRO_Tex.Format;
+    public width: number;
+    public height: number;
 
-    paletteName: String;
-    pixels: Uint8Array;
-    isTranslucent: boolean;
+    public paletteName: string;
+    public pixels: Uint8Array;
+    public isTranslucent: boolean;
 }
 
-function parseTexture(bmd:BMD, view:DataView, key:TextureKey):Texture {
+function parseTexture(bmd: BMD, view: DataView, key: TextureKey): Texture {
     if (bmd.textureCache.has(key.toString()))
         return bmd.textureCache.get(key.toString());
 
@@ -190,7 +191,7 @@ function parseTexture(bmd:BMD, view:DataView, key:TextureKey):Texture {
     const color0 = !!((texture.params >> 29) & 0x01);
 
     let palData = null;
-    if (key.palIdx != 0xFFFFFFFF) {
+    if (key.palIdx !== 0xFFFFFFFF) {
         const palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
         texture.paletteName = readString(view.buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
         const palDataOffs = view.getUint32(palOffs + 0x04, true);
@@ -210,27 +211,27 @@ function parseTexture(bmd:BMD, view:DataView, key:TextureKey):Texture {
 }
 
 export class BMD {
-    scaleFactor: number;
-    models: Model[];
-    textures: Texture[];
-    textureCache: Map<string, Texture>;
+    public scaleFactor: number;
+    public models: Model[];
+    public textures: Texture[];
+    public textureCache: Map<string, Texture>;
 
-    modelCount: number;
-    modelOffsBase: number;
-    polyCount: number;
-    polyOffsBase: number;
-    textureCount: number;
-    textureOffsBase: number;
-    paletteCount: number;
-    paletteOffsBase: number;
-    materialCount: number;
-    materialOffsBase: number;
+    public modelCount: number;
+    public modelOffsBase: number;
+    public polyCount: number;
+    public polyOffsBase: number;
+    public textureCount: number;
+    public textureOffsBase: number;
+    public paletteCount: number;
+    public paletteOffsBase: number;
+    public materialCount: number;
+    public materialOffsBase: number;
 }
 
-export function parse(buffer:ArrayBuffer) {
+export function parse(buffer: ArrayBuffer) {
     const view = new DataView(buffer);
 
-    var bmd:BMD = new BMD();
+    const bmd = new BMD();
 
     bmd.scaleFactor = (1 << view.getUint32(0x00, true));
 
@@ -248,8 +249,8 @@ export function parse(buffer:ArrayBuffer) {
     bmd.textureCache = new Map<string, Texture>();
     bmd.textures = [];
     bmd.models = [];
-    for (var i = 0; i < bmd.modelCount; i++)
+    for (let i = 0; i < bmd.modelCount; i++)
         bmd.models.push(parseModel(bmd, view, i));
 
     return bmd;
-};
+}

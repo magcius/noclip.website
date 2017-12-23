@@ -1,12 +1,13 @@
 
 import * as MDL0 from 'mdl0';
 import * as Viewer from '../viewer';
-import { fetch } from 'util'; 
+
+import { fetch } from 'util';
 
 class FancyGrid_Program extends Viewer.Program {
-    positionLocation:number;
+    public positionLocation: number;
 
-    vert = `
+    public vert = `
 precision mediump float;
 
 uniform mat4 u_modelView;
@@ -28,10 +29,10 @@ void main() {
 }
 `;
 
-    frag = `
+    public frag = `
 #extension GL_EXT_frag_depth : enable
 #extension GL_OES_standard_derivatives : enable
-    
+
 precision highp float;
 varying float v_eyeFade;
 varying vec2 v_surfCoord;
@@ -66,7 +67,7 @@ void main() {
 }
 `;
 
-    bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
+    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
@@ -74,19 +75,32 @@ void main() {
 }
 
 class FancyGrid {
-    program:FancyGrid_Program;
+    public program: FancyGrid_Program;
 
-    _vtxBuffer:WebGLBuffer;
-    _idxBuffer:WebGLBuffer;
+    private vtxBuffer: WebGLBuffer;
 
-    constructor(gl:WebGLRenderingContext) {
-        this.program = new FancyGrid_Program;
+    constructor(gl: WebGLRenderingContext) {
+        this.program = new FancyGrid_Program();
         this._createBuffers(gl);
     }
 
-    _createBuffers(gl:WebGLRenderingContext) {
-        this._vtxBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this._vtxBuffer);
+    public render(state: Viewer.RenderState) {
+        const gl = state.viewport.gl;
+
+        state.useProgram(this.program);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
+        gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(this.program.positionLocation);
+
+        gl.enable(gl.BLEND);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.disable(gl.BLEND);
+    }
+
+    private _createBuffers(gl: WebGLRenderingContext) {
+        this.vtxBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
 
         const vtx = new Float32Array(4 * 3);
 
@@ -105,27 +119,13 @@ class FancyGrid {
 
         gl.bufferData(gl.ARRAY_BUFFER, vtx, gl.STATIC_DRAW);
     }
-
-    render(state:Viewer.RenderState) {
-        const gl = state.viewport.gl;
-
-        state.useProgram(this.program);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this._vtxBuffer);
-        gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(this.program.positionLocation);
-
-        gl.enable(gl.BLEND);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        gl.disable(gl.BLEND);
-    }
 }
 
 class MDL0_Program extends Viewer.Program {
-    positionLocation:number;
-    colorLocation:number;
+    public positionLocation: number;
+    public colorLocation: number;
 
-    vert = `
+    public vert = `
 precision mediump float;
 
 uniform mat4 u_modelView;
@@ -141,7 +141,7 @@ void main() {
 }
 `;
 
-    frag = `
+    public frag = `
 precision mediump float;
 
 varying vec4 v_color;
@@ -151,7 +151,7 @@ void main() {
 }
 `;
 
-    bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
+    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
@@ -160,72 +160,72 @@ void main() {
 }
 
 class Scene implements Viewer.Scene {
-    cameraController = Viewer.OrbitCameraController;
-    textures:HTMLCanvasElement[] = [];
-    program:MDL0_Program;
-    mdl0:MDL0.MDL0;
-    fancyGrid:FancyGrid;
+    public cameraController = Viewer.OrbitCameraController;
+    public textures: HTMLCanvasElement[] = [];
+    public program: MDL0_Program;
+    public mdl0: MDL0.MDL0;
+    public fancyGrid: FancyGrid;
 
-    _clrBuffer:WebGLBuffer;
-    _vtxBuffer:WebGLBuffer;
-    _idxBuffer:WebGLBuffer;
+    private clrBuffer: WebGLBuffer;
+    private vtxBuffer: WebGLBuffer;
+    private idxBuffer: WebGLBuffer;
 
-    constructor(gl:WebGLRenderingContext, mdl0:MDL0.MDL0) {
+    constructor(gl: WebGLRenderingContext, mdl0: MDL0.MDL0) {
         this.fancyGrid = new FancyGrid(gl);
         this.program = new MDL0_Program();
         this.mdl0 = mdl0;
         this._createBuffers(gl);
     }
 
-    _createBuffers(gl:WebGLRenderingContext) {
-        this._clrBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this._clrBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, this.mdl0.clrData, gl.STATIC_DRAW);
-
-        this._idxBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this._idxBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.mdl0.idxData, gl.STATIC_DRAW);
-
-        this._vtxBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this._vtxBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, this.mdl0.vtxData, gl.STATIC_DRAW);
-    }
-
-    render(state:Viewer.RenderState) {
+    public render(state: Viewer.RenderState) {
         const gl = state.viewport.gl;
 
         state.useProgram(this.program);
         gl.enable(gl.DEPTH_TEST);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this._clrBuffer);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.clrBuffer);
         gl.vertexAttribPointer(this.program.colorLocation, 4, gl.UNSIGNED_BYTE, true, 0, 0);
         gl.enableVertexAttribArray(this.program.colorLocation);
 
         const frameNumber = ((state.time / 16) % this.mdl0.animCount) | 0;
         const vtxOffset = frameNumber * this.mdl0.animSize;
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this._vtxBuffer);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
         gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, this.mdl0.vertSize, vtxOffset);
         gl.enableVertexAttribArray(this.program.positionLocation);
 
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this._idxBuffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuffer);
         gl.drawElements(gl.TRIANGLES, this.mdl0.idxData.length, gl.UNSIGNED_SHORT, 0);
 
         this.fancyGrid.render(state);
     }
+
+    private _createBuffers(gl: WebGLRenderingContext) {
+        this.clrBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.clrBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.mdl0.clrData, gl.STATIC_DRAW);
+
+        this.idxBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.mdl0.idxData, gl.STATIC_DRAW);
+
+        this.vtxBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.mdl0.vtxData, gl.STATIC_DRAW);
+    }
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
-    name:string;
-    path:string;
+    public name: string;
+    public path: string;
 
-    constructor(name:string, path:string) {
+    constructor(name: string, path: string) {
         this.name = name;
         this.path = path;
     }
 
-    createScene(gl:WebGLRenderingContext):PromiseLike<Scene> {
-        return fetch(this.path).then((result:ArrayBuffer) => {
+    public createScene(gl: WebGLRenderingContext): PromiseLike<Scene> {
+        return fetch(this.path).then((result: ArrayBuffer) => {
             const mdl0 = MDL0.parse(result);
             return new Scene(gl, mdl0);
         });

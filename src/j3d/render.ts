@@ -1,8 +1,9 @@
 
-import * as LZ77 from 'lz77';
-import * as Viewer from 'viewer';
 import * as BMD from 'bmd';
 import * as GX from 'gx';
+import * as LZ77 from 'lz77';
+import * as Viewer from 'viewer';
+
 import { fetch } from 'util';
 
 const BLACK_VERT_SHADER_SOURCE = `
@@ -25,12 +26,12 @@ void main() {
 `;
 
 class BlackProgram extends Viewer.Program {
-    positionLocation:number;
+    public positionLocation: number;
 
-    vert = BLACK_VERT_SHADER_SOURCE;
-    frag = BLACK_FRAG_SHADER_SOURCE;
+    public vert = BLACK_VERT_SHADER_SOURCE;
+    public frag = BLACK_FRAG_SHADER_SOURCE;
 
-    getAttribLocation(vtxAttrib:GX.VertexAttribute) {
+    public getAttribLocation(vtxAttrib: GX.VertexAttribute) {
         switch (vtxAttrib) {
         case GX.VertexAttribute.POS:
             return this.positionLocation;
@@ -38,14 +39,14 @@ class BlackProgram extends Viewer.Program {
         return null;
     }
 
-    bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
+    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
     }
 }
 
-function translateCompType(gl:WebGLRenderingContext, compType:GX.CompType):number {
+function translateCompType(gl: WebGLRenderingContext, compType: GX.CompType): number {
     switch (compType) {
     case GX.CompType.F32:
         return gl.FLOAT;
@@ -64,7 +65,7 @@ function translateCompType(gl:WebGLRenderingContext, compType:GX.CompType):numbe
     }
 }
 
-function translatePrimType(gl:WebGLRenderingContext, primType:GX.PrimitiveType):number {
+function translatePrimType(gl: WebGLRenderingContext, primType: GX.PrimitiveType): number {
     switch (primType) {
     case GX.PrimitiveType.TRIANGLESTRIP:
         return gl.TRIANGLE_STRIP;
@@ -76,10 +77,10 @@ function translatePrimType(gl:WebGLRenderingContext, primType:GX.PrimitiveType):
 }
 
 class Command_Shape {
-    bmd:BMD.BMD;
-    shape:BMD.Shape;
-    buffer:WebGLBuffer;
-    constructor(gl:WebGLRenderingContext, bmd:BMD.BMD, shape:BMD.Shape) {
+    public bmd: BMD.BMD;
+    public shape: BMD.Shape;
+    public buffer: WebGLBuffer;
+    constructor(gl: WebGLRenderingContext, bmd: BMD.BMD, shape: BMD.Shape) {
         this.bmd = bmd;
         this.shape = shape;
         this.buffer = gl.createBuffer();
@@ -87,11 +88,11 @@ class Command_Shape {
         gl.bufferData(gl.ARRAY_BUFFER, this.shape.packedData, gl.STATIC_DRAW);
         console.log(new Uint8Array(this.shape.packedData));
     }
-    exec(state:Viewer.RenderState) {
+    public exec(state: Viewer.RenderState) {
         const gl = state.gl;
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
 
-        const program:BlackProgram = (<BlackProgram> state.currentProgram);
+        const program: BlackProgram = (<BlackProgram> state.currentProgram);
 
         // Set up vertex attributes.
         for (const attrib of this.shape.packedVertexAttributes) {
@@ -106,7 +107,7 @@ class Command_Shape {
                 translateCompType(gl, vertexArray.compType),
                 false,
                 this.shape.packedVertexSize,
-                attrib.offset
+                attrib.offset,
             );
         }
 
@@ -126,12 +127,12 @@ class Command_Shape {
 type Command = Command_Shape;
 
 export class Scene implements Viewer.Scene {
-    gl:WebGLRenderingContext;
-    cameraController = Viewer.FPSCameraController;
-    textures:HTMLCanvasElement[];
-    program_Black:BlackProgram;
-    bmd:BMD.BMD;
-    commands:Command[];
+    public gl: WebGLRenderingContext;
+    public cameraController = Viewer.FPSCameraController;
+    public textures: HTMLCanvasElement[];
+    private program_Black: BlackProgram;
+    private bmd: BMD.BMD;
+    private commands: Command[];
 
     constructor(gl, bmd) {
         this.gl = gl;
@@ -139,12 +140,19 @@ export class Scene implements Viewer.Scene {
         this.bmd = bmd;
         this.translateModel(this.bmd);
     }
-    translateModel(bmd:BMD.BMD) {
+
+    public render(state: Viewer.RenderState) {
+        state.useProgram(this.program_Black);
+        for (const command of this.commands)
+            command.exec(state);
+    }
+
+    private translateModel(bmd: BMD.BMD) {
         this.commands = [];
         // Iterate through scene graph.
         this.translateSceneGraph(bmd.inf1.sceneGraph);
     }
-    translateSceneGraph(node:BMD.HierarchyNode) {
+    private translateSceneGraph(node: BMD.HierarchyNode) {
         switch (node.type) {
         case BMD.HierarchyType.Open:
             for (const child of node.children)
@@ -162,25 +170,20 @@ export class Scene implements Viewer.Scene {
             break;
         }
     }
-    render(state:Viewer.RenderState) {
-        state.useProgram(this.program_Black);
-        for (const command of this.commands)
-            command.exec(state);
-    }
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
-    name:string;
-    path:string;
+    public name: string;
+    public path: string;
 
-    constructor(name:string, path:string) {
+    constructor(name: string, path: string) {
         this.name = name;
         this.path = path;
     }
 
-    createScene(gl:WebGLRenderingContext):PromiseLike<Scene> {
-        return fetch(this.path).then((result:ArrayBuffer) => {
-            let bmd = BMD.parse(result);
+    public createScene(gl: WebGLRenderingContext): PromiseLike<Scene> {
+        return fetch(this.path).then((result: ArrayBuffer) => {
+            const bmd = BMD.parse(result);
             return new Scene(gl, bmd);
         });
     }

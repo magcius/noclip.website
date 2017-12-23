@@ -1,6 +1,6 @@
 
-export function fetch(path):PromiseLike<ArrayBuffer> {
-    var request = new XMLHttpRequest();
+export function fetch(path): PromiseLike<ArrayBuffer> {
+    const request = new XMLHttpRequest();
     request.open("GET", path, true);
     request.responseType = "arraybuffer";
     request.send();

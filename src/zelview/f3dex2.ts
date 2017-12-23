@@ -1,12 +1,20 @@
 
-import { vec3, mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
-import * as ZELVIEW0 from 'zelview0';
+import * as Render from './render';
+import * as ZELVIEW0 from './zelview0';
 
 // Zelda uses the F3DEX2 display list format. This implements
 // a simple (and probably wrong!) HLE renderer for it.
 
-var UCodeCommands = {
+interface RenderState {
+    currentProgram: Render.F3DEX2Program;
+    gl: WebGLRenderingContext;
+}
+
+type CmdFunc = (renderState: RenderState) => void;
+
+const UCodeCommands = {
     VTX: 0x01,
     TRI1: 0x05,
     TRI2: 0x06,
@@ -42,24 +50,23 @@ for (var name in UCodeCommands)
 */
 
 // 3 pos + 2 uv + 4 color/nrm
-var VERTEX_SIZE = 9;
-var VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+const VERTEX_SIZE = 9;
+const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-var N = 0;
 function readVertex(state, which, addr) {
-    var rom = state.rom;
-    var offs = state.lookupAddress(addr);
-    var posX = rom.view.getInt16(offs, false);
-    var posY = rom.view.getInt16(offs+2, false);
-    var posZ = rom.view.getInt16(offs+4, false);
+    const rom = state.rom;
+    const offs = state.lookupAddress(addr);
+    const posX = rom.view.getInt16(offs + 0, false);
+    const posY = rom.view.getInt16(offs + 2, false);
+    const posZ = rom.view.getInt16(offs + 4, false);
 
-    var pos = vec3.clone([posX, posY, posZ]);
+    const pos = vec3.clone([posX, posY, posZ]);
     vec3.transformMat4(pos, pos, state.mtx);
 
-    var txU = rom.view.getInt16(offs+8, false) * (1/32);
-    var txV = rom.view.getInt16(offs+10, false) * (1/32);
+    const txU = rom.view.getInt16(offs + 8, false) * (1 / 32);
+    const txV = rom.view.getInt16(offs + 10, false) * (1 / 32);
 
-    var vtxArray = new Float32Array(state.vertexBuffer.buffer, which * VERTEX_BYTES, VERTEX_SIZE);
+    const vtxArray = new Float32Array(state.vertexBuffer.buffer, which * VERTEX_BYTES, VERTEX_SIZE);
     vtxArray[0] = pos[0]; vtxArray[1] = pos[1]; vtxArray[2] = pos[2];
     vtxArray[3] = txU; vtxArray[4] = txV;
 
@@ -70,12 +77,12 @@ function readVertex(state, which, addr) {
 }
 
 function cmd_VTX(state, w0, w1) {
-    var N = (w0 >> 12) & 0xFF;
-    var V0 = ((w0 >> 1) & 0x7F) - N;
-    var addr = w1;
+    const N = (w0 >> 12) & 0xFF;
+    const V0 = ((w0 >> 1) & 0x7F) - N;
+    let addr = w1;
 
-    for (var i = 0; i < N; i++) {
-        var which = V0 + i;
+    for (let i = 0; i < N; i++) {
+        const which = V0 + i;
         readVertex(state, which, addr);
         addr += 16;
 
@@ -87,14 +94,14 @@ function translateTRI(state, idxData) {
     const gl = state.gl;
 
     function anyVertsDirty() {
-        for (var i = 0; i < idxData.length; i++)
-            if (state.verticesDirty[idxData[i]])
+        for (const idx of idxData)
+            if (state.verticesDirty[idxData])
                 return true;
         return false;
     }
 
     function createGLVertBuffer() {
-        var vertBuffer = gl.createBuffer();
+        const vertBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, state.vertexBuffer, gl.STATIC_DRAW);
         return vertBuffer;
@@ -107,14 +114,14 @@ function translateTRI(state, idxData) {
         return state.vertexBufferGL;
     }
 
-    var vertBuffer = getVertexBufferGL();
-    var idxBuffer = gl.createBuffer();
+    const vertBuffer = getVertexBufferGL();
+    const idxBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxData, gl.STATIC_DRAW);
 
-    var nPrim = idxData.length;
+    const nPrim = idxData.length;
 
-    return function drawTri(renderState) {
+    return function drawTri(renderState: RenderState) {
         const prog = renderState.currentProgram;
         const gl = renderState.gl;
 
@@ -134,9 +141,9 @@ function translateTRI(state, idxData) {
 }
 
 function tri(idxData, offs, cmd) {
-    idxData[offs+0] = (cmd >> 17) & 0x7F;
-    idxData[offs+1] = (cmd >> 9) & 0x7F;
-    idxData[offs+2] = (cmd >> 1) & 0x7F;
+    idxData[offs + 0] = (cmd >> 17) & 0x7F;
+    idxData[offs + 1] = (cmd >> 9) & 0x7F;
+    idxData[offs + 2] = (cmd >> 1) & 0x7F;
 }
 
 function flushTexture(state) {
@@ -146,19 +153,19 @@ function flushTexture(state) {
 
 function cmd_TRI1(state, w0, w1) {
     flushTexture(state);
-    var idxData = new Uint8Array(3);
+    const idxData = new Uint8Array(3);
     tri(idxData, 0, w0);
     state.cmds.push(translateTRI(state, idxData));
 }
 
 function cmd_TRI2(state, w0, w1) {
     flushTexture(state);
-    var idxData = new Uint8Array(6);
+    const idxData = new Uint8Array(6);
     tri(idxData, 0, w0); tri(idxData, 3, w1);
     state.cmds.push(translateTRI(state, idxData));
 }
 
-var GeometryMode = {
+const GeometryMode = {
     CULL_FRONT: 0x0200,
     CULL_BACK: 0x0400,
     LIGHTING: 0x020000,
@@ -192,12 +199,12 @@ function cmd_GEOMETRYMODE(state, w0, w1) {
     state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
     const newMode = state.geometryMode;
 
-    state.cmds.push(function(renderState) {
+    state.cmds.push((renderState) => {
         return syncGeometryMode(renderState, newMode);
     });
 }
 
-var OtherModeL = {
+const OtherModeL = {
     Z_CMP: 0x0010,
     Z_UPD: 0x0020,
     ZMODE_DEC: 0x0C00,
@@ -220,7 +227,7 @@ function syncRenderMode(renderState, newMode) {
     else
         gl.depthMask(false);
 
-    var alphaTestMode;
+    let alphaTestMode;
 
     if (newMode & OtherModeL.FORCE_BL) {
         alphaTestMode = 0;
@@ -244,11 +251,11 @@ function syncRenderMode(renderState, newMode) {
 }
 
 function cmd_SETOTHERMODE_L(state, w0, w1) {
-    state.cmds.push(function(renderState) {
-        var mode = 31 - (w0 & 0xFF);
-        if (mode == 3)
+    state.cmds.push((renderState) => {
+        const mode = 31 - (w0 & 0xFF);
+        if (mode === 3)
             return syncRenderMode(renderState, w1);
-    })
+    });
 }
 
 function cmd_DL(state, w0, w1) {
@@ -265,15 +272,15 @@ function cmd_MTX(state, w0, w1) {
     state.mtxStack.push(state.mtx);
     state.mtx = mat4.clone(state.mtx);
 
-    var rom = state.rom;
-    var offs = state.lookupAddress(w1);
+    const rom = state.rom;
+    let offs = state.lookupAddress(w1);
 
-    var mtx = mat4.create();
+    const mtx = mat4.create();
 
-    for (var x = 0; x < 4; x++) {
-        for (var y = 0; y < 4; y++) {
-            var mt1 = rom.view.getUint16(offs, false);
-            var mt2 = rom.view.getUint16(offs + 32, false);
+    for (let x = 0; x < 4; x++) {
+        for (let y = 0; y < 4; y++) {
+            const mt1 = rom.view.getUint16(offs, false);
+            const mt2 = rom.view.getUint16(offs + 32, false);
             mtx[(x * 4) + y] = ((mt1 << 16) | (mt2)) * (1 / 0x10000);
             offs += 2;
         }
@@ -287,27 +294,27 @@ function cmd_POPMTX(state, w0, w1) {
 }
 
 function cmd_TEXTURE(state, w0, w1) {
-    var boundTexture = {};
+    const boundTexture = {};
     state.boundTexture = boundTexture;
 
-    var s = w1 >> 16;
-    var t = w1 & 0x0000FFFF;
+    const s = w1 >> 16;
+    const t = w1 & 0x0000FFFF;
 
-    state.boundTexture.scaleS = (s+1) / 0x10000;
-    state.boundTexture.scaleT = (t+1) / 0x10000;
+    state.boundTexture.scaleS = (s + 1) / 0x10000;
+    state.boundTexture.scaleT = (t + 1) / 0x10000;
 }
 
 function r5g5b5a1(dst, dstOffs, p) {
-    var r, g, b, a;
+    let r, g, b, a;
 
     r = (p & 0xF800) >> 11;
-    r = (r << (8-5)) | (r >> (10-8));
+    r = (r << (8 - 5)) | (r >> (10 - 8));
 
     g = (p & 0x07C0) >> 6;
-    g = (g << (8-5)) | (g >> (10-8));
+    g = (g << (8 - 5)) | (g >> (10 - 8));
 
     b = (p & 0x003E) >> 1;
-    b = (b << (8-5)) | (b >> (10-8));
+    b = (b << (8 - 5)) | (b >> (10 - 8));
 
     a = (p & 0x0001) ? 0xFF : 0x00;
 
@@ -327,7 +334,7 @@ function cmd_SETTIMG(state, w0, w1) {
 
 function cmd_SETTILE(state, w0, w1) {
     state.tile = {};
-    var tile = state.tile;
+    const tile = state.tile;
 
     tile.format = (w0 >> 16) & 0xFF;
     tile.cms = (w1 >> 8) & 0x3;
@@ -342,8 +349,8 @@ function cmd_SETTILE(state, w0, w1) {
 }
 
 function cmd_SETTILESIZE(state, w0, w1) {
-    var tileIdx = (w1 >> 24) & 0x7;
-    var tile = state.tile;
+    const tileIdx = (w1 >> 24) & 0x7;
+    const tile = state.tile;
 
     tile.uls = (w0 >> 14) & 0x3FF;
     tile.ult = (w0 >> 2) & 0x3FF;
@@ -352,16 +359,17 @@ function cmd_SETTILESIZE(state, w0, w1) {
 }
 
 function cmd_LOADTLUT(state, w0, w1) {
-    var srcOffs = state.lookupAddress(state.textureImage.addr);
-    var rom = state.rom;
+    const rom = state.rom;
 
     // XXX: properly implement uls/ult/lrs/lrt
-    var size = ((w1 & 0x00FFF000) >> 14) + 1;
-    var dst = new Uint8Array(size * 4);
-    var dstOffs = 0;
+    const size = ((w1 & 0x00FFF000) >> 14) + 1;
+    const dst = new Uint8Array(size * 4);
 
-    for (var i = 0; i < size; i++) {
-        var pixel = rom.view.getUint16(srcOffs, false);
+    let srcOffs = state.lookupAddress(state.textureImage.addr);
+    let dstOffs = 0;
+
+    for (let i = 0; i < size; i++) {
+        const pixel = rom.view.getUint16(srcOffs, false);
         r5g5b5a1(dst, dstOffs, pixel);
         srcOffs += 2;
         dstOffs += 4;
@@ -373,18 +381,18 @@ function cmd_LOADTLUT(state, w0, w1) {
 
 function tileCacheKey(state, tile) {
     // XXX: Do we need more than this?
-    var srcOffs = state.lookupAddress(tile.addr);
+    const srcOffs = state.lookupAddress(tile.addr);
     return srcOffs;
 }
 
 // XXX: This is global to cut down on resources between DLs.
-var tileCache = {};
+const tileCache = {};
 function loadTile(state, tile) {
     if (tile.textureId)
         return;
 
-    var key = tileCacheKey(state, tile);
-    var otherTile = tileCache[key];
+    const key = tileCacheKey(state, tile);
+    const otherTile = tileCache[key];
     if (!otherTile) {
         translateTexture(state, tile);
         tileCache[key] = tile;
@@ -398,18 +406,18 @@ function loadTile(state, tile) {
 }
 
 function convert_CI4(state, texture) {
-    var srcOffs = state.lookupAddress(texture.addr);
-    var nBytes = texture.width * texture.height * 4;
-    var dst = new Uint8Array(nBytes);
-    var i = 0;
-    var palette = state.paletteTile.pixels;
+    const palette = state.paletteTile.pixels;
     if (!palette)
         return;
 
-    for (var y = 0; y < texture.height; y++) {
-        for (var x = 0; x < texture.width; x += 2) {
-            var b, idx;
-            b = state.rom.view.getUint8(srcOffs++);
+    const nBytes = texture.width * texture.height * 4;
+    const dst = new Uint8Array(nBytes);
+    let srcOffs = state.lookupAddress(texture.addr);
+    let i = 0;
+    for (let y = 0; y < texture.height; y++) {
+        for (let x = 0; x < texture.width; x += 2) {
+            const b = state.rom.view.getUint8(srcOffs++);
+            let idx;
 
             idx = ((b & 0xF0) >> 4) * 4;
             dst[i++] = palette[idx++];
@@ -429,16 +437,16 @@ function convert_CI4(state, texture) {
 }
 
 function convert_I4(state, texture) {
-    var srcOffs = state.lookupAddress(texture.addr);
-    var nBytes = texture.width * texture.height * 2;
-    var dst = new Uint8Array(nBytes);
-    var i = 0;
+    const nBytes = texture.width * texture.height * 2;
+    const dst = new Uint8Array(nBytes);
 
-    for (var y = 0; y < texture.height; y++) {
-        for (var x = 0; x < texture.width; x += 2) {
-            var b, p;
-            b = state.rom.view.getUint8(srcOffs++);
+    let srcOffs = state.lookupAddress(texture.addr);
+    let i = 0;
+    for (let y = 0; y < texture.height; y++) {
+        for (let x = 0; x < texture.width; x += 2) {
+            const b = state.rom.view.getUint8(srcOffs++);
 
+            let p;
             p = (b & 0xF0) >> 4;
             p = p << 4 | p;
             dst[i++] = p;
@@ -455,15 +463,15 @@ function convert_I4(state, texture) {
 }
 
 function convert_IA4(state, texture) {
-    var srcOffs = state.lookupAddress(texture.addr);
-    var nBytes = texture.width * texture.height * 2;
-    var dst = new Uint8Array(nBytes);
-    var i = 0;
+    const nBytes = texture.width * texture.height * 2;
+    const dst = new Uint8Array(nBytes);
 
-    for (var y = 0; y < texture.height; y++) {
-        for (var x = 0; x < texture.width; x += 2) {
-            var b, p, pm;
-            b = state.rom.view.getUint8(srcOffs++);
+    let srcOffs = state.lookupAddress(texture.addr);
+    let i = 0;
+    for (let y = 0; y < texture.height; y++) {
+        for (let x = 0; x < texture.width; x += 2) {
+            const b = state.rom.view.getUint8(srcOffs++);
+            let p; let pm;
 
             p = (b & 0xF0) >> 4;
             pm = p & 0x0E;
@@ -481,17 +489,18 @@ function convert_IA4(state, texture) {
 }
 
 function convert_CI8(state, texture) {
-    var srcOffs = state.lookupAddress(texture.addr);
-    var nBytes = texture.width * texture.height * 4;
-    var dst = new Uint8Array(nBytes);
-    var i = 0;
-    var palette = state.paletteTile.pixels;
+    const palette = state.paletteTile.pixels;
     if (!palette)
         return;
 
-    for (var y = 0; y < texture.height; y++) {
-        for (var x = 0; x < texture.width; x++) {
-            var idx = state.rom.view.getUint8(srcOffs)*4;
+    const nBytes = texture.width * texture.height * 4;
+    const dst = new Uint8Array(nBytes);
+
+    let srcOffs = state.lookupAddress(texture.addr);
+    let i = 0;
+    for (let y = 0; y < texture.height; y++) {
+        for (let x = 0; x < texture.width; x++) {
+            let idx = state.rom.view.getUint8(srcOffs) * 4;
             dst[i++] = palette[idx++];
             dst[i++] = palette[idx++];
             dst[i++] = palette[idx++];
@@ -504,14 +513,14 @@ function convert_CI8(state, texture) {
 }
 
 function convert_I8(state, texture) {
-    var srcOffs = state.lookupAddress(texture.addr);
-    var nBytes = texture.width * texture.height * 2;
-    var dst = new Uint8Array(nBytes);
-    var i = 0;
+    const nBytes = texture.width * texture.height * 2;
+    const dst = new Uint8Array(nBytes);
 
-    for (var y = 0; y < texture.height; y++) {
-        for (var x = 0; x < texture.width; x++) {
-            var p = state.rom.view.getUint8(srcOffs++);
+    let srcOffs = state.lookupAddress(texture.addr);
+    let i = 0;
+    for (let y = 0; y < texture.height; y++) {
+        for (let x = 0; x < texture.width; x++) {
+            const p = state.rom.view.getUint8(srcOffs++);
             dst[i++] = p;
             dst[i++] = p;
         }
@@ -521,15 +530,15 @@ function convert_I8(state, texture) {
 }
 
 function convert_IA8(state, texture) {
-    var srcOffs = state.lookupAddress(texture.addr);
-    var nBytes = texture.width * texture.height * 2;
-    var dst = new Uint8Array(nBytes);
-    var i = 0;
+    const nBytes = texture.width * texture.height * 2;
+    const dst = new Uint8Array(nBytes);
 
-    for (var y = 0; y < texture.height; y++) {
-        for (var x = 0; x < texture.width; x++) {
-            var p, b;
-            b = state.rom.view.getUint8(srcOffs++);
+    let srcOffs = state.lookupAddress(texture.addr);
+    let i = 0;
+    for (let y = 0; y < texture.height; y++) {
+        for (let x = 0; x < texture.width; x++) {
+            const b = state.rom.view.getUint8(srcOffs++);
+            let p;
 
             p = (b & 0xF0) >> 4;
             p = p << 4 | p;
@@ -545,15 +554,15 @@ function convert_IA8(state, texture) {
 }
 
 function convert_RGBA16(state, texture) {
-    var rom = state.rom;
-    var srcOffs = state.lookupAddress(texture.addr);
-    var nBytes = texture.width * texture.height * 4;
-    var dst = new Uint8Array(nBytes);
-    var i = 0;
+    const rom = state.rom;
+    const nBytes = texture.width * texture.height * 4;
+    const dst = new Uint8Array(nBytes);
 
-    for (var y = 0; y < texture.height; y++) {
-        for (var x = 0; x < texture.width; x++) {
-            var pixel = rom.view.getUint16(srcOffs, false);
+    let srcOffs = state.lookupAddress(texture.addr);
+    let i = 0;
+    for (let y = 0; y < texture.height; y++) {
+        for (let x = 0; x < texture.width; x++) {
+            const pixel = rom.view.getUint16(srcOffs, false);
             r5g5b5a1(dst, i, pixel);
             i += 4;
             srcOffs += 2;
@@ -564,13 +573,13 @@ function convert_RGBA16(state, texture) {
 }
 
 function convert_IA16(state, texture) {
-    var srcOffs = state.lookupAddress(texture.addr);
-    var nBytes = texture.width * texture.height * 2;
-    var dst = new Uint8Array(nBytes);
-    var i = 0;
+    const nBytes = texture.width * texture.height * 2;
+    const dst = new Uint8Array(nBytes);
 
-    for (var y = 0; y < texture.height; y++) {
-        for (var x = 0; x < texture.width; x++) {
+    let srcOffs = state.lookupAddress(texture.addr);
+    let i = 0;
+    for (let y = 0; y < texture.height; y++) {
+        for (let x = 0; x < texture.width; x++) {
             dst[i++] = state.rom.view.getUint8(srcOffs++);
             dst[i++] = state.rom.view.getUint8(srcOffs++);
         }
@@ -580,29 +589,29 @@ function convert_IA16(state, texture) {
 }
 
 function textureToCanvas(texture) {
-    var canvas = document.createElement("canvas");
+    const canvas = document.createElement("canvas");
     canvas.width = texture.width;
     canvas.height = texture.height;
 
-    var ctx = canvas.getContext("2d");
-    var imgData = ctx.createImageData(canvas.width, canvas.height);
+    const ctx = canvas.getContext("2d");
+    const imgData = ctx.createImageData(canvas.width, canvas.height);
 
-    if (texture.dstFormat == "i8") {
-        for (var si = 0, di = 0; di < imgData.data.length; si++, di += 4) {
-            imgData.data[di+0] = texture.pixels[si];
-            imgData.data[di+1] = texture.pixels[si];
-            imgData.data[di+2] = texture.pixels[si];
-            imgData.data[di+3] = 255;
+    if (texture.dstFormat === "i8") {
+        for (let si = 0, di = 0; di < imgData.data.length; si++, di += 4) {
+            imgData.data[di + 0] = texture.pixels[si];
+            imgData.data[di + 1] = texture.pixels[si];
+            imgData.data[di + 2] = texture.pixels[si];
+            imgData.data[di + 3] = 255;
         }
-    } else if (texture.dstFormat == "i8_a8") {
-        for (var si = 0, di = 0; di < imgData.data.length; si += 2, di += 4) {
-            imgData.data[di+0] = texture.pixels[si];
-            imgData.data[di+1] = texture.pixels[si];
-            imgData.data[di+2] = texture.pixels[si];
-            imgData.data[di+3] = texture.pixels[si + 1];
+    } else if (texture.dstFormat === "i8_a8") {
+        for (let si = 0, di = 0; di < imgData.data.length; si += 2, di += 4) {
+            imgData.data[di + 0] = texture.pixels[si];
+            imgData.data[di + 1] = texture.pixels[si];
+            imgData.data[di + 2] = texture.pixels[si];
+            imgData.data[di + 3] = texture.pixels[si + 1];
         }
-    } else if (texture.dstFormat == "rgba8") {
-        for (var i = 0; i < imgData.data.length; i++)
+    } else if (texture.dstFormat === "rgba8") {
+        for (let i = 0; i < imgData.data.length; i++)
             imgData.data[i] = texture.pixels[i];
     }
 
@@ -640,11 +649,11 @@ function translateTexture(state, texture) {
         convertTexturePixels();
 
     if (!texture.pixels) {
-        if (texture.dstFormat == "i8")
+        if (texture.dstFormat === "i8")
             texture.pixels = new Uint8Array(texture.width * texture.height);
-        else if (texture.dstFormat == "i8_a8")
+        else if (texture.dstFormat === "i8_a8")
             texture.pixels = new Uint8Array(texture.width * texture.height * 2);
-        else if (texture.dstFormat == "rgba8")
+        else if (texture.dstFormat === "rgba8")
             texture.pixels = new Uint8Array(texture.width * texture.height * 4);
     }
 
@@ -666,11 +675,11 @@ function translateTexture(state, texture) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
     let glFormat;
-    if (texture.dstFormat == "i8")
+    if (texture.dstFormat === "i8")
         glFormat = gl.LUMINANCE;
-    else if (texture.dstFormat == "i8_a8")
+    else if (texture.dstFormat === "i8_a8")
         glFormat = gl.LUMINANCE_ALPHA;
-    else if (texture.dstFormat == "rgba8")
+    else if (texture.dstFormat === "rgba8")
         glFormat = gl.RGBA;
 
     gl.texImage2D(gl.TEXTURE_2D, 0, glFormat, texture.width, texture.height, 0, glFormat, gl.UNSIGNED_BYTE, texture.pixels);
@@ -685,12 +694,12 @@ function calcTextureDestFormat(texture) {
         case 0x40: return "rgba8"; // CI -- XXX -- do we need to check the palette type?
         case 0x60: return "i8_a8"; // IA
         case 0x80: return "i8_a8"; // I
-        default: throw new Error("Invalid texture type")
+        default: throw new Error("Invalid texture type");
     }
 }
 
 function calcTextureSize(texture) {
-    var maxTexel, lineShift;
+    let maxTexel, lineShift;
     switch (texture.format) {
         // 4-bit
         case 0x00: maxTexel = 4096; lineShift = 4; break; // RGBA
@@ -711,21 +720,21 @@ function calcTextureSize(texture) {
         case 0x18: maxTexel = 1024; lineShift = 2; break; // RGBA
     }
 
-    var lineW = texture.lineSize << lineShift;
+    const lineW = texture.lineSize << lineShift;
     texture.rowStride = lineW;
-    var tileW = texture.lrs - texture.uls + 1;
-    var tileH = texture.lrt - texture.ult + 1;
+    const tileW = texture.lrs - texture.uls + 1;
+    const tileH = texture.lrt - texture.ult + 1;
 
-    var maskW = 1 << texture.maskS;
-    var maskH = 1 << texture.maskT;
+    const maskW = 1 << texture.maskS;
+    const maskH = 1 << texture.maskT;
 
-    var lineH;
+    let lineH;
     if (lineW > 0)
         lineH = Math.min(maxTexel / lineW, tileH);
     else
         lineH = 0;
 
-    var width;
+    let width;
     if (texture.maskS > 0 && (maskW * maskH) <= maxTexel)
         width = maskW;
     else if ((tileW * tileH) <= maxTexel)
@@ -733,7 +742,7 @@ function calcTextureSize(texture) {
     else
         width = lineW;
 
-    var height;
+    let height;
     if (texture.maskT > 0 && (maskW * maskH) <= maxTexel)
         height = maskH;
     else if ((tileW * tileH) <= maxTexel)
@@ -745,7 +754,7 @@ function calcTextureSize(texture) {
     texture.height = height;
 }
 
-var CommandDispatch = {};
+const CommandDispatch = {};
 CommandDispatch[UCodeCommands.VTX] = cmd_VTX;
 CommandDispatch[UCodeCommands.TRI1] = cmd_TRI1;
 CommandDispatch[UCodeCommands.TRI2] = cmd_TRI2;
@@ -760,20 +769,20 @@ CommandDispatch[UCodeCommands.SETTIMG] = cmd_SETTIMG;
 CommandDispatch[UCodeCommands.SETTILE] = cmd_SETTILE;
 CommandDispatch[UCodeCommands.SETTILESIZE] = cmd_SETTILESIZE;
 
-var F3DEX2 = {};
+const F3DEX2 = {};
 
 function loadTextureBlock(state, cmds) {
-    var tileIdx = (cmds[5][1] >> 24) & 0x7;
-    if (tileIdx != 0)
+    const tileIdx = (cmds[5][1] >> 24) & 0x7;
+    if (tileIdx !== 0)
         return;
 
     cmd_SETTIMG(state, cmds[0][0], cmds[0][1]);
     cmd_SETTILE(state, cmds[5][0], cmds[5][1]);
     cmd_SETTILESIZE(state, cmds[6][0], cmds[6][1]);
-    var tile = state.tile;
+    const tile = state.tile;
     state.textureTile = tile;
     tile.addr = state.textureImage.addr;
-    state.cmds.push(function(renderState) {
+    state.cmds.push((renderState) => {
         const gl = renderState.gl;
 
         if (!tile.textureId)
@@ -789,39 +798,39 @@ function loadTextureBlock(state, cmds) {
 
 function runDL(state, addr) {
     function collectNextCmds() {
-        var L = [];
-        var voffs = offs;
-        for (var i = 0; i < 8; i++) {
-            var cmd0 = rom.view.getUint32(voffs, false);
-            var cmd1 = rom.view.getUint32(voffs + 4, false);
+        const L = [];
+        let voffs = offs;
+        for (let i = 0; i < 8; i++) {
+            const cmd0 = rom.view.getUint32(voffs, false);
+            const cmd1 = rom.view.getUint32(voffs + 4, false);
             L.push([cmd0, cmd1]);
             voffs += 8;
         }
         return L;
     }
     function matchesCmdStream(cmds, needle) {
-        for (var i = 0; i < needle.length; i++)
+        for (let i = 0; i < needle.length; i++)
             if (cmds[i][0] >>> 24 !== needle[i])
                 return false;
         return true;
     }
 
-    var rom = state.rom;
-    var offs = state.lookupAddress(addr);
+    const rom = state.rom;
+    let offs = state.lookupAddress(addr);
     if (offs === null)
         return;
     while (true) {
-        var cmd0 = rom.view.getUint32(offs, false);
-        var cmd1 = rom.view.getUint32(offs + 4, false);
+        const cmd0 = rom.view.getUint32(offs, false);
+        const cmd1 = rom.view.getUint32(offs + 4, false);
 
-        var cmdType = cmd0 >>> 24;
-        if (cmdType == UCodeCommands.ENDDL)
+        const cmdType = cmd0 >>> 24;
+        if (cmdType === UCodeCommands.ENDDL)
             break;
 
         // Texture uploads need to be special.
-        if (cmdType == UCodeCommands.SETTIMG) {
-            var U = UCodeCommands;
-            var nextCmds = collectNextCmds();
+        if (cmdType === UCodeCommands.SETTIMG) {
+            const U = UCodeCommands;
+            const nextCmds = collectNextCmds();
             if (matchesCmdStream(nextCmds, [U.SETTIMG, U.SETTILE, U.RDPLOADSYNC, U.LOADBLOCK, U.RDPPIPESYNC, U.SETTILE, U.SETTILESIZE])) {
                 loadTextureBlock(state, nextCmds);
                 offs += 7 * 8;
@@ -829,45 +838,46 @@ function runDL(state, addr) {
             }
         }
 
-        var func = CommandDispatch[cmdType];
-        if (func) func(state, cmd0, cmd1);
+        const func = CommandDispatch[cmdType];
+        if (func)
+            func(state, cmd0, cmd1);
         offs += 8;
     }
 }
 
 export class DL {
-    cmds:Function[];
-    textures:HTMLCanvasElement[];
+    public cmds: CmdFunc[];
+    public textures: HTMLCanvasElement[];
 
-    constructor(cmds:Function[], textures:HTMLCanvasElement[]) {
+    constructor(cmds: CmdFunc[], textures: HTMLCanvasElement[]) {
         this.cmds = cmds;
         this.textures = textures;
     }
 }
 
 class State {
-    gl:WebGLRenderingContext;
+    public gl: WebGLRenderingContext;
 
-    cmds:Function[];
-    textures:HTMLCanvasElement[];
+    public cmds: CmdFunc[];
+    public textures: HTMLCanvasElement[];
 
-    mtx:any;
-    mtxStack:any[];
+    public mtx: mat4;
+    public mtxStack: mat4[];
 
-    vertexBuffer:Float32Array;
-    verticesDirty:number[];
+    public vertexBuffer: Float32Array;
+    public verticesDirty: number[];
 
-    paletteTile:{};
-    rom:any;
-    banks:any;
+    public paletteTile: {};
+    public rom: any;
+    public banks: any;
 
-    lookupAddress(addr) {
+    public lookupAddress(addr) {
         return this.rom.lookupAddress(this.banks, addr);
-    };
+    }
 }
 
-export function readDL(gl:WebGLRenderingContext, rom, banks, startAddr):DL {
-    var state = new State;
+export function readDL(gl: WebGLRenderingContext, rom, banks, startAddr): DL {
+    const state = new State();
 
     state.gl = gl;
     state.cmds = [];
