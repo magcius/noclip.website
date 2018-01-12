@@ -18,6 +18,22 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __read = (this && this.__read) || function (o, n) {
+    var m = typeof Symbol === "function" && o[Symbol.iterator];
+    if (!m) return o;
+    var i = m.call(o), r, ar = [], e;
+    try {
+        while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+    }
+    catch (error) { e = { error: error }; }
+    finally {
+        try {
+            if (r && !r.done && (m = i["return"])) m.call(i);
+        }
+        finally { if (e) throw e.error; }
+    }
+    return ar;
+};
 System.register("util", [], function (exports_1, context_1) {
     "use strict";
     var __moduleName = context_1 && context_1.id;
@@ -1634,6 +1650,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "viewer", "util"], function 
                 function SceneDesc(name, path) {
                     this.name = name;
                     this.path = path;
+                    this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
                     return util_2.fetch(this.path).then(function (result) {
@@ -1650,7 +1667,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "viewer", "util"], function 
 System.register("j3d/scenes", ["j3d/render"], function (exports_8, context_8) {
     "use strict";
     var __moduleName = context_8 && context_8.id;
-    var render_1, name, sceneDescs, sceneGroup;
+    var render_1, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (render_1_1) {
@@ -1658,6 +1675,7 @@ System.register("j3d/scenes", ["j3d/render"], function (exports_8, context_8) {
             }
         ],
         execute: function () {
+            id = "j3d";
             name = "J3D Models";
             sceneDescs = [
                 { name: "Faceship", filename: "faceship.bmd" },
@@ -1666,7 +1684,7 @@ System.register("j3d/scenes", ["j3d/render"], function (exports_8, context_8) {
                 var name = entry.name || entry.filename;
                 return new render_1.SceneDesc(name, path);
             });
-            exports_8("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_8("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
@@ -1880,6 +1898,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (export
                 function SceneDesc(name, path) {
                     this.name = name;
                     this.path = path;
+                    this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
                     return util_3.fetch(this.path).then(function (result) {
@@ -1896,7 +1915,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (export
 System.register("mdl0/scenes", ["mdl0/render"], function (exports_11, context_11) {
     "use strict";
     var __moduleName = context_11 && context_11.id;
-    var render_2, name, sceneDescs, sceneGroup;
+    var render_2, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
             function (render_2_1) {
@@ -1905,6 +1924,7 @@ System.register("mdl0/scenes", ["mdl0/render"], function (exports_11, context_11
         ],
         execute: function () {
             name = "Sonic Mania";
+            id = "mdl0";
             sceneDescs = [
                 'Meshes/Continue/Count0.bin',
                 'Meshes/Continue/Count1.bin',
@@ -1960,7 +1980,7 @@ System.register("mdl0/scenes", ["mdl0/render"], function (exports_11, context_11
                 var name = filename;
                 return new render_2.SceneDesc(name, path);
             });
-            exports_11("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_11("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
@@ -2864,6 +2884,7 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                 function SceneDesc(name, path) {
                     this.name = name;
                     this.path = path;
+                    this.id = this.path;
                 }
                 SceneDesc.prototype._createSceneFromData = function (gl, result) {
                     var _this = this;
@@ -2899,7 +2920,7 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
 System.register("oot3d/scenes", ["oot3d/render"], function (exports_15, context_15) {
     "use strict";
     var __moduleName = context_15 && context_15.id;
-    var render_3, name, sceneDescs, sceneGroup;
+    var render_3, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (render_3_1) {
@@ -2907,6 +2928,7 @@ System.register("oot3d/scenes", ["oot3d/render"], function (exports_15, context_
             }
         ],
         execute: function () {
+            id = "oot3d";
             name = "Ocarina of Time 3D";
             sceneDescs = [
                 { name: "Inside the Deku Tree", filename: "ydan_info.zsi" },
@@ -3011,7 +3033,7 @@ System.register("oot3d/scenes", ["oot3d/render"], function (exports_15, context_
                 var name = entry.name || entry.filename;
                 return new render_3.SceneDesc(name, path);
             });
-            exports_15("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_15("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
@@ -4077,6 +4099,7 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                 function SceneDesc(name, levelId) {
                     this.name = name;
                     this.levelId = levelId;
+                    this.id = '' + this.levelId;
                 }
                 SceneDesc.prototype._createBmdScene = function (gl, filename, localScale, level) {
                     return util_6.fetch("data/sm64ds/" + filename).then(function (result) {
@@ -4110,7 +4133,7 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
 System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_21, context_21) {
     "use strict";
     var __moduleName = context_21 && context_21.id;
-    var render_4, name, sceneDescs, sceneGroup;
+    var render_4, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (render_4_1) {
@@ -4118,6 +4141,7 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_21, contex
             }
         ],
         execute: function () {
+            id = "sm64ds";
             name = "Super Mario 64 DS";
             sceneDescs = [
                 { 'id': 1, 'name': "Princess Peach's Castle - Gardens" },
@@ -4171,7 +4195,7 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_21, contex
             ].map(function (entry) {
                 return new render_4.SceneDesc(entry.name, entry.id);
             });
-            exports_21("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_21("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
@@ -5561,6 +5585,7 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                 function SceneDesc(name, path) {
                     this.name = name;
                     this.path = path;
+                    this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
                     return util_7.fetch(this.path).then(function (result) {
@@ -5577,7 +5602,7 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
 System.register("zelview/scenes", ["zelview/render"], function (exports_25, context_25) {
     "use strict";
     var __moduleName = context_25 && context_25.id;
-    var render_5, name, sceneDescs, sceneGroup;
+    var render_5, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (render_5_1) {
@@ -5585,6 +5610,7 @@ System.register("zelview/scenes", ["zelview/render"], function (exports_25, cont
             }
         ],
         execute: function () {
+            id = "zelview";
             name = "Ocarina of Time";
             sceneDescs = [
                 {
@@ -6031,7 +6057,7 @@ System.register("zelview/scenes", ["zelview/render"], function (exports_25, cont
                 var path = "data/zelview/" + entry.filename + ".zelview0";
                 return new render_5.SceneDesc(entry.label, path);
             });
-            exports_25("sceneGroup", sceneGroup = { name: name, sceneDescs: sceneDescs });
+            exports_25("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
@@ -6078,15 +6104,43 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     this.groups.push(OOT3D.sceneGroup);
                     // this.groups.push(J3D.sceneGroup);
                     this._makeUI();
-                    // Select defaults
-                    this._loadSceneGroup(this.groups[0]);
+                    // Load the state from the hash
+                    this._loadState(window.location.hash.slice(1));
+                    // If it didn't work, fall back to defaults.
+                    if (!this.currentSceneDesc)
+                        this._loadSceneGroup(this.groups[0]);
                 }
                 Main.prototype._onResize = function () {
                     this.canvas.width = window.innerWidth;
                     this.canvas.height = window.innerHeight;
                 };
+                Main.prototype._loadState = function (state) {
+                    var _a = __read(state.split('/', 2), 2), groupId = _a[0], sceneId = _a[1];
+                    var group = this.groups.find(function (g) { return g.id === groupId; });
+                    if (!group)
+                        return;
+                    var desc = group.sceneDescs.find(function (d) { return d.id === sceneId; });
+                    if (!desc)
+                        return;
+                    this._loadSceneGroup(group, false);
+                    this._loadSceneDesc(desc);
+                };
+                Main.prototype._saveState = function () {
+                    var groupId = this.currentSceneGroup.id;
+                    var sceneId = this.currentSceneDesc.id;
+                    return groupId + "/" + sceneId;
+                };
                 Main.prototype._loadSceneDesc = function (sceneDesc) {
                     var _this = this;
+                    if (this.currentSceneDesc === sceneDesc)
+                        return;
+                    this.currentSceneDesc = sceneDesc;
+                    // Make sure combobox is selected
+                    for (var i = 0; i < this.sceneSelect.options.length; i++) {
+                        var sceneOption = this.sceneSelect.options[i];
+                        if (sceneOption.sceneDesc === sceneDesc)
+                            this.sceneSelect.selectedIndex = i;
+                    }
                     var gl = this.viewer.sceneGraph.renderState.viewport.gl;
                     sceneDesc.createScene(gl).then(function (result) {
                         _this.viewer.setScene(result);
@@ -6100,6 +6154,7 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                         */
                     });
                     this._deselectUI();
+                    window.history.replaceState('', '', '#' + this._saveState());
                 };
                 Main.prototype._deselectUI = function () {
                     // Take focus off of the select.
@@ -6115,10 +6170,17 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     var group = option.group;
                     this._loadSceneGroup(group);
                 };
-                Main.prototype._loadSceneGroup = function (group) {
-                    if (this.selectedGroup === group)
+                Main.prototype._loadSceneGroup = function (group, loadDefaultSceneInGroup) {
+                    if (loadDefaultSceneInGroup === void 0) { loadDefaultSceneInGroup = true; }
+                    if (this.currentSceneGroup === group)
                         return;
-                    this.selectedGroup = group;
+                    this.currentSceneGroup = group;
+                    // Make sure combobox is selected
+                    for (var i = 0; i < this.groupSelect.options.length; i++) {
+                        var groupOption = this.groupSelect.options[i];
+                        if (groupOption.group === group)
+                            this.groupSelect.selectedIndex = i;
+                    }
                     // Clear.
                     this.sceneSelect.innerHTML = '';
                     try {
@@ -6137,8 +6199,8 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                         }
                         finally { if (e_15) throw e_15.error; }
                     }
-                    // Load default.
-                    this._loadSceneDesc(group.sceneDescs[0]);
+                    if (loadDefaultSceneInGroup)
+                        this._loadSceneDesc(group.sceneDescs[0]);
                     var e_15, _c;
                 };
                 Main.prototype._onSceneSelectChange = function () {

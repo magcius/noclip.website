@@ -15,7 +15,8 @@ class Main {
     private groupSelect: HTMLSelectElement;
     private sceneSelect: HTMLSelectElement;
     private gearSettings: HTMLElement;
-    private selectedGroup: SceneGroup;
+    private currentSceneGroup: SceneGroup;
+    private currentSceneDesc: SceneDesc;
 
     constructor() {
         this.canvas = document.createElement('canvas');
@@ -40,8 +41,11 @@ class Main {
 
         this._makeUI();
 
-        // Select defaults
-        this._loadSceneGroup(this.groups[0]);
+        // Load the state from the hash
+        this._loadState(window.location.hash.slice(1));
+        // If it didn't work, fall back to defaults.
+        if (!this.currentSceneDesc)
+            this._loadSceneGroup(this.groups[0]);
     }
 
     private _onResize() {
@@ -49,7 +53,36 @@ class Main {
         this.canvas.height = window.innerHeight;
     }
 
+    private _loadState(state: string) {
+        const [groupId, sceneId] = state.split('/', 2);
+        const group = this.groups.find(g => g.id === groupId);
+        if (!group)
+            return;
+        const desc = group.sceneDescs.find(d => d.id === sceneId);
+        if (!desc)
+            return;
+        this._loadSceneGroup(group, false);
+        this._loadSceneDesc(desc);
+    }
+    private _saveState() {
+        const groupId = this.currentSceneGroup.id;
+        const sceneId = this.currentSceneDesc.id;
+        return `${groupId}/${sceneId}`;
+    }
+
     private _loadSceneDesc(sceneDesc: SceneDesc) {
+        if (this.currentSceneDesc === sceneDesc)
+            return;
+
+        this.currentSceneDesc = sceneDesc;
+
+        // Make sure combobox is selected
+        for (let i = 0; i < this.sceneSelect.options.length; i++) {
+            const sceneOption = this.sceneSelect.options[i];
+            if ((<any>sceneOption).sceneDesc === sceneDesc)
+                this.sceneSelect.selectedIndex = i;
+        }
+
         const gl = this.viewer.sceneGraph.renderState.viewport.gl;
 
         sceneDesc.createScene(gl).then((result: Scene) => {
@@ -67,6 +100,7 @@ class Main {
         });
 
         this._deselectUI();
+        window.history.replaceState('', '', '#' + this._saveState());
     }
 
     private _deselectUI() {
@@ -85,11 +119,18 @@ class Main {
         this._loadSceneGroup(group);
     }
 
-    private _loadSceneGroup(group: SceneGroup) {
-        if (this.selectedGroup === group)
+    private _loadSceneGroup(group: SceneGroup, loadDefaultSceneInGroup: boolean = true) {
+        if (this.currentSceneGroup === group)
             return;
 
-        this.selectedGroup = group;
+        this.currentSceneGroup = group;
+
+        // Make sure combobox is selected
+        for (let i = 0; i < this.groupSelect.options.length; i++) {
+            const groupOption = this.groupSelect.options[i];
+            if ((<any>groupOption).group === group)
+                this.groupSelect.selectedIndex = i;
+        }
 
         // Clear.
         this.sceneSelect.innerHTML = '';
@@ -100,8 +141,8 @@ class Main {
             this.sceneSelect.appendChild(sceneOption);
         }
 
-        // Load default.
-        this._loadSceneDesc(group.sceneDescs[0]);
+        if (loadDefaultSceneInGroup)
+            this._loadSceneDesc(group.sceneDescs[0]);
     }
     private _onSceneSelectChange() {
         const option = this.sceneSelect.selectedOptions.item(0);

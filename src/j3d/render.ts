@@ -173,12 +173,14 @@ export class Scene implements Viewer.Scene {
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
+    public id: string;
     public name: string;
     public path: string;
 
     constructor(name: string, path: string) {
         this.name = name;
         this.path = path;
+        this.id = this.path;
     }
 
     public createScene(gl: WebGLRenderingContext): PromiseLike<Scene> {

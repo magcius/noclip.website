@@ -2,6 +2,7 @@
 import { SceneDesc } from 'render';
 import { SceneGroup } from '../viewer';
 
+const id = "oot3d";
 const name = "Ocarina of Time 3D";
 const sceneDescs:SceneDesc[] = [
     { name: "Inside the Deku Tree", filename: "ydan_info.zsi" },
@@ -111,4 +112,4 @@ const sceneDescs:SceneDesc[] = [
     return new SceneDesc(name, path);
 });
 
-export const sceneGroup:SceneGroup = { name, sceneDescs };
+export const sceneGroup:SceneGroup = { id, name, sceneDescs };
