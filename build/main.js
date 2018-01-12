@@ -3683,7 +3683,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var offs = bmd.materialOffsBase + idx * 0x30;
         var material = {};
         material.name = readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
-        material.texCoordMat = gl_matrix_2.mat4.create();
+        material.texCoordMat = gl_matrix_2.mat2d.create();
         var textureIdx = view.getUint32(offs + 0x04, true);
         if (textureIdx !== 0xFFFFFFFF) {
             var paletteIdx = view.getUint32(offs + 0x08, true);
@@ -3695,11 +3695,11 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 var scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
                 var transS = view.getInt32(offs + 0x18, true) / 4096.0;
                 var transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-                gl_matrix_2.mat4.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-                gl_matrix_2.mat4.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
+                gl_matrix_2.mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
+                gl_matrix_2.mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
             }
             var texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
-            gl_matrix_2.mat4.scale(material.texCoordMat, material.texCoordMat, texScale);
+            gl_matrix_2.mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
         }
         else {
             material.texture = null;
@@ -3873,7 +3873,7 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
             }
         ],
         execute: function () {
-            DL_VERT_SHADER_SOURCE = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform mat4 u_texCoordMat;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n\n    void main() {\n        gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);\n        v_color = a_color;\n        v_uv = (u_texCoordMat * vec4(a_uv, 1.0, 1.0)).st;\n    }\n";
+            DL_VERT_SHADER_SOURCE = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform mat3 u_texCoordMat;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n\n    void main() {\n        gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);\n        v_color = a_color;\n        v_uv = (u_texCoordMat * vec3(a_uv, 1.0)).st;\n    }\n";
             DL_FRAG_SHADER_SOURCE = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n\n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (gl_FragColor.a == 0.0)\n            discard;\n    }\n";
             NITRO_Program = /** @class */ (function (_super) {
                 __extends(NITRO_Program, _super);
@@ -3969,18 +3969,24 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                     }
                     // Find any possible material animations.
                     var crg0mat = this.crg0Level.materials.find(function (crg0mat) { return crg0mat.name === material.name; });
-                    var texCoordMat = gl_matrix_3.mat4.clone(material.texCoordMat);
+                    var texCoordMat = gl_matrix_3.mat3.create();
+                    gl_matrix_3.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                     return function (state) {
                         if (crg0mat !== undefined) {
+                            var texAnimMat = gl_matrix_3.mat3.create();
                             try {
                                 for (var _a = __values(crg0mat.animations), _b = _a.next(); !_b.done; _b = _a.next()) {
                                     var anim = _b.value;
                                     var time = state.time / 30;
                                     var value = anim.values[(time | 0) % anim.values.length];
                                     if (anim.property === 'x')
-                                        texCoordMat[13] = value;
+                                        gl_matrix_3.mat3.translate(texAnimMat, texAnimMat, [0, value]);
                                     else if (anim.property === 'y')
-                                        texCoordMat[12] = value;
+                                        gl_matrix_3.mat3.translate(texAnimMat, texAnimMat, [value, 0]);
+                                    else if (anim.property === 'scale')
+                                        gl_matrix_3.mat3.scale(texAnimMat, texAnimMat, [value, value]);
+                                    else if (anim.property === 'rotation')
+                                        gl_matrix_3.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
                             catch (e_11_1) { e_11 = { error: e_11_1 }; }
@@ -3990,9 +3996,11 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                                 }
                                 finally { if (e_11) throw e_11.error; }
                             }
+                            gl_matrix_3.mat3.fromMat2d(texCoordMat, material.texCoordMat);
+                            gl_matrix_3.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
                         }
                         if (texture !== null) {
-                            gl.uniformMatrix4fv(_this.program.texCoordMatLocation, false, texCoordMat);
+                            gl.uniformMatrix3fv(_this.program.texCoordMatLocation, false, texCoordMat);
                             gl.bindTexture(gl.TEXTURE_2D, texId);
                         }
                         gl.depthMask(material.depthWrite);

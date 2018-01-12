@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { mat3, mat4 } from 'gl-matrix';
 
 import * as LZ77 from 'lz77';
 import * as Viewer from 'viewer';
@@ -14,7 +14,7 @@ const DL_VERT_SHADER_SOURCE = `
     uniform mat4 u_modelView;
     uniform mat4 u_localMatrix;
     uniform mat4 u_projection;
-    uniform mat4 u_texCoordMat;
+    uniform mat3 u_texCoordMat;
     attribute vec3 a_position;
     attribute vec2 a_uv;
     attribute vec4 a_color;
@@ -24,7 +24,7 @@ const DL_VERT_SHADER_SOURCE = `
     void main() {
         gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);
         v_color = a_color;
-        v_uv = (u_texCoordMat * vec4(a_uv, 1.0, 1.0)).st;
+        v_uv = (u_texCoordMat * vec3(a_uv, 1.0)).st;
     }
 `;
 
@@ -172,22 +172,30 @@ class Scene implements Viewer.Scene {
 
         // Find any possible material animations.
         const crg0mat = this.crg0Level.materials.find(crg0mat => crg0mat.name === material.name);
-        const texCoordMat = mat4.clone(material.texCoordMat);
+        const texCoordMat = mat3.create();
+        mat3.fromMat2d(texCoordMat, material.texCoordMat);
 
         return (state: Viewer.RenderState) => {
             if (crg0mat !== undefined) {
+                const texAnimMat = mat3.create();
                 for (const anim of crg0mat.animations) {
                     const time = state.time / 30;
                     const value = anim.values[(time | 0) % anim.values.length];
                     if (anim.property === 'x')
-                        texCoordMat[13] = value;
+                        mat3.translate(texAnimMat, texAnimMat, [0, value]);
                     else if (anim.property === 'y')
-                        texCoordMat[12] = value;
+                        mat3.translate(texAnimMat, texAnimMat, [value, 0]);
+                    else if (anim.property === 'scale')
+                        mat3.scale(texAnimMat, texAnimMat, [value, value]);
+                    else if (anim.property === 'rotation')
+                        mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                 }
+                mat3.fromMat2d(texCoordMat, material.texCoordMat);
+                mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
             }
 
             if (texture !== null) {
-                gl.uniformMatrix4fv(this.program.texCoordMatLocation, false, texCoordMat);
+                gl.uniformMatrix3fv(this.program.texCoordMatLocation, false, texCoordMat);
                 gl.bindTexture(gl.TEXTURE_2D, texId);
             }
 
