@@ -2,6 +2,7 @@
 import { SceneDesc } from 'render';
 import { SceneGroup } from '../viewer';
 
+const id = "sm64ds";
 const name = "Super Mario 64 DS";
 const sceneDescs: SceneDesc[] = [
     {'id': 1, 'name': "Princess Peach's Castle - Gardens"},
@@ -56,4 +57,4 @@ const sceneDescs: SceneDesc[] = [
     return new SceneDesc(entry.name, entry.id);
 });
 
-export const sceneGroup: SceneGroup = { name, sceneDescs };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };

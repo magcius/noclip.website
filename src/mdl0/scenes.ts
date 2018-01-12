@@ -3,6 +3,7 @@ import { SceneGroup } from '../viewer';
 import { SceneDesc } from './render';
 
 const name = "Sonic Mania";
+const id = "mdl0";
 const sceneDescs: SceneDesc[] = [
     'Meshes/Continue/Count0.bin',
     'Meshes/Continue/Count1.bin',
@@ -59,4 +60,4 @@ const sceneDescs: SceneDesc[] = [
     return new SceneDesc(name, path);
 });
 
-export const sceneGroup: SceneGroup = { name, sceneDescs };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };

@@ -268,12 +268,14 @@ class MultiScene implements Viewer.Scene {
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
+    public id: string;
     public name: string;
     public levelId: number;
 
     constructor(name: string, levelId: number) {
         this.name = name;
         this.levelId = levelId;
+        this.id = '' + this.levelId;
     }
 
     private _createBmdScene(gl: WebGLRenderingContext, filename: string, localScale: number, level: CRG0.Level): PromiseLike<Viewer.Scene> {

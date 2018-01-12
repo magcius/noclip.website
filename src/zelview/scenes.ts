@@ -2,6 +2,7 @@
 import { SceneDesc } from 'render';
 import { SceneGroup } from '../viewer';
 
+const id = "zelview";
 const name = "Ocarina of Time";
 const sceneDescs: SceneDesc[] = [
   {
@@ -449,4 +450,4 @@ const sceneDescs: SceneDesc[] = [
     return new SceneDesc(entry.label, path);
 });
 
-export const sceneGroup: SceneGroup = { name, sceneDescs };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };

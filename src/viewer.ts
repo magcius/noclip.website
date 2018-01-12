@@ -422,11 +422,13 @@ export class Viewer {
 }
 
 export interface SceneDesc {
+    id: string;
     name: string;
     createScene(gl: WebGLRenderingContext): PromiseLike<Scene>;
 }
 
 export interface SceneGroup {
+    id: string;
     name: string;
     sceneDescs: SceneDesc[];
 }

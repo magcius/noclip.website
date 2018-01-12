@@ -297,12 +297,14 @@ function dirname(path:string):string {
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
-    name:string;
-    path:string;
+    public name: string;
+    public path: string;
+    public id: string;
 
     constructor(name:string, path:string) {
         this.name = name;
         this.path = path;
+        this.id = this.path;
     }
 
     _createSceneFromData(gl:WebGLRenderingContext, result:ArrayBuffer):PromiseLike<Viewer.Scene> {
