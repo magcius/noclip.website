@@ -4208,7 +4208,7 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_22, context_2
             try {
                 for (var idxData_1 = __values(idxData), idxData_1_1 = idxData_1.next(); !idxData_1_1.done; idxData_1_1 = idxData_1.next()) {
                     var idx = idxData_1_1.value;
-                    if (state.verticesDirty[idxData])
+                    if (state.verticesDirty[idx])
                         return true;
                 }
             }
