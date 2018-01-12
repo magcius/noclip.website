@@ -6060,7 +6060,11 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
         execute: function () {
             Main = /** @class */ (function () {
                 function Main() {
+                    var _this = this;
                     this.canvas = document.createElement('canvas');
+                    this.canvas.onmousedown = function () {
+                        _this._deselectUI();
+                    };
                     document.body.appendChild(this.canvas);
                     window.onresize = this._onResize.bind(this);
                     this._onResize();
@@ -6095,6 +6099,9 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                         });
                         */
                     });
+                    this._deselectUI();
+                };
+                Main.prototype._deselectUI = function () {
                     // Take focus off of the select.
                     this.groupSelect.blur();
                     this.sceneSelect.blur();
