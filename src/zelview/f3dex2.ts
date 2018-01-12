@@ -95,7 +95,7 @@ function translateTRI(state, idxData) {
 
     function anyVertsDirty() {
         for (const idx of idxData)
-            if (state.verticesDirty[idxData])
+            if (state.verticesDirty[idx])
                 return true;
         return false;
     }
