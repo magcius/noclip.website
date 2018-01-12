@@ -1,31 +1,27 @@
-// Nintendo DS LZ77 (LZ10) format.
+// Nintendo Yaz0 format.
 
 // Header (8 bytes):
-//   Magic: "LZ77\x10" (5 bytes)
-//   Uncompressed size (3 bytes, little endian)
+//   Magic: "Yaz0" (4 bytes)
+//   Uncompressed size (4 bytes, big endian)
 // Data:
 //   Flags (1 byte)
 //   For each bit in the flags byte, from MSB to LSB:
 //     If flag is 1:
-//       LZ77 (2 bytes, big endian):
-//         Length: bits 0-3
-//         Offset: bits 4-15
-//         Copy Length+3 bytes from Offset back in the output buffer.
-//     If flag is 0:
 //       Literal: copy one byte from src to dest.
+//     If flag is 0:
+//       LZ77 (2 bytes, big endian):
+//         Length: bits 0-4
+//           If Length = 0, then read additional byte, add 16, and add it to Length.
+//         Offset: bits 5-15
+//         Copy Length+2 bytes from Offset back in the output buffer.
 
 import { assert, readString } from './util';
 
-export function isLZ77(srcBuffer: ArrayBuffer) {
-    const srcView = new DataView(srcBuffer);
-    return (readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
-}
-
 export function decompress(srcBuffer: ArrayBuffer) {
     const srcView = new DataView(srcBuffer);
-    assert(readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
+    assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
 
-    let uncompressedSize = srcView.getUint32(0x04, true) >> 8;
+    let uncompressedSize = srcView.getUint32(0x04, true);
     const dstBuffer = new Uint8Array(uncompressedSize);
 
     let srcOffs = 0x08;
@@ -36,32 +32,29 @@ export function decompress(srcBuffer: ArrayBuffer) {
         let i = 8;
         while (i--) {
             if (commandByte & (1 << i)) {
+                // Literal.
+                uncompressedSize--;
+                dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
+            } else {
                 const tmp = srcView.getUint16(srcOffs, false);
                 srcOffs += 2;
 
                 const windowOffset = (tmp & 0x0FFF) + 1;
-                let windowLength = (tmp >> 12) + 3;
+                let windowLength = (tmp >> 12) + 2;
+                if (windowLength === 2) {
+                    windowLength += srcView.getUint8(srcOffs) + 0x10;
+                    srcOffs += 1;
+                }
 
                 let copyOffs = dstOffs - windowOffset;
 
                 uncompressedSize -= windowLength;
                 while (windowLength--)
                     dstBuffer[dstOffs++] = dstBuffer[copyOffs++];
-            } else {
-                // Literal.
-                uncompressedSize--;
-                dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
             }
 
             if (uncompressedSize <= 0)
                 return dstBuffer.buffer;
         }
     }
-}
-
-export function maybeDecompress(srcBuffer: ArrayBuffer) {
-    if (isLZ77(srcBuffer))
-        return decompress(srcBuffer);
-    else
-        return srcBuffer;
 }

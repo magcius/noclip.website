@@ -3,6 +3,7 @@ import { mat4 } from 'gl-matrix';
 
 import * as LZ77 from 'lz77';
 import * as Viewer from 'viewer';
+import * as CRG0 from './crg0';
 import * as NITRO_BMD from './nitro_bmd';
 import * as NITRO_GX from './nitro_gx';
 
@@ -90,13 +91,17 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
 class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
     public textures: HTMLCanvasElement[];
-    public modelFuncs: Array<(pass: RenderPass) => void>;
+    public modelFuncs: Array<(state: Viewer.RenderState, pass: RenderPass) => void>;
     public program: NITRO_Program;
     public bmd: NITRO_BMD.BMD;
+    public localScale: number;
+    public crg0Level: CRG0.Level;
 
-    constructor(gl: WebGLRenderingContext, bmd: NITRO_BMD.BMD) {
+    constructor(gl: WebGLRenderingContext, bmd: NITRO_BMD.BMD, localScale: number, crg0Level: CRG0.Level) {
         this.program = new NITRO_Program();
         this.bmd = bmd;
+        this.localScale = localScale;
+        this.crg0Level = crg0Level;
 
         this.textures = bmd.textures.map((texture) => {
             return textureToCanvas(texture);
@@ -131,7 +136,7 @@ class Scene implements Viewer.Scene {
 
     public translatePoly(gl: WebGLRenderingContext, poly: NITRO_BMD.Poly) {
         const funcs = poly.packets.map((packet) => this.translatePacket(gl, packet));
-        return () => {
+        return (state: Viewer.RenderState) => {
             funcs.forEach((f) => { f(); });
         };
     }
@@ -165,9 +170,24 @@ class Scene implements Viewer.Scene {
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
         }
 
-        return () => {
+        // Find any possible material animations.
+        const crg0mat = this.crg0Level.materials.find(crg0mat => crg0mat.name === material.name);
+        const texCoordMat = mat4.clone(material.texCoordMat);
+
+        return (state: Viewer.RenderState) => {
+            if (crg0mat !== undefined) {
+                for (const anim of crg0mat.animations) {
+                    const time = state.time / 30;
+                    const value = anim.values[(time | 0) % anim.values.length];
+                    if (anim.property === 'x')
+                        texCoordMat[13] = value;
+                    else if (anim.property === 'y')
+                        texCoordMat[12] = value;
+                }
+            }
+
             if (texture !== null) {
-                gl.uniformMatrix4fv(this.program.texCoordMatLocation, false, material.texCoordMat);
+                gl.uniformMatrix4fv(this.program.texCoordMatLocation, false, texCoordMat);
                 gl.bindTexture(gl.TEXTURE_2D, texId);
             }
 
@@ -180,11 +200,11 @@ class Scene implements Viewer.Scene {
 
         const applyMaterial = this.translateMaterial(gl, batch.material);
         const renderPoly = this.translatePoly(gl, batch.poly);
-        return (pass: RenderPass) => {
+        return (state: Viewer.RenderState, pass: RenderPass) => {
             if (pass !== batchPass)
                 return;
-            applyMaterial();
-            renderPoly();
+            applyMaterial(state);
+            renderPoly(state);
         };
     }
 
@@ -192,21 +212,19 @@ class Scene implements Viewer.Scene {
         const localMatrix = mat4.create();
         const bmd = this.bmd;
 
-        // Local fudge factor so that all the models in the viewer "line up".
-        const localScaleFactor = 100;
-        const scaleFactor = bmd.scaleFactor * localScaleFactor;
+        const scaleFactor = bmd.scaleFactor * this.localScale;
 
         mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
         const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
-        return (pass: RenderPass) => {
+        return (state: Viewer.RenderState, pass: RenderPass) => {
             gl.uniformMatrix4fv(this.program.localMatrixLocation, false, localMatrix);
-            batches.forEach((f) => { f(pass); });
+            batches.forEach((f) => { f(state, pass); });
         };
     }
 
-    public renderModels(pass: RenderPass) {
+    public renderModels(state: Viewer.RenderState, pass: RenderPass) {
         return this.modelFuncs.forEach((func) => {
-            func(pass);
+            func(state, pass);
         });
     }
 
@@ -219,27 +237,59 @@ class Scene implements Viewer.Scene {
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
         // First pass, opaque.
-        this.renderModels(RenderPass.OPAQUE);
+        this.renderModels(state, RenderPass.OPAQUE);
 
         // Second pass, translucent.
-        this.renderModels(RenderPass.TRANSLUCENT);
+        this.renderModels(state, RenderPass.TRANSLUCENT);
+    }
+}
+
+class MultiScene implements Viewer.Scene {
+    cameraController = Viewer.FPSCameraController;    
+    scenes:Viewer.Scene[];
+    textures:HTMLCanvasElement[];
+    constructor(scenes:Viewer.Scene[]) {
+        this.scenes = scenes;
+        this.textures = [];
+        for (const scene of this.scenes)
+            this.textures = this.textures.concat(scene.textures);
+    }
+    render(renderState:Viewer.RenderState) {
+        this.scenes.forEach((scene) => scene.render(renderState));
     }
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
     public name: string;
-    public path: string;
+    public levelId: number;
 
-    constructor(name: string, path: string) {
+    constructor(name: string, levelId: number) {
         this.name = name;
-        this.path = path;
+        this.levelId = levelId;
     }
 
-    public createScene(gl: WebGLRenderingContext): PromiseLike<Scene> {
-        return fetch(this.path).then((result: ArrayBuffer) => {
-            const decompressed = LZ77.decompress(result);
-            const bmd = NITRO_BMD.parse(decompressed);
-            return new Scene(gl, bmd);
+    private _createBmdScene(gl: WebGLRenderingContext, filename: string, localScale: number, level: CRG0.Level): PromiseLike<Viewer.Scene> {
+        return fetch(`data/sm64ds/${filename}`).then((result: ArrayBuffer) => {
+            result = LZ77.maybeDecompress(result);
+            const bmd = NITRO_BMD.parse(result);
+            return new Scene(gl, bmd, localScale, level);
+        });
+    }
+
+    private _createSceneFromCRG0(gl: WebGLRenderingContext, crg0: CRG0.CRG0): PromiseLike<Viewer.Scene> {
+        const level = crg0.levels[this.levelId];
+        const scenes = [this._createBmdScene(gl, level.attributes.get('bmd'), 100, level)];
+        if (level.attributes.get('vrbox'))
+            scenes.unshift(this._createBmdScene(gl, level.attributes.get('vrbox'), 0.1, level));
+        return Promise.all(scenes).then((results) => {
+            return new MultiScene(results);
+        });
+    }
+
+    public createScene(gl: WebGLRenderingContext): PromiseLike<Viewer.Scene> {
+        return fetch('data/sm64ds/sm64ds.crg0').then((result: ArrayBuffer) => {
+            const crg0 = CRG0.parse(result);
+            return this._createSceneFromCRG0(gl, crg0);
         });
     }
 }
