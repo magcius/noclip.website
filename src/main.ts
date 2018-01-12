@@ -19,6 +19,9 @@ class Main {
 
     constructor() {
         this.canvas = document.createElement('canvas');
+        this.canvas.onmousedown = () => {
+            this._deselectUI();
+        };
         document.body.appendChild(this.canvas);
         window.onresize = this._onResize.bind(this);
         this._onResize();
@@ -63,6 +66,10 @@ class Main {
             */
         });
 
+        this._deselectUI();
+    }
+
+    private _deselectUI() {
         // Take focus off of the select.
         this.groupSelect.blur();
         this.sceneSelect.blur();
