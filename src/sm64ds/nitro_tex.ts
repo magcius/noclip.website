@@ -71,19 +71,23 @@ function readTexture_Palette16(width: number, height: number, texData: ArrayBuff
 }
 
 function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBuffer, palData: ArrayBuffer) {
+    function getPal16(offs) {
+        return offs < palView.byteLength ? palView.getUint16(offs, true) : 0;
+    }
+
     function buildColorTable(palBlock) {
         const palMode = palBlock >> 14;
         const palOffs = (palBlock & 0x3FFF) << 2;
 
         const colorTable = new Uint8Array(16);
 
-        const p0 = palView.getUint16(palOffs + 0x00, true);
+        const p0 = getPal16(palOffs + 0x00);
         colorTable[0] = expand5to8(p0 & 0x1F);
         colorTable[1] = expand5to8((p0 >>> 5) & 0x1F);
         colorTable[2] = expand5to8((p0 >>> 10) & 0x1F);
         colorTable[3] = 0xFF;
 
-        const p1 = palView.getUint16(palOffs + 0x02, true);
+        const p1 = getPal16(palOffs + 0x02);
         colorTable[4] = expand5to8(p1 & 0x1F);
         colorTable[5] = expand5to8((p1 >>> 5) & 0x1F);
         colorTable[6] = expand5to8((p1 >>> 10) & 0x1F);
@@ -91,7 +95,7 @@ function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBuffe
 
         if (palMode === 0) {
             // PTY=0, A=0
-            const p2 = palView.getUint16(palOffs + 0x04, true);
+            const p2 = getPal16(palOffs + 0x04);
             colorTable[8]  = expand5to8(p2 & 0x1F);
             colorTable[9]  = expand5to8((p2 >>> 5) & 0x1F);
             colorTable[10] = expand5to8((p2 >>> 10) & 0x1F);
@@ -107,13 +111,13 @@ function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBuffe
             // Color4 is transparent black.
         } else if (palMode === 2) {
             // PTY=0, A=1
-            const p2 = palView.getUint16(palOffs + 0x04, true);
+            const p2 = getPal16(palOffs + 0x04);
             colorTable[8]  = expand5to8(p2 & 0x1F);
             colorTable[9]  = expand5to8((p2 >>> 5) & 0x1F);
             colorTable[10] = expand5to8((p2 >>> 10) & 0x1F);
             colorTable[11] = 0xFF;
 
-            const p3 = palView.getUint16(palOffs + 0x04, true);
+            const p3 = getPal16(palOffs + 0x06);
             colorTable[12] = expand5to8(p3 & 0x1F);
             colorTable[13] = expand5to8((p3 >>> 5) & 0x1F);
             colorTable[14] = expand5to8((p3 >>> 10) & 0x1F);
