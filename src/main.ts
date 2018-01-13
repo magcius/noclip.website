@@ -54,7 +54,8 @@ class Main {
     }
 
     private _loadState(state: string) {
-        const [groupId, sceneId] = state.split('/', 2);
+        const [groupId, ...sceneRest] = state.split('/');
+        const sceneId = sceneRest.join('/');
         const group = this.groups.find(g => g.id === groupId);
         if (!group)
             return;
