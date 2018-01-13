@@ -3088,30 +3088,245 @@ System.register("sm64ds/crg0", ["util"], function (exports_16, context_16) {
         }
     };
 });
-// Read DS Geometry Engine commands.
-System.register("sm64ds/nitro_gx", [], function (exports_17, context_17) {
+// Read DS texture formats.
+System.register("sm64ds/nitro_tex", [], function (exports_17, context_17) {
     "use strict";
     var __moduleName = context_17 && context_17.id;
-    function rgb5(pixel) {
-        var r;
-        var g;
-        var b;
-        r = (pixel & 0x7c00) >> 10;
-        r = (r << (8 - 5)) | (r >> (10 - 8));
-        g = (pixel & 0x3e0) >> 5;
-        g = (g << (8 - 5)) | (g >> (10 - 8));
-        b = pixel & 0x1f;
-        b = (b << (8 - 5)) | (b >> (10 - 8));
+    function expand3to8(n) {
+        return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
+    }
+    function expand5to8(n) {
+        return (n << (8 - 5)) | (n >>> (10 - 8));
+    }
+    function s3tcblend(a, b) {
+        // return (a*3 + b*5) / 8;
+        return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
+    }
+    function bgr5(pixels, dstOffs, p) {
+        pixels[dstOffs + 0] = expand5to8(p & 0x1F);
+        pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
+        pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
+    }
+    exports_17("bgr5", bgr5);
+    function readTexture_A3I5(width, height, texData, palData) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = new DataView(texData);
+        var palView = new DataView(palData);
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var x = 0; x < width; x++) {
+                var texBlock = texView.getUint8(srcOffs++);
+                var palIdx = (texBlock & 0x1F) << 1;
+                var alpha = texBlock >>> 5;
+                var p = palView.getUint16(palIdx, true);
+                var dstOffs = 4 * ((y * width) + x);
+                bgr5(pixels, dstOffs, p);
+                pixels[dstOffs + 3] = expand3to8(alpha);
+            }
+        }
+        return pixels;
+    }
+    function readTexture_Palette16(width, height, texData, palData, color0) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = new DataView(texData);
+        var palView = new DataView(palData);
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var xx = 0; xx < width; xx += 4) {
+                var texBlock = texView.getUint16(srcOffs, true);
+                srcOffs += 2;
+                for (var x = 0; x < 4; x++) {
+                    var palIdx = texBlock & 0x0F;
+                    var p = palView.getUint16(palIdx * 2, true);
+                    var dstOffs = 4 * ((y * width) + xx + x);
+                    bgr5(pixels, dstOffs, p);
+                    pixels[dstOffs + 3] = palIdx === 0 ? (color0 ? 0x00 : 0xFF) : 0xFF;
+                    texBlock >>= 4;
+                }
+            }
+        }
+        return pixels;
+    }
+    function readTexture_Palette256(width, height, texData, palData, color0) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = new DataView(texData);
+        var palView = new DataView(palData);
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var xx = 0; xx < width; xx++) {
+                var palIdx = texView.getUint8(srcOffs++);
+                var p = palView.getUint16(palIdx * 2, true);
+                var dstOffs = 4 * ((y * width) + xx);
+                bgr5(pixels, dstOffs, p);
+                pixels[dstOffs + 3] = palIdx === 0 ? (color0 ? 0x00 : 0xFF) : 0xFF;
+            }
+        }
+        return pixels;
+    }
+    function readTexture_CMPR_4x4(width, height, texData, palData) {
+        function getPal16(offs) {
+            return offs < palView.byteLength ? palView.getUint16(offs, true) : 0;
+        }
+        function buildColorTable(palBlock) {
+            var palMode = palBlock >> 14;
+            var palOffs = (palBlock & 0x3FFF) << 2;
+            var colorTable = new Uint8Array(16);
+            var p0 = getPal16(palOffs + 0x00);
+            bgr5(colorTable, 0, p0);
+            colorTable[3] = 0xFF;
+            var p1 = getPal16(palOffs + 0x02);
+            bgr5(colorTable, 4, p1);
+            colorTable[7] = 0xFF;
+            if (palMode === 0) {
+                // PTY=0, A=0
+                var p2 = getPal16(palOffs + 0x04);
+                bgr5(colorTable, 8, p2);
+                colorTable[11] = 0xFF;
+                // Color4 is transparent black.
+            }
+            else if (palMode === 1) {
+                // PTY=1, A=0
+                // Color3 is a blend of Color1/Color2.
+                colorTable[8] = (colorTable[0] + colorTable[4]) >>> 1;
+                colorTable[9] = (colorTable[1] + colorTable[5]) >>> 1;
+                colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
+                colorTable[11] = 0xFF;
+                // Color4 is transparent black.
+            }
+            else if (palMode === 2) {
+                // PTY=0, A=1
+                var p2 = getPal16(palOffs + 0x04);
+                bgr5(colorTable, 8, p2);
+                colorTable[11] = 0xFF;
+                var p3 = getPal16(palOffs + 0x06);
+                bgr5(colorTable, 12, p3);
+                colorTable[15] = 0xFF;
+            }
+            else {
+                colorTable[8] = s3tcblend(colorTable[4], colorTable[0]);
+                colorTable[9] = s3tcblend(colorTable[5], colorTable[1]);
+                colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
+                colorTable[11] = 0xFF;
+                colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
+                colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
+                colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
+                colorTable[15] = 0xFF;
+            }
+            return colorTable;
+        }
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = new DataView(texData);
+        var palView = new DataView(palData);
+        var palIdxStart = (width * height) / 4;
+        var srcOffs = 0;
+        for (var yy = 0; yy < height; yy += 4) {
+            for (var xx = 0; xx < width; xx += 4) {
+                var texBlock = texView.getUint32((srcOffs * 0x04), true);
+                var palBlock = texView.getUint16(palIdxStart + (srcOffs * 0x02), true);
+                var colorTable = buildColorTable(palBlock);
+                for (var y = 0; y < 4; y++) {
+                    for (var x = 0; x < 4; x++) {
+                        var colorIdx = texBlock & 0x03;
+                        var dstOffs = 4 * (((yy + y) * width) + xx + x);
+                        pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
+                        pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
+                        pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
+                        pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
+                        texBlock >>= 2;
+                    }
+                }
+                srcOffs++;
+            }
+        }
+        return pixels;
+    }
+    function readTexture_A5I3(width, height, texData, palData) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = new DataView(texData);
+        var palView = new DataView(palData);
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var x = 0; x < width; x++) {
+                var texBlock = texView.getUint8(srcOffs++);
+                var palIdx = (texBlock & 0x03) << 1;
+                var alpha = texBlock >>> 3;
+                var p = palView.getUint16(palIdx, true);
+                var dstOffs = 4 * ((y * width) + x);
+                bgr5(pixels, dstOffs, p);
+                pixels[dstOffs + 3] = expand5to8(alpha);
+            }
+        }
+        return pixels;
+    }
+    function readTexture_Direct(width, height, texData) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = new DataView(texData);
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var x = 0; x < width; x++) {
+                var p = texView.getUint16(srcOffs, true);
+                var dstOffs = 4 * ((y * width) + x);
+                bgr5(pixels, dstOffs, p);
+                pixels[dstOffs + 3] = 0xFF;
+                srcOffs += 2;
+            }
+        }
+        return pixels;
+    }
+    function readTexture(format, width, height, texData, palData, color0) {
+        switch (format) {
+            case Format.Tex_A3I5:
+                return readTexture_A3I5(width, height, texData, palData);
+            case Format.Tex_Palette16:
+                return readTexture_Palette16(width, height, texData, palData, color0);
+            case Format.Tex_Palette256:
+                return readTexture_Palette256(width, height, texData, palData, color0);
+            case Format.Tex_CMPR_4x4:
+                return readTexture_CMPR_4x4(width, height, texData, palData);
+            case Format.Tex_A5I3:
+                return readTexture_A5I3(width, height, texData, palData);
+            case Format.Tex_Direct:
+                return readTexture_Direct(width, height, texData);
+            default:
+                throw new Error("Unsupported texture type! " + format);
+        }
+    }
+    exports_17("readTexture", readTexture);
+    var Format;
+    return {
+        setters: [],
+        execute: function () {// Read DS texture formats.
+            (function (Format) {
+                Format[Format["Tex_None"] = 0] = "Tex_None";
+                Format[Format["Tex_A3I5"] = 1] = "Tex_A3I5";
+                Format[Format["Tex_Palette4"] = 2] = "Tex_Palette4";
+                Format[Format["Tex_Palette16"] = 3] = "Tex_Palette16";
+                Format[Format["Tex_Palette256"] = 4] = "Tex_Palette256";
+                Format[Format["Tex_CMPR_4x4"] = 5] = "Tex_CMPR_4x4";
+                Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
+                Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
+            })(Format || (Format = {}));
+            exports_17("Format", Format);
+        }
+    };
+});
+// Read DS Geometry Engine commands.
+System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_18, context_18) {
+    "use strict";
+    var __moduleName = context_18 && context_18.id;
+    function bgr5(pixel) {
+        nitro_tex_1.bgr5(tmp, 0, pixel);
+        var r = tmp[0], g = tmp[1], b = tmp[2];
         return { r: r, g: g, b: b };
     }
-    exports_17("rgb5", rgb5);
+    exports_18("bgr5", bgr5);
     function cmd_MTX_RESTORE(ctx) {
         // XXX: We don't implement the matrix stack yet.
         ctx.readParam();
     }
     function cmd_COLOR(ctx) {
         var param = ctx.readParam();
-        ctx.s_color = rgb5(param);
+        ctx.s_color = bgr5(param);
     }
     function cmd_NORMAL(ctx) {
         var param = ctx.readParam();
@@ -3233,9 +3448,9 @@ System.register("sm64ds/nitro_gx", [], function (exports_17, context_17) {
             vtxArray[0] = v.pos.x;
             vtxArray[1] = v.pos.y;
             vtxArray[2] = v.pos.z;
-            vtxArray[3] = v.color.b / 0xFF;
+            vtxArray[3] = v.color.r / 0xFF;
             vtxArray[4] = v.color.g / 0xFF;
-            vtxArray[5] = v.color.r / 0xFF;
+            vtxArray[5] = v.color.b / 0xFF;
             vtxArray[6] = ctx.alpha / 0xFF;
             vtxArray[7] = v.uv.s;
             vtxArray[8] = v.uv.t;
@@ -3286,12 +3501,8 @@ System.register("sm64ds/nitro_gx", [], function (exports_17, context_17) {
                 idxBuffer[dst++] = i + 0;
             }
         }
-        var packet = new Packet();
-        packet.vertData = vtxBuffer;
-        packet.idxData = idxBuffer;
-        packet.polyType = ctx.s_polyType;
+        var packet = { vertData: vtxBuffer, idxData: idxBuffer, polyType: ctx.s_polyType };
         ctx.packets.push(packet);
-        ctx.vtxs = null;
     }
     function runCmd(ctx, cmd) {
         switch (cmd) {
@@ -3327,10 +3538,14 @@ System.register("sm64ds/nitro_gx", [], function (exports_17, context_17) {
         }
         return ctx.packets;
     }
-    exports_17("readCmds", readCmds);
-    var CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, Packet, Color, TexCoord, Point, Vertex, Context, ContextInternal;
+    exports_18("readCmds", readCmds);
+    var nitro_tex_1, CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, tmp, Context, ContextInternal;
     return {
-        setters: [],
+        setters: [
+            function (nitro_tex_1_1) {
+                nitro_tex_1 = nitro_tex_1_1;
+            }
+        ],
         execute: function () {
             // Read DS Geometry Engine commands.
             // tslint:disable:variable-name
@@ -3358,46 +3573,20 @@ System.register("sm64ds/nitro_gx", [], function (exports_17, context_17) {
             // 3 pos + 4 color + 2 uv
             VERTEX_SIZE = 9;
             VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
-            Packet = /** @class */ (function () {
-                function Packet() {
-                }
-                return Packet;
-            }());
-            exports_17("Packet", Packet);
-            Color = /** @class */ (function () {
-                function Color() {
-                }
-                return Color;
-            }());
-            TexCoord = /** @class */ (function () {
-                function TexCoord() {
-                }
-                return TexCoord;
-            }());
-            Point = /** @class */ (function () {
-                function Point() {
-                }
-                return Point;
-            }());
-            Vertex = /** @class */ (function () {
-                function Vertex() {
-                }
-                return Vertex;
-            }());
+            tmp = new Uint8Array(3);
             Context = /** @class */ (function () {
                 function Context() {
                 }
                 return Context;
             }());
-            exports_17("Context", Context);
+            exports_18("Context", Context);
             ContextInternal = /** @class */ (function () {
                 function ContextInternal(buffer, baseCtx) {
                     this.offs = 0;
-                    this.s_texCoord = new TexCoord();
                     this.alpha = baseCtx.alpha;
                     this.s_color = baseCtx.color;
                     this.view = new DataView(buffer);
-                    this.s_texCoord = new TexCoord();
+                    this.s_texCoord = { s: 0, t: 0 };
                     this.packets = [];
                 }
                 ContextInternal.prototype.readParam = function () {
@@ -3409,222 +3598,6 @@ System.register("sm64ds/nitro_gx", [], function (exports_17, context_17) {
                 };
                 return ContextInternal;
             }());
-        }
-    };
-});
-// Read DS texture formats.
-System.register("sm64ds/nitro_tex", [], function (exports_18, context_18) {
-    "use strict";
-    var __moduleName = context_18 && context_18.id;
-    function expand3to8(n) {
-        return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
-    }
-    function expand5to8(n) {
-        return (n << (8 - 5)) | (n >>> (10 - 8));
-    }
-    function s3tcblend(a, b) {
-        // return (a*3 + b*5) / 8;
-        return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
-    }
-    function readTexture_A3I5(width, height, texData, palData) {
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = new DataView(texData);
-        var palView = new DataView(palData);
-        var srcOffs = 0;
-        for (var y = 0; y < height; y++) {
-            for (var x = 0; x < width; x++) {
-                var texBlock = texView.getUint8(srcOffs++);
-                var palIdx = (texBlock & 0x1F) << 1;
-                var alpha = texBlock >>> 5;
-                var p = palView.getUint16(palIdx, true);
-                var dstOffs = 4 * ((y * width) + x);
-                pixels[dstOffs + 0] = expand5to8(p & 0x1F);
-                pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
-                pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
-                pixels[dstOffs + 3] = expand3to8(alpha);
-            }
-        }
-        return pixels;
-    }
-    function readTexture_Palette16(width, height, texData, palData, color0) {
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = new DataView(texData);
-        var palView = new DataView(palData);
-        var srcOffs = 0;
-        for (var y = 0; y < height; y++) {
-            for (var xx = 0; xx < width; xx += 4) {
-                var texBlock = texView.getUint16(srcOffs, true);
-                srcOffs += 2;
-                for (var x = 0; x < 4; x++) {
-                    var palIdx = texBlock & 0x0F;
-                    var p = palView.getUint16(palIdx, true);
-                    var dstOffs = 4 * ((y * width) + xx + x);
-                    pixels[dstOffs + 0] = expand5to8(p & 0x1F);
-                    pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
-                    pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
-                    pixels[dstOffs + 3] = color0 ? 0x00 : 0xFF;
-                    texBlock >>= 4;
-                }
-            }
-        }
-        return pixels;
-    }
-    function readTexture_CMPR_4x4(width, height, texData, palData) {
-        function getPal16(offs) {
-            return offs < palView.byteLength ? palView.getUint16(offs, true) : 0;
-        }
-        function buildColorTable(palBlock) {
-            var palMode = palBlock >> 14;
-            var palOffs = (palBlock & 0x3FFF) << 2;
-            var colorTable = new Uint8Array(16);
-            var p0 = getPal16(palOffs + 0x00);
-            colorTable[0] = expand5to8(p0 & 0x1F);
-            colorTable[1] = expand5to8((p0 >>> 5) & 0x1F);
-            colorTable[2] = expand5to8((p0 >>> 10) & 0x1F);
-            colorTable[3] = 0xFF;
-            var p1 = getPal16(palOffs + 0x02);
-            colorTable[4] = expand5to8(p1 & 0x1F);
-            colorTable[5] = expand5to8((p1 >>> 5) & 0x1F);
-            colorTable[6] = expand5to8((p1 >>> 10) & 0x1F);
-            colorTable[7] = 0xFF;
-            if (palMode === 0) {
-                // PTY=0, A=0
-                var p2 = getPal16(palOffs + 0x04);
-                colorTable[8] = expand5to8(p2 & 0x1F);
-                colorTable[9] = expand5to8((p2 >>> 5) & 0x1F);
-                colorTable[10] = expand5to8((p2 >>> 10) & 0x1F);
-                colorTable[11] = 0xFF;
-                // Color4 is transparent black.
-            }
-            else if (palMode === 1) {
-                // PTY=1, A=0
-                // Color3 is a blend of Color1/Color2.
-                colorTable[8] = (colorTable[0] + colorTable[4]) >>> 1;
-                colorTable[9] = (colorTable[1] + colorTable[5]) >>> 1;
-                colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
-                colorTable[11] = 0xFF;
-                // Color4 is transparent black.
-            }
-            else if (palMode === 2) {
-                // PTY=0, A=1
-                var p2 = getPal16(palOffs + 0x04);
-                colorTable[8] = expand5to8(p2 & 0x1F);
-                colorTable[9] = expand5to8((p2 >>> 5) & 0x1F);
-                colorTable[10] = expand5to8((p2 >>> 10) & 0x1F);
-                colorTable[11] = 0xFF;
-                var p3 = getPal16(palOffs + 0x06);
-                colorTable[12] = expand5to8(p3 & 0x1F);
-                colorTable[13] = expand5to8((p3 >>> 5) & 0x1F);
-                colorTable[14] = expand5to8((p3 >>> 10) & 0x1F);
-                colorTable[15] = 0xFF;
-            }
-            else {
-                colorTable[8] = s3tcblend(colorTable[4], colorTable[0]);
-                colorTable[9] = s3tcblend(colorTable[5], colorTable[1]);
-                colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
-                colorTable[11] = 0xFF;
-                colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
-                colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
-                colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
-                colorTable[15] = 0xFF;
-            }
-            return colorTable;
-        }
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = new DataView(texData);
-        var palView = new DataView(palData);
-        var palIdxStart = (width * height) / 4;
-        var srcOffs = 0;
-        for (var yy = 0; yy < height; yy += 4) {
-            for (var xx = 0; xx < width; xx += 4) {
-                var texBlock = texView.getUint32((srcOffs * 0x04), true);
-                var palBlock = texView.getUint16(palIdxStart + (srcOffs * 0x02), true);
-                var colorTable = buildColorTable(palBlock);
-                for (var y = 0; y < 4; y++) {
-                    for (var x = 0; x < 4; x++) {
-                        var colorIdx = texBlock & 0x03;
-                        var dstOffs = 4 * (((yy + y) * width) + xx + x);
-                        pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
-                        pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
-                        pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
-                        pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
-                        texBlock >>= 2;
-                    }
-                }
-                srcOffs++;
-            }
-        }
-        return pixels;
-    }
-    function readTexture_A5I3(width, height, texData, palData) {
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = new DataView(texData);
-        var palView = new DataView(palData);
-        var srcOffs = 0;
-        for (var y = 0; y < height; y++) {
-            for (var x = 0; x < width; x++) {
-                var texBlock = texView.getUint8(srcOffs++);
-                var palIdx = (texBlock & 0x03) << 1;
-                var alpha = texBlock >>> 3;
-                var p = palView.getUint16(palIdx, true);
-                var dstOffs = 4 * ((y * width) + x);
-                pixels[dstOffs + 0] = expand5to8(p & 0x1F);
-                pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
-                pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
-                pixels[dstOffs + 3] = expand5to8(alpha);
-            }
-        }
-        return pixels;
-    }
-    function readTexture_Direct(width, height, texData) {
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = new DataView(texData);
-        var srcOffs = 0;
-        for (var y = 0; y < height; y++) {
-            for (var x = 0; x < width; x++) {
-                var p = texView.getUint16(srcOffs, true);
-                var dstOffs = 4 * ((y * width) + x);
-                pixels[dstOffs + 0] = expand5to8(p & 0x1F);
-                pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
-                pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
-                pixels[dstOffs + 3] = 0xFF;
-                srcOffs += 2;
-            }
-        }
-        return pixels;
-    }
-    function readTexture(format, width, height, texData, palData, color0) {
-        switch (format) {
-            case Format.Tex_A3I5:
-                return readTexture_A3I5(width, height, texData, palData);
-            case Format.Tex_Palette16:
-                return readTexture_Palette16(width, height, texData, palData, color0);
-            case Format.Tex_CMPR_4x4:
-                return readTexture_CMPR_4x4(width, height, texData, palData);
-            case Format.Tex_A5I3:
-                return readTexture_A5I3(width, height, texData, palData);
-            case Format.Tex_Direct:
-                return readTexture_Direct(width, height, texData);
-            default:
-                throw new Error("Unsupported texture type! " + format);
-        }
-    }
-    exports_18("readTexture", readTexture);
-    var Format;
-    return {
-        setters: [],
-        execute: function () {// Read DS texture formats.
-            (function (Format) {
-                Format[Format["Tex_None"] = 0] = "Tex_None";
-                Format[Format["Tex_A3I5"] = 1] = "Tex_A3I5";
-                Format[Format["Tex_Palette4"] = 2] = "Tex_Palette4";
-                Format[Format["Tex_Palette16"] = 3] = "Tex_Palette16";
-                Format[Format["Tex_Palette256"] = 4] = "Tex_Palette256";
-                Format[Format["Tex_CMPR_4x4"] = 5] = "Tex_CMPR_4x4";
-                Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
-                Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
-            })(Format || (Format = {}));
-            exports_18("Format", Format);
         }
     };
 });
@@ -3656,6 +3629,9 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             var materialIdx = view.getUint8(batchMaterialOffs + i);
             var material = parseMaterial(bmd, view, materialIdx);
             var baseCtx = { color: material.diffuse, alpha: material.alpha };
+            if (material.name === "mat_mu") {
+                console.log("AAA");
+            }
             var polyIdx = view.getUint8(batchPolyOffs + i);
             var poly = parsePoly(bmd, view, polyIdx, baseCtx);
             model.batches.push({ material: material, poly: poly });
@@ -3713,9 +3689,9 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             material.depthWrite = !material.isTranslucent;
         var difAmb = view.getUint32(offs + 0x28, true);
         if (difAmb & 0x8000)
-            material.diffuse = NITRO_GX.rgb5(difAmb & 0x07FF);
+            material.diffuse = NITRO_GX.bgr5(difAmb);
         else
-            material.diffuse = [0xFF, 0xFF, 0xFF];
+            material.diffuse = { r: 0xFF, g: 0xFF, b: 0xFF };
         material.alpha = alpha;
         return material;
     }
@@ -3839,7 +3815,7 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
         var canvas = document.createElement("canvas");
         canvas.width = bmdTex.width;
         canvas.height = bmdTex.height;
-        canvas.title = bmdTex.name;
+        canvas.title = bmdTex.name + " (" + bmdTex.format + ")";
         var ctx = canvas.getContext("2d");
         var imgData = ctx.createImageData(canvas.width, canvas.height);
         for (var i = 0; i < imgData.data.length; i++)
@@ -3950,8 +3926,6 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                             return flip ? gl.MIRRORED_REPEAT : gl.REPEAT;
                         else
                             return gl.CLAMP_TO_EDGE;
-                    }
-                    function cullMode(renderWhichFaces) {
                     }
                     if (texture !== null) {
                         texId = gl.createTexture();
@@ -4184,9 +4158,10 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_21, contex
                 { 'id': 38, 'name': 'Bowser in the Fire Sea - Battle' },
                 { 'id': 39, 'name': 'Bowser in the Sky' },
                 { 'id': 40, 'name': 'Bowser in the Sky - Battle' },
+                { 'id': 29, 'name': 'The Princess\'s Secret Slide' },
                 { 'id': 30, 'name': 'The Secret Aquarium' },
                 { 'id': 34, 'name': 'Wing Mario over the Rainbow' },
-                { 'id': 31, 'name': 'Tower of the Vanish Cap' },
+                { 'id': 31, 'name': 'Tower of the Wing Cap' },
                 { 'id': 32, 'name': 'Vanish Cap Under the Moat' },
                 { 'id': 33, 'name': 'Cavern of the Metal Cap' },
                 { 'id': 46, 'name': 'ex_l_map_all.bmd' },
@@ -4195,9 +4170,12 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_21, contex
                 { 'id': 45, 'name': 'ex_mario_all.bmd' },
                 { 'id': 48, 'name': 'ex_w_map_all.bmd' },
                 { 'id': 49, 'name': 'ex_wario_all.bmd' },
-                { 'id': 50, 'name': "Princess Peach's Castle - Playroom" },
+                { 'id': 50, 'name': 'Princess Peach\'s Castle - Playroom' },
                 { 'id': 0, 'name': 'Test Map A' },
                 { 'id': 41, 'name': 'Test Map B' },
+                { 'id': 42, 'name': 'VS Map A' },
+                { 'id': 43, 'name': 'VS Map B' },
+                { 'id': 51, 'name': 'VS Map C' },
             ].map(function (entry) {
                 return new render_4.SceneDesc(entry.name, entry.id);
             });
@@ -6152,13 +6130,18 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     sceneDesc.createScene(gl).then(function (result) {
                         _this.viewer.setScene(result);
                         // XXX: Provide a UI for textures eventually?
-                        /*
-                        const textures = document.querySelector('#textures');
-                        textures.innerHTML = '';
-                        result.textures.forEach((canvas) => {
-                            textures.appendChild(canvas);
+                        _this.texturesView.innerHTML = '';
+                        result.textures.forEach(function (canvas) {
+                            var tex = document.createElement('div');
+                            tex.style.margin = '1em';
+                            canvas.style.margin = '2px';
+                            canvas.style.border = '1px dashed black';
+                            tex.appendChild(canvas);
+                            var label = document.createElement('span');
+                            label.textContent = canvas.title;
+                            tex.appendChild(label);
+                            _this.texturesView.appendChild(tex);
                         });
-                        */
                     });
                     this._deselectUI();
                     window.history.replaceState('', '', '#' + this._saveState());
@@ -6170,7 +6153,7 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     this.canvas.focus();
                 };
                 Main.prototype._onGearButtonClicked = function () {
-                    this.gearSettings.style.display = 'block';
+                    this.gearSettings.style.display = this.gearSettings.style.display === 'block' ? 'none' : 'block';
                 };
                 Main.prototype._onGroupSelectChange = function () {
                     var option = this.groupSelect.selectedOptions.item(0);
@@ -6250,25 +6233,23 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     this.sceneSelect.onchange = this._onSceneSelectChange.bind(this);
                     this.sceneSelect.style.marginRight = '1em';
                     uiContainerL.appendChild(this.sceneSelect);
-                    var e_16, _c;
-                    // XXX: Add back settings panel at a later time...
-                    /*
                     this.gearSettings = document.createElement('div');
                     this.gearSettings.style.backgroundColor = 'white';
                     this.gearSettings.style.position = 'absolute';
-                    this.gearSettings.style.top = '0px';
-                    this.gearSettings.style.bottom = '0px';
-                    this.gearSettings.style.right = '0px';
-                    this.gearSettings.style.width = '300px';
-                    this.gearSettings.style.boxShadow = '-2px 0px 10px rgba(0, 0, 0, 0.4)';
+                    this.gearSettings.style.top = this.gearSettings.style.bottom =
+                        this.gearSettings.style.left = this.gearSettings.style.right = '4em';
+                    this.gearSettings.style.boxShadow = '0px 0px 10px rgba(0, 0, 0, 0.4)';
+                    this.gearSettings.style.padding = '1em';
                     this.gearSettings.style.display = 'none';
+                    this.gearSettings.style.overflow = 'auto';
                     document.body.appendChild(this.gearSettings);
-            
-                    const gearButton = document.createElement('button');
+                    this.texturesView = document.createElement('div');
+                    this.gearSettings.appendChild(this.texturesView);
+                    var gearButton = document.createElement('button');
                     gearButton.textContent = '⚙';
                     gearButton.onclick = this._onGearButtonClicked.bind(this);
                     uiContainerR.appendChild(gearButton);
-                    */
+                    var e_16, _c;
                 };
                 return Main;
             }());
