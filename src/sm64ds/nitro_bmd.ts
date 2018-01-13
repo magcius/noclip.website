@@ -106,8 +106,12 @@ function parseMaterial(bmd: BMD, view: DataView, idx: number) {
     }
 
     const polyAttribs = view.getUint32(offs + 0x24, true);
+
     let alpha = (polyAttribs >> 16) & 0x1F;
     alpha = (alpha << (8 - 5)) | (alpha >>> (10 - 8));
+
+    const renderWhichFaces = (polyAttribs >> 6) & 0x03;
+    material.renderWhichFaces = renderWhichFaces;
 
     // NITRO's Rendering Engine uses two passes. Opaque, then Transparent.
     // A transparent polygon is one that has an alpha of < 0xFF, or uses
@@ -116,7 +120,7 @@ function parseMaterial(bmd: BMD, view: DataView, idx: number) {
     material.isTranslucent = (alpha < 0xFF) || (material.texture && material.texture.isTranslucent);
 
     // Do transparent polys write to the depth buffer?
-    const xl = (polyAttribs >>> 1) & 0x01;
+    const xl = (polyAttribs >>> 11) & 0x01;
     if (xl)
         material.depthWrite = true;
     else

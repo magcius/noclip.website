@@ -3699,12 +3699,14 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var polyAttribs = view.getUint32(offs + 0x24, true);
         var alpha = (polyAttribs >> 16) & 0x1F;
         alpha = (alpha << (8 - 5)) | (alpha >>> (10 - 8));
+        var renderWhichFaces = (polyAttribs >> 6) & 0x03;
+        material.renderWhichFaces = renderWhichFaces;
         // NITRO's Rendering Engine uses two passes. Opaque, then Transparent.
         // A transparent polygon is one that has an alpha of < 0xFF, or uses
         // A5I3 / A3I5 textures.
         material.isTranslucent = (alpha < 0xFF) || (material.texture && material.texture.isTranslucent);
         // Do transparent polys write to the depth buffer?
-        var xl = (polyAttribs >>> 1) & 0x01;
+        var xl = (polyAttribs >>> 11) & 0x01;
         if (xl)
             material.depthWrite = true;
         else
@@ -3949,6 +3951,8 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                         else
                             return gl.CLAMP_TO_EDGE;
                     }
+                    function cullMode(renderWhichFaces) {
+                    }
                     if (texture !== null) {
                         texId = gl.createTexture();
                         gl.bindTexture(gl.TEXTURE_2D, texId);
@@ -4000,6 +4004,23 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                             gl.bindTexture(gl.TEXTURE_2D, texId);
                         }
                         gl.depthMask(material.depthWrite);
+                        switch (material.renderWhichFaces) {
+                            case 0x00:// Render Nothing
+                                gl.enable(gl.CULL_FACE);
+                                gl.cullFace(gl.FRONT_AND_BACK);
+                                break;
+                            case 0x01:// Render Back
+                                gl.enable(gl.CULL_FACE);
+                                gl.cullFace(gl.FRONT);
+                                break;
+                            case 0x02:// Render Front
+                                gl.enable(gl.CULL_FACE);
+                                gl.cullFace(gl.BACK);
+                                break;
+                            case 0x03:// Render Front and Back
+                                gl.disable(gl.CULL_FACE);
+                                break;
+                        }
                         var e_11, _c;
                     };
                 };
