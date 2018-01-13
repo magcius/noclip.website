@@ -39,9 +39,10 @@ const sceneDescs: SceneDesc[] = [
     {'id': 38, 'name': 'Bowser in the Fire Sea - Battle'},
     {'id': 39, 'name': 'Bowser in the Sky'},
     {'id': 40, 'name': 'Bowser in the Sky - Battle'},
+    {'id': 29, 'name': 'The Princess\'s Secret Slide'},
     {'id': 30, 'name': 'The Secret Aquarium'},
     {'id': 34, 'name': 'Wing Mario over the Rainbow'},
-    {'id': 31, 'name': 'Tower of the Vanish Cap'},
+    {'id': 31, 'name': 'Tower of the Wing Cap'},
     {'id': 32, 'name': 'Vanish Cap Under the Moat'},
     {'id': 33, 'name': 'Cavern of the Metal Cap'},
     {'id': 46, 'name': 'ex_l_map_all.bmd'},
@@ -50,9 +51,12 @@ const sceneDescs: SceneDesc[] = [
     {'id': 45, 'name': 'ex_mario_all.bmd'},
     {'id': 48, 'name': 'ex_w_map_all.bmd'},
     {'id': 49, 'name': 'ex_wario_all.bmd'},
-    {'id': 50, 'name': "Princess Peach's Castle - Playroom"},
+    {'id': 50, 'name': 'Princess Peach\'s Castle - Playroom'},
     {'id': 0, 'name': 'Test Map A'},
     {'id': 41, 'name': 'Test Map B'},
+    {'id': 42, 'name': 'VS Map A'},
+    {'id': 43, 'name': 'VS Map B'},
+    {'id': 51, 'name': 'VS Map C'},
 ].map((entry): SceneDesc => {
     return new SceneDesc(entry.name, entry.id);
 });

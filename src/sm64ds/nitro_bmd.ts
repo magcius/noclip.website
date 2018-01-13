@@ -55,6 +55,10 @@ function parseModel(bmd: BMD, view: DataView, idx: number) {
         const material = parseMaterial(bmd, view, materialIdx);
         const baseCtx = { color: material.diffuse, alpha: material.alpha };
 
+        if (material.name === "mat_mu") {
+            console.log("AAA");
+        }
+
         const polyIdx = view.getUint8(batchPolyOffs + i);
         const poly = parsePoly(bmd, view, polyIdx, baseCtx);
 
@@ -128,9 +132,9 @@ function parseMaterial(bmd: BMD, view: DataView, idx: number) {
 
     const difAmb = view.getUint32(offs + 0x28, true);
     if (difAmb & 0x8000)
-        material.diffuse = NITRO_GX.rgb5(difAmb & 0x07FF);
+        material.diffuse = NITRO_GX.bgr5(difAmb);
     else
-        material.diffuse = [0xFF, 0xFF, 0xFF];
+        material.diffuse = { r: 0xFF, g: 0xFF, b: 0xFF };
 
     material.alpha = alpha;
 

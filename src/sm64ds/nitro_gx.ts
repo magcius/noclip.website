@@ -1,6 +1,8 @@
 
 // Read DS Geometry Engine commands.
 
+import { bgr5 as _bgr5 } from './nitro_tex';
+
 // tslint:disable:variable-name
 
 enum CmdType {
@@ -33,17 +35,10 @@ enum PolyType {
 const VERTEX_SIZE = 9;
 const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-export function rgb5(pixel) {
-    let r; let g; let b;
-    r = (pixel & 0x7c00) >> 10;
-    r = (r << (8 - 5)) | (r >> (10 - 8));
-
-    g = (pixel & 0x3e0) >> 5;
-    g = (g << (8 - 5)) | (g >> (10 - 8));
-
-    b = pixel & 0x1f;
-    b = (b << (8 - 5)) | (b >> (10 - 8));
-
+const tmp = new Uint8Array(3);
+export function bgr5(pixel): Color {
+    _bgr5(tmp, 0, pixel);
+    const r = tmp[0], g = tmp[1], b = tmp[2];
     return { r, g, b };
 }
 
@@ -54,7 +49,7 @@ function cmd_MTX_RESTORE(ctx: ContextInternal) {
 
 function cmd_COLOR(ctx: ContextInternal) {
     const param = ctx.readParam();
-    ctx.s_color = rgb5(param);
+    ctx.s_color = bgr5(param);
 }
 
 function cmd_NORMAL(ctx: ContextInternal) {
@@ -201,10 +196,10 @@ function cmd_BEGIN_VTXS(ctx: ContextInternal) {
     ctx.vtxs = [];
 }
 
-export class Packet {
-    public vertData: Float32Array;
-    public idxData: Uint16Array;
-    public polyType: PolyType;
+export interface Packet {
+    vertData: Float32Array;
+    idxData: Uint16Array;
+    polyType: PolyType;
 }
 
 function cmd_END_VTXS(ctx: ContextInternal) {
@@ -219,9 +214,9 @@ function cmd_END_VTXS(ctx: ContextInternal) {
         vtxArray[1] = v.pos.y;
         vtxArray[2] = v.pos.z;
 
-        vtxArray[3] = v.color.b / 0xFF;
+        vtxArray[3] = v.color.r / 0xFF;
         vtxArray[4] = v.color.g / 0xFF;
-        vtxArray[5] = v.color.r / 0xFF;
+        vtxArray[5] = v.color.b / 0xFF;
         vtxArray[6] = ctx.alpha / 0xFF;
 
         vtxArray[7] = v.uv.s;
@@ -272,13 +267,8 @@ function cmd_END_VTXS(ctx: ContextInternal) {
         }
     }
 
-    const packet = new Packet();
-    packet.vertData = vtxBuffer;
-    packet.idxData = idxBuffer;
-    packet.polyType = ctx.s_polyType;
+    const packet = { vertData: vtxBuffer, idxData: idxBuffer, polyType: ctx.s_polyType };
     ctx.packets.push(packet);
-
-    ctx.vtxs = null;
 }
 
 function runCmd(ctx, cmd) {
@@ -301,28 +291,28 @@ function runCmd(ctx, cmd) {
     }
 }
 
-class Color {
-    public r: number;
-    public g: number;
-    public b: number;
+interface Color {
+    r: number;
+    g: number;
+    b: number;
 }
 
-class TexCoord {
-    public s: number;
-    public t: number;
+interface TexCoord {
+    s: number;
+    t: number;
 }
 
-class Point {
-    public x: number;
-    public y: number;
-    public z: number;
+interface Point {
+    x: number;
+    y: number;
+    z: number;
 }
 
-class Vertex {
-    public pos: Point;
-    public nrm: Point;
-    public color: Color;
-    public uv: TexCoord;
+interface Vertex {
+    pos: Point;
+    nrm: Point;
+    color: Color;
+    uv: TexCoord;
 }
 
 export class Context {
@@ -336,7 +326,7 @@ class ContextInternal {
 
     public alpha: number;
     public s_color: Color;
-    public s_texCoord: TexCoord = new TexCoord();
+    public s_texCoord: TexCoord;
     public s_vtx: Point;
     public s_nrm: Point;
     public s_polyType: PolyType;
@@ -348,7 +338,7 @@ class ContextInternal {
         this.alpha = baseCtx.alpha;
         this.s_color = baseCtx.color;
         this.view = new DataView(buffer);
-        this.s_texCoord = new TexCoord();
+        this.s_texCoord = { s: 0, t: 0 };
         this.packets = [];
     }
 

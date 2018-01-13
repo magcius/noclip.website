@@ -15,6 +15,7 @@ class Main {
     private groupSelect: HTMLSelectElement;
     private sceneSelect: HTMLSelectElement;
     private gearSettings: HTMLElement;
+    private texturesView: HTMLElement;
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
 
@@ -91,13 +92,18 @@ class Main {
 
             // XXX: Provide a UI for textures eventually?
 
-            /*
-            const textures = document.querySelector('#textures');
-            textures.innerHTML = '';
+            this.texturesView.innerHTML = '';
             result.textures.forEach((canvas) => {
-                textures.appendChild(canvas);
+                const tex = document.createElement('div');
+                tex.style.margin = '1em';
+                canvas.style.margin = '2px';
+                canvas.style.border = '1px dashed black';
+                tex.appendChild(canvas);
+                const label = document.createElement('span');
+                label.textContent = canvas.title;
+                tex.appendChild(label);
+                this.texturesView.appendChild(tex);
             });
-            */
         });
 
         this._deselectUI();
@@ -112,7 +118,7 @@ class Main {
     }
 
     private _onGearButtonClicked() {
-        this.gearSettings.style.display = 'block';
+        this.gearSettings.style.display = this.gearSettings.style.display === 'block' ? 'none' : 'block';
     }
     private _onGroupSelectChange() {
         const option = this.groupSelect.selectedOptions.item(0);
@@ -180,25 +186,24 @@ class Main {
         this.sceneSelect.style.marginRight = '1em';
         uiContainerL.appendChild(this.sceneSelect);
 
-        // XXX: Add back settings panel at a later time...
-
-        /*
         this.gearSettings = document.createElement('div');
         this.gearSettings.style.backgroundColor = 'white';
         this.gearSettings.style.position = 'absolute';
-        this.gearSettings.style.top = '0px';
-        this.gearSettings.style.bottom = '0px';
-        this.gearSettings.style.right = '0px';
-        this.gearSettings.style.width = '300px';
-        this.gearSettings.style.boxShadow = '-2px 0px 10px rgba(0, 0, 0, 0.4)';
+        this.gearSettings.style.top = this.gearSettings.style.bottom =
+        this.gearSettings.style.left = this.gearSettings.style.right = '4em';
+        this.gearSettings.style.boxShadow = '0px 0px 10px rgba(0, 0, 0, 0.4)';
+        this.gearSettings.style.padding = '1em';
         this.gearSettings.style.display = 'none';
+        this.gearSettings.style.overflow = 'auto';
         document.body.appendChild(this.gearSettings);
+
+        this.texturesView = document.createElement('div');
+        this.gearSettings.appendChild(this.texturesView);
 
         const gearButton = document.createElement('button');
         gearButton.textContent = '⚙';
         gearButton.onclick = this._onGearButtonClicked.bind(this);
         uiContainerR.appendChild(gearButton);
-        */
     }
 }
 

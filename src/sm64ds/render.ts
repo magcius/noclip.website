@@ -76,7 +76,7 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
     const canvas = document.createElement("canvas");
     canvas.width = bmdTex.width;
     canvas.height = bmdTex.height;
-    canvas.title = bmdTex.name;
+    canvas.title = `${bmdTex.name} (${bmdTex.format})`;
 
     const ctx = canvas.getContext("2d");
     const imgData = ctx.createImageData(canvas.width, canvas.height);
@@ -152,9 +152,6 @@ class Scene implements Viewer.Scene {
                 return flip ? gl.MIRRORED_REPEAT : gl.REPEAT;
             else
                 return gl.CLAMP_TO_EDGE;
-        }
-
-        function cullMode(renderWhichFaces) {
         }
 
         if (texture !== null) {
