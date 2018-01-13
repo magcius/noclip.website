@@ -1026,13 +1026,9 @@ System.register("j3d/texture", ["j3d/gx"], function (exports_5, context_5) {
         }
     };
 });
-System.register("j3d/bmd", ["j3d/gx", "j3d/texture"], function (exports_6, context_6) {
+System.register("j3d/bmd", ["j3d/gx", "j3d/texture", "util"], function (exports_6, context_6) {
     "use strict";
     var __moduleName = context_6 && context_6.id;
-    function assert(b) {
-        if (!b)
-            throw new Error("Assert fail");
-    }
     function readString(buffer, offs, length) {
         var length2 = Math.min(length, buffer.byteLength - offs);
         var buf = new Uint8Array(buffer, offs, length2);
@@ -1094,7 +1090,7 @@ System.register("j3d/bmd", ["j3d/gx", "j3d/texture"], function (exports_6, conte
                     break;
             }
         }
-        assert(parentStack.length === 0);
+        util_2.assert(parentStack.length === 0);
         bmd.inf1 = { sceneGraph: node };
     }
     function getComponentSize(dataType) {
@@ -1301,7 +1297,7 @@ System.register("j3d/bmd", ["j3d/gx", "j3d/texture"], function (exports_6, conte
                             }
                             finally { if (e_1) throw e_1.error; }
                         }
-                        assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
+                        util_2.assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
                     }
                 }
             }
@@ -1389,7 +1385,7 @@ System.register("j3d/bmd", ["j3d/gx", "j3d/texture"], function (exports_6, conte
         var bmd = new BMD();
         var view = new DataView(buffer);
         var magic = readString(buffer, 0, 8);
-        assert(magic === 'J3D2bmd3' || magic === 'J3D2bdl4');
+        util_2.assert(magic === 'J3D2bmd3' || magic === 'J3D2bdl4');
         var size = view.getUint32(0x08);
         var numChunks = view.getUint32(0x0C);
         var offs = 0x20;
@@ -1417,7 +1413,7 @@ System.register("j3d/bmd", ["j3d/gx", "j3d/texture"], function (exports_6, conte
         return bmd;
     }
     exports_6("parse", parse);
-    var GX, Texture, HierarchyType, BMD;
+    var GX, Texture, util_2, HierarchyType, BMD;
     return {
         setters: [
             function (GX_2) {
@@ -1425,6 +1421,9 @@ System.register("j3d/bmd", ["j3d/gx", "j3d/texture"], function (exports_6, conte
             },
             function (Texture_1) {
                 Texture = Texture_1;
+            },
+            function (util_2_1) {
+                util_2 = util_2_1;
             }
         ],
         execute: function () {
@@ -1477,7 +1476,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "viewer", "util"], function 
                 throw new Error("Unknown PrimType " + primType);
         }
     }
-    var BMD, GX, Viewer, util_2, BLACK_VERT_SHADER_SOURCE, BLACK_FRAG_SHADER_SOURCE, BlackProgram, Command_Shape, Scene, SceneDesc;
+    var BMD, GX, Viewer, util_3, BLACK_VERT_SHADER_SOURCE, BLACK_FRAG_SHADER_SOURCE, BlackProgram, Command_Shape, Scene, SceneDesc;
     return {
         setters: [
             function (BMD_1) {
@@ -1489,8 +1488,8 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "viewer", "util"], function 
             function (Viewer_1) {
                 Viewer = Viewer_1;
             },
-            function (util_2_1) {
-                util_2 = util_2_1;
+            function (util_3_1) {
+                util_3 = util_3_1;
             }
         ],
         execute: function () {
@@ -1653,7 +1652,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "viewer", "util"], function 
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    return util_2.fetch(this.path).then(function (result) {
+                    return util_3.fetch(this.path).then(function (result) {
                         var bmd = BMD.parse(result);
                         return new Scene(gl, bmd);
                     });
@@ -1688,20 +1687,9 @@ System.register("j3d/scenes", ["j3d/render"], function (exports_8, context_8) {
         }
     };
 });
-System.register("mdl0/mdl0", [], function (exports_9, context_9) {
+System.register("mdl0/mdl0", ["util"], function (exports_9, context_9) {
     "use strict";
     var __moduleName = context_9 && context_9.id;
-    function assert(b) {
-        if (!b)
-            throw new Error("Assert fail");
-    }
-    function readString(buffer, offs, length) {
-        var buf = new Uint8Array(buffer, offs, length);
-        var S = '';
-        for (var i = 0; i < length; i++)
-            S += String.fromCharCode(buf[i]);
-        return S;
-    }
     function parse(buffer) {
         var Flag = {
             HAS_NORMAL: 0x01,
@@ -1709,7 +1697,7 @@ System.register("mdl0/mdl0", [], function (exports_9, context_9) {
             HAS_COLOR: 0x04,
         };
         var view = new DataView(buffer);
-        assert(readString(buffer, 0, 4) === 'MDL\0');
+        util_4.assert(util_4.readString(buffer, 0, 4) === 'MDL\0');
         var flags = view.getUint8(0x04);
         var primType = view.getUint8(0x05);
         var vertCount = view.getUint16(0x06, true);
@@ -1765,12 +1753,17 @@ System.register("mdl0/mdl0", [], function (exports_9, context_9) {
             vtxData = new Uint16Array(buffer.slice(start, end));
             offs = end;
         }
-        assert(offs === buffer.byteLength);
+        util_4.assert(offs === buffer.byteLength);
         return { clrData: clrData, idxData: idxData, vtxData: vtxData, animCount: animCount, animSize: animSize, vertCount: vertCount, vertSize: vertSize };
     }
     exports_9("parse", parse);
+    var util_4;
     return {
-        setters: [],
+        setters: [
+            function (util_4_1) {
+                util_4 = util_4_1;
+            }
+        ],
         execute: function () {
         }
     };
@@ -1778,7 +1771,7 @@ System.register("mdl0/mdl0", [], function (exports_9, context_9) {
 System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (exports_10, context_10) {
     "use strict";
     var __moduleName = context_10 && context_10.id;
-    var MDL0, Viewer, util_3, FancyGrid_Program, FancyGrid, MDL0_Program, Scene, SceneDesc;
+    var MDL0, Viewer, util_5, FancyGrid_Program, FancyGrid, MDL0_Program, Scene, SceneDesc;
     return {
         setters: [
             function (MDL0_1) {
@@ -1787,8 +1780,8 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (export
             function (Viewer_2) {
                 Viewer = Viewer_2;
             },
-            function (util_3_1) {
-                util_3 = util_3_1;
+            function (util_5_1) {
+                util_5 = util_5_1;
             }
         ],
         execute: function () {
@@ -1901,7 +1894,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (export
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    return util_3.fetch(this.path).then(function (result) {
+                    return util_5.fetch(this.path).then(function (result) {
                         var mdl0 = MDL0.parse(result);
                         return new Scene(gl, mdl0);
                     });
@@ -1984,26 +1977,12 @@ System.register("mdl0/scenes", ["mdl0/render"], function (exports_11, context_11
         }
     };
 });
-System.register("oot3d/cmb", [], function (exports_12, context_12) {
+System.register("oot3d/cmb", ["util"], function (exports_12, context_12) {
     "use strict";
     var __moduleName = context_12 && context_12.id;
-    function readString(buffer, offs, length) {
-        var buf = new Uint8Array(buffer, offs, length);
-        var S = '';
-        for (var i = 0; i < length; i++) {
-            if (buf[i] === 0)
-                break;
-            S += String.fromCharCode(buf[i]);
-        }
-        return S;
-    }
-    function assert(b) {
-        if (!b)
-            throw new Error("Assert fail");
-    }
     function readMatsChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        assert(readString(buffer, 0x00, 0x04) === 'mats');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'mats');
         var count = view.getUint32(0x08, true);
         var offs = 0x0C;
         for (var i = 0; i < count; i++) {
@@ -2285,7 +2264,7 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
     }
     function readTexChunk(cmb, buffer, texData) {
         var view = new DataView(buffer);
-        assert(readString(buffer, 0x00, 0x04) === 'tex ');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'tex ');
         var count = view.getUint32(0x08, true);
         var offs = 0x0C;
         for (var i = 0; i < count; i++) {
@@ -2295,7 +2274,7 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
             texture.height = view.getUint16(offs + 0x0A, true);
             texture.format = view.getUint32(offs + 0x0C, true);
             var dataOffs = view.getUint32(offs + 0x10, true);
-            texture.name = readString(buffer, offs + 0x14, 0x10);
+            texture.name = util_6.readString(buffer, offs + 0x14, 0x10);
             texture.name = texture.name + "  (" + texture.format + ")";
             offs += 0x24;
             texture.pixels = decodeTexture(texture, texData.slice(dataOffs, dataOffs + size));
@@ -2304,7 +2283,7 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
     }
     function readVatrChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        assert(readString(buffer, 0x00, 0x04) === 'vatr');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'vatr');
         cmb.vertexBufferSlices = new VertexBufferSlices();
         var posSize = view.getUint32(0x0C, true);
         var posOffs = view.getUint32(0x10, true);
@@ -2321,7 +2300,7 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
     }
     function readMshsChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        assert(readString(buffer, 0x00, 0x04) === 'mshs');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'mshs');
         var count = view.getUint32(0x08, true);
         var offs = 0x10;
         for (var i = 0; i < count; i++) {
@@ -2334,7 +2313,7 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
     }
     function readPrmChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        assert(readString(buffer, 0x00, 0x04) === 'prm ');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'prm ');
         var prm = new Prm();
         prm.indexType = view.getUint32(0x10, true);
         prm.count = view.getUint16(0x14, true);
@@ -2343,13 +2322,13 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
     }
     function readPrmsChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        assert(readString(buffer, 0x00, 0x04) === 'prms');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'prms');
         var prmOffs = view.getUint32(0x14, true);
         return readPrmChunk(cmb, buffer.slice(prmOffs));
     }
     function readSepdChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        assert(readString(buffer, 0x00, 0x04) === 'sepd');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'sepd');
         var count = view.getUint16(0x08, true);
         var sepd = new Sepd();
         var offs = 0x108;
@@ -2374,7 +2353,7 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
     }
     function readShpChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        assert(readString(buffer, 0x00, 0x04) === 'shp ');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'shp ');
         var count = view.getUint32(0x08, true);
         var offs = 0x10;
         for (var i = 0; i < count; i++) {
@@ -2386,7 +2365,7 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
     }
     function readSklmChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        assert(readString(buffer, 0x00, 0x04) === 'sklm');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'sklm');
         var mshsChunkOffs = view.getUint32(0x08, true);
         readMshsChunk(cmb, buffer.slice(mshsChunkOffs));
         var shpChunkOffs = view.getUint32(0x0C, true);
@@ -2395,9 +2374,9 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
     function parse(buffer) {
         var view = new DataView(buffer);
         var cmb = new CMB();
-        assert(readString(buffer, 0x00, 0x04) === 'cmb ');
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) === 'cmb ');
         var size = view.getUint32(0x04, true);
-        cmb.name = readString(buffer, 0x10, 0x10);
+        cmb.name = util_6.readString(buffer, 0x10, 0x10);
         var matsChunkOffs = view.getUint32(0x28, true);
         readMatsChunk(cmb, buffer.slice(matsChunkOffs));
         var texDataOffs = view.getUint32(0x40, true);
@@ -2413,9 +2392,13 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
         return cmb;
     }
     exports_12("parse", parse);
-    var VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
+    var util_6, VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
     return {
-        setters: [],
+        setters: [
+            function (util_6_1) {
+                util_6 = util_6_1;
+            }
+        ],
         execute: function () {
             VertexBufferSlices = /** @class */ (function () {
                 function VertexBufferSlices() {
@@ -2506,27 +2489,13 @@ System.register("oot3d/cmb", [], function (exports_12, context_12) {
         }
     };
 });
-System.register("oot3d/zsi", ["oot3d/cmb"], function (exports_13, context_13) {
+System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_13, context_13) {
     "use strict";
     var __moduleName = context_13 && context_13.id;
-    function readString(buffer, offs, length) {
-        var buf = new Uint8Array(buffer, offs, length);
-        var S = '';
-        for (var i = 0; i < length; i++) {
-            if (buf[i] === 0)
-                break;
-            S += String.fromCharCode(buf[i]);
-        }
-        return S;
-    }
-    function assert(b) {
-        if (!b)
-            throw new Error("Assert fail");
-    }
     function readRooms(view, nRooms, offs) {
         var rooms = [];
         for (var i = 0; i < nRooms; i++) {
-            rooms.push(readString(view.buffer, offs, 0x44));
+            rooms.push(util_7.readString(view.buffer, offs, 0x44));
             offs += 0x44;
         }
         return rooms;
@@ -2537,8 +2506,8 @@ System.register("oot3d/zsi", ["oot3d/cmb"], function (exports_13, context_13) {
         var type = (hdr >> 24);
         var nEntries = (hdr >> 16) & 0xFF;
         var entriesAddr = view.getUint32(offs + 4, true);
-        assert(type === 0x02);
-        assert(nEntries === 0x01);
+        util_7.assert(type === 0x02);
+        util_7.assert(nEntries === 0x01);
         var opaqueAddr = view.getUint32(entriesAddr + 0x08, true);
         var transparentAddr = view.getUint32(entriesAddr + 0x0C, true);
         if (opaqueAddr !== 0)
@@ -2577,18 +2546,21 @@ System.register("oot3d/zsi", ["oot3d/cmb"], function (exports_13, context_13) {
         return zsi;
     }
     function parse(buffer) {
-        assert(readString(buffer, 0x00, 0x04) === 'ZSI\x01');
-        var name = readString(buffer, 0x04, 0x0C);
+        util_7.assert(util_7.readString(buffer, 0x00, 0x04) === 'ZSI\x01');
+        var name = util_7.readString(buffer, 0x04, 0x0C);
         // ZSI header is done. It's that simple! Now for the actual data.
         var headersBuf = buffer.slice(0x10);
         return readHeaders(headersBuf);
     }
     exports_13("parse", parse);
-    var CMB, ZSI, HeaderCommands, Mesh;
+    var CMB, util_7, ZSI, HeaderCommands, Mesh;
     return {
         setters: [
             function (CMB_1) {
                 CMB = CMB_1;
+            },
+            function (util_7_1) {
+                util_7 = util_7_1;
             }
         ],
         execute: function () {
@@ -2633,7 +2605,7 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
         parts.pop();
         return parts.join('/');
     }
-    var ZSI, CMB, Viewer, util_4, DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, OoT3D_Program, Scene, MultiScene, SceneDesc;
+    var ZSI, CMB, Viewer, util_8, DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, OoT3D_Program, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (ZSI_1) {
@@ -2645,8 +2617,8 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
             function (Viewer_3) {
                 Viewer = Viewer_3;
             },
-            function (util_4_1) {
-                util_4 = util_4_1;
+            function (util_8_1) {
+                util_8 = util_8_1;
             }
         ],
         execute: function () {
@@ -2899,7 +2871,7 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                             return basePath_1 + '/' + filename;
                         });
                         return Promise.all(roomFilenames.map(function (filename) {
-                            return util_4.fetch(filename).then(function (result) { return _this._createSceneFromData(gl, result); });
+                            return util_8.fetch(filename).then(function (result) { return _this._createSceneFromData(gl, result); });
                         })).then(function (scenes) {
                             return new MultiScene(scenes);
                         });
@@ -2907,7 +2879,7 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                 };
                 SceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return util_4.fetch(this.path).then(function (result) {
+                    return util_8.fetch(this.path).then(function (result) {
                         return _this._createSceneFromData(gl, result);
                     });
                 };
@@ -3042,13 +3014,13 @@ System.register("sm64ds/crg0", ["util"], function (exports_16, context_16) {
     var __moduleName = context_16 && context_16.id;
     function parse(buffer) {
         var view = new DataView(buffer);
-        util_5.assert(util_5.readString(buffer, 0, 0x04) === 'CRG0');
+        util_9.assert(util_9.readString(buffer, 0, 0x04) === 'CRG0');
         var levelTableCount = view.getUint32(0x08, false);
         var levelTableOffs = view.getUint32(0x0C, false);
         var levels = [];
         var levelTableIdx = levelTableOffs;
         for (var i = 0; i < levelTableCount; i++) {
-            util_5.assert(view.getUint8(levelTableIdx) === 0x4d);
+            util_9.assert(view.getUint8(levelTableIdx) === 0x4d);
             var levelId = view.getUint8(levelTableIdx + 0x01);
             var levelAttributesCount = view.getUint8(levelTableIdx + 0x02);
             var levelMaterialsCount = view.getUint8(levelTableIdx + 0x03);
@@ -3057,15 +3029,15 @@ System.register("sm64ds/crg0", ["util"], function (exports_16, context_16) {
             for (var j = 0; j < levelAttributesCount; j++) {
                 var keyOffs = view.getUint32(levelTableIdx + 0x00, false);
                 var valueOffs = view.getUint32(levelTableIdx + 0x04, false);
-                var key = util_5.readString(buffer, keyOffs, 0x20);
-                var value = util_5.readString(buffer, valueOffs, 0x20);
+                var key = util_9.readString(buffer, keyOffs, 0x20);
+                var value = util_9.readString(buffer, valueOffs, 0x20);
                 levelTableIdx += 0x08;
                 levelAttributes.set(key, value);
             }
             var materials = [];
             for (var j = 0; j < levelMaterialsCount; j++) {
                 var materialNameOffs = view.getUint32(levelTableIdx + 0x00, false);
-                var materialName = util_5.readString(buffer, materialNameOffs, 0x20);
+                var materialName = util_9.readString(buffer, materialNameOffs, 0x20);
                 levelTableIdx += 0x04;
                 var scaleOffs = view.getUint32(levelTableIdx + 0x00, false);
                 var scaleCount = view.getUint32(levelTableIdx + 0x04, false);
@@ -3097,11 +3069,11 @@ System.register("sm64ds/crg0", ["util"], function (exports_16, context_16) {
         return { levels: levels };
     }
     exports_16("parse", parse);
-    var util_5;
+    var util_9;
     return {
         setters: [
-            function (util_5_1) {
-                util_5 = util_5_1;
+            function (util_9_1) {
+                util_9 = util_9_1;
             }
         ],
         execute: function () {
@@ -3648,25 +3620,14 @@ System.register("sm64ds/nitro_tex", [], function (exports_18, context_18) {
         }
     };
 });
-System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex"], function (exports_19, context_19) {
+System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_19, context_19) {
     "use strict";
     var __moduleName = context_19 && context_19.id;
-    // Super Mario 64 DS .bmd format
-    function readString(buffer, offs, length) {
-        var buf = new Uint8Array(buffer, offs, length);
-        var S = '';
-        for (var i = 0; i < length; i++) {
-            if (buf[i] === 0)
-                break;
-            S += String.fromCharCode(buf[i]);
-        }
-        return S;
-    }
     function parseModel(bmd, view, idx) {
         var offs = bmd.modelOffsBase + idx * 0x40;
         var model = new Model();
         model.id = view.getUint32(offs + 0x00, true);
-        model.name = readString(view.buffer, view.getUint32(offs + 0x04, true), 0xFF);
+        model.name = util_10.readString(view.buffer, view.getUint32(offs + 0x04, true), 0xFF);
         model.parentID = view.getUint16(offs + 0x08, true);
         // Local transform.
         var xs = view.getUint32(offs + 0x10, true);
@@ -3704,7 +3665,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
     function parseMaterial(bmd, view, idx) {
         var offs = bmd.materialOffsBase + idx * 0x30;
         var material = {};
-        material.name = readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
+        material.name = util_10.readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
         material.texCoordMat = gl_matrix_2.mat2d.create();
         var textureIdx = view.getUint32(offs + 0x04, true);
         if (textureIdx !== 0xFFFFFFFF) {
@@ -3754,7 +3715,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var texOffs = bmd.textureOffsBase + key.texIdx * 0x14;
         var texture = new Texture();
         texture.id = key.texIdx;
-        texture.name = readString(view.buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
+        texture.name = util_10.readString(view.buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
         var texDataOffs = view.getUint32(texOffs + 0x04, true);
         var texDataSize = view.getUint32(texOffs + 0x08, true);
         var texData = view.buffer.slice(texDataOffs);
@@ -3766,7 +3727,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var palData = null;
         if (key.palIdx !== 0xFFFFFFFF) {
             var palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
-            texture.paletteName = readString(view.buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
+            texture.paletteName = util_10.readString(view.buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
             var palDataOffs = view.getUint32(palOffs + 0x04, true);
             var palDataSize = view.getUint32(palOffs + 0x08, true);
             palData = view.buffer.slice(palDataOffs, palDataOffs + palDataSize);
@@ -3800,7 +3761,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         return bmd;
     }
     exports_19("parse", parse);
-    var gl_matrix_2, NITRO_GX, NITRO_Tex, Poly, Batch, Model, TextureKey, Texture, BMD;
+    var gl_matrix_2, NITRO_GX, NITRO_Tex, util_10, Poly, Batch, Model, TextureKey, Texture, BMD;
     return {
         setters: [
             function (gl_matrix_2_1) {
@@ -3811,9 +3772,13 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             },
             function (NITRO_Tex_1) {
                 NITRO_Tex = NITRO_Tex_1;
+            },
+            function (util_10_1) {
+                util_10 = util_10_1;
             }
         ],
         execute: function () {
+            // Super Mario 64 DS .bmd format
             Poly = /** @class */ (function () {
                 function Poly() {
                 }
@@ -3872,7 +3837,7 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
         ctx.putImageData(imgData, 0, 0);
         return canvas;
     }
-    var gl_matrix_3, LZ77, Viewer, CRG0, NITRO_BMD, util_6, DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Scene, MultiScene, SceneDesc;
+    var gl_matrix_3, LZ77, Viewer, CRG0, NITRO_BMD, util_11, DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (gl_matrix_3_1) {
@@ -3890,8 +3855,8 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
             function (NITRO_BMD_1) {
                 NITRO_BMD = NITRO_BMD_1;
             },
-            function (util_6_1) {
-                util_6 = util_6_1;
+            function (util_11_1) {
+                util_11 = util_11_1;
             }
         ],
         execute: function () {
@@ -4102,7 +4067,7 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                     this.id = '' + this.levelId;
                 }
                 SceneDesc.prototype._createBmdScene = function (gl, filename, localScale, level) {
-                    return util_6.fetch("data/sm64ds/" + filename).then(function (result) {
+                    return util_11.fetch("data/sm64ds/" + filename).then(function (result) {
                         result = LZ77.maybeDecompress(result);
                         var bmd = NITRO_BMD.parse(result);
                         return new Scene(gl, bmd, localScale, level);
@@ -4119,7 +4084,7 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                 };
                 SceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return util_6.fetch('data/sm64ds/sm64ds.crg0').then(function (result) {
+                    return util_11.fetch('data/sm64ds/sm64ds.crg0').then(function (result) {
                         var crg0 = CRG0.parse(result);
                         return _this._createSceneFromCRG0(gl, crg0);
                     });
@@ -5390,7 +5355,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
 System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], function (exports_24, context_24) {
     "use strict";
     var __moduleName = context_24 && context_24.id;
-    var Viewer, ZELVIEW0, util_7, BillboardBGProgram, F3DEX2Program, COLL_FRAG_SHADER_SOURCE, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
+    var Viewer, ZELVIEW0, util_12, BillboardBGProgram, F3DEX2Program, COLL_FRAG_SHADER_SOURCE, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
     return {
         setters: [
             function (Viewer_5) {
@@ -5399,8 +5364,8 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
             function (ZELVIEW0_1) {
                 ZELVIEW0 = ZELVIEW0_1;
             },
-            function (util_7_1) {
-                util_7 = util_7_1;
+            function (util_12_1) {
+                util_12 = util_12_1;
             }
         ],
         execute: function () {
@@ -5588,7 +5553,7 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    return util_7.fetch(this.path).then(function (result) {
+                    return util_12.fetch(this.path).then(function (result) {
                         var zelview0 = ZELVIEW0.readZELVIEW0(result);
                         return new Scene(gl, zelview0);
                     });
@@ -6276,7 +6241,7 @@ System.register("yaz0", ["util"], function (exports_27, context_27) {
     var __moduleName = context_27 && context_27.id;
     function decompress(srcBuffer) {
         var srcView = new DataView(srcBuffer);
-        util_8.assert(util_8.readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
+        util_13.assert(util_13.readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
         var uncompressedSize = srcView.getUint32(0x04, true);
         var dstBuffer = new Uint8Array(uncompressedSize);
         var srcOffs = 0x08;
@@ -6310,11 +6275,11 @@ System.register("yaz0", ["util"], function (exports_27, context_27) {
         }
     }
     exports_27("decompress", decompress);
-    var util_8;
+    var util_13;
     return {
         setters: [
-            function (util_8_1) {
-                util_8 = util_8_1;
+            function (util_13_1) {
+                util_13 = util_13_1;
             }
         ],
         execute: function () {// Nintendo Yaz0 format.
