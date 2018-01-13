@@ -1,20 +1,7 @@
 
 import * as CMB from 'cmb';
 
-function readString(buffer:ArrayBuffer, offs:number, length:number):string {
-    const buf = new Uint8Array(buffer, offs, length);
-    let S = '';
-    for (let i = 0; i < length; i++) {
-        if (buf[i] === 0)
-            break;
-        S += String.fromCharCode(buf[i]);
-    }
-    return S;
-}
-
-function assert(b:boolean) {
-    if (!b) throw new Error("Assert fail");
-}
+import { assert, readString } from 'util';
 
 export class ZSI {
     mesh:Mesh;

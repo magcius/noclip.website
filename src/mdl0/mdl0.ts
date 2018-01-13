@@ -1,15 +1,5 @@
 
-function assert(b: boolean) {
-    if (!b) throw new Error("Assert fail");
-}
-
-function readString(buffer: ArrayBuffer, offs: number, length: number): string {
-    const buf = new Uint8Array(buffer, offs, length);
-    let S = '';
-    for (let i = 0; i < length; i++)
-        S += String.fromCharCode(buf[i]);
-    return S;
-}
+import { assert, readString } from 'util';
 
 export interface MDL0 {
     clrData: Uint8Array;

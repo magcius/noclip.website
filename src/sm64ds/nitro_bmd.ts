@@ -4,18 +4,9 @@ import { mat2d } from 'gl-matrix';
 import * as NITRO_GX from './nitro_gx';
 import * as NITRO_Tex from './nitro_tex';
 
-// Super Mario 64 DS .bmd format
+import { readString } from 'util';
 
-function readString(buffer: ArrayBuffer, offs: number, length: number): string {
-    const buf = new Uint8Array(buffer, offs, length);
-    let S = '';
-    for (let i = 0; i < length; i++) {
-        if (buf[i] === 0)
-            break;
-        S += String.fromCharCode(buf[i]);
-    }
-    return S;
-}
+// Super Mario 64 DS .bmd format
 
 export class Poly {
     public packets: NITRO_GX.Packet[];

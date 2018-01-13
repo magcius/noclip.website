@@ -2,9 +2,7 @@
 import * as GX from 'gx';
 import * as Texture from 'texture';
 
-function assert(b: boolean) {
-    if (!b) throw new Error("Assert fail");
-}
+import { assert } from 'util';
 
 function readString(buffer: ArrayBuffer, offs: number, length: number): string {
     const length2 = Math.min(length, buffer.byteLength - offs);
