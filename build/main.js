@@ -3895,6 +3895,7 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                     this.bmd = bmd;
                     this.localScale = localScale;
                     this.crg0Level = crg0Level;
+                    this.isSkybox = false;
                     this.textures = bmd.textures.map(function (texture) {
                         return textureToCanvas(texture);
                     });
@@ -4007,12 +4008,21 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                 };
                 Scene.prototype.translateModel = function (gl, bmdm) {
                     var _this = this;
+                    var skyboxCameraMat = gl_matrix_3.mat4.create();
                     var localMatrix = gl_matrix_3.mat4.create();
                     var bmd = this.bmd;
                     var scaleFactor = bmd.scaleFactor * this.localScale;
                     gl_matrix_3.mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
                     var batches = bmdm.batches.map(function (batch) { return _this.translateBatch(gl, batch); });
                     return function (state, pass) {
+                        if (_this.isSkybox) {
+                            // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
+                            gl_matrix_3.mat4.copy(skyboxCameraMat, state.modelView);
+                            skyboxCameraMat[12] = 0;
+                            skyboxCameraMat[13] = 0;
+                            skyboxCameraMat[14] = 0;
+                            gl.uniformMatrix4fv(_this.program.modelViewLocation, false, skyboxCameraMat);
+                        }
                         gl.uniformMatrix4fv(_this.program.localMatrixLocation, false, localMatrix);
                         batches.forEach(function (f) { f(state, pass); });
                     };
@@ -4066,18 +4076,20 @@ System.register("sm64ds/render", ["gl-matrix", "lz77", "viewer", "sm64ds/crg0", 
                     this.levelId = levelId;
                     this.id = '' + this.levelId;
                 }
-                SceneDesc.prototype._createBmdScene = function (gl, filename, localScale, level) {
+                SceneDesc.prototype._createBmdScene = function (gl, filename, localScale, level, isSkybox) {
                     return util_11.fetch("data/sm64ds/" + filename).then(function (result) {
                         result = LZ77.maybeDecompress(result);
                         var bmd = NITRO_BMD.parse(result);
-                        return new Scene(gl, bmd, localScale, level);
+                        var scene = new Scene(gl, bmd, localScale, level);
+                        scene.isSkybox = isSkybox;
+                        return scene;
                     });
                 };
                 SceneDesc.prototype._createSceneFromCRG0 = function (gl, crg0) {
                     var level = crg0.levels[this.levelId];
-                    var scenes = [this._createBmdScene(gl, level.attributes.get('bmd'), 100, level)];
+                    var scenes = [this._createBmdScene(gl, level.attributes.get('bmd'), 100, level, false)];
                     if (level.attributes.get('vrbox'))
-                        scenes.unshift(this._createBmdScene(gl, level.attributes.get('vrbox'), 0.1, level));
+                        scenes.unshift(this._createBmdScene(gl, level.attributes.get('vrbox'), 0.8, level, true));
                     return Promise.all(scenes).then(function (results) {
                         return new MultiScene(results);
                     });
