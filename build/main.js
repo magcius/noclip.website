@@ -1690,6 +1690,14 @@ System.register("j3d/scenes", ["j3d/render"], function (exports_8, context_8) {
 System.register("mdl0/mdl0", ["util"], function (exports_9, context_9) {
     "use strict";
     var __moduleName = context_9 && context_9.id;
+    function readString(buffer, offs, length) {
+        var buf = new Uint8Array(buffer, offs, length);
+        var S = '';
+        for (var i = 0; i < length; i++) {
+            S += String.fromCharCode(buf[i]);
+        }
+        return S;
+    }
     function parse(buffer) {
         var Flag = {
             HAS_NORMAL: 0x01,
@@ -1697,7 +1705,7 @@ System.register("mdl0/mdl0", ["util"], function (exports_9, context_9) {
             HAS_COLOR: 0x04,
         };
         var view = new DataView(buffer);
-        util_4.assert(util_4.readString(buffer, 0, 4) === 'MDL\0');
+        util_4.assert(readString(buffer, 0, 4) === 'MDL\0');
         var flags = view.getUint8(0x04);
         var primType = view.getUint8(0x05);
         var vertCount = view.getUint16(0x06, true);
