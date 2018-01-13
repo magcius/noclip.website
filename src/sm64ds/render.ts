@@ -154,6 +154,9 @@ class Scene implements Viewer.Scene {
                 return gl.CLAMP_TO_EDGE;
         }
 
+        function cullMode(renderWhichFaces) {
+        }
+
         if (texture !== null) {
             texId = gl.createTexture();
             gl.bindTexture(gl.TEXTURE_2D, texId);
@@ -202,6 +205,24 @@ class Scene implements Viewer.Scene {
             }
 
             gl.depthMask(material.depthWrite);
+
+            switch (material.renderWhichFaces) {
+                case 0x00: // Render Nothing
+                    gl.enable(gl.CULL_FACE);
+                    gl.cullFace(gl.FRONT_AND_BACK);
+                    break;
+                case 0x01: // Render Back
+                    gl.enable(gl.CULL_FACE);
+                    gl.cullFace(gl.FRONT);
+                    break;
+                case 0x02: // Render Front
+                    gl.enable(gl.CULL_FACE);
+                    gl.cullFace(gl.BACK);
+                    break;
+                case 0x03: // Render Front and Back
+                    gl.disable(gl.CULL_FACE);
+                    break;
+            }
         };
     }
 
