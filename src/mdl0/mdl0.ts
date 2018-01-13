@@ -1,5 +1,5 @@
 
-import { assert, readString } from 'util';
+import { assert } from 'util';
 
 export interface MDL0 {
     clrData: Uint8Array;
@@ -10,6 +10,15 @@ export interface MDL0 {
     animSize: number;
     vertCount: number;
     vertSize: number;
+}
+
+function readString(buffer: ArrayBuffer, offs: number, length: number): string {
+    const buf = new Uint8Array(buffer, offs, length);
+    let S = '';
+    for (let i = 0; i < length; i++) {
+        S += String.fromCharCode(buf[i]);
+    }
+    return S;
 }
 
 export function parse(buffer: ArrayBuffer): MDL0 {
