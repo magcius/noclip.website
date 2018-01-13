@@ -6115,7 +6115,8 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     this.canvas.height = window.innerHeight;
                 };
                 Main.prototype._loadState = function (state) {
-                    var _a = __read(state.split('/', 2), 2), groupId = _a[0], sceneId = _a[1];
+                    var _a = __read(state.split('/')), groupId = _a[0], sceneRest = _a.slice(1);
+                    var sceneId = sceneRest.join('/');
                     var group = this.groups.find(function (g) { return g.id === groupId; });
                     if (!group)
                         return;
