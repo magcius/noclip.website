@@ -92,10 +92,6 @@ void main() {
     }
 }
 
-const COLL_FRAG_SHADER_SOURCE = `
-
-`;
-
 class CollisionProgram extends Viewer.Program {
     public positionLocation: number;
 

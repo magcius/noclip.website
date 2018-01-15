@@ -2,21 +2,21 @@
 import { assert, readString } from 'util';
 
 class VertexBufferSlices {
-    posBuffer:ArrayBuffer;
-    nrmBuffer:ArrayBuffer;
-    colBuffer:ArrayBuffer;
-    txcBuffer:ArrayBuffer;
+    public posBuffer: ArrayBuffer;
+    public nrmBuffer: ArrayBuffer;
+    public colBuffer: ArrayBuffer;
+    public txcBuffer: ArrayBuffer;
 }
 
 export class CMB {
-    name:string;
-    textures:Texture[] = [];
-    vertexBufferSlices:VertexBufferSlices;
+    public name: string;
+    public textures: Texture[] = [];
+    public vertexBufferSlices: VertexBufferSlices;
 
-    materials:Material[] = [];
-    sepds:Sepd[] = [];
-    meshs:Mesh[] = [];
-    indexBuffer:ArrayBuffer;
+    public materials: Material[] = [];
+    public sepds: Sepd[] = [];
+    public meshs: Mesh[] = [];
+    public indexBuffer: ArrayBuffer;
 }
 
 export enum TextureFilter {
@@ -34,19 +34,19 @@ export enum TextureWrapMode {
 }
 
 class TextureBinding {
-    textureIdx:number;
-    minFilter:TextureFilter;
-    magFilter:TextureFilter;
-    wrapS:TextureWrapMode;
-    wrapT:TextureWrapMode;
+    public textureIdx: number;
+    public minFilter: TextureFilter;
+    public magFilter: TextureFilter;
+    public wrapS: TextureWrapMode;
+    public wrapT: TextureWrapMode;
 }
 
 export class Material {
-    textureBindings:TextureBinding[] = [];
-    alphaTestEnable:boolean;
+    public textureBindings: TextureBinding[] = [];
+    public alphaTestEnable: boolean;
 }
 
-function readMatsChunk(cmb:CMB, buffer:ArrayBuffer) {
+function readMatsChunk(cmb: CMB, buffer: ArrayBuffer) {
     const view = new DataView(buffer);
 
     assert(readString(buffer, 0x00, 0x04) === 'mats');
@@ -86,40 +86,40 @@ enum TextureFormat {
 }
 
 export class Texture {
-    size:number;
-    width:number;
-    height:number;
-    format:TextureFormat;
-    pixels:Uint8Array;
-    name:string;
+    public size: number;
+    public width: number;
+    public height: number;
+    public format: TextureFormat;
+    public pixels: Uint8Array;
+    public name: string;
 }
 
-function expand4to8(n:number):number {
+function expand4to8(n: number) {
     return (n << 4) | n;
 }
 
-function expand5to8(n:number) {
-    return (n << (8-5)) | (n >>> (10-8));
+function expand5to8(n: number) {
+    return (n << (8 - 5)) | (n >>> (10 - 8));
 }
 
-function expand6to8(n:number) {
-    return (n << (8-6)) | (n >>> (12-8));
+function expand6to8(n: number) {
+    return (n << (8 - 6)) | (n >>> (12 - 8));
 }
 
-function decodeTexture_ETC1_4x4_Color(dst:Uint8Array, w1:number, w2:number, dstOffs:number, stride:number):void {
+function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, dstOffs: number, stride: number): void {
     // w1 = Upper 32-bit word, "control" data
     // w2 = Lower 32-bit word, "pixel" data
 
     // Table 3.17.2 -- Intensity tables for each codeword.
     const intensityTableMap = [
-        [   -8,  -2,  2,   8, ],
-        [  -17,  -5,  5,  17, ],
-        [  -29,  -9,  9,  29, ],
-        [  -42, -13, 13,  42, ],
-        [  -60, -18, 18,  60, ],
-        [  -80, -24, 24,  80, ],
-        [ -106, -33, 33, 106, ],
-        [ -183, -47, 48, 183, ],
+        [   -8,  -2,  2,   8 ],
+        [  -17,  -5,  5,  17 ],
+        [  -29,  -9,  9,  29 ],
+        [  -42, -13, 13,  42 ],
+        [  -60, -18, 18,  60 ],
+        [  -80, -24, 24,  80 ],
+        [ -106, -33, 33, 106 ],
+        [ -183, -47, 48, 183 ],
     ];
 
     // Table 3.17.3 -- MSB/LSB colors to modifiers.
@@ -144,23 +144,23 @@ function decodeTexture_ETC1_4x4_Color(dst:Uint8Array, w1:number, w2:number, dstO
     const intensityTable1 = intensityTableMap[intensityIndex1];
     const intensityTable2 = intensityTableMap[intensityIndex2];
 
-    function signed3(n:number) {
+    function signed3(n: number) {
         // Sign-extend.
         return n << 29 >> 29;
     }
 
-    function clamp(n:number) {
+    function clamp(n: number) {
         if (n < 0) return 0;
         if (n > 255) return 255;
         return n;
     }
 
     // Get the color table for a given block.
-    function getColors(colors:Uint8Array, r, g, b, intensityMap:number[]) {
+    function getColors(colors: Uint8Array, r, g, b, intensityMap: number[]) {
         for (let i = 0; i < 4; i++) {
-            colors[(i*3)+0] = clamp(r + intensityMap[i]);
-            colors[(i*3)+1] = clamp(g + intensityMap[i]);
-            colors[(i*3)+2] = clamp(b + intensityMap[i]);
+            colors[(i * 3) + 0] = clamp(r + intensityMap[i]);
+            colors[(i * 3) + 1] = clamp(g + intensityMap[i]);
+            colors[(i * 3) + 2] = clamp(b + intensityMap[i]);
         }
     }
 
@@ -199,13 +199,14 @@ function decodeTexture_ETC1_4x4_Color(dst:Uint8Array, w1:number, w2:number, dstO
     // Go through each pixel and copy the color into the right spot...
     for (let i = 0; i < 16; i++) {
         const lsb = (w2 >>> i) & 0x01;
-        const msb = (w2 >>> (16+i)) & 0x01;
+        const msb = (w2 >>> (16 + i)) & 0x01;
         const lookup = (msb << 1) | lsb;
         const colorsIndex = pixelToColorIndex[lookup];
 
         // Indexes march down and to the right here.
-        const y = i & 0x03, x = i >> 2;
-        const dstIndex = dstOffs + ((y*stride)+x) * 4; 
+        const y = i & 0x03;
+        const x = i >> 2;
+        const dstIndex = dstOffs + ((y * stride) + x) * 4;
 
         // Whether we're in block 1 or block 2;
         let whichBlock;
@@ -218,16 +219,16 @@ function decodeTexture_ETC1_4x4_Color(dst:Uint8Array, w1:number, w2:number, dstO
             whichBlock = y & 2;
 
         const colors = whichBlock ? colors2 : colors1;
-        dst[dstIndex+0] = colors[(colorsIndex*3)+0];
-        dst[dstIndex+1] = colors[(colorsIndex*3)+1];
-        dst[dstIndex+2] = colors[(colorsIndex*3)+2];
+        dst[dstIndex + 0] = colors[(colorsIndex * 3) + 0];
+        dst[dstIndex + 1] = colors[(colorsIndex * 3) + 1];
+        dst[dstIndex + 2] = colors[(colorsIndex * 3) + 2];
     }
 }
 
-function decodeTexture_ETC1_4x4_Alpha(dst:Uint8Array, a1:number, a2:number, dstOffs:number, stride:number) {
+function decodeTexture_ETC1_4x4_Alpha(dst: Uint8Array, a1: number, a2: number, dstOffs: number, stride: number) {
     for (let ax = 0; ax < 2; ax++) {
         for (let ay = 0; ay < 4; ay++) {
-            const dstIndex = dstOffs + ((ay*stride)+ax) * 4;
+            const dstIndex = dstOffs + ((ay * stride) + ax) * 4;
             dst[dstIndex + 3] = expand4to8(a2 & 0x0F);
             a2 >>= 4;
         }
@@ -235,14 +236,14 @@ function decodeTexture_ETC1_4x4_Alpha(dst:Uint8Array, a1:number, a2:number, dstO
 
     for (let ax = 2; ax < 4; ax++) {
         for (let ay = 0; ay < 4; ay++) {
-            const dstIndex = dstOffs + ((ay*stride)+ax) * 4;
+            const dstIndex = dstOffs + ((ay * stride) + ax) * 4;
             dst[dstIndex + 3] = expand4to8(a1 & 0x0F);
             a1 >>= 4;
         }
     }
 }
 
-function decodeTexture_ETC1(texture:Texture, texData:ArrayBuffer, alpha:boolean) {
+function decodeTexture_ETC1(texture: Texture, texData: ArrayBuffer, alpha: boolean) {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     const stride = texture.width;
 
@@ -253,9 +254,10 @@ function decodeTexture_ETC1(texture:Texture, texData:ArrayBuffer, alpha:boolean)
             // Order of each set of 4 blocks: top left, top right, bottom left, bottom right...
             for (let y = 0; y < 8; y += 4) {
                 for (let x = 0; x < 8; x += 4) {
-                    const dstOffs = ((yy+y) * stride + (xx+x))*4;
+                    const dstOffs = ((yy + y) * stride + (xx + x)) * 4;
 
-                    let a1, a2;
+                    let a1;
+                    let a2;
                     if (alpha) {
                         // In ETC1A4 mode, we have 8 bytes of per-pixel alpha data preceeding the tile.
                         a2 = src.getUint32(offs + 0x00, true);
@@ -279,7 +281,9 @@ function decodeTexture_ETC1(texture:Texture, texData:ArrayBuffer, alpha:boolean)
     return pixels;
 }
 
-function decodeTexture_Tiled(texture:Texture, texData:ArrayBuffer, decoder:Function) {
+type PixelDecode = (pixels: Uint8Array, dstOffs: number) => void;
+
+function decodeTexture_Tiled(texture: Texture, texData: ArrayBuffer, decoder: PixelDecode) {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     const stride = texture.width;
 
@@ -294,7 +298,7 @@ function decodeTexture_Tiled(texture:Texture, texData:ArrayBuffer, decoder:Funct
             for (let i = 0; i < 0x40; i++) {
                 const x = morton7(i);
                 const y = morton7(i >> 1);
-                const dstOffs = ((yy+y)*stride+xx+x) * 4;
+                const dstOffs = ((yy + y) * stride + xx + x) * 4;
                 decoder(pixels, dstOffs);
             }
         }
@@ -303,70 +307,70 @@ function decodeTexture_Tiled(texture:Texture, texData:ArrayBuffer, decoder:Funct
     return pixels;
 }
 
-function decodeTexture_RGBA5551(texture:Texture, texData:ArrayBuffer) {
+function decodeTexture_RGBA5551(texture: Texture, texData: ArrayBuffer) {
     const src = new DataView(texData);
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
-        pixels[dstOffs+0] = expand5to8((p >> 11) & 0x1F);
-        pixels[dstOffs+1] = expand5to8((p >> 6) & 0x1F);
-        pixels[dstOffs+2] = expand5to8((p >> 1) & 0x1F);
-        pixels[dstOffs+3] = (p & 0x01) ? 0xFF : 0x00;
+        pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
+        pixels[dstOffs + 1] = expand5to8((p >> 6) & 0x1F);
+        pixels[dstOffs + 2] = expand5to8((p >> 1) & 0x1F);
+        pixels[dstOffs + 3] = (p & 0x01) ? 0xFF : 0x00;
         srcOffs += 2;
     });
 }
 
-function decodeTexture_RGB565(texture:Texture, texData:ArrayBuffer) {
+function decodeTexture_RGB565(texture: Texture, texData: ArrayBuffer) {
     const src = new DataView(texData);
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
-        pixels[dstOffs+0] = expand5to8((p >> 11) & 0x1F);
-        pixels[dstOffs+1] = expand6to8((p >> 5) & 0x3F);
-        pixels[dstOffs+2] = expand5to8(p & 0x1F);
-        pixels[dstOffs+3] = 0xFF;
+        pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
+        pixels[dstOffs + 1] = expand6to8((p >> 5) & 0x3F);
+        pixels[dstOffs + 2] = expand5to8(p & 0x1F);
+        pixels[dstOffs + 3] = 0xFF;
         srcOffs += 2;
     });
 }
 
-function decodeTexture_A8(texture:Texture, texData:ArrayBuffer) {
+function decodeTexture_A8(texture: Texture, texData: ArrayBuffer) {
     const src = new DataView(texData);
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const A = src.getUint8(srcOffs++);
-        pixels[dstOffs+0] = 0xFF;
-        pixels[dstOffs+1] = 0xFF;
-        pixels[dstOffs+2] = 0xFF;
-        pixels[dstOffs+3] = A;
+        pixels[dstOffs + 0] = 0xFF;
+        pixels[dstOffs + 1] = 0xFF;
+        pixels[dstOffs + 2] = 0xFF;
+        pixels[dstOffs + 3] = A;
     });
 }
 
-function decodeTexture_L8(texture:Texture, texData:ArrayBuffer) {
+function decodeTexture_L8(texture: Texture, texData: ArrayBuffer) {
     const src = new DataView(texData);
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const L = src.getUint8(srcOffs++);
-        pixels[dstOffs+0] = L;
-        pixels[dstOffs+1] = L;
-        pixels[dstOffs+2] = L;
-        pixels[dstOffs+3] = L;
+        pixels[dstOffs + 0] = L;
+        pixels[dstOffs + 1] = L;
+        pixels[dstOffs + 2] = L;
+        pixels[dstOffs + 3] = L;
     });
 }
 
-function decodeTexture_LA8(texture:Texture, texData:ArrayBuffer) {
+function decodeTexture_LA8(texture: Texture, texData: ArrayBuffer) {
     const src = new DataView(texData);
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const L = src.getUint8(srcOffs++);
         const A = src.getUint8(srcOffs++);
-        pixels[dstOffs+0] = L;
-        pixels[dstOffs+1] = L;
-        pixels[dstOffs+2] = L;
-        pixels[dstOffs+3] = A;
+        pixels[dstOffs + 0] = L;
+        pixels[dstOffs + 1] = L;
+        pixels[dstOffs + 2] = L;
+        pixels[dstOffs + 3] = A;
     });
 }
 
-function decodeTexture(texture:Texture, texData:ArrayBuffer) {
+function decodeTexture(texture: Texture, texData: ArrayBuffer) {
     switch (texture.format) {
     case TextureFormat.ETC1:
         return decodeTexture_ETC1(texture, texData, false);
@@ -387,7 +391,7 @@ function decodeTexture(texture:Texture, texData:ArrayBuffer) {
     }
 }
 
-function readTexChunk(cmb:CMB, buffer:ArrayBuffer, texData:ArrayBuffer):void {
+function readTexChunk(cmb: CMB, buffer: ArrayBuffer, texData: ArrayBuffer): void {
     const view = new DataView(buffer);
 
     assert(readString(buffer, 0x00, 0x04) === 'tex ');
@@ -410,7 +414,7 @@ function readTexChunk(cmb:CMB, buffer:ArrayBuffer, texData:ArrayBuffer):void {
     }
 }
 
-function readVatrChunk(cmb:CMB, buffer:ArrayBuffer):void {
+function readVatrChunk(cmb: CMB, buffer: ArrayBuffer): void {
     const view = new DataView(buffer);
 
     assert(readString(buffer, 0x00, 0x04) === 'vatr');
@@ -435,11 +439,11 @@ function readVatrChunk(cmb:CMB, buffer:ArrayBuffer):void {
 }
 
 export class Mesh {
-    sepdIdx:number;
-    matsIdx:number;
+    public sepdIdx: number;
+    public matsIdx: number;
 }
 
-function readMshsChunk(cmb:CMB, buffer:ArrayBuffer):void {
+function readMshsChunk(cmb: CMB, buffer: ArrayBuffer): void {
     const view = new DataView(buffer);
 
     assert(readString(buffer, 0x00, 0x04) === 'mshs');
@@ -462,15 +466,15 @@ export enum DataType {
     Int    = 0x1404,
     UInt   = 0x1405,
     Float  = 0x1406,
-};
-
-export class Prm {
-    indexType:DataType;
-    count:number;
-    offset:number;
 }
 
-function readPrmChunk(cmb:CMB, buffer:ArrayBuffer):Prm {
+export class Prm {
+    public indexType: DataType;
+    public count: number;
+    public offset: number;
+}
+
+function readPrmChunk(cmb: CMB, buffer: ArrayBuffer): Prm {
     const view = new DataView(buffer);
 
     assert(readString(buffer, 0x00, 0x04) === 'prm ');
@@ -483,7 +487,7 @@ function readPrmChunk(cmb:CMB, buffer:ArrayBuffer):Prm {
     return prm;
 }
 
-function readPrmsChunk(cmb:CMB, buffer:ArrayBuffer):Prm {
+function readPrmsChunk(cmb: CMB, buffer: ArrayBuffer): Prm {
     const view = new DataView(buffer);
 
     assert(readString(buffer, 0x00, 0x04) === 'prms');
@@ -493,26 +497,26 @@ function readPrmsChunk(cmb:CMB, buffer:ArrayBuffer):Prm {
 }
 
 export class Sepd {
-    prms:Prm[] = [];
+    public prms: Prm[] = [];
 
-    posStart:number;
-    posScale:number;
-    posType:DataType;
+    public posStart: number;
+    public posScale: number;
+    public posType: DataType;
 
-    nrmStart:number;
-    nrmScale:number;
-    nrmType:DataType;
+    public nrmStart: number;
+    public nrmScale: number;
+    public nrmType: DataType;
 
-    colStart:number;
-    colScale:number;
-    colType:DataType;
+    public colStart: number;
+    public colScale: number;
+    public colType: DataType;
 
-    txcStart:number;
-    txcScale:number;
-    txcType:DataType;
+    public txcStart: number;
+    public txcScale: number;
+    public txcType: DataType;
 }
 
-function readSepdChunk(cmb:CMB, buffer:ArrayBuffer):Sepd {
+function readSepdChunk(cmb: CMB, buffer: ArrayBuffer): Sepd {
     const view = new DataView(buffer);
 
     assert(readString(buffer, 0x00, 0x04) === 'sepd');
@@ -546,7 +550,7 @@ function readSepdChunk(cmb:CMB, buffer:ArrayBuffer):Sepd {
     return sepd;
 }
 
-function readShpChunk(cmb:CMB, buffer:ArrayBuffer):void {
+function readShpChunk(cmb: CMB, buffer: ArrayBuffer): void {
     const view = new DataView(buffer);
 
     assert(readString(buffer, 0x00, 0x04) === 'shp ');
@@ -561,7 +565,7 @@ function readShpChunk(cmb:CMB, buffer:ArrayBuffer):void {
     }
 }
 
-function readSklmChunk(cmb:CMB, buffer:ArrayBuffer):void {
+function readSklmChunk(cmb: CMB, buffer: ArrayBuffer): void {
     const view = new DataView(buffer);
 
     assert(readString(buffer, 0x00, 0x04) === 'sklm');
@@ -572,7 +576,7 @@ function readSklmChunk(cmb:CMB, buffer:ArrayBuffer):void {
     readShpChunk(cmb, buffer.slice(shpChunkOffs));
 }
 
-export function parse(buffer:ArrayBuffer):CMB {
+export function parse(buffer: ArrayBuffer): CMB {
     const view = new DataView(buffer);
     const cmb = new CMB();
 
