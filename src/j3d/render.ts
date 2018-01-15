@@ -1,7 +1,6 @@
 
 import * as BMD from 'bmd';
 import * as GX from 'gx';
-import * as LZ77 from 'lz77';
 import * as Viewer from 'viewer';
 
 import { fetch } from 'util';

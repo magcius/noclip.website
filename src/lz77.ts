@@ -1,7 +1,7 @@
 // Nintendo DS LZ77 (LZ10) format.
 
 // Header (8 bytes):
-//   Magic: "LZ77\x10" (5 bytes)
+//   Magic: "\x10" (1 byte)
 //   Uncompressed size (3 bytes, little endian)
 // Data:
 //   Flags (1 byte)
@@ -14,21 +14,17 @@
 //     If flag is 0:
 //       Literal: copy one byte from src to dest.
 
-import { assert, readString } from './util';
-
-export function isLZ77(srcBuffer: ArrayBuffer) {
-    const srcView = new DataView(srcBuffer);
-    return (readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
-}
-
 export function decompress(srcBuffer: ArrayBuffer) {
     const srcView = new DataView(srcBuffer);
-    assert(readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
 
-    let uncompressedSize = srcView.getUint32(0x04, true) >> 8;
+    const magic = srcView.getUint8(0x00);
+    if (magic !== 0x10)
+        throw new Error("Not Nintendo LZ77");
+
+    let uncompressedSize = srcView.getUint32(0x00, true) >> 8;
     const dstBuffer = new Uint8Array(uncompressedSize);
 
-    let srcOffs = 0x08;
+    let srcOffs = 0x04;
     let dstOffs = 0x00;
 
     while (true) {
@@ -57,11 +53,4 @@ export function decompress(srcBuffer: ArrayBuffer) {
                 return dstBuffer.buffer;
         }
     }
-}
-
-export function maybeDecompress(srcBuffer: ArrayBuffer) {
-    if (isLZ77(srcBuffer))
-        return decompress(srcBuffer);
-    else
-        return srcBuffer;
 }
