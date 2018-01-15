@@ -4,7 +4,15 @@ import * as CMB from 'cmb';
 import * as Viewer from 'viewer';
 import { fetch } from 'util';
 
-const DL_VERT_SHADER_SOURCE = `
+class OoT3D_Program extends Viewer.Program {
+    posScaleLocation:WebGLUniformLocation;
+    uvScaleLocation:WebGLUniformLocation;
+    alphaTestLocation:WebGLUniformLocation;
+    positionLocation:number;
+    colorLocation:number;
+    uvLocation:number;
+
+    vert = `
     precision mediump float;
     uniform mat4 u_modelView;
     uniform mat4 u_localMatrix;
@@ -22,10 +30,9 @@ const DL_VERT_SHADER_SOURCE = `
         v_color = a_color;
         v_uv = a_uv * u_uvScale;
         v_uv.t = 1.0 - v_uv.t;
-    }
-`;
+    }`;
 
-const DL_FRAG_SHADER_SOURCE = `
+    frag = `
     precision mediump float;
     varying vec2 v_uv;
     varying vec4 v_color;
@@ -37,19 +44,7 @@ const DL_FRAG_SHADER_SOURCE = `
         gl_FragColor *= v_color;
         if (u_alphaTest && gl_FragColor.a <= 0.8)
             discard;
-    }
-`;
-
-class OoT3D_Program extends Viewer.Program {
-    posScaleLocation:WebGLUniformLocation;
-    uvScaleLocation:WebGLUniformLocation;
-    alphaTestLocation:WebGLUniformLocation;
-    positionLocation:number;
-    colorLocation:number;
-    uvLocation:number;
-
-    vert = DL_VERT_SHADER_SOURCE;
-    frag = DL_FRAG_SHADER_SOURCE;
+    }`;
 
     bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
         super.bind(gl, prog);
@@ -81,10 +76,10 @@ function textureToCanvas(texture:CMB.Texture) {
 
 class Scene implements Viewer.Scene {
     cameraController = Viewer.FPSCameraController;
-    textures:HTMLCanvasElement[];
-    program:OoT3D_Program;
-    zsi:ZSI.ZSI;
-    model:Function;
+    textures: HTMLCanvasElement[];
+    program: OoT3D_Program;
+    zsi: ZSI.ZSI;
+    model: Function;
 
     constructor(gl:WebGLRenderingContext, zsi:ZSI.ZSI) {
         this.program = new OoT3D_Program();

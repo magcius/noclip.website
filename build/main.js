@@ -2529,6 +2529,33 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_13, contex
             mesh.textures = mesh.textures.concat(mesh.transparent.textures);
         return mesh;
     }
+    function readCollision(view, offs) {
+        var waterboxTableCount = view.getUint16(offs + 0x14, true);
+        var waterboxTableOffs = view.getUint32(offs + 0x28, true);
+        var waterboxes = new Uint16Array(waterboxTableCount * 3 * 4);
+        var waterboxTableIdx = waterboxTableOffs;
+        for (var i = 0; i < waterboxTableCount; i++) {
+            var x = view.getInt16(waterboxTableIdx + 0x00, true);
+            var y = view.getInt16(waterboxTableIdx + 0x02, true);
+            var z = view.getInt16(waterboxTableIdx + 0x04, true);
+            var sx = view.getInt16(waterboxTableIdx + 0x06, true);
+            var sz = view.getInt16(waterboxTableIdx + 0x08, true);
+            waterboxes[i * 3 * 4 + 0] = x;
+            waterboxes[i * 3 * 4 + 1] = y;
+            waterboxes[i * 3 * 4 + 2] = z;
+            waterboxes[i * 3 * 4 + 3] = x + sx;
+            waterboxes[i * 3 * 4 + 4] = y;
+            waterboxes[i * 3 * 4 + 5] = z;
+            waterboxes[i * 3 * 4 + 6] = x;
+            waterboxes[i * 3 * 4 + 7] = y;
+            waterboxes[i * 3 * 4 + 8] = z + sz;
+            waterboxes[i * 3 * 4 + 9] = x + sx;
+            waterboxes[i * 3 * 4 + 10] = y;
+            waterboxes[i * 3 * 4 + 11] = z + sz;
+            waterboxTableIdx += 0x10;
+        }
+        return { waterboxes: waterboxes };
+    }
     // ZSI headers are a slight modification of the original Z64 headers.
     function readHeaders(buffer) {
         var view = new DataView(buffer);
@@ -2548,6 +2575,9 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_13, contex
                     break;
                 case HeaderCommands.Mesh:
                     zsi.mesh = readMesh(view, cmd2);
+                    break;
+                case HeaderCommands.Collision:
+                    zsi.collision = readCollision(view, cmd2);
                     break;
             }
         }
@@ -2580,6 +2610,7 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_13, contex
             exports_13("ZSI", ZSI);
             // Subset of Z64 command types.
             (function (HeaderCommands) {
+                HeaderCommands[HeaderCommands["Collision"] = 3] = "Collision";
                 HeaderCommands[HeaderCommands["Rooms"] = 4] = "Rooms";
                 HeaderCommands[HeaderCommands["Mesh"] = 10] = "Mesh";
                 HeaderCommands[HeaderCommands["End"] = 20] = "End";
@@ -2613,7 +2644,7 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
         parts.pop();
         return parts.join('/');
     }
-    var ZSI, CMB, Viewer, util_8, DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, OoT3D_Program, Scene, MultiScene, SceneDesc;
+    var ZSI, CMB, Viewer, util_8, OoT3D_Program, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (ZSI_1) {
@@ -2630,14 +2661,12 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
             }
         ],
         execute: function () {
-            DL_VERT_SHADER_SOURCE = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform float u_posScale;\n    uniform float u_uvScale;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n\n    void main() {\n        gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;\n        v_color = a_color;\n        v_uv = a_uv * u_uvScale;\n        v_uv.t = 1.0 - v_uv.t;\n    }\n";
-            DL_FRAG_SHADER_SOURCE = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n    uniform bool u_alphaTest;\n    \n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (u_alphaTest && gl_FragColor.a <= 0.8)\n            discard;\n    }\n";
             OoT3D_Program = /** @class */ (function (_super) {
                 __extends(OoT3D_Program, _super);
                 function OoT3D_Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = DL_VERT_SHADER_SOURCE;
-                    _this.frag = DL_FRAG_SHADER_SOURCE;
+                    _this.vert = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform float u_posScale;\n    uniform float u_uvScale;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n\n    void main() {\n        gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;\n        v_color = a_color;\n        v_uv = a_uv * u_uvScale;\n        v_uv.t = 1.0 - v_uv.t;\n    }";
+                    _this.frag = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n    uniform bool u_alphaTest;\n    \n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (u_alphaTest && gl_FragColor.a <= 0.8)\n            discard;\n    }";
                     return _this;
                 }
                 OoT3D_Program.prototype.bind = function (gl, prog) {
