@@ -2697,7 +2697,7 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_13, contex
         }
     };
 });
-System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], function (exports_14, context_14) {
+System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], function (exports_14, context_14) {
     "use strict";
     var __moduleName = context_14 && context_14.id;
     function textureToCanvas(texture) {
@@ -2717,14 +2717,14 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
         parts.pop();
         return parts.join('/');
     }
-    var ZSI, CMB, Viewer, util_7, OoT3D_Program, Scene, MultiScene, SceneDesc;
+    var CMB, ZSI, Viewer, util_7, OoT3D_Program, Scene, MultiScene, SceneDesc;
     return {
         setters: [
-            function (ZSI_1) {
-                ZSI = ZSI_1;
-            },
             function (CMB_2) {
                 CMB = CMB_2;
+            },
+            function (ZSI_1) {
+                ZSI = ZSI_1;
             },
             function (Viewer_3) {
                 Viewer = Viewer_3;
@@ -2739,7 +2739,7 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                 function OoT3D_Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
                     _this.vert = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform float u_posScale;\n    uniform float u_uvScale;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n\n    void main() {\n        gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;\n        v_color = a_color;\n        v_uv = a_uv * u_uvScale;\n        v_uv.t = 1.0 - v_uv.t;\n    }";
-                    _this.frag = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n    uniform bool u_alphaTest;\n    \n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (u_alphaTest && gl_FragColor.a <= 0.8)\n            discard;\n    }";
+                    _this.frag = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n    uniform bool u_alphaTest;\n\n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (u_alphaTest && gl_FragColor.a <= 0.8)\n            discard;\n    }";
                     return _this;
                 }
                 OoT3D_Program.prototype.bind = function (gl, prog) {
@@ -2763,6 +2763,14 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                     this.zsi = zsi;
                     this.model = this.translateModel(gl, zsi.mesh);
                 }
+                Scene.prototype.render = function (state) {
+                    var gl = state.viewport.gl;
+                    state.useProgram(this.program);
+                    gl.enable(gl.DEPTH_TEST);
+                    gl.enable(gl.BLEND);
+                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                    this.model();
+                };
                 Scene.prototype.translateDataType = function (gl, dataType) {
                     switch (dataType) {
                         case CMB.DataType.Byte: return gl.BYTE;
@@ -2927,14 +2935,6 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                         // transparent();
                     };
                 };
-                Scene.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
-                    state.useProgram(this.program);
-                    gl.enable(gl.DEPTH_TEST);
-                    gl.enable(gl.BLEND);
-                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-                    this.model();
-                };
                 return Scene;
             }());
             MultiScene = /** @class */ (function () {
@@ -2968,6 +2968,12 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                     this.path = path;
                     this.id = this.path;
                 }
+                SceneDesc.prototype.createScene = function (gl) {
+                    var _this = this;
+                    return util_7.fetch(this.path).then(function (result) {
+                        return _this._createSceneFromData(gl, result);
+                    });
+                };
                 SceneDesc.prototype._createSceneFromData = function (gl, result) {
                     var _this = this;
                     var zsi = ZSI.parse(result);
@@ -2981,17 +2987,11 @@ System.register("oot3d/render", ["oot3d/zsi", "oot3d/cmb", "viewer", "util"], fu
                             return basePath_1 + '/' + filename;
                         });
                         return Promise.all(roomFilenames.map(function (filename) {
-                            return util_7.fetch(filename).then(function (result) { return _this._createSceneFromData(gl, result); });
+                            return util_7.fetch(filename).then(function (roomResult) { return _this._createSceneFromData(gl, roomResult); });
                         })).then(function (scenes) {
                             return new MultiScene(scenes);
                         });
                     }
-                };
-                SceneDesc.prototype.createScene = function (gl) {
-                    var _this = this;
-                    return util_7.fetch(this.path).then(function (result) {
-                        return _this._createSceneFromData(gl, result);
-                    });
                 };
                 return SceneDesc;
             }());

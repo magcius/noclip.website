@@ -4,7 +4,7 @@ import { SceneGroup } from '../viewer';
 
 const id = "oot3d";
 const name = "Ocarina of Time 3D";
-const sceneDescs:SceneDesc[] = [
+const sceneDescs: SceneDesc[] = [
     { name: "Inside the Deku Tree", filename: "ydan_info.zsi" },
     { name: "Inside the Deku Tree (Boss)", filename: "ydan_boss_info.zsi" },
     { name: "Dodongo's Cavern", filename: "ddan_info.zsi" },
@@ -106,10 +106,10 @@ const sceneDescs:SceneDesc[] = [
     { name: '', filename: "link_info.zsi" },
     { name: '', filename: "shop_info.zsi" },
     { name: "Fishing Pond", filename: "turibori_info.zsi" },
-].map((entry):SceneDesc => {
+].map((entry): SceneDesc => {
     const path = `data/oot3d/${entry.filename}`;
     const name = entry.name || entry.filename;
     return new SceneDesc(name, path);
 });
 
-export const sceneGroup:SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };

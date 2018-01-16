@@ -1,18 +1,20 @@
 
-import * as ZSI from 'zsi';
-import * as CMB from 'cmb';
+import * as CMB from './cmb';
+import * as ZSI from './zsi';
+
 import * as Viewer from 'viewer';
+
 import { fetch } from 'util';
 
 class OoT3D_Program extends Viewer.Program {
-    posScaleLocation:WebGLUniformLocation;
-    uvScaleLocation:WebGLUniformLocation;
-    alphaTestLocation:WebGLUniformLocation;
-    positionLocation:number;
-    colorLocation:number;
-    uvLocation:number;
+    public posScaleLocation: WebGLUniformLocation;
+    public uvScaleLocation: WebGLUniformLocation;
+    public alphaTestLocation: WebGLUniformLocation;
+    public positionLocation: number;
+    public colorLocation: number;
+    public uvLocation: number;
 
-    vert = `
+    public vert = `
     precision mediump float;
     uniform mat4 u_modelView;
     uniform mat4 u_localMatrix;
@@ -32,13 +34,13 @@ class OoT3D_Program extends Viewer.Program {
         v_uv.t = 1.0 - v_uv.t;
     }`;
 
-    frag = `
+    public frag = `
     precision mediump float;
     varying vec2 v_uv;
     varying vec4 v_color;
     uniform sampler2D u_texture;
     uniform bool u_alphaTest;
-    
+
     void main() {
         gl_FragColor = texture2D(u_texture, v_uv);
         gl_FragColor *= v_color;
@@ -46,7 +48,7 @@ class OoT3D_Program extends Viewer.Program {
             discard;
     }`;
 
-    bind(gl:WebGLRenderingContext, prog:WebGLProgram) {
+    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.posScaleLocation = gl.getUniformLocation(prog, "u_posScale");
@@ -58,7 +60,7 @@ class OoT3D_Program extends Viewer.Program {
     }
 }
 
-function textureToCanvas(texture:CMB.Texture) {
+function textureToCanvas(texture: CMB.Texture) {
     const canvas = document.createElement("canvas");
     canvas.width = texture.width;
     canvas.height = texture.height;
@@ -75,13 +77,13 @@ function textureToCanvas(texture:CMB.Texture) {
 }
 
 class Scene implements Viewer.Scene {
-    cameraController = Viewer.FPSCameraController;
-    textures: HTMLCanvasElement[];
-    program: OoT3D_Program;
-    zsi: ZSI.ZSI;
-    model: Function;
+    public cameraController = Viewer.FPSCameraController;
+    public textures: HTMLCanvasElement[];
+    public program: OoT3D_Program;
+    public zsi: ZSI.ZSI;
+    public model: Function;
 
-    constructor(gl:WebGLRenderingContext, zsi:ZSI.ZSI) {
+    constructor(gl: WebGLRenderingContext, zsi: ZSI.ZSI) {
         this.program = new OoT3D_Program();
         this.textures = zsi.mesh.textures.map((texture) => {
             return textureToCanvas(texture);
@@ -91,7 +93,18 @@ class Scene implements Viewer.Scene {
         this.model = this.translateModel(gl, zsi.mesh);
     }
 
-    translateDataType(gl:WebGLRenderingContext, dataType:CMB.DataType) {
+    public render(state: Viewer.RenderState) {
+        const gl = state.viewport.gl;
+
+        state.useProgram(this.program);
+        gl.enable(gl.DEPTH_TEST);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        this.model();
+    }
+
+    private translateDataType(gl: WebGLRenderingContext, dataType: CMB.DataType) {
         switch (dataType) {
             case CMB.DataType.Byte:   return gl.BYTE;
             case CMB.DataType.UByte:  return gl.UNSIGNED_BYTE;
@@ -104,7 +117,7 @@ class Scene implements Viewer.Scene {
         }
     }
 
-    dataTypeSize(dataType:CMB.DataType) {
+    private dataTypeSize(dataType: CMB.DataType) {
         switch (dataType) {
             case CMB.DataType.Byte:   return 1;
             case CMB.DataType.UByte:  return 1;
@@ -117,7 +130,7 @@ class Scene implements Viewer.Scene {
         }
     }
 
-    translateSepd(gl:WebGLRenderingContext, cmbContext, sepd:CMB.Sepd) {
+    private translateSepd(gl: WebGLRenderingContext, cmbContext, sepd: CMB.Sepd) {
         return () => {
             gl.uniform1f(this.program.uvScaleLocation, sepd.txcScale);
             gl.uniform1f(this.program.posScaleLocation, sepd.posScale);
@@ -144,15 +157,15 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    translateTexture(gl:WebGLRenderingContext, texture:CMB.Texture):WebGLTexture {
+    private translateTexture(gl: WebGLRenderingContext, texture: CMB.Texture): WebGLTexture {
         const texId = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texId);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
         return texId;
     }
 
-    translateMaterial(gl:WebGLRenderingContext, cmbContext, material:CMB.Material) {
-        function translateWrapMode(wrapMode:CMB.TextureWrapMode) {
+    private translateMaterial(gl: WebGLRenderingContext, cmbContext, material: CMB.Material) {
+        function translateWrapMode(wrapMode: CMB.TextureWrapMode) {
             switch (wrapMode) {
             case CMB.TextureWrapMode.CLAMP: return gl.CLAMP_TO_EDGE;
             case CMB.TextureWrapMode.REPEAT: return gl.REPEAT;
@@ -160,7 +173,7 @@ class Scene implements Viewer.Scene {
             }
         }
 
-        function translateTextureFilter(filter:CMB.TextureFilter) {
+        function translateTextureFilter(filter: CMB.TextureFilter) {
             switch (filter) {
             case CMB.TextureFilter.LINEAR: return gl.LINEAR;
             case CMB.TextureFilter.NEAREST: return gl.NEAREST;
@@ -190,7 +203,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    translateMesh(gl:WebGLRenderingContext, cmbContext, mesh:CMB.Mesh) {
+    private translateMesh(gl: WebGLRenderingContext, cmbContext, mesh: CMB.Mesh) {
         const mat = cmbContext.matFuncs[mesh.matsIdx];
         const sepd = cmbContext.sepdFuncs[mesh.sepdIdx];
 
@@ -200,7 +213,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    translateCmb(gl:WebGLRenderingContext, cmb:CMB.CMB) {
+    private translateCmb(gl: WebGLRenderingContext, cmb: CMB.CMB) {
         if (!cmb)
             return () => {};
 
@@ -220,16 +233,16 @@ class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.ARRAY_BUFFER, txcBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.txcBuffer, gl.STATIC_DRAW);
 
-        const textures:WebGLTexture[] = cmb.textures.map((texture) => {
+        const textures: WebGLTexture[] = cmb.textures.map((texture) => {
             return this.translateTexture(gl, texture);
-        })
+        });
 
-        const cmbContext:any = {
-            posBuffer: posBuffer,
-            colBuffer: colBuffer,
-            nrmBuffer: nrmBuffer,
-            txcBuffer: txcBuffer,
-            textures: textures,
+        const cmbContext: any = {
+            posBuffer,
+            colBuffer,
+            nrmBuffer,
+            txcBuffer,
+            textures,
         };
 
         cmbContext.sepdFuncs = cmb.sepds.map((sepd) => this.translateSepd(gl, cmbContext, sepd));
@@ -248,7 +261,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    translateModel(gl:WebGLRenderingContext, mesh:ZSI.Mesh) {
+    private translateModel(gl: WebGLRenderingContext, mesh: ZSI.Mesh) {
         const opaque = this.translateCmb(gl, mesh.opaque);
         const transparent = this.translateCmb(gl, mesh.transparent);
 
@@ -257,35 +270,25 @@ class Scene implements Viewer.Scene {
             // transparent();
         };
     }
-
-    render(state:Viewer.RenderState) {
-        const gl = state.viewport.gl;
-
-        state.useProgram(this.program);
-        gl.enable(gl.DEPTH_TEST);
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-        this.model();
-    }
 }
 
 class MultiScene implements Viewer.Scene {
-    cameraController = Viewer.FPSCameraController;    
-    scenes:Viewer.Scene[];
-    textures:HTMLCanvasElement[];
-    constructor(scenes:Viewer.Scene[]) {
+    public cameraController = Viewer.FPSCameraController;
+    public scenes: Viewer.Scene[];
+    public textures: HTMLCanvasElement[];
+
+    constructor(scenes: Viewer.Scene[]) {
         this.scenes = scenes;
         this.textures = [];
         for (const scene of this.scenes)
             this.textures = this.textures.concat(scene.textures);
     }
-    render(renderState:Viewer.RenderState) {
+    public render(renderState: Viewer.RenderState) {
         this.scenes.forEach((scene) => scene.render(renderState));
     }
 }
 
-function dirname(path:string):string {
+function dirname(path: string): string {
     const parts = path.split('/');
     parts.pop();
     return parts.join('/');
@@ -296,13 +299,19 @@ export class SceneDesc implements Viewer.SceneDesc {
     public path: string;
     public id: string;
 
-    constructor(name:string, path:string) {
+    constructor(name: string, path: string) {
         this.name = name;
         this.path = path;
         this.id = this.path;
     }
 
-    _createSceneFromData(gl:WebGLRenderingContext, result:ArrayBuffer):PromiseLike<Viewer.Scene> {
+    public createScene(gl: WebGLRenderingContext): PromiseLike<Viewer.Scene> {
+        return fetch(this.path).then((result: ArrayBuffer) => {
+            return this._createSceneFromData(gl, result);
+        });
+    }
+
+    private _createSceneFromData(gl: WebGLRenderingContext, result: ArrayBuffer): PromiseLike<Viewer.Scene> {
         const zsi = ZSI.parse(result);
         if (zsi.mesh) {
             return Promise.resolve(new Scene(gl, zsi));
@@ -314,16 +323,10 @@ export class SceneDesc implements Viewer.SceneDesc {
             });
 
             return Promise.all(roomFilenames.map((filename) => {
-                return fetch(filename).then((result) => this._createSceneFromData(gl, result));
+                return fetch(filename).then((roomResult) => this._createSceneFromData(gl, roomResult));
             })).then((scenes) => {
                 return new MultiScene(scenes);
             });
         }
-    }
-
-    createScene(gl:WebGLRenderingContext):PromiseLike<Viewer.Scene> {
-        return fetch(this.path).then((result:ArrayBuffer) => {
-            return this._createSceneFromData(gl, result);
-        });
     }
 }
