@@ -2769,7 +2769,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                     gl.enable(gl.DEPTH_TEST);
                     gl.enable(gl.BLEND);
                     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-                    this.model();
+                    this.model(state);
                 };
                 Scene.prototype.translateDataType = function (gl, dataType) {
                     switch (dataType) {
@@ -2930,7 +2930,10 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                 Scene.prototype.translateModel = function (gl, mesh) {
                     var opaque = this.translateCmb(gl, mesh.opaque);
                     var transparent = this.translateCmb(gl, mesh.transparent);
-                    return function () {
+                    return function (state) {
+                        // Backface cull.
+                        gl.enable(gl.CULL_FACE);
+                        gl.cullFace(gl.BACK);
                         opaque();
                         // transparent();
                     };

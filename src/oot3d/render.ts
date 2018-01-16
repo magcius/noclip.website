@@ -5,6 +5,7 @@ import * as ZSI from './zsi';
 import * as Viewer from 'viewer';
 
 import { fetch } from 'util';
+import { RenderState } from 'viewer';
 
 class OoT3D_Program extends Viewer.Program {
     public posScaleLocation: WebGLUniformLocation;
@@ -76,12 +77,14 @@ function textureToCanvas(texture: CMB.Texture) {
     return canvas;
 }
 
+type RenderFunc = (renderState: Viewer.RenderState) => void;
+
 class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
     public textures: HTMLCanvasElement[];
     public program: OoT3D_Program;
     public zsi: ZSI.ZSI;
-    public model: Function;
+    public model: RenderFunc;
 
     constructor(gl: WebGLRenderingContext, zsi: ZSI.ZSI) {
         this.program = new OoT3D_Program();
@@ -101,7 +104,7 @@ class Scene implements Viewer.Scene {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-        this.model();
+        this.model(state);
     }
 
     private translateDataType(gl: WebGLRenderingContext, dataType: CMB.DataType) {
@@ -265,7 +268,10 @@ class Scene implements Viewer.Scene {
         const opaque = this.translateCmb(gl, mesh.opaque);
         const transparent = this.translateCmb(gl, mesh.transparent);
 
-        return () => {
+        return (state: Viewer.RenderState) => {
+            // Backface cull.
+            gl.enable(gl.CULL_FACE);
+            gl.cullFace(gl.BACK);
             opaque();
             // transparent();
         };
