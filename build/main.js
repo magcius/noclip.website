@@ -4177,6 +4177,9 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                     gl.enable(gl.DEPTH_TEST);
                     gl.enable(gl.BLEND);
                     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                    // Clear to black.
+                    gl.clearColor(0, 0, 0, 1.0);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
                     // First pass, opaque.
                     this.renderModels(state, RenderPass.OPAQUE);
                     // Second pass, translucent.
