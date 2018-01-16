@@ -174,7 +174,7 @@ class Scene implements Viewer.Scene {
         }
 
         // Find any possible material animations.
-        const crg0mat = this.crg0Level.materials.find(crg0mat => crg0mat.name === material.name);
+        const crg0mat = this.crg0Level.materials.find((c) => c.name === material.name);
         const texCoordMat = mat3.create();
         mat3.fromMat2d(texCoordMat, material.texCoordMat);
 
@@ -256,7 +256,7 @@ class Scene implements Viewer.Scene {
                 skyboxCameraMat[14] = 0;
                 gl.uniformMatrix4fv(this.program.modelViewLocation, false, skyboxCameraMat);
             }
-    
+
             gl.uniformMatrix4fv(this.program.localMatrixLocation, false, localMatrix);
             batches.forEach((f) => { f(state, pass); });
         };
@@ -285,16 +285,18 @@ class Scene implements Viewer.Scene {
 }
 
 class MultiScene implements Viewer.Scene {
-    cameraController = Viewer.FPSCameraController;    
-    scenes:Viewer.Scene[];
-    textures:HTMLCanvasElement[];
-    constructor(scenes:Viewer.Scene[]) {
+    public cameraController = Viewer.FPSCameraController;
+    public scenes: Viewer.Scene[];
+    public textures: HTMLCanvasElement[];
+
+    constructor(scenes: Viewer.Scene[]) {
         this.scenes = scenes;
         this.textures = [];
         for (const scene of this.scenes)
             this.textures = this.textures.concat(scene.textures);
     }
-    render(renderState:Viewer.RenderState) {
+
+    public render(renderState: Viewer.RenderState) {
         this.scenes.forEach((scene) => scene.render(renderState));
     }
 }
@@ -308,6 +310,13 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.name = name;
         this.levelId = levelId;
         this.id = '' + this.levelId;
+    }
+
+    public createScene(gl: WebGLRenderingContext): PromiseLike<Viewer.Scene> {
+        return fetch('data/sm64ds/sm64ds.crg0').then((result: ArrayBuffer) => {
+            const crg0 = CRG0.parse(result);
+            return this._createSceneFromCRG0(gl, crg0);
+        });
     }
 
     private _createBmdScene(gl: WebGLRenderingContext, filename: string, localScale: number, level: CRG0.Level, isSkybox: boolean): PromiseLike<Viewer.Scene> {
@@ -327,13 +336,6 @@ export class SceneDesc implements Viewer.SceneDesc {
             scenes.unshift(this._createBmdScene(gl, level.attributes.get('vrbox'), 0.8, level, true));
         return Promise.all(scenes).then((results) => {
             return new MultiScene(results);
-        });
-    }
-
-    public createScene(gl: WebGLRenderingContext): PromiseLike<Viewer.Scene> {
-        return fetch('data/sm64ds/sm64ds.crg0').then((result: ArrayBuffer) => {
-            const crg0 = CRG0.parse(result);
-            return this._createSceneFromCRG0(gl, crg0);
         });
     }
 }

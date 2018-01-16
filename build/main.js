@@ -4075,7 +4075,7 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
                     }
                     // Find any possible material animations.
-                    var crg0mat = this.crg0Level.materials.find(function (crg0mat) { return crg0mat.name === material.name; });
+                    var crg0mat = this.crg0Level.materials.find(function (c) { return c.name === material.name; });
                     var texCoordMat = gl_matrix_3.mat3.create();
                     gl_matrix_3.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                     return function (state) {
@@ -4212,6 +4212,13 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                     this.levelId = levelId;
                     this.id = '' + this.levelId;
                 }
+                SceneDesc.prototype.createScene = function (gl) {
+                    var _this = this;
+                    return util_11.fetch('data/sm64ds/sm64ds.crg0').then(function (result) {
+                        var crg0 = CRG0.parse(result);
+                        return _this._createSceneFromCRG0(gl, crg0);
+                    });
+                };
                 SceneDesc.prototype._createBmdScene = function (gl, filename, localScale, level, isSkybox) {
                     return util_11.fetch("data/sm64ds/" + filename).then(function (result) {
                         result = LZ77.maybeDecompress(result);
@@ -4228,13 +4235,6 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                         scenes.unshift(this._createBmdScene(gl, level.attributes.get('vrbox'), 0.8, level, true));
                     return Promise.all(scenes).then(function (results) {
                         return new MultiScene(results);
-                    });
-                };
-                SceneDesc.prototype.createScene = function (gl) {
-                    var _this = this;
-                    return util_11.fetch('data/sm64ds/sm64ds.crg0').then(function (result) {
-                        var crg0 = CRG0.parse(result);
-                        return _this._createSceneFromCRG0(gl, crg0);
                     });
                 };
                 return SceneDesc;
