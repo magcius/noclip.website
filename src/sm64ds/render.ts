@@ -1,9 +1,10 @@
 
 import { mat3, mat4 } from 'gl-matrix';
 
-import * as LZ77 from './lz77';
 import * as Viewer from 'viewer';
+
 import * as CRG0 from './crg0';
+import * as LZ77 from './lz77';
 import * as NITRO_BMD from './nitro_bmd';
 import * as NITRO_GX from './nitro_gx';
 

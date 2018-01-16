@@ -12,6 +12,7 @@ class Main {
     public viewer: Viewer;
     public groups: SceneGroup[];
 
+    private uiContainers: HTMLElement;
     private groupSelect: HTMLSelectElement;
     private sceneSelect: HTMLSelectElement;
     private gearSettings: HTMLElement;
@@ -27,6 +28,8 @@ class Main {
         document.body.appendChild(this.canvas);
         window.onresize = this._onResize.bind(this);
         this._onResize();
+
+        window.addEventListener('keydown', this._onKeyDown.bind(this));
 
         this.viewer = new Viewer(this.canvas);
         this.viewer.start();
@@ -57,10 +60,10 @@ class Main {
     private _loadState(state: string) {
         const [groupId, ...sceneRest] = state.split('/');
         const sceneId = sceneRest.join('/');
-        const group = this.groups.find(g => g.id === groupId);
+        const group = this.groups.find((g) => g.id === groupId);
         if (!group)
             return;
-        const desc = group.sceneDescs.find(d => d.id === sceneId);
+        const desc = group.sceneDescs.find((d) => d.id === sceneId);
         if (!desc)
             return;
         this._loadSceneGroup(group, false);
@@ -81,7 +84,7 @@ class Main {
         // Make sure combobox is selected
         for (let i = 0; i < this.sceneSelect.options.length; i++) {
             const sceneOption = this.sceneSelect.options[i];
-            if ((<any>sceneOption).sceneDesc === sceneDesc)
+            if ((<any> sceneOption).sceneDesc === sceneDesc)
                 this.sceneSelect.selectedIndex = i;
         }
 
@@ -135,7 +138,7 @@ class Main {
         // Make sure combobox is selected
         for (let i = 0; i < this.groupSelect.options.length; i++) {
             const groupOption = this.groupSelect.options[i];
-            if ((<any>groupOption).group === group)
+            if ((<any> groupOption).group === group)
                 this.groupSelect.selectedIndex = i;
         }
 
@@ -158,17 +161,20 @@ class Main {
     }
 
     private _makeUI() {
+        this.uiContainers = document.createElement('div');
+        document.body.appendChild(this.uiContainers);
+
         const uiContainerL = document.createElement('div');
         uiContainerL.style.position = 'absolute';
         uiContainerL.style.left = '2em';
         uiContainerL.style.bottom = '2em';
-        document.body.appendChild(uiContainerL);
+        this.uiContainers.appendChild(uiContainerL);
 
         const uiContainerR = document.createElement('div');
         uiContainerR.style.position = 'absolute';
         uiContainerR.style.right = '2em';
         uiContainerR.style.bottom = '2em';
-        document.body.appendChild(uiContainerR);
+        this.uiContainers.appendChild(uiContainerR);
 
         this.groupSelect = document.createElement('select');
         for (const group of this.groups) {
@@ -197,6 +203,22 @@ class Main {
         this.gearSettings.style.overflow = 'auto';
         document.body.appendChild(this.gearSettings);
 
+        const fovSlider = document.createElement('input');
+        fovSlider.type = 'range';
+        fovSlider.max = '100';
+        fovSlider.min = '1';
+        fovSlider.oninput = this._onFovSliderChange.bind(this);
+
+        const fovSliderLabel = document.createElement('label');
+        fovSliderLabel.textContent = "Field of View";
+
+        this.gearSettings.appendChild(fovSliderLabel);
+        this.gearSettings.appendChild(fovSlider);
+
+        const texturesHeader = document.createElement('h3');
+        texturesHeader.textContent = 'Textures';
+        this.gearSettings.appendChild(texturesHeader);
+
         this.texturesView = document.createElement('div');
         this.gearSettings.appendChild(this.texturesView);
 
@@ -204,6 +226,25 @@ class Main {
         gearButton.textContent = '⚙';
         gearButton.onclick = this._onGearButtonClicked.bind(this);
         uiContainerR.appendChild(gearButton);
+    }
+
+    private _toggleUI() {
+        this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? 'block' : 'none';
+    }
+
+    private _onKeyDown(e: KeyboardEvent) {
+        if (e.key === 'z') {
+            this._toggleUI();
+            event.preventDefault();
+        }
+    }
+    private _getSliderT(slider: HTMLInputElement) {
+        return (+slider.value - +slider.min) / (+slider.max - +slider.min);
+    }
+    private _onFovSliderChange(e: UIEvent) {
+        const slider = (<HTMLInputElement> e.target);
+        const value = this._getSliderT(slider);
+        this.viewer.sceneGraph.renderState.fov = value * (Math.PI * 0.995);
     }
 }
 

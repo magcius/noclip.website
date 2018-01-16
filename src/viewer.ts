@@ -57,6 +57,7 @@ export class RenderState {
     public gl: WebGLRenderingContext;
     public viewport: Viewport;
     public currentProgram: Program = null;
+    public fov: number;
     public time: number;
 
     public projection: mat4;
@@ -66,6 +67,7 @@ export class RenderState {
         this.viewport = viewport;
         this.gl = this.viewport.gl;
         this.time = 0;
+        this.fov = Math.PI / 4;
 
         this.projection = mat4.create();
         this.modelView = mat4.create();
@@ -73,7 +75,7 @@ export class RenderState {
 
     public checkResize() {
         const canvas = this.viewport.canvas;
-        mat4.perspective(this.projection, Math.PI / 4, canvas.width / canvas.height, 0.2, 50000);
+        mat4.perspective(this.projection, this.fov, canvas.width / canvas.height, 0.2, 50000);
     }
 
     public useProgram(prog: Program) {

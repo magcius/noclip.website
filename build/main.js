@@ -104,7 +104,8 @@ System.register("lz77", [], function (exports_1, context_1) {
             while (i--) {
                 if (commandByte & (1 << i)) {
                     var tmp = srcView.getUint32(srcOffs, false);
-                    var windowOffset = void 0, windowLength = void 0;
+                    var windowOffset = void 0;
+                    var windowLength = void 0;
                     var indicator = (tmp >>> 28);
                     if (indicator > 1) {
                         // Two bytes. AB CD xx xx
@@ -258,12 +259,13 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                     this.viewport = viewport;
                     this.gl = this.viewport.gl;
                     this.time = 0;
+                    this.fov = Math.PI / 4;
                     this.projection = gl_matrix_1.mat4.create();
                     this.modelView = gl_matrix_1.mat4.create();
                 }
                 RenderState.prototype.checkResize = function () {
                     var canvas = this.viewport.canvas;
-                    gl_matrix_1.mat4.perspective(this.projection, Math.PI / 4, canvas.width / canvas.height, 0.2, 50000);
+                    gl_matrix_1.mat4.perspective(this.projection, this.fov, canvas.width / canvas.height, 0.2, 50000);
                 };
                 RenderState.prototype.useProgram = function (prog) {
                     var gl = this.viewport.gl;
@@ -2095,14 +2097,14 @@ System.register("oot3d/cmb", ["util"], function (exports_12, context_12) {
         // w2 = Lower 32-bit word, "pixel" data
         // Table 3.17.2 -- Intensity tables for each codeword.
         var intensityTableMap = [
-            [-8, -2, 2, 8,],
-            [-17, -5, 5, 17,],
-            [-29, -9, 9, 29,],
-            [-42, -13, 13, 42,],
-            [-60, -18, 18, 60,],
-            [-80, -24, 24, 80,],
-            [-106, -33, 33, 106,],
-            [-183, -47, 48, 183,],
+            [-8, -2, 2, 8],
+            [-17, -5, 5, 17],
+            [-29, -9, 9, 29],
+            [-42, -13, 13, 42],
+            [-60, -18, 18, 60],
+            [-80, -24, 24, 80],
+            [-106, -33, 33, 106],
+            [-183, -47, 48, 183],
         ];
         // Table 3.17.3 -- MSB/LSB colors to modifiers.
         //
@@ -2177,7 +2179,8 @@ System.register("oot3d/cmb", ["util"], function (exports_12, context_12) {
             var lookup = (msb << 1) | lsb;
             var colorsIndex = pixelToColorIndex[lookup];
             // Indexes march down and to the right here.
-            var y = i & 0x03, x = i >> 2;
+            var y = i & 0x03;
+            var x = i >> 2;
             var dstIndex = dstOffs + ((y * stride) + x) * 4;
             // Whether we're in block 1 or block 2;
             var whichBlock = void 0;
@@ -2220,7 +2223,8 @@ System.register("oot3d/cmb", ["util"], function (exports_12, context_12) {
                 for (var y = 0; y < 8; y += 4) {
                     for (var x = 0; x < 8; x += 4) {
                         var dstOffs = ((yy + y) * stride + (xx + x)) * 4;
-                        var a1 = void 0, a2 = void 0;
+                        var a1 = void 0;
+                        var a2 = void 0;
                         if (alpha) {
                             // In ETC1A4 mode, we have 8 bytes of per-pixel alpha data preceeding the tile.
                             a2 = src.getUint32(offs + 0x00, true);
@@ -2550,7 +2554,6 @@ System.register("oot3d/cmb", ["util"], function (exports_12, context_12) {
                 DataType[DataType["Float"] = 5126] = "Float";
             })(DataType || (DataType = {}));
             exports_12("DataType", DataType);
-            ;
             Prm = /** @class */ (function () {
                 function Prm() {
                 }
@@ -3116,49 +3119,18 @@ System.register("oot3d/scenes", ["oot3d/render"], function (exports_15, context_
         }
     };
 });
-// SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
-System.register("sm64ds/lz77", ["lz77", "util"], function (exports_16, context_16) {
+System.register("sm64ds/crg0", ["util"], function (exports_16, context_16) {
     "use strict";
     var __moduleName = context_16 && context_16.id;
-    function isLZ77(srcBuffer) {
-        var srcView = new DataView(srcBuffer);
-        return (util_8.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
-    }
-    exports_16("isLZ77", isLZ77);
-    function maybeDecompress(srcBuffer) {
-        if (isLZ77(srcBuffer))
-            return lz77_1.decompress(srcBuffer.slice(4));
-        else
-            return srcBuffer;
-    }
-    exports_16("maybeDecompress", maybeDecompress);
-    var lz77_1, util_8;
-    return {
-        setters: [
-            function (lz77_1_1) {
-                lz77_1 = lz77_1_1;
-            },
-            function (util_8_1) {
-                util_8 = util_8_1;
-            }
-        ],
-        execute: function () {
-            // SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
-        }
-    };
-});
-System.register("sm64ds/crg0", ["util"], function (exports_17, context_17) {
-    "use strict";
-    var __moduleName = context_17 && context_17.id;
     function parse(buffer) {
         var view = new DataView(buffer);
-        util_9.assert(util_9.readString(buffer, 0, 0x04) === 'CRG0');
+        util_8.assert(util_8.readString(buffer, 0, 0x04) === 'CRG0');
         var levelTableCount = view.getUint32(0x08, false);
         var levelTableOffs = view.getUint32(0x0C, false);
         var levels = [];
         var levelTableIdx = levelTableOffs;
         for (var i = 0; i < levelTableCount; i++) {
-            util_9.assert(view.getUint8(levelTableIdx) === 0x4d);
+            util_8.assert(view.getUint8(levelTableIdx) === 0x4d);
             var levelId = view.getUint8(levelTableIdx + 0x01);
             var levelAttributesCount = view.getUint8(levelTableIdx + 0x02);
             var levelMaterialsCount = view.getUint8(levelTableIdx + 0x03);
@@ -3167,15 +3139,15 @@ System.register("sm64ds/crg0", ["util"], function (exports_17, context_17) {
             for (var j = 0; j < levelAttributesCount; j++) {
                 var keyOffs = view.getUint32(levelTableIdx + 0x00, false);
                 var valueOffs = view.getUint32(levelTableIdx + 0x04, false);
-                var key = util_9.readString(buffer, keyOffs, 0x20);
-                var value = util_9.readString(buffer, valueOffs, 0x20);
+                var key = util_8.readString(buffer, keyOffs, 0x20);
+                var value = util_8.readString(buffer, valueOffs, 0x20);
                 levelTableIdx += 0x08;
                 levelAttributes.set(key, value);
             }
             var materials = [];
             for (var j = 0; j < levelMaterialsCount; j++) {
                 var materialNameOffs = view.getUint32(levelTableIdx + 0x00, false);
-                var materialName = util_9.readString(buffer, materialNameOffs, 0x20);
+                var materialName = util_8.readString(buffer, materialNameOffs, 0x20);
                 levelTableIdx += 0x04;
                 var scaleOffs = view.getUint32(levelTableIdx + 0x00, false);
                 var scaleCount = view.getUint32(levelTableIdx + 0x04, false);
@@ -3206,15 +3178,46 @@ System.register("sm64ds/crg0", ["util"], function (exports_17, context_17) {
         }
         return { levels: levels };
     }
-    exports_17("parse", parse);
-    var util_9;
+    exports_16("parse", parse);
+    var util_8;
     return {
         setters: [
+            function (util_8_1) {
+                util_8 = util_8_1;
+            }
+        ],
+        execute: function () {
+        }
+    };
+});
+// SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
+System.register("sm64ds/lz77", ["lz77", "util"], function (exports_17, context_17) {
+    "use strict";
+    var __moduleName = context_17 && context_17.id;
+    function isLZ77(srcBuffer) {
+        var srcView = new DataView(srcBuffer);
+        return (util_9.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
+    }
+    exports_17("isLZ77", isLZ77);
+    function maybeDecompress(srcBuffer) {
+        if (isLZ77(srcBuffer))
+            return lz77_1.decompress(srcBuffer.slice(4));
+        else
+            return srcBuffer;
+    }
+    exports_17("maybeDecompress", maybeDecompress);
+    var lz77_1, util_9;
+    return {
+        setters: [
+            function (lz77_1_1) {
+                lz77_1 = lz77_1_1;
+            },
             function (util_9_1) {
                 util_9 = util_9_1;
             }
         ],
         execute: function () {
+            // SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
         }
     };
 });
@@ -3938,7 +3941,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         }
     };
 });
-System.register("sm64ds/render", ["gl-matrix", "sm64ds/lz77", "viewer", "sm64ds/crg0", "sm64ds/nitro_bmd", "util"], function (exports_21, context_21) {
+System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/lz77", "sm64ds/nitro_bmd", "util"], function (exports_21, context_21) {
     "use strict";
     var __moduleName = context_21 && context_21.id;
     function textureToCanvas(bmdTex) {
@@ -3953,20 +3956,20 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/lz77", "viewer", "sm64ds/
         ctx.putImageData(imgData, 0, 0);
         return canvas;
     }
-    var gl_matrix_3, LZ77, Viewer, CRG0, NITRO_BMD, util_11, DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Scene, MultiScene, SceneDesc;
+    var gl_matrix_3, Viewer, CRG0, LZ77, NITRO_BMD, util_11, DL_VERT_SHADER_SOURCE, DL_FRAG_SHADER_SOURCE, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (gl_matrix_3_1) {
                 gl_matrix_3 = gl_matrix_3_1;
-            },
-            function (LZ77_1) {
-                LZ77 = LZ77_1;
             },
             function (Viewer_4) {
                 Viewer = Viewer_4;
             },
             function (CRG0_1) {
                 CRG0 = CRG0_1;
+            },
+            function (LZ77_1) {
+                LZ77 = LZ77_1;
             },
             function (NITRO_BMD_1) {
                 NITRO_BMD = NITRO_BMD_1;
@@ -5504,7 +5507,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
 System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], function (exports_25, context_25) {
     "use strict";
     var __moduleName = context_25 && context_25.id;
-    var Viewer, ZELVIEW0, util_12, BillboardBGProgram, F3DEX2Program, COLL_FRAG_SHADER_SOURCE, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
+    var Viewer, ZELVIEW0, util_12, BillboardBGProgram, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
     return {
         setters: [
             function (Viewer_5) {
@@ -5553,7 +5556,6 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                 return F3DEX2Program;
             }(Viewer.Program));
             exports_25("F3DEX2Program", F3DEX2Program);
-            COLL_FRAG_SHADER_SOURCE = "\n\n";
             CollisionProgram = /** @class */ (function (_super) {
                 __extends(CollisionProgram, _super);
                 function CollisionProgram() {
@@ -6208,6 +6210,7 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     document.body.appendChild(this.canvas);
                     window.onresize = this._onResize.bind(this);
                     this._onResize();
+                    window.addEventListener('keydown', this._onKeyDown.bind(this));
                     this.viewer = new viewer_1.Viewer(this.canvas);
                     this.viewer.start();
                     this.groups = [];
@@ -6329,16 +6332,18 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     this._loadSceneDesc(sceneDesc);
                 };
                 Main.prototype._makeUI = function () {
+                    this.uiContainers = document.createElement('div');
+                    document.body.appendChild(this.uiContainers);
                     var uiContainerL = document.createElement('div');
                     uiContainerL.style.position = 'absolute';
                     uiContainerL.style.left = '2em';
                     uiContainerL.style.bottom = '2em';
-                    document.body.appendChild(uiContainerL);
+                    this.uiContainers.appendChild(uiContainerL);
                     var uiContainerR = document.createElement('div');
                     uiContainerR.style.position = 'absolute';
                     uiContainerR.style.right = '2em';
                     uiContainerR.style.bottom = '2em';
-                    document.body.appendChild(uiContainerR);
+                    this.uiContainers.appendChild(uiContainerR);
                     this.groupSelect = document.createElement('select');
                     try {
                         for (var _a = __values(this.groups), _b = _a.next(); !_b.done; _b = _a.next()) {
@@ -6373,6 +6378,18 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     this.gearSettings.style.display = 'none';
                     this.gearSettings.style.overflow = 'auto';
                     document.body.appendChild(this.gearSettings);
+                    var fovSlider = document.createElement('input');
+                    fovSlider.type = 'range';
+                    fovSlider.max = '100';
+                    fovSlider.min = '1';
+                    fovSlider.oninput = this._onFovSliderChange.bind(this);
+                    var fovSliderLabel = document.createElement('label');
+                    fovSliderLabel.textContent = "Field of View";
+                    this.gearSettings.appendChild(fovSliderLabel);
+                    this.gearSettings.appendChild(fovSlider);
+                    var texturesHeader = document.createElement('h3');
+                    texturesHeader.textContent = 'Textures';
+                    this.gearSettings.appendChild(texturesHeader);
                     this.texturesView = document.createElement('div');
                     this.gearSettings.appendChild(this.texturesView);
                     var gearButton = document.createElement('button');
@@ -6380,6 +6397,23 @@ System.register("main", ["viewer", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes
                     gearButton.onclick = this._onGearButtonClicked.bind(this);
                     uiContainerR.appendChild(gearButton);
                     var e_16, _c;
+                };
+                Main.prototype._toggleUI = function () {
+                    this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? 'block' : 'none';
+                };
+                Main.prototype._onKeyDown = function (e) {
+                    if (e.key === 'z') {
+                        this._toggleUI();
+                        event.preventDefault();
+                    }
+                };
+                Main.prototype._getSliderT = function (slider) {
+                    return (+slider.value - +slider.min) / (+slider.max - +slider.min);
+                };
+                Main.prototype._onFovSliderChange = function (e) {
+                    var slider = e.target;
+                    var value = this._getSliderT(slider);
+                    this.viewer.sceneGraph.renderState.fov = value * (Math.PI * 0.995);
                 };
                 return Main;
             }());
