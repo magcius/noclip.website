@@ -7167,11 +7167,11 @@ System.register("main", ["viewer", "fres/scenes", "mdl0/scenes", "oot3d/scenes",
                     this.viewer.start();
                     this.groups = [];
                     // The "plugin" part of this.
-                    this.groups.push(FRES.sceneGroup);
                     this.groups.push(MDL0.sceneGroup);
                     this.groups.push(SM64DS.sceneGroup);
                     this.groups.push(ZELVIEW.sceneGroup);
                     this.groups.push(OOT3D.sceneGroup);
+                    this.groups.push(FRES.sceneGroup);
                     // this.groups.push(J3D.sceneGroup);
                     this._makeUI();
                     // Load the state from the hash
