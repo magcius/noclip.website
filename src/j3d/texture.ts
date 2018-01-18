@@ -68,7 +68,7 @@ function decode_CMPR_to_S3TC(texture: Texture): DecodedTextureS3TC {
             // S3TC blocks.
             for (let y = 0; y < 2; y++) {
                 for (let x = 0; x < 2; x++) {
-                    const dstBlock = (yy+y) * w4 + xx + x;
+                    const dstBlock = (yy + y) * w4 + xx + x;
                     const dstOffs = dstBlock * 8;
 
                     pixels[dstOffs + 0] = view.getUint8(srcOffs + 1);
@@ -89,7 +89,7 @@ function decode_CMPR_to_S3TC(texture: Texture): DecodedTextureS3TC {
 
 // Software decodes from standard S3TC (not CMPR!) to RGBA.
 function decode_S3TC(texture: DecodedTextureS3TC): DecodedTextureRGBA {
-    const pixels = new Uint8Array(texture.width * texture.height * 4)
+    const pixels = new Uint8Array(texture.width * texture.height * 4);
     const view = new DataView(texture.pixels);
     const colorTable = new Uint8Array(16);
 
@@ -137,7 +137,7 @@ function decode_S3TC(texture: DecodedTextureS3TC): DecodedTextureRGBA {
             let bits = view.getUint32(srcOffs + 0x04, true);
             for (let y = 0; y < 4; y++) {
                 for (let x = 0; x < 4; x++) {
-                    const dstPx = (yy+y) * texture.width + xx + x;
+                    const dstPx = (yy + y) * texture.width + xx + x;
                     const dstOffs = dstPx * 4;
                     const colorIdx = bits & 0x03;
                     pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];

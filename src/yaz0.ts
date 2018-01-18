@@ -21,10 +21,10 @@ export function decompress(srcBuffer: ArrayBuffer) {
     const srcView = new DataView(srcBuffer);
     assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
 
-    let uncompressedSize = srcView.getUint32(0x04, true);
+    let uncompressedSize = srcView.getUint32(0x04, false);
     const dstBuffer = new Uint8Array(uncompressedSize);
 
-    let srcOffs = 0x08;
+    let srcOffs = 0x10;
     let dstOffs = 0x00;
 
     while (true) {
@@ -42,9 +42,10 @@ export function decompress(srcBuffer: ArrayBuffer) {
                 const windowOffset = (tmp & 0x0FFF) + 1;
                 let windowLength = (tmp >> 12) + 2;
                 if (windowLength === 2) {
-                    windowLength += srcView.getUint8(srcOffs) + 0x10;
-                    srcOffs += 1;
+                    windowLength += srcView.getUint8(srcOffs++) + 0x10;
                 }
+
+                assert(windowLength >= 3 && windowLength <= 0x111);
 
                 let copyOffs = dstOffs - windowOffset;
 

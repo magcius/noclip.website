@@ -1,6 +1,7 @@
 
 import { Scene, SceneDesc, SceneGroup, Viewer } from 'viewer';
 
+import * as FRES from 'fres/scenes';
 import * as J3D from 'j3d/scenes';
 import * as MDL0 from 'mdl0/scenes';
 import * as OOT3D from 'oot3d/scenes';
@@ -37,6 +38,7 @@ class Main {
         this.groups = [];
 
         // The "plugin" part of this.
+        this.groups.push(FRES.sceneGroup);
         this.groups.push(MDL0.sceneGroup);
         this.groups.push(SM64DS.sceneGroup);
         this.groups.push(ZELVIEW.sceneGroup);
