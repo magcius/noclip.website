@@ -38,14 +38,14 @@ class BlackProgram extends Viewer.Program {
         return null;
     }
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
     }
 }
 
-function translateCompType(gl: WebGLRenderingContext, compType: GX.CompType): number {
+function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): number {
     switch (compType) {
     case GX.CompType.F32:
         return gl.FLOAT;
@@ -64,7 +64,7 @@ function translateCompType(gl: WebGLRenderingContext, compType: GX.CompType): nu
     }
 }
 
-function translatePrimType(gl: WebGLRenderingContext, primType: GX.PrimitiveType): number {
+function translatePrimType(gl: WebGL2RenderingContext, primType: GX.PrimitiveType): number {
     switch (primType) {
     case GX.PrimitiveType.TRIANGLESTRIP:
         return gl.TRIANGLE_STRIP;
@@ -79,7 +79,7 @@ class Command_Shape {
     public bmd: BMD.BMD;
     public shape: BMD.Shape;
     public buffer: WebGLBuffer;
-    constructor(gl: WebGLRenderingContext, bmd: BMD.BMD, shape: BMD.Shape) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD, shape: BMD.Shape) {
         this.bmd = bmd;
         this.shape = shape;
         this.buffer = gl.createBuffer();
@@ -126,7 +126,7 @@ class Command_Shape {
 type Command = Command_Shape;
 
 export class Scene implements Viewer.Scene {
-    public gl: WebGLRenderingContext;
+    public gl: WebGL2RenderingContext;
     public cameraController = Viewer.FPSCameraController;
     public textures: HTMLCanvasElement[];
     private program_Black: BlackProgram;
@@ -182,7 +182,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGLRenderingContext): PromiseLike<Scene> {
+    public createScene(gl: WebGL2RenderingContext): PromiseLike<Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const bmd = BMD.parse(result);
             return new Scene(gl, bmd);

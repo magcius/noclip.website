@@ -24,11 +24,11 @@ export class Scene implements Viewer.Scene {
         });
     }
 
-    private translateModel(gl: WebGLRenderingContext, model: BFRES.ModelEntry) {
+    private translateModel(gl: WebGL2RenderingContext, model: BFRES.ModelEntry) {
         const fmdl = model.fmdl;
     }
 
-    private translateFRES(gl: WebGLRenderingContext, fres: BFRES.FRES) {
+    private translateFRES(gl: WebGL2RenderingContext, fres: BFRES.FRES) {
         return fres.models.map((modelEntry) => this.translateModel(gl, modelEntry));
     }
 
@@ -47,7 +47,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGLRenderingContext): PromiseLike<Scene> {
+    public createScene(gl: WebGL2RenderingContext): PromiseLike<Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const buf = Yaz0.decompress(result);
             const sarc = SARC.parse(buf);

@@ -5,10 +5,10 @@ import { mat4, vec3 } from 'gl-matrix';
 
 class Viewport {
     public canvas: HTMLCanvasElement;
-    public gl: WebGLRenderingContext;
+    public gl: WebGL2RenderingContext;
 }
 
-function compileShader(gl: WebGLRenderingContext, str: string, type: number) {
+function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     const shader: WebGLShader = gl.createShader(type);
 
     gl.shaderSource(shader, str);
@@ -32,12 +32,14 @@ export class Program {
 
     private glProg: WebGLProgram;
 
-    public compile(gl: WebGLRenderingContext) {
+    public compile(gl: WebGL2RenderingContext) {
         if (this.glProg)
             return this.glProg;
 
-        const vertShader = compileShader(gl, this.vert, gl.VERTEX_SHADER);
-        const fragShader = compileShader(gl, this.frag, gl.FRAGMENT_SHADER);
+        const vert = this.preprocessShader(this.vert, "vert");
+        const frag = this.preprocessShader(this.frag, "frag");
+        const vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
+        const fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
         const prog = gl.createProgram();
         gl.attachShader(prog, vertShader);
         gl.attachShader(prog, fragShader);
@@ -47,14 +49,38 @@ export class Program {
         return this.glProg;
     }
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    protected preprocessShader(source: string, type: "vert" | "frag") {
+        // Garbage WebGL2 compatibility until I get something better down the line...
+        const lines = source.split('\n');
+        const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
+        const extensionLines = lines.filter((line) => line.startsWith('#extension'));
+        const extensions = extensionLines.filter((line) =>
+            line.indexOf('GL_EXT_frag_depth') === -1 ||
+            line.indexOf('GL_OES_standard_derivatives') === -1
+        ).join('\n');
+        const rest = lines.filter((line) => !line.startsWith('precision') && !line.startsWith('#extension')).join('\n');
+        return `
+#version 300 es
+#define attribute in
+#define varying ${type === 'vert' ? 'out' : 'in'}
+#define gl_FragColor o_color
+#define gl_FragDepthEXT gl_FragDepth
+#define texture2D texture
+${extensions}
+${precision}
+out vec4 o_color;
+${rest}
+`.trim();
+    }
+
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         this.modelViewLocation = gl.getUniformLocation(prog, "u_modelView");
         this.projectionLocation = gl.getUniformLocation(prog, "u_projection");
     }
 }
 
 export class RenderState {
-    public gl: WebGLRenderingContext;
+    public gl: WebGL2RenderingContext;
     public viewport: Viewport;
     public currentProgram: Program = null;
     public fov: number;
@@ -380,7 +406,7 @@ export class Viewer {
     public cameraController: CameraController;
 
     constructor(canvas: HTMLCanvasElement) {
-        const gl = canvas.getContext("webgl", { alpha: false });
+        const gl = canvas.getContext("webgl2", { alpha: false });
         const viewport = { canvas, gl };
 
         this.sceneGraph = new SceneGraph(viewport);
@@ -426,7 +452,7 @@ export class Viewer {
 export interface SceneDesc {
     id: string;
     name: string;
-    createScene(gl: WebGLRenderingContext): PromiseLike<Scene>;
+    createScene(gl: WebGL2RenderingContext): PromiseLike<Scene>;
 }
 
 export interface SceneGroup {
