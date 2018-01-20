@@ -19,9 +19,17 @@ export class Scene implements Viewer.Scene {
 
         this.textures = this.fres.textures.map((textureEntry) => {
             const canvas = GX2Texture.textureToCanvas(textureEntry.texture);
-            canvas.title = `${textureEntry.name} ${textureEntry.texture.type}`;
+            canvas.title = `${textureEntry.entry.name} ${textureEntry.texture.type}`;
             return canvas;
         });
+    }
+
+    private translateModel(gl: WebGLRenderingContext, model: BFRES.ModelEntry) {
+        const fmdl = model.fmdl;
+    }
+
+    private translateFRES(gl: WebGLRenderingContext, fres: BFRES.FRES) {
+        return fres.models.map((modelEntry) => this.translateModel(gl, modelEntry));
     }
 
     public render(state: Viewer.RenderState) {
