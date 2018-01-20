@@ -3,5 +3,8 @@
   "private": true,
   "devDependencies": {
     "gl-matrix": "^2.4.0"
+  },
+  "dependencies": {
+    "@types/webgl2": "0.0.2"
   }
 }

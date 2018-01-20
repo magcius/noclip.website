@@ -49,7 +49,7 @@ class OoT3D_Program extends Viewer.Program {
             discard;
     }`;
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.posScaleLocation = gl.getUniformLocation(prog, "u_posScale");
@@ -86,7 +86,7 @@ class Scene implements Viewer.Scene {
     public zsi: ZSI.ZSI;
     public model: RenderFunc;
 
-    constructor(gl: WebGLRenderingContext, zsi: ZSI.ZSI) {
+    constructor(gl: WebGL2RenderingContext, zsi: ZSI.ZSI) {
         this.program = new OoT3D_Program();
         this.textures = zsi.mesh.textures.map((texture) => {
             return textureToCanvas(texture);

@@ -9,7 +9,7 @@ import * as ZELVIEW0 from './zelview0';
 
 interface RenderState {
     currentProgram: Render.F3DEX2Program;
-    gl: WebGLRenderingContext;
+    gl: WebGL2RenderingContext;
 }
 
 type CmdFunc = (renderState: RenderState) => void;
@@ -856,7 +856,7 @@ export class DL {
 }
 
 class State {
-    public gl: WebGLRenderingContext;
+    public gl: WebGL2RenderingContext;
 
     public cmds: CmdFunc[];
     public textures: HTMLCanvasElement[];

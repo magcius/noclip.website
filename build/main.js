@@ -236,8 +236,10 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                 Program.prototype.compile = function (gl) {
                     if (this.glProg)
                         return this.glProg;
-                    var vertShader = compileShader(gl, this.vert, gl.VERTEX_SHADER);
-                    var fragShader = compileShader(gl, this.frag, gl.FRAGMENT_SHADER);
+                    var vert = this.preprocessShader(this.vert, "vert");
+                    var frag = this.preprocessShader(this.frag, "frag");
+                    var vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
+                    var fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
                     var prog = gl.createProgram();
                     gl.attachShader(prog, vertShader);
                     gl.attachShader(prog, fragShader);
@@ -245,6 +247,18 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                     this.glProg = prog;
                     this.bind(gl, prog);
                     return this.glProg;
+                };
+                Program.prototype.preprocessShader = function (source, type) {
+                    // Garbage WebGL2 compatibility until I get something better down the line...
+                    var lines = source.split('\n');
+                    var precision = lines.find(function (line) { return line.startsWith('precision'); }) || 'precision mediump float;';
+                    var extensionLines = lines.filter(function (line) { return line.startsWith('#extension'); });
+                    var extensions = extensionLines.filter(function (line) {
+                        return line.indexOf('GL_EXT_frag_depth') === -1 ||
+                            line.indexOf('GL_OES_standard_derivatives') === -1;
+                    }).join('\n');
+                    var rest = lines.filter(function (line) { return !line.startsWith('precision') && !line.startsWith('#extension'); }).join('\n');
+                    return ("\n#version 300 es\n#define attribute in\n#define varying " + (type === 'vert' ? 'out' : 'in') + "\n#define gl_FragColor o_color\n#define gl_FragDepthEXT gl_FragDepth\n#define texture2D texture\n" + extensions + "\n" + precision + "\nout vec4 o_color;\n" + rest + "\n").trim();
                 };
                 Program.prototype.bind = function (gl, prog) {
                     this.modelViewLocation = gl.getUniformLocation(prog, "u_modelView");
@@ -466,7 +480,7 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
             exports_2("OrbitCameraController", OrbitCameraController);
             Viewer = /** @class */ (function () {
                 function Viewer(canvas) {
-                    var gl = canvas.getContext("webgl", { alpha: false });
+                    var gl = canvas.getContext("webgl2", { alpha: false });
                     var viewport = { canvas: canvas, gl: gl };
                     this.sceneGraph = new SceneGraph(viewport);
                     this.camera = gl_matrix_1.mat4.create();
