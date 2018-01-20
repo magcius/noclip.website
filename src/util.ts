@@ -19,13 +19,17 @@ export function assert(b: boolean) {
     if (!b) throw new Error("Assert fail");
 }
 
-export function readString(buffer: ArrayBuffer, offs: number, length: number): string {
-    const buf = new Uint8Array(buffer, offs, length);
+export function readString(buffer: ArrayBuffer, offs: number, length: number = -1, nulTerminated: boolean = true): string {
+    const buf = new Uint8Array(buffer, offs);
     let S = '';
-    for (let i = 0; i < length; i++) {
-        if (buf[i] === 0)
+    let i = 0;
+    while (true) {
+        if (length > 0 && i >= length)
+            break;
+        if (nulTerminated && buf[i] === 0)
             break;
         S += String.fromCharCode(buf[i]);
+        i++;
     }
     return S;
 }
