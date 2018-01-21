@@ -2493,7 +2493,6 @@ System.register("fres/scenes", ["fres/render"], function (exports_13, context_13
                 { name: 'Walleye Warehouse', path: 'Fld_Warehouse00.szs' },
                 { name: 'Octo Valley', path: 'Fld_World00.szs' },
                 { name: 'Object: Tree', path: 'Obj_Tree02.szs' },
-                { name: 'Object: CenterFloorUpDown', path: 'Obj_CenterFloorUpDown.szs' },
             ].map(function (entry) {
                 var name = entry.name || entry.path;
                 var path = "data/spl/" + entry.path;
