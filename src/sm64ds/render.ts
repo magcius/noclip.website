@@ -146,9 +146,9 @@ class Scene implements Viewer.Scene {
 
     public translateMaterial(gl: WebGL2RenderingContext, material: any) {
         const texture = material.texture;
-        let texId;
+        let texId: WebGLTexture;
 
-        function wrapMode(repeat, flip) {
+        function wrapMode(repeat: boolean, flip: boolean) {
             if (repeat)
                 return flip ? gl.MIRRORED_REPEAT : gl.REPEAT;
             else
@@ -161,10 +161,10 @@ class Scene implements Viewer.Scene {
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-            const repeatS = (material.texParams >> 16) & 0x01;
-            const repeatT = (material.texParams >> 17) & 0x01;
-            const flipS = (material.texParams >> 18) & 0x01;
-            const flipT = (material.texParams >> 19) & 0x01;
+            const repeatS = !!((material.texParams >> 16) & 0x01);
+            const repeatT = !!((material.texParams >> 17) & 0x01);
+            const flipS = !!((material.texParams >> 18) & 0x01);
+            const flipT = !!((material.texParams >> 19) & 0x01);
 
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapMode(repeatS, flipS));
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapMode(repeatT, flipT));

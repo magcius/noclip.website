@@ -133,7 +133,7 @@ export class Scene implements Viewer.Scene {
     private bmd: BMD.BMD;
     private commands: Command[];
 
-    constructor(gl, bmd) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD) {
         this.gl = gl;
         this.program_Black = new BlackProgram();
         this.bmd = bmd;

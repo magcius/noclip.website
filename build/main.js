@@ -334,10 +334,10 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                     elemDragger(this.toplevel, this._onElemDragger.bind(this));
                 }
                 InputManager.prototype.isKeyDown = function (key) {
-                    return !!this.keysDown[key.charCodeAt(0)];
+                    return this.keysDown.get(key.charCodeAt(0));
                 };
                 InputManager.prototype.isKeyDownRaw = function (keyCode) {
-                    return !!this.keysDown[keyCode];
+                    return this.keysDown.get(keyCode);
                 };
                 InputManager.prototype.isDragging = function () {
                     // XXX: Should be an explicit flag.
@@ -349,10 +349,10 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                     this.dz = 0;
                 };
                 InputManager.prototype._onKeyDown = function (e) {
-                    this.keysDown[e.keyCode] = true;
+                    this.keysDown.set(e.keyCode, true);
                 };
                 InputManager.prototype._onKeyUp = function (e) {
-                    delete this.keysDown[e.keyCode];
+                    this.keysDown.delete(e.keyCode);
                 };
                 InputManager.prototype._onElemDragger = function (dx, dy) {
                     this.dx += dx;
@@ -797,6 +797,8 @@ System.register("fres/gx2_texture", ["fres/gx2_enum"], function (exports_6, cont
             // For non-block formats, a "block" is a pixel.
             case gx2_enum_1.GX2SurfaceFormat.FMT_TCS_R8_G8_B8_A8:
                 return 4;
+            default:
+                throw new Error("Unsupported surface format " + format);
         }
     }
     function computePixelIndexWithinMicroTile(x, y, bytesPerBlock) {
@@ -831,12 +833,16 @@ System.register("fres/gx2_texture", ["fres/gx2_enum"], function (exports_6, cont
         switch (tileMode) {
             case gx2_enum_1.GX2TileMode._2D_TILED_THIN1:
                 return numPipes * ((numBanks >> 1) - 1);
+            default:
+                throw new Error("Unsupported tile mode " + tileMode);
         }
     }
     function computeTileModeAspectRatio(tileMode) {
         switch (tileMode) {
             case gx2_enum_1.GX2TileMode._2D_TILED_THIN1:
                 return 1;
+            default:
+                throw new Error("Unsupported tile mode " + tileMode);
         }
     }
     function computeMacroTilePitch(tileMode) {
@@ -2902,8 +2908,8 @@ System.register("j3d/texture", ["j3d/gx"], function (exports_12, context_12) {
             case GX.TexFormat.CI4:
             case GX.TexFormat.CI8:
             case GX.TexFormat.CI14:
+            default:
                 throw new Error("Unsupported texture format " + texture.format);
-            default: var m = texture.format;
         }
     }
     exports_12("decodeTexture", decodeTexture);
@@ -4815,6 +4821,9 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                             return new MultiScene(scenes);
                         });
                     }
+                    else {
+                        throw new Error("wtf");
+                    }
                 };
                 return SceneDesc;
             }());
@@ -5887,10 +5896,10 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                         gl.bindTexture(gl.TEXTURE_2D, texId);
                         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
                         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-                        var repeatS = (material.texParams >> 16) & 0x01;
-                        var repeatT = (material.texParams >> 17) & 0x01;
-                        var flipS = (material.texParams >> 18) & 0x01;
-                        var flipT = (material.texParams >> 19) & 0x01;
+                        var repeatS = !!((material.texParams >> 16) & 0x01);
+                        var repeatT = !!((material.texParams >> 17) & 0x01);
+                        var flipS = !!((material.texParams >> 18) & 0x01);
+                        var flipT = !!((material.texParams >> 19) & 0x01);
                         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapMode(repeatS, flipS));
                         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapMode(repeatT, flipT));
                         gl.bindTexture(gl.TEXTURE_2D, texId);
@@ -6269,7 +6278,7 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_30, context_3
         else
             gl.disable(gl.CULL_FACE);
         var lighting = newMode & GeometryMode.LIGHTING;
-        var useVertexColors = !lighting;
+        var useVertexColors = lighting ? 0 : 1;
         var prog = renderState.currentProgram;
         gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
     }
@@ -6850,7 +6859,7 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_30, context_3
         return new DL(state.cmds, state.textures);
     }
     exports_30("readDL", readDL);
-    var gl_matrix_4, UCodeCommands, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL, State;
+    var gl_matrix_4, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
             function (gl_matrix_4_1) {
@@ -6887,6 +6896,14 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_30, context_3
             for (var name in UCodeCommands)
                 UCodeNames[UCodeCommands[name]] = name;
             */
+            State = /** @class */ (function () {
+                function State() {
+                }
+                State.prototype.lookupAddress = function (addr) {
+                    return this.rom.lookupAddress(this.banks, addr);
+                };
+                return State;
+            }());
             // 3 pos + 2 uv + 4 color/nrm
             VERTEX_SIZE = 9;
             VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
@@ -6928,14 +6945,6 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_30, context_3
                 return DL;
             }());
             exports_30("DL", DL);
-            State = /** @class */ (function () {
-                function State() {
-                }
-                State.prototype.lookupAddress = function (addr) {
-                    return this.rom.lookupAddress(this.banks, addr);
-                };
-                return State;
-            }());
         }
     };
 });

@@ -91,11 +91,11 @@ function readTexture_Palette256(width: number, height: number, texData: ArrayBuf
 }
 
 function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBuffer, palData: ArrayBuffer) {
-    function getPal16(offs) {
+    function getPal16(offs: number) {
         return offs < palView.byteLength ? palView.getUint16(offs, true) : 0;
     }
 
-    function buildColorTable(palBlock) {
+    function buildColorTable(palBlock: number) {
         const palMode = palBlock >> 14;
         const palOffs = (palBlock & 0x3FFF) << 2;
 

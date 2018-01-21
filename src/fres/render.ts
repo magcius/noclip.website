@@ -36,7 +36,7 @@ function bswap32(m: ArrayBuffer): ArrayBuffer {
 class ProgramGambit_UBER extends Viewer.Program {
     public a0Location: WebGLUniformLocation;
 
-    public static attribLocations = {
+    public static attribLocations: { [name: string]: number } = {
         _p0: 0,
         _u0: 1,
     };
@@ -116,7 +116,7 @@ export class Scene implements Viewer.Scene {
 
     private fres: BFRES.FRES;
     private modelFuncs: RenderFunc[];
-    private glTextures: WebGLTexture;
+    private glTextures: WebGLTexture[];
 
     constructor(gl: WebGL2RenderingContext, fres: BFRES.FRES) {
         this.fres = fres;
@@ -250,7 +250,7 @@ export class Scene implements Viewer.Scene {
         // We only support the albedo texture.
         const textureAssigns = fmat.textureAssigns.filter((textureAssign) => textureAssign.attribName === '_a0');
 
-        const samplers = [];
+        const samplers: WebGLSampler[] = [];
         for (const textureAssign of textureAssigns) {
             const sampler = gl.createSampler();
             gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, this.translateTexClamp(gl, textureAssign.texClampU));
@@ -360,7 +360,7 @@ export class Scene implements Viewer.Scene {
     }
  
     private translateFSHP(gl: WebGL2RenderingContext, fshp: BFRES.FSHP): RenderFunc {
-        const glIndexBuffers = [];
+        const glIndexBuffers: WebGLBuffer[] = [];
         for (const mesh of fshp.meshes) {
             assert(mesh.indexBufferData.stride === 0);
             const buffer = this.translateIndexBuffer(gl, mesh.indexFormat, mesh.indexBufferData.data);

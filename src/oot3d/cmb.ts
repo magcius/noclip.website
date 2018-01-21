@@ -156,7 +156,7 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
     }
 
     // Get the color table for a given block.
-    function getColors(colors: Uint8Array, r, g, b, intensityMap: number[]) {
+    function getColors(colors: Uint8Array, r: number, g: number, b: number, intensityMap: number[]): void {
         for (let i = 0; i < 4; i++) {
             colors[(i * 3) + 0] = clamp(r + intensityMap[i]);
             colors[(i * 3) + 1] = clamp(g + intensityMap[i]);
@@ -287,7 +287,7 @@ function decodeTexture_Tiled(texture: Texture, texData: ArrayBuffer, decoder: Pi
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     const stride = texture.width;
 
-    function morton7(n) {
+    function morton7(n: number) {
         // 0a0b0c => 000abc
         return ((n >> 2) & 0x04) | ((n >> 1) & 0x02) | (n & 0x01);
     }

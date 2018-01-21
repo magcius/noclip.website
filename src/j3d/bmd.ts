@@ -213,7 +213,7 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
     bmd.vtx1 = { vertexArrays, buffer };
 
-    function getDataEnd(dataOffsLookupTableEntry) {
+    function getDataEnd(dataOffsLookupTableEntry: number) {
         let offs = dataOffsLookupTableEntry + 0x04;
         while (offs < dataOffsLookupTableEntry) {
             const dataOffs = view.getUint32(offs);
@@ -495,7 +495,8 @@ export function parse(buffer: ArrayBuffer) {
     const numChunks = view.getUint32(0x0C);
     let offs = 0x20;
 
-    const parseFuncs = {
+    type ParseFunc = (bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) => void;
+    const parseFuncs: { [name: string]: ParseFunc } = {
         INF1: readINF1Chunk,
         VTX1: readVTX1Chunk,
         EVP1: null,

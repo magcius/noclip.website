@@ -291,7 +291,7 @@ export function decodeTexture(texture: Texture, supportsS3TC: boolean): DecodedT
     case GX.TexFormat.CI4:
     case GX.TexFormat.CI8:
     case GX.TexFormat.CI14:
+    default:
         throw new Error(`Unsupported texture format ${texture.format}`);
-    default: const m: never = texture.format;
     }
 }
