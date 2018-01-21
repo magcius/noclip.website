@@ -173,6 +173,8 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
         gl.compileShader(shader);
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
             console.error(str);
+            if (gl.getExtension('WEBGL_debug_shaders'))
+                console.error(gl.getExtension('WEBGL_debug_shaders').getTranslatedShaderSource(shader));
             console.error(gl.getShaderInfoLog(shader));
             throw new Error();
         }
@@ -1981,7 +1983,7 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                     var _this = _super !== null && _super.apply(this, arguments) || this;
                     _this.$a = ProgramGambit_UBER.attribLocations;
                     _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + _this.$a._p0 + ") in vec3 _p0;\nlayout(location = " + _this.$a._u0 + ") in vec2 _u0;\nout vec2 a_u0;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(_p0, 1.0);\n    a_u0 = _u0;\n}\n";
-                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvoid main() {\n    o_color = texture(_a0, a_u0);\n    o_color.rgb += texture(_e0, a_u0).rgb;\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n}\n";
+                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvoid main() {\n    o_color = texture(_a0, a_u0);\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n    o_color.rgb += texture(_e0, a_u0).rgb;\n    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));\n}\n";
                     return _this;
                 }
                 ProgramGambit_UBER.prototype.bind = function (gl, prog) {
