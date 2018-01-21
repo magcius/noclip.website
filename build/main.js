@@ -1,19 +1,3 @@
-var __read = (this && this.__read) || function (o, n) {
-    var m = typeof Symbol === "function" && o[Symbol.iterator];
-    if (!m) return o;
-    var i = m.call(o), r, ar = [], e;
-    try {
-        while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
-    }
-    catch (error) { e = { error: error }; }
-    finally {
-        try {
-            if (r && !r.done && (m = i["return"])) m.call(i);
-        }
-        finally { if (e) throw e.error; }
-    }
-    return ar;
-};
 var __values = (this && this.__values) || function (o) {
     var m = typeof Symbol === "function" && o[Symbol.iterator], i = 0;
     if (m) return m.call(o);
@@ -34,6 +18,22 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __read = (this && this.__read) || function (o, n) {
+    var m = typeof Symbol === "function" && o[Symbol.iterator];
+    if (!m) return o;
+    var i = m.call(o), r, ar = [], e;
+    try {
+        while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+    }
+    catch (error) { e = { error: error }; }
+    finally {
+        try {
+            if (r && !r.done && (m = i["return"])) m.call(i);
+        }
+        finally { if (e) throw e.error; }
+    }
+    return ar;
+};
 // Nintendo DS LZ77 format.
 System.register("lz77", [], function (exports_1, context_1) {
     "use strict";
@@ -819,7 +819,12 @@ System.register("fres/gx2_texture", ["fres/gx2_enum"], function (exports_6, cont
         else {
             throw new Error("Invalid bpp");
         }
-        var _a = __read(pixelBits, 6), p5 = _a[0], p4 = _a[1], p3 = _a[2], p2 = _a[3], p1 = _a[4], p0 = _a[5];
+        var p5 = pixelBits[5];
+        var p4 = pixelBits[4];
+        var p3 = pixelBits[3];
+        var p2 = pixelBits[2];
+        var p1 = pixelBits[1];
+        var p0 = pixelBits[0];
         return (p5 << 5) | (p4 << 4) | (p3 << 3) | (p2 << 2) | (p1 << 1) | (p0 << 0);
     }
     function computeSurfaceRotationFromTileMode(tileMode) {
