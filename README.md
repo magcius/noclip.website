@@ -5,10 +5,11 @@ This is a fairly simple game engine model and scene viewer.
 Currently, I support:
 
  * Super Mario 64 DS
+ * Sonic Mania's MDL0 models
  * The Legend of Zelda: Ocarina of Time (original N64 release)
  * The Legend of Zelda: Ocarina of Time 3DS (3DS remaster with brand new art)
- * Sonic Mania's MDL0 models
-
+ * Splatoon
+ 
 Other tools I've written:
 
  * [Dark Souls model viewer](http://magcius.github.io/dunky.js/)
