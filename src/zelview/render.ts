@@ -30,7 +30,7 @@ void main() {
 }
 `;
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
@@ -80,7 +80,7 @@ void main() {
 }
 `;
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.txsLocation = gl.getUniformLocation(prog, "u_txs");
@@ -113,7 +113,7 @@ void main() {
 }
 `;
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
@@ -138,7 +138,7 @@ void main() {
 }
 `;
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
@@ -156,7 +156,7 @@ class Scene implements Viewer.Scene {
 
     public render: RenderFunc;
 
-    constructor(gl: WebGLRenderingContext, zelview0: ZELVIEW0.ZELVIEW0) {
+    constructor(gl: WebGL2RenderingContext, zelview0: ZELVIEW0.ZELVIEW0) {
         this.zelview0 = zelview0;
         this.textures = [];
         this.program_BG = new BillboardBGProgram();
@@ -179,7 +179,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateScene(gl: WebGLRenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
+    private translateScene(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
         return (state: Viewer.RenderState) => {
             const gl = state.gl;
 
@@ -209,7 +209,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateCollision(gl: WebGLRenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
+    private translateCollision(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
         const coll = scene.collision;
 
         function stitchLines(ibd) {
@@ -249,7 +249,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateWaterBoxes(gl: WebGLRenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
+    private translateWaterBoxes(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
         const coll = scene.collision;
 
         const wbVtx = gl.createBuffer();
@@ -289,7 +289,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGLRenderingContext): PromiseLike<Scene> {
+    public createScene(gl: WebGL2RenderingContext): PromiseLike<Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const zelview0 = ZELVIEW0.readZELVIEW0(result);
             return new Scene(gl, zelview0);

@@ -42,13 +42,54 @@ export enum GX2PrimitiveType {
 export enum GX2IndexFormat {
     U16_LE = 0x00,
     U32_LE = 0x01,
-    U16    = 0x02,
-    U32    = 0x03,
+    U16    = 0x04,
+    U32    = 0x09,
 }
 
 export enum GX2AttribFormat {
-    _8_UNORM = 0x0000,
-    _8_UINT  = 0x0100,
-    _8_SNORM = 0x0200,
-    _8_SINT  = 0x0300,
+    _8_UNORM           = 0x0000,
+    _8_UINT            = 0x0100,
+    _8_SNORM           = 0x0200,
+    _8_SINT            = 0x0300,
+    _8_8_UNORM         = 0x0004,
+    _8_8_SNORM         = 0x0204,
+    _16_16_UNORM       = 0x0007,
+    _16_16_SNORM       = 0x0207,
+    _16_16_FLOAT       = 0x0808,
+    _16_16_16_16_FLOAT = 0x080f,
+    _32_32_FLOAT       = 0x080d,
+    _32_32_32_FLOAT    = 0x0811,
+}
+
+export enum GX2TexClamp {
+    WRAP   = 0x00,
+    MIRROR = 0x01,
+    CLAMP  = 0x02,
+}
+
+export enum GX2TexXYFilterType {
+    POINT    = 0x00,
+    BILINEAR = 0x01,
+}
+
+export enum GX2TexMipFilterType {
+    NO_MIP = 0x00,
+    POINT  = 0x01,
+    LINEAR = 0x02,
+}
+
+export enum GX2CompareFunction {
+    NEVER    = 0x00,
+    LESS     = 0x01,
+    EQUAL    = 0x02,
+    LEQUAL   = 0x03,
+    GREATER  = 0x04,
+    NOTEQUAL = 0x05,
+    GEQUAL   = 0x06,
+    ALWAYS   = 0x07,
+}
+
+export enum GX2FrontFaceMode {
+    CCW = 0x00,
+    CW  = 0x01,
 }
