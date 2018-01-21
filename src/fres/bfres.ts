@@ -201,6 +201,7 @@ export interface RenderState {
 }
 
 export interface FMAT {
+    name: string;
     renderInfoParameters: RenderInfoParameter[];
     textureAssigns: TextureAssign[];
     materialParameterDataBuffer: ArrayBuffer;
@@ -468,7 +469,7 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
 
         const renderState: RenderState = { cullFront, cullBack, frontFaceMode, depthTest, depthWrite, depthCompareFunc };
 
-        fmat.push({ renderInfoParameters, textureAssigns, materialParameterDataBuffer, materialParameters, shaderAssign, renderState });
+        fmat.push({ name, renderInfoParameters, textureAssigns, materialParameterDataBuffer, materialParameters, shaderAssign, renderState });
     }
 
     return { fvtx, fshp, fmat };

@@ -279,9 +279,9 @@ export class Scene implements Viewer.Scene {
 
     private translateFMAT(gl: WebGL2RenderingContext, fmat: BFRES.FMAT): RenderFunc {
         // We only support the albedo/emissive texture.
+        const attribNames = ['_a0', '_e0'];
         const textureAssigns = fmat.textureAssigns.filter((textureAssign) => {
-            const n = textureAssign.attribName;
-            return n === '_a0' || n === '_e0';
+            return attribNames.includes(textureAssign.attribName);
         });
 
         const samplers: WebGLSampler[] = [];
@@ -337,7 +337,6 @@ export class Scene implements Viewer.Scene {
             gl.depthFunc(this.translateCompareFunction(gl, renderState.depthCompareFunc));
 
             // Textures.
-            const attribNames = ['_a0', '_e0'];
             for (let i = 0; i < attribNames.length; i++) {
                 const attribName = attribNames[i];
 
