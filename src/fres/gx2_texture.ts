@@ -44,7 +44,7 @@ interface DecodedTextureBC45 {
     height: number;
 }
 
-type DecodedTextureBC = DecodedTextureBC13 | DecodedTextureBC45;
+export type DecodedTextureBC = DecodedTextureBC13 | DecodedTextureBC45;
 export type DecodedTexture = DecodedTextureR | DecodedTextureRG | DecodedTextureRGBA | DecodedTextureBC;
 
 interface GX2Surface {
@@ -311,10 +311,6 @@ function deswizzle(surface: GX2Surface, srcBuffer: ArrayBuffer): ArrayBuffer {
 
     const bytesPerBlock = computeSurfaceBytesPerBlock(surface.format);
     const dst = new Uint8Array(widthBlocks * heightBlocks * bytesPerBlock);
-
-    if (surface.width === 48 && surface.height === 8) {
-        console.log("AAA");
-    }
 
     for (let y = 0; y < heightBlocks; y++) {
         for (let x = 0; x < widthBlocks; x++) {

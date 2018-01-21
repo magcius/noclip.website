@@ -10,57 +10,51 @@ import * as NITRO_GX from './nitro_gx';
 
 import { fetch } from 'util';
 
-const DL_VERT_SHADER_SOURCE = `
-    precision mediump float;
-    uniform mat4 u_modelView;
-    uniform mat4 u_localMatrix;
-    uniform mat4 u_projection;
-    uniform mat3 u_texCoordMat;
-    attribute vec3 a_position;
-    attribute vec2 a_uv;
-    attribute vec4 a_color;
-    varying vec4 v_color;
-    varying vec2 v_uv;
-
-    void main() {
-        gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);
-        v_color = a_color;
-        v_uv = (u_texCoordMat * vec3(a_uv, 1.0)).st;
-    }
-`;
-
-const DL_FRAG_SHADER_SOURCE = `
-    precision mediump float;
-    varying vec2 v_uv;
-    varying vec4 v_color;
-    uniform sampler2D u_texture;
-
-    void main() {
-        gl_FragColor = texture2D(u_texture, v_uv);
-        gl_FragColor *= v_color;
-        if (gl_FragColor.a == 0.0)
-            discard;
-    }
-`;
-
 class NITRO_Program extends Viewer.Program {
     public localMatrixLocation: WebGLUniformLocation;
     public texCoordMatLocation: WebGLUniformLocation;
-    public positionLocation: number;
-    public colorLocation: number;
-    public uvLocation: number;
 
-    public vert = DL_VERT_SHADER_SOURCE;
-    public frag = DL_FRAG_SHADER_SOURCE;
+    public static a_position = 0;
+    public static a_uv = 1;
+    public static a_color = 2;
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    public vert = `
+precision mediump float;
+uniform mat4 u_modelView;
+uniform mat4 u_localMatrix;
+uniform mat4 u_projection;
+uniform mat3 u_texCoordMat;
+layout(location = ${NITRO_Program.a_position}) in vec3 a_position;
+layout(location = ${NITRO_Program.a_uv}) in vec2 a_uv;
+layout(location = ${NITRO_Program.a_color}) in vec4 a_color;
+out vec4 v_color;
+out vec2 v_uv;
+
+void main() {
+    gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);
+    v_color = a_color;
+    v_uv = (u_texCoordMat * vec3(a_uv, 1.0)).st;
+}
+`;
+    public frag = `
+precision mediump float;
+in vec2 v_uv;
+in vec4 v_color;
+uniform sampler2D u_texture;
+
+void main() {
+    gl_FragColor = texture2D(u_texture, v_uv);
+    gl_FragColor *= v_color;
+    if (gl_FragColor.a == 0.0)
+        discard;
+}
+`;
+
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.localMatrixLocation = gl.getUniformLocation(prog, "u_localMatrix");
         this.texCoordMatLocation = gl.getUniformLocation(prog, "u_texCoordMat");
-        this.positionLocation = gl.getAttribLocation(prog, "a_position");
-        this.colorLocation = gl.getAttribLocation(prog, "a_color");
-        this.uvLocation = gl.getAttribLocation(prog, "a_uv");
     }
 }
 
@@ -99,7 +93,7 @@ class Scene implements Viewer.Scene {
     public crg0Level: CRG0.Level;
     public isSkybox: boolean;
 
-    constructor(gl: WebGLRenderingContext, bmd: NITRO_BMD.BMD, localScale: number, crg0Level: CRG0.Level) {
+    constructor(gl: WebGL2RenderingContext, bmd: NITRO_BMD.BMD, localScale: number, crg0Level: CRG0.Level) {
         this.program = new NITRO_Program();
         this.bmd = bmd;
         this.localScale = localScale;
@@ -112,7 +106,7 @@ class Scene implements Viewer.Scene {
         this.modelFuncs = bmd.models.map((bmdm) => this.translateModel(gl, bmdm));
     }
 
-    public translatePacket(gl: WebGLRenderingContext, packet: NITRO_GX.Packet) {
+    public translatePacket(gl: WebGL2RenderingContext, packet: NITRO_GX.Packet) {
         const vertBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, packet.vertData, gl.STATIC_DRAW);
@@ -121,30 +115,36 @@ class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, packet.idxData, gl.STATIC_DRAW);
 
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+
+        gl.vertexAttribPointer(NITRO_Program.a_position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+        gl.vertexAttribPointer(NITRO_Program.a_color, 4, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+        gl.vertexAttribPointer(NITRO_Program.a_uv, 2, gl.FLOAT, false, VERTEX_BYTES, 7 * Float32Array.BYTES_PER_ELEMENT);
+        gl.enableVertexAttribArray(NITRO_Program.a_position);
+        gl.enableVertexAttribArray(NITRO_Program.a_color);
+        gl.enableVertexAttribArray(NITRO_Program.a_uv);
+
+        gl.bindVertexArray(null);
+
         return () => {
-            gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-            gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-            gl.vertexAttribPointer(this.program.colorLocation, 4, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-            gl.vertexAttribPointer(this.program.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 7 * Float32Array.BYTES_PER_ELEMENT);
-            gl.enableVertexAttribArray(this.program.positionLocation);
-            gl.enableVertexAttribArray(this.program.colorLocation);
-            gl.enableVertexAttribArray(this.program.uvLocation);
+            gl.bindVertexArray(vao);
             gl.drawElements(gl.TRIANGLES, packet.idxData.length, gl.UNSIGNED_SHORT, 0);
-            gl.disableVertexAttribArray(this.program.positionLocation);
-            gl.disableVertexAttribArray(this.program.colorLocation);
-            gl.disableVertexAttribArray(this.program.uvLocation);
+            gl.bindVertexArray(null);
         };
     }
 
-    public translatePoly(gl: WebGLRenderingContext, poly: NITRO_BMD.Poly) {
+    public translatePoly(gl: WebGL2RenderingContext, poly: NITRO_BMD.Poly) {
         const funcs = poly.packets.map((packet) => this.translatePacket(gl, packet));
         return (state: Viewer.RenderState) => {
             funcs.forEach((f) => { f(); });
         };
     }
 
-    public translateMaterial(gl: WebGLRenderingContext, material: any) {
+    public translateMaterial(gl: WebGL2RenderingContext, material: any) {
         const texture = material.texture;
         let texId;
 
@@ -224,7 +224,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    public translateBatch(gl: WebGLRenderingContext, batch: NITRO_BMD.Batch) {
+    public translateBatch(gl: WebGL2RenderingContext, batch: NITRO_BMD.Batch) {
         const batchPass = batch.material.isTranslucent ? RenderPass.TRANSLUCENT : RenderPass.OPAQUE;
 
         const applyMaterial = this.translateMaterial(gl, batch.material);
@@ -237,7 +237,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    public translateModel(gl: WebGLRenderingContext, bmdm: NITRO_BMD.Model) {
+    public translateModel(gl: WebGL2RenderingContext, bmdm: NITRO_BMD.Model) {
         const skyboxCameraMat = mat4.create();
         const localMatrix = mat4.create();
         const bmd = this.bmd;
@@ -318,14 +318,14 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = '' + this.levelId;
     }
 
-    public createScene(gl: WebGLRenderingContext): PromiseLike<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): PromiseLike<Viewer.Scene> {
         return fetch('data/sm64ds/sm64ds.crg0').then((result: ArrayBuffer) => {
             const crg0 = CRG0.parse(result);
             return this._createSceneFromCRG0(gl, crg0);
         });
     }
 
-    private _createBmdScene(gl: WebGLRenderingContext, filename: string, localScale: number, level: CRG0.Level, isSkybox: boolean): PromiseLike<Viewer.Scene> {
+    private _createBmdScene(gl: WebGL2RenderingContext, filename: string, localScale: number, level: CRG0.Level, isSkybox: boolean): PromiseLike<Viewer.Scene> {
         return fetch(`data/sm64ds/${filename}`).then((result: ArrayBuffer) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
@@ -335,7 +335,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createSceneFromCRG0(gl: WebGLRenderingContext, crg0: CRG0.CRG0): PromiseLike<Viewer.Scene> {
+    private _createSceneFromCRG0(gl: WebGL2RenderingContext, crg0: CRG0.CRG0): PromiseLike<Viewer.Scene> {
         const level = crg0.levels[this.levelId];
         const scenes = [this._createBmdScene(gl, level.attributes.get('bmd'), 100, level, false)];
         if (level.attributes.get('vrbox'))

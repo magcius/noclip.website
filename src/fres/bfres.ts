@@ -1,6 +1,6 @@
 
 import * as GX2Texture from './gx2_texture';
-import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat } from './gx2_enum';
+import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode } from './gx2_enum';
 
 import { assert, readString } from 'util';
 
@@ -56,7 +56,7 @@ interface SubMesh {
     indexBufferOffset: number;
 }
 
-interface BufferData {
+export interface BufferData {
     stride: number;
     data: ArrayBuffer;
 }
@@ -68,23 +68,24 @@ interface Mesh {
     submeshes: SubMesh[];
 }
 
-interface FSHP {
+export interface FSHP {
     name: string;
     fmatIndex: number;
     fvtxIndex: number;
     meshes: Mesh[];
 }
 
-interface VtxAttrib {
+export interface VtxAttrib {
     name: string;
     bufferIndex: number;
     bufferStart: number;
     format: GX2AttribFormat;
 }
 
-interface FVTX {
+export interface FVTX {
     buffers: BufferData[];
     attribs: VtxAttrib[];
+    vtxCount: number;
 }
 
 interface ShaderAssignDictEntry {
@@ -101,10 +102,17 @@ interface ShaderAssign {
 }
 
 // XXX(jstpierre): Combines sampler and texture info
-interface TextureAssign {
+export interface TextureAssign {
     attribName: string;
     textureName: string;
     ftexOffs: number;
+
+    // Sampler.
+    texClampU: GX2TexClamp;
+    texClampV: GX2TexClamp;
+    texFilterMag: GX2TexXYFilterType;
+    texFilterMin: GX2TexXYFilterType;
+    texFilterMip: GX2TexMipFilterType;
 }
 
 enum UBOParameterType {
@@ -168,12 +176,22 @@ interface RenderInfoParameterString {
 
 type RenderInfoParameter = RenderInfoParameterNumber | RenderInfoParameterString;
 
-interface FMAT {
+export interface RenderState {
+    cullFront: boolean;
+    cullBack: boolean;
+    frontFaceMode: GX2FrontFaceMode;
+    depthTest: boolean;
+    depthWrite: boolean;
+    depthCompareFunc: GX2CompareFunction;
+}
+
+export interface FMAT {
     renderInfoParameters: RenderInfoParameter[];
     textureAssigns: TextureAssign[];
     materialParameterDataBuffer: ArrayBuffer;
     materialParameters: UBOParameter[];
     shaderAssign: ShaderAssign;
+    renderState: RenderState;
 }
 
 export interface FMDL {
@@ -206,7 +224,7 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
         const size = view.getUint32(offs + 0x04, littleEndian);
         const stride = view.getUint16(offs + 0x02, littleEndian);
         const dataOffs = readBinPtrT(view, offs + 0x14, littleEndian);
-        const data = buffer.slice(offs, offs + size);
+        const data = buffer.slice(dataOffs, dataOffs + size);
         return { data, stride };
     }
 
@@ -254,7 +272,7 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
             bufferArrayIdx += 0x18;
         }
 
-        fvtx.push({ buffers, attribs });
+        fvtx.push({ buffers, attribs, vtxCount });
 
         fvtxIdx += 0x20;
     }
@@ -281,7 +299,7 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
             const indexBufferData = readBufferData(indexBufferOffs);
 
             const submeshArrayCount = view.getUint16(meshArrayIdx + 0x0C, littleEndian);
-            const submeshArrayOffs = view.getUint32(meshArrayIdx + 0x10, littleEndian);
+            const submeshArrayOffs = readBinPtrT(view, meshArrayIdx + 0x10, littleEndian);
             let submeshArrayIdx = submeshArrayOffs;
             const submeshes: SubMesh[] = [];
             for (let j = 0; j < submeshArrayCount; j++) {
@@ -377,7 +395,13 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
             const ftexOffs = readBinPtrT(view, textureReferenceArrayIdx + 0x04, littleEndian);
             textureReferenceArrayIdx += 0x08;
 
-            textureAssigns.push({ attribName, textureName, ftexOffs });
+            const texClampU = (samplerParam0 >>> 0) & 0x07;
+            const texClampV = (samplerParam0 >>> 3) & 0x07;
+            const texFilterMag = (samplerParam0 >>> 9) & 0x03;
+            const texFilterMin = (samplerParam0 >>> 12) & 0x03;
+            const texFilterMip = (samplerParam0 >>> 17) & 0x03;
+
+            textureAssigns.push({ attribName, textureName, ftexOffs, texClampU, texClampV, texFilterMin, texFilterMag, texFilterMip });
         }
 
         let materialParameterArrayIdx = materialParameterArrayOffs;
@@ -414,7 +438,22 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
             paramDict,
         }
 
-        fmat.push({ renderInfoParameters, textureAssigns, materialParameterDataBuffer, materialParameters, shaderAssign });
+        // Render state.
+        const renderState0 = view.getUint32(renderStateOffs + 0x00, littleEndian);
+        const renderState1 = view.getUint32(renderStateOffs + 0x04, littleEndian);
+        const renderState2 = view.getUint32(renderStateOffs + 0x08, littleEndian);
+
+        const cullFront = !!((renderState1 >>> 0) & 0x01);
+        const cullBack = !!((renderState1 >>> 1) & 0x01);
+        const frontFaceMode = (renderState1 >>> 2) & 0x01;
+
+        const depthTest = !!((renderState2 >>> 1) & 0x01);
+        const depthWrite = !!((renderState2 >>> 2) & 0x01);
+        const depthCompareFunc = (renderState2 >> 4) & 0x07;
+
+        const renderState: RenderState = { cullFront, cullBack, frontFaceMode, depthTest, depthWrite, depthCompareFunc };
+
+        fmat.push({ renderInfoParameters, textureAssigns, materialParameterDataBuffer, materialParameters, shaderAssign, renderState });
     }
 
     return { fvtx, fshp, fmat };

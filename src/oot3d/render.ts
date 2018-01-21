@@ -107,7 +107,7 @@ class Scene implements Viewer.Scene {
         this.model(state);
     }
 
-    private translateDataType(gl: WebGLRenderingContext, dataType: CMB.DataType) {
+    private translateDataType(gl: WebGL2RenderingContext, dataType: CMB.DataType) {
         switch (dataType) {
             case CMB.DataType.Byte:   return gl.BYTE;
             case CMB.DataType.UByte:  return gl.UNSIGNED_BYTE;
@@ -133,7 +133,7 @@ class Scene implements Viewer.Scene {
         }
     }
 
-    private translateSepd(gl: WebGLRenderingContext, cmbContext, sepd: CMB.Sepd) {
+    private translateSepd(gl: WebGL2RenderingContext, cmbContext, sepd: CMB.Sepd) {
         return () => {
             gl.uniform1f(this.program.uvScaleLocation, sepd.txcScale);
             gl.uniform1f(this.program.posScaleLocation, sepd.posScale);
@@ -160,14 +160,14 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateTexture(gl: WebGLRenderingContext, texture: CMB.Texture): WebGLTexture {
+    private translateTexture(gl: WebGL2RenderingContext, texture: CMB.Texture): WebGLTexture {
         const texId = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texId);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
         return texId;
     }
 
-    private translateMaterial(gl: WebGLRenderingContext, cmbContext, material: CMB.Material) {
+    private translateMaterial(gl: WebGL2RenderingContext, cmbContext, material: CMB.Material) {
         function translateWrapMode(wrapMode: CMB.TextureWrapMode) {
             switch (wrapMode) {
             case CMB.TextureWrapMode.CLAMP: return gl.CLAMP_TO_EDGE;
@@ -206,7 +206,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateMesh(gl: WebGLRenderingContext, cmbContext, mesh: CMB.Mesh) {
+    private translateMesh(gl: WebGL2RenderingContext, cmbContext, mesh: CMB.Mesh) {
         const mat = cmbContext.matFuncs[mesh.matsIdx];
         const sepd = cmbContext.sepdFuncs[mesh.sepdIdx];
 
@@ -216,7 +216,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateCmb(gl: WebGLRenderingContext, cmb: CMB.CMB) {
+    private translateCmb(gl: WebGL2RenderingContext, cmb: CMB.CMB) {
         if (!cmb)
             return () => {};
 
@@ -264,7 +264,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateModel(gl: WebGLRenderingContext, mesh: ZSI.Mesh) {
+    private translateModel(gl: WebGL2RenderingContext, mesh: ZSI.Mesh) {
         const opaque = this.translateCmb(gl, mesh.opaque);
         const transparent = this.translateCmb(gl, mesh.transparent);
 
@@ -311,13 +311,13 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGLRenderingContext): PromiseLike<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): PromiseLike<Viewer.Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             return this._createSceneFromData(gl, result);
         });
     }
 
-    private _createSceneFromData(gl: WebGLRenderingContext, result: ArrayBuffer): PromiseLike<Viewer.Scene> {
+    private _createSceneFromData(gl: WebGL2RenderingContext, result: ArrayBuffer): PromiseLike<Viewer.Scene> {
         const zsi = ZSI.parse(result);
         if (zsi.mesh) {
             return Promise.resolve(new Scene(gl, zsi));

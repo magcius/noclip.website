@@ -876,7 +876,7 @@ class State {
     }
 }
 
-export function readDL(gl: WebGLRenderingContext, rom, banks, startAddr): DL {
+export function readDL(gl: WebGL2RenderingContext, rom, banks, startAddr): DL {
     const state = new State();
 
     state.gl = gl;

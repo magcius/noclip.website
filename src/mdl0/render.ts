@@ -67,7 +67,7 @@ void main() {
 }
 `;
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
@@ -79,7 +79,7 @@ class FancyGrid {
 
     private vtxBuffer: WebGLBuffer;
 
-    constructor(gl: WebGLRenderingContext) {
+    constructor(gl: WebGL2RenderingContext) {
         this.program = new FancyGrid_Program();
         this._createBuffers(gl);
     }
@@ -98,7 +98,7 @@ class FancyGrid {
         gl.disable(gl.BLEND);
     }
 
-    private _createBuffers(gl: WebGLRenderingContext) {
+    private _createBuffers(gl: WebGL2RenderingContext) {
         this.vtxBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
 
@@ -151,7 +151,7 @@ void main() {
 }
 `;
 
-    public bind(gl: WebGLRenderingContext, prog: WebGLProgram) {
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
@@ -170,7 +170,7 @@ class Scene implements Viewer.Scene {
     private vtxBuffer: WebGLBuffer;
     private idxBuffer: WebGLBuffer;
 
-    constructor(gl: WebGLRenderingContext, mdl0: MDL0.MDL0) {
+    constructor(gl: WebGL2RenderingContext, mdl0: MDL0.MDL0) {
         this.fancyGrid = new FancyGrid(gl);
         this.program = new MDL0_Program();
         this.mdl0 = mdl0;
@@ -200,7 +200,7 @@ class Scene implements Viewer.Scene {
         this.fancyGrid.render(state);
     }
 
-    private _createBuffers(gl: WebGLRenderingContext) {
+    private _createBuffers(gl: WebGL2RenderingContext) {
         this.clrBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.clrBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, this.mdl0.clrData, gl.STATIC_DRAW);
@@ -226,7 +226,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGLRenderingContext): PromiseLike<Scene> {
+    public createScene(gl: WebGL2RenderingContext): PromiseLike<Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const mdl0 = MDL0.parse(result);
             return new Scene(gl, mdl0);
