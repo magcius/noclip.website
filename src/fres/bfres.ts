@@ -523,6 +523,7 @@ export function parse(buffer: ArrayBuffer): FRES {
     }
     const fmdlTable = parseResDicIdx(0x00);
     const ftexTable = parseResDicIdx(0x01);
+    const fskaTable = parseResDicIdx(0x02);
 
     const textures: TextureEntry[] = [];
     for (const entry of ftexTable) {
