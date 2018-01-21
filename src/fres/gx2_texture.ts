@@ -176,12 +176,12 @@ function computePixelIndexWithinMicroTile(x, y, bytesPerBlock) {
         throw new Error("Invalid bpp");
     }
 
-    const p5 = pixelBits[5];
-    const p4 = pixelBits[4];
-    const p3 = pixelBits[3];
-    const p2 = pixelBits[2];
-    const p1 = pixelBits[1];
-    const p0 = pixelBits[0];
+    const p5 = pixelBits[0];
+    const p4 = pixelBits[1];
+    const p3 = pixelBits[2];
+    const p2 = pixelBits[3];
+    const p1 = pixelBits[4];
+    const p0 = pixelBits[5];
     return (p5 << 5) | (p4 << 4) | (p3 << 3) | (p2 << 2) | (p1 << 1) | (p0 << 0);
 }
 
