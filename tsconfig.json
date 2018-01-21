@@ -8,6 +8,7 @@
         "lib": [
             "es2015",
             "es2015.promise",
+            "es2016.array.include",
             "dom"
         ],
         "sourceMap": true,

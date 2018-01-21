@@ -1703,7 +1703,7 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_10
                 var depthWrite = !!((renderState2 >>> 2) & 0x01);
                 var depthCompareFunc = (renderState2 >> 4) & 0x07;
                 var renderState = { cullFront: cullFront, cullBack: cullBack, frontFaceMode: frontFaceMode, depthTest: depthTest, depthWrite: depthWrite, depthCompareFunc: depthCompareFunc };
-                fmat.push({ renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
+                fmat.push({ name: name_4, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
             }
         }
         catch (e_5_1) { e_5 = { error: e_5_1 }; }
@@ -2125,9 +2125,9 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                 Scene.prototype.translateFMAT = function (gl, fmat) {
                     var _this = this;
                     // We only support the albedo/emissive texture.
+                    var attribNames = ['_a0', '_e0'];
                     var textureAssigns = fmat.textureAssigns.filter(function (textureAssign) {
-                        var n = textureAssign.attribName;
-                        return n === '_a0' || n === '_e0';
+                        return attribNames.includes(textureAssign.attribName);
                     });
                     var samplers = [];
                     try {
@@ -2183,8 +2183,6 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                             gl.disable(gl.DEPTH_TEST);
                         gl.depthMask(renderState.depthWrite);
                         gl.depthFunc(_this.translateCompareFunction(gl, renderState.depthCompareFunc));
-                        // Textures.
-                        var attribNames = ['_a0', '_e0'];
                         var _loop_1 = function (i) {
                             var attribName = attribNames[i];
                             gl.activeTexture(gl.TEXTURE0 + i);
@@ -2212,6 +2210,7 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                                 gl.bindTexture(gl.TEXTURE_2D, _this.blankTexture);
                             }
                         };
+                        // Textures.
                         for (var i = 0; i < attribNames.length; i++) {
                             _loop_1(i);
                         }
