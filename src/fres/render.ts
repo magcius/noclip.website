@@ -64,10 +64,11 @@ uniform sampler2D _e0;
 
 void main() {
     o_color = texture(_a0, a_u0);
-    o_color.rgb += texture(_e0, a_u0).rgb;
     // TODO(jstpierre): Configurable alpha test
     if (o_color.a < 0.5)
         discard;
+    o_color.rgb += texture(_e0, a_u0).rgb;
+    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));
 }
 `;
 

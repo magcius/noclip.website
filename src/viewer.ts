@@ -16,6 +16,8 @@ function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
 
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
         console.error(str);
+        if (gl.getExtension('WEBGL_debug_shaders'))
+            console.error(gl.getExtension('WEBGL_debug_shaders').getTranslatedShaderSource(shader));
         console.error(gl.getShaderInfoLog(shader));
         throw new Error();
     }
