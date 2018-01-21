@@ -1981,12 +1981,13 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                     var _this = _super !== null && _super.apply(this, arguments) || this;
                     _this.$a = ProgramGambit_UBER.attribLocations;
                     _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + _this.$a._p0 + ") in vec3 _p0;\nlayout(location = " + _this.$a._u0 + ") in vec2 _u0;\nout vec2 a_u0;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(_p0, 1.0);\n    a_u0 = _u0;\n}\n";
-                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\n\nvoid main() {\n    o_color = texture(_a0, a_u0);\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 1.0)\n        discard;\n}\n";
+                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvoid main() {\n    o_color = texture(_a0, a_u0);\n    o_color.rgb += texture(_e0, a_u0).rgb;\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n}\n";
                     return _this;
                 }
                 ProgramGambit_UBER.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
                     this.a0Location = gl.getUniformLocation(prog, "_a0");
+                    this.e0Location = gl.getUniformLocation(prog, "_e0");
                 };
                 ProgramGambit_UBER.attribLocations = {
                     _p0: 0,
@@ -2117,8 +2118,11 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                 };
                 Scene.prototype.translateFMAT = function (gl, fmat) {
                     var _this = this;
-                    // We only support the albedo texture.
-                    var textureAssigns = fmat.textureAssigns.filter(function (textureAssign) { return textureAssign.attribName === '_a0'; });
+                    // We only support the albedo/emissive texture.
+                    var textureAssigns = fmat.textureAssigns.filter(function (textureAssign) {
+                        var n = textureAssign.attribName;
+                        return n === '_a0' || n === '_e0';
+                    });
                     var samplers = [];
                     try {
                         for (var textureAssigns_1 = __values(textureAssigns), textureAssigns_1_1 = textureAssigns_1.next(); !textureAssigns_1_1.done; textureAssigns_1_1 = textureAssigns_1.next()) {
@@ -2173,21 +2177,35 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                             gl.disable(gl.DEPTH_TEST);
                         gl.depthMask(renderState.depthWrite);
                         gl.depthFunc(_this.translateCompareFunction(gl, renderState.depthCompareFunc));
-                        var _loop_1 = function (i) {
-                            var textureAssign = textureAssigns[i];
-                            var ftexIndex = _this.fres.textures.findIndex(function (textureEntry) { return textureEntry.entry.offs === textureAssign.ftexOffs; });
-                            var ftex = _this.fres.textures[ftexIndex];
-                            util_4.assert(ftex.entry.name === textureAssign.textureName);
-                            var glTexture = _this.glTextures[ftexIndex];
-                            gl.activeTexture(gl.TEXTURE0 + i);
-                            gl.bindTexture(gl.TEXTURE_2D, glTexture);
-                            util_4.assert(textureAssign.attribName === '_a0');
-                            gl.uniform1i(prog.a0Location, i);
-                            var sampler = samplers[i];
-                            gl.bindSampler(0, sampler);
-                        };
                         // Textures.
-                        for (var i = 0; i < textureAssigns.length; i++) {
+                        var attribNames = ['_a0', '_e0'];
+                        var _loop_1 = function (i) {
+                            var attribName = attribNames[i];
+                            gl.activeTexture(gl.TEXTURE0 + i);
+                            var uniformLocation = void 0;
+                            if (attribName === '_a0')
+                                uniformLocation = prog.a0Location;
+                            else if (attribName === '_e0')
+                                uniformLocation = prog.e0Location;
+                            else
+                                util_4.assert(false);
+                            gl.uniform1i(uniformLocation, i);
+                            var textureAssignIndex = textureAssigns.findIndex(function (textureAssign) { return textureAssign.attribName === attribName; });
+                            if (textureAssignIndex >= 0) {
+                                var textureAssign_1 = textureAssigns[textureAssignIndex];
+                                var ftexIndex = _this.fres.textures.findIndex(function (textureEntry) { return textureEntry.entry.offs === textureAssign_1.ftexOffs; });
+                                var ftex = _this.fres.textures[ftexIndex];
+                                util_4.assert(ftex.entry.name === textureAssign_1.textureName);
+                                var glTexture = _this.glTextures[ftexIndex];
+                                gl.bindTexture(gl.TEXTURE_2D, glTexture);
+                                var sampler = samplers[textureAssignIndex];
+                                gl.bindSampler(i, sampler);
+                            }
+                            else {
+                                gl.bindTexture(gl.TEXTURE_2D, null);
+                            }
+                        };
+                        for (var i = 0; i < attribNames.length; i++) {
                             _loop_1(i);
                         }
                     };
@@ -2280,7 +2298,6 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                     var fvtxVaos = fmdl.fvtx.map(function (fvtx) { return _this.translateFVTX(gl, fvtx); });
                     var fmatFuncs = fmdl.fmat.map(function (fmat) { return _this.translateFMAT(gl, fmat); });
                     var fshpFuncs = fmdl.fshp.map(function (fshp) { return _this.translateFSHP(gl, fshp); });
-                    console.log(model.entry.name);
                     return function (state) {
                         // _drcmap is the map used for the Gamepad. It does nothing but cause Z-fighting.
                         if (model.entry.name.endsWith('_drcmap'))

@@ -38,6 +38,7 @@ function bswap32(m: ArrayBuffer): ArrayBuffer {
 
 class ProgramGambit_UBER extends Viewer.Program {
     public a0Location: WebGLUniformLocation;
+    public e0Location: WebGLUniformLocation;
 
     public static attribLocations: { [name: string]: number } = {
         _p0: 0,
@@ -59,11 +60,13 @@ void main() {
     public frag = `
 in vec2 a_u0;
 uniform sampler2D _a0;
+uniform sampler2D _e0;
 
 void main() {
     o_color = texture(_a0, a_u0);
+    o_color.rgb += texture(_e0, a_u0).rgb;
     // TODO(jstpierre): Configurable alpha test
-    if (o_color.a < 1.0)
+    if (o_color.a < 0.5)
         discard;
 }
 `;
@@ -71,6 +74,7 @@ void main() {
     bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
         this.a0Location = gl.getUniformLocation(prog, "_a0");
+        this.e0Location = gl.getUniformLocation(prog, "_e0");
     }
 }
 
@@ -256,8 +260,11 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateFMAT(gl: WebGL2RenderingContext, fmat: BFRES.FMAT): RenderFunc {
-        // We only support the albedo texture.
-        const textureAssigns = fmat.textureAssigns.filter((textureAssign) => textureAssign.attribName === '_a0');
+        // We only support the albedo/emissive texture.
+        const textureAssigns = fmat.textureAssigns.filter((textureAssign) => {
+            const n = textureAssign.attribName;
+            return n === '_a0' || n === '_e0';
+        });
 
         const samplers: WebGLSampler[] = [];
         for (const textureAssign of textureAssigns) {
@@ -312,22 +319,38 @@ export class Scene implements Viewer.Scene {
             gl.depthFunc(this.translateCompareFunction(gl, renderState.depthCompareFunc));
 
             // Textures.
-            for (let i = 0; i < textureAssigns.length; i++) {
-                const textureAssign = textureAssigns[i];
+            const attribNames = ['_a0', '_e0'];
+            for (let i = 0; i < attribNames.length; i++) {
+                const attribName = attribNames[i];
 
-                const ftexIndex = this.fres.textures.findIndex((textureEntry) => textureEntry.entry.offs === textureAssign.ftexOffs);
-                const ftex = this.fres.textures[ftexIndex];
-                assert(ftex.entry.name === textureAssign.textureName);
-
-                const glTexture = this.glTextures[ftexIndex];
                 gl.activeTexture(gl.TEXTURE0 + i);
-                gl.bindTexture(gl.TEXTURE_2D, glTexture);
 
-                assert(textureAssign.attribName === '_a0');
-                gl.uniform1i(prog.a0Location, i);
+                let uniformLocation;
+                if (attribName === '_a0')
+                    uniformLocation = prog.a0Location;
+                else if (attribName === '_e0')
+                    uniformLocation = prog.e0Location;
+                else
+                    assert(false);
 
-                const sampler = samplers[i];
-                gl.bindSampler(0, sampler);
+                gl.uniform1i(uniformLocation, i);
+
+                const textureAssignIndex = textureAssigns.findIndex((textureAssign) => textureAssign.attribName === attribName);
+                if (textureAssignIndex >= 0) {
+                    const textureAssign = textureAssigns[textureAssignIndex];
+
+                    const ftexIndex = this.fres.textures.findIndex((textureEntry) => textureEntry.entry.offs === textureAssign.ftexOffs);
+                    const ftex = this.fres.textures[ftexIndex];
+                    assert(ftex.entry.name === textureAssign.textureName);
+
+                    const glTexture = this.glTextures[ftexIndex];
+                    gl.bindTexture(gl.TEXTURE_2D, glTexture);
+
+                    const sampler = samplers[textureAssignIndex];
+                    gl.bindSampler(i, sampler);
+                } else {
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
             }
         };
     }
@@ -407,8 +430,6 @@ export class Scene implements Viewer.Scene {
         const fvtxVaos: WebGLVertexArrayObject[] = fmdl.fvtx.map((fvtx) => this.translateFVTX(gl, fvtx));
         const fmatFuncs: RenderFunc[] = fmdl.fmat.map((fmat) => this.translateFMAT(gl, fmat));
         const fshpFuncs: RenderFunc[] = fmdl.fshp.map((fshp) => this.translateFSHP(gl, fshp));
-
-        console.log(model.entry.name);
 
         return (state: Viewer.RenderState) => {
             // _drcmap is the map used for the Gamepad. It does nothing but cause Z-fighting.
