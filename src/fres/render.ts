@@ -367,8 +367,6 @@ export class Scene implements Viewer.Scene {
             glIndexBuffers.push(buffer);
         }
 
-        console.log(fshp.meshes.length);
-
         return (state: Viewer.RenderState) => {
             const lod = 0;
             const mesh = fshp.meshes[lod];
@@ -481,7 +479,7 @@ export class Scene implements Viewer.Scene {
             break;
         }
         case "RGBA": {
-            const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8 : gl.RGBA8;
+            const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
             gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(tex.pixels));
             break;
         }

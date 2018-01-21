@@ -2155,7 +2155,6 @@ System.register("fres/render", ["viewer", "yaz0", "fres/gx2_enum", "fres/gx2_tex
                         }
                         finally { if (e_8) throw e_8.error; }
                     }
-                    console.log(fshp.meshes.length);
                     return function (state) {
                         var lod = 0;
                         var mesh = fshp.meshes[lod];
@@ -2266,7 +2265,7 @@ System.register("fres/render", ["viewer", "yaz0", "fres/gx2_enum", "fres/gx2_tex
                             break;
                         }
                         case "RGBA": {
-                            var internalFormat = tex.flag === 'SRGB' ? gl.SRGB8 : gl.RGBA8;
+                            var internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
                             gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(tex.pixels));
                             break;
                         }
