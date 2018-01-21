@@ -62,8 +62,20 @@ in vec2 a_u0;
 uniform sampler2D _a0;
 uniform sampler2D _e0;
 
+vec4 textureSRGB(sampler2D s, vec2 uv) {
+    vec4 srgba = texture(s, uv);
+    vec3 srgb = srgba.rgb;
+#ifdef HAS_WEBGL_compressed_texture_s3tc_srgb
+    vec3 rgb = srgb;
+#else
+    // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html
+    vec3 rgb = srgb * (srgb * (srgb * 0.305306011 + 0.682171111) + 0.012522878);
+#endif
+    return vec4(rgb, srgba.a);
+}
+
 void main() {
-    o_color = texture(_a0, a_u0);
+    o_color = textureSRGB(_a0, a_u0);
     // TODO(jstpierre): Configurable alpha test
     if (o_color.a < 0.5)
         discard;
