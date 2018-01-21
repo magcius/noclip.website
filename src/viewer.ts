@@ -123,7 +123,7 @@ type CameraControllerClass = typeof FPSCameraController | typeof OrbitCameraCont
 export interface Scene {
     textures: HTMLCanvasElement[];
     cameraController: CameraControllerClass;
-    render(state: RenderState);
+    render(state: RenderState): void;
 }
 
 class SceneGraph {
@@ -166,23 +166,23 @@ class SceneGraph {
 
 // XXX: Port to a class at some point.
 function elemDragger(elem: HTMLElement, callback: (dx: number, dy: number) => void): void {
-    let lastX;
-    let lastY;
+    let lastX: number;
+    let lastY: number;
 
-    function setGrabbing(v) {
+    function setGrabbing(v: boolean) {
         (<any> elem).grabbing = v;
         elem.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
         elem.style.cursor = v ? 'grabbing' : 'grab';
     }
 
-    function mousemove(e) {
+    function mousemove(e: MouseEvent) {
         const dx = e.pageX - lastX;
         const dy = e.pageY - lastY;
         lastX = e.pageX;
         lastY = e.pageY;
         callback(dx, dy);
     }
-    function mouseup(e) {
+    function mouseup(e: MouseEvent) {
         document.removeEventListener('mouseup', mouseup);
         document.removeEventListener('mousemove', mousemove);
         setGrabbing(false);
@@ -206,7 +206,7 @@ class InputManager {
     public dy: number;
     public dz: number;
 
-    constructor(toplevel) {
+    constructor(toplevel: HTMLElement) {
         this.toplevel = toplevel;
 
         this.keysDown = new Map<number, boolean>();
@@ -220,10 +220,10 @@ class InputManager {
     }
 
     public isKeyDown(key: string) {
-        return !!this.keysDown[key.charCodeAt(0)];
+        return this.keysDown.get(key.charCodeAt(0));
     }
     public isKeyDownRaw(keyCode: number) {
-        return !!this.keysDown[keyCode];
+        return this.keysDown.get(keyCode);
     }
     public isDragging(): boolean {
         // XXX: Should be an explicit flag.
@@ -236,10 +236,10 @@ class InputManager {
     }
 
     private _onKeyDown(e: KeyboardEvent) {
-        this.keysDown[e.keyCode] = true;
+        this.keysDown.set(e.keyCode, true);
     }
     private _onKeyUp(e: KeyboardEvent) {
-        delete this.keysDown[e.keyCode];
+        this.keysDown.delete(e.keyCode);
     }
 
     private _onElemDragger(dx: number, dy: number) {
@@ -428,7 +428,7 @@ export class Viewer {
         const canvas = this.sceneGraph.renderState.viewport.canvas;
 
         let t = 0;
-        const update = (nt) => {
+        const update = (nt: number) => {
             const dt = nt - t;
             t = nt;
 

@@ -49,11 +49,40 @@ for (var name in UCodeCommands)
     UCodeNames[UCodeCommands[name]] = name;
 */
 
+class State {
+    public gl: WebGL2RenderingContext;
+
+    public cmds: CmdFunc[];
+    public textures: HTMLCanvasElement[];
+
+    public mtx: mat4;
+    public mtxStack: mat4[];
+
+    public vertexBuffer: Float32Array;
+    public vertexBufferGL: WebGLBuffer;
+    public verticesDirty: boolean[];
+    public geometryMode: number;
+    public otherModeL: number;
+
+    public paletteTile: any;
+    public textureTile: {};
+    public boundTexture: any;
+    public textureImage: any;
+    public tile: any;
+
+    public rom: any;
+    public banks: any;
+
+    public lookupAddress(addr: number) {
+        return this.rom.lookupAddress(this.banks, addr);
+    }
+}
+
 // 3 pos + 2 uv + 4 color/nrm
 const VERTEX_SIZE = 9;
 const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-function readVertex(state, which, addr) {
+function readVertex(state: State, which: number, addr: number) {
     const rom = state.rom;
     const offs = state.lookupAddress(addr);
     const posX = rom.view.getInt16(offs + 0, false);
@@ -76,7 +105,7 @@ function readVertex(state, which, addr) {
     vtxArray[8] = rom.view.getUint8(offs + 15) / 255;
 }
 
-function cmd_VTX(state, w0, w1) {
+function cmd_VTX(state: State, w0: number, w1: number) {
     const N = (w0 >> 12) & 0xFF;
     const V0 = ((w0 >> 1) & 0x7F) - N;
     let addr = w1;
@@ -90,7 +119,7 @@ function cmd_VTX(state, w0, w1) {
     }
 }
 
-function translateTRI(state, idxData) {
+function translateTRI(state: State, idxData: Uint8Array) {
     const gl = state.gl;
 
     function anyVertsDirty() {
@@ -140,25 +169,25 @@ function translateTRI(state, idxData) {
     };
 }
 
-function tri(idxData, offs, cmd) {
+function tri(idxData: Uint8Array, offs: number, cmd: number) {
     idxData[offs + 0] = (cmd >> 17) & 0x7F;
     idxData[offs + 1] = (cmd >> 9) & 0x7F;
     idxData[offs + 2] = (cmd >> 1) & 0x7F;
 }
 
-function flushTexture(state) {
+function flushTexture(state: State) {
     if (state.textureTile)
         loadTile(state, state.textureTile);
 }
 
-function cmd_TRI1(state, w0, w1) {
+function cmd_TRI1(state: State, w0: number, w1: number) {
     flushTexture(state);
     const idxData = new Uint8Array(3);
     tri(idxData, 0, w0);
     state.cmds.push(translateTRI(state, idxData));
 }
 
-function cmd_TRI2(state, w0, w1) {
+function cmd_TRI2(state: State, w0: number, w1: number) {
     flushTexture(state);
     const idxData = new Uint8Array(6);
     tri(idxData, 0, w0); tri(idxData, 3, w1);
@@ -171,7 +200,7 @@ const GeometryMode = {
     LIGHTING: 0x020000,
 };
 
-function syncGeometryMode(renderState, newMode) {
+function syncGeometryMode(renderState: RenderState, newMode: number) {
     const gl = renderState.gl;
 
     const cullFront = newMode & GeometryMode.CULL_FRONT;
@@ -190,12 +219,12 @@ function syncGeometryMode(renderState, newMode) {
         gl.disable(gl.CULL_FACE);
 
     const lighting = newMode & GeometryMode.LIGHTING;
-    const useVertexColors = !lighting;
+    const useVertexColors = lighting ? 0 : 1;
     const prog = renderState.currentProgram;
     gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
 }
 
-function cmd_GEOMETRYMODE(state, w0, w1) {
+function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
     state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
     const newMode = state.geometryMode;
 
@@ -213,7 +242,7 @@ const OtherModeL = {
     FORCE_BL: 0x4000,
 };
 
-function syncRenderMode(renderState, newMode) {
+function syncRenderMode(renderState: RenderState, newMode: number) {
     const gl = renderState.gl;
     const prog = renderState.currentProgram;
 
@@ -250,19 +279,19 @@ function syncRenderMode(renderState, newMode) {
     gl.uniform1i(prog.alphaTestLocation, alphaTestMode);
 }
 
-function cmd_SETOTHERMODE_L(state, w0, w1) {
-    state.cmds.push((renderState) => {
+function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
+    state.cmds.push((renderState: RenderState) => {
         const mode = 31 - (w0 & 0xFF);
         if (mode === 3)
             return syncRenderMode(renderState, w1);
     });
 }
 
-function cmd_DL(state, w0, w1) {
+function cmd_DL(state: State, w0: number, w1: number) {
     runDL(state, w1);
 }
 
-function cmd_MTX(state, w0, w1) {
+function cmd_MTX(state: State, w0: number, w1: number) {
     if (w1 & 0x80000000) state.mtx = state.mtxStack.pop();
     w1 &= ~0x80000000;
 
@@ -289,11 +318,11 @@ function cmd_MTX(state, w0, w1) {
     mat4.multiply(state.mtx, state.mtx, mtx);
 }
 
-function cmd_POPMTX(state, w0, w1) {
+function cmd_POPMTX(state: State, w0: number, w1: number) {
     state.mtx = state.mtxStack.pop();
 }
 
-function cmd_TEXTURE(state, w0, w1) {
+function cmd_TEXTURE(state: State, w0: number, w1: number) {
     const boundTexture = {};
     state.boundTexture = boundTexture;
 
@@ -304,7 +333,7 @@ function cmd_TEXTURE(state, w0, w1) {
     state.boundTexture.scaleT = (t + 1) / 0x10000;
 }
 
-function r5g5b5a1(dst, dstOffs, p) {
+function r5g5b5a1(dst: Uint8Array, dstOffs: number, p: number) {
     let r, g, b, a;
 
     r = (p & 0xF800) >> 11;
@@ -324,7 +353,7 @@ function r5g5b5a1(dst, dstOffs, p) {
     dst[dstOffs + 3] = a;
 }
 
-function cmd_SETTIMG(state, w0, w1) {
+function cmd_SETTIMG(state: State, w0: number, w1: number) {
     state.textureImage = {};
     state.textureImage.format = (w0 >> 21) & 0x7;
     state.textureImage.size = (w0 >> 19) & 0x3;
@@ -332,7 +361,7 @@ function cmd_SETTIMG(state, w0, w1) {
     state.textureImage.addr = w1;
 }
 
-function cmd_SETTILE(state, w0, w1) {
+function cmd_SETTILE(state: State, w0: number, w1: number) {
     state.tile = {};
     const tile = state.tile;
 
@@ -348,7 +377,7 @@ function cmd_SETTILE(state, w0, w1) {
     tile.maskT = (w1 >> 14) & 0xF;
 }
 
-function cmd_SETTILESIZE(state, w0, w1) {
+function cmd_SETTILESIZE(state: State, w0: number, w1: number) {
     const tileIdx = (w1 >> 24) & 0x7;
     const tile = state.tile;
 
@@ -358,7 +387,7 @@ function cmd_SETTILESIZE(state, w0, w1) {
     tile.lrt = (w1 >> 2) & 0x3FF;
 }
 
-function cmd_LOADTLUT(state, w0, w1) {
+function cmd_LOADTLUT(state: State, w0: number, w1: number) {
     const rom = state.rom;
 
     // XXX: properly implement uls/ult/lrs/lrt
@@ -379,15 +408,15 @@ function cmd_LOADTLUT(state, w0, w1) {
     state.paletteTile.pixels = dst;
 }
 
-function tileCacheKey(state, tile) {
+function tileCacheKey(state: State, tile: any) {
     // XXX: Do we need more than this?
     const srcOffs = state.lookupAddress(tile.addr);
     return srcOffs;
 }
 
 // XXX: This is global to cut down on resources between DLs.
-const tileCache = {};
-function loadTile(state, tile) {
+const tileCache: any = {};
+function loadTile(state: State, tile: any) {
     if (tile.textureId)
         return;
 
@@ -405,7 +434,7 @@ function loadTile(state, tile) {
     }
 }
 
-function convert_CI4(state, texture) {
+function convert_CI4(state: State, texture) {
     const palette = state.paletteTile.pixels;
     if (!palette)
         return;
@@ -852,27 +881,6 @@ export class DL {
     constructor(cmds: CmdFunc[], textures: HTMLCanvasElement[]) {
         this.cmds = cmds;
         this.textures = textures;
-    }
-}
-
-class State {
-    public gl: WebGL2RenderingContext;
-
-    public cmds: CmdFunc[];
-    public textures: HTMLCanvasElement[];
-
-    public mtx: mat4;
-    public mtxStack: mat4[];
-
-    public vertexBuffer: Float32Array;
-    public verticesDirty: number[];
-
-    public paletteTile: {};
-    public rom: any;
-    public banks: any;
-
-    public lookupAddress(addr) {
-        return this.rom.lookupAddress(this.banks, addr);
     }
 }
 

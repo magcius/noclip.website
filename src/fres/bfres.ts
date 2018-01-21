@@ -486,7 +486,7 @@ export function parse(buffer: ArrayBuffer): FRES {
 
     assert(readString(buffer, 0x00, 0x04) === 'FRES');
 
-    let littleEndian;
+    let littleEndian: boolean;
     switch (view.getUint16(0x08, false)) {
     case 0xFEFF:
         littleEndian = false;

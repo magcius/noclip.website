@@ -133,7 +133,7 @@ class Scene implements Viewer.Scene {
         }
     }
 
-    private translateSepd(gl: WebGL2RenderingContext, cmbContext, sepd: CMB.Sepd) {
+    private translateSepd(gl: WebGL2RenderingContext, cmbContext: any, sepd: CMB.Sepd) {
         return () => {
             gl.uniform1f(this.program.uvScaleLocation, sepd.txcScale);
             gl.uniform1f(this.program.posScaleLocation, sepd.posScale);
@@ -167,7 +167,7 @@ class Scene implements Viewer.Scene {
         return texId;
     }
 
-    private translateMaterial(gl: WebGL2RenderingContext, cmbContext, material: CMB.Material) {
+    private translateMaterial(gl: WebGL2RenderingContext, cmbContext: any, material: CMB.Material) {
         function translateWrapMode(wrapMode: CMB.TextureWrapMode) {
             switch (wrapMode) {
             case CMB.TextureWrapMode.CLAMP: return gl.CLAMP_TO_EDGE;
@@ -206,7 +206,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateMesh(gl: WebGL2RenderingContext, cmbContext, mesh: CMB.Mesh) {
+    private translateMesh(gl: WebGL2RenderingContext, cmbContext: any, mesh: CMB.Mesh) {
         const mat = cmbContext.matFuncs[mesh.matsIdx];
         const sepd = cmbContext.sepdFuncs[mesh.sepdIdx];
 
@@ -333,6 +333,8 @@ export class SceneDesc implements Viewer.SceneDesc {
             })).then((scenes) => {
                 return new MultiScene(scenes);
             });
+        } else {
+            throw new Error(`wtf`);
         }
     }
 }

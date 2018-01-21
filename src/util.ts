@@ -1,5 +1,5 @@
 
-export function fetch(path): PromiseLike<ArrayBuffer> {
+export function fetch(path: string): PromiseLike<ArrayBuffer> {
     const request = new XMLHttpRequest();
     request.open("GET", path, true);
     request.responseType = "arraybuffer";

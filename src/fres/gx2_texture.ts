@@ -101,7 +101,7 @@ const microTileWidth = 8;
 const microTileHeight = 8
 const microTilePixels = microTileWidth * microTileHeight;
 
-function computePipeFromCoordWoRotation(x, y) {
+function computePipeFromCoordWoRotation(x: number, y: number) {
     // NumPipes = 2
     const x3 = (x >>> 3) & 1;
     const y3 = (y >>> 3) & 1;
@@ -109,7 +109,7 @@ function computePipeFromCoordWoRotation(x, y) {
     return (pipeBit0 << 0);
 }
 
-function computeBankFromCoordWoRotation(x, y) {
+function computeBankFromCoordWoRotation(x: number, y: number) {
     const ty = (y / numPipes) | 0;
 
     const x3 = (x >>> 3) & 1;
@@ -154,10 +154,12 @@ function computeSurfaceBytesPerBlock(format: GX2SurfaceFormat) {
     // For non-block formats, a "block" is a pixel.
     case GX2SurfaceFormat.FMT_TCS_R8_G8_B8_A8:
         return 4;
+    default:
+        throw new Error(`Unsupported surface format ${format}`);
     }
 }
 
-function computePixelIndexWithinMicroTile(x, y, bytesPerBlock) {
+function computePixelIndexWithinMicroTile(x: number, y: number, bytesPerBlock: number) {
     const x0 = (x >>> 0) & 1;
     const x1 = (x >>> 1) & 1;
     const x2 = (x >>> 2) & 1;
@@ -189,6 +191,8 @@ function computeSurfaceRotationFromTileMode(tileMode: GX2TileMode) {
     switch (tileMode) {
     case GX2TileMode._2D_TILED_THIN1:
         return numPipes * ((numBanks >> 1) - 1);
+    default:
+        throw new Error(`Unsupported tile mode ${tileMode}`);
     }
 }
 
@@ -196,6 +200,8 @@ function computeTileModeAspectRatio(tileMode: GX2TileMode) {
     switch (tileMode) {
     case GX2TileMode._2D_TILED_THIN1:
         return 1;
+    default:
+        throw new Error(`Unsupported tile mode ${tileMode}`);
     }
 }
 
@@ -207,7 +213,7 @@ function computeMacroTileHeight(tileMode: GX2TileMode) {
     return (8 * numPipes) / computeTileModeAspectRatio(tileMode);
 }
 
-function computeSurfaceAddrFromCoordMicroTiled(x, y, surface: GX2Surface) {
+function computeSurfaceAddrFromCoordMicroTiled(x: number, y: number, surface: GX2Surface) {
     // XXX(jstpierre): 3D Textures
     const slice = 0;
 
@@ -228,7 +234,7 @@ function computeSurfaceAddrFromCoordMicroTiled(x, y, surface: GX2Surface) {
     return pixelOffset + microTileOffset + sliceOffset;
 }
 
-function computeSurfaceAddrFromCoordMacroTiled(x, y, surface: GX2Surface) {
+function computeSurfaceAddrFromCoordMacroTiled(x: number, y: number, surface: GX2Surface) {
     // XXX(jstpierre): AA textures
     const sample = 0;
     // XXX(jstpierre): 3D Textures

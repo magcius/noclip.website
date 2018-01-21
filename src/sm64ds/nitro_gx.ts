@@ -36,7 +36,7 @@ const VERTEX_SIZE = 9;
 const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
 const tmp = new Uint8Array(3);
-export function bgr5(pixel): Color {
+export function bgr5(pixel: number): Color {
     _bgr5(tmp, 0, pixel);
     const r = tmp[0], g = tmp[1], b = tmp[2];
     return { r, g, b };
@@ -271,7 +271,7 @@ function cmd_END_VTXS(ctx: ContextInternal) {
     ctx.packets.push(packet);
 }
 
-function runCmd(ctx, cmd) {
+function runCmd(ctx: ContextInternal, cmd: number) {
     switch (cmd) {
     case 0: return;
     case CmdType.MTX_RESTORE: return cmd_MTX_RESTORE(ctx);
@@ -345,7 +345,7 @@ class ContextInternal {
     public readParam(): number {
         return this.view.getUint32((this.offs += 4) - 4, true);
     }
-    public vtx(x, y, z) {
+    public vtx(x: number, y: number, z: number) {
         this.s_vtx = { x, y, z };
         this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord });
     }
