@@ -5,7 +5,11 @@ import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexX
 import { assert, readString } from 'util';
 
 function readBinPtrT(view: DataView, offs: number, littleEndian: boolean) {
-    return offs + view.getInt32(offs, littleEndian);
+    const offs2 = view.getInt32(offs, littleEndian);
+    if (offs2 === 0)
+        return 0;
+    else
+        return offs + offs2;
 }
 
 interface ResDicEntry {
@@ -14,6 +18,9 @@ interface ResDicEntry {
 }
 
 function parseResDic(view: DataView, tableOffs: number, littleEndian: boolean): ResDicEntry[] {
+    if (tableOffs === 0)
+        return [];
+
     const tableSize = view.getUint32(tableOffs + 0x00, littleEndian);
     const tableCount = view.getUint32(tableOffs + 0x04, littleEndian);
     assert(tableCount === tableCount);

@@ -1344,9 +1344,15 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_7,
     "use strict";
     var __moduleName = context_7 && context_7.id;
     function readBinPtrT(view, offs, littleEndian) {
-        return offs + view.getInt32(offs, littleEndian);
+        var offs2 = view.getInt32(offs, littleEndian);
+        if (offs2 === 0)
+            return 0;
+        else
+            return offs + offs2;
     }
     function parseResDic(view, tableOffs, littleEndian) {
+        if (tableOffs === 0)
+            return [];
         var tableSize = view.getUint32(tableOffs + 0x00, littleEndian);
         var tableCount = view.getUint32(tableOffs + 0x04, littleEndian);
         util_2.assert(tableCount === tableCount);
@@ -1924,12 +1930,12 @@ System.register("fres/render", ["viewer", "yaz0", "fres/gx2_enum", "fres/gx2_tex
                     this.cameraController = Viewer.FPSCameraController;
                     this.fres = fres;
                     this.modelFuncs = this.translateFRES(gl, this.fres);
-                    this.textures = []; /*this.fres.textures.map((textureEntry) => {
-                        const tex = textureEntry.texture;
-                        const canvas = GX2Texture.textureToCanvas(tex);
-                        canvas.title = `${textureEntry.entry.name} ${tex.type} (${tex.width}x${tex.height})`;
+                    this.textures = this.fres.textures.map(function (textureEntry) {
+                        var tex = textureEntry.texture;
+                        var canvas = GX2Texture.textureToCanvas(tex);
+                        canvas.title = textureEntry.entry.name + " " + tex.type + " (" + tex.width + "x" + tex.height + ")";
                         return canvas;
-                    }); */
+                    });
                 }
                 Scene.prototype.translateVertexBuffer = function (gl, attrib, buffer) {
                     // Do bswap.
@@ -2192,6 +2198,11 @@ System.register("fres/render", ["viewer", "yaz0", "fres/gx2_enum", "fres/gx2_tex
                         var gl = state.gl;
                         for (var i = 0; i < fmdl.fshp.length; i++) {
                             var fshp = fmdl.fshp[i];
+                            // XXX(jstpierre): Hack. Drcmap is the mini-map shown on the Gamepad during
+                            // Splatoon gameplay, and it causes a lot of Z-fighting. Not sure how it's
+                            // normally filtered out...
+                            if (fshp.name.indexOf('Drcmap') >= 0)
+                                continue;
                             gl.bindVertexArray(fvtxVaos[fshp.fvtxIndex]);
                             // Set up our material state.
                             fmatFuncs[fshp.fmatIndex](state);
@@ -2326,15 +2337,30 @@ System.register("fres/scenes", ["fres/render"], function (exports_10, context_10
             name = "BFRES";
             id = "fres";
             sceneDescs = [
-                'data/spl/Fld_Plaza00.szs',
-                'data/spl/Fld_PlazaLobby.szs',
-                'data/spl/Fld_World00.szs',
-                'data/spl/Fld_Maze00.szs',
-                'data/spl/Fld_EasyJump00.szs',
-                'data/spl/Fld_Tuzura00.szs',
-                'data/spl/Obj_Tree02.szs',
-            ].map(function (path) {
-                var name = path;
+                { name: 'Inkopolis Plaza', path: 'Fld_Plaza00.szs' },
+                { name: 'Inkopolis Plaza Lobby', path: 'Fld_PlazaLobby.szs' },
+                { name: 'Ancho-V Games', path: 'Fld_Office00.szs' },
+                { name: 'Arrowana Mall', path: 'Fld_UpDown00.szs' },
+                { name: 'Blackbelly Skatepark', path: 'Fld_SkatePark00.szs' },
+                { name: 'Bluefin Depot', path: 'Fld_Ruins00.szs' },
+                { name: 'Camp Triggerfish', path: 'Fld_Athletic00.szs' },
+                { name: 'Flounder Heights', path: 'Fld_Jyoheki00.szs' },
+                { name: 'Hammerhead Bridge', path: 'Fld_Kaisou00.szs' },
+                { name: 'Kelp Dome', path: 'Fld_Maze00.szs' },
+                { name: 'Mahi-Mahi Resort', path: 'Fld_Hiagari00.szs' },
+                { name: 'Moray Towers', path: 'Fld_Tuzura00.szs' },
+                { name: 'Museum d\'Alfonsino', path: 'Fld_Pivot00.szs' },
+                { name: 'Pirahna Pit', path: 'Fld_Quarry00.szs' },
+                { name: 'Port Mackerel', path: 'Fld_Amida00.szs' },
+                { name: 'Saltspray Rig', path: 'Fld_SeaPlant00.szs' },
+                { name: 'Urchin Underpass (New)', path: 'Fld_Crank01.szs' },
+                { name: 'Urchin Underpass (Old)', path: 'Fld_Crank00.szs' },
+                { name: 'Walleye Warehouse', path: 'Fld_Warehouse00.szs' },
+                { name: 'Octo Valley', path: 'Fld_World00.szs' },
+                { name: 'Object: Tree', path: 'Obj_Tree02.szs' },
+            ].map(function (entry) {
+                var name = entry.name || entry.path;
+                var path = "data/spl/" + entry.path;
                 return new render_1.SceneDesc(name, path);
             });
             exports_10("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });

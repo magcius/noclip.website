@@ -122,12 +122,12 @@ export class Scene implements Viewer.Scene {
         this.fres = fres;
         this.modelFuncs = this.translateFRES(gl, this.fres);
 
-        this.textures = []; /*this.fres.textures.map((textureEntry) => {
+        this.textures = this.fres.textures.map((textureEntry) => {
             const tex = textureEntry.texture;
             const canvas = GX2Texture.textureToCanvas(tex);
             canvas.title = `${textureEntry.entry.name} ${tex.type} (${tex.width}x${tex.height})`;
             return canvas;
-        }); */
+        });
     }
 
     private translateVertexBuffer(gl: WebGL2RenderingContext, attrib: BFRES.VtxAttrib, buffer: BFRES.BufferData): WebGLBuffer {
@@ -393,6 +393,13 @@ export class Scene implements Viewer.Scene {
             const gl = state.gl;
             for (let i = 0; i < fmdl.fshp.length; i++) {
                 const fshp = fmdl.fshp[i];
+
+                // XXX(jstpierre): Hack. Drcmap is the mini-map shown on the Gamepad during
+                // Splatoon gameplay, and it causes a lot of Z-fighting. Not sure how it's
+                // normally filtered out...
+                if (fshp.name.indexOf('Drcmap') >= 0)
+                    continue;
+
                 gl.bindVertexArray(fvtxVaos[fshp.fvtxIndex]);
                 // Set up our material state.
                 fmatFuncs[fshp.fmatIndex](state);
