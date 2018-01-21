@@ -239,8 +239,8 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                 Program.prototype.compile = function (gl) {
                     if (this.glProg)
                         return this.glProg;
-                    var vert = this.preprocessShader(this.vert, "vert");
-                    var frag = this.preprocessShader(this.frag, "frag");
+                    var vert = this.preprocessShader(gl, this.vert, "vert");
+                    var frag = this.preprocessShader(gl, this.frag, "frag");
                     var vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
                     var fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
                     var prog = gl.createProgram();
@@ -251,7 +251,7 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                     this.bind(gl, prog);
                     return this.glProg;
                 };
-                Program.prototype.preprocessShader = function (source, type) {
+                Program.prototype.preprocessShader = function (gl, source, type) {
                     // Garbage WebGL2 compatibility until I get something better down the line...
                     var lines = source.split('\n');
                     var precision = lines.find(function (line) { return line.startsWith('precision'); }) || 'precision mediump float;';
@@ -261,7 +261,10 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                             line.indexOf('GL_OES_standard_derivatives') === -1;
                     }).join('\n');
                     var rest = lines.filter(function (line) { return !line.startsWith('precision') && !line.startsWith('#extension'); }).join('\n');
-                    return ("\n#version 300 es\n#define attribute in\n#define varying " + (type === 'vert' ? 'out' : 'in') + "\n#define gl_FragColor o_color\n#define gl_FragDepthEXT gl_FragDepth\n#define texture2D texture\n" + extensions + "\n" + precision + "\nout vec4 o_color;\n" + rest + "\n").trim();
+                    var extensionDefines = gl.getSupportedExtensions().map(function (s) {
+                        return "#define HAS_" + s;
+                    }).join('\n');
+                    return ("\n#version 300 es\n#define attribute in\n#define varying " + (type === 'vert' ? 'out' : 'in') + "\n" + extensionDefines + "\n#define gl_FragColor o_color\n#define gl_FragDepthEXT gl_FragDepth\n#define texture2D texture\n" + extensions + "\n" + precision + "\nout vec4 o_color;\n" + rest + "\n").trim();
                 };
                 Program.prototype.bind = function (gl, prog) {
                     this.modelViewLocation = gl.getUniformLocation(prog, "u_modelView");
@@ -299,9 +302,6 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                     this.scenes = [];
                     this.renderState = new RenderState(viewport);
                     var gl = this.renderState.viewport.gl;
-                    // Enable EXT_frag_depth
-                    gl.getExtension('EXT_frag_depth');
-                    gl.getExtension('OES_standard_derivatives');
                     gl.clearColor(0.88, 0.88, 0.88, 1);
                     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
                 }
@@ -1984,7 +1984,7 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                     var _this = _super !== null && _super.apply(this, arguments) || this;
                     _this.$a = ProgramGambit_UBER.attribLocations;
                     _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + _this.$a._p0 + ") in vec3 _p0;\nlayout(location = " + _this.$a._u0 + ") in vec2 _u0;\nout vec2 a_u0;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(_p0, 1.0);\n    a_u0 = _u0;\n}\n";
-                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvoid main() {\n    o_color = texture(_a0, a_u0);\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n    o_color.rgb += texture(_e0, a_u0).rgb;\n    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));\n}\n";
+                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvec4 textureSRGB(sampler2D s, vec2 uv) {\n    vec4 srgba = texture(s, uv);\n    vec3 srgb = srgba.rgb;\n#ifdef HAS_WEBGL_compressed_texture_s3tc_srgb\n    vec3 rgb = srgb;\n#else\n    // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html\n    vec3 rgb = srgb * (srgb * (srgb * 0.305306011 + 0.682171111) + 0.012522878);\n#endif\n    return vec4(rgb, srgba.a);\n}\n\nvoid main() {\n    o_color = textureSRGB(_a0, a_u0);\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n    o_color.rgb += texture(_e0, a_u0).rgb;\n    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));\n}\n";
                     return _this;
                 }
                 ProgramGambit_UBER.prototype.bind = function (gl, prog) {

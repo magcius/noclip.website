@@ -38,8 +38,8 @@ export class Program {
         if (this.glProg)
             return this.glProg;
 
-        const vert = this.preprocessShader(this.vert, "vert");
-        const frag = this.preprocessShader(this.frag, "frag");
+        const vert = this.preprocessShader(gl, this.vert, "vert");
+        const frag = this.preprocessShader(gl, this.frag, "frag");
         const vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
         const fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
         const prog = gl.createProgram();
@@ -51,7 +51,7 @@ export class Program {
         return this.glProg;
     }
 
-    protected preprocessShader(source: string, type: "vert" | "frag") {
+    protected preprocessShader(gl: WebGL2RenderingContext, source: string, type: "vert" | "frag") {
         // Garbage WebGL2 compatibility until I get something better down the line...
         const lines = source.split('\n');
         const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
@@ -61,10 +61,15 @@ export class Program {
             line.indexOf('GL_OES_standard_derivatives') === -1
         ).join('\n');
         const rest = lines.filter((line) => !line.startsWith('precision') && !line.startsWith('#extension')).join('\n');
+
+        const extensionDefines = gl.getSupportedExtensions().map((s) => {
+            return `#define HAS_${s}`;
+        }).join('\n');
         return `
 #version 300 es
 #define attribute in
 #define varying ${type === 'vert' ? 'out' : 'in'}
+${extensionDefines}
 #define gl_FragColor o_color
 #define gl_FragDepthEXT gl_FragDepth
 #define texture2D texture
@@ -137,9 +142,6 @@ class SceneGraph {
 
         const gl = this.renderState.viewport.gl;
 
-        // Enable EXT_frag_depth
-        gl.getExtension('EXT_frag_depth');
-        gl.getExtension('OES_standard_derivatives');
         gl.clearColor(0.88, 0.88, 0.88, 1);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
