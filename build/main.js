@@ -819,12 +819,12 @@ System.register("fres/gx2_texture", ["fres/gx2_enum"], function (exports_6, cont
         else {
             throw new Error("Invalid bpp");
         }
-        var p5 = pixelBits[5];
-        var p4 = pixelBits[4];
-        var p3 = pixelBits[3];
-        var p2 = pixelBits[2];
-        var p1 = pixelBits[1];
-        var p0 = pixelBits[0];
+        var p5 = pixelBits[0];
+        var p4 = pixelBits[1];
+        var p3 = pixelBits[2];
+        var p2 = pixelBits[3];
+        var p1 = pixelBits[4];
+        var p0 = pixelBits[5];
         return (p5 << 5) | (p4 << 4) | (p3 << 3) | (p2 << 2) | (p1 << 1) | (p0 << 0);
     }
     function computeSurfaceRotationFromTileMode(tileMode) {
