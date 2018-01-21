@@ -195,6 +195,9 @@ function elemDragger(elem: HTMLElement, callback: (dx: number, dy: number) => vo
         document.addEventListener('mouseup', mouseup);
         document.addEventListener('mousemove', mousemove);
         setGrabbing(true);
+        // XXX(jstpierre): Needed to make the cursor update in Chrome. See:
+        // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
+        elem.focus();
         e.preventDefault();
     });
 
@@ -214,7 +217,7 @@ class InputManager {
         this.keysDown = new Map<number, boolean>();
         window.addEventListener('keydown', this._onKeyDown.bind(this));
         window.addEventListener('keyup', this._onKeyUp.bind(this));
-        window.addEventListener('wheel', this._onWheel.bind(this));
+        window.addEventListener('wheel', this._onWheel.bind(this), { passive: true });
 
         this.resetMouse();
 
@@ -250,8 +253,6 @@ class InputManager {
     }
     private _onWheel(e: WheelEvent) {
         this.dz += Math.sign(e.deltaY) * -4;
-        // XXX: How can I convince Chrome to let me use wheel events without it complaining...
-        e.preventDefault();
     }
 }
 
