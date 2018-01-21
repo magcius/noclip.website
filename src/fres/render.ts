@@ -408,16 +408,21 @@ export class Scene implements Viewer.Scene {
         const fmatFuncs: RenderFunc[] = fmdl.fmat.map((fmat) => this.translateFMAT(gl, fmat));
         const fshpFuncs: RenderFunc[] = fmdl.fshp.map((fshp) => this.translateFSHP(gl, fshp));
 
+        console.log(model.entry.name);
+
         return (state: Viewer.RenderState) => {
+            // _drcmap is the map used for the Gamepad. It does nothing but cause Z-fighting.
+            if (model.entry.name.endsWith('_drcmap'))
+                return;
+
+            // "_DV" seems to be the skybox. There are additional models which are powered
+            // by skeleton animation, which we don't quite support yet. Kill them for now.
+            if (model.entry.name.indexOf('_DV_') !== -1)
+                return;
+
             const gl = state.gl;
             for (let i = 0; i < fmdl.fshp.length; i++) {
                 const fshp = fmdl.fshp[i];
-
-                // XXX(jstpierre): Hack. Drcmap is the mini-map shown on the Gamepad during
-                // Splatoon gameplay, and it causes a lot of Z-fighting. Not sure how it's
-                // normally filtered out...
-                if (fshp.name.indexOf('Drcmap') >= 0)
-                    continue;
 
                 // XXX(jstpierre): Sun is dynamically moved by the game engine, I think...
                 // ... unless it's SKL animation. For now, skip it.

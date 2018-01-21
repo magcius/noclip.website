@@ -1741,6 +1741,7 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_10
         }
         var fmdlTable = parseResDicIdx(0x00);
         var ftexTable = parseResDicIdx(0x01);
+        var fskaTable = parseResDicIdx(0x02);
         var textures = [];
         try {
             for (var ftexTable_1 = __values(ftexTable), ftexTable_1_1 = ftexTable_1.next(); !ftexTable_1_1.done; ftexTable_1_1 = ftexTable_1.next()) {
@@ -2279,15 +2280,18 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                     var fvtxVaos = fmdl.fvtx.map(function (fvtx) { return _this.translateFVTX(gl, fvtx); });
                     var fmatFuncs = fmdl.fmat.map(function (fmat) { return _this.translateFMAT(gl, fmat); });
                     var fshpFuncs = fmdl.fshp.map(function (fshp) { return _this.translateFSHP(gl, fshp); });
+                    console.log(model.entry.name);
                     return function (state) {
+                        // _drcmap is the map used for the Gamepad. It does nothing but cause Z-fighting.
+                        if (model.entry.name.endsWith('_drcmap'))
+                            return;
+                        // "_DV" seems to be the skybox. There are additional models which are powered
+                        // by skeleton animation, which we don't quite support yet. Kill them for now.
+                        if (model.entry.name.indexOf('_DV_') !== -1)
+                            return;
                         var gl = state.gl;
                         for (var i = 0; i < fmdl.fshp.length; i++) {
                             var fshp = fmdl.fshp[i];
-                            // XXX(jstpierre): Hack. Drcmap is the mini-map shown on the Gamepad during
-                            // Splatoon gameplay, and it causes a lot of Z-fighting. Not sure how it's
-                            // normally filtered out...
-                            if (fshp.name.indexOf('Drcmap') >= 0)
-                                continue;
                             // XXX(jstpierre): Sun is dynamically moved by the game engine, I think...
                             // ... unless it's SKL animation. For now, skip it.
                             if (fshp.name === 'Sun__VRL_Sun')
@@ -2470,7 +2474,7 @@ System.register("fres/scenes", ["fres/render"], function (exports_13, context_13
         ],
         execute: function () {
             name = "Splatoon";
-            id = "spl";
+            id = "fres";
             sceneDescs = [
                 { name: 'Inkopolis Plaza', path: 'Fld_Plaza00.szs' },
                 { name: 'Inkopolis Plaza Lobby', path: 'Fld_PlazaLobby.szs' },
