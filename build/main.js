@@ -2469,8 +2469,8 @@ System.register("fres/scenes", ["fres/render"], function (exports_13, context_13
             }
         ],
         execute: function () {
-            name = "BFRES";
-            id = "fres";
+            name = "Splatoon";
+            id = "spl";
             sceneDescs = [
                 { name: 'Inkopolis Plaza', path: 'Fld_Plaza00.szs' },
                 { name: 'Inkopolis Plaza Lobby', path: 'Fld_PlazaLobby.szs' },
