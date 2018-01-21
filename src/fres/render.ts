@@ -1,8 +1,11 @@
 
+import { mat4 } from 'gl-matrix';
+
 import * as Viewer from 'viewer';
 import * as Yaz0 from 'yaz0';
 
 import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat } from './gx2_enum';
+import { deswizzler } from './gx2_swizzle';
 import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 import * as SARC from './sarc';
@@ -114,18 +117,24 @@ export class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
     public textures: HTMLCanvasElement[];
 
-    private fres: BFRES.FRES;
     private modelFuncs: RenderFunc[];
     private glTextures: WebGLTexture[];
 
-    constructor(gl: WebGL2RenderingContext, fres: BFRES.FRES) {
+    constructor(gl: WebGL2RenderingContext, private fres: BFRES.FRES, private isSkybox: boolean) {
         this.fres = fres;
+
         this.modelFuncs = this.translateFRES(gl, this.fres);
 
         this.textures = this.fres.textures.map((textureEntry) => {
             const tex = textureEntry.texture;
-            const canvas = GX2Texture.textureToCanvas(tex);
-            canvas.title = `${textureEntry.entry.name} ${tex.type} (${tex.width}x${tex.height})`;
+            const surface = tex.surface;
+            const canvas = document.createElement('canvas');
+            canvas.width = surface.width;
+            canvas.height = surface.height;
+            canvas.title = `${textureEntry.entry.name} ${surface.format} (${surface.width}x${surface.height})`;
+            GX2Texture.decodeSurface(tex.surface, tex.texData, tex.mipData).then((decodedTexture) => {
+                GX2Texture.textureToCanvas(canvas, decodedTexture);
+            });
             return canvas;
         });
     }
@@ -263,11 +272,21 @@ export class Scene implements Viewer.Scene {
         }
 
         const prog = new ProgramGambit_UBER();
+        const skyboxCameraMat = mat4.create();
 
         const renderState = fmat.renderState;
 
         return (state: Viewer.RenderState) => {
             state.useProgram(prog);
+
+            if (this.isSkybox) {
+                // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
+                mat4.copy(skyboxCameraMat, state.modelView);
+                skyboxCameraMat[12] = 0;
+                skyboxCameraMat[13] = 0;
+                skyboxCameraMat[14] = 0;
+                gl.uniformMatrix4fv(prog.modelViewLocation, false, skyboxCameraMat);
+            }
 
             // Render state.
             gl.frontFace(this.translateFrontFaceMode(gl, renderState.frontFaceMode));
@@ -400,6 +419,11 @@ export class Scene implements Viewer.Scene {
                 if (fshp.name.indexOf('Drcmap') >= 0)
                     continue;
 
+                // XXX(jstpierre): Sun is dynamically moved by the game engine, I think...
+                // ... unless it's SKL animation. For now, skip it.
+                if (fshp.name === 'Sun__VRL_Sun')
+                    continue;
+
                 gl.bindVertexArray(fvtxVaos[fshp.fvtxIndex]);
                 // Set up our material state.
                 fmatFuncs[fshp.fmatIndex](state);
@@ -442,55 +466,64 @@ export class Scene implements Viewer.Scene {
         return null;
     }
 
-    private translateTexture(gl: WebGL2RenderingContext, ftex: BFRES.TextureEntry) {
+    private translateTexture(gl: WebGL2RenderingContext, ftex: BFRES.TextureEntry): WebGLTexture {
+        // Initially, our texture slot is just the black texture. Once we decode,
+        // we swap it with the correct texture.
+        // XXX(jstpierre): This is done because we don't know the end format of our
+        // texture, but with enough prying we could do it.
+
         const glTexture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, glTexture);
-        // TODO(jstpierre): mipmaps
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 0);
-        let tex = ftex.texture;
+        const surface = ftex.texture.surface;
 
-        // First check if we have to decompress compressed textures.
-        switch (tex.type) {
-        case "BC1":
-        case "BC3":
-        case "BC4":
-        case "BC5":
-            const compressedFormat = this.getCompressedFormat(gl, tex);
-            if (compressedFormat === null)
-                tex = GX2Texture.decompressBC(tex);
-            break;
-        }
+        // Kick off a decode...
+        GX2Texture.decodeSurface(surface, ftex.texture.texData, ftex.texture.mipData).then((tex: GX2Texture.DecodedTexture) => {
+            gl.bindTexture(gl.TEXTURE_2D, glTexture);
 
-        switch (tex.type) {
-        case "R": {
-            const internalFormat = tex.flag === 'SNORM' ? gl.R8_SNORM : gl.R8;
-            const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-            const data = tex.flag === 'SNORM' ? new Int8Array(tex.pixels) : new Uint8Array(tex.pixels);
-            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RED, type, data);
-            break;
-        }
-        case "RG": {
-            const internalFormat = tex.flag === 'SNORM' ? gl.RG8_SNORM : gl.RG8;
-            const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-            const data = tex.flag === 'SNORM' ? new Int8Array(tex.pixels) : new Uint8Array(tex.pixels);
-            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RG, type, data);
-            break;
-        }
-        case "BC1":
-        case "BC3":
-        case "BC4":
-        case "BC5": {
-            const compressedFormat = this.getCompressedFormat(gl, tex);
-            assert(compressedFormat !== null);
-            gl.compressedTexImage2D(gl.TEXTURE_2D, 0, compressedFormat, tex.width, tex.height, 0, new Uint8Array(tex.pixels));
-            break;
-        }
-        case "RGBA": {
-            const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
-            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(tex.pixels));
-            break;
-        }
-        }
+            // First check if we have to decompress compressed textures.
+            switch (tex.type) {
+            case "BC1":
+            case "BC3":
+            case "BC4":
+            case "BC5":
+                const compressedFormat = this.getCompressedFormat(gl, tex);
+                if (compressedFormat === null)
+                    tex = GX2Texture.decompressBC(tex);
+                break;
+            }
+
+            switch (tex.type) {
+            case "R": {
+                const internalFormat = tex.flag === 'SNORM' ? gl.R8_SNORM : gl.R8;
+                const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                const data = tex.flag === 'SNORM' ? new Int8Array(tex.pixels) : new Uint8Array(tex.pixels);
+                gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RED, type, data);
+                break;
+            }
+            case "RG": {
+                const internalFormat = tex.flag === 'SNORM' ? gl.RG8_SNORM : gl.RG8;
+                const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                const data = tex.flag === 'SNORM' ? new Int8Array(tex.pixels) : new Uint8Array(tex.pixels);
+                gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RG, type, data);
+                break;
+            }
+            case "BC1":
+            case "BC3":
+            case "BC4":
+            case "BC5": {
+                const compressedFormat = this.getCompressedFormat(gl, tex);
+                assert(compressedFormat !== null);
+                gl.compressedTexImage2D(gl.TEXTURE_2D, 0, compressedFormat, tex.width, tex.height, 0, new Uint8Array(tex.pixels));
+                break;
+            }
+            case "RGBA": {
+                const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
+                gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(tex.pixels));
+                break;
+            }
+            }
+        });
 
         return glTexture;
     }
@@ -507,6 +540,24 @@ export class Scene implements Viewer.Scene {
     }
 }
 
+class MultiScene implements Viewer.Scene {
+    public cameraController = Viewer.FPSCameraController;
+    public scenes: Viewer.Scene[];
+    public textures: HTMLCanvasElement[];
+
+    constructor(scenes: Viewer.Scene[]) {
+        this.scenes = scenes;
+        this.textures = [];
+        for (const scene of this.scenes)
+            this.textures = this.textures.concat(scene.textures);
+    }
+
+    public render(state: Viewer.RenderState) {
+        const gl = state.viewport.gl;
+        this.scenes.forEach((scene) => scene.render(state));
+    }
+}
+
 export class SceneDesc implements Viewer.SceneDesc {
     public id: string;
     public name: string;
@@ -518,13 +569,27 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): PromiseLike<Scene> {
-        return fetch(this.path).then((result: ArrayBuffer) => {
+    public createScene(gl: WebGL2RenderingContext): PromiseLike<Viewer.Scene> {
+        // Reset any jobs we might have pending.
+        // TODO(jstpierre): Explicit scene teardown.
+        deswizzler.terminate();
+        deswizzler.build();
+
+        return Promise.all([
+            this._createSceneFromPath(gl, this.path, false),
+            this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
+        ]).then((scenes): Viewer.Scene => {
+            return new MultiScene(scenes);
+        });
+    }
+
+    private _createSceneFromPath(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): PromiseLike<Scene> {
+        return fetch(path).then((result: ArrayBuffer) => {
             const buf = Yaz0.decompress(result);
             const sarc = SARC.parse(buf);
             const file = sarc.files.find((file) => file.name === 'Output.bfres');
             const fres = BFRES.parse(file.buffer);
-            const scene = new Scene(gl, fres);
+            const scene = new Scene(gl, fres, isSkybox);
             return scene;
         });
     }

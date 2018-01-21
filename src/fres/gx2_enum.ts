@@ -1,5 +1,5 @@
 
-export enum GX2SurfaceFormat {
+export const enum GX2SurfaceFormat {
     FLAG_SRGB   = 0x0400,
     FLAG_SNORM  = 0x0200,
     FMT_MASK    = 0x003F,
@@ -23,30 +23,30 @@ export enum GX2SurfaceFormat {
     TCS_R8_G8_B8_A8_SRGB  = FMT_TCS_R8_G8_B8_A8 | FLAG_SRGB,
 }
 
-export enum GX2TileMode {
+export const enum GX2TileMode {
     _1D_TILED_THIN1 = 0x02,
     _2D_TILED_THIN1 = 0x04,
 }
 
-export enum GX2AAMode {
+export const enum GX2AAMode {
     _1X = 0x00,
     _2X = 0x01,
     _4X = 0x02,
     _8X = 0x03,
 }
 
-export enum GX2PrimitiveType {
+export const enum GX2PrimitiveType {
     TRIANGLES = 0x04,
 }
 
-export enum GX2IndexFormat {
+export const enum GX2IndexFormat {
     U16_LE = 0x00,
     U32_LE = 0x01,
     U16    = 0x04,
     U32    = 0x09,
 }
 
-export enum GX2AttribFormat {
+export const enum GX2AttribFormat {
     _8_UNORM           = 0x0000,
     _8_UINT            = 0x0100,
     _8_SNORM           = 0x0200,
@@ -61,24 +61,24 @@ export enum GX2AttribFormat {
     _32_32_32_FLOAT    = 0x0811,
 }
 
-export enum GX2TexClamp {
+export const enum GX2TexClamp {
     WRAP   = 0x00,
     MIRROR = 0x01,
     CLAMP  = 0x02,
 }
 
-export enum GX2TexXYFilterType {
+export const enum GX2TexXYFilterType {
     POINT    = 0x00,
     BILINEAR = 0x01,
 }
 
-export enum GX2TexMipFilterType {
+export const enum GX2TexMipFilterType {
     NO_MIP = 0x00,
     POINT  = 0x01,
     LINEAR = 0x02,
 }
 
-export enum GX2CompareFunction {
+export const enum GX2CompareFunction {
     NEVER    = 0x00,
     LESS     = 0x01,
     EQUAL    = 0x02,
@@ -89,7 +89,7 @@ export enum GX2CompareFunction {
     ALWAYS   = 0x07,
 }
 
-export enum GX2FrontFaceMode {
+export const enum GX2FrontFaceMode {
     CCW = 0x00,
     CW  = 0x01,
 }

@@ -26,6 +26,7 @@ const sceneDescs: SceneDesc[] = [
     { name: 'Walleye Warehouse', path: 'Fld_Warehouse00.szs' },
     { name: 'Octo Valley', path: 'Fld_World00.szs' },
     { name: 'Object: Tree', path: 'Obj_Tree02.szs' },
+    { name: 'Object: CenterFloorUpDown', path: 'Obj_CenterFloorUpDown.szs' },
 ].map((entry): SceneDesc => {
     const name = entry.name || entry.path;
     const path = `data/spl/${entry.path}`;
