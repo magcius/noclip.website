@@ -2,7 +2,7 @@
 import { SceneGroup } from '../viewer';
 import { SceneDesc } from './render';
 
-const name = "BFRES";
+const name = "Splatoon";
 const id = "fres";
 const sceneDescs: SceneDesc[] = [
     { name: 'Inkopolis Plaza', path: 'Fld_Plaza00.szs' },
