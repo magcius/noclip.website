@@ -207,6 +207,9 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
             document.addEventListener('mouseup', mouseup);
             document.addEventListener('mousemove', mousemove);
             setGrabbing(true);
+            // XXX(jstpierre): Needed to make the cursor update in Chrome. See:
+            // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
+            elem.focus();
             e.preventDefault();
         });
         setGrabbing(false);
@@ -329,7 +332,7 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                     this.keysDown = new Map();
                     window.addEventListener('keydown', this._onKeyDown.bind(this));
                     window.addEventListener('keyup', this._onKeyUp.bind(this));
-                    window.addEventListener('wheel', this._onWheel.bind(this));
+                    window.addEventListener('wheel', this._onWheel.bind(this), { passive: true });
                     this.resetMouse();
                     elemDragger(this.toplevel, this._onElemDragger.bind(this));
                 }
@@ -360,8 +363,6 @@ System.register("viewer", ["gl-matrix"], function (exports_2, context_2) {
                 };
                 InputManager.prototype._onWheel = function (e) {
                     this.dz += Math.sign(e.deltaY) * -4;
-                    // XXX: How can I convince Chrome to let me use wheel events without it complaining...
-                    e.preventDefault();
                 };
                 return InputManager;
             }());
@@ -2003,6 +2004,9 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                     this.isSkybox = isSkybox;
                     this.cameraController = Viewer.FPSCameraController;
                     this.fres = fres;
+                    this.blankTexture = gl.createTexture();
+                    gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
                     this.modelFuncs = this.translateFRES(gl, this.fres);
                     this.textures = this.fres.textures.map(function (textureEntry) {
                         var tex = textureEntry.texture;
@@ -2204,7 +2208,8 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                                 gl.bindSampler(i, sampler);
                             }
                             else {
-                                gl.bindTexture(gl.TEXTURE_2D, null);
+                                // If we have no binding for this texture, replace it with something harmless...
+                                gl.bindTexture(gl.TEXTURE_2D, _this.blankTexture);
                             }
                         };
                         for (var i = 0; i < attribNames.length; i++) {
@@ -2352,14 +2357,11 @@ System.register("fres/render", ["gl-matrix", "viewer", "yaz0", "fres/gx2_swizzle
                     return null;
                 };
                 Scene.prototype.translateTexture = function (gl, ftex) {
-                    // Initially, our texture slot is just the black texture. Once we decode,
-                    // we swap it with the correct texture.
-                    // XXX(jstpierre): This is done because we don't know the end format of our
-                    // texture, but with enough prying we could do it.
                     var _this = this;
                     var glTexture = gl.createTexture();
                     gl.bindTexture(gl.TEXTURE_2D, glTexture);
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 0);
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
                     var surface = ftex.texture.surface;
                     // Kick off a decode...
                     GX2Texture.decodeSurface(surface, ftex.texture.texData, ftex.texture.mipData).then(function (tex) {

@@ -124,9 +124,14 @@ export class Scene implements Viewer.Scene {
 
     private modelFuncs: RenderFunc[];
     private glTextures: WebGLTexture[];
+    private blankTexture: WebGLTexture;
 
     constructor(gl: WebGL2RenderingContext, private fres: BFRES.FRES, private isSkybox: boolean) {
         this.fres = fres;
+
+        this.blankTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
         this.modelFuncs = this.translateFRES(gl, this.fres);
 
@@ -350,7 +355,8 @@ export class Scene implements Viewer.Scene {
                     const sampler = samplers[textureAssignIndex];
                     gl.bindSampler(i, sampler);
                 } else {
-                    gl.bindTexture(gl.TEXTURE_2D, null);
+                    // If we have no binding for this texture, replace it with something harmless...
+                    gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
                 }
             }
         };
@@ -494,14 +500,10 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateTexture(gl: WebGL2RenderingContext, ftex: BFRES.TextureEntry): WebGLTexture {
-        // Initially, our texture slot is just the black texture. Once we decode,
-        // we swap it with the correct texture.
-        // XXX(jstpierre): This is done because we don't know the end format of our
-        // texture, but with enough prying we could do it.
-
         const glTexture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, glTexture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 0);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
         const surface = ftex.texture.surface;
 
         // Kick off a decode...
