@@ -1,5 +1,6 @@
 
 import * as GX2Texture from './gx2_texture';
+import { GX2Surface } from './gx2_surface';
 import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode } from './gx2_enum';
 
 import { assert, readString } from 'util';
@@ -41,7 +42,13 @@ function parseResDic(view: DataView, tableOffs: number, littleEndian: boolean): 
     return entries;
 }
 
-function parseFTEX(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolean): GX2Texture.DecodedTexture {
+export interface DecodableTexture {
+    surface: GX2Surface;
+    mipData: ArrayBuffer;
+    texData: ArrayBuffer;
+}
+
+function parseFTEX(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolean): DecodableTexture {
     const offs = entry.offs;
     const view = new DataView(buffer);
 
@@ -54,8 +61,9 @@ function parseFTEX(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
     const mipDataOffs = readBinPtrT(view, offs + 0xB4, littleEndian);
 
     const surface = GX2Texture.parseGX2Surface(buffer, gx2SurfaceOffs);
-    const texture = GX2Texture.decodeSurface(surface, buffer, texDataOffs, mipDataOffs);
-    return texture;
+    const texData = buffer.slice(texDataOffs, texDataOffs + surface.texDataSize);
+    const mipData = buffer.slice(mipDataOffs, mipDataOffs + surface.texDataSize);
+    return { surface, texData, mipData };
 }
 
 interface SubMesh {
@@ -468,7 +476,7 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
 
 export interface TextureEntry {
     entry: ResDicEntry;
-    texture: GX2Texture.DecodedTexture;
+    texture: DecodableTexture;
 }
 
 export interface ModelEntry {

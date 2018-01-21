@@ -1,5 +1,7 @@
 
 import { GX2SurfaceFormat, GX2TileMode, GX2AAMode } from './gx2_enum';
+import { GX2Surface } from './gx2_surface';
+import { deswizzler } from './gx2_swizzle';
 
 interface DecodedTextureR {
     type: 'R';
@@ -47,20 +49,6 @@ interface DecodedTextureBC45 {
 export type DecodedTextureBC = DecodedTextureBC13 | DecodedTextureBC45;
 export type DecodedTexture = DecodedTextureR | DecodedTextureRG | DecodedTextureRGBA | DecodedTextureBC;
 
-interface GX2Surface {
-    format: GX2SurfaceFormat;
-    tileMode: GX2TileMode;
-    aaMode: GX2AAMode;
-    swizzle: number;
-    width: number;
-    height: number;
-    depth: number;
-    pitch: number;
-
-    texDataSize: number;
-    mipDataSize: number;
-}
-
 export function parseGX2Surface(buffer: ArrayBuffer, gx2SurfaceOffs: number): GX2Surface {
     const view = new DataView(buffer.slice(gx2SurfaceOffs, gx2SurfaceOffs + 0x9C));
 
@@ -89,264 +77,6 @@ export function parseGX2Surface(buffer: ArrayBuffer, gx2SurfaceOffs: number): GX
     const surface = { format, tileMode, swizzle, width, height, depth, pitch, aaMode, texDataSize, mipDataSize };
     return surface;
 }
-
-function memcpy(dst: Uint8Array, dstOffs: number, src: ArrayBuffer, srcOffs: number, length: number) {
-    dst.set(new Uint8Array(src, srcOffs, length), dstOffs);
-}
-
-// #region Swizzle
-const numPipes = 2;
-const numBanks = 4;
-const microTileWidth = 8;
-const microTileHeight = 8
-const microTilePixels = microTileWidth * microTileHeight;
-
-function computePipeFromCoordWoRotation(x: number, y: number) {
-    // NumPipes = 2
-    const x3 = (x >>> 3) & 1;
-    const y3 = (y >>> 3) & 1;
-    const pipeBit0 = (y3 ^ x3);
-    return (pipeBit0 << 0);
-}
-
-function computeBankFromCoordWoRotation(x: number, y: number) {
-    const ty = (y / numPipes) | 0;
-
-    const x3 = (x >>> 3) & 1;
-    const x4 = (x >>> 4) & 1;
-    const ty3 = (ty >>> 3) & 1;
-    const ty4 = (ty >>> 4) & 1;
-
-    const p0 = ty4 ^ x3;
-    const p1 = ty3 ^ x4;
-    return (p1 << 1) | (p0 << 0);
-}
-
-function computeSurfaceThickness(tileMode: GX2TileMode) {
-    switch (tileMode) {
-    case GX2TileMode._1D_TILED_THIN1:
-    case GX2TileMode._2D_TILED_THIN1:
-        return 1;
-    }
-}
-
-function computeSurfaceBlockWidth(format: GX2SurfaceFormat) {
-    switch (format & GX2SurfaceFormat.FMT_MASK) {
-    case GX2SurfaceFormat.FMT_BC1:
-    case GX2SurfaceFormat.FMT_BC3:
-    case GX2SurfaceFormat.FMT_BC4:
-    case GX2SurfaceFormat.FMT_BC5:
-        return 4;
-    default:
-        return 1;
-    }
-}
-
-function computeSurfaceBytesPerBlock(format: GX2SurfaceFormat) {
-    switch (format & GX2SurfaceFormat.FMT_MASK) {
-    case GX2SurfaceFormat.FMT_BC1:
-    case GX2SurfaceFormat.FMT_BC4:
-        return 8;
-    case GX2SurfaceFormat.FMT_BC3:
-    case GX2SurfaceFormat.FMT_BC5:
-        return 16;
-
-    // For non-block formats, a "block" is a pixel.
-    case GX2SurfaceFormat.FMT_TCS_R8_G8_B8_A8:
-        return 4;
-    default:
-        throw new Error(`Unsupported surface format ${format}`);
-    }
-}
-
-function computePixelIndexWithinMicroTile(x: number, y: number, bytesPerBlock: number) {
-    const x0 = (x >>> 0) & 1;
-    const x1 = (x >>> 1) & 1;
-    const x2 = (x >>> 2) & 1;
-    const y0 = (y >>> 0) & 1;
-    const y1 = (y >>> 1) & 1;
-    const y2 = (y >>> 2) & 1;
-
-    let pixelBits;
-    if (bytesPerBlock === 8) {
-        pixelBits = [y2, y1, x2, x1, y0, x0];
-    } else if (bytesPerBlock === 16) {
-        pixelBits = [y2, y1, x2, x1, x0, y0];
-    } else if (bytesPerBlock === 4) {
-        pixelBits = [y2, y1, y0, x2, x1, x0];
-    } else {
-        throw new Error("Invalid bpp");
-    }
-
-    const p5 = pixelBits[0];
-    const p4 = pixelBits[1];
-    const p3 = pixelBits[2];
-    const p2 = pixelBits[3];
-    const p1 = pixelBits[4];
-    const p0 = pixelBits[5];
-    return (p5 << 5) | (p4 << 4) | (p3 << 3) | (p2 << 2) | (p1 << 1) | (p0 << 0);
-}
-
-function computeSurfaceRotationFromTileMode(tileMode: GX2TileMode) {
-    switch (tileMode) {
-    case GX2TileMode._2D_TILED_THIN1:
-        return numPipes * ((numBanks >> 1) - 1);
-    default:
-        throw new Error(`Unsupported tile mode ${tileMode}`);
-    }
-}
-
-function computeTileModeAspectRatio(tileMode: GX2TileMode) {
-    switch (tileMode) {
-    case GX2TileMode._2D_TILED_THIN1:
-        return 1;
-    default:
-        throw new Error(`Unsupported tile mode ${tileMode}`);
-    }
-}
-
-function computeMacroTilePitch(tileMode: GX2TileMode) {
-    return (8 * numBanks) / computeTileModeAspectRatio(tileMode);
-}
-
-function computeMacroTileHeight(tileMode: GX2TileMode) {
-    return (8 * numPipes) / computeTileModeAspectRatio(tileMode);
-}
-
-function computeSurfaceAddrFromCoordMicroTiled(x: number, y: number, surface: GX2Surface) {
-    // XXX(jstpierre): 3D Textures
-    const slice = 0;
-
-    const bytesPerBlock = computeSurfaceBytesPerBlock(surface.format);
-    const microTileThickness = computeSurfaceThickness(surface.tileMode);
-    const microTileBytes = bytesPerBlock * microTileThickness * microTilePixels;
-    const microTilesPerRow = surface.pitch / microTileWidth;
-    const microTileIndexX = (x / microTileWidth) | 0;
-    const microTileIndexY = (y / microTileHeight) | 0;
-    const microTileIndexZ = (slice / microTileThickness) | 0;
-
-    const microTileOffset = microTileBytes * (microTileIndexX + microTileIndexY * microTilesPerRow);
-    const sliceBytes = surface.pitch * surface.height * microTileThickness * bytesPerBlock;
-    const sliceOffset = microTileIndexZ * sliceBytes;
-    const pixelIndex = computePixelIndexWithinMicroTile(x, y, bytesPerBlock);
-    const pixelOffset = bytesPerBlock * pixelIndex;
-
-    return pixelOffset + microTileOffset + sliceOffset;
-}
-
-function computeSurfaceAddrFromCoordMacroTiled(x: number, y: number, surface: GX2Surface) {
-    // XXX(jstpierre): AA textures
-    const sample = 0;
-    // XXX(jstpierre): 3D Textures
-    const slice = 0;
-
-    const numSamples = 1 << surface.aaMode;
-    const pipeSwizzle = (surface.swizzle >> 8) & 0x01;
-    const bankSwizzle = (surface.swizzle >> 9) & 0x03;
-
-    const pipeInterleaveBytes = 256;
-    const numPipeBits = 1;
-    const numBankBits = 2;
-    const numGroupBits = 8;
-    const rowSize = 2048;
-    const swapSize = 256;
-    const splitSize = 2048;
-
-    const bytesPerBlock = computeSurfaceBytesPerBlock(surface.format);
-    const microTileThickness = computeSurfaceThickness(surface.tileMode);
-    const bytesPerSample = bytesPerBlock * microTileThickness * microTilePixels;
-    const microTileBytes = bytesPerSample * numSamples;
-    const isSamplesSplit = numSamples > 1 && (microTileBytes > splitSize);
-    const samplesPerSlice = Math.max(isSamplesSplit ? (splitSize / bytesPerSample) : numSamples, 1);
-    const numSampleSplits = isSamplesSplit ? (numSamples / samplesPerSlice) : 1;
-    const numSurfaceSamples = isSamplesSplit ? samplesPerSlice : numSamples;
-
-    const rotation = computeSurfaceRotationFromTileMode(surface.tileMode);
-    const macroTilePitch = computeMacroTilePitch(surface.tileMode);
-    const macroTileHeight = computeMacroTileHeight(surface.tileMode);
-    const groupMask = (1 << numGroupBits) - 1;
-
-    const pixelIndex = computePixelIndexWithinMicroTile(x, y, bytesPerBlock);
-    const pixelOffset = pixelIndex * bytesPerBlock;
-    const sampleOffset = sample * (microTileBytes / numSamples);
-
-    let elemOffset = pixelOffset + sampleOffset;
-    let sampleSlice;
-    if (isSamplesSplit) {
-        const tileSliceBytes = microTileBytes / numSampleSplits;
-        sampleSlice = (elemOffset / tileSliceBytes) | 0;
-        elemOffset = elemOffset % tileSliceBytes;
-    } else {
-        sampleSlice = 0;
-    }
-
-    const pipe1 = computePipeFromCoordWoRotation(x, y);
-    const bank1 = computeBankFromCoordWoRotation(x, y);
-    let bankPipe = pipe1 + numPipes * bank1;
-    const sliceIn = slice / (microTileThickness > 1 ? 4 : 1);
-    const swizzle = pipeSwizzle + numPipes * bankSwizzle;
-    bankPipe = bankPipe ^ (numPipes * sampleSlice * ((numBanks >> 1) + 1) ^ (swizzle + sliceIn * rotation));
-    bankPipe = bankPipe % (numPipes * numBanks);
-    const pipe = (bankPipe % numPipes) | 0;
-    const bank = (bankPipe / numPipes) | 0;
-
-    const sliceBytes = surface.height * surface.pitch * microTileThickness * bytesPerBlock * numSamples;
-    const sliceOffset = sliceBytes * ((sampleSlice / microTileThickness) | 0);
-
-    const numSwizzleBits = numBankBits + numPipeBits;
-
-    const macroTilesPerRow = (surface.pitch / macroTilePitch) | 0;
-    const macroTileBytes = (numSamples * microTileThickness * bytesPerBlock * macroTileHeight * macroTilePitch);
-    const macroTileIndexX = (x / macroTilePitch) | 0;
-    const macroTileIndexY = (y / macroTileHeight) | 0;
-    const macroTileOffset = (macroTileIndexX + macroTilesPerRow * macroTileIndexY) * macroTileBytes;
-
-    const totalOffset = (elemOffset + ((macroTileOffset + sliceOffset) >> numSwizzleBits));
-
-    const offsetHigh = (totalOffset & ~groupMask) << numSwizzleBits;
-    const offsetLow =  (totalOffset & groupMask);
-
-    const pipeBits = pipe << (numGroupBits);
-    const bankBits = bank << (numPipeBits + numGroupBits);
-    const addr = (bankBits | pipeBits | offsetLow | offsetHigh);
-
-    return addr;
-}
-
-function deswizzle(surface: GX2Surface, srcBuffer: ArrayBuffer): ArrayBuffer {
-    // For non-BC formats, "block" = 1 pixel.
-    const blockSize = computeSurfaceBlockWidth(surface.format);
-
-    let widthBlocks = ((surface.width + blockSize - 1) / blockSize) | 0;
-    let heightBlocks = ((surface.height + blockSize - 1) / blockSize) | 0;
-
-    const bytesPerBlock = computeSurfaceBytesPerBlock(surface.format);
-    const dst = new Uint8Array(widthBlocks * heightBlocks * bytesPerBlock);
-
-    for (let y = 0; y < heightBlocks; y++) {
-        for (let x = 0; x < widthBlocks; x++) {
-            let srcIdx;
-            switch (surface.tileMode) {
-            case GX2TileMode._1D_TILED_THIN1:
-                srcIdx = computeSurfaceAddrFromCoordMicroTiled(x, y, surface);
-                break;
-            case GX2TileMode._2D_TILED_THIN1:
-                srcIdx = computeSurfaceAddrFromCoordMacroTiled(x, y, surface);
-                break;
-            default:
-                const tileMode_: GX2TileMode = (<GX2TileMode> surface.tileMode);
-                throw new Error(`Unsupported tile mode ${tileMode_.toString(16)}`);
-            }
-
-            const dstIdx = (y * widthBlocks + x) * bytesPerBlock;
-            memcpy(dst, dstIdx, srcBuffer, srcIdx, bytesPerBlock);
-        }
-    }
-
-    return dst.buffer;
-}
-
-// #endregion
 
 // #region Texture Decode
 function expand5to8(n: number): number {
@@ -646,43 +376,39 @@ export function decompressBC(texture: DecodedTextureBC): DecodedTexture {
     }
 }
 
-export function decodeSurface(surface: GX2Surface, buffer: ArrayBuffer,
-                              texDataOffs: number, mipDataOffs: number): DecodedTexture {
-    const texData = buffer.slice(texDataOffs, texDataOffs + surface.texDataSize);
-    const pixels = deswizzle(surface, texData);
+export function decodeSurface(surface: GX2Surface, texData: ArrayBuffer, mipData: ArrayBuffer): Promise<DecodedTexture> {
     const width = surface.width;
     const height = surface.height;
 
-    switch (surface.format) {
-    case GX2SurfaceFormat.BC1_UNORM:
-        return { type: 'BC1', flag: 'UNORM', width, height, pixels };
-    case GX2SurfaceFormat.BC1_SRGB:
-        return { type: 'BC1', flag: 'SRGB', width, height, pixels };
-    case GX2SurfaceFormat.BC3_UNORM:
-        return { type: 'BC3', flag: 'UNORM', width, height, pixels };
-    case GX2SurfaceFormat.BC3_SRGB:
-        return { type: 'BC3', flag: 'SRGB', width, height, pixels };
-    case GX2SurfaceFormat.BC4_UNORM:
-        return { type: 'BC4', flag: 'UNORM', width, height, pixels };
-    case GX2SurfaceFormat.BC4_SNORM:
-        return { type: 'BC4', flag: 'SNORM', width, height, pixels };
-    case GX2SurfaceFormat.BC5_UNORM:
-        return { type: 'BC5', flag: 'UNORM', width, height, pixels };
-    case GX2SurfaceFormat.BC5_SNORM:
-        return { type: 'BC5', flag: 'SNORM', width, height, pixels };
-    case GX2SurfaceFormat.TCS_R8_G8_B8_A8_UNORM:
-        return { type: 'RGBA', flag: 'UNORM', bytesPerPixel: 4, width, height, pixels };
-    case GX2SurfaceFormat.TCS_R8_G8_B8_A8_SRGB:
-        return { type: 'RGBA', flag: 'SRGB', bytesPerPixel: 4, width, height, pixels };
-    default:
-        throw new Error(`Bad format in decodeSurface: ${surface.format.toString(16)}`);
-    }
+    return deswizzler.deswizzle(surface, texData).then((pixels): DecodedTexture => {
+        switch (surface.format) {
+        case GX2SurfaceFormat.BC1_UNORM:
+            return { type: 'BC1', flag: 'UNORM', width, height, pixels };
+        case GX2SurfaceFormat.BC1_SRGB:
+            return { type: 'BC1', flag: 'SRGB', width, height, pixels };
+        case GX2SurfaceFormat.BC3_UNORM:
+            return { type: 'BC3', flag: 'UNORM', width, height, pixels };
+        case GX2SurfaceFormat.BC3_SRGB:
+            return { type: 'BC3', flag: 'SRGB', width, height, pixels };
+        case GX2SurfaceFormat.BC4_UNORM:
+            return { type: 'BC4', flag: 'UNORM', width, height, pixels };
+        case GX2SurfaceFormat.BC4_SNORM:
+            return { type: 'BC4', flag: 'SNORM', width, height, pixels };
+        case GX2SurfaceFormat.BC5_UNORM:
+            return { type: 'BC5', flag: 'UNORM', width, height, pixels };
+        case GX2SurfaceFormat.BC5_SNORM:
+            return { type: 'BC5', flag: 'SNORM', width, height, pixels };
+        case GX2SurfaceFormat.TCS_R8_G8_B8_A8_UNORM:
+            return { type: 'RGBA', flag: 'UNORM', bytesPerPixel: 4, width, height, pixels };
+        case GX2SurfaceFormat.TCS_R8_G8_B8_A8_SRGB:
+            return { type: 'RGBA', flag: 'SRGB', bytesPerPixel: 4, width, height, pixels };
+        default:
+            throw new Error(`Bad format in decodeSurface: ${surface.format.toString(16)}`);
+        }
+    });
 }
 
-export function textureToCanvas(texture: DecodedTexture): HTMLCanvasElement {
-    const canvas = document.createElement('canvas');
-    canvas.width = texture.width;
-    canvas.height = texture.height;
+export function textureToCanvas(canvas: HTMLCanvasElement, texture: DecodedTexture) {
     const ctx = canvas.getContext('2d');
     const imageData = new ImageData(texture.width, texture.height);
 
@@ -744,6 +470,5 @@ export function textureToCanvas(texture: DecodedTexture): HTMLCanvasElement {
         throw new Error(`Unsupported texture type in textureToCanvas ${texture.type}`);
     }
     ctx.putImageData(imageData, 0, 0);
-    return canvas;
 }
 // #endregion
