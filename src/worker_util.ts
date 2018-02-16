@@ -57,7 +57,6 @@ export class WorkerPool<T, R> {
     private multiWorkerManager: MultiWorkerManager<T, R>;
 
     constructor(private workerConstructor: () => Worker, private numWorkers: number = 8) {
-        this.build();
     }
 
     public terminate() {
