@@ -4482,8 +4482,8 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                 __extends(OoT3D_Program, _super);
                 function OoT3D_Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nprecision mediump float;\n\nuniform mat4 u_modelView;\nuniform mat4 u_localMatrix;\nuniform mat4 u_projection;\nuniform float u_posScale;\nuniform float u_uvScale;\nlayout(location = " + OoT3D_Program.a_position + ") in vec3 a_position;\nlayout(location = " + OoT3D_Program.a_uv + ") in vec2 a_uv;\nlayout(location = " + OoT3D_Program.a_color + ") in vec4 a_color;\nvarying vec4 v_color;\nvarying vec2 v_uv;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;\n    v_color = a_color;\n    v_uv = a_uv * u_uvScale;\n    v_uv.t = 1.0 - v_uv.t;\n}";
-                    _this.frag = "\nprecision mediump float;\nvarying vec2 v_uv;\nvarying vec4 v_color;\nuniform sampler2D u_texture;\nuniform bool u_alphaTest;\n\nvoid main() {\n    gl_FragColor = texture2D(u_texture, v_uv);\n    gl_FragColor *= v_color;\n    if (u_alphaTest && gl_FragColor.a <= 0.8)\n        discard;\n}";
+                    _this.vert = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform float u_posScale;\n    uniform float u_uvScale;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n\n    void main() {\n        gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;\n        v_color = a_color;\n        v_uv = a_uv * u_uvScale;\n        v_uv.t = 1.0 - v_uv.t;\n    }";
+                    _this.frag = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n    uniform bool u_alphaTest;\n\n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (u_alphaTest && gl_FragColor.a <= 0.8)\n            discard;\n    }";
                     return _this;
                 }
                 OoT3D_Program.prototype.bind = function (gl, prog) {
@@ -4491,10 +4491,10 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                     this.posScaleLocation = gl.getUniformLocation(prog, "u_posScale");
                     this.uvScaleLocation = gl.getUniformLocation(prog, "u_uvScale");
                     this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
+                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
+                    this.colorLocation = gl.getAttribLocation(prog, "a_color");
+                    this.uvLocation = gl.getAttribLocation(prog, "a_uv");
                 };
-                OoT3D_Program.a_position = 0;
-                OoT3D_Program.a_color = 1;
-                OoT3D_Program.a_uv = 2;
                 return OoT3D_Program;
             }(Viewer.Program));
             Scene = /** @class */ (function () {
@@ -4541,22 +4541,18 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                 };
                 Scene.prototype.translateSepd = function (gl, cmbContext, sepd) {
                     var _this = this;
-                    var vao = gl.createVertexArray();
-                    gl.bindVertexArray(vao);
-                    gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
-                    gl.vertexAttribPointer(OoT3D_Program.a_position, 3, this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
-                    gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
-                    gl.vertexAttribPointer(OoT3D_Program.a_color, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
-                    gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
-                    gl.vertexAttribPointer(OoT3D_Program.a_uv, 2, this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
-                    gl.enableVertexAttribArray(OoT3D_Program.a_position);
-                    gl.enableVertexAttribArray(OoT3D_Program.a_color);
-                    gl.enableVertexAttribArray(OoT3D_Program.a_uv);
-                    gl.bindVertexArray(null);
                     return function () {
                         gl.uniform1f(_this.program.uvScaleLocation, sepd.txcScale);
                         gl.uniform1f(_this.program.posScaleLocation, sepd.posScale);
-                        gl.bindVertexArray(vao);
+                        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
+                        gl.vertexAttribPointer(_this.program.positionLocation, 3, _this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
+                        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
+                        gl.vertexAttribPointer(_this.program.colorLocation, 4, _this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
+                        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
+                        gl.vertexAttribPointer(_this.program.uvLocation, 2, _this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
+                        gl.enableVertexAttribArray(_this.program.positionLocation);
+                        gl.enableVertexAttribArray(_this.program.colorLocation);
+                        gl.enableVertexAttribArray(_this.program.uvLocation);
                         try {
                             for (var _a = __values(sepd.prms), _b = _a.next(); !_b.done; _b = _a.next()) {
                                 var prm = _b.value;
@@ -4570,6 +4566,9 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                             }
                             finally { if (e_18) throw e_18.error; }
                         }
+                        gl.disableVertexAttribArray(_this.program.positionLocation);
+                        gl.disableVertexAttribArray(_this.program.colorLocation);
+                        gl.disableVertexAttribArray(_this.program.uvLocation);
                         var e_18, _c;
                     };
                 };
@@ -6068,7 +6067,7 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_33, contex
         }
     };
 });
-System.register("zelview/f3dex2", ["gl-matrix", "zelview/render"], function (exports_34, context_34) {
+System.register("zelview/f3dex2", ["gl-matrix"], function (exports_34, context_34) {
     "use strict";
     var __moduleName = context_34 && context_34.id;
     function readVertex(state, which, addr) {
@@ -6146,13 +6145,16 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render"], function (exp
             var gl = renderState.gl;
             gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-            gl.vertexAttribPointer(Render.F3DEX2Program.a_position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-            gl.vertexAttribPointer(Render.F3DEX2Program.a_uv, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-            gl.vertexAttribPointer(Render.F3DEX2Program.a_color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
-            gl.enableVertexAttribArray(Render.F3DEX2Program.a_position);
-            gl.enableVertexAttribArray(Render.F3DEX2Program.a_color);
-            gl.enableVertexAttribArray(Render.F3DEX2Program.a_uv);
+            gl.vertexAttribPointer(prog.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+            gl.vertexAttribPointer(prog.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+            gl.vertexAttribPointer(prog.colorLocation, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
+            gl.enableVertexAttribArray(prog.positionLocation);
+            gl.enableVertexAttribArray(prog.colorLocation);
+            gl.enableVertexAttribArray(prog.uvLocation);
             gl.drawElements(gl.TRIANGLES, nPrim, gl.UNSIGNED_BYTE, 0);
+            gl.disableVertexAttribArray(prog.positionLocation);
+            gl.disableVertexAttribArray(prog.uvLocation);
+            gl.disableVertexAttribArray(prog.colorLocation);
         };
     }
     function tri(idxData, offs, cmd) {
@@ -6773,14 +6775,11 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render"], function (exp
         return new DL(state.cmds, state.textures);
     }
     exports_34("readDL", readDL);
-    var gl_matrix_5, Render, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
+    var gl_matrix_5, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
             function (gl_matrix_5_1) {
                 gl_matrix_5 = gl_matrix_5_1;
-            },
-            function (Render_1) {
-                Render = Render_1;
             }
         ],
         execute: function () {
@@ -7277,19 +7276,22 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                 __extends(BillboardBGProgram, _super);
                 function BillboardBGProgram() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nlayout(location = " + BillboardBGProgram.a_position + ") in vec3 a_position;\nlayout(location = " + BillboardBGProgram.a_uv + ") in vec2 a_uv;\nvarying vec2 v_uv;\n\nvoid main() {\n    gl_Position = vec4(a_position, 1.0);\n    v_uv = a_uv;\n}\n";
+                    _this.vert = "\nattribute vec3 a_position;\nattribute vec2 a_uv;\nvarying vec2 v_uv;\n\nvoid main() {\n    gl_Position = vec4(a_position, 1.0);\n    v_uv = a_uv;\n}\n";
                     _this.frag = "\nprecision mediump float;\nvarying vec2 v_uv;\nuniform sampler2D u_texture;\n\nvoid main() {\n    gl_FragColor = texture2D(u_texture, v_uv);\n}\n";
                     return _this;
                 }
-                BillboardBGProgram.a_position = 0;
-                BillboardBGProgram.a_uv = 1;
+                BillboardBGProgram.prototype.bind = function (gl, prog) {
+                    _super.prototype.bind.call(this, gl, prog);
+                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
+                    this.uvLocation = gl.getAttribLocation(prog, "a_uv");
+                };
                 return BillboardBGProgram;
             }(Viewer.Program));
             F3DEX2Program = /** @class */ (function (_super) {
                 __extends(F3DEX2Program, _super);
                 function F3DEX2Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + F3DEX2Program.a_position + ") in vec3 a_position;\nlayout(location = " + F3DEX2Program.a_uv + ") in vec2 a_uv;\nlayout(location = " + F3DEX2Program.a_color + ") in vec4 a_color;\nvarying vec4 v_color;\nvarying vec2 v_uv;\nuniform vec2 u_txs;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n    v_color = a_color;\n    v_uv = a_uv * u_txs;\n}\n";
+                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nattribute vec3 a_position;\nattribute vec2 a_uv;\nattribute vec4 a_color;\nvarying vec4 v_color;\nvarying vec2 v_uv;\nuniform vec2 u_txs;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n    v_color = a_color;\n    v_uv = a_uv * u_txs;\n}\n";
                     _this.frag = "\nprecision mediump float;\nvarying vec2 v_uv;\nvarying vec4 v_color;\nuniform sampler2D u_texture;\nuniform bool u_useVertexColors;\nuniform int u_alphaTest;\n\nvoid main() {\n    gl_FragColor = texture2D(u_texture, v_uv);\n    if (u_useVertexColors)\n        gl_FragColor *= v_color;\n    if (u_alphaTest > 0 && gl_FragColor.a < 0.0125)\n        discard;\n}\n";
                     return _this;
                 }
@@ -7298,10 +7300,10 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                     this.txsLocation = gl.getUniformLocation(prog, "u_txs");
                     this.useVertexColorsLocation = gl.getUniformLocation(prog, "u_useVertexColors");
                     this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
+                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
+                    this.colorLocation = gl.getAttribLocation(prog, "a_color");
+                    this.uvLocation = gl.getAttribLocation(prog, "a_uv");
                 };
-                F3DEX2Program.a_position = 0;
-                F3DEX2Program.a_uv = 1;
-                F3DEX2Program.a_color = 2;
                 return F3DEX2Program;
             }(Viewer.Program));
             exports_36("F3DEX2Program", F3DEX2Program);
@@ -7309,22 +7311,28 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                 __extends(CollisionProgram, _super);
                 function CollisionProgram() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + CollisionProgram.a_position + ") in vec3 a_position;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n}\n";
+                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nattribute vec3 a_position;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n}\n";
                     _this.frag = "\n#extension GL_EXT_frag_depth : enable\n\nvoid main() {\n    gl_FragColor = vec4(1.0, 1.0, 1.0, 0.2);\n    gl_FragDepthEXT = gl_FragCoord.z - 1e-6;\n}\n";
                     return _this;
                 }
-                CollisionProgram.a_position = 0;
+                CollisionProgram.prototype.bind = function (gl, prog) {
+                    _super.prototype.bind.call(this, gl, prog);
+                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
+                };
                 return CollisionProgram;
             }(Viewer.Program));
             WaterboxProgram = /** @class */ (function (_super) {
                 __extends(WaterboxProgram, _super);
                 function WaterboxProgram() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + WaterboxProgram.a_position + " in vec3 a_position;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n}\n";
+                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nattribute vec3 a_position;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n}\n";
                     _this.frag = "\nvoid main() {\n    gl_FragColor = vec4(0.2, 0.6, 1.0, 0.2);\n}\n";
                     return _this;
                 }
-                WaterboxProgram.a_position = 0;
+                WaterboxProgram.prototype.bind = function (gl, prog) {
+                    _super.prototype.bind.call(this, gl, prog);
+                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
+                };
                 return WaterboxProgram;
             }(Viewer.Program));
             Scene = /** @class */ (function () {
@@ -7391,8 +7399,6 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                         }
                         return lines;
                     }
-                    var vao = gl.createVertexArray();
-                    gl.bindVertexArray(vao);
                     var collIdxBuffer = gl.createBuffer();
                     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, collIdxBuffer);
                     var lineData = stitchLines(coll.polys);
@@ -7401,23 +7407,22 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                     var collVertBuffer = gl.createBuffer();
                     gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
                     gl.bufferData(gl.ARRAY_BUFFER, coll.verts, gl.STATIC_DRAW);
-                    gl.vertexAttribPointer(CollisionProgram.a_position, 3, gl.SHORT, false, 0, 0);
-                    gl.enableVertexAttribArray(CollisionProgram.a_position);
-                    gl.bindVertexArray(null);
                     return function (state) {
                         var prog = _this.program_COLL;
                         state.useProgram(prog);
                         gl.enable(gl.BLEND);
-                        gl.bindVertexArray(vao);
                         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                        gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
+                        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, collIdxBuffer);
+                        gl.vertexAttribPointer(prog.positionLocation, 3, gl.SHORT, false, 0, 0);
+                        gl.enableVertexAttribArray(prog.positionLocation);
                         gl.drawElements(gl.LINES, nLinePrim, gl.UNSIGNED_SHORT, 0);
+                        gl.disableVertexAttribArray(prog.positionLocation);
                     };
                 };
                 Scene.prototype.translateWaterBoxes = function (gl, scene) {
                     var _this = this;
                     var coll = scene.collision;
-                    var vao = gl.createVertexArray();
-                    gl.bindVertexArray(vao);
                     var wbVtx = gl.createBuffer();
                     gl.bindBuffer(gl.ARRAY_BUFFER, wbVtx);
                     gl.bufferData(gl.ARRAY_BUFFER, coll.waters, gl.STATIC_DRAW);
@@ -7427,16 +7432,17 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                     var wbIdx = gl.createBuffer();
                     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
                     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
-                    gl.vertexAttribPointer(WaterboxProgram.a_position, 3, gl.SHORT, false, 0, 0);
-                    gl.enableVertexAttribArray(WaterboxProgram.a_position);
-                    gl.bindVertexArray(null);
                     return function (state) {
                         var prog = _this.program_WATERS;
                         state.useProgram(prog);
                         gl.disable(gl.CULL_FACE);
-                        gl.bindVertexArray(vao);
+                        gl.bindBuffer(gl.ARRAY_BUFFER, wbVtx);
+                        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
+                        gl.vertexAttribPointer(prog.positionLocation, 3, gl.SHORT, false, 0, 0);
+                        gl.enableVertexAttribArray(prog.positionLocation);
                         for (var i = 0; i < wbIdxData.length; i += 4)
                             gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_SHORT, i * 2);
+                        gl.disableVertexAttribArray(prog.positionLocation);
                         gl.disable(gl.BLEND);
                     };
                 };
