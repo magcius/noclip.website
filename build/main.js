@@ -4482,8 +4482,8 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                 __extends(OoT3D_Program, _super);
                 function OoT3D_Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\n    precision mediump float;\n    uniform mat4 u_modelView;\n    uniform mat4 u_localMatrix;\n    uniform mat4 u_projection;\n    uniform float u_posScale;\n    uniform float u_uvScale;\n    attribute vec3 a_position;\n    attribute vec2 a_uv;\n    attribute vec4 a_color;\n    varying vec4 v_color;\n    varying vec2 v_uv;\n\n    void main() {\n        gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;\n        v_color = a_color;\n        v_uv = a_uv * u_uvScale;\n        v_uv.t = 1.0 - v_uv.t;\n    }";
-                    _this.frag = "\n    precision mediump float;\n    varying vec2 v_uv;\n    varying vec4 v_color;\n    uniform sampler2D u_texture;\n    uniform bool u_alphaTest;\n\n    void main() {\n        gl_FragColor = texture2D(u_texture, v_uv);\n        gl_FragColor *= v_color;\n        if (u_alphaTest && gl_FragColor.a <= 0.8)\n            discard;\n    }";
+                    _this.vert = "\nprecision mediump float;\n\nuniform mat4 u_modelView;\nuniform mat4 u_localMatrix;\nuniform mat4 u_projection;\nuniform float u_posScale;\nuniform float u_uvScale;\nlayout(location = " + OoT3D_Program.a_position + ") in vec3 a_position;\nlayout(location = " + OoT3D_Program.a_uv + ") in vec2 a_uv;\nlayout(location = " + OoT3D_Program.a_color + ") in vec4 a_color;\nvarying vec4 v_color;\nvarying vec2 v_uv;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;\n    v_color = a_color;\n    v_uv = a_uv * u_uvScale;\n    v_uv.t = 1.0 - v_uv.t;\n}";
+                    _this.frag = "\nprecision mediump float;\nvarying vec2 v_uv;\nvarying vec4 v_color;\nuniform sampler2D u_texture;\nuniform bool u_alphaTest;\n\nvoid main() {\n    gl_FragColor = texture2D(u_texture, v_uv);\n    gl_FragColor *= v_color;\n    if (u_alphaTest && gl_FragColor.a <= 0.8)\n        discard;\n}";
                     return _this;
                 }
                 OoT3D_Program.prototype.bind = function (gl, prog) {
@@ -4491,10 +4491,10 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                     this.posScaleLocation = gl.getUniformLocation(prog, "u_posScale");
                     this.uvScaleLocation = gl.getUniformLocation(prog, "u_uvScale");
                     this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
-                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
-                    this.colorLocation = gl.getAttribLocation(prog, "a_color");
-                    this.uvLocation = gl.getAttribLocation(prog, "a_uv");
                 };
+                OoT3D_Program.a_position = 0;
+                OoT3D_Program.a_color = 1;
+                OoT3D_Program.a_uv = 2;
                 return OoT3D_Program;
             }(Viewer.Program));
             Scene = /** @class */ (function () {
@@ -4541,18 +4541,23 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                 };
                 Scene.prototype.translateSepd = function (gl, cmbContext, sepd) {
                     var _this = this;
+                    var vao = gl.createVertexArray();
+                    gl.bindVertexArray(vao);
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cmbContext.idxBuffer);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
+                    gl.vertexAttribPointer(OoT3D_Program.a_position, 3, this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
+                    gl.vertexAttribPointer(OoT3D_Program.a_color, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
+                    gl.vertexAttribPointer(OoT3D_Program.a_uv, 2, this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
+                    gl.enableVertexAttribArray(OoT3D_Program.a_position);
+                    gl.enableVertexAttribArray(OoT3D_Program.a_color);
+                    gl.enableVertexAttribArray(OoT3D_Program.a_uv);
+                    gl.bindVertexArray(null);
                     return function () {
                         gl.uniform1f(_this.program.uvScaleLocation, sepd.txcScale);
                         gl.uniform1f(_this.program.posScaleLocation, sepd.posScale);
-                        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
-                        gl.vertexAttribPointer(_this.program.positionLocation, 3, _this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
-                        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
-                        gl.vertexAttribPointer(_this.program.colorLocation, 4, _this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
-                        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
-                        gl.vertexAttribPointer(_this.program.uvLocation, 2, _this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
-                        gl.enableVertexAttribArray(_this.program.positionLocation);
-                        gl.enableVertexAttribArray(_this.program.colorLocation);
-                        gl.enableVertexAttribArray(_this.program.uvLocation);
+                        gl.bindVertexArray(vao);
                         try {
                             for (var _a = __values(sepd.prms), _b = _a.next(); !_b.done; _b = _a.next()) {
                                 var prm = _b.value;
@@ -4566,9 +4571,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                             }
                             finally { if (e_18) throw e_18.error; }
                         }
-                        gl.disableVertexAttribArray(_this.program.positionLocation);
-                        gl.disableVertexAttribArray(_this.program.colorLocation);
-                        gl.disableVertexAttribArray(_this.program.uvLocation);
+                        gl.bindVertexArray(null);
                         var e_18, _c;
                     };
                 };
@@ -4640,19 +4643,20 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                     var textures = cmb.textures.map(function (texture) {
                         return _this.translateTexture(gl, texture);
                     });
+                    var idxBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+                    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer, gl.STATIC_DRAW);
                     var cmbContext = {
                         posBuffer: posBuffer,
                         colBuffer: colBuffer,
                         nrmBuffer: nrmBuffer,
                         txcBuffer: txcBuffer,
+                        idxBuffer: idxBuffer,
                         textures: textures,
                     };
                     cmbContext.sepdFuncs = cmb.sepds.map(function (sepd) { return _this.translateSepd(gl, cmbContext, sepd); });
                     cmbContext.matFuncs = cmb.materials.map(function (material) { return _this.translateMaterial(gl, cmbContext, material); });
                     var meshFuncs = cmb.meshs.map(function (mesh) { return _this.translateMesh(gl, cmbContext, mesh); });
-                    var idxBuffer = gl.createBuffer();
-                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-                    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer, gl.STATIC_DRAW);
                     return function () {
                         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
                         try {
@@ -4679,7 +4683,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "util"], fu
                         gl.enable(gl.CULL_FACE);
                         gl.cullFace(gl.BACK);
                         opaque();
-                        // transparent();
+                        transparent();
                     };
                 };
                 return Scene;
