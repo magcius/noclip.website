@@ -83,10 +83,12 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
     return canvas;
 }
 
+type RenderFunc = (state: Viewer.RenderState, pass: RenderPass) => void;
+
 class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
     public textures: HTMLCanvasElement[];
-    public modelFuncs: Array<(state: Viewer.RenderState, pass: RenderPass) => void>;
+    public modelFuncs: RenderFunc[];
     public program: NITRO_Program;
     public bmd: NITRO_BMD.BMD;
     public localScale: number;
@@ -106,7 +108,7 @@ class Scene implements Viewer.Scene {
         this.modelFuncs = bmd.models.map((bmdm) => this.translateModel(gl, bmdm));
     }
 
-    public translatePacket(gl: WebGL2RenderingContext, packet: NITRO_GX.Packet) {
+    private translatePacket(gl: WebGL2RenderingContext, packet: NITRO_GX.Packet): RenderFunc {
         const vertBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, packet.vertData, gl.STATIC_DRAW);
@@ -137,14 +139,14 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    public translatePoly(gl: WebGL2RenderingContext, poly: NITRO_BMD.Poly) {
+    private translatePoly(gl: WebGL2RenderingContext, poly: NITRO_BMD.Poly): RenderFunc {
         const funcs = poly.packets.map((packet) => this.translatePacket(gl, packet));
-        return (state: Viewer.RenderState) => {
-            funcs.forEach((f) => { f(); });
+        return (state: Viewer.RenderState, pass: RenderPass) => {
+            funcs.forEach((f) => { f(state, pass); });
         };
     }
 
-    public translateMaterial(gl: WebGL2RenderingContext, material: any) {
+    private translateMaterial(gl: WebGL2RenderingContext, material: any) {
         const texture = material.texture;
         let texId: WebGLTexture;
 
@@ -224,7 +226,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    public translateBatch(gl: WebGL2RenderingContext, batch: NITRO_BMD.Batch) {
+    private translateBatch(gl: WebGL2RenderingContext, batch: NITRO_BMD.Batch): RenderFunc {
         const batchPass = batch.material.isTranslucent ? RenderPass.TRANSLUCENT : RenderPass.OPAQUE;
 
         const applyMaterial = this.translateMaterial(gl, batch.material);
@@ -233,11 +235,11 @@ class Scene implements Viewer.Scene {
             if (pass !== batchPass)
                 return;
             applyMaterial(state);
-            renderPoly(state);
+            renderPoly(state, pass);
         };
     }
 
-    public translateModel(gl: WebGL2RenderingContext, bmdm: NITRO_BMD.Model) {
+    private translateModel(gl: WebGL2RenderingContext, bmdm: NITRO_BMD.Model): RenderFunc {
         const skyboxCameraMat = mat4.create();
         const localMatrix = mat4.create();
         const bmd = this.bmd;
@@ -262,7 +264,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    public renderModels(state: Viewer.RenderState, pass: RenderPass) {
+    private renderModels(state: Viewer.RenderState, pass: RenderPass) {
         return this.modelFuncs.forEach((func) => {
             func(state, pass);
         });

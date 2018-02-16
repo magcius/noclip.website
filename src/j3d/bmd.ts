@@ -2,6 +2,7 @@
 import * as GX from 'gx';
 import * as Texture from 'texture';
 
+import { be16toh, be32toh } from 'endian';
 import { assert } from 'util';
 
 function readString(buffer: ArrayBuffer, offs: number, length: number): string {
@@ -30,10 +31,6 @@ function readStringTable(buffer: ArrayBuffer, offs: number): string[] {
     }
 
     return strings;
-}
-
-function memcpy(dst: ArrayBuffer, dstOffs: number, src: ArrayBuffer, srcOffs: number, length: number) {
-    new Uint8Array(dst).set(new Uint8Array(src, srcOffs, length), dstOffs);
 }
 
 export enum HierarchyType {
@@ -114,7 +111,20 @@ function readINF1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     bmd.inf1 = { sceneGraph: node };
 }
 
-function getComponentSize(dataType: GX.CompType) {
+type CompSize = 1 | 2 | 4;
+
+function bswapArray(m: ArrayBuffer, componentSize: CompSize): ArrayBuffer {
+    switch (componentSize) {
+    case 1:
+        return m;
+    case 2:
+        return be16toh(m);
+    case 4:
+        return be32toh(m);
+    }
+}
+
+function getComponentSize(dataType: GX.CompType): CompSize {
     switch (dataType) {
     case GX.CompType.U8:
     case GX.CompType.S8:
@@ -164,14 +174,13 @@ export interface VertexArray {
     vtxAttrib: GX.VertexAttribute;
     compType: GX.CompType;
     compCount: number;
-    compSize: number;
-    dataOffs: number;
-    dataSize: number;
+    compSize: CompSize;
+    scale: number;
+    buffer: ArrayBuffer;
 }
 
 export interface VTX1 {
     vertexArrays: Map<GX.VertexAttribute, VertexArray>;
-    buffer: ArrayBuffer;
 }
 
 function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
@@ -192,6 +201,7 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const compCnt: GX.CompCnt = view.getUint32(offs + 0x04);
         const compType: GX.CompType = view.getUint32(offs + 0x08);
         const decimalPoint: number = view.getUint8(offs + 0x0C);
+        const scale = Math.pow(0.5, decimalPoint);
         offs += 0x10;
 
         // Each attrib in the VTX1 chunk also has a corresponding data chunk containing
@@ -203,15 +213,17 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const dataOffsLookupTableEntry: number = dataOffsLookupTable + formatIdx*0x04;
         const dataStart: number = view.getUint32(dataOffsLookupTableEntry);
         const dataEnd: number = getDataEnd(dataOffsLookupTableEntry);
-        const dataOffs: number = offs + dataStart;
+        const dataOffs: number = chunkStart + dataStart;
         const dataSize: number = dataEnd - dataStart;
         const compCount = getNumComponents(vtxAttrib, compCnt);
         const compSize = getComponentSize(compType);
-        const vertexArray = { vtxAttrib, compType, compCount, compSize, dataOffs, dataSize };
+        const vtxDataBufferRaw = buffer.slice(dataOffs, dataOffs + dataSize);
+        const vtxDataBuffer = bswapArray(vtxDataBufferRaw, compSize);
+        const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compSize, scale, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }
 
-    bmd.vtx1 = { vertexArrays, buffer };
+    bmd.vtx1 = { vertexArrays };
 
     function getDataEnd(dataOffsLookupTableEntry: number) {
         let offs = dataOffsLookupTableEntry + 0x04;
@@ -355,7 +367,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
         // Now copy our data into it.
         const packedDataSize = packedVertexSize * totalVertexCount;
-        const packedData = new ArrayBuffer(packedDataSize);
+        const packedDataView = new Uint8Array(packedDataSize);
         let packedDataOffs = 0;
         for (const drawCall of drawCalls) {
             let drawCallIdx = drawCall.srcOffs;
@@ -368,13 +380,15 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
                     const vertexArray: VertexArray = bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
                     const attribDataSize = vertexArray.compSize * vertexArray.compCount;
-                    const srcOffs = vertexArray.dataOffs + (attribDataSize * index);
-                    memcpy(packedData, packedDataOffs, bmd.vtx1.buffer, srcOffs, attribDataSize);
+                    const vertexData = new Uint8Array(vertexArray.buffer, attribDataSize * index, attribDataSize);
+                    packedDataView.set(vertexData, packedDataOffs);
                     packedDataOffs += attribDataSize;
                 }
                 assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
             }
         }
+        assert((packedVertexSize * totalVertexCount) === packedDataOffs);
+        const packedData = packedDataView.buffer;
 
         // Now we should have a complete shape. Onto the next!
         shapes.push({ packedData, packedVertexSize, packedVertexAttributes, drawCalls });

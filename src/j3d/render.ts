@@ -5,18 +5,20 @@ import * as Viewer from 'viewer';
 
 import { fetch } from 'util';
 
-const BLACK_VERT_SHADER_SOURCE = `
+class BlackProgram extends Viewer.Program {
+    public static a_position = 0;
+
+    public vert = `
 precision mediump float;
 uniform mat4 u_modelView;
 uniform mat4 u_projection;
-attribute vec3 a_position;
+layout(location = ${BlackProgram.a_position}) in vec3 a_position;
 
 void main() {
     gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);
-}
-`;
+}`;
 
-const BLACK_FRAG_SHADER_SOURCE = `
+    public frag = `
 precision mediump float;
 
 void main() {
@@ -24,24 +26,12 @@ void main() {
 }
 `;
 
-class BlackProgram extends Viewer.Program {
-    public positionLocation: number;
-
-    public vert = BLACK_VERT_SHADER_SOURCE;
-    public frag = BLACK_FRAG_SHADER_SOURCE;
-
-    public getAttribLocation(vtxAttrib: GX.VertexAttribute) {
+    public static getAttribLocation(vtxAttrib: GX.VertexAttribute) {
         switch (vtxAttrib) {
         case GX.VertexAttribute.POS:
-            return this.positionLocation;
+            return this.a_position;
         }
         return null;
-    }
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-
-        this.positionLocation = gl.getAttribLocation(prog, "a_position");
     }
 }
 
@@ -79,47 +69,47 @@ class Command_Shape {
     public bmd: BMD.BMD;
     public shape: BMD.Shape;
     public buffer: WebGLBuffer;
+    public vao: WebGLVertexArrayObject;
+
     constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD, shape: BMD.Shape) {
         this.bmd = bmd;
         this.shape = shape;
+        this.vao = gl.createVertexArray();
+        gl.bindVertexArray(this.vao);
+
         this.buffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
         gl.bufferData(gl.ARRAY_BUFFER, this.shape.packedData, gl.STATIC_DRAW);
-        console.log(new Uint8Array(this.shape.packedData));
-    }
-    public exec(state: Viewer.RenderState) {
-        const gl = state.gl;
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
 
-        const program: BlackProgram = (<BlackProgram> state.currentProgram);
-
-        // Set up vertex attributes.
         for (const attrib of this.shape.packedVertexAttributes) {
-            const attribLocation = program.getAttribLocation(attrib.vtxAttrib);
+            const vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
+
+            const attribLocation = BlackProgram.getAttribLocation(attrib.vtxAttrib);
             if (attribLocation === null) continue; // XXX(jstpierre)
             gl.enableVertexAttribArray(attribLocation);
 
-            const vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
             gl.vertexAttribPointer(
                 attribLocation,
-                vertexArray.compSize,
+                vertexArray.compCount,
                 translateCompType(gl, vertexArray.compType),
                 false,
                 this.shape.packedVertexSize,
                 attrib.offset,
             );
         }
+    }
+
+    public exec(state: Viewer.RenderState) {
+        const gl = state.gl;
+
+        gl.bindVertexArray(this.vao);
 
         // Do draw calls.
         for (const drawCall of this.shape.drawCalls) {
             gl.drawArrays(translatePrimType(gl, drawCall.primType), drawCall.first, drawCall.vertexCount);
         }
 
-        for (const attrib of this.shape.packedVertexAttributes) {
-            const attribLocation = program.getAttribLocation(attrib.vtxAttrib);
-            if (attribLocation === null) continue; // XXX(jstpierre)
-            gl.disableVertexAttribArray(attribLocation);
-        }
+        gl.bindVertexArray(null);
     }
 }
 
@@ -151,6 +141,7 @@ export class Scene implements Viewer.Scene {
         // Iterate through scene graph.
         this.translateSceneGraph(bmd.inf1.sceneGraph);
     }
+
     private translateSceneGraph(node: BMD.HierarchyNode) {
         switch (node.type) {
         case BMD.HierarchyType.Open:

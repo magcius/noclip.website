@@ -10,31 +10,10 @@ import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 import * as SARC from './sarc';
 
+import { be16toh, be32toh } from 'endian';
 import { assert, fetch } from 'util';
 
 type RenderFunc = (renderState: Viewer.RenderState) => void;
-
-function bswap16(m: ArrayBuffer): ArrayBuffer {
-    const a = new Uint8Array(m);
-    const o = new Uint8Array(a.byteLength);
-    for (let i = 0; i < a.byteLength; i += 2) {
-        o[i+0] = a[i+1];
-        o[i+1] = a[i+0];
-    }
-    return o.buffer;
-}
-
-function bswap32(m: ArrayBuffer): ArrayBuffer {
-    const a = new Uint8Array(m);
-    const o = new Uint8Array(a.byteLength);
-    for (let i = 0; i < a.byteLength; i += 4) {
-        o[i+0] = a[i+3];
-        o[i+1] = a[i+2];
-        o[i+2] = a[i+1];
-        o[i+3] = a[i+0];
-    }
-    return o.buffer;
-}
 
 class ProgramGambit_UBER extends Viewer.Program {
     public a0Location: WebGLUniformLocation;
@@ -162,16 +141,15 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateVertexBuffer(gl: WebGL2RenderingContext, attrib: BFRES.VtxAttrib, buffer: BFRES.BufferData): WebGLBuffer {
-        // Do bswap.
         let bufferData = buffer.data;
         switch (getAttribFormatInfo(gl, attrib.format).elemSize) {
         case 1:
             break;
         case 2:
-            bufferData = bswap16(buffer.data);
+            bufferData = be16toh(buffer.data);
             break;
         case 4:
-            bufferData = bswap32(buffer.data);
+            bufferData = be32toh(buffer.data);
             break;
         default:
             throw new Error(`Unsupported vertex format ${attrib}`);
@@ -392,10 +370,10 @@ export class Scene implements Viewer.Scene {
             out = indexBufferData;
             break;
         case GX2IndexFormat.U16:
-            out = bswap16(indexBufferData);
+            out = be16toh(indexBufferData);
             break;
         case GX2IndexFormat.U32:
-            out = bswap32(indexBufferData);
+            out = be32toh(indexBufferData);
             break;
         }
 

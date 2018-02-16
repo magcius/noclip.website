@@ -1,12 +1,12 @@
 
 // GX constants. Mostly taken from libogc.
 
-export enum PrimitiveType {
+export const enum PrimitiveType {
     TRIANGLESTRIP = 0x98,
     TRIANGLEFAN = 0xA0,
 }
 
-export enum VertexAttribute {
+export const enum VertexAttribute {
     PTMTXIDX = 0,
     TEX0MTXIDX = 1,
     TEX1MTXIDX = 2,
@@ -31,7 +31,7 @@ export enum VertexAttribute {
     NULL = 0xFF,
 }
 
-export enum CompCnt {
+export const enum CompCnt {
     POS_XY = 0,
     POS_XYZ = 1,
     CLR_RGB = 0,
@@ -40,7 +40,7 @@ export enum CompCnt {
     TEX_ST = 1,
 }
 
-export enum CompType {
+export const enum CompType {
     U8 = 0,
     S8 = 1,
     U16 = 2,
@@ -49,7 +49,7 @@ export enum CompType {
     RGBA8 = 5,
 }
 
-export enum CompareType {
+export const enum CompareType {
     NEVER = 0,
     LESS = 1,
     EQUAL = 2,
@@ -60,21 +60,21 @@ export enum CompareType {
     ALWAYS = 7,
 }
 
-export enum AlphaOp {
+export const enum AlphaOp {
     AND = 0,
     OR = 1,
     XOR = 2,
     XNOR = 3,
 }
 
-export enum CullMode {
+export const enum CullMode {
     NONE = 0, /*!< Do not cull any primitives. */
     FRONT = 1, /*!< Cull front-facing primitives. */
     BACK = 2, /*!< Cull back-facing primitives. */
     ALL = 3, /*!< Cull all primitives. */
 }
 
-export enum BlendMode {
+export const enum BlendMode {
     ZERO = 0, /*!< 0.0 */
     ONE = 1, /*!< 1.0 */
     SRCCLR = 2, /*!< source color */
@@ -85,7 +85,7 @@ export enum BlendMode {
     INVDSTALPHA = 7, /*!< 1.0 - (FB alpha) */
 }
 
-export enum TevOp {
+export const enum TevOp {
     ADD = 0,
     SUB = 1,
     COMP_R8_GT = 8,
@@ -98,20 +98,20 @@ export enum TevOp {
     COMP_RGB8_EQ = 15,
 }
 
-export enum TevBias {
+export const enum TevBias {
     ZERO = 0,
     ADDHALF = 1,
     SUBHALF = 2,
 }
 
-export enum TevScale {
+export const enum TevScale {
     SCALE_1 = 0,
     SCALE_2 = 1,
     SCALE_4 = 2,
     DIVIDE_2 = 3,
 }
 
-export enum CombineColorInput {
+export const enum CombineColorInput {
     CPREV = 0, /*!< Use the color value from previous TEV stage */
     APREV = 1, /*!< Use the alpha value from previous TEV stage */
     C0 = 2, /*!< Use the color value from the color/output register 0 */
@@ -130,7 +130,7 @@ export enum CombineColorInput {
     ZERO = 15, /*!< Use to pass zero value */
 }
 
-export enum CombineAlphaInput {
+export const enum CombineAlphaInput {
     APREV = 0, /*!< Use the alpha value from previous TEV stage */
     A0 = 1, /*!< Use the alpha value from the color/output register 0 */
     A1 = 2, /*!< Use the alpha value from the color/output register 1 */
@@ -141,7 +141,7 @@ export enum CombineAlphaInput {
     ZERO = 7, /*!< Use to pass zero value */
 }
 
-export enum KonstColorSel {
+export const enum KonstColorSel {
     KCSEL_1 = 0x00, /*!< constant 1.0 */
     KCSEL_7_8 = 0x01, /*!< constant 7/8 */
     KCSEL_3_4 = 0x02, /*!< constant 3/4 */
@@ -172,7 +172,7 @@ export enum KonstColorSel {
     KCSEL_K3_A = 0x1F, /*!< K3[AAA] register */
 }
 
-export enum KonstAlphaSel {
+export const enum KonstAlphaSel {
     KASEL_1 = 0x00, /*!< constant 1.0 */
     KASEL_7_8 = 0x01, /*!< constant 7/8 */
     KASEL_3_4 = 0x02, /*!< constant 3/4 */
@@ -199,7 +199,7 @@ export enum KonstAlphaSel {
     KASEL_K3_A = 0x1F, /*!< K3[A] register */
 }
 
-export enum TexFormat {
+export const enum TexFormat {
     I4 = 0x0,
     I8 = 0x1,
     IA4 = 0x2,
@@ -213,13 +213,13 @@ export enum TexFormat {
     CMPR = 0xE, /*!< Compressed */
 }
 
-export enum TexPalette {
+export const enum TexPalette {
     IA8 = 0x00,
     RGB565 = 0x01,
     RGB5A3 = 0x02,
 }
 
-export enum TexFilter {
+export const enum TexFilter {
     NEAR = 0, /*!< Point sampling, no mipmap */
     LINEAR = 1, /*!< Bilinear filtering, no mipmap */
     NEAR_MIP_NEAR = 2, /*!< Point sampling, discrete mipmap */
@@ -228,18 +228,18 @@ export enum TexFilter {
     LIN_MIP_LIN = 5, /*!< Trilinear filtering */
 }
 
-export enum WrapMode {
+export const enum WrapMode {
     CLAMP = 0,
     REPEAT = 1,
     MIRROR = 2,
 }
 
-export enum ColorSrc {
+export const enum ColorSrc {
     REG = 0,
     VTX = 1,
 }
 
-export enum TexGenSrc {
+export const enum TexGenSrc {
     POS = 0,
     NRM = 1,
     BINRM = 2,
@@ -254,7 +254,7 @@ export enum TexGenSrc {
     TEX7 = 11,
 }
 
-export enum TexGenType {
+export const enum TexGenType {
     MTX3x4 = 0,
     MTX2x4 = 1,
     BUMP0 = 2,
@@ -268,7 +268,7 @@ export enum TexGenType {
     SRTG = 10,
 }
 
-export enum TexGenMatrix {
+export const enum TexGenMatrix {
     IDENTITY = 60,
     TEXMTX0 = 30,
     TEXMTX1 = 33,
