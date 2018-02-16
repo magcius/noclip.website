@@ -139,9 +139,12 @@ class SceneGraph {
 
     constructor(viewport: Viewport) {
         this.renderState = new RenderState(viewport);
+        this.reset();
+    }
 
+    public reset() {
         const gl = this.renderState.viewport.gl;
-
+        gl.activeTexture(gl.TEXTURE0);
         gl.clearColor(0.88, 0.88, 0.88, 1);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
@@ -423,6 +426,7 @@ export class Viewer {
         mat4.identity(this.camera);
     }
     public setScene(scene: Scene) {
+        this.sceneGraph.reset();
         this.sceneGraph.setScenes([scene]);
         this.cameraController = new scene.cameraController();
         this.resetCamera();
