@@ -11,45 +11,43 @@ class OoT3D_Program extends Viewer.Program {
     public posScaleLocation: WebGLUniformLocation;
     public uvScaleLocation: WebGLUniformLocation;
     public alphaTestLocation: WebGLUniformLocation;
-
-    public static a_position = 0;
-    public static a_color = 1;
-    public static a_uv = 2;
+    public positionLocation: number;
+    public colorLocation: number;
+    public uvLocation: number;
 
     public vert = `
-precision mediump float;
+    precision mediump float;
+    uniform mat4 u_modelView;
+    uniform mat4 u_localMatrix;
+    uniform mat4 u_projection;
+    uniform float u_posScale;
+    uniform float u_uvScale;
+    attribute vec3 a_position;
+    attribute vec2 a_uv;
+    attribute vec4 a_color;
+    varying vec4 v_color;
+    varying vec2 v_uv;
 
-uniform mat4 u_modelView;
-uniform mat4 u_localMatrix;
-uniform mat4 u_projection;
-uniform float u_posScale;
-uniform float u_uvScale;
-layout(location = ${OoT3D_Program.a_position}) in vec3 a_position;
-layout(location = ${OoT3D_Program.a_uv}) in vec2 a_uv;
-layout(location = ${OoT3D_Program.a_color}) in vec4 a_color;
-varying vec4 v_color;
-varying vec2 v_uv;
-
-void main() {
-    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;
-    v_color = a_color;
-    v_uv = a_uv * u_uvScale;
-    v_uv.t = 1.0 - v_uv.t;
-}`;
+    void main() {
+        gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;
+        v_color = a_color;
+        v_uv = a_uv * u_uvScale;
+        v_uv.t = 1.0 - v_uv.t;
+    }`;
 
     public frag = `
-precision mediump float;
-varying vec2 v_uv;
-varying vec4 v_color;
-uniform sampler2D u_texture;
-uniform bool u_alphaTest;
+    precision mediump float;
+    varying vec2 v_uv;
+    varying vec4 v_color;
+    uniform sampler2D u_texture;
+    uniform bool u_alphaTest;
 
-void main() {
-    gl_FragColor = texture2D(u_texture, v_uv);
-    gl_FragColor *= v_color;
-    if (u_alphaTest && gl_FragColor.a <= 0.8)
-        discard;
-}`;
+    void main() {
+        gl_FragColor = texture2D(u_texture, v_uv);
+        gl_FragColor *= v_color;
+        if (u_alphaTest && gl_FragColor.a <= 0.8)
+            discard;
+    }`;
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
@@ -57,6 +55,9 @@ void main() {
         this.posScaleLocation = gl.getUniformLocation(prog, "u_posScale");
         this.uvScaleLocation = gl.getUniformLocation(prog, "u_uvScale");
         this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
+        this.positionLocation = gl.getAttribLocation(prog, "a_position");
+        this.colorLocation = gl.getAttribLocation(prog, "a_color");
+        this.uvLocation = gl.getAttribLocation(prog, "a_uv");
     }
 }
 
@@ -133,32 +134,29 @@ class Scene implements Viewer.Scene {
     }
 
     private translateSepd(gl: WebGL2RenderingContext, cmbContext: any, sepd: CMB.Sepd) {
-        const vao = gl.createVertexArray();
-        gl.bindVertexArray(vao);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_position, 3, this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_color, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_uv, 2, this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
-
-        gl.enableVertexAttribArray(OoT3D_Program.a_position);
-        gl.enableVertexAttribArray(OoT3D_Program.a_color);
-        gl.enableVertexAttribArray(OoT3D_Program.a_uv);
-
-        gl.bindVertexArray(null);
-
         return () => {
             gl.uniform1f(this.program.uvScaleLocation, sepd.txcScale);
             gl.uniform1f(this.program.posScaleLocation, sepd.posScale);
 
-            gl.bindVertexArray(vao);
+            gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
+            gl.vertexAttribPointer(this.program.positionLocation, 3, this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
+            gl.vertexAttribPointer(this.program.colorLocation, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
+            gl.vertexAttribPointer(this.program.uvLocation, 2, this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
+
+            gl.enableVertexAttribArray(this.program.positionLocation);
+            gl.enableVertexAttribArray(this.program.colorLocation);
+            gl.enableVertexAttribArray(this.program.uvLocation);
 
             for (const prm of sepd.prms)
                 gl.drawElements(gl.TRIANGLES, prm.count, this.translateDataType(gl, prm.indexType), prm.offset * this.dataTypeSize(prm.indexType));
+
+            gl.disableVertexAttribArray(this.program.positionLocation);
+            gl.disableVertexAttribArray(this.program.colorLocation);
+            gl.disableVertexAttribArray(this.program.uvLocation);
         };
     }
 

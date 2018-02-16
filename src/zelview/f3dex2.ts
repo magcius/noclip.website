@@ -156,13 +156,16 @@ function translateTRI(state: State, idxData: Uint8Array) {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-        gl.vertexAttribPointer(Render.F3DEX2Program.a_position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-        gl.vertexAttribPointer(Render.F3DEX2Program.a_uv, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-        gl.vertexAttribPointer(Render.F3DEX2Program.a_color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
-        gl.enableVertexAttribArray(Render.F3DEX2Program.a_position);
-        gl.enableVertexAttribArray(Render.F3DEX2Program.a_color);
-        gl.enableVertexAttribArray(Render.F3DEX2Program.a_uv);
+        gl.vertexAttribPointer(prog.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+        gl.vertexAttribPointer(prog.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+        gl.vertexAttribPointer(prog.colorLocation, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
+        gl.enableVertexAttribArray(prog.positionLocation);
+        gl.enableVertexAttribArray(prog.colorLocation);
+        gl.enableVertexAttribArray(prog.uvLocation);
         gl.drawElements(gl.TRIANGLES, nPrim, gl.UNSIGNED_BYTE, 0);
+        gl.disableVertexAttribArray(prog.positionLocation);
+        gl.disableVertexAttribArray(prog.uvLocation);
+        gl.disableVertexAttribArray(prog.colorLocation);
     };
 }
 
