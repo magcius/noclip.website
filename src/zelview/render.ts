@@ -7,12 +7,12 @@ import { fetch } from 'util';
 export type RenderFunc = (renderState: Viewer.RenderState) => void;
 
 class BillboardBGProgram extends Viewer.Program {
-    public positionLocation: number;
-    public uvLocation: number;
+    public static a_position = 0;
+    public static a_uv = 1;
 
     public vert = `
-attribute vec3 a_position;
-attribute vec2 a_uv;
+layout(location = ${BillboardBGProgram.a_position}) in vec3 a_position;
+layout(location = ${BillboardBGProgram.a_uv}) in vec2 a_uv;
 varying vec2 v_uv;
 
 void main() {
@@ -29,29 +29,22 @@ void main() {
     gl_FragColor = texture2D(u_texture, v_uv);
 }
 `;
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-
-        this.positionLocation = gl.getAttribLocation(prog, "a_position");
-        this.uvLocation = gl.getAttribLocation(prog, "a_uv");
-    }
 }
 
 export class F3DEX2Program extends Viewer.Program {
     public txsLocation: WebGLUniformLocation;
     public useVertexColorsLocation: WebGLUniformLocation;
     public alphaTestLocation: WebGLUniformLocation;
-    public positionLocation: number;
-    public uvLocation: number;
-    public colorLocation: number;
+    public static a_position = 0;
+    public static a_uv = 1;
+    public static a_color = 2;
 
     public vert = `
 uniform mat4 u_modelView;
 uniform mat4 u_projection;
-attribute vec3 a_position;
-attribute vec2 a_uv;
-attribute vec4 a_color;
+layout(location = ${F3DEX2Program.a_position}) in vec3 a_position;
+layout(location = ${F3DEX2Program.a_uv}) in vec2 a_uv;
+layout(location = ${F3DEX2Program.a_color}) in vec4 a_color;
 varying vec4 v_color;
 varying vec2 v_uv;
 uniform vec2 u_txs;
@@ -86,19 +79,16 @@ void main() {
         this.txsLocation = gl.getUniformLocation(prog, "u_txs");
         this.useVertexColorsLocation = gl.getUniformLocation(prog, "u_useVertexColors");
         this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
-        this.positionLocation = gl.getAttribLocation(prog, "a_position");
-        this.colorLocation = gl.getAttribLocation(prog, "a_color");
-        this.uvLocation = gl.getAttribLocation(prog, "a_uv");
     }
 }
 
 class CollisionProgram extends Viewer.Program {
-    public positionLocation: number;
+    public static a_position = 0;
 
     public vert = `
 uniform mat4 u_modelView;
 uniform mat4 u_projection;
-attribute vec3 a_position;
+layout(location = ${CollisionProgram.a_position}) in vec3 a_position;
 
 void main() {
     gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);
@@ -112,21 +102,15 @@ void main() {
     gl_FragDepthEXT = gl_FragCoord.z - 1e-6;
 }
 `;
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-
-        this.positionLocation = gl.getAttribLocation(prog, "a_position");
-    }
 }
 
 class WaterboxProgram extends Viewer.Program {
-    public positionLocation: number;
+    public static a_position = 0;
 
     public vert = `
 uniform mat4 u_modelView;
 uniform mat4 u_projection;
-attribute vec3 a_position;
+layout(location = ${WaterboxProgram.a_position} in vec3 a_position;
 
 void main() {
     gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);
@@ -137,12 +121,6 @@ void main() {
     gl_FragColor = vec4(0.2, 0.6, 1.0, 0.2);
 }
 `;
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-
-        this.positionLocation = gl.getAttribLocation(prog, "a_position");
-    }
 }
 
 class Scene implements Viewer.Scene {
@@ -225,6 +203,10 @@ class Scene implements Viewer.Scene {
             }
             return lines;
         }
+
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+
         const collIdxBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, collIdxBuffer);
         const lineData = stitchLines(coll.polys);
@@ -235,22 +217,26 @@ class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, coll.verts, gl.STATIC_DRAW);
 
+        gl.vertexAttribPointer(CollisionProgram.a_position, 3, gl.SHORT, false, 0, 0);
+        gl.enableVertexAttribArray(CollisionProgram.a_position);
+
+        gl.bindVertexArray(null);
+
         return (state: Viewer.RenderState) => {
             const prog = this.program_COLL;
             state.useProgram(prog);
             gl.enable(gl.BLEND);
+            gl.bindVertexArray(vao);
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, collIdxBuffer);
-            gl.vertexAttribPointer(prog.positionLocation, 3, gl.SHORT, false, 0, 0);
-            gl.enableVertexAttribArray(prog.positionLocation);
             gl.drawElements(gl.LINES, nLinePrim, gl.UNSIGNED_SHORT, 0);
-            gl.disableVertexAttribArray(prog.positionLocation);
         };
     }
 
     private translateWaterBoxes(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
         const coll = scene.collision;
+
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
 
         const wbVtx = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, wbVtx);
@@ -262,17 +248,18 @@ class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
 
+        gl.vertexAttribPointer(WaterboxProgram.a_position, 3, gl.SHORT, false, 0, 0);
+        gl.enableVertexAttribArray(WaterboxProgram.a_position);
+
+        gl.bindVertexArray(null);
+
         return (state: Viewer.RenderState) => {
             const prog = this.program_WATERS;
             state.useProgram(prog);
             gl.disable(gl.CULL_FACE);
-            gl.bindBuffer(gl.ARRAY_BUFFER, wbVtx);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
-            gl.vertexAttribPointer(prog.positionLocation, 3, gl.SHORT, false, 0, 0);
-            gl.enableVertexAttribArray(prog.positionLocation);
+            gl.bindVertexArray(vao);
             for (let i = 0; i < wbIdxData.length; i += 4)
                 gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_SHORT, i * 2);
-            gl.disableVertexAttribArray(prog.positionLocation);
             gl.disable(gl.BLEND);
         };
     }
