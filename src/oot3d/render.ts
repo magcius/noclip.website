@@ -4,6 +4,7 @@ import * as ZSI from './zsi';
 
 import * as Viewer from 'viewer';
 
+import { Progressable } from 'progress';
 import { fetch } from 'util';
 import { RenderState } from 'viewer';
 
@@ -318,16 +319,16 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): PromiseLike<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             return this._createSceneFromData(gl, result);
         });
     }
 
-    private _createSceneFromData(gl: WebGL2RenderingContext, result: ArrayBuffer): PromiseLike<Viewer.Scene> {
+    private _createSceneFromData(gl: WebGL2RenderingContext, result: ArrayBuffer): Progressable<Viewer.Scene> {
         const zsi = ZSI.parse(result);
         if (zsi.mesh) {
-            return Promise.resolve(new Scene(gl, zsi));
+            return new Progressable(Promise.resolve(new Scene(gl, zsi)));
         } else if (zsi.rooms) {
             const basePath = dirname(this.path);
             const roomFilenames = zsi.rooms.map((romPath) => {
@@ -335,9 +336,9 @@ export class SceneDesc implements Viewer.SceneDesc {
                 return basePath + '/' + filename;
             });
 
-            return Promise.all(roomFilenames.map((filename) => {
+            return Progressable.all(roomFilenames.map((filename) => {
                 return fetch(filename).then((roomResult) => this._createSceneFromData(gl, roomResult));
-            })).then((scenes) => {
+            })).then((scenes: Viewer.Scene[]) => {
                 return new MultiScene(scenes);
             });
         } else {

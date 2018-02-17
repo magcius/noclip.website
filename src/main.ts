@@ -8,6 +8,52 @@ import * as OOT3D from 'oot3d/scenes';
 import * as SM64DS from 'sm64ds/scenes';
 import * as ZELVIEW from 'zelview/scenes';
 
+import { Progressable } from './progress';
+
+class ProgressBar {
+    public elem: HTMLElement;
+
+    private toplevel: HTMLDivElement;
+    private barFill: HTMLDivElement;
+    private progressable: Progressable<Scene>;
+
+    constructor() {
+        this.toplevel = document.createElement('div');
+        this.toplevel.style.border = '1px solid black';
+
+        this.barFill = document.createElement('div');
+        this.barFill.style.backgroundColor = 'black';
+
+        this.toplevel.appendChild(this.barFill);
+        this.elem = this.toplevel;
+        this.progressable = null;
+
+        this.sync();
+    }
+
+    public sync() {
+        if (this.progressable) {
+            this.toplevel.style.visibility = '';
+            this.barFill.style.width = (this.progressable.progress * 100) + '%';
+            console.log(this.progressable);
+        } else {
+            this.toplevel.style.visibility = 'hidden';
+        }
+    }
+
+    set(p: Progressable<Scene>) {
+        if (this.progressable)
+            this.progressable.onProgress = null;
+
+        this.progressable = p;
+
+        if (this.progressable)
+            this.progressable.onProgress = this.sync.bind(this);
+
+        this.sync();
+    }
+}
+
 class Main {
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
@@ -20,6 +66,7 @@ class Main {
     private texturesView: HTMLElement;
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
+    private progressBar: ProgressBar;
 
     constructor() {
         this.canvas = document.createElement('canvas');
@@ -92,7 +139,12 @@ class Main {
 
         const gl = this.viewer.sceneGraph.renderState.viewport.gl;
 
-        sceneDesc.createScene(gl).then((result: Scene) => {
+        const progressable = sceneDesc.createScene(gl);
+        this.viewer.setScene(null);
+        this.progressBar.set(progressable);
+
+        progressable.promise.then((result: Scene) => {
+            this.progressBar.set(null);
             this.viewer.setScene(result);
 
             // XXX: Provide a UI for textures eventually?
@@ -165,6 +217,17 @@ class Main {
     private _makeUI() {
         this.uiContainers = document.createElement('div');
         document.body.appendChild(this.uiContainers);
+
+        const progressBarContainer = document.createElement('div');
+        progressBarContainer.style.position = 'absolute';
+        progressBarContainer.style.left = '100px';
+        progressBarContainer.style.right = '100px';
+        progressBarContainer.style.top = '50%';
+        progressBarContainer.style.marginTop = '-20px';
+
+        this.progressBar = new ProgressBar();
+        this.progressBar.elem.style.height = '40px';
+        progressBarContainer.appendChild(this.progressBar.elem);
 
         const uiContainerL = document.createElement('div');
         uiContainerL.style.position = 'absolute';

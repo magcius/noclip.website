@@ -8,6 +8,7 @@ import * as LZ77 from './lz77';
 import * as NITRO_BMD from './nitro_bmd';
 import * as NITRO_GX from './nitro_gx';
 
+import { Progressable } from 'progress';
 import { fetch } from 'util';
 
 class NITRO_Program extends Viewer.Program {
@@ -320,7 +321,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = '' + this.levelId;
     }
 
-    public createScene(gl: WebGL2RenderingContext): PromiseLike<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
         return fetch('data/sm64ds/sm64ds.crg0').then((result: ArrayBuffer) => {
             const crg0 = CRG0.parse(result);
             return this._createSceneFromCRG0(gl, crg0);
