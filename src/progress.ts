@@ -47,3 +47,25 @@ function avg(L: number[]) {
     s /= L.length;
     return s;
 }
+
+function setTimeoutProgressable(n: number): Progressable<number> {
+    const p = new Promise<number>((resolve, reject) => {
+        setTimeout(() => {
+            resolve(n);
+        }, n);
+    });
+
+    const pr = new Progressable(p);
+
+    const start = +(new Date());
+    function tick() {
+        const ms = +(new Date());
+        const t = (ms - start) / n;
+        pr.setProgress(t);
+        if (t < 1)
+            window.requestAnimationFrame(tick);
+    }
+    tick();
+
+    return pr;
+}
