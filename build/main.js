@@ -239,6 +239,24 @@ System.register("progress", [], function (exports_3, context_3) {
         s /= L.length;
         return s;
     }
+    function setTimeoutProgressable(n) {
+        var p = new Promise(function (resolve, reject) {
+            setTimeout(function () {
+                resolve(n);
+            }, n);
+        });
+        var pr = new Progressable(p);
+        var start = +(new Date());
+        function tick() {
+            var ms = +(new Date());
+            var t = (ms - start) / n;
+            pr.setProgress(t);
+            if (t < 1)
+                window.requestAnimationFrame(tick);
+        }
+        tick();
+        return pr;
+    }
     var Progressable;
     return {
         setters: [],
@@ -8111,6 +8129,7 @@ System.register("main", ["viewer", "fres/scenes", "mdl0/scenes", "oot3d/scenes",
                     this.toplevel.style.border = '1px solid black';
                     this.barFill = document.createElement('div');
                     this.barFill.style.backgroundColor = 'black';
+                    this.barFill.style.height = '100%';
                     this.toplevel.appendChild(this.barFill);
                     this.elem = this.toplevel;
                     this.progressable = null;
@@ -8283,6 +8302,7 @@ System.register("main", ["viewer", "fres/scenes", "mdl0/scenes", "oot3d/scenes",
                     this.progressBar = new ProgressBar();
                     this.progressBar.elem.style.height = '40px';
                     progressBarContainer.appendChild(this.progressBar.elem);
+                    this.uiContainers.appendChild(progressBarContainer);
                     var uiContainerL = document.createElement('div');
                     uiContainerL.style.position = 'absolute';
                     uiContainerL.style.left = '2em';

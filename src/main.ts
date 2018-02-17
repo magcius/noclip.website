@@ -23,6 +23,7 @@ class ProgressBar {
 
         this.barFill = document.createElement('div');
         this.barFill.style.backgroundColor = 'black';
+        this.barFill.style.height = '100%';
 
         this.toplevel.appendChild(this.barFill);
         this.elem = this.toplevel;
@@ -227,6 +228,7 @@ class Main {
         this.progressBar = new ProgressBar();
         this.progressBar.elem.style.height = '40px';
         progressBarContainer.appendChild(this.progressBar.elem);
+        this.uiContainers.appendChild(progressBarContainer);
 
         const uiContainerL = document.createElement('div');
         uiContainerL.style.position = 'absolute';
