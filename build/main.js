@@ -341,7 +341,7 @@ System.register("viewer", ["gl-matrix"], function (exports_4, context_4) {
     function clampRange(v, lim) {
         return clamp(v, -lim, lim);
     }
-    var gl_matrix_1, Viewport, Program, RenderState, SceneGraph, InputManager, FPSCameraController, OrbitCameraController, Viewer;
+    var gl_matrix_1, Viewport, Program, RenderFlags, RenderState, SceneGraph, InputManager, FPSCameraController, OrbitCameraController, Viewer;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -394,9 +394,74 @@ System.register("viewer", ["gl-matrix"], function (exports_4, context_4) {
                 return Program;
             }());
             exports_4("Program", Program);
+            RenderFlags = /** @class */ (function () {
+                function RenderFlags() {
+                    this.depthWrite = undefined;
+                    this.depthTest = undefined;
+                    this.blend = undefined;
+                    this.cullMode = undefined;
+                    this.frontFace = undefined;
+                }
+                RenderFlags.flatten = function (dst, src) {
+                    if (dst.depthWrite === undefined)
+                        dst.depthWrite = src.depthWrite;
+                    if (dst.depthTest === undefined)
+                        dst.depthTest = src.depthTest;
+                    if (dst.blend === undefined)
+                        dst.blend = src.blend;
+                    if (dst.cullMode === undefined)
+                        dst.cullMode = src.cullMode;
+                    if (dst.frontFace === undefined)
+                        dst.frontFace = src.frontFace;
+                };
+                RenderFlags.apply = function (gl, oldFlags, newFlags) {
+                    if (oldFlags.depthWrite !== newFlags.depthWrite) {
+                        gl.depthMask(newFlags.depthWrite);
+                    }
+                    if (oldFlags.depthTest !== newFlags.depthTest) {
+                        if (newFlags.depthTest)
+                            gl.enable(gl.DEPTH_TEST);
+                        else
+                            gl.disable(gl.DEPTH_TEST);
+                    }
+                    if (oldFlags.blend !== newFlags.blend) {
+                        if (newFlags.blend)
+                            gl.enable(gl.BLEND);
+                        else
+                            gl.disable(gl.BLEND);
+                    }
+                    if (oldFlags.cullMode !== newFlags.cullMode) {
+                        if (oldFlags.cullMode === 0 /* NONE */)
+                            gl.enable(gl.CULL_FACE);
+                        else if (newFlags.cullMode === 0 /* NONE */)
+                            gl.disable(gl.CULL_FACE);
+                        if (newFlags.cullMode === 2 /* BACK */)
+                            gl.cullFace(gl.BACK);
+                        else if (newFlags.cullMode === 1 /* FRONT */)
+                            gl.cullFace(gl.FRONT);
+                        else if (newFlags.cullMode === 3 /* FRONT_AND_BACK */)
+                            gl.cullFace(gl.FRONT_AND_BACK);
+                    }
+                    if (oldFlags.frontFace !== newFlags.frontFace) {
+                        if (newFlags.frontFace === 0 /* CCW */)
+                            gl.frontFace(gl.CCW);
+                        else if (newFlags.frontFace === 1 /* CW */)
+                            gl.frontFace(gl.CW);
+                    }
+                };
+                RenderFlags.default = new RenderFlags();
+                return RenderFlags;
+            }());
+            exports_4("RenderFlags", RenderFlags);
+            RenderFlags.default.blend = false;
+            RenderFlags.default.cullMode = 0 /* NONE */;
+            RenderFlags.default.depthTest = false;
+            RenderFlags.default.depthWrite = false;
+            RenderFlags.default.frontFace = 0 /* CCW */;
             RenderState = /** @class */ (function () {
                 function RenderState(viewport) {
                     this.currentProgram = null;
+                    this.currentFlags = RenderFlags.default;
                     this.viewport = viewport;
                     this.gl = this.viewport.gl;
                     this.time = 0;
@@ -414,6 +479,13 @@ System.register("viewer", ["gl-matrix"], function (exports_4, context_4) {
                     gl.useProgram(prog.compile(gl));
                     gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
                     gl.uniformMatrix4fv(prog.modelViewLocation, false, this.modelView);
+                };
+                RenderState.prototype.useFlags = function (flags) {
+                    var gl = this.viewport.gl;
+                    // TODO(jstpierre): Move the flattening to a stack, possibly?
+                    RenderFlags.flatten(flags, this.currentFlags);
+                    RenderFlags.apply(gl, this.currentFlags, flags);
+                    this.currentFlags = flags;
                 };
                 return RenderState;
             }());
@@ -433,8 +505,8 @@ System.register("viewer", ["gl-matrix"], function (exports_4, context_4) {
                 SceneGraph.prototype.render = function () {
                     var _this = this;
                     var gl = this.renderState.viewport.gl;
-                    gl.depthMask(true);
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+                    this.renderState.useFlags(RenderFlags.default);
                     this.scenes.forEach(function (scene) { return scene.render(_this.renderState); });
                 };
                 SceneGraph.prototype.checkResize = function () {
@@ -3700,16 +3772,17 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (export
                 function FancyGrid(gl) {
                     this.program = new FancyGrid_Program();
                     this._createBuffers(gl);
+                    this.renderFlags = new Viewer.RenderFlags();
+                    this.renderFlags.blend = true;
                 }
                 FancyGrid.prototype.render = function (state) {
                     var gl = state.viewport.gl;
                     state.useProgram(this.program);
+                    state.useFlags(this.renderFlags);
                     gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
                     gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, 0, 0);
                     gl.enableVertexAttribArray(this.program.positionLocation);
-                    gl.enable(gl.BLEND);
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                    gl.disable(gl.BLEND);
                 };
                 FancyGrid.prototype._createBuffers = function (gl) {
                     this.vtxBuffer = gl.createBuffer();
@@ -3754,11 +3827,13 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "util"], function (export
                     this.program = new MDL0_Program();
                     this.mdl0 = mdl0;
                     this._createBuffers(gl);
+                    this.renderFlags = new Viewer.RenderFlags();
+                    this.renderFlags.depthTest = true;
                 }
                 Scene.prototype.render = function (state) {
                     var gl = state.viewport.gl;
                     state.useProgram(this.program);
-                    gl.enable(gl.DEPTH_TEST);
+                    state.useFlags(this.renderFlags);
                     gl.bindBuffer(gl.ARRAY_BUFFER, this.clrBuffer);
                     gl.vertexAttribPointer(this.program.colorLocation, 4, gl.UNSIGNED_BYTE, true, 0, 0);
                     gl.enableVertexAttribArray(this.program.colorLocation);
@@ -4586,9 +4661,6 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                 Scene.prototype.render = function (state) {
                     var gl = state.viewport.gl;
                     state.useProgram(this.program);
-                    gl.enable(gl.DEPTH_TEST);
-                    gl.enable(gl.BLEND);
-                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
                     this.model(state);
                 };
                 Scene.prototype.translateDataType = function (gl, dataType) {
@@ -4754,10 +4826,12 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                 Scene.prototype.translateModel = function (gl, mesh) {
                     var opaque = this.translateCmb(gl, mesh.opaque);
                     var transparent = this.translateCmb(gl, mesh.transparent);
+                    var renderFlags = new Viewer.RenderFlags();
+                    renderFlags.blend = true;
+                    renderFlags.depthTest = true;
+                    renderFlags.cullMode = 2 /* BACK */;
                     return function (state) {
-                        // Backface cull.
-                        gl.enable(gl.CULL_FACE);
-                        gl.cullFace(gl.BACK);
+                        state.useFlags(renderFlags);
                         opaque();
                         transparent();
                     };
@@ -5877,6 +5951,20 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                         funcs.forEach(function (f) { f(state, pass); });
                     };
                 };
+                Scene.prototype.translateCullMode = function (renderWhichFaces) {
+                    switch (renderWhichFaces) {
+                        case 0x00:// Render Nothing
+                            return 3 /* FRONT_AND_BACK */;
+                        case 0x01:// Render Back
+                            return 1 /* FRONT */;
+                        case 0x02:// Render Front
+                            return 2 /* BACK */;
+                        case 0x03:// Render Front and Back
+                            return 0 /* NONE */;
+                        default:
+                            throw new Error("Unknown renderWhichFaces");
+                    }
+                };
                 Scene.prototype.translateMaterial = function (gl, material) {
                     var _this = this;
                     var texture = material.texture;
@@ -5905,6 +5993,11 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                     var crg0mat = this.crg0Level.materials.find(function (c) { return c.name === material.name; });
                     var texCoordMat = gl_matrix_4.mat3.create();
                     gl_matrix_4.mat3.fromMat2d(texCoordMat, material.texCoordMat);
+                    var renderFlags = new Viewer.RenderFlags();
+                    renderFlags.blend = true;
+                    renderFlags.depthTest = true;
+                    renderFlags.depthWrite = material.depthWrite;
+                    renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
                     return function (state) {
                         if (crg0mat !== undefined) {
                             var texAnimMat = gl_matrix_4.mat3.create();
@@ -5937,24 +6030,7 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                             gl.uniformMatrix3fv(_this.program.texCoordMatLocation, false, texCoordMat);
                             gl.bindTexture(gl.TEXTURE_2D, texId);
                         }
-                        gl.depthMask(material.depthWrite);
-                        switch (material.renderWhichFaces) {
-                            case 0x00:// Render Nothing
-                                gl.enable(gl.CULL_FACE);
-                                gl.cullFace(gl.FRONT_AND_BACK);
-                                break;
-                            case 0x01:// Render Back
-                                gl.enable(gl.CULL_FACE);
-                                gl.cullFace(gl.FRONT);
-                                break;
-                            case 0x02:// Render Front
-                                gl.enable(gl.CULL_FACE);
-                                gl.cullFace(gl.BACK);
-                                break;
-                            case 0x03:// Render Front and Back
-                                gl.disable(gl.CULL_FACE);
-                                break;
-                        }
+                        state.useFlags(renderFlags);
                         var e_21, _c;
                     };
                 };
@@ -5998,9 +6074,6 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                 Scene.prototype.render = function (state) {
                     var gl = state.viewport.gl;
                     state.useProgram(this.program);
-                    gl.enable(gl.DEPTH_TEST);
-                    gl.enable(gl.BLEND);
-                    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
                     // First pass, opaque.
                     this.renderModels(state, RenderPass.OPAQUE);
                     // Second pass, translucent.
@@ -6147,17 +6220,409 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_34, contex
         }
     };
 });
-System.register("zelview/f3dex2", ["gl-matrix"], function (exports_35, context_35) {
+System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (exports_35, context_35) {
     "use strict";
     var __moduleName = context_35 && context_35.id;
+    // Loads the ZELVIEW0 format.
+    function read0String(buffer, offs, length) {
+        var buf = new Uint8Array(buffer, offs, length);
+        var L = new Array(length);
+        for (var i = 0; i < length; i++) {
+            var elem = buf[i];
+            if (elem === 0)
+                break;
+            L.push(String.fromCharCode(elem));
+        }
+        return L.join('');
+    }
+    function readZELVIEW0(buffer) {
+        var view = new DataView(buffer);
+        var MAGIC = "ZELVIEW0";
+        if (read0String(buffer, 0, MAGIC.length) !== MAGIC)
+            throw new Error("Invalid ZELVIEW0 file");
+        var offs = 0x08;
+        var count = view.getUint8(offs);
+        offs += 0x04;
+        var mainFile = view.getUint8(offs);
+        offs += 0x04;
+        function readVFSEntry() {
+            var entry = new VFSEntry();
+            entry.filename = read0String(buffer, offs, 0x30);
+            offs += 0x30;
+            entry.pStart = view.getUint32(offs, true);
+            entry.pEnd = view.getUint32(offs + 0x04, true);
+            entry.vStart = view.getUint32(offs + 0x08, true);
+            entry.vEnd = view.getUint32(offs + 0x0C, true);
+            offs += 0x10;
+            return entry;
+        }
+        var entries = [];
+        for (var i = 0; i < count; i++)
+            entries.push(readVFSEntry());
+        var zelview0 = new ZELVIEW0();
+        zelview0.entries = entries;
+        zelview0.sceneFile = entries[mainFile];
+        zelview0.view = view;
+        return zelview0;
+    }
+    exports_35("readZELVIEW0", readZELVIEW0);
+    function readHeaders(gl, rom, offs, banks) {
+        var headers = new Headers();
+        function loadAddress(addr) {
+            return rom.loadAddress(banks, addr);
+        }
+        function readCollision(collisionAddr) {
+            var offs = rom.lookupAddress(banks, collisionAddr);
+            function readVerts(N, addr) {
+                var offs = rom.lookupAddress(banks, addr);
+                var verts = new Uint16Array(N * 3);
+                for (var i = 0; i < N; i++) {
+                    verts[i * 3 + 0] = rom.view.getInt16(offs + 0x00, false);
+                    verts[i * 3 + 1] = rom.view.getInt16(offs + 0x02, false);
+                    verts[i * 3 + 2] = rom.view.getInt16(offs + 0x04, false);
+                    offs += 0x06;
+                }
+                return verts;
+            }
+            var vertsN = rom.view.getUint16(offs + 0x0C, false);
+            var vertsAddr = rom.view.getUint32(offs + 0x10, false);
+            var verts = readVerts(vertsN, vertsAddr);
+            function readPolys(N, addr) {
+                var offs = rom.lookupAddress(banks, addr);
+                var polys = new Uint16Array(N * 3);
+                for (var i = 0; i < N; i++) {
+                    polys[i * 3 + 0] = rom.view.getUint16(offs + 0x02, false) & 0x0FFF;
+                    polys[i * 3 + 1] = rom.view.getUint16(offs + 0x04, false) & 0x0FFF;
+                    polys[i * 3 + 2] = rom.view.getUint16(offs + 0x06, false) & 0x0FFF;
+                    offs += 0x10;
+                }
+                return polys;
+            }
+            var polysN = rom.view.getUint16(offs + 0x14, false);
+            var polysAddr = rom.view.getUint32(offs + 0x18, false);
+            var polys = readPolys(polysN, polysAddr);
+            function readWaters(N, addr) {
+                // XXX: While we should probably keep the actual stuff about
+                // water boxes, I'm just drawing them, so let's just record
+                // a quad.
+                var offs = rom.lookupAddress(banks, addr);
+                var waters = new Uint16Array(N * 3 * 4);
+                for (var i = 0; i < N; i++) {
+                    var x = rom.view.getInt16(offs + 0x00, false);
+                    var y = rom.view.getInt16(offs + 0x02, false);
+                    var z = rom.view.getInt16(offs + 0x04, false);
+                    var sx = rom.view.getInt16(offs + 0x06, false);
+                    var sz = rom.view.getInt16(offs + 0x08, false);
+                    waters[i * 3 * 4 + 0] = x;
+                    waters[i * 3 * 4 + 1] = y;
+                    waters[i * 3 * 4 + 2] = z;
+                    waters[i * 3 * 4 + 3] = x + sx;
+                    waters[i * 3 * 4 + 4] = y;
+                    waters[i * 3 * 4 + 5] = z;
+                    waters[i * 3 * 4 + 6] = x;
+                    waters[i * 3 * 4 + 7] = y;
+                    waters[i * 3 * 4 + 8] = z + sz;
+                    waters[i * 3 * 4 + 9] = x + sx;
+                    waters[i * 3 * 4 + 10] = y;
+                    waters[i * 3 * 4 + 11] = z + sz;
+                    offs += 0x10;
+                }
+                return waters;
+            }
+            var watersN = rom.view.getUint16(offs + 0x24, false);
+            var watersAddr = rom.view.getUint32(offs + 0x28, false);
+            var waters = readWaters(watersN, watersAddr);
+            function readCamera(addr) {
+                var skyboxCamera = loadAddress(addr + 0x04);
+                var offs = rom.lookupAddress(banks, skyboxCamera);
+                var x = rom.view.getInt16(offs + 0x00, false);
+                var y = rom.view.getInt16(offs + 0x02, false);
+                var z = rom.view.getInt16(offs + 0x04, false);
+                var a = rom.view.getUint16(offs + 0x06, false) / 0xFFFF * (Math.PI * 2);
+                var b = rom.view.getUint16(offs + 0x08, false) / 0xFFFF * (Math.PI * 2) + Math.PI;
+                var c = rom.view.getUint16(offs + 0x0A, false) / 0xFFFF * (Math.PI * 2);
+                var d = rom.view.getUint16(offs + 0x0C, false);
+                var mtx = gl_matrix_5.mat4.create();
+                gl_matrix_5.mat4.translate(mtx, mtx, [x, y, z]);
+                gl_matrix_5.mat4.rotateZ(mtx, mtx, c);
+                gl_matrix_5.mat4.rotateY(mtx, mtx, b);
+                gl_matrix_5.mat4.rotateX(mtx, mtx, -a);
+                return mtx;
+            }
+            var cameraAddr = rom.view.getUint32(offs + 0x20, false);
+            var camera = readCamera(cameraAddr);
+            return { verts: verts, polys: polys, waters: waters, camera: camera };
+        }
+        function readRoom(file) {
+            var banks2 = Object.create(banks);
+            banks2.room = file;
+            return readHeaders(gl, rom, file.vStart, banks2);
+        }
+        function readRooms(nRooms, roomTableAddr) {
+            var rooms = [];
+            for (var i = 0; i < nRooms; i++) {
+                var pStart = loadAddress(roomTableAddr);
+                var file = rom.lookupFile(pStart);
+                var room = readRoom(file);
+                room.filename = file.filename;
+                rooms.push(room);
+                roomTableAddr += 8;
+            }
+            return rooms;
+        }
+        function loadImage(gl, src) {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            var texId = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texId);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            var img = document.createElement('img');
+            img.src = src;
+            var aspect = 1;
+            img.onload = function () {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                gl.bindTexture(gl.TEXTURE_2D, texId);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, imgData.width, imgData.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, imgData.data);
+            };
+            // XXX: Should pull this dynamically at runtime.
+            var imgWidth = 320;
+            var imgHeight = 240;
+            var imgAspect = imgWidth / imgHeight;
+            var viewportAspect = gl.viewportWidth / gl.viewportHeight;
+            var x = imgAspect / viewportAspect;
+            var vertData = new Float32Array([
+                /* x   y   z   u  v */
+                -x, -1, 0, 0, 1,
+                x, -1, 0, 1, 1,
+                -x, 1, 0, 0, 0,
+                x, 1, 0, 1, 0,
+            ]);
+            var vertBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertData, gl.STATIC_DRAW);
+            var idxData = new Uint8Array([
+                0, 1, 2, 3,
+            ]);
+            var idxBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxData, gl.STATIC_DRAW);
+            // 3 pos + 2 uv
+            var VERTEX_SIZE = 5;
+            var VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+            return function (renderState) {
+                var gl = renderState.gl;
+                var prog = renderState.currentProgram;
+                gl.disable(gl.BLEND);
+                gl.disable(gl.DEPTH_TEST);
+                gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+                gl.vertexAttribPointer(prog.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+                gl.vertexAttribPointer(prog.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+                gl.enableVertexAttribArray(prog.positionLocation);
+                gl.enableVertexAttribArray(prog.uvLocation);
+                gl.bindTexture(gl.TEXTURE_2D, texId);
+                gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_BYTE, 0);
+                gl.disableVertexAttribArray(prog.positionLocation);
+                gl.disableVertexAttribArray(prog.uvLocation);
+            };
+        }
+        function readMesh(meshAddr) {
+            var hdr = loadAddress(meshAddr);
+            var type = (hdr >> 24);
+            var nEntries = (hdr >> 16) & 0xFF;
+            var entriesAddr = loadAddress(meshAddr + 4);
+            var mesh = new Mesh();
+            function readDL(addr) {
+                var dlStart = loadAddress(addr);
+                if (dlStart === 0)
+                    return null;
+                return F3DEX2.readDL(gl, rom, banks, dlStart);
+            }
+            if (type === 0) {
+                for (var i = 0; i < nEntries; i++) {
+                    mesh.opaque.push(readDL(entriesAddr));
+                    mesh.transparent.push(readDL(entriesAddr + 4));
+                    entriesAddr += 8;
+                }
+            }
+            else if (type === 1) {
+                // The last entry always seems to contain the BG. Not sure
+                // what the other data is about... maybe the VR skybox for rotating scenes?
+                var lastEntry = nEntries - 1;
+                var bg = loadAddress(meshAddr + (lastEntry * 0x0C) + 0x08);
+                var bgOffs = rom.lookupAddress(banks, bg);
+                var buffer = rom.view.buffer.slice(bgOffs);
+                var blob = new Blob([buffer], { type: 'image/jpeg' });
+                var url = window.URL.createObjectURL(blob);
+                mesh.bg = loadImage(gl, url);
+            }
+            else if (type === 2) {
+                for (var i = 0; i < nEntries; i++) {
+                    mesh.opaque.push(readDL(entriesAddr + 8));
+                    mesh.transparent.push(readDL(entriesAddr + 12));
+                    entriesAddr += 16;
+                }
+            }
+            mesh.opaque = mesh.opaque.filter(function (dl) { return !!dl; });
+            mesh.transparent = mesh.transparent.filter(function (dl) { return !!dl; });
+            mesh.textures = [];
+            mesh.opaque.forEach(function (dl) { mesh.textures = mesh.textures.concat(dl.textures); });
+            mesh.transparent.forEach(function (dl) { mesh.textures = mesh.textures.concat(dl.textures); });
+            return mesh;
+        }
+        headers.rooms = [];
+        headers.mesh = null;
+        var startOffs = offs;
+        while (true) {
+            var cmd1 = rom.view.getUint32(offs, false);
+            var cmd2 = rom.view.getUint32(offs + 4, false);
+            offs += 8;
+            var cmdType = cmd1 >> 24;
+            if (cmdType === HeaderCommands.End)
+                break;
+            switch (cmdType) {
+                case HeaderCommands.Collision:
+                    headers.collision = readCollision(cmd2);
+                    break;
+                case HeaderCommands.Rooms:
+                    var nRooms = (cmd1 >> 16) & 0xFF;
+                    headers.rooms = readRooms(nRooms, cmd2);
+                    break;
+                case HeaderCommands.Mesh:
+                    headers.mesh = readMesh(cmd2);
+                    break;
+            }
+        }
+        return headers;
+    }
+    function readScene(gl, zelview0, file) {
+        var banks = { scene: file };
+        return readHeaders(gl, zelview0, file.vStart, banks);
+    }
+    var gl_matrix_5, F3DEX2, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
+    return {
+        setters: [
+            function (gl_matrix_5_1) {
+                gl_matrix_5 = gl_matrix_5_1;
+            },
+            function (F3DEX2_1) {
+                F3DEX2 = F3DEX2_1;
+            }
+        ],
+        execute: function () {
+            VFSEntry = /** @class */ (function () {
+                function VFSEntry() {
+                }
+                return VFSEntry;
+            }());
+            ZELVIEW0 = /** @class */ (function () {
+                function ZELVIEW0() {
+                }
+                ZELVIEW0.prototype.lookupFile = function (pStart) {
+                    try {
+                        for (var _a = __values(this.entries), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var entry = _b.value;
+                            if (entry.pStart === pStart)
+                                return entry;
+                        }
+                    }
+                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_23) throw e_23.error; }
+                    }
+                    return null;
+                    var e_23, _c;
+                };
+                ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
+                    var bankIdx = addr >>> 24;
+                    var offs = addr & 0x00FFFFFF;
+                    function findBank() {
+                        switch (bankIdx) {
+                            case 0x02: return banks.scene;
+                            case 0x03: return banks.room;
+                            default: return null;
+                        }
+                    }
+                    var bank = findBank();
+                    if (bank === null)
+                        return null;
+                    var absOffs = bank.vStart + offs;
+                    if (absOffs > bank.vEnd)
+                        return null;
+                    return absOffs;
+                };
+                ZELVIEW0.prototype.loadAddress = function (banks, addr) {
+                    var offs = this.lookupAddress(banks, addr);
+                    return this.view.getUint32(offs);
+                };
+                ZELVIEW0.prototype.loadScene = function (gl, scene) {
+                    return readScene(gl, this, scene);
+                };
+                ZELVIEW0.prototype.loadMainScene = function (gl) {
+                    return this.loadScene(gl, this.sceneFile);
+                };
+                return ZELVIEW0;
+            }());
+            exports_35("ZELVIEW0", ZELVIEW0);
+            Mesh = /** @class */ (function () {
+                function Mesh() {
+                    this.opaque = [];
+                    this.transparent = [];
+                }
+                return Mesh;
+            }());
+            exports_35("Mesh", Mesh);
+            Headers = /** @class */ (function () {
+                function Headers() {
+                    this.rooms = [];
+                }
+                return Headers;
+            }());
+            exports_35("Headers", Headers);
+            (function (HeaderCommands) {
+                HeaderCommands[HeaderCommands["Spawns"] = 0] = "Spawns";
+                HeaderCommands[HeaderCommands["Actors"] = 1] = "Actors";
+                HeaderCommands[HeaderCommands["Camera"] = 2] = "Camera";
+                HeaderCommands[HeaderCommands["Collision"] = 3] = "Collision";
+                HeaderCommands[HeaderCommands["Rooms"] = 4] = "Rooms";
+                HeaderCommands[HeaderCommands["WindSettings"] = 5] = "WindSettings";
+                HeaderCommands[HeaderCommands["EntranceList"] = 6] = "EntranceList";
+                HeaderCommands[HeaderCommands["SpecialObjects"] = 7] = "SpecialObjects";
+                HeaderCommands[HeaderCommands["SpecialBehavior"] = 8] = "SpecialBehavior";
+                // 0x09 is unknown
+                HeaderCommands[HeaderCommands["Mesh"] = 10] = "Mesh";
+                HeaderCommands[HeaderCommands["Objects"] = 11] = "Objects";
+                // 0x0C is unused
+                HeaderCommands[HeaderCommands["Waypoints"] = 13] = "Waypoints";
+                HeaderCommands[HeaderCommands["Transitions"] = 14] = "Transitions";
+                HeaderCommands[HeaderCommands["Environment"] = 15] = "Environment";
+                HeaderCommands[HeaderCommands["Time"] = 16] = "Time";
+                HeaderCommands[HeaderCommands["Skybox"] = 17] = "Skybox";
+                HeaderCommands[HeaderCommands["End"] = 20] = "End";
+            })(HeaderCommands || (HeaderCommands = {}));
+        }
+    };
+});
+System.register("zelview/f3dex2", ["gl-matrix", "viewer"], function (exports_36, context_36) {
+    "use strict";
+    var __moduleName = context_36 && context_36.id;
     function readVertex(state, which, addr) {
         var rom = state.rom;
         var offs = state.lookupAddress(addr);
         var posX = rom.view.getInt16(offs + 0, false);
         var posY = rom.view.getInt16(offs + 2, false);
         var posZ = rom.view.getInt16(offs + 4, false);
-        var pos = gl_matrix_5.vec3.clone([posX, posY, posZ]);
-        gl_matrix_5.vec3.transformMat4(pos, pos, state.mtx);
+        var pos = gl_matrix_6.vec3.clone([posX, posY, posZ]);
+        gl_matrix_6.vec3.transformMat4(pos, pos, state.mtx);
         var txU = rom.view.getInt16(offs + 8, false) * (1 / 32);
         var txV = rom.view.getInt16(offs + 10, false) * (1 / 32);
         var vtxArray = new Float32Array(state.vertexBuffer.buffer, which * VERTEX_BYTES, VERTEX_SIZE);
@@ -6192,15 +6657,15 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_35, context_3
                         return true;
                 }
             }
-            catch (e_23_1) { e_23 = { error: e_23_1 }; }
+            catch (e_24_1) { e_24 = { error: e_24_1 }; }
             finally {
                 try {
                     if (idxData_1_1 && !idxData_1_1.done && (_a = idxData_1.return)) _a.call(idxData_1);
                 }
-                finally { if (e_23) throw e_23.error; }
+                finally { if (e_24) throw e_24.error; }
             }
             return false;
-            var e_23, _a;
+            var e_24, _a;
         }
         function createGLVertBuffer() {
             var vertBuffer = gl.createBuffer();
@@ -6259,70 +6724,60 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_35, context_3
         tri(idxData, 3, w1);
         state.cmds.push(translateTRI(state, idxData));
     }
-    function syncGeometryMode(renderState, newMode) {
-        var gl = renderState.gl;
-        var cullFront = newMode & GeometryMode.CULL_FRONT;
-        var cullBack = newMode & GeometryMode.CULL_BACK;
-        if (cullFront && cullBack)
-            gl.cullFace(gl.FRONT_AND_BACK);
-        else if (cullFront)
-            gl.cullFace(gl.FRONT);
-        else if (cullBack)
-            gl.cullFace(gl.BACK);
-        if (cullFront || cullBack)
-            gl.enable(gl.CULL_FACE);
-        else
-            gl.disable(gl.CULL_FACE);
-        var lighting = newMode & GeometryMode.LIGHTING;
-        var useVertexColors = lighting ? 0 : 1;
-        var prog = renderState.currentProgram;
-        gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
-    }
     function cmd_GEOMETRYMODE(state, w0, w1) {
         state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
         var newMode = state.geometryMode;
+        var renderFlags = new Viewer.RenderFlags();
+        var cullFront = newMode & GeometryMode.CULL_FRONT;
+        var cullBack = newMode & GeometryMode.CULL_BACK;
+        if (cullFront && cullBack)
+            renderFlags.cullMode = 3 /* FRONT_AND_BACK */;
+        else if (cullFront)
+            renderFlags.cullMode = 1 /* FRONT */;
+        else if (cullBack)
+            renderFlags.cullMode = 2 /* BACK */;
+        else
+            renderFlags.cullMode = 0 /* NONE */;
         state.cmds.push(function (renderState) {
-            return syncGeometryMode(renderState, newMode);
+            var gl = renderState.gl;
+            var prog = renderState.currentProgram;
+            renderState.useFlags(renderFlags);
+            var lighting = newMode & GeometryMode.LIGHTING;
+            var useVertexColors = lighting ? 0 : 1;
+            gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
         });
-    }
-    function syncRenderMode(renderState, newMode) {
-        var gl = renderState.gl;
-        var prog = renderState.currentProgram;
-        if (newMode & OtherModeL.Z_CMP)
-            gl.enable(gl.DEPTH_TEST);
-        else
-            gl.disable(gl.DEPTH_TEST);
-        if (newMode & OtherModeL.Z_UPD)
-            gl.depthMask(true);
-        else
-            gl.depthMask(false);
-        var alphaTestMode;
-        if (newMode & OtherModeL.FORCE_BL) {
-            alphaTestMode = 0;
-            gl.enable(gl.BLEND);
-            // XXX: additional blend funcs?
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        }
-        else {
-            alphaTestMode = ((newMode & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
-                (newMode & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
-            gl.disable(gl.BLEND);
-        }
-        if (newMode & OtherModeL.ZMODE_DEC) {
-            gl.enable(gl.POLYGON_OFFSET_FILL);
-            gl.polygonOffset(-0.5, -0.5);
-        }
-        else {
-            gl.disable(gl.POLYGON_OFFSET_FILL);
-        }
-        gl.uniform1i(prog.alphaTestLocation, alphaTestMode);
     }
     function cmd_SETOTHERMODE_L(state, w0, w1) {
-        state.cmds.push(function (renderState) {
-            var mode = 31 - (w0 & 0xFF);
-            if (mode === 3)
-                return syncRenderMode(renderState, w1);
-        });
+        var mode = 31 - (w0 & 0xFF);
+        if (mode === 3) {
+            var renderFlags_1 = new Viewer.RenderFlags();
+            var newMode_1 = w1;
+            renderFlags_1.depthTest = !!(newMode_1 & OtherModeL.Z_CMP);
+            renderFlags_1.depthWrite = !!(newMode_1 & OtherModeL.Z_UPD);
+            var alphaTestMode_1;
+            if (newMode_1 & OtherModeL.FORCE_BL) {
+                alphaTestMode_1 = 0;
+                renderFlags_1.blend = true;
+            }
+            else {
+                alphaTestMode_1 = ((newMode_1 & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
+                    (newMode_1 & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
+                renderFlags_1.blend = false;
+            }
+            state.cmds.push(function (renderState) {
+                var gl = renderState.gl;
+                var prog = renderState.currentProgram;
+                renderState.useFlags(renderFlags_1);
+                if (newMode_1 & OtherModeL.ZMODE_DEC) {
+                    gl.enable(gl.POLYGON_OFFSET_FILL);
+                    gl.polygonOffset(-0.5, -0.5);
+                }
+                else {
+                    gl.disable(gl.POLYGON_OFFSET_FILL);
+                }
+                gl.uniform1i(prog.alphaTestLocation, alphaTestMode_1);
+            });
+        }
     }
     function cmd_DL(state, w0, w1) {
         runDL(state, w1);
@@ -6334,10 +6789,10 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_35, context_3
         state.geometryMode = 0;
         state.otherModeL = 0;
         state.mtxStack.push(state.mtx);
-        state.mtx = gl_matrix_5.mat4.clone(state.mtx);
+        state.mtx = gl_matrix_6.mat4.clone(state.mtx);
         var rom = state.rom;
         var offs = state.lookupAddress(w1);
-        var mtx = gl_matrix_5.mat4.create();
+        var mtx = gl_matrix_6.mat4.create();
         for (var x = 0; x < 4; x++) {
             for (var y = 0; y < 4; y++) {
                 var mt1 = rom.view.getUint16(offs, false);
@@ -6346,7 +6801,7 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_35, context_3
                 offs += 2;
             }
         }
-        gl_matrix_5.mat4.multiply(state.mtx, state.mtx, mtx);
+        gl_matrix_6.mat4.multiply(state.mtx, state.mtx, mtx);
     }
     function cmd_POPMTX(state, w0, w1) {
         state.mtx = state.mtxStack.pop();
@@ -6844,7 +7299,7 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_35, context_3
         state.gl = gl;
         state.cmds = [];
         state.textures = [];
-        state.mtx = gl_matrix_5.mat4.create();
+        state.mtx = gl_matrix_6.mat4.create();
         state.mtxStack = [state.mtx];
         state.vertexBuffer = new Float32Array(32 * VERTEX_SIZE);
         state.verticesDirty = [];
@@ -6854,12 +7309,15 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_35, context_3
         runDL(state, startAddr);
         return new DL(state.cmds, state.textures);
     }
-    exports_35("readDL", readDL);
-    var gl_matrix_5, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
+    exports_36("readDL", readDL);
+    var gl_matrix_6, Viewer, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
-            function (gl_matrix_5_1) {
-                gl_matrix_5 = gl_matrix_5_1;
+            function (gl_matrix_6_1) {
+                gl_matrix_6 = gl_matrix_6_1;
+            },
+            function (Viewer_6) {
+                Viewer = Viewer_6;
             }
         ],
         execute: function () {
@@ -6940,398 +7398,7 @@ System.register("zelview/f3dex2", ["gl-matrix"], function (exports_35, context_3
                 }
                 return DL;
             }());
-            exports_35("DL", DL);
-        }
-    };
-});
-System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (exports_36, context_36) {
-    "use strict";
-    var __moduleName = context_36 && context_36.id;
-    // Loads the ZELVIEW0 format.
-    function read0String(buffer, offs, length) {
-        var buf = new Uint8Array(buffer, offs, length);
-        var L = new Array(length);
-        for (var i = 0; i < length; i++) {
-            var elem = buf[i];
-            if (elem === 0)
-                break;
-            L.push(String.fromCharCode(elem));
-        }
-        return L.join('');
-    }
-    function readZELVIEW0(buffer) {
-        var view = new DataView(buffer);
-        var MAGIC = "ZELVIEW0";
-        if (read0String(buffer, 0, MAGIC.length) !== MAGIC)
-            throw new Error("Invalid ZELVIEW0 file");
-        var offs = 0x08;
-        var count = view.getUint8(offs);
-        offs += 0x04;
-        var mainFile = view.getUint8(offs);
-        offs += 0x04;
-        function readVFSEntry() {
-            var entry = new VFSEntry();
-            entry.filename = read0String(buffer, offs, 0x30);
-            offs += 0x30;
-            entry.pStart = view.getUint32(offs, true);
-            entry.pEnd = view.getUint32(offs + 0x04, true);
-            entry.vStart = view.getUint32(offs + 0x08, true);
-            entry.vEnd = view.getUint32(offs + 0x0C, true);
-            offs += 0x10;
-            return entry;
-        }
-        var entries = [];
-        for (var i = 0; i < count; i++)
-            entries.push(readVFSEntry());
-        var zelview0 = new ZELVIEW0();
-        zelview0.entries = entries;
-        zelview0.sceneFile = entries[mainFile];
-        zelview0.view = view;
-        return zelview0;
-    }
-    exports_36("readZELVIEW0", readZELVIEW0);
-    function readHeaders(gl, rom, offs, banks) {
-        var headers = new Headers();
-        function loadAddress(addr) {
-            return rom.loadAddress(banks, addr);
-        }
-        function readCollision(collisionAddr) {
-            var offs = rom.lookupAddress(banks, collisionAddr);
-            function readVerts(N, addr) {
-                var offs = rom.lookupAddress(banks, addr);
-                var verts = new Uint16Array(N * 3);
-                for (var i = 0; i < N; i++) {
-                    verts[i * 3 + 0] = rom.view.getInt16(offs + 0x00, false);
-                    verts[i * 3 + 1] = rom.view.getInt16(offs + 0x02, false);
-                    verts[i * 3 + 2] = rom.view.getInt16(offs + 0x04, false);
-                    offs += 0x06;
-                }
-                return verts;
-            }
-            var vertsN = rom.view.getUint16(offs + 0x0C, false);
-            var vertsAddr = rom.view.getUint32(offs + 0x10, false);
-            var verts = readVerts(vertsN, vertsAddr);
-            function readPolys(N, addr) {
-                var offs = rom.lookupAddress(banks, addr);
-                var polys = new Uint16Array(N * 3);
-                for (var i = 0; i < N; i++) {
-                    polys[i * 3 + 0] = rom.view.getUint16(offs + 0x02, false) & 0x0FFF;
-                    polys[i * 3 + 1] = rom.view.getUint16(offs + 0x04, false) & 0x0FFF;
-                    polys[i * 3 + 2] = rom.view.getUint16(offs + 0x06, false) & 0x0FFF;
-                    offs += 0x10;
-                }
-                return polys;
-            }
-            var polysN = rom.view.getUint16(offs + 0x14, false);
-            var polysAddr = rom.view.getUint32(offs + 0x18, false);
-            var polys = readPolys(polysN, polysAddr);
-            function readWaters(N, addr) {
-                // XXX: While we should probably keep the actual stuff about
-                // water boxes, I'm just drawing them, so let's just record
-                // a quad.
-                var offs = rom.lookupAddress(banks, addr);
-                var waters = new Uint16Array(N * 3 * 4);
-                for (var i = 0; i < N; i++) {
-                    var x = rom.view.getInt16(offs + 0x00, false);
-                    var y = rom.view.getInt16(offs + 0x02, false);
-                    var z = rom.view.getInt16(offs + 0x04, false);
-                    var sx = rom.view.getInt16(offs + 0x06, false);
-                    var sz = rom.view.getInt16(offs + 0x08, false);
-                    waters[i * 3 * 4 + 0] = x;
-                    waters[i * 3 * 4 + 1] = y;
-                    waters[i * 3 * 4 + 2] = z;
-                    waters[i * 3 * 4 + 3] = x + sx;
-                    waters[i * 3 * 4 + 4] = y;
-                    waters[i * 3 * 4 + 5] = z;
-                    waters[i * 3 * 4 + 6] = x;
-                    waters[i * 3 * 4 + 7] = y;
-                    waters[i * 3 * 4 + 8] = z + sz;
-                    waters[i * 3 * 4 + 9] = x + sx;
-                    waters[i * 3 * 4 + 10] = y;
-                    waters[i * 3 * 4 + 11] = z + sz;
-                    offs += 0x10;
-                }
-                return waters;
-            }
-            var watersN = rom.view.getUint16(offs + 0x24, false);
-            var watersAddr = rom.view.getUint32(offs + 0x28, false);
-            var waters = readWaters(watersN, watersAddr);
-            function readCamera(addr) {
-                var skyboxCamera = loadAddress(addr + 0x04);
-                var offs = rom.lookupAddress(banks, skyboxCamera);
-                var x = rom.view.getInt16(offs + 0x00, false);
-                var y = rom.view.getInt16(offs + 0x02, false);
-                var z = rom.view.getInt16(offs + 0x04, false);
-                var a = rom.view.getUint16(offs + 0x06, false) / 0xFFFF * (Math.PI * 2);
-                var b = rom.view.getUint16(offs + 0x08, false) / 0xFFFF * (Math.PI * 2) + Math.PI;
-                var c = rom.view.getUint16(offs + 0x0A, false) / 0xFFFF * (Math.PI * 2);
-                var d = rom.view.getUint16(offs + 0x0C, false);
-                var mtx = gl_matrix_6.mat4.create();
-                gl_matrix_6.mat4.translate(mtx, mtx, [x, y, z]);
-                gl_matrix_6.mat4.rotateZ(mtx, mtx, c);
-                gl_matrix_6.mat4.rotateY(mtx, mtx, b);
-                gl_matrix_6.mat4.rotateX(mtx, mtx, -a);
-                return mtx;
-            }
-            var cameraAddr = rom.view.getUint32(offs + 0x20, false);
-            var camera = readCamera(cameraAddr);
-            return { verts: verts, polys: polys, waters: waters, camera: camera };
-        }
-        function readRoom(file) {
-            var banks2 = Object.create(banks);
-            banks2.room = file;
-            return readHeaders(gl, rom, file.vStart, banks2);
-        }
-        function readRooms(nRooms, roomTableAddr) {
-            var rooms = [];
-            for (var i = 0; i < nRooms; i++) {
-                var pStart = loadAddress(roomTableAddr);
-                var file = rom.lookupFile(pStart);
-                var room = readRoom(file);
-                room.filename = file.filename;
-                rooms.push(room);
-                roomTableAddr += 8;
-            }
-            return rooms;
-        }
-        function loadImage(gl, src) {
-            var canvas = document.createElement('canvas');
-            var ctx = canvas.getContext('2d');
-            var texId = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, texId);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            var img = document.createElement('img');
-            img.src = src;
-            var aspect = 1;
-            img.onload = function () {
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-                var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                gl.bindTexture(gl.TEXTURE_2D, texId);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, imgData.width, imgData.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, imgData.data);
-            };
-            // XXX: Should pull this dynamically at runtime.
-            var imgWidth = 320;
-            var imgHeight = 240;
-            var imgAspect = imgWidth / imgHeight;
-            var viewportAspect = gl.viewportWidth / gl.viewportHeight;
-            var x = imgAspect / viewportAspect;
-            var vertData = new Float32Array([
-                /* x   y   z   u  v */
-                -x, -1, 0, 0, 1,
-                x, -1, 0, 1, 1,
-                -x, 1, 0, 0, 0,
-                x, 1, 0, 1, 0,
-            ]);
-            var vertBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, vertData, gl.STATIC_DRAW);
-            var idxData = new Uint8Array([
-                0, 1, 2, 3,
-            ]);
-            var idxBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxData, gl.STATIC_DRAW);
-            // 3 pos + 2 uv
-            var VERTEX_SIZE = 5;
-            var VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
-            return function (renderState) {
-                var gl = renderState.gl;
-                var prog = renderState.currentProgram;
-                gl.disable(gl.BLEND);
-                gl.disable(gl.DEPTH_TEST);
-                gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-                gl.vertexAttribPointer(prog.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-                gl.vertexAttribPointer(prog.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-                gl.enableVertexAttribArray(prog.positionLocation);
-                gl.enableVertexAttribArray(prog.uvLocation);
-                gl.bindTexture(gl.TEXTURE_2D, texId);
-                gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_BYTE, 0);
-                gl.disableVertexAttribArray(prog.positionLocation);
-                gl.disableVertexAttribArray(prog.uvLocation);
-            };
-        }
-        function readMesh(meshAddr) {
-            var hdr = loadAddress(meshAddr);
-            var type = (hdr >> 24);
-            var nEntries = (hdr >> 16) & 0xFF;
-            var entriesAddr = loadAddress(meshAddr + 4);
-            var mesh = new Mesh();
-            function readDL(addr) {
-                var dlStart = loadAddress(addr);
-                if (dlStart === 0)
-                    return null;
-                return F3DEX2.readDL(gl, rom, banks, dlStart);
-            }
-            if (type === 0) {
-                for (var i = 0; i < nEntries; i++) {
-                    mesh.opaque.push(readDL(entriesAddr));
-                    mesh.transparent.push(readDL(entriesAddr + 4));
-                    entriesAddr += 8;
-                }
-            }
-            else if (type === 1) {
-                // The last entry always seems to contain the BG. Not sure
-                // what the other data is about... maybe the VR skybox for rotating scenes?
-                var lastEntry = nEntries - 1;
-                var bg = loadAddress(meshAddr + (lastEntry * 0x0C) + 0x08);
-                var bgOffs = rom.lookupAddress(banks, bg);
-                var buffer = rom.view.buffer.slice(bgOffs);
-                var blob = new Blob([buffer], { type: 'image/jpeg' });
-                var url = window.URL.createObjectURL(blob);
-                mesh.bg = loadImage(gl, url);
-            }
-            else if (type === 2) {
-                for (var i = 0; i < nEntries; i++) {
-                    mesh.opaque.push(readDL(entriesAddr + 8));
-                    mesh.transparent.push(readDL(entriesAddr + 12));
-                    entriesAddr += 16;
-                }
-            }
-            mesh.opaque = mesh.opaque.filter(function (dl) { return !!dl; });
-            mesh.transparent = mesh.transparent.filter(function (dl) { return !!dl; });
-            mesh.textures = [];
-            mesh.opaque.forEach(function (dl) { mesh.textures = mesh.textures.concat(dl.textures); });
-            mesh.transparent.forEach(function (dl) { mesh.textures = mesh.textures.concat(dl.textures); });
-            return mesh;
-        }
-        headers.rooms = [];
-        headers.mesh = null;
-        var startOffs = offs;
-        while (true) {
-            var cmd1 = rom.view.getUint32(offs, false);
-            var cmd2 = rom.view.getUint32(offs + 4, false);
-            offs += 8;
-            var cmdType = cmd1 >> 24;
-            if (cmdType === HeaderCommands.End)
-                break;
-            switch (cmdType) {
-                case HeaderCommands.Collision:
-                    headers.collision = readCollision(cmd2);
-                    break;
-                case HeaderCommands.Rooms:
-                    var nRooms = (cmd1 >> 16) & 0xFF;
-                    headers.rooms = readRooms(nRooms, cmd2);
-                    break;
-                case HeaderCommands.Mesh:
-                    headers.mesh = readMesh(cmd2);
-                    break;
-            }
-        }
-        return headers;
-    }
-    function readScene(gl, zelview0, file) {
-        var banks = { scene: file };
-        return readHeaders(gl, zelview0, file.vStart, banks);
-    }
-    var gl_matrix_6, F3DEX2, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
-    return {
-        setters: [
-            function (gl_matrix_6_1) {
-                gl_matrix_6 = gl_matrix_6_1;
-            },
-            function (F3DEX2_1) {
-                F3DEX2 = F3DEX2_1;
-            }
-        ],
-        execute: function () {
-            VFSEntry = /** @class */ (function () {
-                function VFSEntry() {
-                }
-                return VFSEntry;
-            }());
-            ZELVIEW0 = /** @class */ (function () {
-                function ZELVIEW0() {
-                }
-                ZELVIEW0.prototype.lookupFile = function (pStart) {
-                    try {
-                        for (var _a = __values(this.entries), _b = _a.next(); !_b.done; _b = _a.next()) {
-                            var entry = _b.value;
-                            if (entry.pStart === pStart)
-                                return entry;
-                        }
-                    }
-                    catch (e_24_1) { e_24 = { error: e_24_1 }; }
-                    finally {
-                        try {
-                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                        }
-                        finally { if (e_24) throw e_24.error; }
-                    }
-                    return null;
-                    var e_24, _c;
-                };
-                ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
-                    var bankIdx = addr >>> 24;
-                    var offs = addr & 0x00FFFFFF;
-                    function findBank() {
-                        switch (bankIdx) {
-                            case 0x02: return banks.scene;
-                            case 0x03: return banks.room;
-                            default: return null;
-                        }
-                    }
-                    var bank = findBank();
-                    if (bank === null)
-                        return null;
-                    var absOffs = bank.vStart + offs;
-                    if (absOffs > bank.vEnd)
-                        return null;
-                    return absOffs;
-                };
-                ZELVIEW0.prototype.loadAddress = function (banks, addr) {
-                    var offs = this.lookupAddress(banks, addr);
-                    return this.view.getUint32(offs);
-                };
-                ZELVIEW0.prototype.loadScene = function (gl, scene) {
-                    return readScene(gl, this, scene);
-                };
-                ZELVIEW0.prototype.loadMainScene = function (gl) {
-                    return this.loadScene(gl, this.sceneFile);
-                };
-                return ZELVIEW0;
-            }());
-            exports_36("ZELVIEW0", ZELVIEW0);
-            Mesh = /** @class */ (function () {
-                function Mesh() {
-                    this.opaque = [];
-                    this.transparent = [];
-                }
-                return Mesh;
-            }());
-            Headers = /** @class */ (function () {
-                function Headers() {
-                    this.rooms = [];
-                }
-                return Headers;
-            }());
-            exports_36("Headers", Headers);
-            (function (HeaderCommands) {
-                HeaderCommands[HeaderCommands["Spawns"] = 0] = "Spawns";
-                HeaderCommands[HeaderCommands["Actors"] = 1] = "Actors";
-                HeaderCommands[HeaderCommands["Camera"] = 2] = "Camera";
-                HeaderCommands[HeaderCommands["Collision"] = 3] = "Collision";
-                HeaderCommands[HeaderCommands["Rooms"] = 4] = "Rooms";
-                HeaderCommands[HeaderCommands["WindSettings"] = 5] = "WindSettings";
-                HeaderCommands[HeaderCommands["EntranceList"] = 6] = "EntranceList";
-                HeaderCommands[HeaderCommands["SpecialObjects"] = 7] = "SpecialObjects";
-                HeaderCommands[HeaderCommands["SpecialBehavior"] = 8] = "SpecialBehavior";
-                // 0x09 is unknown
-                HeaderCommands[HeaderCommands["Mesh"] = 10] = "Mesh";
-                HeaderCommands[HeaderCommands["Objects"] = 11] = "Objects";
-                // 0x0C is unused
-                HeaderCommands[HeaderCommands["Waypoints"] = 13] = "Waypoints";
-                HeaderCommands[HeaderCommands["Transitions"] = 14] = "Transitions";
-                HeaderCommands[HeaderCommands["Environment"] = 15] = "Environment";
-                HeaderCommands[HeaderCommands["Time"] = 16] = "Time";
-                HeaderCommands[HeaderCommands["Skybox"] = 17] = "Skybox";
-                HeaderCommands[HeaderCommands["End"] = 20] = "End";
-            })(HeaderCommands || (HeaderCommands = {}));
+            exports_36("DL", DL);
         }
     };
 });
@@ -7341,8 +7408,8 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
     var Viewer, ZELVIEW0, util_16, BillboardBGProgram, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
     return {
         setters: [
-            function (Viewer_6) {
-                Viewer = Viewer_6;
+            function (Viewer_7) {
+                Viewer = Viewer_7;
             },
             function (ZELVIEW0_1) {
                 ZELVIEW0 = ZELVIEW0_1;
@@ -7487,11 +7554,13 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                     var collVertBuffer = gl.createBuffer();
                     gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
                     gl.bufferData(gl.ARRAY_BUFFER, coll.verts, gl.STATIC_DRAW);
+                    var renderFlags = new Viewer.RenderFlags();
+                    renderFlags.depthTest = true;
+                    renderFlags.blend = true;
                     return function (state) {
                         var prog = _this.program_COLL;
                         state.useProgram(prog);
-                        gl.enable(gl.BLEND);
-                        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                        state.useFlags(renderFlags);
                         gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
                         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, collIdxBuffer);
                         gl.vertexAttribPointer(prog.positionLocation, 3, gl.SHORT, false, 0, 0);
@@ -7512,10 +7581,13 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                     var wbIdx = gl.createBuffer();
                     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
                     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
+                    var renderFlags = new Viewer.RenderFlags();
+                    renderFlags.blend = true;
+                    renderFlags.cullMode = 0 /* NONE */;
                     return function (state) {
                         var prog = _this.program_WATERS;
                         state.useProgram(prog);
-                        gl.disable(gl.CULL_FACE);
+                        state.useFlags(renderFlags);
                         gl.bindBuffer(gl.ARRAY_BUFFER, wbVtx);
                         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
                         gl.vertexAttribPointer(prog.positionLocation, 3, gl.SHORT, false, 0, 0);
@@ -7523,7 +7595,6 @@ System.register("zelview/render", ["viewer", "zelview/zelview0", "util"], functi
                         for (var i = 0; i < wbIdxData.length; i += 4)
                             gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_SHORT, i * 2);
                         gl.disableVertexAttribArray(prog.positionLocation);
-                        gl.disable(gl.BLEND);
                     };
                 };
                 return Scene;
@@ -8049,7 +8120,6 @@ System.register("main", ["viewer", "fres/scenes", "mdl0/scenes", "oot3d/scenes",
                     if (this.progressable) {
                         this.toplevel.style.visibility = '';
                         this.barFill.style.width = (this.progressable.progress * 100) + '%';
-                        console.log(this.progressable);
                     }
                     else {
                         this.toplevel.style.visibility = 'hidden';

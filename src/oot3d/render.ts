@@ -98,12 +98,7 @@ class Scene implements Viewer.Scene {
 
     public render(state: Viewer.RenderState) {
         const gl = state.viewport.gl;
-
         state.useProgram(this.program);
-        gl.enable(gl.DEPTH_TEST);
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
         this.model(state);
     }
 
@@ -276,10 +271,13 @@ class Scene implements Viewer.Scene {
         const opaque = this.translateCmb(gl, mesh.opaque);
         const transparent = this.translateCmb(gl, mesh.transparent);
 
+        const renderFlags = new Viewer.RenderFlags();
+        renderFlags.blend = true;
+        renderFlags.depthTest = true;
+        renderFlags.cullMode = Viewer.RenderCullMode.BACK;
+
         return (state: Viewer.RenderState) => {
-            // Backface cull.
-            gl.enable(gl.CULL_FACE);
-            gl.cullFace(gl.BACK);
+            state.useFlags(renderFlags);
             opaque();
             transparent();
         };

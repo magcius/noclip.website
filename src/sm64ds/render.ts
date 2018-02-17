@@ -147,6 +147,21 @@ class Scene implements Viewer.Scene {
         };
     }
 
+    private translateCullMode(renderWhichFaces: number): Viewer.RenderCullMode {
+        switch (renderWhichFaces) {
+        case 0x00: // Render Nothing
+            return Viewer.RenderCullMode.FRONT_AND_BACK;
+        case 0x01: // Render Back
+            return Viewer.RenderCullMode.FRONT;
+        case 0x02: // Render Front
+            return Viewer.RenderCullMode.BACK;
+        case 0x03: // Render Front and Back
+            return Viewer.RenderCullMode.NONE;
+        default:
+            throw new Error("Unknown renderWhichFaces");
+        }
+    }
+
     private translateMaterial(gl: WebGL2RenderingContext, material: any) {
         const texture = material.texture;
         let texId: WebGLTexture;
@@ -181,6 +196,12 @@ class Scene implements Viewer.Scene {
         const texCoordMat = mat3.create();
         mat3.fromMat2d(texCoordMat, material.texCoordMat);
 
+        const renderFlags = new Viewer.RenderFlags();
+        renderFlags.blend = true;
+        renderFlags.depthTest = true;
+        renderFlags.depthWrite = material.depthWrite;
+        renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
+
         return (state: Viewer.RenderState) => {
             if (crg0mat !== undefined) {
                 const texAnimMat = mat3.create();
@@ -205,25 +226,7 @@ class Scene implements Viewer.Scene {
                 gl.bindTexture(gl.TEXTURE_2D, texId);
             }
 
-            gl.depthMask(material.depthWrite);
-
-            switch (material.renderWhichFaces) {
-                case 0x00: // Render Nothing
-                    gl.enable(gl.CULL_FACE);
-                    gl.cullFace(gl.FRONT_AND_BACK);
-                    break;
-                case 0x01: // Render Back
-                    gl.enable(gl.CULL_FACE);
-                    gl.cullFace(gl.FRONT);
-                    break;
-                case 0x02: // Render Front
-                    gl.enable(gl.CULL_FACE);
-                    gl.cullFace(gl.BACK);
-                    break;
-                case 0x03: // Render Front and Back
-                    gl.disable(gl.CULL_FACE);
-                    break;
-            }
+            state.useFlags(renderFlags);
         };
     }
 
@@ -275,9 +278,6 @@ class Scene implements Viewer.Scene {
         const gl = state.viewport.gl;
 
         state.useProgram(this.program);
-        gl.enable(gl.DEPTH_TEST);
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
         // First pass, opaque.
         this.renderModels(state, RenderPass.OPAQUE);

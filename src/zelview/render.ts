@@ -1,4 +1,5 @@
 
+import * as F3DEX2 from 'f3dex2';
 import * as Viewer from 'viewer';
 import * as ZELVIEW0 from 'zelview0';
 
@@ -184,13 +185,13 @@ class Scene implements Viewer.Scene {
         return (state: Viewer.RenderState) => {
             const gl = state.gl;
 
-            const renderDL = (dl) => {
+            const renderDL = (dl: F3DEX2.DL) => {
                 dl.cmds.forEach((cmd) => {
                     cmd(state);
                 });
             };
 
-            const renderMesh = (mesh) => {
+            const renderMesh = (mesh: ZELVIEW0.Mesh) => {
                 if (mesh.bg) {
                     state.useProgram(this.program_BG);
                     mesh.bg(state);
@@ -201,7 +202,7 @@ class Scene implements Viewer.Scene {
                 mesh.transparent.forEach(renderDL);
             };
 
-            const renderRoom = (room) => {
+            const renderRoom = (room: ZELVIEW0.Headers) => {
                 renderMesh(room.mesh);
             };
 
@@ -236,11 +237,14 @@ class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, coll.verts, gl.STATIC_DRAW);
 
+        const renderFlags = new Viewer.RenderFlags();
+        renderFlags.depthTest = true;
+        renderFlags.blend = true;
+
         return (state: Viewer.RenderState) => {
             const prog = this.program_COLL;
             state.useProgram(prog);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            state.useFlags(renderFlags);
             gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, collIdxBuffer);
             gl.vertexAttribPointer(prog.positionLocation, 3, gl.SHORT, false, 0, 0);
@@ -263,10 +267,14 @@ class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
 
+        const renderFlags = new Viewer.RenderFlags();
+        renderFlags.blend = true;
+        renderFlags.cullMode = Viewer.RenderCullMode.NONE;
+
         return (state: Viewer.RenderState) => {
             const prog = this.program_WATERS;
             state.useProgram(prog);
-            gl.disable(gl.CULL_FACE);
+            state.useFlags(renderFlags);
             gl.bindBuffer(gl.ARRAY_BUFFER, wbVtx);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
             gl.vertexAttribPointer(prog.positionLocation, 3, gl.SHORT, false, 0, 0);
@@ -274,7 +282,6 @@ class Scene implements Viewer.Scene {
             for (let i = 0; i < wbIdxData.length; i += 4)
                 gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_SHORT, i * 2);
             gl.disableVertexAttribArray(prog.positionLocation);
-            gl.disable(gl.BLEND);
         };
     }
 }

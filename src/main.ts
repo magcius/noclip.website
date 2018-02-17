@@ -35,7 +35,6 @@ class ProgressBar {
         if (this.progressable) {
             this.toplevel.style.visibility = '';
             this.barFill.style.width = (this.progressable.progress * 100) + '%';
-            console.log(this.progressable);
         } else {
             this.toplevel.style.visibility = 'hidden';
         }
