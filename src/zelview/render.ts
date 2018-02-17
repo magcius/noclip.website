@@ -2,6 +2,7 @@
 import * as Viewer from 'viewer';
 import * as ZELVIEW0 from 'zelview0';
 
+import { Progressable } from 'progress';
 import { fetch } from 'util';
 
 export type RenderFunc = (renderState: Viewer.RenderState) => void;
@@ -289,7 +290,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): PromiseLike<Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const zelview0 = ZELVIEW0.readZELVIEW0(result);
             return new Scene(gl, zelview0);

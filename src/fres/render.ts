@@ -10,6 +10,7 @@ import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 import * as SARC from './sarc';
 
+import { Progressable } from 'progress';
 import { be16toh, be32toh } from 'endian';
 import { assert, fetch } from 'util';
 
@@ -587,13 +588,13 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): PromiseLike<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
         // Reset any jobs we might have pending.
         // TODO(jstpierre): Explicit scene teardown.
         deswizzler.terminate();
         deswizzler.build();
 
-        return Promise.all([
+        return Progressable.all([
             this._createSceneFromPath(gl, this.path, false),
             this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
         ]).then((scenes): Viewer.Scene => {
@@ -601,7 +602,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createSceneFromPath(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): PromiseLike<Scene> {
+    private _createSceneFromPath(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): Progressable<Scene> {
         return fetch(path).then((result: ArrayBuffer) => {
             const buf = Yaz0.decompress(result);
             const sarc = SARC.parse(buf);

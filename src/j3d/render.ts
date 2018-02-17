@@ -4,6 +4,7 @@ import * as GX from 'gx';
 import * as Viewer from 'viewer';
 
 import { fetch } from 'util';
+import { Progressable } from '../progress';
 
 class BlackProgram extends Viewer.Program {
     public static a_position = 0;
@@ -173,7 +174,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): PromiseLike<Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const bmd = BMD.parse(result);
             return new Scene(gl, bmd);

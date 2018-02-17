@@ -2,6 +2,7 @@
 import * as MDL0 from 'mdl0';
 import * as Viewer from '../viewer';
 
+import { Progressable } from 'progress';
 import { fetch } from 'util';
 
 class FancyGrid_Program extends Viewer.Program {
@@ -226,7 +227,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): PromiseLike<Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const mdl0 = MDL0.parse(result);
             return new Scene(gl, mdl0);

@@ -1,6 +1,8 @@
 
 // tslint:disable:no-console
 
+import { Progressable } from './progress';
+
 import { mat4, vec3 } from 'gl-matrix';
 
 class Viewport {
@@ -427,8 +429,12 @@ export class Viewer {
     }
     public setScene(scene: Scene) {
         this.sceneGraph.reset();
-        this.sceneGraph.setScenes([scene]);
-        this.cameraController = new scene.cameraController();
+        if (scene) {
+            this.sceneGraph.setScenes([scene]);
+            this.cameraController = new scene.cameraController();
+        } else {
+            this.sceneGraph.setScenes([]);
+        }
         this.resetCamera();
     }
 
@@ -461,7 +467,7 @@ export class Viewer {
 export interface SceneDesc {
     id: string;
     name: string;
-    createScene(gl: WebGL2RenderingContext): PromiseLike<Scene>;
+    createScene(gl: WebGL2RenderingContext): Progressable<Scene>;
 }
 
 export interface SceneGroup {

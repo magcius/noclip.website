@@ -1,18 +1,26 @@
 
-export function fetch(path: string): PromiseLike<ArrayBuffer> {
+import { Progressable } from './progress';
+
+export function fetch(path: string): Progressable<ArrayBuffer> {
     const request = new XMLHttpRequest();
     request.open("GET", path, true);
     request.responseType = "arraybuffer";
     request.send();
 
-    return new Promise((resolve, reject) => {
+    const p = new Promise<ArrayBuffer>((resolve, reject) => {
         request.onload = () => {
             resolve(request.response);
         };
         request.onerror = () => {
             reject();
         };
+        request.onprogress = (e) => {
+            if (e.lengthComputable)
+                pr.setProgress(e.loaded / e.total);
+        };
     });
+    const pr = new Progressable<ArrayBuffer>(p);
+    return pr;
 }
 
 export function assert(b: boolean) {
