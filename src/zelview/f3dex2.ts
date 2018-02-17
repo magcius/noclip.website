@@ -4,12 +4,12 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Render from './render';
 import * as ZELVIEW0 from './zelview0';
 
+import * as Viewer from '../viewer';
+
 // Zelda uses the F3DEX2 display list format. This implements
 // a simple (and probably wrong!) HLE renderer for it.
 
-interface RenderState {
-    currentProgram: Render.F3DEX2Program;
-    gl: WebGL2RenderingContext;
+interface RenderState extends Viewer.RenderState {
 }
 
 type CmdFunc = (renderState: RenderState) => void;
@@ -151,7 +151,7 @@ function translateTRI(state: State, idxData: Uint8Array) {
     const nPrim = idxData.length;
 
     return function drawTri(renderState: RenderState) {
-        const prog = renderState.currentProgram;
+        const prog = (<Render.F3DEX2Program> renderState.currentProgram);
         const gl = renderState.gl;
 
         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
@@ -200,36 +200,33 @@ const GeometryMode = {
     LIGHTING: 0x020000,
 };
 
-function syncGeometryMode(renderState: RenderState, newMode: number) {
-    const gl = renderState.gl;
+function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
+    state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
+    const newMode = state.geometryMode;
+
+    const renderFlags = new Viewer.RenderFlags();
 
     const cullFront = newMode & GeometryMode.CULL_FRONT;
     const cullBack = newMode & GeometryMode.CULL_BACK;
 
     if (cullFront && cullBack)
-        gl.cullFace(gl.FRONT_AND_BACK);
+        renderFlags.cullMode = Viewer.RenderCullMode.FRONT_AND_BACK;
     else if (cullFront)
-        gl.cullFace(gl.FRONT);
+        renderFlags.cullMode = Viewer.RenderCullMode.FRONT;
     else if (cullBack)
-        gl.cullFace(gl.BACK);
-
-    if (cullFront || cullBack)
-        gl.enable(gl.CULL_FACE);
+        renderFlags.cullMode = Viewer.RenderCullMode.BACK;
     else
-        gl.disable(gl.CULL_FACE);
+        renderFlags.cullMode = Viewer.RenderCullMode.NONE;
 
-    const lighting = newMode & GeometryMode.LIGHTING;
-    const useVertexColors = lighting ? 0 : 1;
-    const prog = renderState.currentProgram;
-    gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
-}
+    state.cmds.push((renderState: RenderState) => {
+        const gl = renderState.gl;
+        const prog = (<Render.F3DEX2Program> renderState.currentProgram);
 
-function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
-    state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
-    const newMode = state.geometryMode;
+        renderState.useFlags(renderFlags);
 
-    state.cmds.push((renderState) => {
-        return syncGeometryMode(renderState, newMode);
+        const lighting = newMode & GeometryMode.LIGHTING;
+        const useVertexColors = lighting ? 0 : 1;
+        gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
     });
 }
 
@@ -242,49 +239,41 @@ const OtherModeL = {
     FORCE_BL: 0x4000,
 };
 
-function syncRenderMode(renderState: RenderState, newMode: number) {
-    const gl = renderState.gl;
-    const prog = renderState.currentProgram;
-
-    if (newMode & OtherModeL.Z_CMP)
-        gl.enable(gl.DEPTH_TEST);
-    else
-        gl.disable(gl.DEPTH_TEST);
-
-    if (newMode & OtherModeL.Z_UPD)
-        gl.depthMask(true);
-    else
-        gl.depthMask(false);
-
-    let alphaTestMode;
-
-    if (newMode & OtherModeL.FORCE_BL) {
-        alphaTestMode = 0;
-        gl.enable(gl.BLEND);
-        // XXX: additional blend funcs?
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    } else {
-        alphaTestMode = ((newMode & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
-                         (newMode & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
-        gl.disable(gl.BLEND);
-    }
-
-    if (newMode & OtherModeL.ZMODE_DEC) {
-        gl.enable(gl.POLYGON_OFFSET_FILL);
-        gl.polygonOffset(-0.5, -0.5);
-    } else {
-        gl.disable(gl.POLYGON_OFFSET_FILL);
-    }
-
-    gl.uniform1i(prog.alphaTestLocation, alphaTestMode);
-}
-
 function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
-    state.cmds.push((renderState: RenderState) => {
-        const mode = 31 - (w0 & 0xFF);
-        if (mode === 3)
-            return syncRenderMode(renderState, w1);
-    });
+    const mode = 31 - (w0 & 0xFF);
+    if (mode === 3) {
+        const renderFlags = new Viewer.RenderFlags();
+        const newMode = w1;
+
+        renderFlags.depthTest = !!(newMode & OtherModeL.Z_CMP);
+        renderFlags.depthWrite = !!(newMode & OtherModeL.Z_UPD);
+
+        let alphaTestMode;
+        if (newMode & OtherModeL.FORCE_BL) {
+            alphaTestMode = 0;
+            renderFlags.blend = true;
+        } else {
+            alphaTestMode = ((newMode & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
+                             (newMode & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
+            renderFlags.blend = false;
+        }
+   
+        state.cmds.push((renderState: RenderState) => {
+            const gl = renderState.gl;
+            const prog = (<Render.F3DEX2Program> renderState.currentProgram);
+
+            renderState.useFlags(renderFlags);
+
+            if (newMode & OtherModeL.ZMODE_DEC) {
+                gl.enable(gl.POLYGON_OFFSET_FILL);
+                gl.polygonOffset(-0.5, -0.5);
+            } else {
+                gl.disable(gl.POLYGON_OFFSET_FILL);
+            }
+
+            gl.uniform1i(prog.alphaTestLocation, alphaTestMode);
+        });
+    }
 }
 
 function cmd_DL(state: State, w0: number, w1: number) {
@@ -811,7 +800,7 @@ function loadTextureBlock(state, cmds) {
     const tile = state.tile;
     state.textureTile = tile;
     tile.addr = state.textureImage.addr;
-    state.cmds.push((renderState) => {
+    state.cmds.push((renderState: RenderState) => {
         const gl = renderState.gl;
 
         if (!tile.textureId)
@@ -820,7 +809,7 @@ function loadTextureBlock(state, cmds) {
         gl.bindTexture(gl.TEXTURE_2D, tile.textureId);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, tile.wrapS);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, tile.wrapT);
-        const prog = renderState.currentProgram;
+        const prog = (<Render.F3DEX2Program> renderState.currentProgram);
         gl.uniform2fv(prog.txsLocation, [1 / tile.width, 1 / tile.height]);
     });
 }

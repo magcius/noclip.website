@@ -88,10 +88,84 @@ ${rest}
     }
 }
 
+export const enum RenderFrontFaceMode { CCW, CW }
+export const enum RenderCullMode { NONE, FRONT, BACK, FRONT_AND_BACK }
+
+export class RenderFlags {
+    depthWrite: boolean = undefined;
+    depthTest: boolean = undefined;
+    blend: boolean = undefined;
+    cullMode: RenderCullMode = undefined;
+    frontFace: RenderFrontFaceMode = undefined;
+
+    static default: RenderFlags = new RenderFlags();
+
+    static flatten(dst: RenderFlags, src: RenderFlags) {
+        if (dst.depthWrite === undefined)
+            dst.depthWrite = src.depthWrite;
+        if (dst.depthTest === undefined)
+            dst.depthTest = src.depthTest;
+        if (dst.blend === undefined)
+            dst.blend = src.blend;
+        if (dst.cullMode === undefined)
+            dst.cullMode = src.cullMode;
+        if (dst.frontFace === undefined)
+            dst.frontFace = src.frontFace;
+    }
+
+    static apply(gl: WebGL2RenderingContext, oldFlags: RenderFlags, newFlags: RenderFlags) {
+        if (oldFlags.depthWrite !== newFlags.depthWrite) {
+            gl.depthMask(newFlags.depthWrite);
+        }
+
+        if (oldFlags.depthTest !== newFlags.depthTest) {
+            if (newFlags.depthTest)
+                gl.enable(gl.DEPTH_TEST);
+            else
+                gl.disable(gl.DEPTH_TEST);
+        }
+
+        if (oldFlags.blend !== newFlags.blend) {
+            if (newFlags.blend)
+                gl.enable(gl.BLEND);
+            else
+                gl.disable(gl.BLEND);
+        }
+
+        if (oldFlags.cullMode !== newFlags.cullMode) {
+            if (oldFlags.cullMode === RenderCullMode.NONE)
+                gl.enable(gl.CULL_FACE);
+            else if (newFlags.cullMode === RenderCullMode.NONE)
+                gl.disable(gl.CULL_FACE);
+
+            if (newFlags.cullMode === RenderCullMode.BACK)
+                gl.cullFace(gl.BACK);
+            else if (newFlags.cullMode === RenderCullMode.FRONT)
+                gl.cullFace(gl.FRONT);
+            else if (newFlags.cullMode === RenderCullMode.FRONT_AND_BACK)
+                gl.cullFace(gl.FRONT_AND_BACK);
+        }
+
+        if (oldFlags.frontFace !== newFlags.frontFace) {
+            if (newFlags.frontFace === RenderFrontFaceMode.CCW)
+                gl.frontFace(gl.CCW);
+            else if (newFlags.frontFace === RenderFrontFaceMode.CW)
+                gl.frontFace(gl.CW);
+        }
+    }
+}
+
+RenderFlags.default.blend = false;
+RenderFlags.default.cullMode = RenderCullMode.NONE;
+RenderFlags.default.depthTest = false;
+RenderFlags.default.depthWrite = false;
+RenderFlags.default.frontFace = RenderFrontFaceMode.CCW;
+
 export class RenderState {
     public gl: WebGL2RenderingContext;
     public viewport: Viewport;
     public currentProgram: Program = null;
+    public currentFlags: RenderFlags = RenderFlags.default;
     public fov: number;
     public time: number;
 
@@ -119,6 +193,14 @@ export class RenderState {
         gl.useProgram(prog.compile(gl));
         gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
         gl.uniformMatrix4fv(prog.modelViewLocation, false, this.modelView);
+    }
+
+    public useFlags(flags: RenderFlags) {
+        const gl = this.viewport.gl;
+        // TODO(jstpierre): Move the flattening to a stack, possibly?
+        RenderFlags.flatten(flags, this.currentFlags);
+        RenderFlags.apply(gl, this.currentFlags, flags);
+        this.currentFlags = flags;
     }
 }
 
@@ -153,8 +235,8 @@ class SceneGraph {
 
     public render() {
         const gl = this.renderState.viewport.gl;
-        gl.depthMask(true);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        this.renderState.useFlags(RenderFlags.default);
         this.scenes.forEach((scene) => scene.render(this.renderState));
     }
 

@@ -67,7 +67,7 @@ export class ZELVIEW0 {
     }
 }
 
-class Mesh {
+export class Mesh {
     public opaque: F3DEX2.DL[] = [];
     public transparent: F3DEX2.DL[] = [];
     public bg: Render.RenderFunc;

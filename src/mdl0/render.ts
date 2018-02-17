@@ -79,24 +79,27 @@ class FancyGrid {
     public program: FancyGrid_Program;
 
     private vtxBuffer: WebGLBuffer;
+    private renderFlags: Viewer.RenderFlags;
 
     constructor(gl: WebGL2RenderingContext) {
         this.program = new FancyGrid_Program();
         this._createBuffers(gl);
+
+        this.renderFlags = new Viewer.RenderFlags();
+        this.renderFlags.blend = true;
     }
 
     public render(state: Viewer.RenderState) {
         const gl = state.viewport.gl;
 
         state.useProgram(this.program);
+        state.useFlags(this.renderFlags);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
         gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(this.program.positionLocation);
 
-        gl.enable(gl.BLEND);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        gl.disable(gl.BLEND);
     }
 
     private _createBuffers(gl: WebGL2RenderingContext) {
@@ -170,19 +173,23 @@ class Scene implements Viewer.Scene {
     private clrBuffer: WebGLBuffer;
     private vtxBuffer: WebGLBuffer;
     private idxBuffer: WebGLBuffer;
+    private renderFlags: Viewer.RenderFlags;
 
     constructor(gl: WebGL2RenderingContext, mdl0: MDL0.MDL0) {
         this.fancyGrid = new FancyGrid(gl);
         this.program = new MDL0_Program();
         this.mdl0 = mdl0;
         this._createBuffers(gl);
+
+        this.renderFlags = new Viewer.RenderFlags();
+        this.renderFlags.depthTest = true;
     }
 
     public render(state: Viewer.RenderState) {
         const gl = state.viewport.gl;
 
         state.useProgram(this.program);
-        gl.enable(gl.DEPTH_TEST);
+        state.useFlags(this.renderFlags);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.clrBuffer);
         gl.vertexAttribPointer(this.program.colorLocation, 4, gl.UNSIGNED_BYTE, true, 0, 0);
