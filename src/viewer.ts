@@ -158,7 +158,7 @@ export class RenderFlags {
 RenderFlags.default.blend = false;
 RenderFlags.default.cullMode = RenderCullMode.NONE;
 RenderFlags.default.depthTest = false;
-RenderFlags.default.depthWrite = false;
+RenderFlags.default.depthWrite = true;
 RenderFlags.default.frontFace = RenderFrontFaceMode.CCW;
 
 export class RenderState {
