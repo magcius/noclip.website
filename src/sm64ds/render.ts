@@ -162,7 +162,7 @@ class Scene implements Viewer.Scene {
         }
     }
 
-    private translateMaterial(gl: WebGL2RenderingContext, material: any) {
+    private translateMaterial(gl: WebGL2RenderingContext, material: NITRO_BMD.Material) {
         const texture = material.texture;
         let texId: WebGLTexture;
 

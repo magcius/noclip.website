@@ -291,13 +291,13 @@ function runCmd(ctx: ContextInternal, cmd: number) {
     }
 }
 
-interface Color {
+export interface Color {
     r: number;
     g: number;
     b: number;
 }
 
-interface TexCoord {
+export interface TexCoord {
     s: number;
     t: number;
 }

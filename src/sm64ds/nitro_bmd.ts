@@ -8,13 +8,25 @@ import { readString } from 'util';
 
 // Super Mario 64 DS .bmd format
 
-export class Poly {
-    public packets: NITRO_GX.Packet[];
+export interface Poly {
+    packets: NITRO_GX.Packet[];
 }
 
-export class Batch {
-    public material: any;
-    public poly: Poly;
+export class Material {
+    public name: string;
+    public isTranslucent: boolean;
+    public depthWrite: boolean;
+    public renderWhichFaces: number;
+    public diffuse: NITRO_GX.Color;
+    public alpha: number;
+    public texCoordMat: mat2d;
+    public texture: Texture;
+    public texParams: number;
+}
+
+export interface Batch {
+    material: Material;
+    poly: Poly;
 }
 
 export class Model {
@@ -68,7 +80,7 @@ function parseModel(bmd: BMD, view: DataView, idx: number) {
     return model;
 }
 
-function parsePoly(bmd: BMD, view: DataView, idx: number, baseCtx: NITRO_GX.Context) {
+function parsePoly(bmd: BMD, view: DataView, idx: number, baseCtx: NITRO_GX.Context): Poly {
     const offs = view.getUint32((bmd.polyOffsBase + idx * 0x08) + 0x04, true);
 
     const gxCmdSize = view.getUint32(offs + 0x08, true);
@@ -80,10 +92,10 @@ function parsePoly(bmd: BMD, view: DataView, idx: number, baseCtx: NITRO_GX.Cont
     return { packets };
 }
 
-function parseMaterial(bmd: BMD, view: DataView, idx: number) {
+function parseMaterial(bmd: BMD, view: DataView, idx: number): Material {
     const offs = bmd.materialOffsBase + idx * 0x30;
 
-    const material: any = {};
+    const material = new Material();
     material.name = readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
     material.texCoordMat = mat2d.create();
 

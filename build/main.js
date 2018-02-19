@@ -5701,7 +5701,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
     }
     function parseMaterial(bmd, view, idx) {
         var offs = bmd.materialOffsBase + idx * 0x30;
-        var material = {};
+        var material = new Material();
         material.name = util_14.readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
         material.texCoordMat = gl_matrix_3.mat2d.create();
         var textureIdx = view.getUint32(offs + 0x04, true);
@@ -5800,7 +5800,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         return bmd;
     }
     exports_32("parse", parse);
-    var gl_matrix_3, NITRO_GX, NITRO_Tex, util_14, Poly, Batch, Model, TextureKey, Texture, BMD;
+    var gl_matrix_3, NITRO_GX, NITRO_Tex, util_14, Material, Model, TextureKey, Texture, BMD;
     return {
         setters: [
             function (gl_matrix_3_1) {
@@ -5817,19 +5817,12 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             }
         ],
         execute: function () {
-            // Super Mario 64 DS .bmd format
-            Poly = /** @class */ (function () {
-                function Poly() {
+            Material = /** @class */ (function () {
+                function Material() {
                 }
-                return Poly;
+                return Material;
             }());
-            exports_32("Poly", Poly);
-            Batch = /** @class */ (function () {
-                function Batch() {
-                }
-                return Batch;
-            }());
-            exports_32("Batch", Batch);
+            exports_32("Material", Material);
             Model = /** @class */ (function () {
                 function Model() {
                 }
