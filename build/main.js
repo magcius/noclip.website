@@ -474,7 +474,7 @@ System.register("viewer", ["gl-matrix"], function (exports_4, context_4) {
             RenderFlags.default.blend = false;
             RenderFlags.default.cullMode = 0 /* NONE */;
             RenderFlags.default.depthTest = false;
-            RenderFlags.default.depthWrite = false;
+            RenderFlags.default.depthWrite = true;
             RenderFlags.default.frontFace = 0 /* CCW */;
             RenderState = /** @class */ (function () {
                 function RenderState(viewport) {
