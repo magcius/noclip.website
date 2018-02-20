@@ -425,12 +425,101 @@ export interface MAT3 {
     materialEntries: MaterialEntry[];
 }
 
-export interface MaterialEntry {
-    textureIndexes: number[];
-    cullMode: GX.CullMode;
+export interface Color {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+}
+
+export interface ColorChannelControl {
+    lightingEnabled: boolean;
+    matColorSource: GX.ColorSrc;
+    matColorReg: Color;
+    ambColorSource: GX.ColorSrc;
+}
+
+export interface TexGen {
+    index: number;
+
+    type: GX.TexGenType;
+    source: GX.TexGenSrc;
+    matrix: GX.TexGenMatrix;
+}
+
+export interface TevStage {
+    index: number;
+
+    colorInA: GX.CombineColorInput;
+    colorInB: GX.CombineColorInput;
+    colorInC: GX.CombineColorInput;
+    colorInD: GX.CombineColorInput;
+    colorOp: GX.TevOp;
+    colorBias: GX.TevBias;
+    colorScale: GX.TevScale;
+    colorClamp: boolean;
+    colorRegId: GX.Register;
+
+    alphaInA: GX.CombineAlphaInput;
+    alphaInB: GX.CombineAlphaInput;
+    alphaInC: GX.CombineAlphaInput;
+    alphaInD: GX.CombineAlphaInput;
+    alphaOp: GX.TevOp;
+    alphaBias: GX.TevBias;
+    alphaScale: GX.TevScale;
+    alphaClamp: boolean;
+    alphaRegId: GX.Register;
+
+    // SetTevOrder
+    texCoordId: GX.TexCoordSlot;
+    texMap: number;
+    channelId: GX.ColorChannelId;
+
+    konstColorSel: GX.KonstColorSel;
+    konstAlphaSel: GX.KonstAlphaSel;
+}
+
+export interface AlphaTest {
+    op: GX.AlphaOp;
+    compareA: GX.CompareType;
+    referenceA: number;
+    compareB: GX.CompareType;
+    referenceB: number;
+}
+
+export interface RopInfo {
+    // TODO(jstpierre): Blend func
     depthTest: boolean;
     depthFunc: GX.CompareType;
     depthWrite: boolean;
+}
+
+export interface MaterialEntry {
+    textureIndexes: number[];
+    cullMode: GX.CullMode;
+    colorRegisters: Color[];
+    colorConstants: Color[];
+    colorChannels: ColorChannelControl[];
+    texGens: TexGen[];
+    tevStages: TevStage[];
+    alphaTest: AlphaTest;
+    ropInfo: RopInfo;
+}
+
+function readColor32(view: DataView, srcOffs: number): Color {
+    const r = view.getUint8(srcOffs + 0x00) / 255;
+    const g = view.getUint8(srcOffs + 0x01) / 255;
+    const b = view.getUint8(srcOffs + 0x02) / 255;
+    const a = view.getUint8(srcOffs + 0x03) / 255;
+    return { r, g, b, a };
+}
+
+function readColorShort(view: DataView, srcOffs: number): Color {
+    const r = view.getUint16(srcOffs + 0x00) / 255;
+    const g = view.getUint16(srcOffs + 0x02) / 255;
+    const b = view.getUint16(srcOffs + 0x04) / 255;
+    const a = view.getUint16(srcOffs + 0x06) / 255;
+    return { r, g, b, a };
 }
 
 function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
@@ -448,7 +537,15 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
 
     const cullModeTableOffs = view.getUint32(0x1C);
+    const materialColorTableOffs = view.getUint32(0x20);
+    const colorChanTableOffs = view.getUint32(0x28);
+    const texGenTableOffs = view.getUint32(0x38);
     const textureTableOffs = view.getUint32(0x48);
+    const tevOrderTableOffs = view.getUint32(0x4C);
+    const colorRegisterTableOffs = view.getUint32(0x50);
+    const colorConstantTableOffs = view.getUint32(0x54);
+    const tevStageTableOffs = view.getUint32(0x5C);
+    const alphaTestTableOffs = view.getUint32(0x6C);
     const blendModeTableOffs = view.getUint32(0x70);
     const depthModeTableOffs = view.getUint32(0x74);
 
@@ -464,10 +561,53 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const depthModeIndex = view.getUint8(materialEntryIdx + 0x06);
         // unk
 
-        const cullMode: GX.CullMode = view.getUint32(cullModeTableOffs + cullModeIndex * 0x04);
-        const depthTest: boolean = !!view.getUint8(depthModeTableOffs + depthModeIndex * 4 + 0x00);
-        const depthFunc: GX.CompareType = view.getUint8(depthModeTableOffs + depthModeIndex * 4 + 0x01);
-        const depthWrite: boolean = !!view.getUint8(depthModeTableOffs + depthModeIndex * 4 + 0x02);
+        const colorChannels: ColorChannelControl[] = [];
+        for (let j = 0; j < 2; j++) {
+            const colorChanIndex = view.getInt16(materialEntryIdx + 0x0C + j * 0x02);
+            if (colorChanIndex < 0)
+                continue;
+            const colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
+            const lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
+            const matColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x01);
+            const litMask = view.getUint8(colorChanOffs + 0x02);
+            const diffuseFunction = view.getUint8(colorChanOffs + 0x03);
+            const attenuationFunction = view.getUint8(colorChanOffs + 0x04);
+            const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
+
+            const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
+            const matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
+            const matColorReg = readColor32(view, matColorOffs);
+            const colorChan: ColorChannelControl = { lightingEnabled, matColorSource, matColorReg, ambColorSource };
+            colorChannels.push(colorChan);
+        }
+
+        const texGens: TexGen[] = [];
+        for (let j = 0; j < 8; j++) {
+            const texGenIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
+            if (texGenIndex < 0)
+                continue;
+            const index = j;
+            const type: GX.TexGenType = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x00);
+            const source: GX.TexGenSrc = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
+            const matrix: GX.TexGenMatrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
+            assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
+            const texGen: TexGen = { index, type, source, matrix };
+            texGens.push(texGen);
+        }
+
+        const colorConstants: Color[] = [];
+        for (let j = 0; j < 4; j++) {
+            const colorIndex = view.getUint16(materialEntryIdx + 0x94 + j * 0x02);
+            const color = readColorShort(view, colorConstantTableOffs + colorIndex * 0x04);
+            colorConstants.push(color);
+        }
+
+        const colorRegisters: Color[] = [];
+        for (let j = 0; j < 4; j++) {
+            const colorIndex = view.getUint16(materialEntryIdx + 0xDC + j * 0x02);
+            const color = readColorShort(view, colorRegisterTableOffs + colorIndex * 0x04);
+            colorRegisters.push(color);
+        }
 
         let textureIndexTableIdx = materialEntryIdx + 0x78;
         const textureIndexes = [];
@@ -482,7 +622,88 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             textureIndexTableIdx += 0x02;
         }
 
-        materialEntries.push({ textureIndexes, cullMode, depthTest, depthFunc, depthWrite });
+        const tevStages: TevStage[] = [];
+        for (let j = 0; j < 16; j++) {
+            // TevStage
+            const tevStageIndex = view.getInt16(materialEntryIdx + 0xE4 + j * 0x02);
+            if (tevStageIndex < 0)
+                continue;
+
+            const index = j;
+            const tevStageOffs = tevStageTableOffs + tevStageIndex * 0x14;
+
+            // const unknown0 = view.getUint8(tevStageOffs + 0x00);
+            const colorInA: GX.CombineColorInput = view.getUint8(tevStageOffs + 0x01);
+            const colorInB: GX.CombineColorInput = view.getUint8(tevStageOffs + 0x02);
+            const colorInC: GX.CombineColorInput = view.getUint8(tevStageOffs + 0x03);
+            const colorInD: GX.CombineColorInput = view.getUint8(tevStageOffs + 0x04);
+            const colorOp: GX.TevOp = view.getUint8(tevStageOffs + 0x05);
+            const colorBias: GX.TevBias = view.getUint8(tevStageOffs + 0x06);
+            const colorScale: GX.TevScale = view.getUint8(tevStageOffs + 0x07);
+            const colorClamp: boolean = !!view.getUint8(tevStageOffs + 0x08);
+            const colorRegId: GX.Register = view.getUint8(tevStageOffs + 0x09);
+
+            const alphaInA: GX.CombineAlphaInput = view.getUint8(tevStageOffs + 0x0A);
+            const alphaInB: GX.CombineAlphaInput = view.getUint8(tevStageOffs + 0x0B);
+            const alphaInC: GX.CombineAlphaInput = view.getUint8(tevStageOffs + 0x0C);
+            const alphaInD: GX.CombineAlphaInput = view.getUint8(tevStageOffs + 0x0D);
+            const alphaOp: GX.TevOp = view.getUint8(tevStageOffs + 0x0E);
+            const alphaBias: GX.TevBias = view.getUint8(tevStageOffs + 0x0F);
+            const alphaScale: GX.TevScale = view.getUint8(tevStageOffs + 0x10);
+            const alphaClamp: boolean = !!view.getUint8(tevStageOffs + 0x11);
+            const alphaRegId: GX.Register = view.getUint8(tevStageOffs + 0x12);
+            // const unknown1 = view.getUint8(tevStageOffs + 0x13);
+
+            // TevOrder
+            const tevOrderIndex = view.getUint16(materialEntryIdx + 0xBC + j * 0x02);
+            const tevOrderOffs = tevOrderTableOffs + tevOrderIndex * 0x04;
+            const texCoordId: GX.TexCoordSlot = view.getUint8(tevOrderOffs + 0x00);
+            const texMap: number = view.getUint8(tevOrderOffs + 0x01);
+            const channelId: GX.ColorChannelId = view.getUint8(tevOrderOffs + 0x02);
+            assert(view.getUint8(tevOrderOffs + 0x03) == 0xFF);
+
+            // KonstSel
+            const konstColorSel: GX.KonstColorSel = view.getUint8(materialEntryIdx + 0x9C + j);
+            const konstAlphaSel: GX.KonstAlphaSel = view.getUint8(materialEntryIdx + 0xAC + j);
+
+            const tevStage: TevStage = {
+                index,
+                colorInA, colorInB, colorInC, colorInD, colorOp, colorBias, colorScale, colorClamp, colorRegId,
+                alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId,
+                texCoordId, texMap, channelId,
+                konstColorSel, konstAlphaSel,
+            };
+            tevStages.push(tevStage);
+        }
+
+        const alphaTestIndex = view.getUint16(materialEntryIdx + 0x146);
+        const alphaTestOffs = alphaTestTableOffs + alphaTestIndex * 0x08;
+        const compareA: GX.CompareType = view.getUint8(alphaTestOffs + 0x00);
+        const referenceA: number = view.getUint8(alphaTestOffs + 0x01) / 0xFF;
+        const op: GX.AlphaOp = view.getUint8(alphaTestOffs + 0x02);
+        const compareB: GX.CompareType = view.getUint8(alphaTestOffs + 0x03);
+        const referenceB: number = view.getUint8(alphaTestOffs + 0x04) / 0xFF;
+        const alphaTest: AlphaTest = { compareA, referenceA, op, compareB, referenceB };
+
+        const cullMode: GX.CullMode = view.getUint32(cullModeTableOffs + cullModeIndex * 0x04);
+        const depthModeOffs = depthModeTableOffs + depthModeIndex * 4;
+        const depthTest: boolean = !!view.getUint8(depthModeOffs + 0x00);
+        const depthFunc: GX.CompareType = view.getUint8(depthModeOffs + 0x01);
+        const depthWrite: boolean = !!view.getUint8(depthModeOffs + 0x02);
+
+        const ropInfo: RopInfo = { depthTest, depthFunc, depthWrite };
+
+        materialEntries.push({
+            textureIndexes,
+            cullMode,
+            colorChannels,
+            texGens,
+            colorRegisters,
+            colorConstants,
+            tevStages,
+            alphaTest,
+            ropInfo,
+        });
         materialEntryIdx += 0x014C;
     }
 
