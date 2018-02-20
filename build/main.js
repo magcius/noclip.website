@@ -3378,6 +3378,8 @@ System.register("j3d/bmd", ["j3d/gx", "endian", "util"], function (exports_18, c
         var materialEntries = [];
         var materialEntryIdx = view.getUint32(0x0C);
         for (var i = 0; i <= maxIndex; i++) {
+            var index = i;
+            var name_8 = nameTable[i];
             var flags = view.getUint8(materialEntryIdx + 0x00);
             var cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
             var numChansIndex = view.getUint8(materialEntryIdx + 0x02);
@@ -3409,27 +3411,27 @@ System.register("j3d/bmd", ["j3d/gx", "endian", "util"], function (exports_18, c
                 var texGenIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
                 if (texGenIndex < 0)
                     continue;
-                var index = j;
+                var index_1 = j;
                 var type = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x00);
                 var source = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
                 var matrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
                 util_5.assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
-                var texGen = { index: index, type: type, source: source, matrix: matrix };
+                var texGen = { index: index_1, type: type, source: source, matrix: matrix };
                 texGens.push(texGen);
             }
             var colorConstants = [];
             for (var j = 0; j < 4; j++) {
                 var colorIndex = view.getUint16(materialEntryIdx + 0x94 + j * 0x02);
-                var color = readColorShort(view, colorConstantTableOffs + colorIndex * 0x04);
+                var color = readColor32(view, colorConstantTableOffs + colorIndex * 0x04);
                 colorConstants.push(color);
             }
             var colorRegisters = [];
             for (var j = 0; j < 4; j++) {
                 var colorIndex = view.getUint16(materialEntryIdx + 0xDC + j * 0x02);
-                var color = readColorShort(view, colorRegisterTableOffs + colorIndex * 0x04);
+                var color = readColorShort(view, colorRegisterTableOffs + colorIndex * 0x08);
                 colorRegisters.push(color);
             }
-            var textureIndexTableIdx = materialEntryIdx + 0x78;
+            var textureIndexTableIdx = materialEntryIdx + 0x84;
             var textureIndexes = [];
             for (var j = 0; j < 8; j++) {
                 var textureTableIndex = view.getInt16(textureIndexTableIdx);
@@ -3448,7 +3450,7 @@ System.register("j3d/bmd", ["j3d/gx", "endian", "util"], function (exports_18, c
                 var tevStageIndex = view.getInt16(materialEntryIdx + 0xE4 + j * 0x02);
                 if (tevStageIndex < 0)
                     continue;
-                var index = j;
+                var index_2 = j;
                 var tevStageOffs = tevStageTableOffs + tevStageIndex * 0x14;
                 // const unknown0 = view.getUint8(tevStageOffs + 0x00);
                 var colorInA = view.getUint8(tevStageOffs + 0x01);
@@ -3481,7 +3483,7 @@ System.register("j3d/bmd", ["j3d/gx", "endian", "util"], function (exports_18, c
                 var konstColorSel = view.getUint8(materialEntryIdx + 0x9C + j);
                 var konstAlphaSel = view.getUint8(materialEntryIdx + 0xAC + j);
                 var tevStage = {
-                    index: index,
+                    index: index_2,
                     colorInA: colorInA, colorInB: colorInB, colorInC: colorInC, colorInD: colorInD, colorOp: colorOp, colorBias: colorBias, colorScale: colorScale, colorClamp: colorClamp, colorRegId: colorRegId,
                     alphaInA: alphaInA, alphaInB: alphaInB, alphaInC: alphaInC, alphaInD: alphaInD, alphaOp: alphaOp, alphaBias: alphaBias, alphaScale: alphaScale, alphaClamp: alphaClamp, alphaRegId: alphaRegId,
                     texCoordId: texCoordId, texMap: texMap, channelId: channelId,
@@ -3504,6 +3506,7 @@ System.register("j3d/bmd", ["j3d/gx", "endian", "util"], function (exports_18, c
             var depthWrite = !!view.getUint8(depthModeOffs + 0x02);
             var ropInfo = { depthTest: depthTest, depthFunc: depthFunc, depthWrite: depthWrite };
             materialEntries.push({
+                index: index, name: name_8,
                 textureIndexes: textureIndexes,
                 cullMode: cullMode,
                 colorChannels: colorChannels,
@@ -3528,7 +3531,7 @@ System.register("j3d/bmd", ["j3d/gx", "endian", "util"], function (exports_18, c
         var textures = [];
         var textureIdx = textureHeaderOffs;
         for (var i = 0; i < textureCount; i++) {
-            var name_8 = nameTable[i];
+            var name_9 = nameTable[i];
             var format = view.getUint8(textureIdx + 0x00);
             var width = view.getUint16(textureIdx + 0x02);
             var height = view.getUint16(textureIdx + 0x04);
@@ -3542,7 +3545,7 @@ System.register("j3d/bmd", ["j3d/gx", "endian", "util"], function (exports_18, c
             var mipCount = view.getUint16(textureIdx + 0x18);
             var dataOffs = view.getUint32(textureIdx + 0x1C);
             var data = buffer.slice(chunkStart + textureIdx + dataOffs);
-            textures.push({ name: name_8, format: format, width: width, height: height, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter, data: data });
+            textures.push({ name: name_9, format: format, width: width, height: height, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter, data: data });
             textureIdx += 0x20;
         }
         bmd.tex1 = { textures: textures };
@@ -3673,10 +3676,16 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                     _this.generateShaders();
                     return _this;
                 }
-                // Color Channels
+                BMDProgram.prototype.generateFloat = function (v) {
+                    var s = v.toString();
+                    if (!s.includes('.'))
+                        s += '.0';
+                    return s;
+                };
                 BMDProgram.prototype.generateColorConstant = function (c) {
                     return "vec4(" + c.r + ", " + c.g + ", " + c.b + ", " + c.a + ")";
                 };
+                // Color Channels
                 BMDProgram.prototype.generateColorChannel = function (chan, vtxSource) {
                     // TODO(jstpierre): Ambient and lighting.
                     switch (chan.matColorSource) {
@@ -3691,14 +3700,14 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                         case 1 /* NRM */: return "v_Normal";
                         case 20 /* COLOR0 */: return "v_Color0";
                         case 21 /* COLOR1 */: return "v_Color1";
-                        case 4 /* TEX0 */: return "Read_Tex0()";
-                        case 5 /* TEX1 */: return "Read_Tex1()";
-                        case 6 /* TEX2 */: return "Read_Tex2()";
-                        case 7 /* TEX3 */: return "Read_Tex3()";
-                        case 8 /* TEX4 */: return "Read_Tex4()";
-                        case 9 /* TEX5 */: return "Read_Tex5()";
-                        case 10 /* TEX6 */: return "Read_Tex6()";
-                        case 11 /* TEX7 */: return "Read_Tex7()";
+                        case 4 /* TEX0 */: return "ReadAttrib_Tex0()";
+                        case 5 /* TEX1 */: return "ReadAttrib_Tex1()";
+                        case 6 /* TEX2 */: return "ReadAttrib_Tex2()";
+                        case 7 /* TEX3 */: return "ReadAttrib_Tex3()";
+                        case 8 /* TEX4 */: return "ReadAttrib_Tex4()";
+                        case 9 /* TEX5 */: return "ReadAttrib_Tex5()";
+                        case 10 /* TEX6 */: return "ReadAttrib_Tex6()";
+                        case 11 /* TEX7 */: return "ReadAttrib_Tex7()";
                         // Use a previously generated texcoordgen.
                         case 12 /* TEXCOORD0 */: return "v_TexCoord0";
                         case 13 /* TEXCOORD1 */: return "v_TexCoord1";
@@ -3708,14 +3717,14 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                         case 18 /* TEXCOORD5 */: return "v_TexCoord5";
                         case 19 /* TEXCOORD6 */: return "v_TexCoord6";
                         default:
-                            throw "whoops";
+                            throw new Error("whoops");
                     }
                 };
                 BMDProgram.prototype.generateTexGenMatrix = function (src, matrix) {
                     switch (matrix) {
-                        case 60 /* IDENTITY */: return src;
+                        case 60 /* IDENTITY */: return src + ".xy";
                         // TODO(jstpierre): TexMtx
-                        default: return src;
+                        default: return src + ".xy";
                     }
                 };
                 BMDProgram.prototype.generateTexGenType = function (texCoordGen) {
@@ -3726,74 +3735,80 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                         case 1 /* MTX2x4 */: return this.generateTexGenMatrix(src, texCoordGen.matrix);
                         // TODO(jstpierre): Support projected textures.
                         case 0 /* MTX3x4 */:
-                            throw "whoops";
+                            throw new Error("whoops");
                         default:
-                            throw "whoops";
+                            throw new Error("whoops");
                     }
                 };
                 BMDProgram.prototype.generateTexGen = function (texCoordGen) {
                     var i = texCoordGen.index;
-                    return "\n    // TexGen " + i + "  Type: " + texCoordGen.type + " Source: " + texCoordGen.source + " Matrix: " + texCoordGen.matrix + "\n    v_TexCoord" + i + " = " + this.generateTexGenType(texCoordGen) + ";\n";
+                    return "\n    // TexGen " + i + "  Type: " + texCoordGen.type + " Source: " + texCoordGen.source + " Matrix: " + texCoordGen.matrix + "\n    v_TexCoord" + i + " = " + this.generateTexGenType(texCoordGen) + ";";
+                };
+                BMDProgram.prototype.generateTexGens = function (texGens) {
+                    var _this = this;
+                    return texGens.map(function (tg) {
+                        return _this.generateTexGen(tg);
+                    }).join('');
                 };
                 // TEV
                 BMDProgram.prototype.generateKonstColorSel = function (konstColor) {
                     switch (konstColor) {
-                        case 0 /* KCSEL_1 */: return 'vec3(8/8)';
-                        case 1 /* KCSEL_7_8 */: return 'vec3(7/8)';
-                        case 2 /* KCSEL_3_4 */: return 'vec3(6/8)';
-                        case 3 /* KCSEL_5_8 */: return 'vec3(5/8)';
-                        case 4 /* KCSEL_1_2 */: return 'vec3(4/8)';
-                        case 5 /* KCSEL_3_8 */: return 'vec3(3/8)';
-                        case 6 /* KCSEL_1_4 */: return 'vec3(2/8)';
-                        case 7 /* KCSEL_1_8 */: return 'vec3(1/8)';
-                        case 12 /* KCSEL_K0 */: return 's_kColor[0].rgb';
-                        case 16 /* KCSEL_K0_R */: return 's_kColor[0].rrr';
-                        case 20 /* KCSEL_K0_G */: return 's_kColor[0].ggg';
-                        case 24 /* KCSEL_K0_B */: return 's_kColor[0].bbb';
-                        case 28 /* KCSEL_K0_A */: return 's_kColor[0].aaa';
-                        case 13 /* KCSEL_K1 */: return 's_kColor[1].rgb';
-                        case 17 /* KCSEL_K1_R */: return 's_kColor[1].rrr';
-                        case 21 /* KCSEL_K1_G */: return 's_kColor[1].ggg';
-                        case 25 /* KCSEL_K1_B */: return 's_kColor[1].bbb';
-                        case 29 /* KCSEL_K1_A */: return 's_kColor[1].aaa';
-                        case 14 /* KCSEL_K2 */: return 's_kColor[2].rgb';
-                        case 18 /* KCSEL_K2_R */: return 's_kColor[2].rrr';
-                        case 22 /* KCSEL_K2_G */: return 's_kColor[2].ggg';
-                        case 26 /* KCSEL_K2_B */: return 's_kColor[2].bbb';
-                        case 30 /* KCSEL_K2_A */: return 's_kColor[2].aaa';
-                        case 15 /* KCSEL_K3 */: return 's_kColor[3].rgb';
-                        case 19 /* KCSEL_K3_R */: return 's_kColor[3].rrr';
-                        case 23 /* KCSEL_K3_G */: return 's_kColor[3].ggg';
-                        case 27 /* KCSEL_K3_B */: return 's_kColor[3].bbb';
-                        case 31 /* KCSEL_K3_A */: return 's_kColor[3].aaa';
+                        case 0 /* KCSEL_1 */: return 'vec3(8.0/8.0)';
+                        case 1 /* KCSEL_7_8 */: return 'vec3(7.0/8.0)';
+                        case 2 /* KCSEL_3_4 */: return 'vec3(6.0/8.0)';
+                        case 3 /* KCSEL_5_8 */: return 'vec3(5.0/8.0)';
+                        case 4 /* KCSEL_1_2 */: return 'vec3(4.0/8.0)';
+                        case 5 /* KCSEL_3_8 */: return 'vec3(3.0/8.0)';
+                        case 6 /* KCSEL_1_4 */: return 'vec3(2.0/8.0)';
+                        case 7 /* KCSEL_1_8 */: return 'vec3(1.0/8.0)';
+                        case 12 /* KCSEL_K0 */: return 's_kColor0.rgb';
+                        case 16 /* KCSEL_K0_R */: return 's_kColor0.rrr';
+                        case 20 /* KCSEL_K0_G */: return 's_kColor0.ggg';
+                        case 24 /* KCSEL_K0_B */: return 's_kColor0.bbb';
+                        case 28 /* KCSEL_K0_A */: return 's_kColor0.aaa';
+                        case 13 /* KCSEL_K1 */: return 's_kColor1.rgb';
+                        case 17 /* KCSEL_K1_R */: return 's_kColor1.rrr';
+                        case 21 /* KCSEL_K1_G */: return 's_kColor1.ggg';
+                        case 25 /* KCSEL_K1_B */: return 's_kColor1.bbb';
+                        case 29 /* KCSEL_K1_A */: return 's_kColor1.aaa';
+                        case 14 /* KCSEL_K2 */: return 's_kColor2.rgb';
+                        case 18 /* KCSEL_K2_R */: return 's_kColor2.rrr';
+                        case 22 /* KCSEL_K2_G */: return 's_kColor2.ggg';
+                        case 26 /* KCSEL_K2_B */: return 's_kColor2.bbb';
+                        case 30 /* KCSEL_K2_A */: return 's_kColor2.aaa';
+                        case 15 /* KCSEL_K3 */: return 's_kColor3.rgb';
+                        case 19 /* KCSEL_K3_R */: return 's_kColor3.rrr';
+                        case 23 /* KCSEL_K3_G */: return 's_kColor3.ggg';
+                        case 27 /* KCSEL_K3_B */: return 's_kColor3.bbb';
+                        case 31 /* KCSEL_K3_A */: return 's_kColor3.aaa';
                     }
                 };
                 BMDProgram.prototype.generateKonstAlphaSel = function (konstAlpha) {
                     switch (konstAlpha) {
-                        case 0 /* KASEL_1 */: return '8/8';
-                        case 1 /* KASEL_7_8 */: return '7/8';
-                        case 2 /* KASEL_3_4 */: return '6/8';
-                        case 3 /* KASEL_5_8 */: return '5/8';
-                        case 4 /* KASEL_1_2 */: return '4/8';
-                        case 5 /* KASEL_3_8 */: return '3/8';
-                        case 6 /* KASEL_1_4 */: return '2/8';
-                        case 7 /* KASEL_1_8 */: return '1/8';
-                        case 16 /* KASEL_K0_R */: return 's_kColor[0].r';
-                        case 20 /* KASEL_K0_G */: return 's_kColor[0].g';
-                        case 24 /* KASEL_K0_B */: return 's_kColor[0].b';
-                        case 28 /* KASEL_K0_A */: return 's_kColor[0].a';
-                        case 17 /* KASEL_K1_R */: return 's_kColor[1].r';
-                        case 21 /* KASEL_K1_G */: return 's_kColor[1].g';
-                        case 25 /* KASEL_K1_B */: return 's_kColor[1].b';
-                        case 29 /* KASEL_K1_A */: return 's_kColor[1].a';
-                        case 18 /* KASEL_K2_R */: return 's_kColor[2].r';
-                        case 22 /* KASEL_K2_G */: return 's_kColor[2].g';
-                        case 26 /* KASEL_K2_B */: return 's_kColor[2].b';
-                        case 30 /* KASEL_K2_A */: return 's_kColor[2].a';
-                        case 19 /* KASEL_K3_R */: return 's_kColor[3].r';
-                        case 23 /* KASEL_K3_G */: return 's_kColor[3].g';
-                        case 27 /* KASEL_K3_B */: return 's_kColor[3].b';
-                        case 31 /* KASEL_K3_A */: return 's_kColor[3].a';
+                        case 0 /* KASEL_1 */: return '(8.0/8.0)';
+                        case 1 /* KASEL_7_8 */: return '(7.0/8.0)';
+                        case 2 /* KASEL_3_4 */: return '(6.0/8.0)';
+                        case 3 /* KASEL_5_8 */: return '(5.0/8.0)';
+                        case 4 /* KASEL_1_2 */: return '(4.0/8.0)';
+                        case 5 /* KASEL_3_8 */: return '(3.0/8.0)';
+                        case 6 /* KASEL_1_4 */: return '(2.0/8.0)';
+                        case 7 /* KASEL_1_8 */: return '(1.0/8.0)';
+                        case 16 /* KASEL_K0_R */: return 's_kColor0.r';
+                        case 20 /* KASEL_K0_G */: return 's_kColor0.g';
+                        case 24 /* KASEL_K0_B */: return 's_kColor0.b';
+                        case 28 /* KASEL_K0_A */: return 's_kColor0.a';
+                        case 17 /* KASEL_K1_R */: return 's_kColor1.r';
+                        case 21 /* KASEL_K1_G */: return 's_kColor1.g';
+                        case 25 /* KASEL_K1_B */: return 's_kColor1.b';
+                        case 29 /* KASEL_K1_A */: return 's_kColor1.a';
+                        case 18 /* KASEL_K2_R */: return 's_kColor2.r';
+                        case 22 /* KASEL_K2_G */: return 's_kColor2.g';
+                        case 26 /* KASEL_K2_B */: return 's_kColor2.b';
+                        case 30 /* KASEL_K2_A */: return 's_kColor2.a';
+                        case 19 /* KASEL_K3_R */: return 's_kColor3.r';
+                        case 23 /* KASEL_K3_G */: return 's_kColor3.g';
+                        case 27 /* KASEL_K3_B */: return 's_kColor3.b';
+                        case 31 /* KASEL_K3_A */: return 's_kColor3.a';
                     }
                 };
                 BMDProgram.prototype.generateRas = function (stage) {
@@ -3801,7 +3816,11 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                         case 0 /* COLOR0 */: return "v_Color0";
                         case 1 /* COLOR1 */: return "v_Color1";
                         case 6 /* COLOR_ZERO */: return "vec4(0, 0, 0, 0)";
-                        default: throw "whoops";
+                        // XXX(jstpierre): Shouldn't appear but do in practice? WTF?
+                        case 4 /* COLOR0A0 */: return "v_Color0";
+                        case 5 /* COLOR1A1 */: return "v_Color1";
+                        default:
+                            throw new Error("whoops " + stage.channelId);
                     }
                 };
                 BMDProgram.prototype.generateTexAccess = function (stage) {
@@ -3824,7 +3843,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                         case 11 /* RASA */: return this.generateRas(stage) + ".aaa";
                         case 12 /* ONE */: return "vec3(1)";
                         case 13 /* HALF */: return "vec3(1/2)";
-                        case 14 /* KONST */: return this.generateKonstColorSel(stage.konstColorSel) + ".rgb";
+                        case 14 /* KONST */: return "" + this.generateKonstColorSel(stage.konstColorSel);
                         case 15 /* ZERO */: return "vec3(0)";
                     }
                 };
@@ -3837,8 +3856,8 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                         case 3 /* A2 */: return "t_Color2.a";
                         case 4 /* TEXA */: return this.generateTexAccess(stage) + ".a";
                         case 5 /* RASA */: return this.generateRas(stage) + ".a";
-                        case 6 /* KONST */: return this.generateKonstAlphaSel(stage.konstAlphaSel) + ".a";
-                        case 7 /* ZERO */: return "0";
+                        case 6 /* KONST */: return "" + this.generateKonstAlphaSel(stage.konstAlphaSel);
+                        case 7 /* ZERO */: return "0.0";
                     }
                 };
                 BMDProgram.prototype.generateTevRegister = function (regId) {
@@ -3856,9 +3875,9 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                     else if (bias === 2 /* SUBHALF */)
                         v = "TevBias(" + v + ", -0.5)";
                     if (scale === 1 /* SCALE_2 */)
-                        v = "(" + v + ") * 2";
+                        v = "(" + v + ") * 2.0";
                     else if (scale === 2 /* SCALE_4 */)
-                        v = "(" + v + ") * 4";
+                        v = "(" + v + ") * 4.0";
                     else if (scale === 3 /* DIVIDE_2 */)
                         v = "(" + v + ") * 0.5";
                     if (clamp)
@@ -3869,11 +3888,11 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                     switch (op) {
                         case 0 /* ADD */:
                         case 1 /* SUB */:
-                            var oper = (op === 0 /* ADD */) ? '+' : '-';
-                            var bare = d + " " + op + " mix(" + a + ", " + b + ", " + c + ")";
-                            return this.generateTevOpBiasScaleClamp(bare, bias, scale, clamp);
+                            var o = (op === 0 /* ADD */) ? '+' : '-';
+                            var v = "mix(" + a + ", " + b + ", " + c + ") " + o + " " + d;
+                            return this.generateTevOpBiasScaleClamp(v, bias, scale, clamp);
                         default:
-                            throw "whoops";
+                            throw new Error("whoops");
                     }
                 };
                 BMDProgram.prototype.generateColorOp = function (stage) {
@@ -3894,15 +3913,15 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                 };
                 BMDProgram.prototype.generateTevStage = function (stage) {
                     var i = stage.index;
-                    var header = "\n    // TEV Stage " + i + "\n    // colorIn: " + stage.colorInA + " " + stage.colorInB + " " + stage.colorInC + " " + stage.colorInD + "  colorOp: " + stage.colorOp + " colorBias: " + stage.colorBias + " colorScale: " + stage.colorScale + " colorClamp: " + stage.colorClamp + " colorRegId: " + stage.colorRegId + "\n    // alphaIn: " + stage.alphaInA + " " + stage.alphaInB + " " + stage.alphaInC + " " + stage.alphaInD + "  alphaOp: " + stage.alphaOp + " alphaBias: " + stage.alphaBias + " alphaScale: " + stage.alphaScale + " alphaClamp: " + stage.alphaClamp + " alphaRegId: " + stage.alphaRegId + "\n    // texCoordId: " + stage.texCoordId + " texMap: " + stage.texMap + " channelId: " + stage.channelId + "\n    " + this.generateColorOp(stage) + "\n    " + this.generateAlphaOp(stage) + "\n";
+                    return "\n    // TEV Stage " + i + "\n    // colorIn: " + stage.colorInA + " " + stage.colorInB + " " + stage.colorInC + " " + stage.colorInD + "  colorOp: " + stage.colorOp + " colorBias: " + stage.colorBias + " colorScale: " + stage.colorScale + " colorClamp: " + stage.colorClamp + " colorRegId: " + stage.colorRegId + "\n    // alphaIn: " + stage.alphaInA + " " + stage.alphaInB + " " + stage.alphaInC + " " + stage.alphaInD + "  alphaOp: " + stage.alphaOp + " alphaBias: " + stage.alphaBias + " alphaScale: " + stage.alphaScale + " alphaClamp: " + stage.alphaClamp + " alphaRegId: " + stage.alphaRegId + "\n    // texCoordId: " + stage.texCoordId + " texMap: " + stage.texMap + " channelId: " + stage.channelId + "\n    " + this.generateColorOp(stage) + ";\n    " + this.generateAlphaOp(stage) + ";";
                 };
                 BMDProgram.prototype.generateTevStages = function (tevStages) {
                     var _this = this;
-                    return tevStages.map(function (s) { return _this.generateTevStage(s); }).join('\n');
+                    return tevStages.map(function (s) { return _this.generateTevStage(s); }).join('');
                 };
                 BMDProgram.prototype.generateAlphaTestCompare = function (compare, reference) {
                     var reg = this.generateTevRegister(0 /* PREV */);
-                    var ref = "" + reference;
+                    var ref = this.generateFloat(reference);
                     switch (compare) {
                         case 0 /* NEVER */: return "false";
                         case 1 /* LESS */: return reg + ".a <  " + ref;
@@ -3923,21 +3942,18 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                     }
                 };
                 BMDProgram.prototype.generateAlphaTest = function (alphaTest) {
-                    return "\n    bool t_alphaTestA = " + this.generateAlphaTestCompare(alphaTest.compareA, alphaTest.referenceA) + ";\n    bool t_alphaTestB = " + this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB) + ";\n    if (!(" + this.generateAlphaTestOp(alphaTest.op) + "))\n        discard;\n";
+                    return "\n    // Alpha Test: Op " + alphaTest.op + "\n    // Compare A: " + alphaTest.compareA + " Reference A: " + this.generateFloat(alphaTest.referenceA) + "\n    // Compare B: " + alphaTest.compareB + " Reference B: " + this.generateFloat(alphaTest.referenceB) + "\n    bool t_alphaTestA = " + this.generateAlphaTestCompare(alphaTest.compareA, alphaTest.referenceA) + ";\n    bool t_alphaTestB = " + this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB) + ";\n    if (!(" + this.generateAlphaTestOp(alphaTest.op) + "))\n        discard;\n";
                 };
                 BMDProgram.prototype.generateShaders = function () {
                     var vertAttributeDefs = BMDProgram.vtxAttributeGenDefs.map(function (a) {
-                        return "\nlayout(location = " + a.attrib + ") in " + a.storage + " a_" + a.name + ";\nout " + a.storage + " v_" + a.name + ";\n" + (a.scale ? "uniform float u_scale_" + a.name + ";" : "") + "\n" + a.storage + " ReadAttrib_" + a.name + "() {\n    return a_" + a.name + (a.scale ? " * u_scale_" + a.name : "") + ";\n}\n";
+                        return "\nlayout(location = " + a.attrib + ") in " + a.storage + " a_" + a.name + ";\n" + (a.scale ? "uniform float u_scale_" + a.name + ";" : "") + "\n" + a.storage + " ReadAttrib_" + a.name + "() {\n    return a_" + a.name + (a.scale ? " * u_scale_" + a.name : "") + ";\n}\n";
                     }).join('');
-                    this.vert = "\nprecision mediump float;\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n" + vertAttributeDefs + "\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0, 1); }\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    vec3 t_Color0 = ReadAttrib_Color0();\n    vec3 t_Color1 = ReadAttrib_Color1();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);\n}\n";
-                    var fragAttributeDefs = BMDProgram.vtxAttributeGenDefs.map(function (a) {
-                        return "\nin " + a.storage + " v_" + a.name + ";\n";
-                    }).join('');
+                    this.vert = "\nprecision mediump float;\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n" + vertAttributeDefs + "\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec2 v_TexCoord0;\nout vec2 v_TexCoord1;\nout vec2 v_TexCoord2;\nout vec2 v_TexCoord3;\nout vec2 v_TexCoord4;\nout vec2 v_TexCoord5;\nout vec2 v_TexCoord6;\nout vec2 v_TexCoord7;\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n    " + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);\n}\n";
                     var tevStages = this.material.tevStages;
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\nprecision mediump float;\n" + fragAttributeDefs + "\n\nvoid main() {\n    const vec4 s_kColor0 = " + this.generateColorConstant(kColors[0]) + ";\n    const vec4 s_kColor1 = " + this.generateColorConstant(kColors[1]) + ";\n    const vec4 s_kColor2 = " + this.generateColorConstant(kColors[2]) + ";\n    const vec4 s_kColor3 = " + this.generateColorConstant(kColors[3]) + ";\n\n    vec4 t_Color0    = " + this.generateColorConstant(rColors[0]) + ";\n    vec4 t_Color1    = " + this.generateColorConstant(rColors[1]) + ";\n    vec4 t_Color2    = " + this.generateColorConstant(rColors[2]) + ";\n    vec4 t_ColorPrev = " + this.generateColorConstant(rColors[3]) + ";\n\n    " + this.generateTevStages(tevStages) + "\n\n    // Alpha Test: Op " + alphaTest.op + "\n    // Compare A: " + alphaTest.compareA + " Reference A: " + alphaTest.referenceA + "\n    // Compare B: " + alphaTest.compareB + " Reference B: " + alphaTest.referenceB + "\n    " + this.generateAlphaTest(alphaTest) + "\n\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\nprecision mediump float;\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec2 v_TexCoord0;\nin vec2 v_TexCoord1;\nin vec2 v_TexCoord2;\nin vec2 v_TexCoord3;\nin vec2 v_TexCoord4;\nin vec2 v_TexCoord5;\nin vec2 v_TexCoord6;\nin vec2 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\n\nvoid main() {\n    const vec4 s_kColor0 = " + this.generateColorConstant(kColors[0]) + ";\n    const vec4 s_kColor1 = " + this.generateColorConstant(kColors[1]) + ";\n    const vec4 s_kColor2 = " + this.generateColorConstant(kColors[2]) + ";\n    const vec4 s_kColor3 = " + this.generateColorConstant(kColors[3]) + ";\n\n    vec4 t_Color0    = " + this.generateColorConstant(rColors[0]) + ";\n    vec4 t_Color1    = " + this.generateColorConstant(rColors[1]) + ";\n    vec4 t_Color2    = " + this.generateColorConstant(rColors[2]) + ";\n    vec4 t_ColorPrev = " + this.generateColorConstant(rColors[3]) + ";\n\n    " + this.generateTevStages(tevStages) + "\n\n    " + this.generateAlphaTest(alphaTest) + "\n\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 BMDProgram.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
@@ -3970,14 +3986,14 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                     { attrib: 10 /* NRM */, name: "Normal", storage: "vec3", scale: true },
                     { attrib: 11 /* CLR0 */, name: "Color0", storage: "vec4", scale: false },
                     { attrib: 12 /* CLR1 */, name: "Color1", storage: "vec4", scale: false },
-                    { attrib: 13 /* TEX0 */, name: "TexCoord0", storage: "vec2", scale: true },
-                    { attrib: 14 /* TEX1 */, name: "TexCoord1", storage: "vec2", scale: true },
-                    { attrib: 15 /* TEX2 */, name: "TexCoord2", storage: "vec2", scale: true },
-                    { attrib: 16 /* TEX3 */, name: "TexCoord3", storage: "vec2", scale: true },
-                    { attrib: 17 /* TEX4 */, name: "TexCoord4", storage: "vec2", scale: true },
-                    { attrib: 18 /* TEX5 */, name: "TexCoord5", storage: "vec2", scale: true },
-                    { attrib: 19 /* TEX6 */, name: "TexCoord6", storage: "vec2", scale: true },
-                    { attrib: 20 /* TEX7 */, name: "TexCoord7", storage: "vec2", scale: true },
+                    { attrib: 13 /* TEX0 */, name: "Tex0", storage: "vec2", scale: true },
+                    { attrib: 14 /* TEX1 */, name: "Tex1", storage: "vec2", scale: true },
+                    { attrib: 15 /* TEX2 */, name: "Tex2", storage: "vec2", scale: true },
+                    { attrib: 16 /* TEX3 */, name: "Tex3", storage: "vec2", scale: true },
+                    { attrib: 17 /* TEX4 */, name: "Tex4", storage: "vec2", scale: true },
+                    { attrib: 18 /* TEX5 */, name: "Tex5", storage: "vec2", scale: true },
+                    { attrib: 19 /* TEX6 */, name: "Tex6", storage: "vec2", scale: true },
+                    { attrib: 20 /* TEX7 */, name: "Tex7", storage: "vec2", scale: true },
                 ];
                 return BMDProgram;
             }(Viewer.Program));
@@ -4033,15 +4049,24 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
             }());
             Command_Material = /** @class */ (function () {
                 function Command_Material(gl, bmd, material) {
-                    this.tex0 = null;
+                    this.textures = [];
                     this.bmd = bmd;
                     this.material = material;
                     this.program = new BMDProgram(material);
                     this.renderFlags = Command_Material.translateRenderFlags(this.material);
-                    var tex0Index = this.material.textureIndexes[6];
-                    if (tex0Index > 0)
-                        this.tex0 = Command_Material.translateTexture(gl, this.bmd.tex1.textures[tex0Index]);
+                    this.textures = this.translateTextures(gl);
                 }
+                Command_Material.prototype.translateTextures = function (gl) {
+                    var textures = [];
+                    for (var i = 0; i < this.material.textureIndexes.length; i++) {
+                        var texIndex = this.material.textureIndexes[i];
+                        if (texIndex >= 0)
+                            textures[i] = Command_Material.translateTexture(gl, this.bmd.tex1.textures[texIndex]);
+                        else
+                            textures[i] = null;
+                    }
+                    return textures;
+                };
                 Command_Material.translateTexFilter = function (gl, texFilter) {
                     // TODO(jstpierre): Upload mipmaps as well.
                     switch (texFilter) {
@@ -4123,7 +4148,13 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                         finally { if (e_17) throw e_17.error; }
                     }
                     state.useFlags(this.renderFlags);
-                    gl.bindTexture(gl.TEXTURE_2D, this.tex0);
+                    for (var i = 0; i < this.textures.length; i++) {
+                        var texture = this.textures[i];
+                        if (texture === null)
+                            continue;
+                        gl.activeTexture(gl.TEXTURE0 + i);
+                        gl.bindTexture(gl.TEXTURE_2D, texture);
+                    }
                     var e_17, _c;
                 };
                 return Command_Material;
