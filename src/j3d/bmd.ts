@@ -177,6 +177,8 @@ export interface VertexArray {
     compSize: CompSize;
     scale: number;
     buffer: ArrayBuffer;
+    dataOffs: number;
+    dataSize: number;
 }
 
 export interface VTX1 {
@@ -188,12 +190,27 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const formatOffs = view.getUint32(0x08);
     const dataOffsLookupTable = 0x0C;
 
+    // Data tables are stored in this order. Assumed to be hardcoded in a
+    // struct somewhere inside JSystem.
+    const dataTables = [
+        GX.VertexAttribute.POS,
+        GX.VertexAttribute.NRM,
+        GX.VertexAttribute.NBT,
+        GX.VertexAttribute.CLR0,
+        GX.VertexAttribute.CLR1,
+        GX.VertexAttribute.TEX0,
+        GX.VertexAttribute.TEX1,
+        GX.VertexAttribute.TEX2,
+        GX.VertexAttribute.TEX3,
+        GX.VertexAttribute.TEX4,
+        GX.VertexAttribute.TEX5,
+        GX.VertexAttribute.TEX6,
+        GX.VertexAttribute.TEX7,
+    ];
+
     let offs = formatOffs;
-    let i = 0;
     const vertexArrays = new Map<GX.VertexAttribute, VertexArray>();
     while (true) {
-        // Parse out the vertex formats.
-        const formatIdx = i++;
         const vtxAttrib: GX.VertexAttribute = view.getUint32(offs + 0x00);
         if (vtxAttrib === GX.VertexAttribute.NULL)
             break;
@@ -203,6 +220,10 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const decimalPoint: number = view.getUint8(offs + 0x0C);
         const scale = Math.pow(0.5, decimalPoint);
         offs += 0x10;
+
+        const formatIdx = dataTables.indexOf(vtxAttrib);
+        if (formatIdx < 0)
+            continue;
 
         // Each attrib in the VTX1 chunk also has a corresponding data chunk containing
         // the data for that attribute, in the format stored above.
@@ -219,7 +240,7 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const compSize = getComponentSize(compType);
         const vtxDataBufferRaw = buffer.slice(dataOffs, dataOffs + dataSize);
         const vtxDataBuffer = bswapArray(vtxDataBufferRaw, compSize);
-        const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compSize, scale, buffer: vtxDataBuffer };
+        const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compSize, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }
 
@@ -382,6 +403,10 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                     const attribDataSize = vertexArray.compSize * vertexArray.compCount;
                     const vertexData = new Uint8Array(vertexArray.buffer, attribDataSize * index, attribDataSize);
                     packedDataView.set(vertexData, packedDataOffs);
+
+                    if (i === 0 && j === 0 && packedDataOffs < packedDataSize && attrib.vtxAttrib === GX.VertexAttribute.CLR0)
+                        console.log(vertexArray.dataOffs, vertexData, vertexArray.buffer, attribDataSize * index);
+
                     packedDataOffs += attribDataSize;
                 }
                 assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
@@ -400,11 +425,23 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     bmd.shp1 = shp1;
 }
 
+export interface MAT3 {
+    materialEntries: MaterialEntry[];
+}
+
+export interface MaterialEntry {
+    textureIndexes: number[];
+    cullMode: GX.CullMode;
+    depthTest: boolean;
+    depthFunc: GX.CompareType;
+    depthWrite: boolean;
+}
+
 function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
     const view = new DataView(buffer, chunkStart, chunkSize);
     const materialCount = view.getUint16(0x08);
 
-    const indexToMatIndexTableOffs = view.getUint16(0x10);
+    const indexToMatIndexTableOffs = view.getUint32(0x10);
     const indexToMatIndexTable = [];
     for (let i = 0; i < materialCount; i++)
         indexToMatIndexTable[i] = view.getUint16(indexToMatIndexTableOffs + i * 0x02);
@@ -414,41 +451,59 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const nameTableOffs = view.getUint32(0x14);
     const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
 
-    const materialEntries = [];
-    const materialEntryIdx = view.getUint16(0x0C);
-    for (let i = 0; i < maxIndex + 1; i++) {
+    const cullModeTableOffs = view.getUint32(0x1C);
+    const textureTableOffs = view.getUint32(0x48);
+    const blendModeTableOffs = view.getUint32(0x70);
+    const depthModeTableOffs = view.getUint32(0x74);
+
+    const materialEntries: MaterialEntry[] = [];
+    let materialEntryIdx = view.getUint32(0x0C);
+    for (let i = 0; i <= maxIndex; i++) {
         const flags = view.getUint8(materialEntryIdx + 0x00);
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
         const numChansIndex = view.getUint8(materialEntryIdx + 0x02);
         const texGenCountIndex = view.getUint8(materialEntryIdx + 0x03);
-        const tevCount = view.getUint8(materialEntryIdx + 0x04);
+        const tevCountIndex = view.getUint8(materialEntryIdx + 0x04);
         // unk
-        const zModeIndex = view.getUint8(materialEntryIdx + 0x06);
+        const depthModeIndex = view.getUint8(materialEntryIdx + 0x06);
         // unk
-        const color1_Index0 = view.getUint16(materialEntryIdx + 0x08);
-        const color1_Index1 = view.getUint16(materialEntryIdx + 0x0A);
-        const chanControlsIndex0 = view.getUint16(materialEntryIdx + 0x0C);
-        const chanControlsIndex1 = view.getUint16(materialEntryIdx + 0x0E);
-        const chanControlsIndex2 = view.getUint16(materialEntryIdx + 0x10);
-        const chanControlsIndex3 = view.getUint16(materialEntryIdx + 0x12);
-        const color2_Index0 = view.getUint16(materialEntryIdx + 0x14);
-        const color2_Index1 = view.getUint16(materialEntryIdx + 0x16);
-        // uint16_t lights[8];
 
-        const cullMode = view.getUint32(0x18 + cullModeIndex * 0x04);
+        const cullMode: GX.CullMode = view.getUint32(cullModeTableOffs + cullModeIndex * 0x04);
+        const depthTest: boolean = !!view.getUint8(depthModeTableOffs + depthModeIndex * 4 + 0x00);
+        const depthFunc: GX.CompareType = view.getUint8(depthModeTableOffs + depthModeIndex * 4 + 0x01);
+        const depthWrite: boolean = !!view.getUint8(depthModeTableOffs + depthModeIndex * 4 + 0x02);
+
+        let textureIndexTableIdx = materialEntryIdx + 0x78;
+        const textureIndexes = [];
+        for (let j = 0; j < 8; j++) {
+            const textureTableIndex = view.getInt16(textureIndexTableIdx);
+            if (textureTableIndex >= 0) {
+                const textureIndex = view.getUint16(textureTableOffs + textureTableIndex * 0x02);
+                textureIndexes.push(textureIndex);
+            } else {
+                textureIndexes.push(-1);
+            }
+            textureIndexTableIdx += 0x02;
+        }
+
+        materialEntries.push({ textureIndexes, cullMode, depthTest, depthFunc, depthWrite });
+        materialEntryIdx += 0x014C;
     }
+
+    const mat3 = { materialEntries };
+    bmd.mat3 = mat3;
 }
 
-interface TEX1_Texture {
+export interface TEX1_Texture {
     name: string;
     format: GX.TexFormat;
     width: number;
     height: number;
-    wrapS: boolean;
-    wrapT: boolean;
+    wrapS: GX.WrapMode;
+    wrapT: GX.WrapMode;
     minFilter: GX.TexFilter;
     magFilter: GX.TexFilter;
-    decodedTexture: Texture.DecodedTexture;
+    data: ArrayBuffer;
 }
 
 export interface TEX1 {
@@ -469,8 +524,8 @@ export function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number,
         const format: GX.TexFormat = view.getUint8(textureIdx + 0x00);
         const width = view.getUint16(textureIdx + 0x02);
         const height = view.getUint16(textureIdx + 0x04);
-        const wrapS = !!view.getUint8(textureIdx + 0x06);
-        const wrapT = !!view.getUint8(textureIdx + 0x07);
+        const wrapS = view.getUint8(textureIdx + 0x06);
+        const wrapT = view.getUint8(textureIdx + 0x07);
         const paletteFormat = view.getUint8(textureIdx + 0x09);
         const paletteNumEntries = view.getUint16(textureIdx + 0x0A);
         const paletteOffs = view.getUint16(textureIdx + 0x0C);
@@ -478,13 +533,9 @@ export function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number,
         const magFilter = view.getUint8(textureIdx + 0x15);
         const mipCount = view.getUint16(textureIdx + 0x18);
         const dataOffs = view.getUint32(textureIdx + 0x1C);
+        const data = buffer.slice(chunkStart + textureIdx + dataOffs);
 
-        // TODO(jstpierre): WEBGL_compressed_texture_s3tc
-        const supportsS3TC = false;
-        const data = buffer.slice(textureIdx + dataOffs);
-        const decodedTexture: Texture.DecodedTexture = Texture.decodeTexture({ format, width, height, data }, false);
-
-        textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, decodedTexture });
+        textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, data });
         textureIdx += 0x20;
     }
 
@@ -495,6 +546,7 @@ export class BMD {
     public inf1: INF1;
     public vtx1: VTX1;
     public shp1: SHP1;
+    public mat3: MAT3;
     public tex1: TEX1;
 }
 

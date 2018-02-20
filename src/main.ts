@@ -90,7 +90,7 @@ class Main {
         this.groups.push(ZELVIEW.sceneGroup);
         this.groups.push(OOT3D.sceneGroup);
         this.groups.push(FRES.sceneGroup);
-        // this.groups.push(J3D.sceneGroup);
+        this.groups.push(J3D.sceneGroup);
 
         this._makeUI();
 

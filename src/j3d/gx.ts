@@ -28,6 +28,7 @@ export const enum VertexAttribute {
     TEX5 = 18,
     TEX6 = 19,
     TEX7 = 20,
+    NBT = 25,
     NULL = 0xFF,
 }
 
