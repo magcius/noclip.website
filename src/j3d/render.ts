@@ -16,18 +16,18 @@ interface VertexAttributeGenDef {
 
 class BMDProgram extends Viewer.Program {
     private static vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-        { attrib: GX.VertexAttribute.POS,  name: "Position",  storage: "vec3", scale: true },
-        { attrib: GX.VertexAttribute.NRM,  name: "Normal",    storage: "vec3", scale: true },
-        { attrib: GX.VertexAttribute.CLR0, name: "Color0",    storage: "vec4", scale: false },
-        { attrib: GX.VertexAttribute.CLR1, name: "Color1",    storage: "vec4", scale: false },
-        { attrib: GX.VertexAttribute.TEX0, name: "TexCoord0", storage: "vec2", scale: true },
-        { attrib: GX.VertexAttribute.TEX1, name: "TexCoord1", storage: "vec2", scale: true },
-        { attrib: GX.VertexAttribute.TEX2, name: "TexCoord2", storage: "vec2", scale: true },
-        { attrib: GX.VertexAttribute.TEX3, name: "TexCoord3", storage: "vec2", scale: true },
-        { attrib: GX.VertexAttribute.TEX4, name: "TexCoord4", storage: "vec2", scale: true },
-        { attrib: GX.VertexAttribute.TEX5, name: "TexCoord5", storage: "vec2", scale: true },
-        { attrib: GX.VertexAttribute.TEX6, name: "TexCoord6", storage: "vec2", scale: true },
-        { attrib: GX.VertexAttribute.TEX7, name: "TexCoord7", storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.POS,  name: "Position", storage: "vec3", scale: true },
+        { attrib: GX.VertexAttribute.NRM,  name: "Normal",   storage: "vec3", scale: true },
+        { attrib: GX.VertexAttribute.CLR0, name: "Color0",   storage: "vec4", scale: false },
+        { attrib: GX.VertexAttribute.CLR1, name: "Color1",   storage: "vec4", scale: false },
+        { attrib: GX.VertexAttribute.TEX0, name: "Tex0",     storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX1, name: "Tex1",     storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX2, name: "Tex2",     storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX3, name: "Tex3",     storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX4, name: "Tex4",     storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX5, name: "Tex5",     storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX6, name: "Tex6",     storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX7, name: "Tex7",     storage: "vec2", scale: true },
     ];
 
     private vtxAttributeScaleLocations: WebGLUniformLocation[] = [];
@@ -41,11 +41,18 @@ class BMDProgram extends Viewer.Program {
         this.generateShaders();
     }
 
-    // Color Channels
+    private generateFloat(v: number): string {
+        let s = v.toString();
+        if (!s.includes('.'))
+            s += '.0';
+        return s;
+    }
+
     private generateColorConstant(c: BMD.Color) {
         return `vec4(${c.r}, ${c.g}, ${c.b}, ${c.a})`;
     }
 
+    // Color Channels
     private generateColorChannel(chan: BMD.ColorChannelControl, vtxSource: string) {
         // TODO(jstpierre): Ambient and lighting.
         switch (chan.matColorSource) {
@@ -61,14 +68,14 @@ class BMDProgram extends Viewer.Program {
         case GX.TexGenSrc.NRM:       return `v_Normal`;
         case GX.TexGenSrc.COLOR0:    return `v_Color0`;
         case GX.TexGenSrc.COLOR1:    return `v_Color1`;
-        case GX.TexGenSrc.TEX0:      return `Read_Tex0()`;
-        case GX.TexGenSrc.TEX1:      return `Read_Tex1()`;
-        case GX.TexGenSrc.TEX2:      return `Read_Tex2()`;
-        case GX.TexGenSrc.TEX3:      return `Read_Tex3()`;
-        case GX.TexGenSrc.TEX4:      return `Read_Tex4()`;
-        case GX.TexGenSrc.TEX5:      return `Read_Tex5()`;
-        case GX.TexGenSrc.TEX6:      return `Read_Tex6()`;
-        case GX.TexGenSrc.TEX7:      return `Read_Tex7()`;
+        case GX.TexGenSrc.TEX0:      return `ReadAttrib_Tex0()`;
+        case GX.TexGenSrc.TEX1:      return `ReadAttrib_Tex1()`;
+        case GX.TexGenSrc.TEX2:      return `ReadAttrib_Tex2()`;
+        case GX.TexGenSrc.TEX3:      return `ReadAttrib_Tex3()`;
+        case GX.TexGenSrc.TEX4:      return `ReadAttrib_Tex4()`;
+        case GX.TexGenSrc.TEX5:      return `ReadAttrib_Tex5()`;
+        case GX.TexGenSrc.TEX6:      return `ReadAttrib_Tex6()`;
+        case GX.TexGenSrc.TEX7:      return `ReadAttrib_Tex7()`;
         // Use a previously generated texcoordgen.
         case GX.TexGenSrc.TEXCOORD0: return `v_TexCoord0`;
         case GX.TexGenSrc.TEXCOORD1: return `v_TexCoord1`;
@@ -78,15 +85,15 @@ class BMDProgram extends Viewer.Program {
         case GX.TexGenSrc.TEXCOORD5: return `v_TexCoord5`;
         case GX.TexGenSrc.TEXCOORD6: return `v_TexCoord6`;
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
     private generateTexGenMatrix(src: string, matrix: GX.TexGenMatrix) {
         switch (matrix) {
-        case GX.TexGenMatrix.IDENTITY: return src;
+        case GX.TexGenMatrix.IDENTITY: return `${src}.xy`;
         // TODO(jstpierre): TexMtx
-        default: return src;
+        default: return `${src}.xy`;
         }
     }
 
@@ -98,9 +105,9 @@ class BMDProgram extends Viewer.Program {
         case GX.TexGenType.MTX2x4: return this.generateTexGenMatrix(src, texCoordGen.matrix);
         // TODO(jstpierre): Support projected textures.
         case GX.TexGenType.MTX3x4:
-            throw "whoops";
+            throw new Error("whoops");
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -108,79 +115,88 @@ class BMDProgram extends Viewer.Program {
         const i = texCoordGen.index;
         return `
     // TexGen ${i}  Type: ${texCoordGen.type} Source: ${texCoordGen.source} Matrix: ${texCoordGen.matrix}
-    v_TexCoord${i} = ${this.generateTexGenType(texCoordGen)};
-`;
+    v_TexCoord${i} = ${this.generateTexGenType(texCoordGen)};`;
+    }
+
+    private generateTexGens(texGens: BMD.TexGen[]) {
+        return texGens.map((tg) => {
+            return this.generateTexGen(tg)
+        }).join('');
     }
 
     // TEV
     private generateKonstColorSel(konstColor: GX.KonstColorSel): string {
         switch (konstColor) {
-        case GX.KonstColorSel.KCSEL_1:    return 'vec3(8/8)';
-        case GX.KonstColorSel.KCSEL_7_8:  return 'vec3(7/8)';
-        case GX.KonstColorSel.KCSEL_3_4:  return 'vec3(6/8)';
-        case GX.KonstColorSel.KCSEL_5_8:  return 'vec3(5/8)';
-        case GX.KonstColorSel.KCSEL_1_2:  return 'vec3(4/8)';
-        case GX.KonstColorSel.KCSEL_3_8:  return 'vec3(3/8)';
-        case GX.KonstColorSel.KCSEL_1_4:  return 'vec3(2/8)';
-        case GX.KonstColorSel.KCSEL_1_8:  return 'vec3(1/8)';
-        case GX.KonstColorSel.KCSEL_K0:   return 's_kColor[0].rgb';
-        case GX.KonstColorSel.KCSEL_K0_R: return 's_kColor[0].rrr';
-        case GX.KonstColorSel.KCSEL_K0_G: return 's_kColor[0].ggg';
-        case GX.KonstColorSel.KCSEL_K0_B: return 's_kColor[0].bbb';
-        case GX.KonstColorSel.KCSEL_K0_A: return 's_kColor[0].aaa';
-        case GX.KonstColorSel.KCSEL_K1:   return 's_kColor[1].rgb';
-        case GX.KonstColorSel.KCSEL_K1_R: return 's_kColor[1].rrr';
-        case GX.KonstColorSel.KCSEL_K1_G: return 's_kColor[1].ggg';
-        case GX.KonstColorSel.KCSEL_K1_B: return 's_kColor[1].bbb';
-        case GX.KonstColorSel.KCSEL_K1_A: return 's_kColor[1].aaa';
-        case GX.KonstColorSel.KCSEL_K2:   return 's_kColor[2].rgb';
-        case GX.KonstColorSel.KCSEL_K2_R: return 's_kColor[2].rrr';
-        case GX.KonstColorSel.KCSEL_K2_G: return 's_kColor[2].ggg';
-        case GX.KonstColorSel.KCSEL_K2_B: return 's_kColor[2].bbb';
-        case GX.KonstColorSel.KCSEL_K2_A: return 's_kColor[2].aaa';
-        case GX.KonstColorSel.KCSEL_K3:   return 's_kColor[3].rgb';
-        case GX.KonstColorSel.KCSEL_K3_R: return 's_kColor[3].rrr';
-        case GX.KonstColorSel.KCSEL_K3_G: return 's_kColor[3].ggg';
-        case GX.KonstColorSel.KCSEL_K3_B: return 's_kColor[3].bbb';
-        case GX.KonstColorSel.KCSEL_K3_A: return 's_kColor[3].aaa';
+        case GX.KonstColorSel.KCSEL_1:    return 'vec3(8.0/8.0)';
+        case GX.KonstColorSel.KCSEL_7_8:  return 'vec3(7.0/8.0)';
+        case GX.KonstColorSel.KCSEL_3_4:  return 'vec3(6.0/8.0)';
+        case GX.KonstColorSel.KCSEL_5_8:  return 'vec3(5.0/8.0)';
+        case GX.KonstColorSel.KCSEL_1_2:  return 'vec3(4.0/8.0)';
+        case GX.KonstColorSel.KCSEL_3_8:  return 'vec3(3.0/8.0)';
+        case GX.KonstColorSel.KCSEL_1_4:  return 'vec3(2.0/8.0)';
+        case GX.KonstColorSel.KCSEL_1_8:  return 'vec3(1.0/8.0)';
+        case GX.KonstColorSel.KCSEL_K0:   return 's_kColor0.rgb';
+        case GX.KonstColorSel.KCSEL_K0_R: return 's_kColor0.rrr';
+        case GX.KonstColorSel.KCSEL_K0_G: return 's_kColor0.ggg';
+        case GX.KonstColorSel.KCSEL_K0_B: return 's_kColor0.bbb';
+        case GX.KonstColorSel.KCSEL_K0_A: return 's_kColor0.aaa';
+        case GX.KonstColorSel.KCSEL_K1:   return 's_kColor1.rgb';
+        case GX.KonstColorSel.KCSEL_K1_R: return 's_kColor1.rrr';
+        case GX.KonstColorSel.KCSEL_K1_G: return 's_kColor1.ggg';
+        case GX.KonstColorSel.KCSEL_K1_B: return 's_kColor1.bbb';
+        case GX.KonstColorSel.KCSEL_K1_A: return 's_kColor1.aaa';
+        case GX.KonstColorSel.KCSEL_K2:   return 's_kColor2.rgb';
+        case GX.KonstColorSel.KCSEL_K2_R: return 's_kColor2.rrr';
+        case GX.KonstColorSel.KCSEL_K2_G: return 's_kColor2.ggg';
+        case GX.KonstColorSel.KCSEL_K2_B: return 's_kColor2.bbb';
+        case GX.KonstColorSel.KCSEL_K2_A: return 's_kColor2.aaa';
+        case GX.KonstColorSel.KCSEL_K3:   return 's_kColor3.rgb';
+        case GX.KonstColorSel.KCSEL_K3_R: return 's_kColor3.rrr';
+        case GX.KonstColorSel.KCSEL_K3_G: return 's_kColor3.ggg';
+        case GX.KonstColorSel.KCSEL_K3_B: return 's_kColor3.bbb';
+        case GX.KonstColorSel.KCSEL_K3_A: return 's_kColor3.aaa';
         }
     }
 
     private generateKonstAlphaSel(konstAlpha: GX.KonstAlphaSel): string {
         switch (konstAlpha) {
-        case GX.KonstAlphaSel.KASEL_1:    return '8/8';
-        case GX.KonstAlphaSel.KASEL_7_8:  return '7/8';
-        case GX.KonstAlphaSel.KASEL_3_4:  return '6/8';
-        case GX.KonstAlphaSel.KASEL_5_8:  return '5/8';
-        case GX.KonstAlphaSel.KASEL_1_2:  return '4/8';
-        case GX.KonstAlphaSel.KASEL_3_8:  return '3/8';
-        case GX.KonstAlphaSel.KASEL_1_4:  return '2/8';
-        case GX.KonstAlphaSel.KASEL_1_8:  return '1/8';
-        case GX.KonstAlphaSel.KASEL_K0_R: return 's_kColor[0].r';
-        case GX.KonstAlphaSel.KASEL_K0_G: return 's_kColor[0].g';
-        case GX.KonstAlphaSel.KASEL_K0_B: return 's_kColor[0].b';
-        case GX.KonstAlphaSel.KASEL_K0_A: return 's_kColor[0].a';
-        case GX.KonstAlphaSel.KASEL_K1_R: return 's_kColor[1].r';
-        case GX.KonstAlphaSel.KASEL_K1_G: return 's_kColor[1].g';
-        case GX.KonstAlphaSel.KASEL_K1_B: return 's_kColor[1].b';
-        case GX.KonstAlphaSel.KASEL_K1_A: return 's_kColor[1].a';
-        case GX.KonstAlphaSel.KASEL_K2_R: return 's_kColor[2].r';
-        case GX.KonstAlphaSel.KASEL_K2_G: return 's_kColor[2].g';
-        case GX.KonstAlphaSel.KASEL_K2_B: return 's_kColor[2].b';
-        case GX.KonstAlphaSel.KASEL_K2_A: return 's_kColor[2].a';
-        case GX.KonstAlphaSel.KASEL_K3_R: return 's_kColor[3].r';
-        case GX.KonstAlphaSel.KASEL_K3_G: return 's_kColor[3].g';
-        case GX.KonstAlphaSel.KASEL_K3_B: return 's_kColor[3].b';
-        case GX.KonstAlphaSel.KASEL_K3_A: return 's_kColor[3].a';
+        case GX.KonstAlphaSel.KASEL_1:    return '(8.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_7_8:  return '(7.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_3_4:  return '(6.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_5_8:  return '(5.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_1_2:  return '(4.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_3_8:  return '(3.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_1_4:  return '(2.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_1_8:  return '(1.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_K0_R: return 's_kColor0.r';
+        case GX.KonstAlphaSel.KASEL_K0_G: return 's_kColor0.g';
+        case GX.KonstAlphaSel.KASEL_K0_B: return 's_kColor0.b';
+        case GX.KonstAlphaSel.KASEL_K0_A: return 's_kColor0.a';
+        case GX.KonstAlphaSel.KASEL_K1_R: return 's_kColor1.r';
+        case GX.KonstAlphaSel.KASEL_K1_G: return 's_kColor1.g';
+        case GX.KonstAlphaSel.KASEL_K1_B: return 's_kColor1.b';
+        case GX.KonstAlphaSel.KASEL_K1_A: return 's_kColor1.a';
+        case GX.KonstAlphaSel.KASEL_K2_R: return 's_kColor2.r';
+        case GX.KonstAlphaSel.KASEL_K2_G: return 's_kColor2.g';
+        case GX.KonstAlphaSel.KASEL_K2_B: return 's_kColor2.b';
+        case GX.KonstAlphaSel.KASEL_K2_A: return 's_kColor2.a';
+        case GX.KonstAlphaSel.KASEL_K3_R: return 's_kColor3.r';
+        case GX.KonstAlphaSel.KASEL_K3_G: return 's_kColor3.g';
+        case GX.KonstAlphaSel.KASEL_K3_B: return 's_kColor3.b';
+        case GX.KonstAlphaSel.KASEL_K3_A: return 's_kColor3.a';
         }
     }
 
     private generateRas(stage: BMD.TevStage) {
         switch (stage.channelId) {
-        case GX.ColorChannelId.COLOR0: return `v_Color0`;
-        case GX.ColorChannelId.COLOR1: return `v_Color1`;
+        case GX.ColorChannelId.COLOR0:     return `v_Color0`;
+        case GX.ColorChannelId.COLOR1:     return `v_Color1`;
         case GX.ColorChannelId.COLOR_ZERO: return `vec4(0, 0, 0, 0)`;
-        default: throw "whoops";
+        // XXX(jstpierre): Shouldn't appear but do in practice? WTF?
+        case GX.ColorChannelId.COLOR0A0:   return `v_Color0`;
+        case GX.ColorChannelId.COLOR1A1:   return `v_Color1`;
+        default:
+            throw new Error(`whoops ${stage.channelId}`);
         }
     }
 
@@ -205,7 +221,7 @@ class BMDProgram extends Viewer.Program {
         case GX.CombineColorInput.RASA:  return `${this.generateRas(stage)}.aaa`;
         case GX.CombineColorInput.ONE:   return `vec3(1)`;
         case GX.CombineColorInput.HALF:  return `vec3(1/2)`;
-        case GX.CombineColorInput.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}.rgb`;
+        case GX.CombineColorInput.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}`;
         case GX.CombineColorInput.ZERO:  return `vec3(0)`;
         }
     }
@@ -219,8 +235,8 @@ class BMDProgram extends Viewer.Program {
         case GX.CombineAlphaInput.A2:    return `t_Color2.a`;
         case GX.CombineAlphaInput.TEXA:  return `${this.generateTexAccess(stage)}.a`;
         case GX.CombineAlphaInput.RASA:  return `${this.generateRas(stage)}.a`;
-        case GX.CombineAlphaInput.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}.a`;
-        case GX.CombineAlphaInput.ZERO:  return `0`;
+        case GX.CombineAlphaInput.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
+        case GX.CombineAlphaInput.ZERO:  return `0.0`;
         }
     }
 
@@ -242,9 +258,9 @@ class BMDProgram extends Viewer.Program {
             v = `TevBias(${v}, -0.5)`;
 
         if (scale === GX.TevScale.SCALE_2)
-            v = `(${v}) * 2`;
+            v = `(${v}) * 2.0`;
         else if (scale === GX.TevScale.SCALE_4)
-            v = `(${v}) * 4`;
+            v = `(${v}) * 4.0`;
         else if (scale === GX.TevScale.DIVIDE_2)
             v = `(${v}) * 0.5`;
 
@@ -258,11 +274,11 @@ class BMDProgram extends Viewer.Program {
         switch (op) {
         case GX.TevOp.ADD:
         case GX.TevOp.SUB:
-            const oper = (op === GX.TevOp.ADD) ? '+' : '-';
-            const bare = `${d} ${op} mix(${a}, ${b}, ${c})`;
-            return this.generateTevOpBiasScaleClamp(bare, bias, scale, clamp);
+            const o = (op === GX.TevOp.ADD) ? '+' : '-';
+            const v = `mix(${a}, ${b}, ${c}) ${o} ${d}`;
+            return this.generateTevOpBiasScaleClamp(v, bias, scale, clamp);
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
     }
 
@@ -286,23 +302,22 @@ class BMDProgram extends Viewer.Program {
 
     private generateTevStage(stage: BMD.TevStage) {
         const i = stage.index;
-        const header = `
+        return `
     // TEV Stage ${i}
     // colorIn: ${stage.colorInA} ${stage.colorInB} ${stage.colorInC} ${stage.colorInD}  colorOp: ${stage.colorOp} colorBias: ${stage.colorBias} colorScale: ${stage.colorScale} colorClamp: ${stage.colorClamp} colorRegId: ${stage.colorRegId}
     // alphaIn: ${stage.alphaInA} ${stage.alphaInB} ${stage.alphaInC} ${stage.alphaInD}  alphaOp: ${stage.alphaOp} alphaBias: ${stage.alphaBias} alphaScale: ${stage.alphaScale} alphaClamp: ${stage.alphaClamp} alphaRegId: ${stage.alphaRegId}
     // texCoordId: ${stage.texCoordId} texMap: ${stage.texMap} channelId: ${stage.channelId}
-    ${this.generateColorOp(stage)}
-    ${this.generateAlphaOp(stage)}
-`;
+    ${this.generateColorOp(stage)};
+    ${this.generateAlphaOp(stage)};`;
     }
 
     private generateTevStages(tevStages: BMD.TevStage[]) {
-        return tevStages.map((s) => this.generateTevStage(s)).join('\n');
+        return tevStages.map((s) => this.generateTevStage(s)).join('');
     }
 
     private generateAlphaTestCompare(compare: GX.CompareType, reference: number) {
         const reg = this.generateTevRegister(GX.Register.PREV);
-        const ref = `${reference}`;
+        const ref = this.generateFloat(reference);
         switch (compare) {
         case GX.CompareType.NEVER:   return `false`;
         case GX.CompareType.LESS:    return `${reg}.a <  ${ref}`;
@@ -326,6 +341,9 @@ class BMDProgram extends Viewer.Program {
 
     private generateAlphaTest(alphaTest: BMD.AlphaTest) {
         return `
+    // Alpha Test: Op ${alphaTest.op}
+    // Compare A: ${alphaTest.compareA} Reference A: ${this.generateFloat(alphaTest.referenceA)}
+    // Compare B: ${alphaTest.compareB} Reference B: ${this.generateFloat(alphaTest.referenceB)}
     bool t_alphaTestA = ${this.generateAlphaTestCompare(alphaTest.compareA, alphaTest.referenceA)};
     bool t_alphaTestB = ${this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB)};
     if (!(${this.generateAlphaTestOp(alphaTest.op)}))
@@ -337,7 +355,6 @@ class BMDProgram extends Viewer.Program {
         const vertAttributeDefs = BMDProgram.vtxAttributeGenDefs.map((a) => {
             return `
 layout(location = ${a.attrib}) in ${a.storage} a_${a.name};
-out ${a.storage} v_${a.name};
 ${a.scale ? `uniform float u_scale_${a.name};` : ``}
 ${a.storage} ReadAttrib_${a.name}() {
     return a_${a.name}${a.scale ? ` * u_scale_${a.name}` : ``};
@@ -351,27 +368,28 @@ uniform mat4 u_projection;
 uniform mat4 u_modelView;
 ${vertAttributeDefs}
 
-vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
-float TevBias(float a, float b) { return a + b; }
-vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
-float TevSaturate(float a) { return clamp(a, 0, 1); }
+out vec3 v_Position;
+out vec3 v_Normal;
+out vec4 v_Color0;
+out vec4 v_Color1;
+out vec2 v_TexCoord0;
+out vec2 v_TexCoord1;
+out vec2 v_TexCoord2;
+out vec2 v_TexCoord3;
+out vec2 v_TexCoord4;
+out vec2 v_TexCoord5;
+out vec2 v_TexCoord6;
+out vec2 v_TexCoord7;
 
 void main() {
     v_Position = ReadAttrib_Position();
     v_Normal = ReadAttrib_Normal();
-    vec3 t_Color0 = ReadAttrib_Color0();
-    vec3 t_Color1 = ReadAttrib_Color1();
     v_Color0 = ${this.generateColorChannel(this.material.colorChannels[0], `ReadAttrib_Color0()`)};
     v_Color1 = ${this.generateColorChannel(this.material.colorChannels[1], `ReadAttrib_Color1()`)};
+    ${this.generateTexGens(this.material.texGens)}
     gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);
 }
 `;
-
-        const fragAttributeDefs = BMDProgram.vtxAttributeGenDefs.map((a) => {
-            return `
-in ${a.storage} v_${a.name};
-`;
-        }).join('');
 
         const tevStages = this.material.tevStages;
         const alphaTest = this.material.alphaTest;
@@ -380,7 +398,25 @@ in ${a.storage} v_${a.name};
 
         this.frag = `
 precision mediump float;
-${fragAttributeDefs}
+uniform sampler2D u_Texture[8];
+
+in vec3 v_Position;
+in vec3 v_Normal;
+in vec4 v_Color0;
+in vec4 v_Color1;
+in vec2 v_TexCoord0;
+in vec2 v_TexCoord1;
+in vec2 v_TexCoord2;
+in vec2 v_TexCoord3;
+in vec2 v_TexCoord4;
+in vec2 v_TexCoord5;
+in vec2 v_TexCoord6;
+in vec2 v_TexCoord7;
+
+vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
+float TevBias(float a, float b) { return a + b; }
+vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
+float TevSaturate(float a) { return clamp(a, 0.0, 1.0); }
 
 void main() {
     const vec4 s_kColor0 = ${this.generateColorConstant(kColors[0])};
@@ -395,9 +431,6 @@ void main() {
 
     ${this.generateTevStages(tevStages)}
 
-    // Alpha Test: Op ${alphaTest.op}
-    // Compare A: ${alphaTest.compareA} Reference A: ${alphaTest.referenceA}
-    // Compare B: ${alphaTest.compareB} Reference B: ${alphaTest.referenceB}
     ${this.generateAlphaTest(alphaTest)}
 
     gl_FragColor = t_ColorPrev;
@@ -506,7 +539,7 @@ class Command_Material {
     public bmd: BMD.BMD;
     public material: BMD.MaterialEntry;
 
-    private tex0: WebGLTexture = null;
+    private textures: WebGLTexture[] = [];
     private renderFlags: Viewer.RenderFlags;
     private program: BMDProgram;
 
@@ -517,9 +550,19 @@ class Command_Material {
 
         this.renderFlags = Command_Material.translateRenderFlags(this.material);
 
-        const tex0Index = this.material.textureIndexes[6];
-        if (tex0Index > 0)
-            this.tex0 = Command_Material.translateTexture(gl, this.bmd.tex1.textures[tex0Index]);
+        this.textures = this.translateTextures(gl);
+    }
+
+    private translateTextures(gl: WebGL2RenderingContext): WebGLTexture[] {
+        const textures = [];
+        for (let i = 0; i < this.material.textureIndexes.length; i++) {
+            const texIndex = this.material.textureIndexes[i];
+            if (texIndex >= 0)
+                textures[i] = Command_Material.translateTexture(gl, this.bmd.tex1.textures[texIndex]);
+            else
+                textures[i] = null;
+        }
+        return textures;
     }
 
     private static translateTexFilter(gl: WebGL2RenderingContext, texFilter: GX.TexFilter) {
@@ -603,7 +646,14 @@ class Command_Material {
         }
 
         state.useFlags(this.renderFlags);
-        gl.bindTexture(gl.TEXTURE_2D, this.tex0);
+
+        for (let i = 0; i < this.textures.length; i++) {
+            const texture = this.textures[i];
+            if (texture === null)
+                continue;
+            gl.activeTexture(gl.TEXTURE0 + i);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+        }
     }
 }
 

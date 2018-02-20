@@ -495,6 +495,8 @@ export interface RopInfo {
 }
 
 export interface MaterialEntry {
+    index: number;
+    name: string;
     textureIndexes: number[];
     cullMode: GX.CullMode;
     colorRegisters: Color[];
@@ -552,6 +554,8 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const materialEntries: MaterialEntry[] = [];
     let materialEntryIdx = view.getUint32(0x0C);
     for (let i = 0; i <= maxIndex; i++) {
+        const index = i;
+        const name = nameTable[i];
         const flags = view.getUint8(materialEntryIdx + 0x00);
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
         const numChansIndex = view.getUint8(materialEntryIdx + 0x02);
@@ -598,18 +602,18 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const colorConstants: Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0x94 + j * 0x02);
-            const color = readColorShort(view, colorConstantTableOffs + colorIndex * 0x04);
+            const color = readColor32(view, colorConstantTableOffs + colorIndex * 0x04);
             colorConstants.push(color);
         }
 
         const colorRegisters: Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0xDC + j * 0x02);
-            const color = readColorShort(view, colorRegisterTableOffs + colorIndex * 0x04);
+            const color = readColorShort(view, colorRegisterTableOffs + colorIndex * 0x08);
             colorRegisters.push(color);
         }
 
-        let textureIndexTableIdx = materialEntryIdx + 0x78;
+        let textureIndexTableIdx = materialEntryIdx + 0x84;
         const textureIndexes = [];
         for (let j = 0; j < 8; j++) {
             const textureTableIndex = view.getInt16(textureIndexTableIdx);
@@ -694,6 +698,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const ropInfo: RopInfo = { depthTest, depthFunc, depthWrite };
 
         materialEntries.push({
+            index, name,
             textureIndexes,
             cullMode,
             colorChannels,
