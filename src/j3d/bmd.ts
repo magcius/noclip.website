@@ -403,10 +403,6 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                     const attribDataSize = vertexArray.compSize * vertexArray.compCount;
                     const vertexData = new Uint8Array(vertexArray.buffer, attribDataSize * index, attribDataSize);
                     packedDataView.set(vertexData, packedDataOffs);
-
-                    if (i === 0 && j === 0 && packedDataOffs < packedDataSize && attrib.vtxAttrib === GX.VertexAttribute.CLR0)
-                        console.log(vertexArray.dataOffs, vertexData, vertexArray.buffer, attribDataSize * index);
-
                     packedDataOffs += attribDataSize;
                 }
                 assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
