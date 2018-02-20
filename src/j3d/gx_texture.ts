@@ -1,5 +1,5 @@
 
-import * as GX from 'gx';
+import * as GX from 'gx_enum';
 
 // Decode GX textures
 
