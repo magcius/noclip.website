@@ -3511,7 +3511,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                 throw new Error("Unknown PrimType " + primType);
         }
     }
-    var BMD, GX, Texture, Viewer, util_6, BlackProgram, Command_Shape, Command_Material, Scene, SceneDesc;
+    var BMD, GX, Texture, Viewer, util_6, BMDProgram, Command_Shape, Command_Material, Scene, SceneDesc;
     return {
         setters: [
             function (BMD_1) {
@@ -3531,40 +3531,67 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
             }
         ],
         execute: function () {
-            BlackProgram = /** @class */ (function (_super) {
-                __extends(BlackProgram, _super);
-                function BlackProgram() {
-                    var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nprecision mediump float;\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nuniform float u_scalePosition;\nlayout(location = " + BlackProgram.a_position + ") in vec3 a_position;\nlayout(location = " + BlackProgram.a_tex0 + ") in vec2 a_tex0;\nlayout(location = " + BlackProgram.a_clr0 + ") in vec4 a_clr0;\nout vec2 v_tex0;\nout vec4 v_clr0;\n\nvoid main() {\n    v_tex0 = a_tex0;\n    v_clr0 = a_clr0;\n\n    vec4 scaledPosition = vec4(a_position * u_scalePosition, 1.0);\n    gl_Position = u_projection * u_modelView * scaledPosition;\n}";
-                    _this.frag = "\nprecision mediump float;\nuniform sampler2D u_tex0;\nin vec2 v_tex0;\nin vec4 v_clr0;\n\nvoid main() {\n    gl_FragColor = v_clr0; // texture(u_tex0, v_tex0);\n    gl_FragColor.a = 1.0;\n}\n";
+            ;
+            BMDProgram = /** @class */ (function (_super) {
+                __extends(BMDProgram, _super);
+                function BMDProgram(material) {
+                    var _this = _super.call(this) || this;
+                    _this.vtxAttributeScaleLocations = [];
+                    _this.material = material;
+                    _this.generateShaders();
                     return _this;
                 }
-                BlackProgram.prototype.bind = function (gl, prog) {
+                BMDProgram.prototype.generateShaders = function () {
+                    var vertAttributeDefs = BMDProgram.vtxAttributeGenDefs.map(function (a) {
+                        return "\nlayout(location = " + a.attrib + ") in " + a.storage + " a_" + a.name + ";\nout " + a.storage + " v_" + a.name + ";\n" + (a.scale ? "uniform float u_scale_" + a.name + ";" : "") + "\n" + a.storage + " ReadAttrib_" + a.name + "() {\n    return a_" + a.name + (a.scale ? " * u_scale_" + a.name : "") + ";\n}\n";
+                    }).join('');
+                    this.vert = "\nprecision mediump float;\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n" + vertAttributeDefs + "\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = ReadAttrib_Color0();\n    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);\n}\n";
+                    var fragAttributeDefs = BMDProgram.vtxAttributeGenDefs.map(function (a) {
+                        return "\nin " + a.storage + " v_" + a.name + ";\n";
+                    }).join('');
+                    this.frag = "\nprecision mediump float;\n" + fragAttributeDefs + "\n\nvoid main() {\n    o_color = v_Color0;\n    o_color.a = 1.0;\n}\n";
+                };
+                BMDProgram.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
-                    this.scalePositionLocation = gl.getUniformLocation(prog, "u_scalePosition");
-                };
-                BlackProgram.getAttribLocation = function (vtxAttrib) {
-                    switch (vtxAttrib) {
-                        case 9 /* POS */:
-                            return this.a_position;
-                        case 13 /* TEX0 */:
-                            return this.a_tex0;
-                        case 11 /* CLR0 */:
-                            return this.a_clr0;
+                    try {
+                        for (var _a = __values(BMDProgram.vtxAttributeGenDefs), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var a = _b.value;
+                            if (a.scale === false)
+                                continue;
+                            var uniformName = "u_scale_" + a.name;
+                            this.vtxAttributeScaleLocations[a.attrib] = gl.getUniformLocation(prog, uniformName);
+                        }
                     }
-                    return null;
-                };
-                BlackProgram.prototype.getScaleUniformLocation = function (vtxAttrib) {
-                    switch (vtxAttrib) {
-                        case 9 /* POS */:
-                            return this.scalePositionLocation;
+                    catch (e_14_1) { e_14 = { error: e_14_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_14) throw e_14.error; }
                     }
-                    return null;
+                    var e_14, _c;
                 };
-                BlackProgram.a_position = 0;
-                BlackProgram.a_tex0 = 1;
-                BlackProgram.a_clr0 = 2;
-                return BlackProgram;
+                BMDProgram.prototype.getScaleUniformLocation = function (vtxAttrib) {
+                    var location = this.vtxAttributeScaleLocations[vtxAttrib];
+                    if (location === undefined)
+                        return null;
+                    return location;
+                };
+                BMDProgram.vtxAttributeGenDefs = [
+                    { attrib: 9 /* POS */, name: "Position", storage: "vec3", scale: true },
+                    { attrib: 10 /* NRM */, name: "Normal", storage: "vec3", scale: true },
+                    { attrib: 11 /* CLR0 */, name: "Color0", storage: "vec4", scale: false },
+                    { attrib: 12 /* CLR1 */, name: "Color1", storage: "vec4", scale: false },
+                    { attrib: 13 /* TEX0 */, name: "TexCoord0", storage: "vec2", scale: true },
+                    { attrib: 14 /* TEX1 */, name: "TexCoord1", storage: "vec2", scale: true },
+                    { attrib: 15 /* TEX2 */, name: "TexCoord2", storage: "vec2", scale: true },
+                    { attrib: 16 /* TEX3 */, name: "TexCoord3", storage: "vec2", scale: true },
+                    { attrib: 17 /* TEX4 */, name: "TexCoord4", storage: "vec2", scale: true },
+                    { attrib: 18 /* TEX5 */, name: "TexCoord5", storage: "vec2", scale: true },
+                    { attrib: 19 /* TEX6 */, name: "TexCoord6", storage: "vec2", scale: true },
+                    { attrib: 20 /* TEX7 */, name: "TexCoord7", storage: "vec2", scale: true },
+                ];
+                return BMDProgram;
             }(Viewer.Program));
             Command_Shape = /** @class */ (function () {
                 function Command_Shape(gl, bmd, shape) {
@@ -3579,62 +3606,40 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                         for (var _a = __values(this.shape.packedVertexAttributes), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var attrib = _b.value;
                             var vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
-                            var attribLocation = BlackProgram.getAttribLocation(attrib.vtxAttrib);
-                            if (attribLocation === null)
-                                continue; // XXX(jstpierre)
+                            var attribLocation = attrib.vtxAttrib;
                             gl.enableVertexAttribArray(attribLocation);
                             var _c = translateCompType(gl, vertexArray.compType), type = _c.type, normalized = _c.normalized;
                             gl.vertexAttribPointer(attribLocation, vertexArray.compCount, type, normalized, this.shape.packedVertexSize, attrib.offset);
                         }
                     }
-                    catch (e_14_1) { e_14 = { error: e_14_1 }; }
+                    catch (e_15_1) { e_15 = { error: e_15_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                         }
-                        finally { if (e_14) throw e_14.error; }
+                        finally { if (e_15) throw e_15.error; }
                     }
-                    var e_14, _d;
+                    var e_15, _d;
                 }
                 Command_Shape.prototype.exec = function (state) {
                     var gl = state.gl;
-                    // Bind our uniforms.
-                    var prog = state.currentProgram;
-                    try {
-                        // First up, bind vtx attr scales.
-                        for (var _a = __values(this.shape.packedVertexAttributes), _b = _a.next(); !_b.done; _b = _a.next()) {
-                            var attrib = _b.value;
-                            var location_3 = prog.getScaleUniformLocation(attrib.vtxAttrib);
-                            if (location_3 === null)
-                                continue;
-                            var vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
-                            gl.uniform1f(location_3, vertexArray.scale);
-                        }
-                    }
-                    catch (e_15_1) { e_15 = { error: e_15_1 }; }
-                    finally {
-                        try {
-                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                        }
-                        finally { if (e_15) throw e_15.error; }
-                    }
                     gl.bindVertexArray(this.vao);
                     try {
                         // Do draw calls.
-                        for (var _d = __values(this.shape.drawCalls), _e = _d.next(); !_e.done; _e = _d.next()) {
-                            var drawCall = _e.value;
+                        for (var _a = __values(this.shape.drawCalls), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var drawCall = _b.value;
                             gl.drawArrays(translatePrimType(gl, drawCall.primType), drawCall.first, drawCall.vertexCount);
                         }
                     }
                     catch (e_16_1) { e_16 = { error: e_16_1 }; }
                     finally {
                         try {
-                            if (_e && !_e.done && (_f = _d.return)) _f.call(_d);
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
                         finally { if (e_16) throw e_16.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_15, _c, e_16, _f;
+                    var e_16, _c;
                 };
                 return Command_Shape;
             }());
@@ -3643,6 +3648,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                     this.tex0 = null;
                     this.bmd = bmd;
                     this.material = material;
+                    this.program = new BMDProgram(material);
                     this.renderFlags = Command_Material.translateRenderFlags(this.material);
                     var tex0Index = this.material.textureIndexes[6];
                     if (tex0Index > 0)
@@ -3710,8 +3716,27 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                 };
                 Command_Material.prototype.exec = function (state) {
                     var gl = state.gl;
+                    state.useProgram(this.program);
+                    try {
+                        // Bind our scale uniforms.
+                        for (var _a = __values(this.bmd.vtx1.vertexArrays.values()), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var vertexArray = _b.value;
+                            var location_3 = this.program.getScaleUniformLocation(vertexArray.vtxAttrib);
+                            if (location_3 === null)
+                                continue;
+                            gl.uniform1f(location_3, vertexArray.scale);
+                        }
+                    }
+                    catch (e_17_1) { e_17 = { error: e_17_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_17) throw e_17.error; }
+                    }
                     state.useFlags(this.renderFlags);
                     gl.bindTexture(gl.TEXTURE_2D, this.tex0);
+                    var e_17, _c;
                 };
                 return Command_Material;
             }());
@@ -3720,7 +3745,6 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                     var _this = this;
                     this.cameraController = Viewer.FPSCameraController;
                     this.gl = gl;
-                    this.program_Black = new BlackProgram();
                     this.bmd = bmd;
                     this.translateModel(this.bmd);
                     this.textures = this.bmd.tex1.textures.map(function (tex) { return _this.translateTextureToCanvas(tex); });
@@ -3741,21 +3765,20 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                     return canvas;
                 };
                 Scene.prototype.render = function (state) {
-                    state.useProgram(this.program_Black);
                     try {
                         for (var _a = __values(this.commands), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var command = _b.value;
                             command.exec(state);
                         }
                     }
-                    catch (e_17_1) { e_17 = { error: e_17_1 }; }
+                    catch (e_18_1) { e_18 = { error: e_18_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_17) throw e_17.error; }
+                        finally { if (e_18) throw e_18.error; }
                     }
-                    var e_17, _c;
+                    var e_18, _c;
                 };
                 Scene.prototype.translateModel = function (bmd) {
                     this.commands = [];
@@ -3771,12 +3794,12 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                                     this.translateSceneGraph(child);
                                 }
                             }
-                            catch (e_18_1) { e_18 = { error: e_18_1 }; }
+                            catch (e_19_1) { e_19 = { error: e_19_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_18) throw e_18.error; }
+                                finally { if (e_19) throw e_19.error; }
                             }
                             break;
                         case BMD.HierarchyType.Shape:
@@ -3791,7 +3814,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx", "j3d/texture", "viewer", "ut
                             this.commands.push(new Command_Material(this.gl, this.bmd, material));
                             break;
                     }
-                    var e_18, _c;
+                    var e_19, _c;
                 };
                 return Scene;
             }());
@@ -4902,15 +4925,15 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                                 gl.drawElements(gl.TRIANGLES, prm.count, _this.translateDataType(gl, prm.indexType), prm.offset * _this.dataTypeSize(prm.indexType));
                             }
                         }
-                        catch (e_19_1) { e_19 = { error: e_19_1 }; }
+                        catch (e_20_1) { e_20 = { error: e_20_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_19) throw e_19.error; }
+                            finally { if (e_20) throw e_20.error; }
                         }
                         gl.bindVertexArray(null);
-                        var e_19, _c;
+                        var e_20, _c;
                     };
                 };
                 Scene.prototype.translateTexture = function (gl, texture) {
@@ -5003,14 +5026,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                                 func();
                             }
                         }
-                        catch (e_20_1) { e_20 = { error: e_20_1 }; }
+                        catch (e_21_1) { e_21 = { error: e_21_1 }; }
                         finally {
                             try {
                                 if (meshFuncs_1_1 && !meshFuncs_1_1.done && (_a = meshFuncs_1.return)) _a.call(meshFuncs_1);
                             }
-                            finally { if (e_20) throw e_20.error; }
+                            finally { if (e_21) throw e_21.error; }
                         }
-                        var e_20, _a;
+                        var e_21, _a;
                     };
                 };
                 Scene.prototype.translateModel = function (gl, mesh) {
@@ -5039,14 +5062,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_21_1) { e_21 = { error: e_21_1 }; }
+                    catch (e_22_1) { e_22 = { error: e_22_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_21) throw e_21.error; }
+                        finally { if (e_22) throw e_22.error; }
                     }
-                    var e_21, _c;
+                    var e_22, _c;
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) { return scene.render(renderState); });
@@ -6196,12 +6219,12 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                                         gl_matrix_4.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
-                            catch (e_22_1) { e_22 = { error: e_22_1 }; }
+                            catch (e_23_1) { e_23 = { error: e_23_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_22) throw e_22.error; }
+                                finally { if (e_23) throw e_23.error; }
                             }
                             gl_matrix_4.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                             gl_matrix_4.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
@@ -6211,7 +6234,7 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                             gl.bindTexture(gl.TEXTURE_2D, texId);
                         }
                         state.useFlags(renderFlags);
-                        var e_22, _c;
+                        var e_23, _c;
                     };
                 };
                 Scene.prototype.translateBatch = function (gl, batch) {
@@ -6272,14 +6295,14 @@ System.register("sm64ds/render", ["gl-matrix", "viewer", "sm64ds/crg0", "sm64ds/
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
+                    catch (e_24_1) { e_24 = { error: e_24_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_23) throw e_23.error; }
+                        finally { if (e_24) throw e_24.error; }
                     }
-                    var e_23, _c;
+                    var e_24, _c;
                 }
                 MultiScene.prototype.render = function (state) {
                     var gl = state.viewport.gl;
@@ -6712,15 +6735,15 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
                                 return entry;
                         }
                     }
-                    catch (e_24_1) { e_24 = { error: e_24_1 }; }
+                    catch (e_25_1) { e_25 = { error: e_25_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_24) throw e_24.error; }
+                        finally { if (e_25) throw e_25.error; }
                     }
                     return null;
-                    var e_24, _c;
+                    var e_25, _c;
                 };
                 ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
                     var bankIdx = addr >>> 24;
@@ -6837,15 +6860,15 @@ System.register("zelview/f3dex2", ["gl-matrix", "viewer"], function (exports_36,
                         return true;
                 }
             }
-            catch (e_25_1) { e_25 = { error: e_25_1 }; }
+            catch (e_26_1) { e_26 = { error: e_26_1 }; }
             finally {
                 try {
                     if (idxData_1_1 && !idxData_1_1.done && (_a = idxData_1.return)) _a.call(idxData_1);
                 }
-                finally { if (e_25) throw e_25.error; }
+                finally { if (e_26) throw e_26.error; }
             }
             return false;
-            var e_25, _a;
+            var e_26, _a;
         }
         function createGLVertBuffer() {
             var vertBuffer = gl.createBuffer();
@@ -8439,16 +8462,16 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                             this.sceneSelect.appendChild(sceneOption);
                         }
                     }
-                    catch (e_26_1) { e_26 = { error: e_26_1 }; }
+                    catch (e_27_1) { e_27 = { error: e_27_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_26) throw e_26.error; }
+                        finally { if (e_27) throw e_27.error; }
                     }
                     if (loadDefaultSceneInGroup)
                         this._loadSceneDesc(group.sceneDescs[0]);
-                    var e_26, _c;
+                    var e_27, _c;
                 };
                 Main.prototype._onSceneSelectChange = function () {
                     var option = this.sceneSelect.selectedOptions.item(0);
@@ -8488,12 +8511,12 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                             this.groupSelect.appendChild(groupOption);
                         }
                     }
-                    catch (e_27_1) { e_27 = { error: e_27_1 }; }
+                    catch (e_28_1) { e_28 = { error: e_28_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_27) throw e_27.error; }
+                        finally { if (e_28) throw e_28.error; }
                     }
                     this.groupSelect.onchange = this._onGroupSelectChange.bind(this);
                     this.groupSelect.style.marginRight = '1em';
@@ -8530,7 +8553,7 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     gearButton.textContent = '⚙';
                     gearButton.onclick = this._onGearButtonClicked.bind(this);
                     uiContainerR.appendChild(gearButton);
-                    var e_27, _c;
+                    var e_28, _c;
                 };
                 Main.prototype._toggleUI = function () {
                     this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? 'block' : 'none';
