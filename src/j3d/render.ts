@@ -7,67 +7,99 @@ import * as Viewer from 'viewer';
 import { fetch } from 'util';
 import { Progressable } from '../progress';
 
-class BlackProgram extends Viewer.Program {
-    public static a_position = 0;
-    public static a_tex0 = 1;
-    public static a_clr0 = 2;
-    public scalePositionLocation: WebGLUniformLocation;
+interface VertexAttributeGenDef {
+    attrib: GX.VertexAttribute;
+    storage: string;
+    name: string;
+    scale: boolean;
+};
 
-    public vert = `
-precision mediump float;
-uniform mat4 u_modelView;
-uniform mat4 u_projection;
-uniform float u_scalePosition;
-layout(location = ${BlackProgram.a_position}) in vec3 a_position;
-layout(location = ${BlackProgram.a_tex0}) in vec2 a_tex0;
-layout(location = ${BlackProgram.a_clr0}) in vec4 a_clr0;
-out vec2 v_tex0;
-out vec4 v_clr0;
+class BMDProgram extends Viewer.Program {
+    private static vtxAttributeGenDefs: VertexAttributeGenDef[] = [
+        { attrib: GX.VertexAttribute.POS,  name: "Position",  storage: "vec3", scale: true },
+        { attrib: GX.VertexAttribute.NRM,  name: "Normal",    storage: "vec3", scale: true },
+        { attrib: GX.VertexAttribute.CLR0, name: "Color0",    storage: "vec4", scale: false },
+        { attrib: GX.VertexAttribute.CLR1, name: "Color1",    storage: "vec4", scale: false },
+        { attrib: GX.VertexAttribute.TEX0, name: "TexCoord0", storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX1, name: "TexCoord1", storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX2, name: "TexCoord2", storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX3, name: "TexCoord3", storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX4, name: "TexCoord4", storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX5, name: "TexCoord5", storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX6, name: "TexCoord6", storage: "vec2", scale: true },
+        { attrib: GX.VertexAttribute.TEX7, name: "TexCoord7", storage: "vec2", scale: true },
+    ];
 
-void main() {
-    v_tex0 = a_tex0;
-    v_clr0 = a_clr0;
+    private vtxAttributeScaleLocations: WebGLUniformLocation[] = [];
 
-    vec4 scaledPosition = vec4(a_position * u_scalePosition, 1.0);
-    gl_Position = u_projection * u_modelView * scaledPosition;
-}`;
+    private material: BMD.MaterialEntry;
 
-    public frag = `
-precision mediump float;
-uniform sampler2D u_tex0;
-in vec2 v_tex0;
-in vec4 v_clr0;
+    constructor(material: BMD.MaterialEntry) {
+        super();
+        this.material = material;
 
-void main() {
-    gl_FragColor = v_clr0; // texture(u_tex0, v_tex0);
-    gl_FragColor.a = 1.0;
+        this.generateShaders();
+    }
+
+    private generateShaders() {
+        const vertAttributeDefs = BMDProgram.vtxAttributeGenDefs.map((a) => {
+            return `
+layout(location = ${a.attrib}) in ${a.storage} a_${a.name};
+out ${a.storage} v_${a.name};
+${a.scale ? `uniform float u_scale_${a.name};` : ``}
+${a.storage} ReadAttrib_${a.name}() {
+    return a_${a.name}${a.scale ? ` * u_scale_${a.name}` : ``};
 }
 `;
+        }).join('');
+
+        this.vert = `
+precision mediump float;
+uniform mat4 u_projection;
+uniform mat4 u_modelView;
+${vertAttributeDefs}
+
+void main() {
+    v_Position = ReadAttrib_Position();
+    v_Normal = ReadAttrib_Normal();
+    v_Color0 = ReadAttrib_Color0();
+    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);
+}
+`;
+
+        const fragAttributeDefs = BMDProgram.vtxAttributeGenDefs.map((a) => {
+            return `
+in ${a.storage} v_${a.name};
+`;
+        }).join('');
+
+        this.frag = `
+precision mediump float;
+${fragAttributeDefs}
+
+void main() {
+    o_color = v_Color0;
+    o_color.a = 1.0;
+}
+`
+    }
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
-        this.scalePositionLocation = gl.getUniformLocation(prog, "u_scalePosition");
-    }
-
-    public static getAttribLocation(vtxAttrib: GX.VertexAttribute) {
-        switch (vtxAttrib) {
-        case GX.VertexAttribute.POS:
-            return this.a_position;
-        case GX.VertexAttribute.TEX0:
-            return this.a_tex0;
-        case GX.VertexAttribute.CLR0:
-            return this.a_clr0;
+        for (const a of BMDProgram.vtxAttributeGenDefs) {
+            if (a.scale === false)
+                continue;
+            const uniformName = `u_scale_${a.name}`;
+            this.vtxAttributeScaleLocations[a.attrib] = gl.getUniformLocation(prog, uniformName);
         }
-        return null;
     }
 
     public getScaleUniformLocation(vtxAttrib: GX.VertexAttribute) {
-        switch (vtxAttrib) {
-        case GX.VertexAttribute.POS:
-            return this.scalePositionLocation;
-        }
-        return null;
+        const location = this.vtxAttributeScaleLocations[vtxAttrib];
+        if (location === undefined)
+            return null;
+        return location;
     }
 }
 
@@ -120,8 +152,7 @@ class Command_Shape {
         for (const attrib of this.shape.packedVertexAttributes) {
             const vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
 
-            const attribLocation = BlackProgram.getAttribLocation(attrib.vtxAttrib);
-            if (attribLocation === null) continue; // XXX(jstpierre)
+            const attribLocation = attrib.vtxAttrib;
             gl.enableVertexAttribArray(attribLocation);
 
             const { type, normalized } = translateCompType(gl, vertexArray.compType);
@@ -138,18 +169,6 @@ class Command_Shape {
 
     public exec(state: Viewer.RenderState) {
         const gl = state.gl;
-
-        // Bind our uniforms.
-        const prog = (<BlackProgram> state.currentProgram);
-
-        // First up, bind vtx attr scales.
-        for (const attrib of this.shape.packedVertexAttributes) {
-            const location = prog.getScaleUniformLocation(attrib.vtxAttrib);
-            if (location === null)
-                continue;
-            const vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
-            gl.uniform1f(location, vertexArray.scale);
-        }
 
         gl.bindVertexArray(this.vao);
 
@@ -168,10 +187,12 @@ class Command_Material {
 
     private tex0: WebGLTexture = null;
     private renderFlags: Viewer.RenderFlags;
+    private program: BMDProgram;
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD, material: BMD.MaterialEntry) {
         this.bmd = bmd;
         this.material = material;
+        this.program = new BMDProgram(material);
 
         this.renderFlags = Command_Material.translateRenderFlags(this.material);
 
@@ -250,6 +271,16 @@ class Command_Material {
     public exec(state: Viewer.RenderState) {
         const gl = state.gl;
 
+        state.useProgram(this.program);
+
+        // Bind our scale uniforms.
+        for (const vertexArray of this.bmd.vtx1.vertexArrays.values()) {
+            const location = this.program.getScaleUniformLocation(vertexArray.vtxAttrib);
+            if (location === null)
+                continue;
+            gl.uniform1f(location, vertexArray.scale);
+        }
+
         state.useFlags(this.renderFlags);
         gl.bindTexture(gl.TEXTURE_2D, this.tex0);
     }
@@ -261,13 +292,11 @@ export class Scene implements Viewer.Scene {
     public gl: WebGL2RenderingContext;
     public cameraController = Viewer.FPSCameraController;
     public textures: HTMLCanvasElement[];
-    private program_Black: BlackProgram;
     private bmd: BMD.BMD;
     private commands: Command[];
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD) {
         this.gl = gl;
-        this.program_Black = new BlackProgram();
         this.bmd = bmd;
         this.translateModel(this.bmd);
 
@@ -291,7 +320,6 @@ export class Scene implements Viewer.Scene {
     }
 
     public render(state: Viewer.RenderState) {
-        state.useProgram(this.program_Black);
         for (const command of this.commands)
             command.exec(state);
     }
