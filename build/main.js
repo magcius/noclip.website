@@ -8841,6 +8841,12 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                             tex.appendChild(label);
                             _this.texturesView.appendChild(tex);
                         });
+                        if (result.cameraController === viewer_1.FPSCameraController) {
+                            _this.cameraControllerSelect.selectedIndex = 0;
+                        }
+                        else {
+                            _this.cameraControllerSelect.selectedIndex = 1;
+                        }
                     });
                     this._deselectUI();
                     window.history.replaceState('', '', '#' + this._saveState());
@@ -8963,6 +8969,15 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     fovSliderLabel.textContent = "Field of View";
                     this.gearSettings.appendChild(fovSliderLabel);
                     this.gearSettings.appendChild(fovSlider);
+                    this.cameraControllerSelect = document.createElement('select');
+                    var cameraControllerFPS = document.createElement('option');
+                    cameraControllerFPS.textContent = 'WASD';
+                    this.cameraControllerSelect.appendChild(cameraControllerFPS);
+                    var cameraControllerOrbit = document.createElement('option');
+                    cameraControllerOrbit.textContent = 'Orbit';
+                    this.cameraControllerSelect.appendChild(cameraControllerOrbit);
+                    this.cameraControllerSelect.onchange = this._onCameraControllerSelect.bind(this);
+                    this.gearSettings.appendChild(this.cameraControllerSelect);
                     var texturesHeader = document.createElement('h3');
                     texturesHeader.textContent = 'Textures';
                     this.gearSettings.appendChild(texturesHeader);
@@ -8990,6 +9005,15 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     var slider = e.target;
                     var value = this._getSliderT(slider);
                     this.viewer.sceneGraph.renderState.fov = value * (Math.PI * 0.995);
+                };
+                Main.prototype._onCameraControllerSelect = function (e) {
+                    var index = this.cameraControllerSelect.selectedIndex;
+                    if (index === 0) {
+                        this.viewer.cameraController = new viewer_1.FPSCameraController();
+                    }
+                    else {
+                        this.viewer.cameraController = new viewer_1.OrbitCameraController();
+                    }
                 };
                 return Main;
             }());

@@ -1,5 +1,5 @@
 
-import { Scene, SceneDesc, SceneGroup, Viewer } from 'viewer';
+import { Scene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController } from 'viewer';
 
 import * as FRES from 'fres/scenes';
 import * as J3D from 'j3d/scenes';
@@ -67,6 +67,7 @@ class Main {
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
     private progressBar: ProgressBar;
+    private cameraControllerSelect: HTMLSelectElement;
 
     constructor() {
         this.canvas = document.createElement('canvas');
@@ -161,6 +162,12 @@ class Main {
                 tex.appendChild(label);
                 this.texturesView.appendChild(tex);
             });
+
+            if (result.cameraController === FPSCameraController) {
+                this.cameraControllerSelect.selectedIndex = 0;
+            } else {
+                this.cameraControllerSelect.selectedIndex = 1;
+            }
         });
 
         this._deselectUI();
@@ -281,6 +288,17 @@ class Main {
         this.gearSettings.appendChild(fovSliderLabel);
         this.gearSettings.appendChild(fovSlider);
 
+        this.cameraControllerSelect = document.createElement('select');
+        const cameraControllerFPS = document.createElement('option');
+        cameraControllerFPS.textContent = 'WASD';
+        this.cameraControllerSelect.appendChild(cameraControllerFPS);
+        const cameraControllerOrbit = document.createElement('option');
+        cameraControllerOrbit.textContent = 'Orbit';
+        this.cameraControllerSelect.appendChild(cameraControllerOrbit);
+        this.cameraControllerSelect.onchange = this._onCameraControllerSelect.bind(this);
+
+        this.gearSettings.appendChild(this.cameraControllerSelect);
+
         const texturesHeader = document.createElement('h3');
         texturesHeader.textContent = 'Textures';
         this.gearSettings.appendChild(texturesHeader);
@@ -311,6 +329,15 @@ class Main {
         const slider = (<HTMLInputElement> e.target);
         const value = this._getSliderT(slider);
         this.viewer.sceneGraph.renderState.fov = value * (Math.PI * 0.995);
+    }
+
+    private _onCameraControllerSelect(e: UIEvent) {
+        const index = this.cameraControllerSelect.selectedIndex;
+        if (index === 0) {
+            this.viewer.cameraController = new FPSCameraController();
+        } else {
+            this.viewer.cameraController = new OrbitCameraController();
+        }
     }
 }
 
