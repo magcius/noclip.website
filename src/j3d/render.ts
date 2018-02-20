@@ -41,6 +41,298 @@ class BMDProgram extends Viewer.Program {
         this.generateShaders();
     }
 
+    // Color Channels
+    private generateColorConstant(c: BMD.Color) {
+        return `vec4(${c.r}, ${c.g}, ${c.b}, ${c.a})`;
+    }
+
+    private generateColorChannel(chan: BMD.ColorChannelControl, vtxSource: string) {
+        // TODO(jstpierre): Ambient and lighting.
+        switch (chan.matColorSource) {
+        case GX.ColorSrc.VTX: return vtxSource;
+        case GX.ColorSrc.REG: return this.generateColorConstant(chan.matColorReg);
+        }
+    }
+
+    // TexGen
+    private generateTexGenSource(src: GX.TexGenSrc) {
+        switch (src) {
+        case GX.TexGenSrc.POS:       return `v_Position`;
+        case GX.TexGenSrc.NRM:       return `v_Normal`;
+        case GX.TexGenSrc.COLOR0:    return `v_Color0`;
+        case GX.TexGenSrc.COLOR1:    return `v_Color1`;
+        case GX.TexGenSrc.TEX0:      return `Read_Tex0()`;
+        case GX.TexGenSrc.TEX1:      return `Read_Tex1()`;
+        case GX.TexGenSrc.TEX2:      return `Read_Tex2()`;
+        case GX.TexGenSrc.TEX3:      return `Read_Tex3()`;
+        case GX.TexGenSrc.TEX4:      return `Read_Tex4()`;
+        case GX.TexGenSrc.TEX5:      return `Read_Tex5()`;
+        case GX.TexGenSrc.TEX6:      return `Read_Tex6()`;
+        case GX.TexGenSrc.TEX7:      return `Read_Tex7()`;
+        // Use a previously generated texcoordgen.
+        case GX.TexGenSrc.TEXCOORD0: return `v_TexCoord0`;
+        case GX.TexGenSrc.TEXCOORD1: return `v_TexCoord1`;
+        case GX.TexGenSrc.TEXCOORD2: return `v_TexCoord2`;
+        case GX.TexGenSrc.TEXCOORD3: return `v_TexCoord3`;
+        case GX.TexGenSrc.TEXCOORD4: return `v_TexCoord4`;
+        case GX.TexGenSrc.TEXCOORD5: return `v_TexCoord5`;
+        case GX.TexGenSrc.TEXCOORD6: return `v_TexCoord6`;
+        default:
+            throw "whoops";
+        }
+    }
+
+    private generateTexGenMatrix(src: string, matrix: GX.TexGenMatrix) {
+        switch (matrix) {
+        case GX.TexGenMatrix.IDENTITY: return src;
+        // TODO(jstpierre): TexMtx
+        default: return src;
+        }
+    }
+
+    private generateTexGenType(texCoordGen: BMD.TexGen) {
+        const src = this.generateTexGenSource(texCoordGen.source);
+        switch (texCoordGen.type) {
+        // Expected to be used with colors, I suspect...
+        case GX.TexGenType.SRTG:   return `${src}.rg`;
+        case GX.TexGenType.MTX2x4: return this.generateTexGenMatrix(src, texCoordGen.matrix);
+        // TODO(jstpierre): Support projected textures.
+        case GX.TexGenType.MTX3x4:
+            throw "whoops";
+        default:
+            throw "whoops";
+        }
+    }
+
+    private generateTexGen(texCoordGen: BMD.TexGen) {
+        const i = texCoordGen.index;
+        return `
+    // TexGen ${i}  Type: ${texCoordGen.type} Source: ${texCoordGen.source} Matrix: ${texCoordGen.matrix}
+    v_TexCoord${i} = ${this.generateTexGenType(texCoordGen)};
+`;
+    }
+
+    // TEV
+    private generateKonstColorSel(konstColor: GX.KonstColorSel): string {
+        switch (konstColor) {
+        case GX.KonstColorSel.KCSEL_1:    return 'vec3(8/8)';
+        case GX.KonstColorSel.KCSEL_7_8:  return 'vec3(7/8)';
+        case GX.KonstColorSel.KCSEL_3_4:  return 'vec3(6/8)';
+        case GX.KonstColorSel.KCSEL_5_8:  return 'vec3(5/8)';
+        case GX.KonstColorSel.KCSEL_1_2:  return 'vec3(4/8)';
+        case GX.KonstColorSel.KCSEL_3_8:  return 'vec3(3/8)';
+        case GX.KonstColorSel.KCSEL_1_4:  return 'vec3(2/8)';
+        case GX.KonstColorSel.KCSEL_1_8:  return 'vec3(1/8)';
+        case GX.KonstColorSel.KCSEL_K0:   return 's_kColor[0].rgb';
+        case GX.KonstColorSel.KCSEL_K0_R: return 's_kColor[0].rrr';
+        case GX.KonstColorSel.KCSEL_K0_G: return 's_kColor[0].ggg';
+        case GX.KonstColorSel.KCSEL_K0_B: return 's_kColor[0].bbb';
+        case GX.KonstColorSel.KCSEL_K0_A: return 's_kColor[0].aaa';
+        case GX.KonstColorSel.KCSEL_K1:   return 's_kColor[1].rgb';
+        case GX.KonstColorSel.KCSEL_K1_R: return 's_kColor[1].rrr';
+        case GX.KonstColorSel.KCSEL_K1_G: return 's_kColor[1].ggg';
+        case GX.KonstColorSel.KCSEL_K1_B: return 's_kColor[1].bbb';
+        case GX.KonstColorSel.KCSEL_K1_A: return 's_kColor[1].aaa';
+        case GX.KonstColorSel.KCSEL_K2:   return 's_kColor[2].rgb';
+        case GX.KonstColorSel.KCSEL_K2_R: return 's_kColor[2].rrr';
+        case GX.KonstColorSel.KCSEL_K2_G: return 's_kColor[2].ggg';
+        case GX.KonstColorSel.KCSEL_K2_B: return 's_kColor[2].bbb';
+        case GX.KonstColorSel.KCSEL_K2_A: return 's_kColor[2].aaa';
+        case GX.KonstColorSel.KCSEL_K3:   return 's_kColor[3].rgb';
+        case GX.KonstColorSel.KCSEL_K3_R: return 's_kColor[3].rrr';
+        case GX.KonstColorSel.KCSEL_K3_G: return 's_kColor[3].ggg';
+        case GX.KonstColorSel.KCSEL_K3_B: return 's_kColor[3].bbb';
+        case GX.KonstColorSel.KCSEL_K3_A: return 's_kColor[3].aaa';
+        }
+    }
+
+    private generateKonstAlphaSel(konstAlpha: GX.KonstAlphaSel): string {
+        switch (konstAlpha) {
+        case GX.KonstAlphaSel.KASEL_1:    return '8/8';
+        case GX.KonstAlphaSel.KASEL_7_8:  return '7/8';
+        case GX.KonstAlphaSel.KASEL_3_4:  return '6/8';
+        case GX.KonstAlphaSel.KASEL_5_8:  return '5/8';
+        case GX.KonstAlphaSel.KASEL_1_2:  return '4/8';
+        case GX.KonstAlphaSel.KASEL_3_8:  return '3/8';
+        case GX.KonstAlphaSel.KASEL_1_4:  return '2/8';
+        case GX.KonstAlphaSel.KASEL_1_8:  return '1/8';
+        case GX.KonstAlphaSel.KASEL_K0_R: return 's_kColor[0].r';
+        case GX.KonstAlphaSel.KASEL_K0_G: return 's_kColor[0].g';
+        case GX.KonstAlphaSel.KASEL_K0_B: return 's_kColor[0].b';
+        case GX.KonstAlphaSel.KASEL_K0_A: return 's_kColor[0].a';
+        case GX.KonstAlphaSel.KASEL_K1_R: return 's_kColor[1].r';
+        case GX.KonstAlphaSel.KASEL_K1_G: return 's_kColor[1].g';
+        case GX.KonstAlphaSel.KASEL_K1_B: return 's_kColor[1].b';
+        case GX.KonstAlphaSel.KASEL_K1_A: return 's_kColor[1].a';
+        case GX.KonstAlphaSel.KASEL_K2_R: return 's_kColor[2].r';
+        case GX.KonstAlphaSel.KASEL_K2_G: return 's_kColor[2].g';
+        case GX.KonstAlphaSel.KASEL_K2_B: return 's_kColor[2].b';
+        case GX.KonstAlphaSel.KASEL_K2_A: return 's_kColor[2].a';
+        case GX.KonstAlphaSel.KASEL_K3_R: return 's_kColor[3].r';
+        case GX.KonstAlphaSel.KASEL_K3_G: return 's_kColor[3].g';
+        case GX.KonstAlphaSel.KASEL_K3_B: return 's_kColor[3].b';
+        case GX.KonstAlphaSel.KASEL_K3_A: return 's_kColor[3].a';
+        }
+    }
+
+    private generateRas(stage: BMD.TevStage) {
+        switch (stage.channelId) {
+        case GX.ColorChannelId.COLOR0: return `v_Color0`;
+        case GX.ColorChannelId.COLOR1: return `v_Color1`;
+        case GX.ColorChannelId.COLOR_ZERO: return `vec4(0, 0, 0, 0)`;
+        default: throw "whoops";
+        }
+    }
+
+    private generateTexAccess(stage: BMD.TevStage) {
+        return `texture(u_Texture[${stage.texMap}], v_TexCoord${stage.texCoordId})`;
+    }
+
+    private generateColorIn(stage: BMD.TevStage, colorIn: GX.CombineColorInput) {
+        const i = stage.index;
+        switch (colorIn) {
+        case GX.CombineColorInput.CPREV: return `t_ColorPrev.rgb`;
+        case GX.CombineColorInput.APREV: return `t_ColorPrev.aaa`;
+        case GX.CombineColorInput.C0:    return `t_Color0.rgb`;
+        case GX.CombineColorInput.A0:    return `t_Color0.aaa`;
+        case GX.CombineColorInput.C1:    return `t_Color1.rgb`;
+        case GX.CombineColorInput.A1:    return `t_Color1.aaa`;
+        case GX.CombineColorInput.C2:    return `t_Color2.rgb`;
+        case GX.CombineColorInput.A2:    return `t_Color2.aaa`;
+        case GX.CombineColorInput.TEXC:  return `${this.generateTexAccess(stage)}.rgb`;
+        case GX.CombineColorInput.TEXA:  return `${this.generateTexAccess(stage)}.aaa`;
+        case GX.CombineColorInput.RASC:  return `${this.generateRas(stage)}.rgb`;
+        case GX.CombineColorInput.RASA:  return `${this.generateRas(stage)}.aaa`;
+        case GX.CombineColorInput.ONE:   return `vec3(1)`;
+        case GX.CombineColorInput.HALF:  return `vec3(1/2)`;
+        case GX.CombineColorInput.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}.rgb`;
+        case GX.CombineColorInput.ZERO:  return `vec3(0)`;
+        }
+    }
+
+    private generateAlphaIn(stage: BMD.TevStage, alphaIn: GX.CombineAlphaInput) {
+        const i = stage.index;
+        switch (alphaIn) {
+        case GX.CombineAlphaInput.APREV: return `t_ColorPrev.a`;
+        case GX.CombineAlphaInput.A0:    return `t_Color0.a`;
+        case GX.CombineAlphaInput.A1:    return `t_Color1.a`;
+        case GX.CombineAlphaInput.A2:    return `t_Color2.a`;
+        case GX.CombineAlphaInput.TEXA:  return `${this.generateTexAccess(stage)}.a`;
+        case GX.CombineAlphaInput.RASA:  return `${this.generateRas(stage)}.a`;
+        case GX.CombineAlphaInput.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}.a`;
+        case GX.CombineAlphaInput.ZERO:  return `0`;
+        }
+    }
+
+    private generateTevRegister(regId: GX.Register) {
+        switch (regId) {
+        case GX.Register.PREV: return `t_ColorPrev`;
+        case GX.Register.REG0: return `t_Color0`;
+        case GX.Register.REG1: return `t_Color1`;
+        case GX.Register.REG2: return `t_Color2`;
+        }
+    }
+
+    private generateTevOpBiasScaleClamp(value: string, bias: GX.TevBias, scale: GX.TevScale, clamp: boolean) {
+        let v = value;
+
+        if (bias === GX.TevBias.ADDHALF)
+            v = `TevBias(${v}, 0.5)`;
+        else if (bias === GX.TevBias.SUBHALF)
+            v = `TevBias(${v}, -0.5)`;
+
+        if (scale === GX.TevScale.SCALE_2)
+            v = `(${v}) * 2`;
+        else if (scale === GX.TevScale.SCALE_4)
+            v = `(${v}) * 4`;
+        else if (scale === GX.TevScale.DIVIDE_2)
+            v = `(${v}) * 0.5`;
+
+        if (clamp)
+            v = `TevSaturate(${v})`;
+
+        return v;
+    }
+
+    private generateTevOpValue(op: GX.TevOp, bias: GX.TevBias, scale: GX.TevScale, clamp: boolean, a: string, b: string, c: string, d: string) {
+        switch (op) {
+        case GX.TevOp.ADD:
+        case GX.TevOp.SUB:
+            const oper = (op === GX.TevOp.ADD) ? '+' : '-';
+            const bare = `${d} ${op} mix(${a}, ${b}, ${c})`;
+            return this.generateTevOpBiasScaleClamp(bare, bias, scale, clamp);
+        default:
+            throw "whoops";
+        }
+    }
+
+    private generateColorOp(stage: BMD.TevStage) {
+        const a = this.generateColorIn(stage, stage.colorInA);
+        const b = this.generateColorIn(stage, stage.colorInB);
+        const c = this.generateColorIn(stage, stage.colorInC);
+        const d = this.generateColorIn(stage, stage.colorInD);
+        const value = this.generateTevOpValue(stage.colorOp, stage.colorBias, stage.colorScale, stage.colorClamp, a, b, c, d);
+        return `${this.generateTevRegister(stage.colorRegId)}.rgb = ${value}`;
+    }
+
+    private generateAlphaOp(stage: BMD.TevStage) {
+        const a = this.generateAlphaIn(stage, stage.alphaInA);
+        const b = this.generateAlphaIn(stage, stage.alphaInB);
+        const c = this.generateAlphaIn(stage, stage.alphaInC);
+        const d = this.generateAlphaIn(stage, stage.alphaInD);
+        const value = this.generateTevOpValue(stage.alphaOp, stage.alphaBias, stage.alphaScale, stage.alphaClamp, a, b, c, d);
+        return `${this.generateTevRegister(stage.alphaRegId)}.a = ${value}`;
+    }
+
+    private generateTevStage(stage: BMD.TevStage) {
+        const i = stage.index;
+        const header = `
+    // TEV Stage ${i}
+    // colorIn: ${stage.colorInA} ${stage.colorInB} ${stage.colorInC} ${stage.colorInD}  colorOp: ${stage.colorOp} colorBias: ${stage.colorBias} colorScale: ${stage.colorScale} colorClamp: ${stage.colorClamp} colorRegId: ${stage.colorRegId}
+    // alphaIn: ${stage.alphaInA} ${stage.alphaInB} ${stage.alphaInC} ${stage.alphaInD}  alphaOp: ${stage.alphaOp} alphaBias: ${stage.alphaBias} alphaScale: ${stage.alphaScale} alphaClamp: ${stage.alphaClamp} alphaRegId: ${stage.alphaRegId}
+    // texCoordId: ${stage.texCoordId} texMap: ${stage.texMap} channelId: ${stage.channelId}
+    ${this.generateColorOp(stage)}
+    ${this.generateAlphaOp(stage)}
+`;
+    }
+
+    private generateTevStages(tevStages: BMD.TevStage[]) {
+        return tevStages.map((s) => this.generateTevStage(s)).join('\n');
+    }
+
+    private generateAlphaTestCompare(compare: GX.CompareType, reference: number) {
+        const reg = this.generateTevRegister(GX.Register.PREV);
+        const ref = `${reference}`;
+        switch (compare) {
+        case GX.CompareType.NEVER:   return `false`;
+        case GX.CompareType.LESS:    return `${reg}.a <  ${ref}`;
+        case GX.CompareType.EQUAL:   return `${reg}.a == ${ref}`;
+        case GX.CompareType.LEQUAL:  return `${reg}.a <= ${ref}`;
+        case GX.CompareType.GREATER: return `${reg}.a >  ${ref}`;
+        case GX.CompareType.NEQUAL:  return `${reg}.a != ${ref}`;
+        case GX.CompareType.GEQUAL:  return `${reg}.a >= ${ref}`;
+        case GX.CompareType.ALWAYS:  return `true`;
+        }
+    }
+
+    private generateAlphaTestOp(op: GX.AlphaOp) {
+        switch (op) {
+        case GX.AlphaOp.AND:  return `t_alphaTestA && t_alphaTestB`;
+        case GX.AlphaOp.OR:   return `t_alphaTestA || t_alphaTestB`;
+        case GX.AlphaOp.XOR:  return `t_alphaTestA != t_alphaTestB`;
+        case GX.AlphaOp.XNOR: return `t_alphaTestA == t_alphaTestB`;
+        }
+    }
+
+    private generateAlphaTest(alphaTest: BMD.AlphaTest) {
+        return `
+    bool t_alphaTestA = ${this.generateAlphaTestCompare(alphaTest.compareA, alphaTest.referenceA)};
+    bool t_alphaTestB = ${this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB)};
+    if (!(${this.generateAlphaTestOp(alphaTest.op)}))
+        discard;
+`;
+    }
+
     private generateShaders() {
         const vertAttributeDefs = BMDProgram.vtxAttributeGenDefs.map((a) => {
             return `
@@ -59,10 +351,18 @@ uniform mat4 u_projection;
 uniform mat4 u_modelView;
 ${vertAttributeDefs}
 
+vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
+float TevBias(float a, float b) { return a + b; }
+vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
+float TevSaturate(float a) { return clamp(a, 0, 1); }
+
 void main() {
     v_Position = ReadAttrib_Position();
     v_Normal = ReadAttrib_Normal();
-    v_Color0 = ReadAttrib_Color0();
+    vec3 t_Color0 = ReadAttrib_Color0();
+    vec3 t_Color1 = ReadAttrib_Color1();
+    v_Color0 = ${this.generateColorChannel(this.material.colorChannels[0], `ReadAttrib_Color0()`)};
+    v_Color1 = ${this.generateColorChannel(this.material.colorChannels[1], `ReadAttrib_Color1()`)};
     gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);
 }
 `;
@@ -73,13 +373,34 @@ in ${a.storage} v_${a.name};
 `;
         }).join('');
 
+        const tevStages = this.material.tevStages;
+        const alphaTest = this.material.alphaTest;
+        const kColors = this.material.colorConstants;
+        const rColors = this.material.colorRegisters;
+
         this.frag = `
 precision mediump float;
 ${fragAttributeDefs}
 
 void main() {
-    o_color = v_Color0;
-    o_color.a = 1.0;
+    const vec4 s_kColor0 = ${this.generateColorConstant(kColors[0])};
+    const vec4 s_kColor1 = ${this.generateColorConstant(kColors[1])};
+    const vec4 s_kColor2 = ${this.generateColorConstant(kColors[2])};
+    const vec4 s_kColor3 = ${this.generateColorConstant(kColors[3])};
+
+    vec4 t_Color0    = ${this.generateColorConstant(rColors[0])};
+    vec4 t_Color1    = ${this.generateColorConstant(rColors[1])};
+    vec4 t_Color2    = ${this.generateColorConstant(rColors[2])};
+    vec4 t_ColorPrev = ${this.generateColorConstant(rColors[3])};
+
+    ${this.generateTevStages(tevStages)}
+
+    // Alpha Test: Op ${alphaTest.op}
+    // Compare A: ${alphaTest.compareA} Reference A: ${alphaTest.referenceA}
+    // Compare B: ${alphaTest.compareB} Reference B: ${alphaTest.referenceB}
+    ${this.generateAlphaTest(alphaTest)}
+
+    gl_FragColor = t_ColorPrev;
 }
 `
     }
@@ -262,8 +583,8 @@ class Command_Material {
     private static translateRenderFlags(material: BMD.MaterialEntry): Viewer.RenderFlags {
         const renderFlags = new Viewer.RenderFlags();
         renderFlags.cullMode = this.translateCullMode(material.cullMode);
-        renderFlags.depthWrite = material.depthWrite;
-        renderFlags.depthTest = material.depthTest;
+        renderFlags.depthWrite = material.ropInfo.depthWrite;
+        renderFlags.depthTest = material.ropInfo.depthTest;
         renderFlags.frontFace = Viewer.RenderFrontFaceMode.CW;
         return renderFlags;
     }

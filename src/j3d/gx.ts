@@ -253,6 +253,15 @@ export const enum TexGenSrc {
     TEX5 = 9,
     TEX6 = 10,
     TEX7 = 11,
+    TEXCOORD0 = 12,
+    TEXCOORD1 = 13,
+    TEXCOORD2 = 14,
+    TEXCOORD3 = 15,
+    TEXCOORD4 = 16,
+    TEXCOORD5 = 18,
+    TEXCOORD6 = 19,
+    COLOR0 = 20,
+    COLOR1 = 21,
 }
 
 export const enum TexGenType {
@@ -281,4 +290,34 @@ export const enum TexGenMatrix {
     TEXMTX7 = 51,
     TEXMTX8 = 54,
     TEXMTX9 = 57,
+}
+
+export const enum Register {
+    PREV = 0,
+    REG0 = 1,
+    REG1 = 2,
+    REG2 = 3,
+}
+
+export const enum TexCoordSlot {
+    TEXCOORD0 = 0,
+    TEXCOORD1 = 1,
+    TEXCOORD2 = 2,
+    TEXCOORD3 = 3,
+    TEXCOORD4 = 4,
+    TEXCOORD5 = 5,
+    TEXCOORD6 = 6,
+    TEXCOORD7 = 7,
+}
+
+export const enum ColorChannelId {
+    COLOR0 = 0,
+    COLOR1 = 1,
+    ALPHA0 = 2,
+    ALPHA1 = 3,
+    COLOR0A0 = 4,
+    COLOR1A1 = 5,
+    COLOR_ZERO = 6,
+    ALPHA_BUMP = 7,
+    ALPHA_BUMP_N = 8,
 }
