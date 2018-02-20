@@ -67,10 +67,6 @@ function parseModel(bmd: BMD, view: DataView, idx: number) {
         const material = parseMaterial(bmd, view, materialIdx);
         const baseCtx = { color: material.diffuse, alpha: material.alpha };
 
-        if (material.name === "mat_mu") {
-            console.log("AAA");
-        }
-
         const polyIdx = view.getUint8(batchPolyOffs + i);
         const poly = parsePoly(bmd, view, polyIdx, baseCtx);
 

@@ -3308,8 +3308,6 @@ System.register("j3d/bmd", ["j3d/gx", "endian", "util"], function (exports_18, c
                                 var attribDataSize = vertexArray.compSize * vertexArray.compCount;
                                 var vertexData = new Uint8Array(vertexArray.buffer, attribDataSize * index, attribDataSize);
                                 packedDataView.set(vertexData, packedDataOffs);
-                                if (i === 0 && j === 0 && packedDataOffs < packedDataSize && attrib.vtxAttrib === 11 /* CLR0 */)
-                                    console.log(vertexArray.dataOffs, vertexData, vertexArray.buffer, attribDataSize * index);
                                 packedDataOffs += attribDataSize;
                             }
                         }
@@ -5856,9 +5854,6 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             var materialIdx = view.getUint8(batchMaterialOffs + i);
             var material = parseMaterial(bmd, view, materialIdx);
             var baseCtx = { color: material.diffuse, alpha: material.alpha };
-            if (material.name === "mat_mu") {
-                console.log("AAA");
-            }
             var polyIdx = view.getUint8(batchPolyOffs + i);
             var poly = parsePoly(bmd, view, polyIdx, baseCtx);
             model.batches.push({ material: material, poly: poly });
