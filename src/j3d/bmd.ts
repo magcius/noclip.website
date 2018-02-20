@@ -1,6 +1,6 @@
 
-import * as GX from 'gx';
-import * as Texture from 'texture';
+import * as GX from './gx_enum';
+import * as GX_Material from './gx_material';
 
 import { be16toh, be32toh } from 'endian';
 import { assert } from 'util';
@@ -422,93 +422,10 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 }
 
 export interface MAT3 {
-    materialEntries: MaterialEntry[];
+    materialEntries: GX_Material.GXMaterial[];
 }
 
-export interface Color {
-    r: number;
-    g: number;
-    b: number;
-    a: number;
-}
-
-export interface ColorChannelControl {
-    lightingEnabled: boolean;
-    matColorSource: GX.ColorSrc;
-    matColorReg: Color;
-    ambColorSource: GX.ColorSrc;
-}
-
-export interface TexGen {
-    index: number;
-
-    type: GX.TexGenType;
-    source: GX.TexGenSrc;
-    matrix: GX.TexGenMatrix;
-}
-
-export interface TevStage {
-    index: number;
-
-    colorInA: GX.CombineColorInput;
-    colorInB: GX.CombineColorInput;
-    colorInC: GX.CombineColorInput;
-    colorInD: GX.CombineColorInput;
-    colorOp: GX.TevOp;
-    colorBias: GX.TevBias;
-    colorScale: GX.TevScale;
-    colorClamp: boolean;
-    colorRegId: GX.Register;
-
-    alphaInA: GX.CombineAlphaInput;
-    alphaInB: GX.CombineAlphaInput;
-    alphaInC: GX.CombineAlphaInput;
-    alphaInD: GX.CombineAlphaInput;
-    alphaOp: GX.TevOp;
-    alphaBias: GX.TevBias;
-    alphaScale: GX.TevScale;
-    alphaClamp: boolean;
-    alphaRegId: GX.Register;
-
-    // SetTevOrder
-    texCoordId: GX.TexCoordSlot;
-    texMap: number;
-    channelId: GX.ColorChannelId;
-
-    konstColorSel: GX.KonstColorSel;
-    konstAlphaSel: GX.KonstAlphaSel;
-}
-
-export interface AlphaTest {
-    op: GX.AlphaOp;
-    compareA: GX.CompareType;
-    referenceA: number;
-    compareB: GX.CompareType;
-    referenceB: number;
-}
-
-export interface RopInfo {
-    // TODO(jstpierre): Blend func
-    depthTest: boolean;
-    depthFunc: GX.CompareType;
-    depthWrite: boolean;
-}
-
-export interface MaterialEntry {
-    index: number;
-    name: string;
-    textureIndexes: number[];
-    cullMode: GX.CullMode;
-    colorRegisters: Color[];
-    colorConstants: Color[];
-    colorChannels: ColorChannelControl[];
-    texGens: TexGen[];
-    tevStages: TevStage[];
-    alphaTest: AlphaTest;
-    ropInfo: RopInfo;
-}
-
-function readColor32(view: DataView, srcOffs: number): Color {
+function readColor32(view: DataView, srcOffs: number): GX_Material.Color {
     const r = view.getUint8(srcOffs + 0x00) / 255;
     const g = view.getUint8(srcOffs + 0x01) / 255;
     const b = view.getUint8(srcOffs + 0x02) / 255;
@@ -516,7 +433,7 @@ function readColor32(view: DataView, srcOffs: number): Color {
     return { r, g, b, a };
 }
 
-function readColorShort(view: DataView, srcOffs: number): Color {
+function readColorShort(view: DataView, srcOffs: number): GX_Material.Color {
     const r = view.getUint16(srcOffs + 0x00) / 255;
     const g = view.getUint16(srcOffs + 0x02) / 255;
     const b = view.getUint16(srcOffs + 0x04) / 255;
@@ -551,7 +468,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const blendModeTableOffs = view.getUint32(0x70);
     const depthModeTableOffs = view.getUint32(0x74);
 
-    const materialEntries: MaterialEntry[] = [];
+    const materialEntries: GX_Material.GXMaterial[] = [];
     let materialEntryIdx = view.getUint32(0x0C);
     for (let i = 0; i <= maxIndex; i++) {
         const index = i;
@@ -565,7 +482,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const depthModeIndex = view.getUint8(materialEntryIdx + 0x06);
         // unk
 
-        const colorChannels: ColorChannelControl[] = [];
+        const colorChannels: GX_Material.ColorChannelControl[] = [];
         for (let j = 0; j < 2; j++) {
             const colorChanIndex = view.getInt16(materialEntryIdx + 0x0C + j * 0x02);
             if (colorChanIndex < 0)
@@ -581,11 +498,11 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
             const matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
             const matColorReg = readColor32(view, matColorOffs);
-            const colorChan: ColorChannelControl = { lightingEnabled, matColorSource, matColorReg, ambColorSource };
+            const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, matColorReg, ambColorSource };
             colorChannels.push(colorChan);
         }
 
-        const texGens: TexGen[] = [];
+        const texGens: GX_Material.TexGen[] = [];
         for (let j = 0; j < 8; j++) {
             const texGenIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
             if (texGenIndex < 0)
@@ -595,18 +512,18 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const source: GX.TexGenSrc = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
             const matrix: GX.TexGenMatrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
             assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
-            const texGen: TexGen = { index, type, source, matrix };
+            const texGen: GX_Material.TexGen = { index, type, source, matrix };
             texGens.push(texGen);
         }
 
-        const colorConstants: Color[] = [];
+        const colorConstants: GX_Material.Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0x94 + j * 0x02);
             const color = readColor32(view, colorConstantTableOffs + colorIndex * 0x04);
             colorConstants.push(color);
         }
 
-        const colorRegisters: Color[] = [];
+        const colorRegisters: GX_Material.Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0xDC + j * 0x02);
             const color = readColorShort(view, colorRegisterTableOffs + colorIndex * 0x08);
@@ -626,7 +543,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             textureIndexTableIdx += 0x02;
         }
 
-        const tevStages: TevStage[] = [];
+        const tevStages: GX_Material.TevStage[] = [];
         for (let j = 0; j < 16; j++) {
             // TevStage
             const tevStageIndex = view.getInt16(materialEntryIdx + 0xE4 + j * 0x02);
@@ -670,7 +587,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const konstColorSel: GX.KonstColorSel = view.getUint8(materialEntryIdx + 0x9C + j);
             const konstAlphaSel: GX.KonstAlphaSel = view.getUint8(materialEntryIdx + 0xAC + j);
 
-            const tevStage: TevStage = {
+            const tevStage: GX_Material.TevStage = {
                 index,
                 colorInA, colorInB, colorInC, colorInD, colorOp, colorBias, colorScale, colorClamp, colorRegId,
                 alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId,
@@ -687,7 +604,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const op: GX.AlphaOp = view.getUint8(alphaTestOffs + 0x02);
         const compareB: GX.CompareType = view.getUint8(alphaTestOffs + 0x03);
         const referenceB: number = view.getUint8(alphaTestOffs + 0x04) / 0xFF;
-        const alphaTest: AlphaTest = { compareA, referenceA, op, compareB, referenceB };
+        const alphaTest: GX_Material.AlphaTest = { compareA, referenceA, op, compareB, referenceB };
 
         const cullMode: GX.CullMode = view.getUint32(cullModeTableOffs + cullModeIndex * 0x04);
         const depthModeOffs = depthModeTableOffs + depthModeIndex * 4;
@@ -695,7 +612,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const depthFunc: GX.CompareType = view.getUint8(depthModeOffs + 0x01);
         const depthWrite: boolean = !!view.getUint8(depthModeOffs + 0x02);
 
-        const ropInfo: RopInfo = { depthTest, depthFunc, depthWrite };
+        const ropInfo: GX_Material.RopInfo = { depthTest, depthFunc, depthWrite };
 
         materialEntries.push({
             index, name,
