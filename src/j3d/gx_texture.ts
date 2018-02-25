@@ -17,6 +17,7 @@ export interface DecodedTextureS3TC {
     width: number;
     height: number;
 }
+
 export interface DecodedTextureRGBA {
     type: "RGBA";
     pixels: ArrayBufferView;
@@ -46,6 +47,30 @@ function expand6to8(n: number): number {
 function s3tcblend(a: number, b: number): number {
     // return (a*3 + b*5) / 8;
     return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
+}
+
+export function calcTextureSize(format: GX.TexFormat, width: number, height: number) {
+    const numPixels = width * height;
+    switch (format) {
+    case GX.TexFormat.I4:
+        return numPixels / 2;
+    case GX.TexFormat.I8:
+        return numPixels;
+    case GX.TexFormat.IA4:
+        return numPixels;
+    case GX.TexFormat.IA8:
+        return numPixels * 2;
+    case GX.TexFormat.RGB565:
+        return numPixels * 2;
+    case GX.TexFormat.RGB5A3:
+        return numPixels * 2;
+    case GX.TexFormat.RGBA8:
+        return numPixels * 4;
+    case GX.TexFormat.CMPR:
+        return numPixels / 2;
+    default:
+        throw "whoops";
+    }
 }
 
 // GX's CMPR format is S3TC but using GX's tiled addressing.
@@ -265,7 +290,7 @@ function decode_IA4(texture: Texture): DecodedTexture {
 function decode_IA8(texture: Texture): DecodedTexture {
     const view = new DataView(texture.data);
     let srcOffs = 0;
-    return decode_Tiled(texture, 8, 4, (pixels: Uint8Array, dstOffs: number): void => {
+    return decode_Tiled(texture, 4, 4, (pixels: Uint8Array, dstOffs: number): void => {
         const i = view.getUint8(srcOffs + 0);
         const a = view.getUint8(srcOffs + 1);
         pixels[dstOffs + 0] = i;

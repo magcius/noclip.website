@@ -4,10 +4,17 @@ import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
 import * as GX_Texture from './gx_texture';
 import * as Viewer from 'viewer';
+import * as RARC from './rarc';
+import * as YAZ0 from '../yaz0';
 
 import { RenderFlags, RenderState } from '../render';
 import { Progressable } from '../progress';
-import { fetch, assert } from '../util';
+import { fetch, assert, readString } from '../util';
+
+enum RenderPass {
+    OPAQUE,
+    TRANSPARENT,
+}
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
@@ -121,14 +128,17 @@ class Command_Material {
     }
 
     private static translateTexFilter(gl: WebGL2RenderingContext, texFilter: GX.TexFilter) {
-        // TODO(jstpierre): Upload mipmaps as well.
         switch (texFilter) {
         case GX.TexFilter.LIN_MIP_NEAR:
+            return gl.LINEAR_MIPMAP_NEAREST;
         case GX.TexFilter.LIN_MIP_LIN:
+            return gl.LINEAR_MIPMAP_LINEAR;
         case GX.TexFilter.LINEAR:
             return gl.LINEAR;
         case GX.TexFilter.NEAR_MIP_NEAR:
+            return gl.NEAREST_MIPMAP_NEAREST;
         case GX.TexFilter.NEAR_MIP_LIN:
+            return gl.NEAREST_MIPMAP_LINEAR;
         case GX.TexFilter.NEAR:
             return gl.NEAREST;
         }
@@ -149,17 +159,32 @@ class Command_Material {
         const texId = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texId);
 
-        const ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
-        const decodedTexture = GX_Texture.decodeTexture(texture, !!ext_compressed_texture_s3tc);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, this.translateTexFilter(gl, texture.minFilter));
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, this.translateTexFilter(gl, texture.magFilter));
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, texture.wrapS));
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, texture.wrapT));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
 
-        if (decodedTexture.type === 'RGBA') {
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
-        } else if (decodedTexture.type === 'S3TC') {
-            gl.compressedTexImage2D(gl.TEXTURE_2D, 0, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
+        const ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
+        const name = texture.name;
+        const format = texture.format;
+
+        let offs = 0, width = texture.width, height = texture.height;
+        for (let i = 0; i < texture.mipCount; i++) {
+            const size = GX_Texture.calcTextureSize(format, width, height);
+            const data = texture.data.slice(offs, offs + size);
+            const surface = { name, format, width, height, data };
+            const decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
+
+            if (decodedTexture.type === 'RGBA') {
+                gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
+            } else if (decodedTexture.type === 'S3TC') {
+                gl.compressedTexImage2D(gl.TEXTURE_2D, i, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
+            }
+
+            offs += size;
+            width /= 2;
+            height /= 2;
         }
 
         return texId;
@@ -169,6 +194,8 @@ class Command_Material {
         const gl = state.gl;
 
         state.useProgram(this.program);
+
+        this.program.bindSamplers(gl);
 
         // Bind our scale uniforms.
         for (const vertexArray of this.bmd.vtx1.vertexArrays.values()) {
@@ -204,12 +231,13 @@ class Command_Material {
 
 type Command = Command_Shape | Command_Material;
 
-export class Scene implements Viewer.Scene {
+export class Scene {
     public gl: WebGL2RenderingContext;
-    public cameraController = Viewer.FPSCameraController;
     public textures: HTMLCanvasElement[];
     private bmd: BMD.BMD;
-    private commands: Command[];
+    private opaqueCommands: Command[];
+    private transparentCommands: Command[];
+
     private materialCommands: Command_Material[];
     private shapeCommands: Command_Shape[];
 
@@ -230,6 +258,7 @@ export class Scene implements Viewer.Scene {
         canvas.width = rgbaTexture.width;
         canvas.height = rgbaTexture.height;
         canvas.title = `${texture.name} ${texture.format}`;
+        canvas.style.backgroundColor = 'black';
         const ctx = canvas.getContext('2d');
         const imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
         imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
@@ -237,15 +266,16 @@ export class Scene implements Viewer.Scene {
         return canvas;
     }
 
-    public render(state: RenderState) {
-        this.commands.forEach((command) => {
+    public render(state: RenderState, pass: RenderPass) {
+        state.setClipPlanes(10, 500000);
+
+        const commands = pass === RenderPass.OPAQUE ? this.opaqueCommands : this.transparentCommands;
+        commands.forEach((command) => {
             command.exec(state);
-        })
+        });
     }
 
     private translateModel(bmd: BMD.BMD) {
-        this.commands = [];
-
         this.materialCommands = bmd.mat3.materialEntries.map((material) => {
             return new Command_Material(this.gl, this.bmd, material);
         });
@@ -253,31 +283,63 @@ export class Scene implements Viewer.Scene {
             return new Command_Shape(this.gl, this.bmd, shape);
         });
 
+        this.opaqueCommands = [];
+        this.transparentCommands = [];
+
         // Iterate through scene graph.
-        this.translateSceneGraph(bmd.inf1.sceneGraph);
+        // TODO(jstpierre): Clean this up.
+        const context = {};
+        this.translateSceneGraph(bmd.inf1.sceneGraph, context);
+        console.log(this.opaqueCommands, this.transparentCommands);
     }
 
-    private translateSceneGraph(node: BMD.HierarchyNode) {
+    private translateSceneGraph(node: BMD.HierarchyNode, context) {
         switch (node.type) {
         case BMD.HierarchyType.Open:
             for (const child of node.children)
-                this.translateSceneGraph(child);
+                this.translateSceneGraph(child, context);
             break;
         case BMD.HierarchyType.Shape:
-            this.commands.push(this.shapeCommands[node.shapeIdx]);
+            context.currentCommandList.push(this.shapeCommands[node.shapeIdx]);
             break;
         case BMD.HierarchyType.Joint:
             // XXX: Implement joints...
             break;
         case BMD.HierarchyType.Material:
             const materialIdx = this.bmd.mat3.remapTable[node.materialIdx];
-            this.commands.push(this.materialCommands[materialIdx]);
+            const materialCommand = this.materialCommands[materialIdx];
+            context.currentCommandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
+            context.currentCommandList.push(materialCommand);
             break;
         }
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.commands.forEach((command) => command.destroy(gl));
+        this.materialCommands.forEach((command) => command.destroy(gl));
+        this.shapeCommands.forEach((command) => command.destroy(gl));
+    }
+}
+
+class MultiScene implements Viewer.Scene {
+    public cameraController = Viewer.FPSCameraController;
+    public scenes: Scene[];
+    public textures: HTMLCanvasElement[];
+
+    constructor(scenes: Scene[]) {
+        this.scenes = scenes;
+        this.textures = [];
+        for (const scene of this.scenes)
+            this.textures = this.textures.concat(scene.textures);
+    }
+
+    public render(state: RenderState) {
+        const gl = state.viewport.gl;
+        this.scenes.forEach((scene) => scene.render(state, RenderPass.OPAQUE));
+        this.scenes.forEach((scene) => scene.render(state, RenderPass.TRANSPARENT));
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.scenes.forEach((scene) => scene.destroy(gl));
     }
 }
 
@@ -285,15 +347,35 @@ export class SceneDesc implements Viewer.SceneDesc {
     public id: string;
     public name: string;
     public path: string;
+    public vrbox: string;
 
-    constructor(name: string, path: string) {
+    constructor(name: string, path: string, vrbox: string) {
         this.name = name;
         this.path = path;
+        this.vrbox = vrbox;
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
-        return fetch(this.path).then((result: ArrayBuffer) => {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+        return Progressable.all([
+            this.createSceneFromPath(gl, this.path),
+            this.createSceneFromPath(gl, this.vrbox),
+        ]).then((scenes) => {
+            return new MultiScene(scenes);
+        });
+    }
+
+    private createSceneFromPath(gl: WebGL2RenderingContext, path: string): Progressable<Scene> {
+        if (!path)
+            return new Progressable(Promise.resolve(null));
+
+        return fetch(path).then((result: ArrayBuffer) => {
+            if (readString(result, 0, 4) === 'Yaz0') {
+                const dec = YAZ0.decompress(result);
+                const rarc = RARC.parse(dec);
+                result = rarc.files[0].buffer;
+            }
+
             const bmd = BMD.parse(result);
             return new Scene(gl, bmd);
         });
