@@ -65,13 +65,13 @@ export class RenderFlags {
         if (oldFlags.blend !== newFlags.blend) {
             if (newFlags.blend) {
                 gl.enable(gl.BLEND);
-
-                if (oldFlags.blendSrc !== newFlags.blendSrc || oldFlags.blendDst !== newFlags.blendDst) {
-                    gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
-                }
             } else {
                 gl.disable(gl.BLEND);
             }
+        }
+
+        if (newFlags.blend && (oldFlags.blendSrc !== newFlags.blendSrc || oldFlags.blendDst !== newFlags.blendDst)) {
+            gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
         }
 
         if (oldFlags.cullMode !== newFlags.cullMode) {
@@ -95,6 +95,8 @@ export class RenderFlags {
 }
 
 RenderFlags.default.blend = false;
+RenderFlags.default.blendSrc = BlendFactor.SRC_ALPHA;
+RenderFlags.default.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
 RenderFlags.default.cullMode = CullMode.NONE;
 RenderFlags.default.depthTest = false;
 RenderFlags.default.depthWrite = true;
@@ -116,6 +118,9 @@ export class RenderState {
     public projection: mat4;
     public modelView: mat4;
 
+    public nearClipPlane: number;
+    public farClipPlane: number;
+
     constructor(viewport: Viewport) {
         this.viewport = viewport;
         this.gl = this.viewport.gl;
@@ -132,10 +137,14 @@ export class RenderState {
         const gl = this.gl;
 
         const width = canvas.width, height = canvas.height;
-        // XXX(jstpierre): Make near / far plane configurable per-Scene?
-        mat4.perspective(this.projection, this.fov, width / height, 0.2, 50000);
+        mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
 
         gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+
+    public setClipPlanes(near: number, far: number) {
+        this.nearClipPlane = near;
+        this.farClipPlane = far;
     }
 
     public useProgram(prog: Program) {

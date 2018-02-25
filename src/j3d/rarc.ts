@@ -57,16 +57,16 @@ export function parse(buffer: ArrayBuffer): RARC {
         const subdirIndexes = [];
 
         // Go through and parse the file table.
-        let fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x14);
+        let fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x10);
         for (let i = 0; i < fileEntryCount; i++) {
             const id = view.getUint16(fileEntryIdx + 0x00);
             const nameHash = view.getUint16(fileEntryIdx + 0x02);
             const flags = view.getUint8(fileEntryIdx + 0x04);
-            const nameOffs = view.getUint16(dirTableIdx + 0x06);
+            const nameOffs = view.getUint16(fileEntryIdx + 0x06);
             const name = readString(buffer, strTableOffs + nameOffs, -1, true);
 
-            const entryDataOffs = view.getUint32(fileEntryTableOffs + 0x0C);
-            const entryDataSize = view.getUint32(fileEntryTableOffs + 0x10);
+            const entryDataOffs = view.getUint32(fileEntryIdx + 0x08);
+            const entryDataSize = view.getUint32(fileEntryIdx + 0x0C);
             fileEntryIdx += 0x14;
 
             if (name === '.' || name === '..')
@@ -78,8 +78,9 @@ export function parse(buffer: ArrayBuffer): RARC {
                 subdirIndexes.push(subdirEntryIndex);
             } else {
                 const offs = dataOffs + entryDataOffs;
+                console.log(offs, dataOffs, entryDataOffs);
                 const fileBuffer = buffer.slice(offs, offs + entryDataSize);
-                const file: RARCFile = { name, buffer };
+                const file: RARCFile = { name, buffer: fileBuffer };
                 files.push(file);
                 allFiles.push(file);
             }
@@ -102,7 +103,7 @@ export function parse(buffer: ArrayBuffer): RARC {
         return dir;
     }
 
-    const root = translateDirEntry(0)
+    const root = translateDirEntry(0);
     assert(root.type === 'ROOT');
 
     const files = allFiles;

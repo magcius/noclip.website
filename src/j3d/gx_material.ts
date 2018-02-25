@@ -98,6 +98,7 @@ export interface RopInfo {
 export interface GXMaterial {
     index: number;
     name: string;
+    translucent: boolean;
     textureIndexes: number[];
     cullMode: GX.CullMode;
     colorRegisters: Color[];
@@ -137,6 +138,7 @@ const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
 export class GX_Program extends Program {
     private vtxAttributeScaleLocations: WebGLUniformLocation[] = [];
     private texMtxLocations: WebGLUniformLocation[] = [];
+    private samplerLocations: WebGLUniformLocation[] = [];
 
     private material: GXMaterial;
 
@@ -391,6 +393,9 @@ export class GX_Program extends Program {
     }
 
     private generateColorOp(stage: TevStage) {
+        if (this.material.name === 'lambert119_v_x' && stage.index === 1)
+            return 't_ColorPrev.rgb = vec3(1, 1, 1);';
+
         const a = this.generateColorIn(stage, stage.colorInA);
         const b = this.generateColorIn(stage, stage.colorInB);
         const c = this.generateColorIn(stage, stage.colorInC);
@@ -410,6 +415,7 @@ export class GX_Program extends Program {
 
     private generateTevStage(stage: TevStage) {
         const i = stage.index;
+
         return `
     // TEV Stage ${i}
     // colorIn: ${stage.colorInA} ${stage.colorInB} ${stage.colorInC} ${stage.colorInD}  colorOp: ${stage.colorOp} colorBias: ${stage.colorBias} colorScale: ${stage.colorScale} colorClamp: ${stage.colorClamp} colorRegId: ${stage.colorRegId}
@@ -471,7 +477,7 @@ ${a.storage} ReadAttrib_${a.name}() {
         }).join('');
 
         this.vert = `
-precision mediump float;
+precision highp float;
 // Viewer
 uniform mat4 u_projection;
 uniform mat4 u_modelView;
@@ -559,6 +565,9 @@ ${this.generateAlphaTest(alphaTest)}
 
         for (let i = 0; i < 10; i++)
             this.texMtxLocations[i] = gl.getUniformLocation(prog, `u_TexMtx[${i}]`);
+
+        for (let i = 0; i < 8; i++)
+            this.samplerLocations[i] = gl.getUniformLocation(prog, `u_Texture[${i}]`);
     }
 
     public getTexMtxLocation(i: number) {
@@ -570,6 +579,12 @@ ${this.generateAlphaTest(alphaTest)}
         if (location === undefined)
             return null;
         return location;
+    }
+
+    public bindSamplers(gl: WebGL2RenderingContext) {
+        for (let i = 0; i < this.samplerLocations.length; i++) {
+            gl.uniform1i(this.samplerLocations[i], i);
+        }
     }
 }
 // #endregion

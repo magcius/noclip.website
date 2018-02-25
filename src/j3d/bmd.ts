@@ -360,6 +360,9 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             vertexIndexSize += indexDataSize;
             packedVertexSize += vertexArray.compSize * vertexArray.compCount;
         }
+        // Align to the first item.
+        const firstAlign = bmd.vtx1.vertexArrays.get(packedVertexAttributes[0].vtxAttrib).compSize;
+        packedVertexSize = align(packedVertexSize, firstAlign);
 
         // Now parse out the packets.
         let packetIdx = packetTableOffs + (firstPacket * 0x08);
@@ -405,7 +408,6 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                     const index = readIndex(view, drawCallIdx, attrib.indexDataType);
                     const indexDataSize = getComponentSize(attrib.indexDataType);
                     drawCallIdx += indexDataSize;
-
                     const vertexArray: VertexArray = bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
                     packedDataOffs = align(packedDataOffs, vertexArray.compSize);
                     const attribDataSize = vertexArray.compSize * vertexArray.compCount;
@@ -413,6 +415,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                     packedDataView.set(vertexData, packedDataOffs);
                     packedDataOffs += attribDataSize;
                 }
+                packedDataOffs = align(packedDataOffs, firstAlign);
                 assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
             }
         }
@@ -544,7 +547,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const centerW = view.getFloat32(texMtxOffs + 0x0C);
             const scaleS = view.getFloat32(texMtxOffs + 0x10);
             const scaleT = view.getFloat32(texMtxOffs + 0x14);
-            const rotation = view.getInt16(texMtxOffs + 0x18) / 0xFFFF;
+            const rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
             assert(view.getUint16(texMtxOffs + 0x1A) == 0xFFFF);
             const translationS = view.getFloat32(texMtxOffs + 0x1C);
             const translationT = view.getFloat32(texMtxOffs + 0x20);
@@ -574,6 +577,21 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                 p30, p31, p32, p33,
             );
 
+            const S = mat2d.create();
+            mat2d.fromScaling(S, [scaleS, scaleT]);
+            const CI = mat2d.create();
+            mat2d.fromTranslation(CI, [-centerS, -centerT, -centerW]);
+            const C = mat2d.create();
+            mat2d.fromTranslation(C, [centerS, centerT, centerW]);
+            const T = mat2d.create();
+            mat2d.fromTranslation(T, [translationS, translationT, 0]);
+
+            const m = mat2d.create();
+            mat2d.mul(m, T, CI);
+            mat2d.mul(S, S, C);
+            mat2d.mul(m, m, S);
+
+            /*
             const sin = Math.sin(rotation * Math.PI);
             const cos = Math.cos(rotation * Math.PI);
             const m = mat2d.fromValues(
@@ -582,6 +600,8 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                 translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS *  sin),
                 translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos)
             );
+            */
+
             const matrix = matrix3.create();
             matrix3.fromMat2d(matrix, m);
             texMatrices[j] = { projection, matrix };
@@ -694,9 +714,11 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const depthWrite: boolean = !!view.getUint8(depthModeOffs + 0x02);
 
         const ropInfo: GX_Material.RopInfo = { blendMode, depthTest, depthFunc, depthWrite };
+        const translucent = !(flags & 0x03);
 
         materialEntries.push({
             index, name,
+            translucent,
             textureIndexes,
             cullMode,
             colorChannels,
@@ -723,6 +745,7 @@ export interface TEX1_Texture {
     wrapT: GX.WrapMode;
     minFilter: GX.TexFilter;
     magFilter: GX.TexFilter;
+    mipCount: number;
     data: ArrayBuffer;
 }
 
@@ -751,11 +774,11 @@ export function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number,
         const paletteOffs = view.getUint16(textureIdx + 0x0C);
         const minFilter = view.getUint8(textureIdx + 0x14);
         const magFilter = view.getUint8(textureIdx + 0x15);
-        const mipCount = view.getUint16(textureIdx + 0x18);
+        const mipCount = view.getUint8(textureIdx + 0x18);
         const dataOffs = view.getUint32(textureIdx + 0x1C);
         const data = buffer.slice(chunkStart + textureIdx + dataOffs);
 
-        textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, data });
+        textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, mipCount, data });
         textureIdx += 0x20;
     }
 
@@ -791,6 +814,7 @@ export function parse(buffer: ArrayBuffer) {
         SHP1: readSHP1Chunk,
         MAT3: readMAT3Chunk,
         TEX1: readTEX1Chunk,
+        MDL3: null,
     };
 
     for (let i = 0; i < numChunks; i++) {

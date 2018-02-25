@@ -30,14 +30,14 @@ class SceneGraph {
     }
 
     public reset() {
-        const gl = this.renderState.viewport.gl;
+        const gl = this.renderState.gl;
         gl.activeTexture(gl.TEXTURE0);
         gl.clearColor(0.88, 0.88, 0.88, 1);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        this.renderState.setClipPlanes(0.2, 50000);
     }
 
     public render() {
-        const gl = this.renderState.viewport.gl;
+        const gl = this.renderState.gl;
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         this.renderState.useFlags(RenderFlags.default);
         if (this.scene)
