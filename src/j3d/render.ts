@@ -78,10 +78,9 @@ class Command_Shape {
 
         gl.bindVertexArray(this.vao);
 
-        // Do draw calls.
-        for (const drawCall of this.shape.drawCalls) {
+        this.shape.drawCalls.forEach((drawCall) => {
             gl.drawArrays(translatePrimType(gl, drawCall.primType), drawCall.first, drawCall.vertexCount);
-        }
+        });
 
         gl.bindVertexArray(null);
     }
@@ -230,8 +229,9 @@ export class Scene implements Viewer.Scene {
     }
 
     public render(state: RenderState) {
-        for (const command of this.commands)
+        this.commands.forEach((command) => {
             command.exec(state);
+        })
     }
 
     private translateModel(bmd: BMD.BMD) {
