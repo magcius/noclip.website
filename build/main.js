@@ -9045,4 +9045,88 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
         }
     };
 });
+// Nintendo RARC file format.
+System.register("j3d/rarc", ["util"], function (exports_41, context_41) {
+    "use strict";
+    var __moduleName = context_41 && context_41.id;
+    function parse(buffer) {
+        var view = new DataView(buffer);
+        util_17.assert(util_17.readString(buffer, 0x00, 0x04) == 'RARC');
+        var size = view.getUint32(0x04);
+        var dataOffs = view.getUint32(0x0C) + 0x20;
+        var dirCount = view.getUint32(0x20);
+        var dirTableOffs = view.getUint32(0x24) + 0x20;
+        var fileEntryCount = view.getUint32(0x28);
+        var fileEntryTableOffs = view.getUint32(0x2C) + 0x20;
+        var strTableOffs = view.getUint32(0x34) + 0x20;
+        var dirTableIdx = dirTableOffs;
+        var dirEntries = [];
+        var allFiles = [];
+        for (var i = 0; i < dirCount; i++) {
+            var type = util_17.readString(buffer, dirTableIdx + 0x00, 0x04, false);
+            var nameOffs = view.getUint32(dirTableIdx + 0x04);
+            var name_10 = util_17.readString(buffer, strTableOffs + nameOffs, -1, true);
+            var nameHash = view.getUint16(dirTableIdx + 0x08);
+            var fileEntryCount_1 = view.getUint16(dirTableIdx + 0x0A);
+            var fileEntryFirstIndex = view.getUint32(dirTableIdx + 0x0C);
+            var files_1 = [];
+            var subdirIndexes = [];
+            // Go through and parse the file table.
+            var fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x14);
+            for (var i_1 = 0; i_1 < fileEntryCount_1; i_1++) {
+                var id = view.getUint16(fileEntryIdx + 0x00);
+                var nameHash_1 = view.getUint16(fileEntryIdx + 0x02);
+                var flags = view.getUint8(fileEntryIdx + 0x04);
+                var nameOffs_1 = view.getUint16(dirTableIdx + 0x06);
+                var name_11 = util_17.readString(buffer, strTableOffs + nameOffs_1, -1, true);
+                var entryDataOffs = view.getUint32(fileEntryTableOffs + 0x0C);
+                var entryDataSize = view.getUint32(fileEntryTableOffs + 0x10);
+                fileEntryIdx += 0x14;
+                if (name_11 === '.' || name_11 === '..')
+                    continue;
+                var isDirectory = !!(flags & 0x02);
+                if (isDirectory) {
+                    var subdirEntryIndex = entryDataOffs;
+                    subdirIndexes.push(subdirEntryIndex);
+                }
+                else {
+                    var offs = dataOffs + entryDataOffs;
+                    var fileBuffer = buffer.slice(offs, offs + entryDataSize);
+                    var file = { name: name_11, buffer: buffer };
+                    files_1.push(file);
+                    allFiles.push(file);
+                }
+            }
+            dirEntries.push({ name: name_10, type: type, files: files_1, subdirIndexes: subdirIndexes });
+            dirTableIdx += 0x10;
+        }
+        var dirs = [];
+        function translateDirEntry(i) {
+            if (dirs[i] !== undefined)
+                return dirs[i];
+            var dirEntry = dirEntries[i];
+            var name = dirEntry.name, type = dirEntry.type, files = dirEntry.files;
+            var subdirs = dirEntry.subdirIndexes.map(function (i) { return translateDirEntry(i); });
+            var dir = { name: name, type: type, files: files, subdirs: subdirs };
+            dirs[i] = dir;
+            return dir;
+        }
+        var root = translateDirEntry(0);
+        util_17.assert(root.type === 'ROOT');
+        var files = allFiles;
+        var rarc = { files: files, root: root };
+        return rarc;
+    }
+    exports_41("parse", parse);
+    var util_17;
+    return {
+        setters: [
+            function (util_17_1) {
+                util_17 = util_17_1;
+            }
+        ],
+        execute: function () {
+        }
+    };
+});
 //# sourceMappingURL=main.js.map
