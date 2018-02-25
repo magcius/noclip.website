@@ -7,14 +7,9 @@ import * as Viewer from 'viewer';
 import * as RARC from './rarc';
 import * as YAZ0 from '../yaz0';
 
-import { RenderFlags, RenderState } from '../render';
+import { RenderFlags, RenderState, RenderPass } from '../render';
 import { Progressable } from '../progress';
 import { fetch, assert, readString } from '../util';
-
-enum RenderPass {
-    OPAQUE,
-    TRANSPARENT,
-}
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
@@ -266,10 +261,16 @@ export class Scene {
         return canvas;
     }
 
-    public render(state: RenderState, pass: RenderPass) {
+    public render(state: RenderState) {
         state.setClipPlanes(10, 500000);
 
-        const commands = pass === RenderPass.OPAQUE ? this.opaqueCommands : this.transparentCommands;
+        let commands;
+        if (state.currentPass === RenderPass.OPAQUE) {
+            commands = this.opaqueCommands;
+        } else if (state.currentPass === RenderPass.TRANSPARENT) {
+            commands = this.transparentCommands;
+        }
+
         commands.forEach((command) => {
             command.exec(state);
         });
@@ -321,6 +322,7 @@ export class Scene {
 
 class MultiScene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Scene[];
     public textures: HTMLCanvasElement[];
 
@@ -331,10 +333,10 @@ class MultiScene implements Viewer.Scene {
             this.textures = this.textures.concat(scene.textures);
     }
 
-    public render(state: RenderState) {
-        const gl = state.viewport.gl;
-        this.scenes.forEach((scene) => scene.render(state, RenderPass.OPAQUE));
-        this.scenes.forEach((scene) => scene.render(state, RenderPass.TRANSPARENT));
+    public render(renderState: RenderState) {
+        this.scenes.forEach((scene) => {
+            scene.render(renderState);
+        });
     }
 
     public destroy(gl: WebGL2RenderingContext) {

@@ -1,6 +1,14 @@
 
 import { mat4 } from 'gl-matrix';
 
+export const enum RenderPass {
+    CLEAR,
+    DEPTH_PREPASS,
+    OPAQUE,
+    TRANSPARENT,
+    COUNT,
+}
+
 export enum FrontFaceMode {
     CCW = WebGL2RenderingContext.CCW,
     CW  = WebGL2RenderingContext.CW,
@@ -10,7 +18,7 @@ export enum CullMode {
     NONE,
     FRONT,
     BACK,
-    FRONT_AND_BACK
+    FRONT_AND_BACK,
 }
 
 export enum BlendFactor {
@@ -44,6 +52,10 @@ export class RenderFlags {
             dst.depthTest = src.depthTest;
         if (dst.blend === undefined)
             dst.blend = src.blend;
+        if (dst.blendSrc === undefined)
+            dst.blendSrc = src.blendSrc;
+        if (dst.blendDst === undefined)
+            dst.blendDst = src.blendDst;
         if (dst.cullMode === undefined)
             dst.cullMode = src.cullMode;
         if (dst.frontFace === undefined)
@@ -70,7 +82,7 @@ export class RenderFlags {
             }
         }
 
-        if (newFlags.blend && (oldFlags.blendSrc !== newFlags.blendSrc || oldFlags.blendDst !== newFlags.blendDst)) {
+        if (oldFlags.blendSrc !== newFlags.blendSrc || oldFlags.blendDst !== newFlags.blendDst) {
             gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
         }
 
@@ -110,8 +122,13 @@ export interface Viewport {
 export class RenderState {
     public gl: WebGL2RenderingContext;
     public viewport: Viewport;
+
+    // State.
     public currentProgram: Program = null;
-    public currentFlags: RenderFlags = RenderFlags.default;
+    public currentFlags: RenderFlags = new RenderFlags();
+    public currentPass: RenderPass;
+
+    // Parameters.
     public fov: number;
     public time: number;
 

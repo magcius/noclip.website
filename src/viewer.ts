@@ -2,7 +2,7 @@
 // tslint:disable:no-console
 
 import { Progressable } from './progress';
-import { RenderState, RenderFlags, Viewport } from './render';
+import { RenderState, RenderFlags, Viewport, RenderPass } from './render';
 
 import { mat4, vec3 } from 'gl-matrix';
 
@@ -14,8 +14,9 @@ interface CameraController {
 type CameraControllerClass = typeof FPSCameraController | typeof OrbitCameraController;
 
 export interface Scene {
-    textures: HTMLCanvasElement[];
     cameraController: CameraControllerClass;
+    renderPasses: RenderPass[];
+    textures: HTMLCanvasElement[];
     render(state: RenderState): void;
     destroy(gl: WebGL2RenderingContext): void;
 }
@@ -40,8 +41,17 @@ class SceneGraph {
         const gl = this.renderState.gl;
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         this.renderState.useFlags(RenderFlags.default);
-        if (this.scene)
-            this.scene.render(this.renderState);
+
+        if (!this.scene)
+            return;
+
+        const state = this.renderState;
+        const scene = this.scene;
+        for (let i = 0; i < RenderPass.COUNT; i++) {
+            state.currentPass = i;
+            if (scene.renderPasses.includes(state.currentPass))
+                scene.render(state);
+        }
     }
 
     public checkResize() {

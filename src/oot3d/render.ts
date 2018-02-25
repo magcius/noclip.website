@@ -5,7 +5,7 @@ import * as ZSI from './zsi';
 import * as Viewer from '../viewer';
 
 import { Progressable } from '../progress';
-import { CullMode, RenderFlags, RenderState, Program, RenderArena } from '../render';
+import { CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass } from '../render';
 import { fetch } from '../util';
 
 class OoT3D_Program extends Program {
@@ -81,6 +81,7 @@ type RenderFunc = (renderState: RenderState) => void;
 
 class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public textures: HTMLCanvasElement[];
     public program: OoT3D_Program;
     public zsi: ZSI.ZSI;
@@ -281,8 +282,10 @@ class Scene implements Viewer.Scene {
 
         return (state: RenderState) => {
             state.useFlags(renderFlags);
-            opaque();
-            transparent();
+            if (state.currentPass === RenderPass.OPAQUE)
+                opaque();
+            if (state.currentPass === RenderPass.TRANSPARENT)
+                transparent();
         };
     }
 
@@ -293,6 +296,7 @@ class Scene implements Viewer.Scene {
 
 class MultiScene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
     public textures: HTMLCanvasElement[];
 
@@ -304,7 +308,10 @@ class MultiScene implements Viewer.Scene {
     }
 
     public render(renderState: RenderState) {
-        this.scenes.forEach((scene) => scene.render(renderState));
+        this.scenes.forEach((scene) => {
+            if (scene.renderPasses.includes(renderState.currentPass))
+                scene.render(renderState);
+        });
     }
 
     public destroy(gl: WebGL2RenderingContext) {

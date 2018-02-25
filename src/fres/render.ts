@@ -11,7 +11,7 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import { Progressable } from '../progress';
-import { RenderState, Program, RenderArena } from '../render';
+import { RenderState, Program, RenderArena, RenderPass } from '../render';
 import { be16toh, be32toh } from '../endian';
 import { assert, fetch } from '../util';
 
@@ -113,6 +113,7 @@ function getAttribFormatInfo(gl: WebGL2RenderingContext, format: GX2AttribFormat
 
 export class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE ];
     public textures: HTMLCanvasElement[];
 
     private modelFuncs: RenderFunc[];
@@ -572,6 +573,7 @@ export class Scene implements Viewer.Scene {
 
 class MultiScene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE ];
     public scenes: Viewer.Scene[];
     public textures: HTMLCanvasElement[];
 

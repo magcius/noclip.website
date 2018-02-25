@@ -3,7 +3,7 @@ import * as F3DEX2 from './f3dex2';
 import * as ZELVIEW0 from './zelview0';
 
 import { Progressable } from '../progress';
-import { CullMode, RenderFlags, RenderState, Program } from '../render';
+import { CullMode, RenderFlags, RenderState, Program, RenderPass } from '../render';
 import { fetch } from '../util';
 
 import * as Viewer from '../viewer';
@@ -151,6 +151,8 @@ void main() {
 
 class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE ];
+
     public textures: HTMLCanvasElement[];
     public zelview0: ZELVIEW0.ZELVIEW0;
     public program_BG: BillboardBGProgram;

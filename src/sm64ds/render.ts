@@ -8,7 +8,7 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, RenderFlags, RenderState, Program, RenderArena } from '../render';
+import { CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass } from '../render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
 
@@ -64,11 +64,6 @@ void main() {
 const VERTEX_SIZE = 9;
 const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-enum RenderPass {
-    OPAQUE = 0x01,
-    TRANSLUCENT = 0x02,
-}
-
 function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
     const canvas = document.createElement("canvas");
     canvas.width = bmdTex.width;
@@ -85,10 +80,12 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
     return canvas;
 }
 
-type RenderFunc = (state: RenderState, pass: RenderPass) => void;
+type RenderFunc = (state: RenderState) => void;
 
 class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
+
     public textures: HTMLCanvasElement[];
     public modelFuncs: RenderFunc[];
     public program: NITRO_Program;
@@ -137,7 +134,7 @@ class Scene implements Viewer.Scene {
 
         gl.bindVertexArray(null);
 
-        return () => {
+        return (renderState: RenderState) => {
             gl.bindVertexArray(vao);
             gl.drawElements(gl.TRIANGLES, packet.idxData.length, gl.UNSIGNED_SHORT, 0);
             gl.bindVertexArray(null);
@@ -146,8 +143,8 @@ class Scene implements Viewer.Scene {
 
     private translatePoly(gl: WebGL2RenderingContext, poly: NITRO_BMD.Poly): RenderFunc {
         const funcs = poly.packets.map((packet) => this.translatePacket(gl, packet));
-        return (state: RenderState, pass: RenderPass) => {
-            funcs.forEach((f) => { f(state, pass); });
+        return (state: RenderState) => {
+            funcs.forEach((f) => { f(state); });
         };
     }
 
@@ -235,15 +232,15 @@ class Scene implements Viewer.Scene {
     }
 
     private translateBatch(gl: WebGL2RenderingContext, batch: NITRO_BMD.Batch): RenderFunc {
-        const batchPass = batch.material.isTranslucent ? RenderPass.TRANSLUCENT : RenderPass.OPAQUE;
+        const batchPass = batch.material.isTranslucent ? RenderPass.TRANSPARENT : RenderPass.OPAQUE;
 
         const applyMaterial = this.translateMaterial(gl, batch.material);
         const renderPoly = this.translatePoly(gl, batch.poly);
-        return (state: RenderState, pass: RenderPass) => {
-            if (pass !== batchPass)
+        return (state: RenderState) => {
+            if (state.currentPass !== batchPass)
                 return;
             applyMaterial(state);
-            renderPoly(state, pass);
+            renderPoly(state);
         };
     }
 
@@ -257,7 +254,7 @@ class Scene implements Viewer.Scene {
         mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
 
         const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
-        return (state: RenderState, pass: RenderPass) => {
+        return (state: RenderState) => {
             if (this.isSkybox) {
                 // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
                 mat4.copy(skyboxCameraMat, state.modelView);
@@ -268,26 +265,20 @@ class Scene implements Viewer.Scene {
             }
 
             gl.uniformMatrix4fv(this.program.localMatrixLocation, false, localMatrix);
-            batches.forEach((f) => { f(state, pass); });
+            batches.forEach((f) => { f(state); });
         };
     }
 
-    private renderModels(state: RenderState, pass: RenderPass) {
+    private renderModels(state: RenderState) {
         return this.modelFuncs.forEach((func) => {
-            func(state, pass);
+            func(state);
         });
     }
 
     public render(state: RenderState) {
         const gl = state.viewport.gl;
-
         state.useProgram(this.program);
-
-        // First pass, opaque.
-        this.renderModels(state, RenderPass.OPAQUE);
-
-        // Second pass, translucent.
-        this.renderModels(state, RenderPass.TRANSLUCENT);
+        this.renderModels(state);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -297,6 +288,7 @@ class Scene implements Viewer.Scene {
 
 class MultiScene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
     public textures: HTMLCanvasElement[];
 
@@ -307,14 +299,19 @@ class MultiScene implements Viewer.Scene {
             this.textures = this.textures.concat(scene.textures);
     }
 
-    public render(state: RenderState) {
-        const gl = state.viewport.gl;
+    public render(renderState: RenderState) {
+        const gl = renderState.gl;
 
         // Clear to black.
-        gl.clearColor(0, 0, 0, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+        if (renderState.currentPass === RenderPass.CLEAR) {
+            gl.clearColor(0, 0, 0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+        }
 
-        this.scenes.forEach((scene) => scene.render(state));
+        this.scenes.forEach((scene) => {
+            if (scene.renderPasses.includes(renderState.currentPass))
+                scene.render(renderState);
+        });
     }
 
     public destroy(gl: WebGL2RenderingContext) {
