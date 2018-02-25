@@ -85,6 +85,11 @@ class Command_Shape {
 
         gl.bindVertexArray(null);
     }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        gl.deleteVertexArray(this.vao);
+        gl.deleteBuffer(this.buffer);
+    }
 }
 
 class Command_Material {
@@ -184,6 +189,11 @@ class Command_Material {
             gl.bindTexture(gl.TEXTURE_2D, texture);
         }
     }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.textures.forEach((texture) => gl.deleteTexture(texture));
+        this.program.destroy(gl);
+    }
 }
 
 type Command = Command_Shape | Command_Material;
@@ -248,6 +258,10 @@ export class Scene implements Viewer.Scene {
             this.commands.push(new Command_Material(this.gl, this.bmd, material));
             break;
         }
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.commands.forEach((command) => command.destroy(gl));
     }
 }
 

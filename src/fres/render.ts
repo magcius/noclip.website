@@ -11,7 +11,7 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import { Progressable } from '../progress';
-import { RenderState, Program } from '../render';
+import { RenderState, Program, RenderArena } from '../render';
 import { be16toh, be32toh } from '../endian';
 import { assert, fetch } from '../util';
 
@@ -118,11 +118,14 @@ export class Scene implements Viewer.Scene {
     private modelFuncs: RenderFunc[];
     private glTextures: WebGLTexture[];
     private blankTexture: WebGLTexture;
+    private arena: RenderArena;
 
     constructor(gl: WebGL2RenderingContext, private fres: BFRES.FRES, private isSkybox: boolean) {
         this.fres = fres;
 
-        this.blankTexture = gl.createTexture();
+        this.arena = new RenderArena();
+
+        this.blankTexture = this.arena.createTexture(gl);
         gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
@@ -157,7 +160,7 @@ export class Scene implements Viewer.Scene {
             throw new Error(`Unsupported vertex format ${attrib}`);
         }
 
-        const glBuffer = gl.createBuffer();
+        const glBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, glBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, bufferData, gl.STATIC_DRAW);
         return glBuffer;
@@ -179,7 +182,7 @@ export class Scene implements Viewer.Scene {
             glBuffers[i] = this.translateVertexBuffer(gl, attrib, buffer);
         }
 
-        const vao = gl.createVertexArray();
+        const vao = this.arena.createVertexArray(gl);
         gl.bindVertexArray(vao);
 
         for (let i = 0; i < fvtx.attribs.length; i++) {
@@ -266,7 +269,7 @@ export class Scene implements Viewer.Scene {
 
         const samplers: WebGLSampler[] = [];
         for (const textureAssign of textureAssigns) {
-            const sampler = gl.createSampler();
+            const sampler = this.arena.createSampler(gl);
             gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, this.translateTexClamp(gl, textureAssign.texClampU));
             gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, this.translateTexClamp(gl, textureAssign.texClampV));
             // XXX(jstpierre): Introduce this when we start decoding mipmaps.
@@ -277,6 +280,7 @@ export class Scene implements Viewer.Scene {
         }
 
         const prog = new ProgramGambit_UBER();
+        this.arena.trackProgram(prog);
         const skyboxCameraMat = mat4.create();
 
         const renderState = fmat.renderState;
@@ -379,7 +383,7 @@ export class Scene implements Viewer.Scene {
             break;
         }
 
-        const glBuffer = gl.createBuffer();
+        const glBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, out, gl.STATIC_DRAW);
         return glBuffer;
@@ -491,7 +495,7 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateTexture(gl: WebGL2RenderingContext, ftex: BFRES.TextureEntry): WebGLTexture {
-        const glTexture = gl.createTexture();
+        const glTexture = this.arena.createTexture(gl);
         gl.bindTexture(gl.TEXTURE_2D, glTexture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 0);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
@@ -558,6 +562,10 @@ export class Scene implements Viewer.Scene {
             func(state);
         });
     }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.arena.destroy(gl);
+    }
 }
 
 class MultiScene implements Viewer.Scene {
@@ -575,6 +583,10 @@ class MultiScene implements Viewer.Scene {
     public render(state: RenderState) {
         const gl = state.viewport.gl;
         this.scenes.forEach((scene) => scene.render(state));
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.scenes.forEach((scene) => scene.destroy(gl));
     }
 }
 

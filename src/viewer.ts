@@ -17,11 +17,12 @@ export interface Scene {
     textures: HTMLCanvasElement[];
     cameraController: CameraControllerClass;
     render(state: RenderState): void;
+    destroy(gl: WebGL2RenderingContext): void;
 }
 
 class SceneGraph {
     public renderState: RenderState;
-    public scenes: Scene[] = [];
+    public scene: Scene = null;
 
     constructor(viewport: Viewport) {
         this.renderState = new RenderState(viewport);
@@ -39,15 +40,18 @@ class SceneGraph {
         const gl = this.renderState.viewport.gl;
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         this.renderState.useFlags(RenderFlags.default);
-        this.scenes.forEach((scene) => scene.render(this.renderState));
+        if (this.scene)
+            this.scene.render(this.renderState);
     }
 
     public checkResize() {
         this.renderState.checkResize();
     }
 
-    public setScenes(scenes: Scene[]) {
-        this.scenes = scenes;
+    public setScene(scene: Scene) {
+        if (this.scene)
+            this.scene.destroy(this.renderState.gl);
+        this.scene = scene;
     }
     public setCamera(matrix: mat4) {
         mat4.copy(this.renderState.modelView, matrix);
@@ -311,10 +315,10 @@ export class Viewer {
     public setScene(scene: Scene) {
         this.sceneGraph.reset();
         if (scene) {
-            this.sceneGraph.setScenes([scene]);
+            this.sceneGraph.setScene(scene);
             this.cameraController = new scene.cameraController();
         } else {
-            this.sceneGraph.setScenes([]);
+            this.sceneGraph.setScene(null);
         }
         this.resetCamera();
     }
