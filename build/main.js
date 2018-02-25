@@ -9125,6 +9125,7 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     progressBarContainer.style.right = '100px';
                     progressBarContainer.style.top = '50%';
                     progressBarContainer.style.marginTop = '-20px';
+                    progressBarContainer.style.pointerEvents = 'none';
                     this.progressBar = new ProgressBar();
                     this.progressBar.elem.style.height = '40px';
                     progressBarContainer.appendChild(this.progressBar.elem);
