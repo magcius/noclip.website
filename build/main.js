@@ -372,6 +372,10 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                         dst.depthTest = src.depthTest;
                     if (dst.blend === undefined)
                         dst.blend = src.blend;
+                    if (dst.blendSrc === undefined)
+                        dst.blendSrc = src.blendSrc;
+                    if (dst.blendDst === undefined)
+                        dst.blendDst = src.blendDst;
                     if (dst.cullMode === undefined)
                         dst.cullMode = src.cullMode;
                     if (dst.frontFace === undefined)
@@ -395,7 +399,7 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                             gl.disable(gl.BLEND);
                         }
                     }
-                    if (newFlags.blend && (oldFlags.blendSrc !== newFlags.blendSrc || oldFlags.blendDst !== newFlags.blendDst)) {
+                    if (oldFlags.blendSrc !== newFlags.blendSrc || oldFlags.blendDst !== newFlags.blendDst) {
                         gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
                     }
                     if (oldFlags.cullMode !== newFlags.cullMode) {
@@ -427,8 +431,9 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
             RenderFlags.default.frontFace = FrontFaceMode.CCW;
             RenderState = /** @class */ (function () {
                 function RenderState(viewport) {
+                    // State.
                     this.currentProgram = null;
-                    this.currentFlags = RenderFlags.default;
+                    this.currentFlags = new RenderFlags();
                     this.viewport = viewport;
                     this.gl = this.viewport.gl;
                     this.time = 0;
@@ -687,8 +692,15 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     var gl = this.renderState.gl;
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                     this.renderState.useFlags(render_1.RenderFlags.default);
-                    if (this.scene)
-                        this.scene.render(this.renderState);
+                    if (!this.scene)
+                        return;
+                    var state = this.renderState;
+                    var scene = this.scene;
+                    for (var i = 0; i < 4 /* COUNT */; i++) {
+                        state.currentPass = i;
+                        if (scene.renderPasses.includes(state.currentPass))
+                            scene.render(state);
+                    }
                 };
                 SceneGraph.prototype.checkResize = function () {
                     this.renderState.checkResize();
@@ -2387,6 +2399,7 @@ System.register("fres/render", ["gl-matrix", "fres/gx2_swizzle", "fres/gx2_textu
                     this.fres = fres;
                     this.isSkybox = isSkybox;
                     this.cameraController = Viewer.FPSCameraController;
+                    this.renderPasses = [2 /* OPAQUE */];
                     this.fres = fres;
                     this.arena = new render_2.RenderArena();
                     this.blankTexture = this.arena.createTexture(gl);
@@ -2815,6 +2828,7 @@ System.register("fres/render", ["gl-matrix", "fres/gx2_swizzle", "fres/gx2_textu
             MultiScene = /** @class */ (function () {
                 function MultiScene(scenes) {
                     this.cameraController = Viewer.FPSCameraController;
+                    this.renderPasses = [2 /* OPAQUE */];
                     this.scenes = scenes;
                     this.textures = [];
                     try {
@@ -4430,7 +4444,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                 throw new Error("Unknown PrimType " + primType);
         }
     }
-    var BMD, GX, GX_Material, GX_Texture, Viewer, RARC, YAZ0, progress_3, util_7, RenderPass, Command_Shape, Command_Material, Scene, MultiScene, SceneDesc;
+    var BMD, GX, GX_Material, GX_Texture, Viewer, RARC, YAZ0, progress_3, util_7, Command_Shape, Command_Material, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (BMD_1) {
@@ -4462,10 +4476,6 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
             }
         ],
         execute: function () {
-            (function (RenderPass) {
-                RenderPass[RenderPass["OPAQUE"] = 0] = "OPAQUE";
-                RenderPass[RenderPass["TRANSPARENT"] = 1] = "TRANSPARENT";
-            })(RenderPass || (RenderPass = {}));
             Command_Shape = /** @class */ (function () {
                 function Command_Shape(gl, bmd, shape) {
                     this.bmd = bmd;
@@ -4651,9 +4661,15 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                     ctx.putImageData(imgData, 0, 0);
                     return canvas;
                 };
-                Scene.prototype.render = function (state, pass) {
+                Scene.prototype.render = function (state) {
                     state.setClipPlanes(10, 500000);
-                    var commands = pass === RenderPass.OPAQUE ? this.opaqueCommands : this.transparentCommands;
+                    var commands;
+                    if (state.currentPass === 2 /* OPAQUE */) {
+                        commands = this.opaqueCommands;
+                    }
+                    else if (state.currentPass === 3 /* TRANSPARENT */) {
+                        commands = this.transparentCommands;
+                    }
                     commands.forEach(function (command) {
                         command.exec(state);
                     });
@@ -4715,6 +4731,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
             MultiScene = /** @class */ (function () {
                 function MultiScene(scenes) {
                     this.cameraController = Viewer.FPSCameraController;
+                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.scenes = scenes;
                     this.textures = [];
                     try {
@@ -4732,10 +4749,10 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                     }
                     var e_23, _c;
                 }
-                MultiScene.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
-                    this.scenes.forEach(function (scene) { return scene.render(state, RenderPass.OPAQUE); });
-                    this.scenes.forEach(function (scene) { return scene.render(state, RenderPass.TRANSPARENT); });
+                MultiScene.prototype.render = function (renderState) {
+                    this.scenes.forEach(function (scene) {
+                        scene.render(renderState);
+                    });
                 };
                 MultiScene.prototype.destroy = function (gl) {
                     this.scenes.forEach(function (scene) { return scene.destroy(gl); });
@@ -4987,6 +5004,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
             Scene = /** @class */ (function () {
                 function Scene(gl, mdl0) {
                     this.cameraController = Viewer.OrbitCameraController;
+                    this.renderPasses = [2 /* OPAQUE */];
                     this.textures = [];
                     this.fancyGrid = new FancyGrid(gl);
                     this.program = new MDL0_Program();
@@ -5825,6 +5843,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
             Scene = /** @class */ (function () {
                 function Scene(gl, zsi) {
                     this.cameraController = Viewer.FPSCameraController;
+                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.program = new OoT3D_Program();
                     this.textures = zsi.mesh.textures.map(function (texture) {
                         return textureToCanvas(texture);
@@ -6007,8 +6026,10 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                     renderFlags.cullMode = render_8.CullMode.BACK;
                     return function (state) {
                         state.useFlags(renderFlags);
-                        opaque();
-                        transparent();
+                        if (state.currentPass === 2 /* OPAQUE */)
+                            opaque();
+                        if (state.currentPass === 3 /* TRANSPARENT */)
+                            transparent();
                     };
                 };
                 Scene.prototype.destroy = function (gl) {
@@ -6019,6 +6040,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
             MultiScene = /** @class */ (function () {
                 function MultiScene(scenes) {
                     this.cameraController = Viewer.FPSCameraController;
+                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.scenes = scenes;
                     this.textures = [];
                     try {
@@ -6037,7 +6059,10 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                     var e_26, _c;
                 }
                 MultiScene.prototype.render = function (renderState) {
-                    this.scenes.forEach(function (scene) { return scene.render(renderState); });
+                    this.scenes.forEach(function (scene) {
+                        if (scene.renderPasses.includes(renderState.currentPass))
+                            scene.render(renderState);
+                    });
                 };
                 MultiScene.prototype.destroy = function (gl) {
                     this.scenes.forEach(function (scene) { return scene.destroy(gl); });
@@ -7029,7 +7054,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
         ctx.putImageData(imgData, 0, 0);
         return canvas;
     }
-    var gl_matrix_6, CRG0, LZ77, NITRO_BMD, Viewer, render_10, util_16, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, RenderPass, Scene, MultiScene, SceneDesc;
+    var gl_matrix_6, CRG0, LZ77, NITRO_BMD, Viewer, render_10, util_16, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (gl_matrix_6_1) {
@@ -7076,14 +7101,11 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
             // 3 pos + 4 color + 2 uv
             VERTEX_SIZE = 9;
             VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
-            (function (RenderPass) {
-                RenderPass[RenderPass["OPAQUE"] = 1] = "OPAQUE";
-                RenderPass[RenderPass["TRANSLUCENT"] = 2] = "TRANSLUCENT";
-            })(RenderPass || (RenderPass = {}));
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, localScale, crg0Level) {
                     var _this = this;
                     this.cameraController = Viewer.FPSCameraController;
+                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.program = new NITRO_Program();
                     this.bmd = bmd;
                     this.localScale = localScale;
@@ -7113,7 +7135,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     gl.enableVertexAttribArray(NITRO_Program.a_color);
                     gl.enableVertexAttribArray(NITRO_Program.a_uv);
                     gl.bindVertexArray(null);
-                    return function () {
+                    return function (renderState) {
                         gl.bindVertexArray(vao);
                         gl.drawElements(gl.TRIANGLES, packet.idxData.length, gl.UNSIGNED_SHORT, 0);
                         gl.bindVertexArray(null);
@@ -7122,8 +7144,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 Scene.prototype.translatePoly = function (gl, poly) {
                     var _this = this;
                     var funcs = poly.packets.map(function (packet) { return _this.translatePacket(gl, packet); });
-                    return function (state, pass) {
-                        funcs.forEach(function (f) { f(state, pass); });
+                    return function (state) {
+                        funcs.forEach(function (f) { f(state); });
                     };
                 };
                 Scene.prototype.translateCullMode = function (renderWhichFaces) {
@@ -7210,14 +7232,14 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     };
                 };
                 Scene.prototype.translateBatch = function (gl, batch) {
-                    var batchPass = batch.material.isTranslucent ? RenderPass.TRANSLUCENT : RenderPass.OPAQUE;
+                    var batchPass = batch.material.isTranslucent ? 3 /* TRANSPARENT */ : 2 /* OPAQUE */;
                     var applyMaterial = this.translateMaterial(gl, batch.material);
                     var renderPoly = this.translatePoly(gl, batch.poly);
-                    return function (state, pass) {
-                        if (pass !== batchPass)
+                    return function (state) {
+                        if (state.currentPass !== batchPass)
                             return;
                         applyMaterial(state);
-                        renderPoly(state, pass);
+                        renderPoly(state);
                     };
                 };
                 Scene.prototype.translateModel = function (gl, bmdm) {
@@ -7228,7 +7250,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     var scaleFactor = bmd.scaleFactor * this.localScale;
                     gl_matrix_6.mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
                     var batches = bmdm.batches.map(function (batch) { return _this.translateBatch(gl, batch); });
-                    return function (state, pass) {
+                    return function (state) {
                         if (_this.isSkybox) {
                             // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
                             gl_matrix_6.mat4.copy(skyboxCameraMat, state.modelView);
@@ -7238,21 +7260,18 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                             gl.uniformMatrix4fv(_this.program.modelViewLocation, false, skyboxCameraMat);
                         }
                         gl.uniformMatrix4fv(_this.program.localMatrixLocation, false, localMatrix);
-                        batches.forEach(function (f) { f(state, pass); });
+                        batches.forEach(function (f) { f(state); });
                     };
                 };
-                Scene.prototype.renderModels = function (state, pass) {
+                Scene.prototype.renderModels = function (state) {
                     return this.modelFuncs.forEach(function (func) {
-                        func(state, pass);
+                        func(state);
                     });
                 };
                 Scene.prototype.render = function (state) {
                     var gl = state.viewport.gl;
                     state.useProgram(this.program);
-                    // First pass, opaque.
-                    this.renderModels(state, RenderPass.OPAQUE);
-                    // Second pass, translucent.
-                    this.renderModels(state, RenderPass.TRANSLUCENT);
+                    this.renderModels(state);
                 };
                 Scene.prototype.destroy = function (gl) {
                     this.arena.destroy(gl);
@@ -7262,6 +7281,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
             MultiScene = /** @class */ (function () {
                 function MultiScene(scenes) {
                     this.cameraController = Viewer.FPSCameraController;
+                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.scenes = scenes;
                     this.textures = [];
                     try {
@@ -7279,12 +7299,17 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     }
                     var e_28, _c;
                 }
-                MultiScene.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
+                MultiScene.prototype.render = function (renderState) {
+                    var gl = renderState.gl;
                     // Clear to black.
-                    gl.clearColor(0, 0, 0, 1.0);
-                    gl.clear(gl.COLOR_BUFFER_BIT);
-                    this.scenes.forEach(function (scene) { return scene.render(state); });
+                    if (renderState.currentPass === 0 /* CLEAR */) {
+                        gl.clearColor(0, 0, 0, 1.0);
+                        gl.clear(gl.COLOR_BUFFER_BIT);
+                    }
+                    this.scenes.forEach(function (scene) {
+                        if (scene.renderPasses.includes(renderState.currentPass))
+                            scene.render(renderState);
+                    });
                 };
                 MultiScene.prototype.destroy = function (gl) {
                     this.scenes.forEach(function (scene) { return scene.destroy(gl); });
@@ -8670,6 +8695,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                 function Scene(gl, zelview0) {
                     var _this = this;
                     this.cameraController = Viewer.FPSCameraController;
+                    this.renderPasses = [2 /* OPAQUE */];
                     this.zelview0 = zelview0;
                     this.textures = [];
                     this.program_BG = new BillboardBGProgram();

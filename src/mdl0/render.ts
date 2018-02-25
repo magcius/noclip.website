@@ -3,7 +3,7 @@ import * as MDL0 from 'mdl0';
 
 import * as Viewer from '../viewer';
 
-import { RenderFlags, RenderState, Program } from '../render';
+import { RenderFlags, RenderState, Program, RenderPass } from '../render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
 
@@ -172,6 +172,7 @@ void main() {
 
 class Scene implements Viewer.Scene {
     public cameraController = Viewer.OrbitCameraController;
+    public renderPasses = [ RenderPass.OPAQUE ];
     public textures: HTMLCanvasElement[] = [];
     public program: MDL0_Program;
     public mdl0: MDL0.MDL0;
