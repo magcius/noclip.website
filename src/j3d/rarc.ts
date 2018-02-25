@@ -78,7 +78,6 @@ export function parse(buffer: ArrayBuffer): RARC {
                 subdirIndexes.push(subdirEntryIndex);
             } else {
                 const offs = dataOffs + entryDataOffs;
-                console.log(offs, dataOffs, entryDataOffs);
                 const fileBuffer = buffer.slice(offs, offs + entryDataSize);
                 const file: RARCFile = { name, buffer: fileBuffer };
                 files.push(file);

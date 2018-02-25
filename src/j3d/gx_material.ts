@@ -581,10 +581,8 @@ ${this.generateAlphaTest(alphaTest)}
         return location;
     }
 
-    public bindSamplers(gl: WebGL2RenderingContext) {
-        for (let i = 0; i < this.samplerLocations.length; i++) {
-            gl.uniform1i(this.samplerLocations[i], i);
-        }
+    public getSamplerLocation(i: number) {
+        return this.samplerLocations[i];
     }
 }
 // #endregion

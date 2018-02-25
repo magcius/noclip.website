@@ -190,8 +190,6 @@ class Command_Material {
 
         state.useProgram(this.program);
 
-        this.program.bindSamplers(gl);
-
         // Bind our scale uniforms.
         for (const vertexArray of this.bmd.vtx1.vertexArrays.values()) {
             const location = this.program.getScaleUniformLocation(vertexArray.vtxAttrib);
@@ -214,6 +212,7 @@ class Command_Material {
             if (texture === null)
                 continue;
             gl.activeTexture(gl.TEXTURE0 + i);
+            gl.uniform1i(this.program.getSamplerLocation(i), i);
             gl.bindTexture(gl.TEXTURE_2D, texture);
         }
     }
@@ -361,7 +360,6 @@ export class SceneDesc implements Viewer.SceneDesc {
         const scenes = [ this.createSceneFromPath(gl, this.path) ];
         if (this.vrbox)
             scenes.push(this.createSceneFromPath(gl, this.vrbox));
-        console.log(this.vrbox);
         return Progressable.all(scenes).then((scenes) => {
             return new MultiScene(scenes);
         });
