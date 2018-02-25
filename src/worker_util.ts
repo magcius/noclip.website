@@ -67,7 +67,8 @@ export class WorkerPool<T, R> {
     }
 
     public build() {
-        this.terminate();
+        if (this.multiWorkerManager)
+            return;
 
         const workers: WorkerManager<T, R>[] = [];
         let numWorkers = this.numWorkers;
@@ -77,6 +78,7 @@ export class WorkerPool<T, R> {
     }
 
     public execute(req: R): Promise<T> {
+        this.build();
         return this.multiWorkerManager.execute(req);
     }
 }

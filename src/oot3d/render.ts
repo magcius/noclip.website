@@ -287,7 +287,7 @@ class Scene implements Viewer.Scene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        // TODO(jstpierre): Destroy.
+        this.arena.destroy(gl);
     }
 }
 

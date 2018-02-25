@@ -564,6 +564,8 @@ export class Scene implements Viewer.Scene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        // Tear down the deswizzle workers.
+        deswizzler.terminate();
         this.arena.destroy(gl);
     }
 }
@@ -602,11 +604,6 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
-        // Reset any jobs we might have pending.
-        // TODO(jstpierre): Explicit scene teardown.
-        deswizzler.terminate();
-        deswizzler.build();
-
         return Progressable.all([
             this._createSceneFromPath(gl, this.path, false),
             this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
