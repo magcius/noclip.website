@@ -8,7 +8,7 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { RenderCullMode, RenderFlags, RenderState, Program } from '../render';
+import { CullMode, RenderFlags, RenderState, Program } from '../render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
 
@@ -148,16 +148,16 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateCullMode(renderWhichFaces: number): RenderCullMode {
+    private translateCullMode(renderWhichFaces: number): CullMode {
         switch (renderWhichFaces) {
         case 0x00: // Render Nothing
-            return RenderCullMode.FRONT_AND_BACK;
+            return CullMode.FRONT_AND_BACK;
         case 0x01: // Render Back
-            return RenderCullMode.FRONT;
+            return CullMode.FRONT;
         case 0x02: // Render Front
-            return RenderCullMode.BACK;
+            return CullMode.BACK;
         case 0x03: // Render Front and Back
-            return RenderCullMode.NONE;
+            return CullMode.NONE;
         default:
             throw new Error("Unknown renderWhichFaces");
         }

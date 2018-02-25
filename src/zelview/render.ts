@@ -3,7 +3,7 @@ import * as F3DEX2 from './f3dex2';
 import * as ZELVIEW0 from './zelview0';
 
 import { Progressable } from '../progress';
-import { RenderCullMode, RenderFlags, RenderState, Program } from '../render';
+import { CullMode, RenderFlags, RenderState, Program } from '../render';
 import { fetch } from '../util';
 
 import * as Viewer from '../viewer';
@@ -271,7 +271,7 @@ class Scene implements Viewer.Scene {
 
         const renderFlags = new RenderFlags();
         renderFlags.blend = true;
-        renderFlags.cullMode = RenderCullMode.NONE;
+        renderFlags.cullMode = CullMode.NONE;
 
         return (state: RenderState) => {
             const prog = this.program_WATERS;

@@ -1,6 +1,18 @@
 
 import { mat4 } from 'gl-matrix';
 
+export const enum FrontFaceMode {
+    CCW,
+    CW
+}
+
+export const enum CullMode {
+    NONE,
+    FRONT,
+    BACK,
+    FRONT_AND_BACK
+}
+
 function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     const shader: WebGLShader = gl.createShader(type);
 
@@ -79,24 +91,12 @@ ${rest}
     }
 }
 
-export const enum RenderFrontFaceMode {
-    CCW,
-    CW
-}
-
-export const enum RenderCullMode {
-    NONE,
-    FRONT,
-    BACK,
-    FRONT_AND_BACK
-}
-
 export class RenderFlags {
     depthWrite: boolean = undefined;
     depthTest: boolean = undefined;
     blend: boolean = undefined;
-    cullMode: RenderCullMode = undefined;
-    frontFace: RenderFrontFaceMode = undefined;
+    cullMode: CullMode = undefined;
+    frontFace: FrontFaceMode = undefined;
 
     static default: RenderFlags = new RenderFlags();
 
@@ -133,33 +133,33 @@ export class RenderFlags {
         }
 
         if (oldFlags.cullMode !== newFlags.cullMode) {
-            if (oldFlags.cullMode === RenderCullMode.NONE)
+            if (oldFlags.cullMode === CullMode.NONE)
                 gl.enable(gl.CULL_FACE);
-            else if (newFlags.cullMode === RenderCullMode.NONE)
+            else if (newFlags.cullMode === CullMode.NONE)
                 gl.disable(gl.CULL_FACE);
 
-            if (newFlags.cullMode === RenderCullMode.BACK)
+            if (newFlags.cullMode === CullMode.BACK)
                 gl.cullFace(gl.BACK);
-            else if (newFlags.cullMode === RenderCullMode.FRONT)
+            else if (newFlags.cullMode === CullMode.FRONT)
                 gl.cullFace(gl.FRONT);
-            else if (newFlags.cullMode === RenderCullMode.FRONT_AND_BACK)
+            else if (newFlags.cullMode === CullMode.FRONT_AND_BACK)
                 gl.cullFace(gl.FRONT_AND_BACK);
         }
 
         if (oldFlags.frontFace !== newFlags.frontFace) {
-            if (newFlags.frontFace === RenderFrontFaceMode.CCW)
+            if (newFlags.frontFace === FrontFaceMode.CCW)
                 gl.frontFace(gl.CCW);
-            else if (newFlags.frontFace === RenderFrontFaceMode.CW)
+            else if (newFlags.frontFace === FrontFaceMode.CW)
                 gl.frontFace(gl.CW);
         }
     }
 }
 
 RenderFlags.default.blend = false;
-RenderFlags.default.cullMode = RenderCullMode.NONE;
+RenderFlags.default.cullMode = CullMode.NONE;
 RenderFlags.default.depthTest = false;
 RenderFlags.default.depthWrite = true;
-RenderFlags.default.frontFace = RenderFrontFaceMode.CCW;
+RenderFlags.default.frontFace = FrontFaceMode.CCW;
 
 export interface Viewport {
     canvas: HTMLCanvasElement;

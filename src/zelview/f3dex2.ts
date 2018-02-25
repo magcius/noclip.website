@@ -4,7 +4,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Render from './render';
 import * as ZELVIEW0 from './zelview0';
 
-import { RenderCullMode, RenderState, RenderFlags, Program } from '../render';
+import { CullMode, RenderState, RenderFlags, Program } from '../render';
 import * as Viewer from '../viewer';
 
 // Zelda uses the F3DEX2 display list format. This implements
@@ -208,13 +208,13 @@ function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
     const cullBack = newMode & GeometryMode.CULL_BACK;
 
     if (cullFront && cullBack)
-        renderFlags.cullMode = RenderCullMode.FRONT_AND_BACK;
+        renderFlags.cullMode = CullMode.FRONT_AND_BACK;
     else if (cullFront)
-        renderFlags.cullMode = RenderCullMode.FRONT;
+        renderFlags.cullMode = CullMode.FRONT;
     else if (cullBack)
-        renderFlags.cullMode = RenderCullMode.BACK;
+        renderFlags.cullMode = CullMode.BACK;
     else
-        renderFlags.cullMode = RenderCullMode.NONE;
+        renderFlags.cullMode = CullMode.NONE;
 
     state.cmds.push((renderState: RenderState) => {
         const gl = renderState.gl;
