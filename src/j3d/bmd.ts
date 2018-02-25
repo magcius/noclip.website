@@ -2,21 +2,9 @@
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
 
-import { be16toh, be32toh } from 'endian';
-import { assert } from 'util';
+import { betoh } from 'endian';
+import { assert, readString } from 'util';
 import { mat2d, mat4, mat3 as matrix3 } from 'gl-matrix';
-
-function readString(buffer: ArrayBuffer, offs: number, length: number): string {
-    const length2 = Math.min(length, buffer.byteLength - offs);
-    const buf = new Uint8Array(buffer, offs, length2);
-    let S = '';
-    for (let i = 0; i < buf.byteLength; i++) {
-        if (buf[i] === 0)
-            break;
-        S += String.fromCharCode(buf[i]);
-    }
-    return S;
-}
 
 function readStringTable(buffer: ArrayBuffer, offs: number): string[] {
     const view = new DataView(buffer, offs);
@@ -113,17 +101,6 @@ function readINF1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 }
 
 type CompSize = 1 | 2 | 4;
-
-function bswapArray(m: ArrayBuffer, componentSize: CompSize): ArrayBuffer {
-    switch (componentSize) {
-    case 1:
-        return m;
-    case 2:
-        return be16toh(m);
-    case 4:
-        return be32toh(m);
-    }
-}
 
 function getComponentSize(dataType: GX.CompType): CompSize {
     switch (dataType) {
@@ -240,7 +217,7 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const compCount = getNumComponents(vtxAttrib, compCnt);
         const compSize = getComponentSize(compType);
         const vtxDataBufferRaw = buffer.slice(dataOffs, dataOffs + dataSize);
-        const vtxDataBuffer = bswapArray(vtxDataBufferRaw, compSize);
+        const vtxDataBuffer = betoh(vtxDataBufferRaw, compSize);
         const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compSize, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }

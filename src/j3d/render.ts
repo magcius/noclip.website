@@ -1,5 +1,8 @@
 
+import { mat3 } from 'gl-matrix';
+
 import * as BMD from './bmd';
+import * as BTK from './btk';
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
 import * as GX_Texture from './gx_texture';
@@ -95,14 +98,16 @@ class Command_Shape {
 
 class Command_Material {
     public bmd: BMD.BMD;
+    public btk: BTK.BTK;
     public material: GX_Material.GXMaterial;
 
     private textures: WebGLTexture[] = [];
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD, material: GX_Material.GXMaterial) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD, btk: BTK.BTK, material: GX_Material.GXMaterial) {
         this.bmd = bmd;
+        this.btk = btk;
         this.material = material;
         this.program = new GX_Material.GX_Program(material);
         this.renderFlags = GX_Material.translateRenderFlags(this.material);
@@ -199,11 +204,17 @@ class Command_Material {
         }
 
         // Bind our texture matrices.
+        const matrix = mat3.create();
         for (let i = 0; i < this.material.texMatrices.length; i++) {
             const texMtx = this.material.texMatrices[i];
+            if (texMtx === null)
+                continue;
+
+            if (!(this.btk && this.btk.applyAnimation(matrix, this.material.name, i, state.time)))
+                mat3.copy(matrix, texMtx.matrix);
+
             const location = this.program.getTexMtxLocation(i);
-            if (texMtx !== null)
-                gl.uniformMatrix3fv(location, false, texMtx.matrix);
+            gl.uniformMatrix3fv(location, false, matrix);
         }
         state.useFlags(this.renderFlags);
 
@@ -229,15 +240,17 @@ export class Scene {
     public gl: WebGL2RenderingContext;
     public textures: HTMLCanvasElement[];
     private bmd: BMD.BMD;
+    private btk: BTK.BTK;
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
 
     private materialCommands: Command_Material[];
     private shapeCommands: Command_Shape[];
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD, btk: BTK.BTK) {
         this.gl = gl;
         this.bmd = bmd;
+        this.btk = btk;
         this.translateModel(this.bmd);
 
         this.textures = this.bmd.tex1.textures.map((tex) => this.translateTextureToCanvas(tex));
@@ -277,7 +290,7 @@ export class Scene {
 
     private translateModel(bmd: BMD.BMD) {
         this.materialCommands = bmd.mat3.materialEntries.map((material) => {
-            return new Command_Material(this.gl, this.bmd, material);
+            return new Command_Material(this.gl, this.bmd, this.btk, material);
         });
         this.shapeCommands = bmd.shp1.shapes.map((shape) => {
             return new Command_Shape(this.gl, this.bmd, shape);
@@ -365,19 +378,30 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
+    private createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer): Scene {
+        if (readString(buffer, 0, 4) === 'Yaz0') {
+            return this.createSceneFromBuffer(gl, YAZ0.decompress(buffer));
+        } else if (readString(buffer, 0, 4) === 'RARC') {
+            const rarc = RARC.parse(buffer);
+            const bmdFile = rarc.files.find((s) => s.name.endsWith('.bmd') || s.name.endsWith('.bdl'));
+            const btkFile = rarc.files.find((s) => s.name.endsWith('.btk'));
+            const bmd = BMD.parse(bmdFile.buffer);
+            const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
+            return new Scene(gl, bmd, btk);
+        } else if (readString(buffer, 0, 4) === 'J3D2') {
+            const bmd = BMD.parse(buffer);
+            return new Scene(gl, bmd, null);
+        } else {
+            throw "whoops";
+        }
+    }
+
     private createSceneFromPath(gl: WebGL2RenderingContext, path: string): Progressable<Scene> {
         if (!path)
             return new Progressable(Promise.resolve(null));
 
         return fetch(path).then((result: ArrayBuffer) => {
-            if (readString(result, 0, 4) === 'Yaz0') {
-                const dec = YAZ0.decompress(result);
-                const rarc = RARC.parse(dec);
-                result = rarc.files[0].buffer;
-            }
-
-            const bmd = BMD.parse(result);
-            return new Scene(gl, bmd);
+            return this.createSceneFromBuffer(gl, result);
         });
     }
 }

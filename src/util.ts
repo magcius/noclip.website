@@ -23,7 +23,7 @@ export function fetch(path: string): Progressable<ArrayBuffer> {
     return pr;
 }
 
-export function assert(b: boolean) {
+export function assert<T = never>(b: boolean) {
     if (!b) throw new Error("Assert fail");
 }
 
