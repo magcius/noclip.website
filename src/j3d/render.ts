@@ -7,7 +7,7 @@ import * as Viewer from 'viewer';
 
 import { RenderFlags, RenderState } from '../render';
 import { Progressable } from '../progress';
-import { fetch } from '../util';
+import { fetch, assert } from '../util';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
@@ -210,6 +210,8 @@ export class Scene implements Viewer.Scene {
     public textures: HTMLCanvasElement[];
     private bmd: BMD.BMD;
     private commands: Command[];
+    private materialCommands: Command_Material[];
+    private shapeCommands: Command_Shape[];
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD) {
         this.gl = gl;
@@ -243,6 +245,14 @@ export class Scene implements Viewer.Scene {
 
     private translateModel(bmd: BMD.BMD) {
         this.commands = [];
+
+        this.materialCommands = bmd.mat3.materialEntries.map((material) => {
+            return new Command_Material(this.gl, this.bmd, material);
+        });
+        this.shapeCommands = bmd.shp1.shapes.map((shape) => {
+            return new Command_Shape(this.gl, this.bmd, shape);
+        });
+
         // Iterate through scene graph.
         this.translateSceneGraph(bmd.inf1.sceneGraph);
     }
@@ -254,15 +264,14 @@ export class Scene implements Viewer.Scene {
                 this.translateSceneGraph(child);
             break;
         case BMD.HierarchyType.Shape:
-            const shape = this.bmd.shp1.shapes[node.shapeIdx];
-            this.commands.push(new Command_Shape(this.gl, this.bmd, shape));
+            this.commands.push(this.shapeCommands[node.shapeIdx]);
             break;
         case BMD.HierarchyType.Joint:
             // XXX: Implement joints...
             break;
         case BMD.HierarchyType.Material:
-            const material = this.bmd.mat3.materialEntries[node.materialIdx];
-            this.commands.push(new Command_Material(this.gl, this.bmd, material));
+            const materialIdx = this.bmd.mat3.remapTable[node.materialIdx];
+            this.commands.push(this.materialCommands[materialIdx]);
             break;
         }
     }

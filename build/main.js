@@ -3003,8 +3003,6 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     _this.texMtxLocations = [];
                     _this.material = material;
                     _this.generateShaders();
-                    if (material.name === 'Water01_v')
-                        console.log(_this.material, _this.vert, _this.frag);
                     return _this;
                 }
                 GX_Program.prototype.generateFloat = function (v) {
@@ -3520,6 +3518,10 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 throw new Error("Unknown index data type " + type + "!");
         }
     }
+    function align(n, multiple) {
+        var mask = (multiple - 1);
+        return (n + mask) & ~mask;
+    }
     function readSHP1Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = new DataView(buffer, chunkStart, chunkSize);
         var shapeCount = view.getUint16(0x08);
@@ -3557,13 +3559,14 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 var vtxAttrib = view.getUint32(attribIdx + 0x00);
                 if (vtxAttrib === 255 /* NULL */)
                     break;
+                var vertexArray = bmd.vtx1.vertexArrays.get(vtxAttrib);
+                packedVertexSize = align(packedVertexSize, vertexArray.compSize);
                 var indexDataType = view.getUint32(attribIdx + 0x04);
                 var indexDataSize = getComponentSize(indexDataType);
                 var offset = packedVertexSize;
                 packedVertexAttributes.push({ vtxAttrib: vtxAttrib, indexDataType: indexDataType, offset: offset });
                 attribIdx += 0x08;
                 vertexIndexSize += indexDataSize;
-                var vertexArray = bmd.vtx1.vertexArrays.get(vtxAttrib);
                 packedVertexSize += vertexArray.compSize * vertexArray.compCount;
             }
             // Now parse out the packets.
@@ -3610,6 +3613,7 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                                 var indexDataSize = getComponentSize(attrib.indexDataType);
                                 drawCallIdx += indexDataSize;
                                 var vertexArray = bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
+                                packedDataOffs = align(packedDataOffs, vertexArray.compSize);
                                 var attribDataSize = vertexArray.compSize * vertexArray.compCount;
                                 var vertexData = new Uint8Array(vertexArray.buffer, attribDataSize * index, attribDataSize);
                                 packedDataView.set(vertexData, packedDataOffs);
@@ -3661,11 +3665,11 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
     function readMAT3Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = new DataView(buffer, chunkStart, chunkSize);
         var materialCount = view.getUint16(0x08);
-        var indexToMatIndexTableOffs = view.getUint32(0x10);
-        var indexToMatIndexTable = [];
+        var remapTableOffs = view.getUint32(0x10);
+        var remapTable = [];
         for (var i = 0; i < materialCount; i++)
-            indexToMatIndexTable[i] = view.getUint16(indexToMatIndexTableOffs + i * 0x02);
-        var maxIndex = Math.max.apply(null, indexToMatIndexTable);
+            remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
+        var maxIndex = Math.max.apply(null, remapTable);
         var nameTableOffs = view.getUint32(0x14);
         var nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
         var cullModeTableOffs = view.getUint32(0x1C);
@@ -3879,8 +3883,7 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             });
             materialEntryIdx += 0x014C;
         }
-        var mat3 = { materialEntries: materialEntries };
-        bmd.mat3 = mat3;
+        bmd.mat3 = { remapTable: remapTable, materialEntries: materialEntries };
     }
     function readTEX1Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = new DataView(buffer, chunkStart, chunkSize);
@@ -4475,7 +4478,14 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                     });
                 };
                 Scene.prototype.translateModel = function (bmd) {
+                    var _this = this;
                     this.commands = [];
+                    this.materialCommands = bmd.mat3.materialEntries.map(function (material) {
+                        return new Command_Material(_this.gl, _this.bmd, material);
+                    });
+                    this.shapeCommands = bmd.shp1.shapes.map(function (shape) {
+                        return new Command_Shape(_this.gl, _this.bmd, shape);
+                    });
                     // Iterate through scene graph.
                     this.translateSceneGraph(bmd.inf1.sceneGraph);
                 };
@@ -4497,15 +4507,14 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                             }
                             break;
                         case BMD.HierarchyType.Shape:
-                            var shape = this.bmd.shp1.shapes[node.shapeIdx];
-                            this.commands.push(new Command_Shape(this.gl, this.bmd, shape));
+                            this.commands.push(this.shapeCommands[node.shapeIdx]);
                             break;
                         case BMD.HierarchyType.Joint:
                             // XXX: Implement joints...
                             break;
                         case BMD.HierarchyType.Material:
-                            var material = this.bmd.mat3.materialEntries[node.materialIdx];
-                            this.commands.push(new Command_Material(this.gl, this.bmd, material));
+                            var materialIdx = this.bmd.mat3.remapTable[node.materialIdx];
+                            this.commands.push(this.materialCommands[materialIdx]);
                             break;
                     }
                     var e_22, _c;
@@ -4549,6 +4558,8 @@ System.register("j3d/scenes", ["j3d/render"], function (exports_22, context_22) 
             name = "J3D Models";
             sceneDescs = [
                 { name: "Faceship", filename: "faceship.bmd" },
+                { name: "Sirena Beach", filename: "sirena.bmd" },
+                { name: "Noki Bay", filename: "noki.bmd" },
             ].map(function (entry) {
                 var path = "data/j3d/" + entry.filename;
                 var name = entry.name || entry.filename;

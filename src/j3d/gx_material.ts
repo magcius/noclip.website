@@ -143,10 +143,7 @@ export class GX_Program extends Program {
     constructor(material: GXMaterial) {
         super();
         this.material = material;
-
         this.generateShaders();
-        if (material.name === 'Water01_v')
-            console.log(this.material, this.vert, this.frag);
     }
 
     private generateFloat(v: number): string {
