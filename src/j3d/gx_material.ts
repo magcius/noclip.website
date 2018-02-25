@@ -4,7 +4,7 @@ import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';
 
-import { RenderCullMode, RenderFrontFaceMode, RenderFlags, Program } from '../render';
+import { CullMode, FrontFaceMode, RenderFlags, Program } from '../render';
 
 // #region Material definition.
 export interface Color {
@@ -544,16 +544,16 @@ void main() {
 // #endregion
 
 // #region Material flags generation.
-function translateCullMode(cullMode: GX.CullMode): RenderCullMode {
+function translateCullMode(cullMode: GX.CullMode): CullMode {
     switch (cullMode) {
     case GX.CullMode.ALL:
-        return RenderCullMode.FRONT_AND_BACK;
+        return CullMode.FRONT_AND_BACK;
     case GX.CullMode.FRONT:
-        return RenderCullMode.FRONT;
+        return CullMode.FRONT;
     case GX.CullMode.BACK:
-        return RenderCullMode.BACK;
+        return CullMode.BACK;
     case GX.CullMode.NONE:
-        return RenderCullMode.NONE;
+        return CullMode.NONE;
     }
 }
 
@@ -562,7 +562,7 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
     renderFlags.cullMode = translateCullMode(material.cullMode);
     renderFlags.depthWrite = material.ropInfo.depthWrite;
     renderFlags.depthTest = material.ropInfo.depthTest;
-    renderFlags.frontFace = RenderFrontFaceMode.CW;
+    renderFlags.frontFace = FrontFaceMode.CW;
     return renderFlags;
 }
 // #endregion

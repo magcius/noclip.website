@@ -3,7 +3,7 @@ import * as MDL0 from 'mdl0';
 
 import * as Viewer from '../viewer';
 
-import { RenderCullMode, RenderFlags, RenderState, Program } from '../render';
+import { RenderFlags, RenderState, Program } from '../render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
 

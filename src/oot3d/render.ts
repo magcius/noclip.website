@@ -5,7 +5,7 @@ import * as ZSI from './zsi';
 import * as Viewer from '../viewer';
 
 import { Progressable } from '../progress';
-import { RenderCullMode, RenderFlags, RenderState, Program } from '../render';
+import { CullMode, RenderFlags, RenderState, Program } from '../render';
 import { fetch } from '../util';
 
 class OoT3D_Program extends Program {
@@ -274,7 +274,7 @@ class Scene implements Viewer.Scene {
         const renderFlags = new RenderFlags();
         renderFlags.blend = true;
         renderFlags.depthTest = true;
-        renderFlags.cullMode = RenderCullMode.BACK;
+        renderFlags.cullMode = CullMode.BACK;
 
         return (state: RenderState) => {
             state.useFlags(renderFlags);
