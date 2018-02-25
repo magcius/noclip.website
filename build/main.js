@@ -4672,7 +4672,6 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                     // TODO(jstpierre): Clean this up.
                     var context = {};
                     this.translateSceneGraph(bmd.inf1.sceneGraph, context);
-                    console.log(this.opaqueCommands, this.transparentCommands);
                 };
                 Scene.prototype.translateSceneGraph = function (node, context) {
                     switch (node.type) {
@@ -4751,10 +4750,11 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    return progress_3.Progressable.all([
-                        this.createSceneFromPath(gl, this.path),
-                        this.createSceneFromPath(gl, this.vrbox),
-                    ]).then(function (scenes) {
+                    var scenes = [this.createSceneFromPath(gl, this.path)];
+                    if (this.vrbox)
+                        scenes.push(this.createSceneFromPath(gl, this.vrbox));
+                    console.log(this.vrbox);
+                    return progress_3.Progressable.all(scenes).then(function (scenes) {
                         return new MultiScene(scenes);
                     });
                 };
@@ -4799,7 +4799,7 @@ System.register("j3d/scenes", ["j3d/render"], function (exports_23, context_23) 
             ].map(function (entry) {
                 var path = "data/j3d/" + entry.filename;
                 var name = entry.name || entry.filename;
-                var vrbox = "data/j3d/" + entry.vrbox;
+                var vrbox = entry.vrbox ? "data/j3d/" + entry.vrbox : null;
                 return new render_5.SceneDesc(name, path, vrbox);
             });
             exports_23("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });

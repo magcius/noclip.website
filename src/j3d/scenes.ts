@@ -13,7 +13,7 @@ const sceneDescs: SceneDesc[] = [
 ].map((entry): SceneDesc => {
     const path = `data/j3d/${entry.filename}`;
     const name = entry.name || entry.filename;
-    const vrbox = `data/j3d/${entry.vrbox}`;
+    const vrbox = entry.vrbox ? `data/j3d/${entry.vrbox}` : null;
     return new SceneDesc(name, path, vrbox);
 });
 

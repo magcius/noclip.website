@@ -290,7 +290,6 @@ export class Scene {
         // TODO(jstpierre): Clean this up.
         const context = {};
         this.translateSceneGraph(bmd.inf1.sceneGraph, context);
-        console.log(this.opaqueCommands, this.transparentCommands);
     }
 
     private translateSceneGraph(node: BMD.HierarchyNode, context) {
@@ -357,10 +356,11 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
-        return Progressable.all([
-            this.createSceneFromPath(gl, this.path),
-            this.createSceneFromPath(gl, this.vrbox),
-        ]).then((scenes) => {
+        const scenes = [ this.createSceneFromPath(gl, this.path) ];
+        if (this.vrbox)
+            scenes.push(this.createSceneFromPath(gl, this.vrbox));
+        console.log(this.vrbox);
+        return Progressable.all(scenes).then((scenes) => {
             return new MultiScene(scenes);
         });
     }
