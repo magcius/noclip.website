@@ -5,7 +5,7 @@ import * as ZSI from './zsi';
 import * as Viewer from '../viewer';
 
 import { Progressable } from '../progress';
-import { CullMode, RenderFlags, RenderState, Program } from '../render';
+import { CullMode, RenderFlags, RenderState, Program, RenderArena } from '../render';
 import { fetch } from '../util';
 
 class OoT3D_Program extends Program {
@@ -86,6 +86,8 @@ class Scene implements Viewer.Scene {
     public zsi: ZSI.ZSI;
     public model: RenderFunc;
 
+    private arena: RenderArena;
+
     constructor(gl: WebGL2RenderingContext, zsi: ZSI.ZSI) {
         this.program = new OoT3D_Program();
         this.textures = zsi.mesh.textures.map((texture) => {
@@ -93,6 +95,7 @@ class Scene implements Viewer.Scene {
         });
         this.zsi = zsi;
 
+        this.arena = new RenderArena();
         this.model = this.translateModel(gl, zsi.mesh);
     }
 
@@ -129,7 +132,7 @@ class Scene implements Viewer.Scene {
     }
 
     private translateSepd(gl: WebGL2RenderingContext, cmbContext: any, sepd: CMB.Sepd) {
-        const vao = gl.createVertexArray();
+        const vao = this.arena.createVertexArray(gl);
         gl.bindVertexArray(vao);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cmbContext.idxBuffer);
@@ -163,7 +166,7 @@ class Scene implements Viewer.Scene {
     }
 
     private translateTexture(gl: WebGL2RenderingContext, texture: CMB.Texture): WebGLTexture {
-        const texId = gl.createTexture();
+        const texId = this.arena.createTexture(gl);
         gl.bindTexture(gl.TEXTURE_2D, texId);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
         return texId;
@@ -222,19 +225,19 @@ class Scene implements Viewer.Scene {
         if (!cmb)
             return () => {};
 
-        const posBuffer = gl.createBuffer();
+        const posBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.posBuffer, gl.STATIC_DRAW);
 
-        const colBuffer = gl.createBuffer();
+        const colBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.colBuffer, gl.STATIC_DRAW);
 
-        const nrmBuffer = gl.createBuffer();
+        const nrmBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, nrmBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.nrmBuffer, gl.STATIC_DRAW);
 
-        const txcBuffer = gl.createBuffer();
+        const txcBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, txcBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.txcBuffer, gl.STATIC_DRAW);
 
@@ -242,7 +245,7 @@ class Scene implements Viewer.Scene {
             return this.translateTexture(gl, texture);
         });
 
-        const idxBuffer = gl.createBuffer();
+        const idxBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer, gl.STATIC_DRAW);
 
@@ -282,6 +285,10 @@ class Scene implements Viewer.Scene {
             transparent();
         };
     }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        // TODO(jstpierre): Destroy.
+    }
 }
 
 class MultiScene implements Viewer.Scene {
@@ -295,8 +302,13 @@ class MultiScene implements Viewer.Scene {
         for (const scene of this.scenes)
             this.textures = this.textures.concat(scene.textures);
     }
+
     public render(renderState: RenderState) {
         this.scenes.forEach((scene) => scene.render(renderState));
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.scenes.forEach((scene) => scene.destroy(gl));
     }
 }
 

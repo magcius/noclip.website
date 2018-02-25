@@ -125,6 +125,11 @@ class FancyGrid {
 
         gl.bufferData(gl.ARRAY_BUFFER, vtx, gl.STATIC_DRAW);
     }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.program.destroy(gl);
+        gl.deleteBuffer(this.vtxBuffer);
+    }
 }
 
 class MDL0_Program extends Program {
@@ -222,6 +227,13 @@ class Scene implements Viewer.Scene {
         this.vtxBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, this.mdl0.vtxData, gl.STATIC_DRAW);
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        gl.deleteBuffer(this.clrBuffer);
+        gl.deleteBuffer(this.vtxBuffer);
+        gl.deleteBuffer(this.idxBuffer);
+        this.program.destroy(gl);
     }
 }
 

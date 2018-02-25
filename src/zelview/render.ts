@@ -286,6 +286,10 @@ class Scene implements Viewer.Scene {
             gl.disableVertexAttribArray(prog.positionLocation);
         };
     }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        // TODO(jstpierre): Implement destroy for zelview.
+    }
 }
 
 export class SceneDesc implements Viewer.SceneDesc {

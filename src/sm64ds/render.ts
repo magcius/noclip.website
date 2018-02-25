@@ -8,7 +8,7 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, RenderFlags, RenderState, Program } from '../render';
+import { CullMode, RenderFlags, RenderState, Program, RenderArena } from '../render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
 
@@ -97,12 +97,15 @@ class Scene implements Viewer.Scene {
     public crg0Level: CRG0.Level;
     public isSkybox: boolean;
 
+    private arena: RenderArena;
+
     constructor(gl: WebGL2RenderingContext, bmd: NITRO_BMD.BMD, localScale: number, crg0Level: CRG0.Level) {
         this.program = new NITRO_Program();
         this.bmd = bmd;
         this.localScale = localScale;
         this.crg0Level = crg0Level;
         this.isSkybox = false;
+        this.arena = new RenderArena();
 
         this.textures = bmd.textures.map((texture) => {
             return textureToCanvas(texture);
@@ -111,15 +114,15 @@ class Scene implements Viewer.Scene {
     }
 
     private translatePacket(gl: WebGL2RenderingContext, packet: NITRO_GX.Packet): RenderFunc {
-        const vertBuffer = gl.createBuffer();
+        const vertBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, packet.vertData, gl.STATIC_DRAW);
 
-        const idxBuffer = gl.createBuffer();
+        const idxBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, packet.idxData, gl.STATIC_DRAW);
 
-        const vao = gl.createVertexArray();
+        const vao = this.arena.createVertexArray(gl);
         gl.bindVertexArray(vao);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
@@ -175,7 +178,7 @@ class Scene implements Viewer.Scene {
         }
 
         if (texture !== null) {
-            texId = gl.createTexture();
+            texId = this.arena.createTexture(gl);
             gl.bindTexture(gl.TEXTURE_2D, texId);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -286,6 +289,10 @@ class Scene implements Viewer.Scene {
         // Second pass, translucent.
         this.renderModels(state, RenderPass.TRANSLUCENT);
     }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.arena.destroy(gl);
+    }
 }
 
 class MultiScene implements Viewer.Scene {
@@ -308,6 +315,10 @@ class MultiScene implements Viewer.Scene {
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         this.scenes.forEach((scene) => scene.render(state));
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.scenes.forEach((scene) => scene.destroy(gl));
     }
 }
 
