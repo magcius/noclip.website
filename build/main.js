@@ -1031,7 +1031,8 @@ System.register("worker_util", [], function (exports_9, context_9) {
                     }
                 };
                 WorkerPool.prototype.build = function () {
-                    this.terminate();
+                    if (this.multiWorkerManager)
+                        return;
                     var workers = [];
                     var numWorkers = this.numWorkers;
                     while (numWorkers--)
@@ -1039,6 +1040,7 @@ System.register("worker_util", [], function (exports_9, context_9) {
                     this.multiWorkerManager = new MultiWorkerManager(workers);
                 };
                 WorkerPool.prototype.execute = function (req) {
+                    this.build();
                     return this.multiWorkerManager.execute(req);
                 };
                 return WorkerPool;
@@ -2769,6 +2771,8 @@ System.register("fres/render", ["gl-matrix", "fres/gx2_swizzle", "fres/gx2_textu
                     });
                 };
                 Scene.prototype.destroy = function (gl) {
+                    // Tear down the deswizzle workers.
+                    gx2_swizzle_2.deswizzler.terminate();
                     this.arena.destroy(gl);
                 };
                 return Scene;
@@ -2810,10 +2814,6 @@ System.register("fres/render", ["gl-matrix", "fres/gx2_swizzle", "fres/gx2_textu
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    // Reset any jobs we might have pending.
-                    // TODO(jstpierre): Explicit scene teardown.
-                    gx2_swizzle_2.deswizzler.terminate();
-                    gx2_swizzle_2.deswizzler.build();
                     return progress_2.Progressable.all([
                         this._createSceneFromPath(gl, this.path, false),
                         this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
@@ -5660,7 +5660,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                     };
                 };
                 Scene.prototype.destroy = function (gl) {
-                    // TODO(jstpierre): Destroy.
+                    this.arena.destroy(gl);
                 };
                 return Scene;
             }());
