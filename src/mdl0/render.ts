@@ -1,11 +1,13 @@
 
 import * as MDL0 from 'mdl0';
+
 import * as Viewer from '../viewer';
 
-import { Progressable } from 'progress';
-import { fetch } from 'util';
+import { RenderCullMode, RenderFlags, RenderState, Program } from '../render';
+import { Progressable } from '../progress';
+import { fetch } from '../util';
 
-class FancyGrid_Program extends Viewer.Program {
+class FancyGrid_Program extends Program {
     public positionLocation: number;
 
     public vert = `
@@ -79,17 +81,17 @@ class FancyGrid {
     public program: FancyGrid_Program;
 
     private vtxBuffer: WebGLBuffer;
-    private renderFlags: Viewer.RenderFlags;
+    private renderFlags: RenderFlags;
 
     constructor(gl: WebGL2RenderingContext) {
         this.program = new FancyGrid_Program();
         this._createBuffers(gl);
 
-        this.renderFlags = new Viewer.RenderFlags();
+        this.renderFlags = new RenderFlags();
         this.renderFlags.blend = true;
     }
 
-    public render(state: Viewer.RenderState) {
+    public render(state: RenderState) {
         const gl = state.viewport.gl;
 
         state.useProgram(this.program);
@@ -125,7 +127,7 @@ class FancyGrid {
     }
 }
 
-class MDL0_Program extends Viewer.Program {
+class MDL0_Program extends Program {
     public positionLocation: number;
     public colorLocation: number;
 
@@ -173,7 +175,7 @@ class Scene implements Viewer.Scene {
     private clrBuffer: WebGLBuffer;
     private vtxBuffer: WebGLBuffer;
     private idxBuffer: WebGLBuffer;
-    private renderFlags: Viewer.RenderFlags;
+    private renderFlags: RenderFlags;
 
     constructor(gl: WebGL2RenderingContext, mdl0: MDL0.MDL0) {
         this.fancyGrid = new FancyGrid(gl);
@@ -181,11 +183,11 @@ class Scene implements Viewer.Scene {
         this.mdl0 = mdl0;
         this._createBuffers(gl);
 
-        this.renderFlags = new Viewer.RenderFlags();
+        this.renderFlags = new RenderFlags();
         this.renderFlags.depthTest = true;
     }
 
-    public render(state: Viewer.RenderState) {
+    public render(state: RenderState) {
         const gl = state.viewport.gl;
 
         state.useProgram(this.program);

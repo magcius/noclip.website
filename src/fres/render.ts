@@ -1,22 +1,23 @@
 
 import { mat4 } from 'gl-matrix';
 
-import * as Viewer from 'viewer';
-import * as Yaz0 from 'yaz0';
-
 import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat } from './gx2_enum';
 import { deswizzler } from './gx2_swizzle';
 import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 import * as SARC from './sarc';
 
-import { Progressable } from 'progress';
-import { be16toh, be32toh } from 'endian';
-import { assert, fetch } from 'util';
+import * as Viewer from '../viewer';
+import * as Yaz0 from '../yaz0';
 
-type RenderFunc = (renderState: Viewer.RenderState) => void;
+import { Progressable } from '../progress';
+import { RenderState, Program } from '../render';
+import { be16toh, be32toh } from '../endian';
+import { assert, fetch } from '../util';
 
-class ProgramGambit_UBER extends Viewer.Program {
+type RenderFunc = (renderState: RenderState) => void;
+
+class ProgramGambit_UBER extends Program {
     public a0Location: WebGLUniformLocation;
     public e0Location: WebGLUniformLocation;
 
@@ -280,7 +281,7 @@ export class Scene implements Viewer.Scene {
 
         const renderState = fmat.renderState;
 
-        return (state: Viewer.RenderState) => {
+        return (state: RenderState) => {
             state.useProgram(prog);
 
             if (this.isSkybox) {
@@ -406,7 +407,7 @@ export class Scene implements Viewer.Scene {
             glIndexBuffers.push(buffer);
         }
 
-        return (state: Viewer.RenderState) => {
+        return (state: RenderState) => {
             const lod = 0;
             const mesh = fshp.meshes[lod];
             const glIndexBuffer = glIndexBuffers[lod];
@@ -428,7 +429,7 @@ export class Scene implements Viewer.Scene {
         const fmatFuncs: RenderFunc[] = fmdl.fmat.map((fmat) => this.translateFMAT(gl, fmat));
         const fshpFuncs: RenderFunc[] = fmdl.fshp.map((fshp) => this.translateFSHP(gl, fshp));
 
-        return (state: Viewer.RenderState) => {
+        return (state: RenderState) => {
             // _drcmap is the map used for the Gamepad. It does nothing but cause Z-fighting.
             if (model.entry.name.endsWith('_drcmap'))
                 return;
@@ -552,7 +553,7 @@ export class Scene implements Viewer.Scene {
         return fres.models.map((modelEntry) => this.translateModel(gl, modelEntry));
     }
 
-    public render(state: Viewer.RenderState) {
+    public render(state: RenderState) {
         this.modelFuncs.forEach((func) => {
             func(state);
         });
@@ -571,7 +572,7 @@ class MultiScene implements Viewer.Scene {
             this.textures = this.textures.concat(scene.textures);
     }
 
-    public render(state: Viewer.RenderState) {
+    public render(state: RenderState) {
         const gl = state.viewport.gl;
         this.scenes.forEach((scene) => scene.render(state));
     }
