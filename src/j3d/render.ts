@@ -236,7 +236,10 @@ class Command_Material {
 
 type Command = Command_Shape | Command_Material;
 
-export class Scene {
+export class Scene implements Viewer.Scene {
+    public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
+
     public gl: WebGL2RenderingContext;
     public textures: HTMLCanvasElement[];
     private bmd: BMD.BMD;
@@ -329,79 +332,5 @@ export class Scene {
     public destroy(gl: WebGL2RenderingContext) {
         this.materialCommands.forEach((command) => command.destroy(gl));
         this.shapeCommands.forEach((command) => command.destroy(gl));
-    }
-}
-
-class MultiScene implements Viewer.Scene {
-    public cameraController = Viewer.FPSCameraController;
-    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
-    public scenes: Scene[];
-    public textures: HTMLCanvasElement[];
-
-    constructor(scenes: Scene[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
-    }
-
-    public render(renderState: RenderState) {
-        this.scenes.forEach((scene) => {
-            scene.render(renderState);
-        });
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
-    }
-}
-
-export class SceneDesc implements Viewer.SceneDesc {
-    public id: string;
-    public name: string;
-    public path: string;
-    public vrbox: string;
-
-    constructor(name: string, path: string, vrbox: string) {
-        this.name = name;
-        this.path = path;
-        this.vrbox = vrbox;
-        this.id = this.path;
-    }
-
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
-        const scenes = [ this.createSceneFromPath(gl, this.path) ];
-        if (this.vrbox)
-            scenes.push(this.createSceneFromPath(gl, this.vrbox));
-        return Progressable.all(scenes).then((scenes) => {
-            return new MultiScene(scenes);
-        });
-    }
-
-    private createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer): Scene {
-        if (readString(buffer, 0, 4) === 'Yaz0') {
-            return this.createSceneFromBuffer(gl, YAZ0.decompress(buffer));
-        } else if (readString(buffer, 0, 4) === 'RARC') {
-            const rarc = RARC.parse(buffer);
-            const bmdFile = rarc.files.find((s) => s.name.endsWith('.bmd') || s.name.endsWith('.bdl'));
-            const btkFile = rarc.files.find((s) => s.name.endsWith('.btk'));
-            const bmd = BMD.parse(bmdFile.buffer);
-            const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
-            return new Scene(gl, bmd, btk);
-        } else if (readString(buffer, 0, 4) === 'J3D2') {
-            const bmd = BMD.parse(buffer);
-            return new Scene(gl, bmd, null);
-        } else {
-            throw "whoops";
-        }
-    }
-
-    private createSceneFromPath(gl: WebGL2RenderingContext, path: string): Progressable<Scene> {
-        if (!path)
-            return new Progressable(Promise.resolve(null));
-
-        return fetch(path).then((result: ArrayBuffer) => {
-            return this.createSceneFromBuffer(gl, result);
-        });
     }
 }
