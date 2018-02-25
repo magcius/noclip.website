@@ -76,14 +76,40 @@ export const enum CullMode {
 }
 
 export const enum BlendMode {
-    ZERO = 0, /*!< 0.0 */
-    ONE = 1, /*!< 1.0 */
-    SRCCLR = 2, /*!< source color */
-    INVSRCCLR = 3, /*!< 1.0 - (source color) */
-    SRCALPHA = 4, /*!< source alpha */
-    INVSRCALPHA = 5, /*!< 1.0 - (source alpha) */
-    DSTALPHA = 6, /*!< framebuffer alpha */
-    INVDSTALPHA = 7, /*!< 1.0 - (FB alpha) */
+    NONE = 0,
+    BLEND = 1,
+    LOGIC = 2,
+    SUBTRACT = 3,
+}
+
+export const enum BlendFactor {
+    ZERO = 0,
+    ONE = 1,
+    SRCCLR = 2,
+    INVSRCCLR = 3,
+    SRCALPHA = 4,
+    INVSRCALPHA = 5,
+    DSTALPHA = 6,
+    INVDSTALPHA = 7,
+}
+
+export const enum LogicOp {
+    CLEAR = 0,
+    AND = 1,
+    REVAND = 2,
+    COPY = 3,
+    INVAND = 4,
+    NOOP = 5,
+    XOR = 6,
+    OR = 7,
+    NOR = 8,
+    EQUIV = 9,
+    INV = 10,
+    REVOR = 11,
+    INVCOPY = 12,
+    INVOR = 13,
+    NAND = 14,
+    SET = 15,
 }
 
 export const enum TevOp {

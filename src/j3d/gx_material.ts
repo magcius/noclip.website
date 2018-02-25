@@ -6,7 +6,7 @@ import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, FrontFaceMode, RenderFlags, Program } from '../render';
+import { CullMode, FrontFaceMode, RenderFlags, Program, BlendFactor } from '../render';
 
 // #region Material definition.
 export interface Color {
@@ -81,8 +81,15 @@ export interface AlphaTest {
     referenceB: number;
 }
 
+export interface BlendMode {
+    type: GX.BlendMode;
+    srcFactor: GX.BlendFactor;
+    dstFactor: GX.BlendFactor;
+    logicOp: GX.LogicOp;
+}
+
 export interface RopInfo {
-    // TODO(jstpierre): Blend func
+    blendMode: BlendMode;
     depthTest: boolean;
     depthFunc: GX.CompareType;
     depthWrite: boolean;
@@ -584,12 +591,36 @@ function translateCullMode(cullMode: GX.CullMode): CullMode {
     }
 }
 
+function translateBlendFactor(blendFactor: GX.BlendFactor): BlendFactor {
+    switch (blendFactor) {
+    case GX.BlendFactor.ZERO:
+        return BlendFactor.ZERO;
+    case GX.BlendFactor.ONE:
+        return BlendFactor.ONE;
+    case GX.BlendFactor.SRCCLR:
+        return BlendFactor.SRC_COLOR;
+    case GX.BlendFactor.INVSRCCLR:
+        return BlendFactor.ONE_MINUS_SRC_COLOR;
+    case GX.BlendFactor.SRCALPHA:
+        return BlendFactor.SRC_ALPHA;
+    case GX.BlendFactor.INVSRCALPHA:
+        return BlendFactor.ONE_MINUS_SRC_ALPHA;
+    case GX.BlendFactor.DSTALPHA:
+        return BlendFactor.DST_ALPHA;
+    case GX.BlendFactor.INVDSTALPHA:
+        return BlendFactor.ONE_MINUS_DST_ALPHA;
+    }
+}
+
 export function translateRenderFlags(material: GXMaterial): RenderFlags {
     const renderFlags = new RenderFlags();
     renderFlags.cullMode = translateCullMode(material.cullMode);
     renderFlags.depthWrite = material.ropInfo.depthWrite;
     renderFlags.depthTest = material.ropInfo.depthTest;
     renderFlags.frontFace = FrontFaceMode.CW;
+    renderFlags.blend = material.ropInfo.blendMode.type === GX.BlendMode.BLEND;
+    renderFlags.blendSrc = translateBlendFactor(material.ropInfo.blendMode.srcFactor);
+    renderFlags.blendDst = translateBlendFactor(material.ropInfo.blendMode.dstFactor);
     return renderFlags;
 }
 // #endregion
