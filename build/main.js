@@ -3341,10 +3341,8 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                         return null;
                     return location;
                 };
-                GX_Program.prototype.bindSamplers = function (gl) {
-                    for (var i = 0; i < this.samplerLocations.length; i++) {
-                        gl.uniform1i(this.samplerLocations[i], i);
-                    }
+                GX_Program.prototype.getSamplerLocation = function (i) {
+                    return this.samplerLocations[i];
                 };
                 return GX_Program;
             }(render_4.Program));
@@ -4374,7 +4372,6 @@ System.register("j3d/rarc", ["util"], function (exports_21, context_21) {
                 }
                 else {
                     var offs = dataOffs + entryDataOffs;
-                    console.log(offs, dataOffs, entryDataOffs);
                     var fileBuffer = buffer.slice(offs, offs + entryDataSize);
                     var file = { name: name_11, buffer: fileBuffer };
                     files_1.push(file);
@@ -4596,7 +4593,6 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                 Command_Material.prototype.exec = function (state) {
                     var gl = state.gl;
                     state.useProgram(this.program);
-                    this.program.bindSamplers(gl);
                     try {
                         // Bind our scale uniforms.
                         for (var _a = __values(this.bmd.vtx1.vertexArrays.values()), _b = _a.next(); !_b.done; _b = _a.next()) {
@@ -4627,6 +4623,7 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                         if (texture === null)
                             continue;
                         gl.activeTexture(gl.TEXTURE0 + i);
+                        gl.uniform1i(this.program.getSamplerLocation(i), i);
                         gl.bindTexture(gl.TEXTURE_2D, texture);
                     }
                     var e_21, _c;
@@ -4770,7 +4767,6 @@ System.register("j3d/render", ["j3d/bmd", "j3d/gx_enum", "j3d/gx_material", "j3d
                     var scenes = [this.createSceneFromPath(gl, this.path)];
                     if (this.vrbox)
                         scenes.push(this.createSceneFromPath(gl, this.vrbox));
-                    console.log(this.vrbox);
                     return progress_3.Progressable.all(scenes).then(function (scenes) {
                         return new MultiScene(scenes);
                     });
