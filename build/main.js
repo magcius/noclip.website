@@ -322,7 +322,7 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
         a.push(v);
         return v;
     }
-    var gl_matrix_1, Program, RenderFlags, RenderState, RenderArena;
+    var gl_matrix_1, FrontFaceMode, CullMode, BlendFactor, RenderFlags, RenderState, Program, RenderArena;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -330,6 +330,136 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
             }
         ],
         execute: function () {
+            (function (FrontFaceMode) {
+                FrontFaceMode[FrontFaceMode["CCW"] = WebGL2RenderingContext.CCW] = "CCW";
+                FrontFaceMode[FrontFaceMode["CW"] = WebGL2RenderingContext.CW] = "CW";
+            })(FrontFaceMode || (FrontFaceMode = {}));
+            exports_4("FrontFaceMode", FrontFaceMode);
+            (function (CullMode) {
+                CullMode[CullMode["NONE"] = 0] = "NONE";
+                CullMode[CullMode["FRONT"] = 1] = "FRONT";
+                CullMode[CullMode["BACK"] = 2] = "BACK";
+                CullMode[CullMode["FRONT_AND_BACK"] = 3] = "FRONT_AND_BACK";
+            })(CullMode || (CullMode = {}));
+            exports_4("CullMode", CullMode);
+            (function (BlendFactor) {
+                BlendFactor[BlendFactor["ZERO"] = WebGL2RenderingContext.ZERO] = "ZERO";
+                BlendFactor[BlendFactor["ONE"] = WebGL2RenderingContext.ONE] = "ONE";
+                BlendFactor[BlendFactor["SRC_COLOR"] = WebGL2RenderingContext.SRC_COLOR] = "SRC_COLOR";
+                BlendFactor[BlendFactor["ONE_MINUS_SRC_COLOR"] = WebGL2RenderingContext.ONE_MINUS_SRC_COLOR] = "ONE_MINUS_SRC_COLOR";
+                BlendFactor[BlendFactor["DST_COLOR"] = WebGL2RenderingContext.DST_COLOR] = "DST_COLOR";
+                BlendFactor[BlendFactor["ONE_MINUS_DST_COLOR"] = WebGL2RenderingContext.ONE_MINUS_DST_COLOR] = "ONE_MINUS_DST_COLOR";
+                BlendFactor[BlendFactor["SRC_ALPHA"] = WebGL2RenderingContext.SRC_ALPHA] = "SRC_ALPHA";
+                BlendFactor[BlendFactor["ONE_MINUS_SRC_ALPHA"] = WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA] = "ONE_MINUS_SRC_ALPHA";
+                BlendFactor[BlendFactor["DST_ALPHA"] = WebGL2RenderingContext.DST_ALPHA] = "DST_ALPHA";
+                BlendFactor[BlendFactor["ONE_MINUS_DST_ALPHA"] = WebGL2RenderingContext.ONE_MINUS_DST_ALPHA] = "ONE_MINUS_DST_ALPHA";
+            })(BlendFactor || (BlendFactor = {}));
+            exports_4("BlendFactor", BlendFactor);
+            RenderFlags = /** @class */ (function () {
+                function RenderFlags() {
+                    this.depthWrite = undefined;
+                    this.depthTest = undefined;
+                    this.blend = undefined;
+                    this.blendSrc = undefined;
+                    this.blendDst = undefined;
+                    this.cullMode = undefined;
+                    this.frontFace = undefined;
+                }
+                RenderFlags.flatten = function (dst, src) {
+                    if (dst.depthWrite === undefined)
+                        dst.depthWrite = src.depthWrite;
+                    if (dst.depthTest === undefined)
+                        dst.depthTest = src.depthTest;
+                    if (dst.blend === undefined)
+                        dst.blend = src.blend;
+                    if (dst.cullMode === undefined)
+                        dst.cullMode = src.cullMode;
+                    if (dst.frontFace === undefined)
+                        dst.frontFace = src.frontFace;
+                };
+                RenderFlags.apply = function (gl, oldFlags, newFlags) {
+                    if (oldFlags.depthWrite !== newFlags.depthWrite) {
+                        gl.depthMask(newFlags.depthWrite);
+                    }
+                    if (oldFlags.depthTest !== newFlags.depthTest) {
+                        if (newFlags.depthTest)
+                            gl.enable(gl.DEPTH_TEST);
+                        else
+                            gl.disable(gl.DEPTH_TEST);
+                    }
+                    if (oldFlags.blend !== newFlags.blend) {
+                        if (newFlags.blend) {
+                            gl.enable(gl.BLEND);
+                            if (oldFlags.blendSrc !== newFlags.blendSrc || oldFlags.blendDst !== newFlags.blendDst) {
+                                gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
+                            }
+                        }
+                        else {
+                            gl.disable(gl.BLEND);
+                        }
+                    }
+                    if (oldFlags.cullMode !== newFlags.cullMode) {
+                        if (oldFlags.cullMode === CullMode.NONE)
+                            gl.enable(gl.CULL_FACE);
+                        else if (newFlags.cullMode === CullMode.NONE)
+                            gl.disable(gl.CULL_FACE);
+                        if (newFlags.cullMode === CullMode.BACK)
+                            gl.cullFace(gl.BACK);
+                        else if (newFlags.cullMode === CullMode.FRONT)
+                            gl.cullFace(gl.FRONT);
+                        else if (newFlags.cullMode === CullMode.FRONT_AND_BACK)
+                            gl.cullFace(gl.FRONT_AND_BACK);
+                    }
+                    if (oldFlags.frontFace !== newFlags.frontFace) {
+                        gl.frontFace(newFlags.frontFace);
+                    }
+                };
+                RenderFlags.default = new RenderFlags();
+                return RenderFlags;
+            }());
+            exports_4("RenderFlags", RenderFlags);
+            RenderFlags.default.blend = false;
+            RenderFlags.default.cullMode = CullMode.NONE;
+            RenderFlags.default.depthTest = false;
+            RenderFlags.default.depthWrite = true;
+            RenderFlags.default.frontFace = FrontFaceMode.CCW;
+            RenderState = /** @class */ (function () {
+                function RenderState(viewport) {
+                    this.currentProgram = null;
+                    this.currentFlags = RenderFlags.default;
+                    this.viewport = viewport;
+                    this.gl = this.viewport.gl;
+                    this.time = 0;
+                    this.fov = Math.PI / 4;
+                    this.projection = gl_matrix_1.mat4.create();
+                    this.modelView = gl_matrix_1.mat4.create();
+                }
+                RenderState.prototype.checkResize = function () {
+                    // TODO(jstpierre): Make viewport explicit
+                    var canvas = this.viewport.canvas;
+                    var gl = this.gl;
+                    var width = canvas.width, height = canvas.height;
+                    // XXX(jstpierre): Make near / far plane configurable per-Scene?
+                    gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, 0.2, 50000);
+                    gl.viewport(0, 0, canvas.width, canvas.height);
+                };
+                RenderState.prototype.useProgram = function (prog) {
+                    var gl = this.gl;
+                    this.currentProgram = prog;
+                    gl.useProgram(prog.compile(gl));
+                    gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
+                    gl.uniformMatrix4fv(prog.modelViewLocation, false, this.modelView);
+                };
+                RenderState.prototype.useFlags = function (flags) {
+                    var gl = this.gl;
+                    // TODO(jstpierre): Move the flattening to a stack, possibly?
+                    RenderFlags.flatten(flags, this.currentFlags);
+                    RenderFlags.apply(gl, this.currentFlags, flags);
+                    this.currentFlags = flags;
+                };
+                return RenderState;
+            }());
+            exports_4("RenderState", RenderState);
             Program = /** @class */ (function () {
                 function Program() {
                 }
@@ -378,107 +508,6 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                 return Program;
             }());
             exports_4("Program", Program);
-            RenderFlags = /** @class */ (function () {
-                function RenderFlags() {
-                    this.depthWrite = undefined;
-                    this.depthTest = undefined;
-                    this.blend = undefined;
-                    this.cullMode = undefined;
-                    this.frontFace = undefined;
-                }
-                RenderFlags.flatten = function (dst, src) {
-                    if (dst.depthWrite === undefined)
-                        dst.depthWrite = src.depthWrite;
-                    if (dst.depthTest === undefined)
-                        dst.depthTest = src.depthTest;
-                    if (dst.blend === undefined)
-                        dst.blend = src.blend;
-                    if (dst.cullMode === undefined)
-                        dst.cullMode = src.cullMode;
-                    if (dst.frontFace === undefined)
-                        dst.frontFace = src.frontFace;
-                };
-                RenderFlags.apply = function (gl, oldFlags, newFlags) {
-                    if (oldFlags.depthWrite !== newFlags.depthWrite) {
-                        gl.depthMask(newFlags.depthWrite);
-                    }
-                    if (oldFlags.depthTest !== newFlags.depthTest) {
-                        if (newFlags.depthTest)
-                            gl.enable(gl.DEPTH_TEST);
-                        else
-                            gl.disable(gl.DEPTH_TEST);
-                    }
-                    if (oldFlags.blend !== newFlags.blend) {
-                        if (newFlags.blend)
-                            gl.enable(gl.BLEND);
-                        else
-                            gl.disable(gl.BLEND);
-                    }
-                    if (oldFlags.cullMode !== newFlags.cullMode) {
-                        if (oldFlags.cullMode === 0 /* NONE */)
-                            gl.enable(gl.CULL_FACE);
-                        else if (newFlags.cullMode === 0 /* NONE */)
-                            gl.disable(gl.CULL_FACE);
-                        if (newFlags.cullMode === 2 /* BACK */)
-                            gl.cullFace(gl.BACK);
-                        else if (newFlags.cullMode === 1 /* FRONT */)
-                            gl.cullFace(gl.FRONT);
-                        else if (newFlags.cullMode === 3 /* FRONT_AND_BACK */)
-                            gl.cullFace(gl.FRONT_AND_BACK);
-                    }
-                    if (oldFlags.frontFace !== newFlags.frontFace) {
-                        if (newFlags.frontFace === 0 /* CCW */)
-                            gl.frontFace(gl.CCW);
-                        else if (newFlags.frontFace === 1 /* CW */)
-                            gl.frontFace(gl.CW);
-                    }
-                };
-                RenderFlags.default = new RenderFlags();
-                return RenderFlags;
-            }());
-            exports_4("RenderFlags", RenderFlags);
-            RenderFlags.default.blend = false;
-            RenderFlags.default.cullMode = 0 /* NONE */;
-            RenderFlags.default.depthTest = false;
-            RenderFlags.default.depthWrite = true;
-            RenderFlags.default.frontFace = 0 /* CCW */;
-            RenderState = /** @class */ (function () {
-                function RenderState(viewport) {
-                    this.currentProgram = null;
-                    this.currentFlags = RenderFlags.default;
-                    this.viewport = viewport;
-                    this.gl = this.viewport.gl;
-                    this.time = 0;
-                    this.fov = Math.PI / 4;
-                    this.projection = gl_matrix_1.mat4.create();
-                    this.modelView = gl_matrix_1.mat4.create();
-                }
-                RenderState.prototype.checkResize = function () {
-                    // TODO(jstpierre): Make viewport explicit
-                    var canvas = this.viewport.canvas;
-                    var gl = this.gl;
-                    var width = canvas.width, height = canvas.height;
-                    // XXX(jstpierre): Make near / far plane configurable per-Scene?
-                    gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, 0.2, 50000);
-                    gl.viewport(0, 0, canvas.width, canvas.height);
-                };
-                RenderState.prototype.useProgram = function (prog) {
-                    var gl = this.gl;
-                    this.currentProgram = prog;
-                    gl.useProgram(prog.compile(gl));
-                    gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
-                    gl.uniformMatrix4fv(prog.modelViewLocation, false, this.modelView);
-                };
-                RenderState.prototype.useFlags = function (flags) {
-                    var gl = this.gl;
-                    // TODO(jstpierre): Move the flattening to a stack, possibly?
-                    RenderFlags.flatten(flags, this.currentFlags);
-                    RenderFlags.apply(gl, this.currentFlags, flags);
-                    this.currentFlags = flags;
-                };
-                return RenderState;
-            }());
-            exports_4("RenderState", RenderState);
             // Optional helper providing a lazy attempt at arena-style garbage collection.
             RenderArena = /** @class */ (function () {
                 function RenderArena() {
@@ -2899,13 +2928,33 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
     function translateCullMode(cullMode) {
         switch (cullMode) {
             case 3 /* ALL */:
-                return 3 /* FRONT_AND_BACK */;
+                return render_4.CullMode.FRONT_AND_BACK;
             case 1 /* FRONT */:
-                return 1 /* FRONT */;
+                return render_4.CullMode.FRONT;
             case 2 /* BACK */:
-                return 2 /* BACK */;
+                return render_4.CullMode.BACK;
             case 0 /* NONE */:
-                return 0 /* NONE */;
+                return render_4.CullMode.NONE;
+        }
+    }
+    function translateBlendFactor(blendFactor) {
+        switch (blendFactor) {
+            case 0 /* ZERO */:
+                return render_4.BlendFactor.ZERO;
+            case 1 /* ONE */:
+                return render_4.BlendFactor.ONE;
+            case 2 /* SRCCLR */:
+                return render_4.BlendFactor.SRC_COLOR;
+            case 3 /* INVSRCCLR */:
+                return render_4.BlendFactor.ONE_MINUS_SRC_COLOR;
+            case 4 /* SRCALPHA */:
+                return render_4.BlendFactor.SRC_ALPHA;
+            case 5 /* INVSRCALPHA */:
+                return render_4.BlendFactor.ONE_MINUS_SRC_ALPHA;
+            case 6 /* DSTALPHA */:
+                return render_4.BlendFactor.DST_ALPHA;
+            case 7 /* INVDSTALPHA */:
+                return render_4.BlendFactor.ONE_MINUS_DST_ALPHA;
         }
     }
     function translateRenderFlags(material) {
@@ -2913,7 +2962,10 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
         renderFlags.cullMode = translateCullMode(material.cullMode);
         renderFlags.depthWrite = material.ropInfo.depthWrite;
         renderFlags.depthTest = material.ropInfo.depthTest;
-        renderFlags.frontFace = 1 /* CW */;
+        renderFlags.frontFace = render_4.FrontFaceMode.CW;
+        renderFlags.blend = material.ropInfo.blendMode.type === 1 /* BLEND */;
+        renderFlags.blendSrc = translateBlendFactor(material.ropInfo.blendMode.srcFactor);
+        renderFlags.blendDst = translateBlendFactor(material.ropInfo.blendMode.dstFactor);
         return renderFlags;
     }
     exports_18("translateRenderFlags", translateRenderFlags);
@@ -3789,7 +3841,9 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 };
                 tevStages.push(tevStage);
             }
+            // SetAlphaCompare
             var alphaTestIndex = view.getUint16(materialEntryIdx + 0x146);
+            var blendModeIndex = view.getUint16(materialEntryIdx + 0x148);
             var alphaTestOffs = alphaTestTableOffs + alphaTestIndex * 0x08;
             var compareA = view.getUint8(alphaTestOffs + 0x00);
             var referenceA = view.getUint8(alphaTestOffs + 0x01) / 0xFF;
@@ -3797,12 +3851,19 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             var compareB = view.getUint8(alphaTestOffs + 0x03);
             var referenceB = view.getUint8(alphaTestOffs + 0x04) / 0xFF;
             var alphaTest = { compareA: compareA, referenceA: referenceA, op: op, compareB: compareB, referenceB: referenceB };
+            // SetBlendMode
+            var blendModeOffs = blendModeTableOffs + blendModeIndex * 0x04;
+            var blendType = view.getUint8(blendModeOffs + 0x00);
+            var blendSrc = view.getUint8(blendModeOffs + 0x01);
+            var blendDst = view.getUint8(blendModeOffs + 0x02);
+            var blendLogicOp = view.getUint8(blendModeOffs + 0x03);
+            var blendMode = { type: blendType, srcFactor: blendSrc, dstFactor: blendDst, logicOp: blendLogicOp };
             var cullMode = view.getUint32(cullModeTableOffs + cullModeIndex * 0x04);
             var depthModeOffs = depthModeTableOffs + depthModeIndex * 4;
             var depthTest = !!view.getUint8(depthModeOffs + 0x00);
             var depthFunc = view.getUint8(depthModeOffs + 0x01);
             var depthWrite = !!view.getUint8(depthModeOffs + 0x02);
-            var ropInfo = { depthTest: depthTest, depthFunc: depthFunc, depthWrite: depthWrite };
+            var ropInfo = { blendMode: blendMode, depthTest: depthTest, depthFunc: depthFunc, depthWrite: depthWrite };
             materialEntries.push({
                 index: index, name: name_8,
                 textureIndexes: textureIndexes,
@@ -5695,7 +5756,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                     var renderFlags = new render_8.RenderFlags();
                     renderFlags.blend = true;
                     renderFlags.depthTest = true;
-                    renderFlags.cullMode = 2 /* BACK */;
+                    renderFlags.cullMode = render_8.CullMode.BACK;
                     return function (state) {
                         state.useFlags(renderFlags);
                         opaque();
@@ -6820,13 +6881,13 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 Scene.prototype.translateCullMode = function (renderWhichFaces) {
                     switch (renderWhichFaces) {
                         case 0x00:// Render Nothing
-                            return 3 /* FRONT_AND_BACK */;
+                            return render_10.CullMode.FRONT_AND_BACK;
                         case 0x01:// Render Back
-                            return 1 /* FRONT */;
+                            return render_10.CullMode.FRONT;
                         case 0x02:// Render Front
-                            return 2 /* BACK */;
+                            return render_10.CullMode.BACK;
                         case 0x03:// Render Front and Back
-                            return 0 /* NONE */;
+                            return render_10.CullMode.NONE;
                         default:
                             throw new Error("Unknown renderWhichFaces");
                     }
@@ -7603,13 +7664,13 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_38,
         var cullFront = newMode & GeometryMode.CULL_FRONT;
         var cullBack = newMode & GeometryMode.CULL_BACK;
         if (cullFront && cullBack)
-            renderFlags.cullMode = 3 /* FRONT_AND_BACK */;
+            renderFlags.cullMode = render_12.CullMode.FRONT_AND_BACK;
         else if (cullFront)
-            renderFlags.cullMode = 1 /* FRONT */;
+            renderFlags.cullMode = render_12.CullMode.FRONT;
         else if (cullBack)
-            renderFlags.cullMode = 2 /* BACK */;
+            renderFlags.cullMode = render_12.CullMode.BACK;
         else
-            renderFlags.cullMode = 0 /* NONE */;
+            renderFlags.cullMode = render_12.CullMode.NONE;
         state.cmds.push(function (renderState) {
             var gl = renderState.gl;
             var prog = renderState.currentProgram;
@@ -8458,7 +8519,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
                     var renderFlags = new render_13.RenderFlags();
                     renderFlags.blend = true;
-                    renderFlags.cullMode = 0 /* NONE */;
+                    renderFlags.cullMode = render_13.CullMode.NONE;
                     return function (state) {
                         var prog = _this.program_WATERS;
                         state.useProgram(prog);
