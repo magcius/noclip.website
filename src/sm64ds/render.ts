@@ -1,17 +1,18 @@
 
 import { mat3, mat4 } from 'gl-matrix';
 
-import * as Viewer from 'viewer';
-
 import * as CRG0 from './crg0';
 import * as LZ77 from './lz77';
 import * as NITRO_BMD from './nitro_bmd';
 import * as NITRO_GX from './nitro_gx';
 
-import { Progressable } from 'progress';
-import { fetch } from 'util';
+import * as Viewer from '../viewer';
 
-class NITRO_Program extends Viewer.Program {
+import { RenderCullMode, RenderFlags, RenderState, Program } from '../render';
+import { Progressable } from '../progress';
+import { fetch } from '../util';
+
+class NITRO_Program extends Program {
     public localMatrixLocation: WebGLUniformLocation;
     public texCoordMatLocation: WebGLUniformLocation;
 
@@ -84,7 +85,7 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
     return canvas;
 }
 
-type RenderFunc = (state: Viewer.RenderState, pass: RenderPass) => void;
+type RenderFunc = (state: RenderState, pass: RenderPass) => void;
 
 class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
@@ -142,21 +143,21 @@ class Scene implements Viewer.Scene {
 
     private translatePoly(gl: WebGL2RenderingContext, poly: NITRO_BMD.Poly): RenderFunc {
         const funcs = poly.packets.map((packet) => this.translatePacket(gl, packet));
-        return (state: Viewer.RenderState, pass: RenderPass) => {
+        return (state: RenderState, pass: RenderPass) => {
             funcs.forEach((f) => { f(state, pass); });
         };
     }
 
-    private translateCullMode(renderWhichFaces: number): Viewer.RenderCullMode {
+    private translateCullMode(renderWhichFaces: number): RenderCullMode {
         switch (renderWhichFaces) {
         case 0x00: // Render Nothing
-            return Viewer.RenderCullMode.FRONT_AND_BACK;
+            return RenderCullMode.FRONT_AND_BACK;
         case 0x01: // Render Back
-            return Viewer.RenderCullMode.FRONT;
+            return RenderCullMode.FRONT;
         case 0x02: // Render Front
-            return Viewer.RenderCullMode.BACK;
+            return RenderCullMode.BACK;
         case 0x03: // Render Front and Back
-            return Viewer.RenderCullMode.NONE;
+            return RenderCullMode.NONE;
         default:
             throw new Error("Unknown renderWhichFaces");
         }
@@ -196,13 +197,13 @@ class Scene implements Viewer.Scene {
         const texCoordMat = mat3.create();
         mat3.fromMat2d(texCoordMat, material.texCoordMat);
 
-        const renderFlags = new Viewer.RenderFlags();
+        const renderFlags = new RenderFlags();
         renderFlags.blend = true;
         renderFlags.depthTest = true;
         renderFlags.depthWrite = material.depthWrite;
         renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
 
-        return (state: Viewer.RenderState) => {
+        return (state: RenderState) => {
             if (crg0mat !== undefined) {
                 const texAnimMat = mat3.create();
                 for (const anim of crg0mat.animations) {
@@ -235,7 +236,7 @@ class Scene implements Viewer.Scene {
 
         const applyMaterial = this.translateMaterial(gl, batch.material);
         const renderPoly = this.translatePoly(gl, batch.poly);
-        return (state: Viewer.RenderState, pass: RenderPass) => {
+        return (state: RenderState, pass: RenderPass) => {
             if (pass !== batchPass)
                 return;
             applyMaterial(state);
@@ -253,7 +254,7 @@ class Scene implements Viewer.Scene {
         mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
 
         const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
-        return (state: Viewer.RenderState, pass: RenderPass) => {
+        return (state: RenderState, pass: RenderPass) => {
             if (this.isSkybox) {
                 // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
                 mat4.copy(skyboxCameraMat, state.modelView);
@@ -268,13 +269,13 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private renderModels(state: Viewer.RenderState, pass: RenderPass) {
+    private renderModels(state: RenderState, pass: RenderPass) {
         return this.modelFuncs.forEach((func) => {
             func(state, pass);
         });
     }
 
-    public render(state: Viewer.RenderState) {
+    public render(state: RenderState) {
         const gl = state.viewport.gl;
 
         state.useProgram(this.program);
@@ -299,7 +300,7 @@ class MultiScene implements Viewer.Scene {
             this.textures = this.textures.concat(scene.textures);
     }
 
-    public render(state: Viewer.RenderState) {
+    public render(state: RenderState) {
         const gl = state.viewport.gl;
 
         // Clear to black.

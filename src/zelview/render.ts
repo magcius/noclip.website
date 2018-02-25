@@ -1,14 +1,16 @@
 
-import * as F3DEX2 from 'f3dex2';
-import * as Viewer from 'viewer';
-import * as ZELVIEW0 from 'zelview0';
+import * as F3DEX2 from './f3dex2';
+import * as ZELVIEW0 from './zelview0';
 
-import { Progressable } from 'progress';
-import { fetch } from 'util';
+import { Progressable } from '../progress';
+import { RenderCullMode, RenderFlags, RenderState, Program } from '../render';
+import { fetch } from '../util';
 
-export type RenderFunc = (renderState: Viewer.RenderState) => void;
+import * as Viewer from '../viewer';
 
-class BillboardBGProgram extends Viewer.Program {
+export type RenderFunc = (renderState: RenderState) => void;
+
+class BillboardBGProgram extends Program {
     public positionLocation: number;
     public uvLocation: number;
 
@@ -40,7 +42,7 @@ void main() {
     }
 }
 
-export class F3DEX2Program extends Viewer.Program {
+export class F3DEX2Program extends Program {
     public txsLocation: WebGLUniformLocation;
     public useVertexColorsLocation: WebGLUniformLocation;
     public alphaTestLocation: WebGLUniformLocation;
@@ -94,7 +96,7 @@ void main() {
     }
 }
 
-class CollisionProgram extends Viewer.Program {
+class CollisionProgram extends Program {
     public positionLocation: number;
 
     public vert = `
@@ -122,7 +124,7 @@ void main() {
     }
 }
 
-class WaterboxProgram extends Viewer.Program {
+class WaterboxProgram extends Program {
     public positionLocation: number;
 
     public vert = `
@@ -174,15 +176,15 @@ class Scene implements Viewer.Scene {
         const renderScene = this.translateScene(gl, mainScene);
         const renderCollision = this.translateCollision(gl, mainScene);
         const renderWaterBoxes = this.translateWaterBoxes(gl, mainScene);
-        this.render = (state: Viewer.RenderState) => {
+        this.render = (state: RenderState) => {
             renderScene(state);
             renderCollision(state);
             renderWaterBoxes(state);
         };
     }
 
-    private translateScene(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
-        return (state: Viewer.RenderState) => {
+    private translateScene(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: RenderState) => void {
+        return (state: RenderState) => {
             const gl = state.gl;
 
             const renderDL = (dl: F3DEX2.DL) => {
@@ -211,7 +213,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateCollision(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
+    private translateCollision(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: RenderState) => void {
         const coll = scene.collision;
 
         function stitchLines(ibd) {
@@ -237,11 +239,11 @@ class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, coll.verts, gl.STATIC_DRAW);
 
-        const renderFlags = new Viewer.RenderFlags();
+        const renderFlags = new RenderFlags();
         renderFlags.depthTest = true;
         renderFlags.blend = true;
 
-        return (state: Viewer.RenderState) => {
+        return (state: RenderState) => {
             const prog = this.program_COLL;
             state.useProgram(prog);
             state.useFlags(renderFlags);
@@ -254,7 +256,7 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateWaterBoxes(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: Viewer.RenderState) => void {
+    private translateWaterBoxes(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: RenderState) => void {
         const coll = scene.collision;
 
         const wbVtx = gl.createBuffer();
@@ -267,11 +269,11 @@ class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
 
-        const renderFlags = new Viewer.RenderFlags();
+        const renderFlags = new RenderFlags();
         renderFlags.blend = true;
-        renderFlags.cullMode = Viewer.RenderCullMode.NONE;
+        renderFlags.cullMode = RenderCullMode.NONE;
 
-        return (state: Viewer.RenderState) => {
+        return (state: RenderState) => {
             const prog = this.program_WATERS;
             state.useProgram(prog);
             state.useFlags(renderFlags);

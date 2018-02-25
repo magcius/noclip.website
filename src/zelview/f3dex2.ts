@@ -4,13 +4,11 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Render from './render';
 import * as ZELVIEW0 from './zelview0';
 
+import { RenderCullMode, RenderState, RenderFlags, Program } from '../render';
 import * as Viewer from '../viewer';
 
 // Zelda uses the F3DEX2 display list format. This implements
 // a simple (and probably wrong!) HLE renderer for it.
-
-interface RenderState extends Viewer.RenderState {
-}
 
 type CmdFunc = (renderState: RenderState) => void;
 
@@ -204,19 +202,19 @@ function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
     state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
     const newMode = state.geometryMode;
 
-    const renderFlags = new Viewer.RenderFlags();
+    const renderFlags = new RenderFlags();
 
     const cullFront = newMode & GeometryMode.CULL_FRONT;
     const cullBack = newMode & GeometryMode.CULL_BACK;
 
     if (cullFront && cullBack)
-        renderFlags.cullMode = Viewer.RenderCullMode.FRONT_AND_BACK;
+        renderFlags.cullMode = RenderCullMode.FRONT_AND_BACK;
     else if (cullFront)
-        renderFlags.cullMode = Viewer.RenderCullMode.FRONT;
+        renderFlags.cullMode = RenderCullMode.FRONT;
     else if (cullBack)
-        renderFlags.cullMode = Viewer.RenderCullMode.BACK;
+        renderFlags.cullMode = RenderCullMode.BACK;
     else
-        renderFlags.cullMode = Viewer.RenderCullMode.NONE;
+        renderFlags.cullMode = RenderCullMode.NONE;
 
     state.cmds.push((renderState: RenderState) => {
         const gl = renderState.gl;
@@ -242,7 +240,7 @@ const OtherModeL = {
 function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
     const mode = 31 - (w0 & 0xFF);
     if (mode === 3) {
-        const renderFlags = new Viewer.RenderFlags();
+        const renderFlags = new RenderFlags();
         const newMode = w1;
 
         renderFlags.depthTest = !!(newMode & OtherModeL.Z_CMP);

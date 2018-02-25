@@ -4,6 +4,8 @@ import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';
 
+import { RenderCullMode, RenderFrontFaceMode, RenderFlags, Program } from '../render';
+
 // #region Material definition.
 export interface Color {
     r: number;
@@ -112,7 +114,7 @@ const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
     { attrib: GX.VertexAttribute.TEX7, name: "Tex7",     storage: "vec2", scale: true },
 ];
 
-export class Program extends Viewer.Program {
+export class GX_Program extends Program {
     private vtxAttributeScaleLocations: WebGLUniformLocation[] = [];
 
     private material: GXMaterial;
@@ -542,25 +544,25 @@ void main() {
 // #endregion
 
 // #region Material flags generation.
-function translateCullMode(cullMode: GX.CullMode): Viewer.RenderCullMode {
+function translateCullMode(cullMode: GX.CullMode): RenderCullMode {
     switch (cullMode) {
     case GX.CullMode.ALL:
-        return Viewer.RenderCullMode.FRONT_AND_BACK;
+        return RenderCullMode.FRONT_AND_BACK;
     case GX.CullMode.FRONT:
-        return Viewer.RenderCullMode.FRONT;
+        return RenderCullMode.FRONT;
     case GX.CullMode.BACK:
-        return Viewer.RenderCullMode.BACK;
+        return RenderCullMode.BACK;
     case GX.CullMode.NONE:
-        return Viewer.RenderCullMode.NONE;
+        return RenderCullMode.NONE;
     }
 }
 
-export function translateRenderFlags(material: GXMaterial): Viewer.RenderFlags {
-    const renderFlags = new Viewer.RenderFlags();
+export function translateRenderFlags(material: GXMaterial): RenderFlags {
+    const renderFlags = new RenderFlags();
     renderFlags.cullMode = translateCullMode(material.cullMode);
     renderFlags.depthWrite = material.ropInfo.depthWrite;
     renderFlags.depthTest = material.ropInfo.depthTest;
-    renderFlags.frontFace = Viewer.RenderFrontFaceMode.CW;
+    renderFlags.frontFace = RenderFrontFaceMode.CW;
     return renderFlags;
 }
 // #endregion

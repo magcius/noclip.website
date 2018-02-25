@@ -2,13 +2,13 @@
 import * as CMB from './cmb';
 import * as ZSI from './zsi';
 
-import * as Viewer from 'viewer';
+import * as Viewer from '../viewer';
 
-import { Progressable } from 'progress';
-import { fetch } from 'util';
-import { RenderState } from 'viewer';
+import { Progressable } from '../progress';
+import { RenderCullMode, RenderFlags, RenderState, Program } from '../render';
+import { fetch } from '../util';
 
-class OoT3D_Program extends Viewer.Program {
+class OoT3D_Program extends Program {
     public posScaleLocation: WebGLUniformLocation;
     public uvScaleLocation: WebGLUniformLocation;
     public alphaTestLocation: WebGLUniformLocation;
@@ -77,7 +77,7 @@ function textureToCanvas(texture: CMB.Texture) {
     return canvas;
 }
 
-type RenderFunc = (renderState: Viewer.RenderState) => void;
+type RenderFunc = (renderState: RenderState) => void;
 
 class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
@@ -96,7 +96,7 @@ class Scene implements Viewer.Scene {
         this.model = this.translateModel(gl, zsi.mesh);
     }
 
-    public render(state: Viewer.RenderState) {
+    public render(state: RenderState) {
         const gl = state.viewport.gl;
         state.useProgram(this.program);
         this.model(state);
@@ -271,12 +271,12 @@ class Scene implements Viewer.Scene {
         const opaque = this.translateCmb(gl, mesh.opaque);
         const transparent = this.translateCmb(gl, mesh.transparent);
 
-        const renderFlags = new Viewer.RenderFlags();
+        const renderFlags = new RenderFlags();
         renderFlags.blend = true;
         renderFlags.depthTest = true;
-        renderFlags.cullMode = Viewer.RenderCullMode.BACK;
+        renderFlags.cullMode = RenderCullMode.BACK;
 
-        return (state: Viewer.RenderState) => {
+        return (state: RenderState) => {
             state.useFlags(renderFlags);
             opaque();
             transparent();
@@ -295,7 +295,7 @@ class MultiScene implements Viewer.Scene {
         for (const scene of this.scenes)
             this.textures = this.textures.concat(scene.textures);
     }
-    public render(renderState: Viewer.RenderState) {
+    public render(renderState: RenderState) {
         this.scenes.forEach((scene) => scene.render(renderState));
     }
 }

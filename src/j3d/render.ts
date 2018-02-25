@@ -5,8 +5,9 @@ import * as GX_Material from './gx_material';
 import * as GX_Texture from './gx_texture';
 import * as Viewer from 'viewer';
 
-import { fetch } from 'util';
+import { RenderFlags, RenderState } from '../render';
 import { Progressable } from '../progress';
+import { fetch } from '../util';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
@@ -72,7 +73,7 @@ class Command_Shape {
         }
     }
 
-    public exec(state: Viewer.RenderState) {
+    public exec(state: RenderState) {
         const gl = state.gl;
 
         gl.bindVertexArray(this.vao);
@@ -91,13 +92,13 @@ class Command_Material {
     public material: GX_Material.GXMaterial;
 
     private textures: WebGLTexture[] = [];
-    private renderFlags: Viewer.RenderFlags;
-    private program: GX_Material.Program;
+    private renderFlags: RenderFlags;
+    private program: GX_Material.GX_Program;
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD.BMD, material: GX_Material.GXMaterial) {
         this.bmd = bmd;
         this.material = material;
-        this.program = new GX_Material.Program(material);
+        this.program = new GX_Material.GX_Program(material);
         this.renderFlags = GX_Material.translateRenderFlags(this.material);
 
         this.textures = this.translateTextures(gl);
@@ -160,7 +161,7 @@ class Command_Material {
         return texId;
     }
 
-    public exec(state: Viewer.RenderState) {
+    public exec(state: RenderState) {
         const gl = state.gl;
 
         state.useProgram(this.program);
@@ -218,7 +219,7 @@ export class Scene implements Viewer.Scene {
         return canvas;
     }
 
-    public render(state: Viewer.RenderState) {
+    public render(state: RenderState) {
         for (const command of this.commands)
             command.exec(state);
     }
