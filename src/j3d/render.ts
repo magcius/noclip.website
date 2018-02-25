@@ -178,6 +178,13 @@ class Command_Material {
             gl.uniform1f(location, vertexArray.scale);
         }
 
+        // Bind our texture matrices.
+        for (let i = 0; i < this.material.texMatrices.length; i++) {
+            const texMtx = this.material.texMatrices[i];
+            const location = this.program.getTexMtxLocation(i);
+            if (texMtx !== null)
+                gl.uniformMatrix3fv(location, false, texMtx.matrix);
+        }
         state.useFlags(this.renderFlags);
 
         for (let i = 0; i < this.textures.length; i++) {

@@ -1,4 +1,6 @@
 
+import { mat3 } from 'gl-matrix';
+
 import * as BMD from './bmd';
 import * as GX from './gx_enum';
 
@@ -27,6 +29,16 @@ export interface TexGen {
     type: GX.TexGenType;
     source: GX.TexGenSrc;
     matrix: GX.TexGenMatrix;
+}
+
+export const enum TexMtxProjection {
+    ST = 0,
+    STQ = 1,
+}
+
+export interface TexMtx {
+    projection: TexMtxProjection;
+    matrix: mat3;
 }
 
 export interface TevStage {
@@ -88,6 +100,7 @@ export interface GXMaterial {
     tevStages: TevStage[];
     alphaTest: AlphaTest;
     ropInfo: RopInfo;
+    texMatrices: TexMtx[];
 }
 // #endregion
 
@@ -116,6 +129,7 @@ const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
 
 export class GX_Program extends Program {
     private vtxAttributeScaleLocations: WebGLUniformLocation[] = [];
+    private texMtxLocations: WebGLUniformLocation[] = [];
 
     private material: GXMaterial;
 
@@ -124,6 +138,8 @@ export class GX_Program extends Program {
         this.material = material;
 
         this.generateShaders();
+        if (material.name === 'Water01_v')
+            console.log(this.material, this.vert, this.frag);
     }
 
     private generateFloat(v: number): string {
@@ -153,14 +169,14 @@ export class GX_Program extends Program {
         case GX.TexGenSrc.NRM:       return `v_Normal`;
         case GX.TexGenSrc.COLOR0:    return `v_Color0`;
         case GX.TexGenSrc.COLOR1:    return `v_Color1`;
-        case GX.TexGenSrc.TEX0:      return `ReadAttrib_Tex0()`;
-        case GX.TexGenSrc.TEX1:      return `ReadAttrib_Tex1()`;
-        case GX.TexGenSrc.TEX2:      return `ReadAttrib_Tex2()`;
-        case GX.TexGenSrc.TEX3:      return `ReadAttrib_Tex3()`;
-        case GX.TexGenSrc.TEX4:      return `ReadAttrib_Tex4()`;
-        case GX.TexGenSrc.TEX5:      return `ReadAttrib_Tex5()`;
-        case GX.TexGenSrc.TEX6:      return `ReadAttrib_Tex6()`;
-        case GX.TexGenSrc.TEX7:      return `ReadAttrib_Tex7()`;
+        case GX.TexGenSrc.TEX0:      return `vec3(ReadAttrib_Tex0(), 1.0)`;
+        case GX.TexGenSrc.TEX1:      return `vec3(ReadAttrib_Tex1(), 1.0)`;
+        case GX.TexGenSrc.TEX2:      return `vec3(ReadAttrib_Tex2(), 1.0)`;
+        case GX.TexGenSrc.TEX3:      return `vec3(ReadAttrib_Tex3(), 1.0)`;
+        case GX.TexGenSrc.TEX4:      return `vec3(ReadAttrib_Tex4(), 1.0)`;
+        case GX.TexGenSrc.TEX5:      return `vec3(ReadAttrib_Tex5(), 1.0)`;
+        case GX.TexGenSrc.TEX6:      return `vec3(ReadAttrib_Tex6(), 1.0)`;
+        case GX.TexGenSrc.TEX7:      return `vec3(ReadAttrib_Tex7(), 1.0)`;
         // Use a previously generated texcoordgen.
         case GX.TexGenSrc.TEXCOORD0: return `v_TexCoord0`;
         case GX.TexGenSrc.TEXCOORD1: return `v_TexCoord1`;
@@ -175,22 +191,25 @@ export class GX_Program extends Program {
     }
 
     private generateTexGenMatrix(src: string, matrix: GX.TexGenMatrix) {
-        switch (matrix) {
-        case GX.TexGenMatrix.IDENTITY: return `${src}.xy`;
-        // TODO(jstpierre): TexMtx
-        default: return `${src}.xy`;
-        }
+        if (matrix === GX.TexGenMatrix.IDENTITY)
+            return `${src}`;
+
+        const matrixIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
+        const matrixSrc = `u_TexMtx[${matrixIdx}]`;
+        const texMtx = this.material.texMatrices[matrixIdx];
+        if (texMtx.projection === TexMtxProjection.ST)
+            return `(${matrixSrc} * vec3(${src}.xy, 1.0))`;
+        else
+            return `(${matrixSrc} * ${src})`;
     }
 
     private generateTexGenType(texCoordGen: TexGen) {
         const src = this.generateTexGenSource(texCoordGen.source);
         switch (texCoordGen.type) {
         // Expected to be used with colors, I suspect...
-        case GX.TexGenType.SRTG:   return `${src}.rg`;
-        case GX.TexGenType.MTX2x4: return this.generateTexGenMatrix(src, texCoordGen.matrix);
-        // TODO(jstpierre): Support projected textures.
-        case GX.TexGenType.MTX3x4:
-            throw new Error("whoops");
+        case GX.TexGenType.SRTG:   return `vec3(${src}.rg, 1.0)`;
+        case GX.TexGenType.MTX2x4: return `vec3(${this.generateTexGenMatrix(src, texCoordGen.matrix)}.xy, 1.0)`;
+        case GX.TexGenType.MTX3x4: return `${this.generateTexGenMatrix(src, texCoordGen.matrix)}`;
         default:
             throw new Error("whoops");
         }
@@ -205,7 +224,7 @@ export class GX_Program extends Program {
 
     private generateTexGens(texGens: TexGen[]) {
         return texGens.map((tg) => {
-            return this.generateTexGen(tg)
+            return this.generateTexGen(tg);
         }).join('');
     }
 
@@ -286,7 +305,7 @@ export class GX_Program extends Program {
     }
 
     private generateTexAccess(stage: TevStage) {
-        return `texture(u_Texture[${stage.texMap}], v_TexCoord${stage.texCoordId})`;
+        return `textureProj(u_Texture[${stage.texMap}], v_TexCoord${stage.texCoordId})`;
     }
 
     private generateColorIn(stage: TevStage, colorIn: GX.CombineColorInput) {
@@ -397,7 +416,7 @@ export class GX_Program extends Program {
     }
 
     private generateTevStages(tevStages: TevStage[]) {
-        return tevStages.map((s) => this.generateTevStage(s)).join('');
+        return tevStages.map((s) => this.generateTevStage(s)).join(`\n`);
     }
 
     private generateAlphaTestCompare(compare: GX.CompareType, reference: number) {
@@ -449,29 +468,33 @@ ${a.storage} ReadAttrib_${a.name}() {
 
         this.vert = `
 precision mediump float;
+// Viewer
 uniform mat4 u_projection;
 uniform mat4 u_modelView;
+// GX_Material
 ${vertAttributeDefs}
+uniform mat3 u_TexMtx[10];
 
 out vec3 v_Position;
 out vec3 v_Normal;
 out vec4 v_Color0;
 out vec4 v_Color1;
-out vec2 v_TexCoord0;
-out vec2 v_TexCoord1;
-out vec2 v_TexCoord2;
-out vec2 v_TexCoord3;
-out vec2 v_TexCoord4;
-out vec2 v_TexCoord5;
-out vec2 v_TexCoord6;
-out vec2 v_TexCoord7;
+out vec3 v_TexCoord0;
+out vec3 v_TexCoord1;
+out vec3 v_TexCoord2;
+out vec3 v_TexCoord3;
+out vec3 v_TexCoord4;
+out vec3 v_TexCoord5;
+out vec3 v_TexCoord6;
+out vec3 v_TexCoord7;
 
 void main() {
     v_Position = ReadAttrib_Position();
     v_Normal = ReadAttrib_Normal();
     v_Color0 = ${this.generateColorChannel(this.material.colorChannels[0], `ReadAttrib_Color0()`)};
     v_Color1 = ${this.generateColorChannel(this.material.colorChannels[1], `ReadAttrib_Color1()`)};
-    ${this.generateTexGens(this.material.texGens)}
+${this.generateTexGens(this.material.texGens)}
+
     gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);
 }
 `;
@@ -489,14 +512,14 @@ in vec3 v_Position;
 in vec3 v_Normal;
 in vec4 v_Color0;
 in vec4 v_Color1;
-in vec2 v_TexCoord0;
-in vec2 v_TexCoord1;
-in vec2 v_TexCoord2;
-in vec2 v_TexCoord3;
-in vec2 v_TexCoord4;
-in vec2 v_TexCoord5;
-in vec2 v_TexCoord6;
-in vec2 v_TexCoord7;
+in vec3 v_TexCoord0;
+in vec3 v_TexCoord1;
+in vec3 v_TexCoord2;
+in vec3 v_TexCoord3;
+in vec3 v_TexCoord4;
+in vec3 v_TexCoord5;
+in vec3 v_TexCoord6;
+in vec3 v_TexCoord7;
 
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
@@ -513,11 +536,8 @@ void main() {
     vec4 t_Color1    = ${this.generateColorConstant(rColors[1])};
     vec4 t_Color2    = ${this.generateColorConstant(rColors[2])};
     vec4 t_ColorPrev = ${this.generateColorConstant(rColors[3])};
-
-    ${this.generateTevStages(tevStages)}
-
-    ${this.generateAlphaTest(alphaTest)}
-
+${this.generateTevStages(tevStages)}
+${this.generateAlphaTest(alphaTest)}
     gl_FragColor = t_ColorPrev;
 }
 `
@@ -532,6 +552,13 @@ void main() {
             const uniformName = `u_scale_${a.name}`;
             this.vtxAttributeScaleLocations[a.attrib] = gl.getUniformLocation(prog, uniformName);
         }
+
+        for (let i = 0; i < 10; i++)
+            this.texMtxLocations[i] = gl.getUniformLocation(prog, `u_TexMtx[${i}]`);
+    }
+
+    public getTexMtxLocation(i: number) {
+        return this.texMtxLocations[i];
     }
 
     public getScaleUniformLocation(vtxAttrib: GX.VertexAttribute) {

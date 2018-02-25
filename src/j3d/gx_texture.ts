@@ -229,7 +229,7 @@ function decode_I4(texture: Texture): DecodedTexture {
         pixels[dstOffs + 0] = i;
         pixels[dstOffs + 1] = i;
         pixels[dstOffs + 2] = i;
-        pixels[dstOffs + 3] = 0xFF;
+        pixels[dstOffs + 3] = i;
         srcOffs++;
     });
 }
@@ -242,7 +242,7 @@ function decode_I8(texture: Texture): DecodedTexture {
         pixels[dstOffs + 0] = i;
         pixels[dstOffs + 1] = i;
         pixels[dstOffs + 2] = i;
-        pixels[dstOffs + 3] = 0xFF;
+        pixels[dstOffs + 3] = i;
         srcOffs++;
     });
 }
