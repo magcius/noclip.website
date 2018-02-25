@@ -3805,20 +3805,15 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 gl_matrix_4.mat2d.fromTranslation(C, [centerS, centerT, centerW]);
                 var T = gl_matrix_4.mat2d.create();
                 gl_matrix_4.mat2d.fromTranslation(T, [translationS, translationT, 0]);
-                var m = gl_matrix_4.mat2d.create();
-                gl_matrix_4.mat2d.mul(m, T, CI);
-                gl_matrix_4.mat2d.mul(S, S, C);
-                gl_matrix_4.mat2d.mul(m, m, S);
                 /*
-                const sin = Math.sin(rotation * Math.PI);
-                const cos = Math.cos(rotation * Math.PI);
-                const m = mat2d.fromValues(
-                    scaleS * cos, scaleS * -sin,
-                    scaleT * sin, scaleS *  cos,
-                    translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS *  sin),
-                    translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos)
-                );
+                const m = mat2d.create();
+                mat2d.mul(m, T, CI);
+                mat2d.mul(S, S, C);
+                mat2d.mul(m, m, S);
                 */
+                var sin = Math.sin(rotation * Math.PI);
+                var cos = Math.cos(rotation * Math.PI);
+                var m = gl_matrix_4.mat2d.fromValues(scaleS * cos, scaleS * -sin, scaleT * sin, scaleS * cos, translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS * sin), translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos));
                 var matrix = gl_matrix_4.mat3.create();
                 gl_matrix_4.mat3.fromMat2d(matrix, m);
                 texMatrices[j] = { projection: projection, matrix: matrix };
@@ -4224,13 +4219,32 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_20, context
     function decode_RGBA8(texture) {
         var view = new DataView(texture.data);
         var srcOffs = 0;
-        return decode_Tiled(texture, 4, 4, function (pixels, dstOffs) {
-            pixels[dstOffs + 0] = view.getUint8(srcOffs + 0);
-            pixels[dstOffs + 1] = view.getUint8(srcOffs + 1);
-            pixels[dstOffs + 2] = view.getUint8(srcOffs + 2);
-            pixels[dstOffs + 3] = view.getUint8(srcOffs + 3);
-            srcOffs += 4;
-        });
+        // RGBA8 is a bit special, so we hand-code this one.
+        var bw = 4, bh = 4;
+        var pixels = new Uint8Array(texture.width * texture.height * 4);
+        for (var yy = 0; yy < texture.height; yy += bh) {
+            for (var xx = 0; xx < texture.width; xx += bw) {
+                for (var y = 0; y < bh; y++) {
+                    for (var x = 0; x < bw; x++) {
+                        var dstPixel = (texture.width * (yy + y)) + xx + x;
+                        var dstOffs = dstPixel * 4;
+                        pixels[dstOffs + 3] = view.getUint8(srcOffs + 0);
+                        pixels[dstOffs + 0] = view.getUint8(srcOffs + 1);
+                        srcOffs += 2;
+                    }
+                }
+                for (var y = 0; y < bh; y++) {
+                    for (var x = 0; x < bw; x++) {
+                        var dstPixel = (texture.width * (yy + y)) + xx + x;
+                        var dstOffs = dstPixel * 4;
+                        pixels[dstOffs + 1] = view.getUint8(srcOffs + 0);
+                        pixels[dstOffs + 2] = view.getUint8(srcOffs + 1);
+                        srcOffs += 2;
+                    }
+                }
+            }
+        }
+        return { type: "RGBA", pixels: pixels, width: texture.width, height: texture.height };
     }
     function decode_I4(texture) {
         var view = new DataView(texture.data);
@@ -4353,7 +4367,7 @@ System.register("j3d/rarc", ["util"], function (exports_21, context_21) {
             var files_1 = [];
             var subdirIndexes = [];
             // Go through and parse the file table.
-            var fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x10);
+            var fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x14);
             for (var i_1 = 0; i_1 < fileEntryCount_1; i_1++) {
                 var id = view.getUint16(fileEntryIdx + 0x00);
                 var nameHash_1 = view.getUint16(fileEntryIdx + 0x02);
@@ -4809,6 +4823,7 @@ System.register("j3d/scenes", ["j3d/render"], function (exports_23, context_23) 
                 { name: "Noki Bay", filename: "noki.bmd" },
                 { name: "Delfino Plaza", filename: "dolpic.bmd" },
                 { name: "Peach Castle Garden", filename: "peachcastlegardenplanet.bdl", vrbox: "GalaxySky.arc" },
+                { name: "Windfall Island", filename: "windfall.bdl" },
             ].map(function (entry) {
                 var path = "data/j3d/" + entry.filename;
                 var name = entry.name || entry.filename;

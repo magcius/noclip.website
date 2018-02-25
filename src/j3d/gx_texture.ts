@@ -235,13 +235,32 @@ function decode_RGB5A3(texture: Texture): DecodedTexture {
 function decode_RGBA8(texture: Texture): DecodedTexture {
     const view = new DataView(texture.data);
     let srcOffs = 0;
-    return decode_Tiled(texture, 4, 4, (pixels: Uint8Array, dstOffs: number): void => {
-        pixels[dstOffs + 0] = view.getUint8(srcOffs + 0);
-        pixels[dstOffs + 1] = view.getUint8(srcOffs + 1);
-        pixels[dstOffs + 2] = view.getUint8(srcOffs + 2);
-        pixels[dstOffs + 3] = view.getUint8(srcOffs + 3);
-        srcOffs += 4;
-    });
+    // RGBA8 is a bit special, so we hand-code this one.
+    const bw = 4, bh = 4;
+    const pixels = new Uint8Array(texture.width * texture.height * 4);
+    for (let yy = 0; yy < texture.height; yy += bh) {
+        for (let xx = 0; xx < texture.width; xx += bw) {
+            for (let y = 0; y < bh; y++) {
+                for (let x = 0; x < bw; x++) {
+                    const dstPixel = (texture.width * (yy + y)) + xx + x;
+                    const dstOffs = dstPixel * 4;
+                    pixels[dstOffs + 3] = view.getUint8(srcOffs + 0);
+                    pixels[dstOffs + 0] = view.getUint8(srcOffs + 1);
+                    srcOffs += 2;
+                }
+            }
+            for (let y = 0; y < bh; y++) {
+                for (let x = 0; x < bw; x++) {
+                    const dstPixel = (texture.width * (yy + y)) + xx + x;
+                    const dstOffs = dstPixel * 4;
+                    pixels[dstOffs + 1] = view.getUint8(srcOffs + 0);
+                    pixels[dstOffs + 2] = view.getUint8(srcOffs + 1);
+                    srcOffs += 2;
+                }
+            }
+        }
+    }
+    return { type: "RGBA", pixels, width: texture.width, height: texture.height };
 }
 
 function decode_I4(texture: Texture): DecodedTexture {

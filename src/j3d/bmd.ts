@@ -586,12 +586,13 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const T = mat2d.create();
             mat2d.fromTranslation(T, [translationS, translationT, 0]);
 
+            /*
             const m = mat2d.create();
             mat2d.mul(m, T, CI);
             mat2d.mul(S, S, C);
             mat2d.mul(m, m, S);
+            */
 
-            /*
             const sin = Math.sin(rotation * Math.PI);
             const cos = Math.cos(rotation * Math.PI);
             const m = mat2d.fromValues(
@@ -600,7 +601,6 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                 translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS *  sin),
                 translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos)
             );
-            */
 
             const matrix = matrix3.create();
             matrix3.fromMat2d(matrix, m);

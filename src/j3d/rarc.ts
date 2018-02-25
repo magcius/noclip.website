@@ -57,7 +57,7 @@ export function parse(buffer: ArrayBuffer): RARC {
         const subdirIndexes = [];
 
         // Go through and parse the file table.
-        let fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x10);
+        let fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x14);
         for (let i = 0; i < fileEntryCount; i++) {
             const id = view.getUint16(fileEntryIdx + 0x00);
             const nameHash = view.getUint16(fileEntryIdx + 0x02);
