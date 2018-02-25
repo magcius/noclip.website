@@ -4819,9 +4819,10 @@ System.register("j3d/scenes", ["j3d/render"], function (exports_23, context_23) 
             name = "J3D Models";
             sceneDescs = [
                 { name: "Faceship", filename: "faceship.bmd" },
-                { name: "Sirena Beach", filename: "sirena.bmd" },
-                { name: "Noki Bay", filename: "noki.bmd" },
                 { name: "Delfino Plaza", filename: "dolpic.bmd" },
+                { name: "Ricco Harbor", filename: "ricco.bmd" },
+                { name: "Noki Bay", filename: "noki.bmd" },
+                { name: "Sirena Beach", filename: "sirena.bmd" },
                 { name: "Peach Castle Garden", filename: "peachcastlegardenplanet.bdl", vrbox: "GalaxySky.arc" },
                 { name: "Windfall Island", filename: "windfall.bdl" },
             ].map(function (entry) {
