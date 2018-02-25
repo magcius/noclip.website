@@ -15,11 +15,34 @@ export interface RARCDir {
     subdirs: RARCDir[];
 }
 
-export interface RARC {
+export class RARC {
     // All the files in a flat list.
     files: RARCFile[];
     // Root directory.
     root: RARCDir;
+
+    public findDirParts(parts: string[]): RARCDir {
+        let dir = this.root;
+        for (const part of parts) {
+            dir = dir.subdirs.find((subdir) => subdir.name === part);
+            if (dir === null)
+                return null;
+        }
+        return dir;
+    }
+
+    public findDir(path: string): RARCDir {
+        return this.findDirParts(path.split('/'));
+    }
+
+    public findFile(path: string): RARCFile {
+        const parts = path.split('/');
+        const filename = parts.pop();
+        const dir = this.findDirParts(parts);
+        if (dir === null)
+            return null;
+        return dir.files.find((file) => file.name === filename);
+    }
 }
 
 // Used while parsing
@@ -105,7 +128,8 @@ export function parse(buffer: ArrayBuffer): RARC {
     const root = translateDirEntry(0);
     assert(root.type === 'ROOT');
 
-    const files = allFiles;
-    const rarc: RARC = { files, root };
+    const rarc = new RARC();
+    rarc.files = allFiles;
+    rarc.root = root;
     return rarc;
 }
