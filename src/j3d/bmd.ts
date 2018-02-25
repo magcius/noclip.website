@@ -303,6 +303,11 @@ function readIndex(view: DataView, offs: number, type: GX.CompType) {
     }
 }
 
+function align(n: number, multiple: number): number {
+    const mask = (multiple - 1);
+    return (n + mask) & ~mask;
+}
+
 function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
     const view = new DataView(buffer, chunkStart, chunkSize);
     const shapeCount = view.getUint16(0x08);
@@ -343,6 +348,9 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const vtxAttrib: GX.VertexAttribute = view.getUint32(attribIdx + 0x00);
             if (vtxAttrib === GX.VertexAttribute.NULL)
                 break;
+            const vertexArray: VertexArray = bmd.vtx1.vertexArrays.get(vtxAttrib);
+            packedVertexSize = align(packedVertexSize, vertexArray.compSize);
+
             const indexDataType: GX.CompType = view.getUint32(attribIdx + 0x04);
             const indexDataSize = getComponentSize(indexDataType);
             const offset = packedVertexSize;
@@ -350,8 +358,6 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             attribIdx += 0x08;
 
             vertexIndexSize += indexDataSize;
-
-            const vertexArray: VertexArray = bmd.vtx1.vertexArrays.get(vtxAttrib);
             packedVertexSize += vertexArray.compSize * vertexArray.compCount;
         }
 
@@ -401,6 +407,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                     drawCallIdx += indexDataSize;
 
                     const vertexArray: VertexArray = bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
+                    packedDataOffs = align(packedDataOffs, vertexArray.compSize);
                     const attribDataSize = vertexArray.compSize * vertexArray.compCount;
                     const vertexData = new Uint8Array(vertexArray.buffer, attribDataSize * index, attribDataSize);
                     packedDataView.set(vertexData, packedDataOffs);
@@ -423,6 +430,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 }
 
 export interface MAT3 {
+    remapTable: number[];
     materialEntries: GX_Material.GXMaterial[];
 }
 
@@ -446,12 +454,12 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const view = new DataView(buffer, chunkStart, chunkSize);
     const materialCount = view.getUint16(0x08);
 
-    const indexToMatIndexTableOffs = view.getUint32(0x10);
-    const indexToMatIndexTable = [];
+    const remapTableOffs = view.getUint32(0x10);
+    const remapTable: number[] = [];
     for (let i = 0; i < materialCount; i++)
-        indexToMatIndexTable[i] = view.getUint16(indexToMatIndexTableOffs + i * 0x02);
+        remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
 
-    const maxIndex = Math.max.apply(null, indexToMatIndexTable);
+    const maxIndex = Math.max.apply(null, remapTable);
 
     const nameTableOffs = view.getUint32(0x14);
     const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
@@ -703,8 +711,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         materialEntryIdx += 0x014C;
     }
 
-    const mat3 = { materialEntries };
-    bmd.mat3 = mat3;
+    bmd.mat3 = { remapTable, materialEntries };
 }
 
 export interface TEX1_Texture {
