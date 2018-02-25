@@ -17,7 +17,7 @@ const sceneDescs: SceneDesc[] = (<SceneOpt[]> [
     { name: "Ricco Harbor", filename: "ricco.bmd" },
     { name: "Noki Bay", filename: "noki.bmd" },
     { name: "Sirena Beach", filename: "sirena.bmd" },
-    { name: "Peach Castle Garden", filename: "peachcastlegardenplanet.bdl", vrbox: "GalaxySky.arc" },
+    { name: "Peach Castle Garden", filename: "PeachCastleGardenPlanet.arc", vrbox: "GalaxySky.arc" },
     { name: "Windfall Island", filename: "windfall.bdl" },
 ]).map((entry): SceneDesc => {
     const path = `data/j3d/${entry.filename}`;

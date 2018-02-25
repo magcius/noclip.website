@@ -56,3 +56,16 @@ export function le32toh(m: ArrayBuffer): ArrayBuffer {
     else
         return m;
 }
+
+type CompSize = 1 | 2 | 4;
+
+export function betoh(m: ArrayBuffer, componentSize: CompSize): ArrayBuffer {
+    switch (componentSize) {
+    case 1:
+        return m;
+    case 2:
+        return be16toh(m);
+    case 4:
+        return be32toh(m);
+    }
+}
