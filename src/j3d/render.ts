@@ -193,6 +193,7 @@ class Command_Material {
         const gl = state.gl;
 
         state.useProgram(this.program);
+        state.useFlags(this.renderFlags);
 
         // Bind our scale uniforms.
         for (const vertexArray of this.bmd.vtx1.vertexArrays.values()) {
@@ -215,7 +216,6 @@ class Command_Material {
             const location = this.program.getTexMtxLocation(i);
             gl.uniformMatrix3fv(location, false, matrix);
         }
-        state.useFlags(this.renderFlags);
 
         for (let i = 0; i < this.textures.length; i++) {
             const texture = this.textures[i];

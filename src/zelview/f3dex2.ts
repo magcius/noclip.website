@@ -4,7 +4,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Render from './render';
 import * as ZELVIEW0 from './zelview0';
 
-import { CullMode, RenderState, RenderFlags, Program } from '../render';
+import { CullMode, RenderState, RenderFlags, Program, BlendMode } from '../render';
 import * as Viewer from '../viewer';
 
 // Zelda uses the F3DEX2 display list format. This implements
@@ -249,11 +249,11 @@ function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
         let alphaTestMode;
         if (newMode & OtherModeL.FORCE_BL) {
             alphaTestMode = 0;
-            renderFlags.blend = true;
+            renderFlags.blendMode = BlendMode.ADD;
         } else {
             alphaTestMode = ((newMode & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
                              (newMode & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
-            renderFlags.blend = false;
+            renderFlags.blendMode = BlendMode.NONE;
         }
    
         state.cmds.push((renderState: RenderState) => {

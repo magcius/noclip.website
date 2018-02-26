@@ -45,13 +45,20 @@ export enum BlendFactor {
     ONE_MINUS_DST_ALPHA = WebGL2RenderingContext.ONE_MINUS_DST_ALPHA,
 }
 
+export enum BlendMode {
+    NONE             = 0,
+    ADD              = WebGL2RenderingContext.FUNC_ADD,
+    SUBTRACT         = WebGL2RenderingContext.FUNC_SUBTRACT,
+    REVERSE_SUBTRACT = WebGL2RenderingContext.FUNC_REVERSE_SUBTRACT,
+}
+
 export class RenderFlags {
     public depthWrite: boolean = undefined;
     public depthTest: boolean = undefined;
     public depthFunc: CompareMode = undefined;
-    public blend: boolean = undefined;
     public blendSrc: BlendFactor = undefined;
     public blendDst: BlendFactor = undefined;
+    public blendMode: BlendMode = undefined;
     public cullMode: CullMode = undefined;
     public frontFace: FrontFaceMode = undefined;
 
@@ -64,8 +71,8 @@ export class RenderFlags {
             dst.depthTest = src.depthTest;
         if (dst.depthFunc === undefined)
             dst.depthFunc = src.depthFunc;
-        if (dst.blend === undefined)
-            dst.blend = src.blend;
+        if (dst.blendMode === undefined)
+            dst.blendMode = src.blendMode;
         if (dst.blendSrc === undefined)
             dst.blendSrc = src.blendSrc;
         if (dst.blendDst === undefined)
@@ -88,9 +95,10 @@ export class RenderFlags {
                 gl.disable(gl.DEPTH_TEST);
         }
 
-        if (oldFlags.blend !== newFlags.blend) {
-            if (newFlags.blend) {
+        if (oldFlags.blendMode !== newFlags.blendMode) {
+            if (newFlags.blendMode !== BlendMode.NONE) {
                 gl.enable(gl.BLEND);
+                gl.blendEquation(newFlags.blendMode);
             } else {
                 gl.disable(gl.BLEND);
             }
@@ -124,7 +132,7 @@ export class RenderFlags {
     }
 }
 
-RenderFlags.default.blend = false;
+RenderFlags.default.blendMode = BlendMode.NONE;
 RenderFlags.default.blendSrc = BlendFactor.SRC_ALPHA;
 RenderFlags.default.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
 RenderFlags.default.cullMode = CullMode.NONE;

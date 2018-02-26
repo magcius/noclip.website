@@ -3,7 +3,7 @@ import * as MDL0 from 'mdl0';
 
 import * as Viewer from '../viewer';
 
-import { RenderFlags, RenderState, Program, RenderPass } from '../render';
+import { RenderFlags, RenderState, Program, RenderPass, BlendMode } from '../render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
 
@@ -88,7 +88,7 @@ class FancyGrid {
         this._createBuffers(gl);
 
         this.renderFlags = new RenderFlags();
-        this.renderFlags.blend = true;
+        this.renderFlags.blendMode = BlendMode.ADD;
     }
 
     public render(state: RenderState) {

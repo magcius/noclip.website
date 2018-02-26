@@ -3,7 +3,7 @@ import * as F3DEX2 from './f3dex2';
 import * as ZELVIEW0 from './zelview0';
 
 import { Progressable } from '../progress';
-import { CullMode, RenderFlags, RenderState, Program, RenderPass } from '../render';
+import { CullMode, RenderFlags, RenderState, Program, RenderPass, BlendMode } from '../render';
 import { fetch } from '../util';
 
 import * as Viewer from '../viewer';
@@ -243,7 +243,7 @@ class Scene implements Viewer.Scene {
 
         const renderFlags = new RenderFlags();
         renderFlags.depthTest = true;
-        renderFlags.blend = true;
+        renderFlags.blendMode = BlendMode.ADD;
 
         return (state: RenderState) => {
             const prog = this.program_COLL;
@@ -272,7 +272,7 @@ class Scene implements Viewer.Scene {
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
 
         const renderFlags = new RenderFlags();
-        renderFlags.blend = true;
+        renderFlags.blendMode = BlendMode.ADD;
         renderFlags.cullMode = CullMode.NONE;
 
         return (state: RenderState) => {
