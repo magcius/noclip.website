@@ -294,10 +294,11 @@ function decode_I8(texture: Texture): DecodedTexture {
 function decode_IA4(texture: Texture): DecodedTexture {
     const view = new DataView(texture.data);
     let srcOffs = 0;
+
     return decode_Tiled(texture, 8, 4, (pixels: Uint8Array, dstOffs: number): void => {
         const ia = view.getUint8(srcOffs);
-        const i = expand4to8(ia >>> 4);
-        const a = expand4to8(ia & 0x0F);
+        const i = expand4to8(ia & 0x0F);
+        const a = expand4to8(ia >>> 4);
         pixels[dstOffs + 0] = i;
         pixels[dstOffs + 1] = i;
         pixels[dstOffs + 2] = i;
