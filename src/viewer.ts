@@ -161,10 +161,12 @@ class InputManager {
 export class FPSCameraController implements CameraController {
     private tmp: mat4;
     private camera: mat4;
+    private speed: number;
 
     constructor() {
         this.tmp = mat4.create();
         this.camera = mat4.create();
+        this.speed = 10;
     }
 
     public update(outCamera: mat4, inputManager: InputManager, dt: number): void {
@@ -172,7 +174,10 @@ export class FPSCameraController implements CameraController {
         const tmp = this.tmp;
         const camera = this.camera;
 
-        let mult = 10;
+        this.speed += inputManager.dz;
+        this.speed = Math.max(this.speed, 1);
+
+        let mult = this.speed;
         if (inputManager.isKeyDownRaw(SHIFT))
             mult *= 5;
         mult *= (dt / 16.0);
