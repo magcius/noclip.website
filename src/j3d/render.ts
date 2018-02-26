@@ -7,12 +7,8 @@ import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
 import * as GX_Texture from './gx_texture';
 import * as Viewer from 'viewer';
-import * as RARC from './rarc';
-import * as YAZ0 from '../yaz0';
 
 import { RenderFlags, RenderState, RenderPass } from '../render';
-import { Progressable } from '../progress';
-import { fetch, assert, readString } from '../util';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {

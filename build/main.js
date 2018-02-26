@@ -3278,7 +3278,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     if (scale === 1 /* SCALE_2 */)
                         v = "(" + v + ") * 2.0";
                     else if (scale === 2 /* SCALE_4 */)
-                        v = "(" + v + ") * 4.0";
+                        v = "(" + v + ") * 1.0";
                     else if (scale === 3 /* DIVIDE_2 */)
                         v = "(" + v + ") * 0.5";
                     if (clamp)
@@ -3345,11 +3345,13 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                 GX_Program.prototype.generateAlphaTest = function (alphaTest) {
                     return "\n    // Alpha Test: Op " + alphaTest.op + "\n    // Compare A: " + alphaTest.compareA + " Reference A: " + this.generateFloat(alphaTest.referenceA) + "\n    // Compare B: " + alphaTest.compareB + " Reference B: " + this.generateFloat(alphaTest.referenceB) + "\n    bool t_alphaTestA = " + this.generateAlphaTestCompare(alphaTest.compareA, alphaTest.referenceA) + ";\n    bool t_alphaTestB = " + this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB) + ";\n    if (!(" + this.generateAlphaTestOp(alphaTest.op) + "))\n        discard;\n";
                 };
-                GX_Program.prototype.generateShaders = function () {
-                    var vertAttributeDefs = vtxAttributeGenDefs.map(function (a) {
+                GX_Program.prototype.generateVertAttributeDefs = function () {
+                    return vtxAttributeGenDefs.map(function (a) {
                         return "\nlayout(location = " + a.attrib + ") in " + a.storage + " a_" + a.name + ";\n" + (a.scale ? "uniform float u_scale_" + a.name + ";" : "") + "\n" + a.storage + " ReadAttrib_" + a.name + "() {\n    return a_" + a.name + (a.scale ? " * u_scale_" + a.name : "") + ";\n}\n";
                     }).join('');
-                    this.vert = "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + vertAttributeDefs + "\nuniform mat3 u_TexMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);\n}\n";
+                };
+                GX_Program.prototype.generateShaders = function () {
+                    this.vert = "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + this.generateVertAttributeDefs() + "\nuniform mat3 u_TexMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);\n}\n";
                     var tevStages = this.material.tevStages;
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
@@ -4571,136 +4573,9 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_20, context
         }
     };
 });
-// Nintendo RARC file format.
-System.register("j3d/rarc", ["util"], function (exports_21, context_21) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_material", "j3d/gx_texture", "viewer"], function (exports_21, context_21) {
     "use strict";
     var __moduleName = context_21 && context_21.id;
-    function parse(buffer) {
-        var view = new DataView(buffer);
-        util_6.assert(util_6.readString(buffer, 0x00, 0x04) == 'RARC');
-        var size = view.getUint32(0x04);
-        var dataOffs = view.getUint32(0x0C) + 0x20;
-        var dirCount = view.getUint32(0x20);
-        var dirTableOffs = view.getUint32(0x24) + 0x20;
-        var fileEntryCount = view.getUint32(0x28);
-        var fileEntryTableOffs = view.getUint32(0x2C) + 0x20;
-        var strTableOffs = view.getUint32(0x34) + 0x20;
-        var dirTableIdx = dirTableOffs;
-        var dirEntries = [];
-        var allFiles = [];
-        for (var i = 0; i < dirCount; i++) {
-            var type = util_6.readString(buffer, dirTableIdx + 0x00, 0x04, false);
-            var nameOffs = view.getUint32(dirTableIdx + 0x04);
-            var name_10 = util_6.readString(buffer, strTableOffs + nameOffs, -1, true);
-            var nameHash = view.getUint16(dirTableIdx + 0x08);
-            var fileEntryCount_1 = view.getUint16(dirTableIdx + 0x0A);
-            var fileEntryFirstIndex = view.getUint32(dirTableIdx + 0x0C);
-            var files = [];
-            var subdirIndexes = [];
-            // Go through and parse the file table.
-            var fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x14);
-            for (var i_1 = 0; i_1 < fileEntryCount_1; i_1++) {
-                var id = view.getUint16(fileEntryIdx + 0x00);
-                var nameHash_1 = view.getUint16(fileEntryIdx + 0x02);
-                var flags = view.getUint8(fileEntryIdx + 0x04);
-                var nameOffs_1 = view.getUint16(fileEntryIdx + 0x06);
-                var name_11 = util_6.readString(buffer, strTableOffs + nameOffs_1, -1, true);
-                var entryDataOffs = view.getUint32(fileEntryIdx + 0x08);
-                var entryDataSize = view.getUint32(fileEntryIdx + 0x0C);
-                fileEntryIdx += 0x14;
-                if (name_11 === '.' || name_11 === '..')
-                    continue;
-                var isDirectory = !!(flags & 0x02);
-                if (isDirectory) {
-                    var subdirEntryIndex = entryDataOffs;
-                    subdirIndexes.push(subdirEntryIndex);
-                }
-                else {
-                    var offs = dataOffs + entryDataOffs;
-                    var fileBuffer = buffer.slice(offs, offs + entryDataSize);
-                    var file = { name: name_11, buffer: fileBuffer };
-                    files.push(file);
-                    allFiles.push(file);
-                }
-            }
-            dirEntries.push({ name: name_10, type: type, files: files, subdirIndexes: subdirIndexes });
-            dirTableIdx += 0x10;
-        }
-        var dirs = [];
-        function translateDirEntry(i) {
-            if (dirs[i] !== undefined)
-                return dirs[i];
-            var dirEntry = dirEntries[i];
-            var name = dirEntry.name, type = dirEntry.type, files = dirEntry.files;
-            var subdirs = dirEntry.subdirIndexes.map(function (i) { return translateDirEntry(i); });
-            var dir = { name: name, type: type, files: files, subdirs: subdirs };
-            dirs[i] = dir;
-            return dir;
-        }
-        var root = translateDirEntry(0);
-        util_6.assert(root.type === 'ROOT');
-        var rarc = new RARC();
-        rarc.files = allFiles;
-        rarc.root = root;
-        return rarc;
-    }
-    exports_21("parse", parse);
-    var util_6, RARC;
-    return {
-        setters: [
-            function (util_6_1) {
-                util_6 = util_6_1;
-            }
-        ],
-        execute: function () {
-            RARC = /** @class */ (function () {
-                function RARC() {
-                }
-                RARC.prototype.findDirParts = function (parts) {
-                    var dir = this.root;
-                    var _loop_2 = function (part) {
-                        dir = dir.subdirs.find(function (subdir) { return subdir.name === part; });
-                        if (dir === null)
-                            return { value: null };
-                    };
-                    try {
-                        for (var parts_1 = __values(parts), parts_1_1 = parts_1.next(); !parts_1_1.done; parts_1_1 = parts_1.next()) {
-                            var part = parts_1_1.value;
-                            var state_1 = _loop_2(part);
-                            if (typeof state_1 === "object")
-                                return state_1.value;
-                        }
-                    }
-                    catch (e_20_1) { e_20 = { error: e_20_1 }; }
-                    finally {
-                        try {
-                            if (parts_1_1 && !parts_1_1.done && (_a = parts_1.return)) _a.call(parts_1);
-                        }
-                        finally { if (e_20) throw e_20.error; }
-                    }
-                    return dir;
-                    var e_20, _a;
-                };
-                RARC.prototype.findDir = function (path) {
-                    return this.findDirParts(path.split('/'));
-                };
-                RARC.prototype.findFile = function (path) {
-                    var parts = path.split('/');
-                    var filename = parts.pop();
-                    var dir = this.findDirParts(parts);
-                    if (dir === null)
-                        return null;
-                    return dir.files.find(function (file) { return file.name === filename; });
-                };
-                return RARC;
-            }());
-            exports_21("RARC", RARC);
-        }
-    };
-});
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_material", "j3d/gx_texture", "viewer"], function (exports_22, context_22) {
-    "use strict";
-    var __moduleName = context_22 && context_22.id;
     function translateCompType(gl, compType) {
         switch (compType) {
             case 4 /* F32 */:
@@ -4771,14 +4646,14 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                             gl.vertexAttribPointer(attribLocation, vertexArray.compCount, type, normalized, this.shape.packedVertexSize, attrib.offset);
                         }
                     }
-                    catch (e_21_1) { e_21 = { error: e_21_1 }; }
+                    catch (e_20_1) { e_20 = { error: e_20_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                         }
-                        finally { if (e_21) throw e_21.error; }
+                        finally { if (e_20) throw e_20.error; }
                     }
-                    var e_21, _d;
+                    var e_20, _d;
                 }
                 Command_Shape.prototype.exec = function (state) {
                     var gl = state.gl;
@@ -4885,12 +4760,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                             gl.uniform1f(location_3, vertexArray.scale);
                         }
                     }
-                    catch (e_22_1) { e_22 = { error: e_22_1 }; }
+                    catch (e_21_1) { e_21 = { error: e_21_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_22) throw e_22.error; }
+                        finally { if (e_21) throw e_21.error; }
                     }
                     // Bind our texture matrices.
                     var matrix = gl_matrix_5.mat3.create();
@@ -4912,7 +4787,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         gl.uniform1i(this.program.getSamplerLocation(i), i);
                         gl.bindTexture(gl.TEXTURE_2D, texture);
                     }
-                    var e_22, _c;
+                    var e_21, _c;
                 };
                 Command_Material.prototype.destroy = function (gl) {
                     this.textures.forEach(function (texture) { return gl.deleteTexture(texture); });
@@ -5000,14 +4875,14 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                             this.translateSceneGraph(child, context);
                         }
                     }
-                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
+                    catch (e_22_1) { e_22 = { error: e_22_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_23) throw e_23.error; }
+                        finally { if (e_22) throw e_22.error; }
                     }
-                    var e_23, _c;
+                    var e_22, _c;
                 };
                 Scene.prototype.destroy = function (gl) {
                     this.materialCommands.forEach(function (command) { return command.destroy(gl); });
@@ -5015,7 +4890,134 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 };
                 return Scene;
             }());
-            exports_22("Scene", Scene);
+            exports_21("Scene", Scene);
+        }
+    };
+});
+// Nintendo RARC file format.
+System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
+    "use strict";
+    var __moduleName = context_22 && context_22.id;
+    function parse(buffer) {
+        var view = new DataView(buffer);
+        util_6.assert(util_6.readString(buffer, 0x00, 0x04) == 'RARC');
+        var size = view.getUint32(0x04);
+        var dataOffs = view.getUint32(0x0C) + 0x20;
+        var dirCount = view.getUint32(0x20);
+        var dirTableOffs = view.getUint32(0x24) + 0x20;
+        var fileEntryCount = view.getUint32(0x28);
+        var fileEntryTableOffs = view.getUint32(0x2C) + 0x20;
+        var strTableOffs = view.getUint32(0x34) + 0x20;
+        var dirTableIdx = dirTableOffs;
+        var dirEntries = [];
+        var allFiles = [];
+        for (var i = 0; i < dirCount; i++) {
+            var type = util_6.readString(buffer, dirTableIdx + 0x00, 0x04, false);
+            var nameOffs = view.getUint32(dirTableIdx + 0x04);
+            var name_10 = util_6.readString(buffer, strTableOffs + nameOffs, -1, true);
+            var nameHash = view.getUint16(dirTableIdx + 0x08);
+            var fileEntryCount_1 = view.getUint16(dirTableIdx + 0x0A);
+            var fileEntryFirstIndex = view.getUint32(dirTableIdx + 0x0C);
+            var files = [];
+            var subdirIndexes = [];
+            // Go through and parse the file table.
+            var fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x14);
+            for (var i_1 = 0; i_1 < fileEntryCount_1; i_1++) {
+                var id = view.getUint16(fileEntryIdx + 0x00);
+                var nameHash_1 = view.getUint16(fileEntryIdx + 0x02);
+                var flags = view.getUint8(fileEntryIdx + 0x04);
+                var nameOffs_1 = view.getUint16(fileEntryIdx + 0x06);
+                var name_11 = util_6.readString(buffer, strTableOffs + nameOffs_1, -1, true);
+                var entryDataOffs = view.getUint32(fileEntryIdx + 0x08);
+                var entryDataSize = view.getUint32(fileEntryIdx + 0x0C);
+                fileEntryIdx += 0x14;
+                if (name_11 === '.' || name_11 === '..')
+                    continue;
+                var isDirectory = !!(flags & 0x02);
+                if (isDirectory) {
+                    var subdirEntryIndex = entryDataOffs;
+                    subdirIndexes.push(subdirEntryIndex);
+                }
+                else {
+                    var offs = dataOffs + entryDataOffs;
+                    var fileBuffer = buffer.slice(offs, offs + entryDataSize);
+                    var file = { name: name_11, buffer: fileBuffer };
+                    files.push(file);
+                    allFiles.push(file);
+                }
+            }
+            dirEntries.push({ name: name_10, type: type, files: files, subdirIndexes: subdirIndexes });
+            dirTableIdx += 0x10;
+        }
+        var dirs = [];
+        function translateDirEntry(i) {
+            if (dirs[i] !== undefined)
+                return dirs[i];
+            var dirEntry = dirEntries[i];
+            var name = dirEntry.name, type = dirEntry.type, files = dirEntry.files;
+            var subdirs = dirEntry.subdirIndexes.map(function (i) { return translateDirEntry(i); });
+            var dir = { name: name, type: type, files: files, subdirs: subdirs };
+            dirs[i] = dir;
+            return dir;
+        }
+        var root = translateDirEntry(0);
+        util_6.assert(root.type === 'ROOT');
+        var rarc = new RARC();
+        rarc.files = allFiles;
+        rarc.root = root;
+        return rarc;
+    }
+    exports_22("parse", parse);
+    var util_6, RARC;
+    return {
+        setters: [
+            function (util_6_1) {
+                util_6 = util_6_1;
+            }
+        ],
+        execute: function () {
+            RARC = /** @class */ (function () {
+                function RARC() {
+                }
+                RARC.prototype.findDirParts = function (parts) {
+                    var dir = this.root;
+                    var _loop_2 = function (part) {
+                        dir = dir.subdirs.find(function (subdir) { return subdir.name === part; });
+                        if (dir === null)
+                            return { value: null };
+                    };
+                    try {
+                        for (var parts_1 = __values(parts), parts_1_1 = parts_1.next(); !parts_1_1.done; parts_1_1 = parts_1.next()) {
+                            var part = parts_1_1.value;
+                            var state_1 = _loop_2(part);
+                            if (typeof state_1 === "object")
+                                return state_1.value;
+                        }
+                    }
+                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
+                    finally {
+                        try {
+                            if (parts_1_1 && !parts_1_1.done && (_a = parts_1.return)) _a.call(parts_1);
+                        }
+                        finally { if (e_23) throw e_23.error; }
+                    }
+                    return dir;
+                    var e_23, _a;
+                };
+                RARC.prototype.findDir = function (path) {
+                    return this.findDirParts(path.split('/'));
+                };
+                RARC.prototype.findFile = function (path) {
+                    var parts = path.split('/');
+                    var filename = parts.pop();
+                    var dir = this.findDirParts(parts);
+                    if (dir === null)
+                        return null;
+                    return dir.files.find(function (file) { return file.name === filename; });
+                };
+                return RARC;
+            }());
+            exports_22("RARC", RARC);
         }
     };
 });
@@ -5167,19 +5169,21 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
             }());
             WindWakerSceneDesc = /** @class */ (function () {
                 function WindWakerSceneDesc(path, name) {
-                    this.name = name;
+                    this.name = name || path;
                     this.path = path;
                     this.id = this.path;
                 }
                 WindWakerSceneDesc.prototype.createScene = function (gl) {
                     return util_7.fetch(this.path).then(function (result) {
+                        if (util_7.readString(result, 0, 4) === 'Yaz0')
+                            result = Yaz0.decompress(result);
                         var rarc = RARC.parse(result);
-                        var bdl = rarc.findDir('bdl');
-                        var scenes = bdl.files.map(function (bdlFile) {
+                        var bmdFiles = rarc.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
+                        var scenes = bmdFiles.map(function (bmdFile) {
                             // Find the corresponding btk.
-                            var basename = bdlFile.name.split('.')[0];
+                            var basename = bmdFile.name.split('.')[0];
                             var btkFile = rarc.findFile("btk/" + basename + ".btk");
-                            return createScene(gl, bdlFile, btkFile, null);
+                            return createScene(gl, bmdFile, btkFile, null);
                         });
                         return new MultiScene(scenes.filter(function (s) { return !!s; }));
                     });

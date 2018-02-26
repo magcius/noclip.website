@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 
 import { Progressable } from '../progress';
 import { RenderPass, RenderState } from '../render';
-import { fetch } from '../util';
+import { fetch, readString } from '../util';
 
 const id = "j3d";
 const name = "J3D Models";
@@ -140,21 +140,23 @@ class WindWakerSceneDesc implements Viewer.SceneDesc {
     public path: string;
     public id: string;
 
-    constructor(path: string, name: string) {
-        this.name = name;
+    constructor(path: string, name?: string) {
+        this.name = name || path;
         this.path = path;
         this.id = this.path;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
+            if (readString(result, 0, 4) === 'Yaz0')
+                result = Yaz0.decompress(result);
             const rarc = RARC.parse(result);
-            const bdl = rarc.findDir('bdl');
-            const scenes = bdl.files.map((bdlFile) => {
+            const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
+            const scenes = bmdFiles.map((bmdFile) => {
                 // Find the corresponding btk.
-                const basename = bdlFile.name.split('.')[0];
+                const basename = bmdFile.name.split('.')[0];
                 const btkFile = rarc.findFile(`btk/${basename}.btk`);
-                return createScene(gl, bdlFile, btkFile, null);
+                return createScene(gl, bmdFile, btkFile, null);
             });
             return new MultiScene(scenes.filter((s) => !!s));
         });
