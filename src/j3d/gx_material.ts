@@ -369,7 +369,7 @@ export class GX_Program extends Program {
         if (scale === GX.TevScale.SCALE_2)
             v = `(${v}) * 2.0`;
         else if (scale === GX.TevScale.SCALE_4)
-            v = `(${v}) * 4.0`;
+            v = `(${v}) * 1.0`;
         else if (scale === GX.TevScale.DIVIDE_2)
             v = `(${v}) * 0.5`;
 
@@ -461,8 +461,8 @@ export class GX_Program extends Program {
 `;
     }
 
-    private generateShaders() {
-        const vertAttributeDefs = vtxAttributeGenDefs.map((a) => {
+    private generateVertAttributeDefs() {
+        return vtxAttributeGenDefs.map((a) => {
             return `
 layout(location = ${a.attrib}) in ${a.storage} a_${a.name};
 ${a.scale ? `uniform float u_scale_${a.name};` : ``}
@@ -471,14 +471,16 @@ ${a.storage} ReadAttrib_${a.name}() {
 }
 `;
         }).join('');
+    }
 
+    private generateShaders() {
         this.vert = `
 precision highp float;
 // Viewer
 uniform mat4 u_projection;
 uniform mat4 u_modelView;
 // GX_Material
-${vertAttributeDefs}
+${this.generateVertAttributeDefs()}
 uniform mat3 u_TexMtx[10];
 
 out vec3 v_Position;
