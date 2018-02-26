@@ -158,7 +158,7 @@ class WindWakerSceneDesc implements Viewer.SceneDesc {
                 const btkFile = rarc.findFile(`btk/${basename}.btk`);
                 return createScene(gl, bmdFile, btkFile, null);
             });
-            return new MultiScene(scenes.filter((s) => !!s));
+            return new MultiScene(scenes);
         });
     }
 }
@@ -178,8 +178,9 @@ const sceneDescs: Viewer.SceneDesc[] = [
     ]),
 
     new WindWakerSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
-    new WindWakerSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
     new WindWakerSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
+    new WindWakerSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
+    new WindWakerSceneDesc("data/j3d/Room44.arc", "Outset Island"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

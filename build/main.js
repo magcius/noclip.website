@@ -3072,6 +3072,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
         execute: function () {
             ;
             vtxAttributeGenDefs = [
+                { attrib: 0 /* PTMTXIDX */, name: "PosMtxIdx", storage: "float", scale: false },
                 { attrib: 9 /* POS */, name: "Position", storage: "vec3", scale: true },
                 { attrib: 10 /* NRM */, name: "Normal", storage: "vec3", scale: true },
                 { attrib: 11 /* CLR0 */, name: "Color0", storage: "vec4", scale: false },
@@ -3372,7 +3373,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     }).join('');
                 };
                 GX_Program.prototype.generateShaders = function () {
-                    this.vert = "\n// " + this.material.name + "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + this.generateVertAttributeDefs() + "\nuniform mat3 u_TexMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    vec3 p = v_Position;\n    gl_Position = u_projection * u_modelView * vec4(p, 1.0);\n}\n";
+                    this.vert = "\n// " + this.material.name + "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + this.generateVertAttributeDefs() + "\nuniform mat3 u_TexMtx[10];\nuniform mat4 u_PosMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];\n    vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);\n    v_Position = t_Position.xyz;\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * t_Position;\n}\n";
                     var tevStages = this.material.tevStages;
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
@@ -3382,6 +3383,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                 GX_Program.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
                     this.texLodBiasLocation = gl.getUniformLocation(prog, 'u_TextureLODBias');
+                    this.posMtxLocation = gl.getUniformLocation(prog, "u_PosMtx");
                     try {
                         for (var vtxAttributeGenDefs_1 = __values(vtxAttributeGenDefs), vtxAttributeGenDefs_1_1 = vtxAttributeGenDefs_1.next(); !vtxAttributeGenDefs_1_1.done; vtxAttributeGenDefs_1_1 = vtxAttributeGenDefs_1.next()) {
                             var a = vtxAttributeGenDefs_1_1.value;
@@ -3404,17 +3406,11 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                         this.samplerLocations[i] = gl.getUniformLocation(prog, "u_Texture[" + i + "]");
                     var e_17, _a;
                 };
-                GX_Program.prototype.getTexMtxLocation = function (i) {
-                    return this.texMtxLocations[i];
-                };
                 GX_Program.prototype.getScaleUniformLocation = function (vtxAttrib) {
                     var location = this.vtxAttributeScaleLocations[vtxAttrib];
                     if (location === undefined)
                         return null;
                     return location;
-                };
-                GX_Program.prototype.getSamplerLocation = function (i) {
-                    return this.samplerLocations[i];
                 };
                 return GX_Program;
             }(render_4.Program));
@@ -3587,6 +3583,54 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             return chunkSize;
         }
     }
+    function readDRW1Chunk(bmd, buffer, chunkStart, chunkSize) {
+        var view = new DataView(buffer, chunkStart, chunkSize);
+        var weightedJointCount = view.getUint16(0x08);
+        var isWeightedTableOffs = view.getUint32(0x0C);
+        var jointIndexTableOffs = view.getUint32(0x10);
+        var weightedJoints = [];
+        for (var i = 0; i < weightedJointCount; i++) {
+            var isWeighted = !!view.getUint8(isWeightedTableOffs + i);
+            var jointIndex = view.getUint16(jointIndexTableOffs + i * 0x02);
+            weightedJoints.push({ isWeighted: isWeighted, jointIndex: jointIndex });
+        }
+        bmd.drw1 = { weightedJoints: weightedJoints };
+    }
+    function readJNT1Chunk(bmd, buffer, chunkStart, chunkSize) {
+        var view = new DataView(buffer, chunkStart, chunkSize);
+        var boneDataCount = view.getUint16(0x08);
+        util_5.assert(view.getUint16(0x0A) === 0xFFFF);
+        var boneDataTableOffs = view.getUint32(0x0C);
+        var remapTableOffs = view.getUint32(0x10);
+        var remapTable = [];
+        for (var i = 0; i < boneDataCount; i++)
+            remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
+        var nameTableOffs = view.getUint32(0x14);
+        var nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
+        var q = gl_matrix_4.quat.create();
+        var bones = [];
+        var boneDataTableIdx = boneDataTableOffs;
+        for (var i = 0; i < boneDataCount; i++) {
+            var name_8 = nameTable[i];
+            var scaleX = view.getFloat32(boneDataTableIdx + 0x04);
+            var scaleY = view.getFloat32(boneDataTableIdx + 0x08);
+            var scaleZ = view.getFloat32(boneDataTableIdx + 0x0C);
+            var rotationX = view.getUint16(boneDataTableIdx + 0x10) / 0x7FFF;
+            var rotationY = view.getUint16(boneDataTableIdx + 0x12) / 0x7FFF;
+            var rotationZ = view.getUint16(boneDataTableIdx + 0x14) / 0x7FFF;
+            var translationX = view.getFloat32(boneDataTableIdx + 0x18);
+            var translationY = view.getFloat32(boneDataTableIdx + 0x1C);
+            var translationZ = view.getFloat32(boneDataTableIdx + 0x20);
+            // Skipping bounding box data for now.
+            gl_matrix_4.quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
+            var matrix = gl_matrix_4.mat4.create();
+            gl_matrix_4.mat4.fromRotationTranslationScale(matrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
+            // mat4.translate(matrix, matrix, [translationX, translationY, translationZ]);
+            bones.push({ name: name_8, matrix: matrix });
+            boneDataTableIdx += 0x40;
+        }
+        bmd.jnt1 = { remapTable: remapTable, bones: bones };
+    }
     function readIndex(view, offs, type) {
         switch (type) {
             case 0 /* U8 */:
@@ -3602,21 +3646,6 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
     function align(n, multiple) {
         var mask = (multiple - 1);
         return (n + mask) & ~mask;
-    }
-    function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
-        // TODO(jstpierre): Remove these.
-        gl_matrix_4.mat3.fromTranslation(c, [centerS, centerT, centerQ]);
-        gl_matrix_4.mat3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
-        gl_matrix_4.mat3.fromTranslation(m, [translationS, translationT, 0]);
-        gl_matrix_4.mat3.fromRotation(t, rotation);
-        gl_matrix_4.mat3.mul(t, t, ci);
-        gl_matrix_4.mat3.mul(t, c, t);
-        gl_matrix_4.mat3.mul(m, m, t);
-        gl_matrix_4.mat3.fromScaling(t, [scaleS, scaleT, 1]);
-        gl_matrix_4.mat3.mul(t, t, ci);
-        gl_matrix_4.mat3.mul(t, c, t);
-        gl_matrix_4.mat3.mul(m, m, t);
-        return m;
     }
     function readSHP1Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = new DataView(buffer, chunkStart, chunkSize);
@@ -3670,12 +3699,19 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             packedVertexSize = align(packedVertexSize, firstAlign);
             // Now parse out the packets.
             var packetIdx = packetTableOffs + (firstPacket * 0x08);
-            var drawCalls = [];
+            var allDrawCalls = [];
+            var packets = [];
             var totalVertexCount = 0;
             for (var j = 0; j < packetCount; j++) {
                 var packetSize = view.getUint32(packetIdx + 0x00);
                 var packetStart = primDataOffs + view.getUint32(packetIdx + 0x04);
-                // XXX: We need an "update matrix table" command here in the draw call list.
+                var packetMatrixDataOffs = matrixDataOffs + (firstMatrix + j) * 0x08;
+                var matrixCount = view.getUint16(packetMatrixDataOffs + 0x02);
+                var matrixFirstIndex = view.getUint32(packetMatrixDataOffs + 0x04);
+                var packetMatrixTableOffs = chunkStart + matrixTableOffs + matrixFirstIndex * 0x02;
+                var packetMatrixTableEnd = packetMatrixTableOffs + matrixCount * 0x02;
+                var weightedJointTable = new Uint16Array(endian_2.be16toh(buffer.slice(packetMatrixTableOffs, packetMatrixTableEnd)));
+                var drawCalls = [];
                 var drawCallEnd = packetStart + packetSize;
                 var drawCallIdx = packetStart;
                 while (true) {
@@ -3691,8 +3727,11 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                     totalVertexCount += vertexCount;
                     // Skip over the index data.
                     drawCallIdx += vertexIndexSize * vertexCount;
-                    drawCalls.push({ primType: primType, vertexCount: vertexCount, first: first, srcOffs: srcOffs });
+                    var drawCall = { primType: primType, vertexCount: vertexCount, first: first, srcOffs: srcOffs };
+                    drawCalls.push(drawCall);
+                    allDrawCalls.push(drawCall);
                 }
+                packets.push({ weightedJointTable: weightedJointTable, drawCalls: drawCalls });
                 packetIdx += 0x08;
             }
             // Now copy our data into it.
@@ -3700,8 +3739,8 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             var packedDataView = new Uint8Array(packedDataSize);
             var packedDataOffs = 0;
             try {
-                for (var drawCalls_1 = __values(drawCalls), drawCalls_1_1 = drawCalls_1.next(); !drawCalls_1_1.done; drawCalls_1_1 = drawCalls_1.next()) {
-                    var drawCall = drawCalls_1_1.value;
+                for (var allDrawCalls_1 = __values(allDrawCalls), allDrawCalls_1_1 = allDrawCalls_1.next(); !allDrawCalls_1_1.done; allDrawCalls_1_1 = allDrawCalls_1.next()) {
+                    var drawCall = allDrawCalls_1_1.value;
                     var drawCallIdx = drawCall.srcOffs;
                     for (var j = 0; j < drawCall.vertexCount; j++) {
                         var packedDataOffs_ = packedDataOffs;
@@ -3734,19 +3773,34 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             catch (e_19_1) { e_19 = { error: e_19_1 }; }
             finally {
                 try {
-                    if (drawCalls_1_1 && !drawCalls_1_1.done && (_b = drawCalls_1.return)) _b.call(drawCalls_1);
+                    if (allDrawCalls_1_1 && !allDrawCalls_1_1.done && (_b = allDrawCalls_1.return)) _b.call(allDrawCalls_1);
                 }
                 finally { if (e_19) throw e_19.error; }
             }
             util_5.assert((packedVertexSize * totalVertexCount) === packedDataOffs);
             var packedData = packedDataView.buffer;
             // Now we should have a complete shape. Onto the next!
-            shapes.push({ packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, drawCalls: drawCalls });
+            shapes.push({ packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, packets: packets });
             shapeIdx += 0x28;
         }
         var shp1 = { shapes: shapes };
         bmd.shp1 = shp1;
         var e_19, _b, e_18, _a;
+    }
+    function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
+        // TODO(jstpierre): Remove these.
+        gl_matrix_4.mat3.fromTranslation(c, [centerS, centerT, centerQ]);
+        gl_matrix_4.mat3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
+        gl_matrix_4.mat3.fromTranslation(m, [translationS, translationT, 0]);
+        gl_matrix_4.mat3.fromRotation(t, rotation);
+        gl_matrix_4.mat3.mul(t, t, ci);
+        gl_matrix_4.mat3.mul(t, c, t);
+        gl_matrix_4.mat3.mul(m, m, t);
+        gl_matrix_4.mat3.fromScaling(t, [scaleS, scaleT, 1]);
+        gl_matrix_4.mat3.mul(t, t, ci);
+        gl_matrix_4.mat3.mul(t, c, t);
+        gl_matrix_4.mat3.mul(m, m, t);
+        return m;
     }
     function readColor32(view, srcOffs) {
         var r = view.getUint8(srcOffs + 0x00) / 255;
@@ -3789,7 +3843,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         var materialEntryIdx = view.getUint32(0x0C);
         for (var i = 0; i <= maxIndex; i++) {
             var index = i;
-            var name_8 = nameTable[i];
+            var name_9 = nameTable[i];
             var flags = view.getUint8(materialEntryIdx + 0x00);
             var cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
             var numChansIndex = view.getUint8(materialEntryIdx + 0x02);
@@ -3967,7 +4021,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             var ropInfo = { blendMode: blendMode, depthTest: depthTest, depthFunc: depthFunc, depthWrite: depthWrite };
             var translucent = !(flags & 0x03);
             materialEntries.push({
-                index: index, name: name_8,
+                index: index, name: name_9,
                 translucent: translucent,
                 textureIndexes: textureIndexes,
                 cullMode: cullMode,
@@ -3993,7 +4047,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         var textures = [];
         var textureIdx = textureHeaderOffs;
         for (var i = 0; i < textureCount; i++) {
-            var name_9 = nameTable[i];
+            var name_10 = nameTable[i];
             var format = view.getUint8(textureIdx + 0x00);
             var width = view.getUint16(textureIdx + 0x02);
             var height = view.getUint16(textureIdx + 0x04);
@@ -4007,12 +4061,11 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             var mipCount = view.getUint8(textureIdx + 0x18);
             var dataOffs = view.getUint32(textureIdx + 0x1C);
             var data = buffer.slice(chunkStart + textureIdx + dataOffs);
-            textures.push({ name: name_9, format: format, width: width, height: height, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter, mipCount: mipCount, data: data });
+            textures.push({ name: name_10, format: format, width: width, height: height, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter, mipCount: mipCount, data: data });
             textureIdx += 0x20;
         }
         bmd.tex1 = { textures: textures };
     }
-    exports_19("readTEX1Chunk", readTEX1Chunk);
     function readTTK1Chunk(btk, buffer, chunkStart, chunkSize) {
         var view = new DataView(buffer, chunkStart, chunkSize);
         var loopMode = view.getUint8(0x08);
@@ -4128,8 +4181,8 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                         INF1: readINF1Chunk,
                         VTX1: readVTX1Chunk,
                         EVP1: null,
-                        DRW1: null,
-                        JNT1: null,
+                        DRW1: readDRW1Chunk,
+                        JNT1: readJNT1Chunk,
                         SHP1: readSHP1Chunk,
                         MAT3: readMAT3Chunk,
                         TEX1: readTEX1Chunk,
@@ -4234,12 +4287,12 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                     for (var i = 0; i < numChunks; i++) {
                         var chunkStart = offs;
                         var chunkId = util_5.readString(buffer, chunkStart + 0x00, 4);
-                        var chunkSize = view.getUint32(chunkStart + 0x04) - 0x04;
+                        var chunkSize = view.getUint32(chunkStart + 0x04);
                         var parseFunc = parseFuncs[chunkId];
                         if (parseFunc === undefined)
                             throw new Error("Unknown chunk " + chunkId + "!");
                         if (parseFunc !== null)
-                            parseFunc(btk, buffer, chunkStart, chunkSize);
+                            parseFunc(btk, buffer, chunkStart, chunkSize - 0x04);
                         offs += chunkSize;
                     }
                     return btk;
@@ -4624,7 +4677,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 throw new Error("Unknown PrimType " + primType);
         }
     }
-    var gl_matrix_5, j3d_1, GX, GX_Material, GX_Texture, Viewer, Command_Shape, Command_Material, Scene;
+    var gl_matrix_5, j3d_1, GX, GX_Material, GX_Texture, Viewer, posMtxTable, Command_Shape, Command_Material, Scene;
     return {
         setters: [
             function (gl_matrix_5_1) {
@@ -4647,10 +4700,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
             }
         ],
         execute: function () {
+            posMtxTable = new Float32Array(16 * 10);
             Command_Shape = /** @class */ (function () {
-                function Command_Shape(gl, bmd, shape) {
+                function Command_Shape(gl, bmd, shape, jointMatrices) {
                     this.bmd = bmd;
                     this.shape = shape;
+                    this.jointMatrices = jointMatrices;
                     this.vao = gl.createVertexArray();
                     gl.bindVertexArray(this.vao);
                     this.buffer = gl.createBuffer();
@@ -4676,10 +4731,27 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     var e_20, _d;
                 }
                 Command_Shape.prototype.exec = function (state) {
+                    var _this = this;
                     var gl = state.gl;
+                    var prog = state.currentProgram;
                     gl.bindVertexArray(this.vao);
-                    this.shape.drawCalls.forEach(function (drawCall) {
-                        gl.drawArrays(translatePrimType(gl, drawCall.primType), drawCall.first, drawCall.vertexCount);
+                    this.shape.packets.forEach(function (packet) {
+                        // Update our matrix table.
+                        for (var i = 0; i < packet.weightedJointTable.length; i++) {
+                            var weightedJointIndex = packet.weightedJointTable[i];
+                            // Leave existing joint.
+                            if (weightedJointIndex === 0xFFFF)
+                                continue;
+                            var weightedJoint = _this.bmd.drw1.weightedJoints[weightedJointIndex];
+                            if (weightedJoint.isWeighted)
+                                throw "whoops";
+                            var posMtx = _this.jointMatrices[weightedJoint.jointIndex];
+                            posMtxTable.set(posMtx, i * 16);
+                        }
+                        gl.uniformMatrix4fv(prog.posMtxLocation, false, posMtxTable);
+                        packet.drawCalls.forEach(function (drawCall) {
+                            gl.drawArrays(translatePrimType(gl, drawCall.primType), drawCall.first, drawCall.vertexCount);
+                        });
                     });
                     gl.bindVertexArray(null);
                 };
@@ -4803,7 +4875,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                             continue;
                         if (!(this.btk && this.btk.applyAnimation(matrix, this.material.name, i, state.time)))
                             gl_matrix_5.mat3.copy(matrix, texMtx.matrix);
-                        var location_4 = this.program.getTexMtxLocation(i);
+                        var location_4 = this.program.texMtxLocations[i];
                         gl.uniformMatrix3fv(location_4, false, matrix);
                     }
                     for (var i = 0; i < this.textures.length; i++) {
@@ -4811,7 +4883,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         if (texture === null)
                             continue;
                         gl.activeTexture(gl.TEXTURE0 + i);
-                        gl.uniform1i(this.program.getSamplerLocation(i), i);
+                        gl.uniform1i(this.program.samplerLocations[i], i);
                         gl.bindTexture(gl.TEXTURE_2D, texture);
                     }
                     var e_21, _c;
@@ -4866,40 +4938,51 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 };
                 Scene.prototype.translateModel = function (bmd) {
                     var _this = this;
+                    this.opaqueCommands = [];
+                    this.transparentCommands = [];
+                    this.jointMatrices = [];
                     var mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
                     this.materialCommands = mat3.materialEntries.map(function (material) {
                         return new Command_Material(_this.gl, _this.bmd, _this.btk, _this.bmt, material);
                     });
                     this.shapeCommands = bmd.shp1.shapes.map(function (shape) {
-                        return new Command_Shape(_this.gl, _this.bmd, shape);
+                        return new Command_Shape(_this.gl, _this.bmd, shape, _this.jointMatrices);
                     });
-                    this.opaqueCommands = [];
-                    this.transparentCommands = [];
                     // Iterate through scene graph.
-                    // TODO(jstpierre): Clean this up.
-                    var context = {};
+                    var context = {
+                        commandList: null,
+                        parentJointMatrix: gl_matrix_5.mat4.create(),
+                    };
                     this.translateSceneGraph(bmd.inf1.sceneGraph, context);
                 };
                 Scene.prototype.translateSceneGraph = function (node, context) {
                     var mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
+                    var jnt1 = this.bmd.jnt1;
+                    var commandList = context.commandList;
+                    var parentJointMatrix = context.parentJointMatrix;
                     switch (node.type) {
                         case j3d_1.HierarchyType.Shape:
-                            context.currentCommandList.push(this.shapeCommands[node.shapeIdx]);
+                            commandList.push(this.shapeCommands[node.shapeIdx]);
                             break;
                         case j3d_1.HierarchyType.Joint:
-                            // XXX: Implement joints...
+                            var boneMatrix = jnt1.bones[jnt1.remapTable[node.jointIdx]].matrix;
+                            var jointMatrix = gl_matrix_5.mat4.create();
+                            gl_matrix_5.mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
+                            this.jointMatrices[node.jointIdx] = jointMatrix;
+                            parentJointMatrix = jointMatrix;
                             break;
                         case j3d_1.HierarchyType.Material:
                             var materialIdx = mat3.remapTable[node.materialIdx];
                             var materialCommand = this.materialCommands[materialIdx];
-                            context.currentCommandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
-                            context.currentCommandList.push(materialCommand);
+                            commandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
+                            commandList.push(materialCommand);
                             break;
                     }
+                    var childContext = { commandList: commandList, parentJointMatrix: parentJointMatrix };
                     try {
                         for (var _a = __values(node.children), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var child = _b.value;
-                            this.translateSceneGraph(child, context);
+                            this.translateSceneGraph(child, childContext);
                         }
                     }
                     catch (e_22_1) { e_22 = { error: e_22_1 }; }
@@ -4941,7 +5024,7 @@ System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
         for (var i = 0; i < dirCount; i++) {
             var type = util_6.readString(buffer, dirTableIdx + 0x00, 0x04, false);
             var nameOffs = view.getUint32(dirTableIdx + 0x04);
-            var name_10 = util_6.readString(buffer, strTableOffs + nameOffs, -1, true);
+            var name_11 = util_6.readString(buffer, strTableOffs + nameOffs, -1, true);
             var nameHash = view.getUint16(dirTableIdx + 0x08);
             var fileEntryCount_1 = view.getUint16(dirTableIdx + 0x0A);
             var fileEntryFirstIndex = view.getUint32(dirTableIdx + 0x0C);
@@ -4954,11 +5037,11 @@ System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
                 var nameHash_1 = view.getUint16(fileEntryIdx + 0x02);
                 var flags = view.getUint8(fileEntryIdx + 0x04);
                 var nameOffs_1 = view.getUint16(fileEntryIdx + 0x06);
-                var name_11 = util_6.readString(buffer, strTableOffs + nameOffs_1, -1, true);
+                var name_12 = util_6.readString(buffer, strTableOffs + nameOffs_1, -1, true);
                 var entryDataOffs = view.getUint32(fileEntryIdx + 0x08);
                 var entryDataSize = view.getUint32(fileEntryIdx + 0x0C);
                 fileEntryIdx += 0x14;
-                if (name_11 === '.' || name_11 === '..')
+                if (name_12 === '.' || name_12 === '..')
                     continue;
                 var isDirectory = !!(flags & 0x02);
                 if (isDirectory) {
@@ -4968,12 +5051,12 @@ System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
                 else {
                     var offs = dataOffs + entryDataOffs;
                     var fileBuffer = buffer.slice(offs, offs + entryDataSize);
-                    var file = { name: name_11, buffer: fileBuffer };
+                    var file = { name: name_12, buffer: fileBuffer };
                     files.push(file);
                     allFiles.push(file);
                 }
             }
-            dirEntries.push({ name: name_10, type: type, files: files, subdirIndexes: subdirIndexes });
+            dirEntries.push({ name: name_11, type: type, files: files, subdirIndexes: subdirIndexes });
             dirTableIdx += 0x10;
         }
         var dirs = [];
@@ -5212,7 +5295,7 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                             var btkFile = rarc.findFile("btk/" + basename + ".btk");
                             return createScene(gl, bmdFile, btkFile, null);
                         });
-                        return new MultiScene(scenes.filter(function (s) { return !!s; }));
+                        return new MultiScene(scenes);
                     });
                 };
                 return WindWakerSceneDesc;
@@ -5229,8 +5312,9 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                     new RARCDesc("data/j3d/GalaxySky.arc"),
                 ]),
                 new WindWakerSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
-                new WindWakerSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
                 new WindWakerSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
+                new WindWakerSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
+                new WindWakerSceneDesc("data/j3d/Room44.arc", "Outset Island"),
             ];
             exports_23("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
