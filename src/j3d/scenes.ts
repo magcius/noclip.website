@@ -1,7 +1,7 @@
 
 import { Scene } from 'render';
 
-import { BMD, BTK } from './j3d';
+import { BMD, BTK, BMT } from './j3d';
 import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';
@@ -15,7 +15,7 @@ const name = "J3D Models";
 
 export class MultiScene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
-    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
+    public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
     public textures: HTMLCanvasElement[];
 
@@ -28,6 +28,8 @@ export class MultiScene implements Viewer.Scene {
 
     public render(renderState: RenderState) {
         this.scenes.forEach((scene) => {
+            if (!scene.renderPasses.includes(renderState.currentPass))
+                return;
             scene.render(renderState);
         });
     }
@@ -37,10 +39,26 @@ export class MultiScene implements Viewer.Scene {
     }
 }
 
-function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile) {
+function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
     const bmd = BMD.parse(bmdFile.buffer);
     const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
-    return new Scene(gl, bmd, btk);
+    const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
+    return new Scene(gl, bmd, btk, bmt);
+}
+
+class SunshineClearScene implements Viewer.Scene {
+    public cameraController = Viewer.FPSCameraController;
+    public textures = [];
+    public renderPasses = [ RenderPass.CLEAR ];
+
+    public render(renderState: RenderState) {
+        const gl = renderState.gl;
+        gl.clearColor(0, 0, 0.125, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+
+    public destroy() {
+    }
 }
 
 class SunshineSceneDesc implements Viewer.SceneDesc {
@@ -57,7 +75,8 @@ class SunshineSceneDesc implements Viewer.SceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const rarc = RARC.parse(Yaz0.decompress(result));
-            const scenes = this.createSceneForPrefixes(gl, rarc, ['map/map/map', 'map/map/sea']);
+            const scenes: Viewer.Scene[] = this.createSceneForPrefixes(gl, rarc, ['map/map/map', 'map/map/sea', 'map/map/sky']);
+            scenes.unshift(new SunshineClearScene());
             return new MultiScene(scenes);
         });
     }
@@ -71,7 +90,8 @@ class SunshineSceneDesc implements Viewer.SceneDesc {
         if (!bmdFile)
             return null;
         const btkFile = rarc.findFile(`${fn}.btk`);
-        return createScene(gl, bmdFile, btkFile);
+        const bmtFile = rarc.findFile(`${fn}.bmt`);
+        return createScene(gl, bmdFile, btkFile, bmtFile);
     }
 }
 
@@ -92,7 +112,7 @@ class RARCDesc implements Viewer.SceneDesc {
             // Find a BMD and a BTK.
             const bmdFile = rarc.files.find((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
             const btkFile = rarc.files.find((f) => f.name.endsWith('.btk'));
-            return createScene(gl, bmdFile, btkFile);
+            return createScene(gl, bmdFile, btkFile, null);
         });
     }
 }
@@ -134,7 +154,7 @@ class WindWakerSceneDesc implements Viewer.SceneDesc {
                 // Find the corresponding btk.
                 const basename = bdlFile.name.split('.')[0];
                 const btkFile = rarc.findFile(`btk/${basename}.btk`);
-                return createScene(gl, bdlFile, btkFile);
+                return createScene(gl, bdlFile, btkFile, null);
             });
             return new MultiScene(scenes.filter((s) => !!s));
         });

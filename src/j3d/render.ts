@@ -1,7 +1,7 @@
 
 import { mat3 } from 'gl-matrix';
 
-import { BMD, BTK, TEX1_Texture, Shape, HierarchyNode, HierarchyType } from './j3d';
+import { BMD, BTK, BMT, TEX1_Texture, Shape, HierarchyNode, HierarchyType } from './j3d';
 
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
@@ -99,15 +99,17 @@ class Command_Shape {
 class Command_Material {
     public bmd: BMD;
     public btk: BTK;
+    public bmt: BMT;
     public material: GX_Material.GXMaterial;
 
     private textures: WebGLTexture[] = [];
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, material: GX_Material.GXMaterial) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT, material: GX_Material.GXMaterial) {
         this.bmd = bmd;
         this.btk = btk;
+        this.bmt = bmt;
         this.material = material;
         this.program = new GX_Material.GX_Program(material);
         this.renderFlags = GX_Material.translateRenderFlags(this.material);
@@ -116,11 +118,12 @@ class Command_Material {
     }
 
     private translateTextures(gl: WebGL2RenderingContext): WebGLTexture[] {
+        const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
         const textures = [];
         for (let i = 0; i < this.material.textureIndexes.length; i++) {
             const texIndex = this.material.textureIndexes[i];
             if (texIndex >= 0)
-                textures[i] = Command_Material.translateTexture(gl, this.bmd.tex1.textures[texIndex]);
+                textures[i] = Command_Material.translateTexture(gl, tex1.textures[texIndex]);
             else
                 textures[i] = null;
         }
@@ -244,19 +247,22 @@ export class Scene implements Viewer.Scene {
     public textures: HTMLCanvasElement[];
     private bmd: BMD;
     private btk: BTK;
+    private bmt: BMT;
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
 
     private materialCommands: Command_Material[];
     private shapeCommands: Command_Shape[];
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT) {
         this.gl = gl;
         this.bmd = bmd;
         this.btk = btk;
+        this.bmt = bmt;
         this.translateModel(this.bmd);
 
-        this.textures = this.bmd.tex1.textures.map((tex) => this.translateTextureToCanvas(tex));
+        const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
+        this.textures = tex1.textures.map((tex) => this.translateTextureToCanvas(tex));
     }
 
     private translateTextureToCanvas(texture: TEX1_Texture): HTMLCanvasElement {
@@ -292,8 +298,9 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateModel(bmd: BMD) {
-        this.materialCommands = bmd.mat3.materialEntries.map((material) => {
-            return new Command_Material(this.gl, this.bmd, this.btk, material);
+        const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
+        this.materialCommands = mat3.materialEntries.map((material) => {
+            return new Command_Material(this.gl, this.bmd, this.btk, this.bmt, material);
         });
         this.shapeCommands = bmd.shp1.shapes.map((shape) => {
             return new Command_Shape(this.gl, this.bmd, shape);
@@ -309,6 +316,8 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateSceneGraph(node: HierarchyNode, context) {
+        const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
+
         switch (node.type) {
         case HierarchyType.Shape:
             context.currentCommandList.push(this.shapeCommands[node.shapeIdx]);
@@ -317,7 +326,7 @@ export class Scene implements Viewer.Scene {
             // XXX: Implement joints...
             break;
         case HierarchyType.Material:
-            const materialIdx = this.bmd.mat3.remapTable[node.materialIdx];
+            const materialIdx = mat3.remapTable[node.materialIdx];
             const materialCommand = this.materialCommands[materialIdx];
             context.currentCommandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
             context.currentCommandList.push(materialCommand);

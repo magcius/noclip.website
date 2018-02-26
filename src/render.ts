@@ -9,6 +9,17 @@ export const enum RenderPass {
     COUNT,
 }
 
+export enum CompareMode {
+    NEVER   = WebGL2RenderingContext.NEVER,
+    LESS    = WebGL2RenderingContext.LESS,
+    EQUAL   = WebGL2RenderingContext.EQUAL,
+    LEQUAL  = WebGL2RenderingContext.LEQUAL,
+    GREATER = WebGL2RenderingContext.GREATER,
+    NEQUAL  = WebGL2RenderingContext.NOTEQUAL,
+    GEQUAL  = WebGL2RenderingContext.GEQUAL,
+    ALWAYS  = WebGL2RenderingContext.ALWAYS,
+}
+
 export enum FrontFaceMode {
     CCW = WebGL2RenderingContext.CCW,
     CW  = WebGL2RenderingContext.CW,
@@ -35,13 +46,14 @@ export enum BlendFactor {
 }
 
 export class RenderFlags {
-    depthWrite: boolean = undefined;
-    depthTest: boolean = undefined;
-    blend: boolean = undefined;
-    blendSrc: BlendFactor = undefined;
-    blendDst: BlendFactor = undefined;
-    cullMode: CullMode = undefined;
-    frontFace: FrontFaceMode = undefined;
+    public depthWrite: boolean = undefined;
+    public depthTest: boolean = undefined;
+    public depthFunc: CompareMode = undefined;
+    public blend: boolean = undefined;
+    public blendSrc: BlendFactor = undefined;
+    public blendDst: BlendFactor = undefined;
+    public cullMode: CullMode = undefined;
+    public frontFace: FrontFaceMode = undefined;
 
     static default: RenderFlags = new RenderFlags();
 
@@ -50,6 +62,8 @@ export class RenderFlags {
             dst.depthWrite = src.depthWrite;
         if (dst.depthTest === undefined)
             dst.depthTest = src.depthTest;
+        if (dst.depthFunc === undefined)
+            dst.depthFunc = src.depthFunc;
         if (dst.blend === undefined)
             dst.blend = src.blend;
         if (dst.blendSrc === undefined)
@@ -86,6 +100,10 @@ export class RenderFlags {
             gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
         }
 
+        if (oldFlags.depthFunc !== newFlags.depthFunc) {
+            gl.depthFunc(newFlags.depthFunc);
+        }
+
         if (oldFlags.cullMode !== newFlags.cullMode) {
             if (oldFlags.cullMode === CullMode.NONE)
                 gl.enable(gl.CULL_FACE);
@@ -112,6 +130,7 @@ RenderFlags.default.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
 RenderFlags.default.cullMode = CullMode.NONE;
 RenderFlags.default.depthTest = false;
 RenderFlags.default.depthWrite = true;
+RenderFlags.default.depthFunc = CompareMode.LEQUAL;
 RenderFlags.default.frontFace = FrontFaceMode.CCW;
 
 export interface Viewport {

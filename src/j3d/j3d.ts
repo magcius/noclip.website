@@ -293,17 +293,6 @@ function align(n: number, multiple: number): number {
 }
 
 function createTexMtx(m: matrix3, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
-    /*
-    const sin = Math.sin(rotation * Math.PI);
-    const cos = Math.cos(rotation * Math.PI);
-    const m = mat2d.fromValues(
-        scaleS * cos, scaleS * -sin,
-        scaleT * sin, scaleS *  cos,
-        translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS *  sin),
-        translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos)
-    );
-    */
-
     const CN = matrix3.create();
     matrix3.fromTranslation(CN, [centerS, centerT, centerQ]);
     
@@ -325,7 +314,6 @@ function createTexMtx(m: matrix3, scaleS: number, scaleT: number, rotation: numb
 
     matrix3.mul(m, T, R);
     matrix3.mul(m, m, S);
-    // matrix3.transpose(m, m);
 
     return m;
 }
@@ -798,7 +786,7 @@ export class BMD {
         const size = view.getUint32(0x08);
         const numChunks = view.getUint32(0x0C);
         let offs = 0x20;
-    
+
         type ParseFunc = (bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) => void;
         const parseFuncs: { [name: string]: ParseFunc } = {
             INF1: readINF1Chunk,
@@ -830,7 +818,6 @@ export class BMD {
         return bmd;
     }
 }
-
 
 export const enum LoopMode {
     ONCE = 0,
@@ -1076,5 +1063,47 @@ export class BTK {
         }
 
         return btk;
+    }
+}
+
+export class BMT {
+    public mat3: MAT3;
+    public tex1: TEX1;
+
+    static parse(buffer: ArrayBuffer) {
+        const bmt = new BMT();
+    
+        const view = new DataView(buffer);
+        const magic = readString(buffer, 0, 8);
+        assert(magic === 'J3D2bmt3');
+    
+        const size = view.getUint32(0x08);
+        const numChunks = view.getUint32(0x0C);
+        let offs = 0x20;
+    
+        // XXX(jstpierre): Type system abuse.
+        type ParseFunc = (bmt: any, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) => void;
+        const parseFuncs: { [name: string]: ParseFunc } = {
+            MAT3: readMAT3Chunk,
+            TEX1: readTEX1Chunk,
+            MDL3: null,
+        };
+    
+        for (let i = 0; i < numChunks; i++) {
+            const chunkStart = offs;
+            const chunkId = readString(buffer, chunkStart + 0x00, 4);
+            const chunkSize = view.getUint32(chunkStart + 0x04);
+    
+            const parseFunc = parseFuncs[chunkId];
+            if (parseFunc === undefined)
+                throw new Error(`Unknown chunk ${chunkId}!`);
+    
+            if (parseFunc !== null)
+                parseFunc(bmt, buffer, chunkStart, chunkSize);
+    
+            offs += chunkSize;
+        }
+    
+        return bmt;
     }
 }
