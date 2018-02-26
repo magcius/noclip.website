@@ -292,29 +292,21 @@ function align(n: number, multiple: number): number {
     return (n + mask) & ~mask;
 }
 
+// temp, center, center inverse
+const t = matrix3.create(), c = matrix3.create(), ci = matrix3.create();
 function createTexMtx(m: matrix3, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
-    const CN = matrix3.create();
-    matrix3.fromTranslation(CN, [centerS, centerT, centerQ]);
-    
-    const CI = matrix3.create();
-    matrix3.fromTranslation(CI, [-centerS, -centerT, -centerQ]);
-
-    const S = matrix3.create();
-    matrix3.fromScaling(S, [scaleS, scaleT, 1]);
-    matrix3.mul(S, S, CI);
-    matrix3.mul(S, CN, S);
-
-    const R = matrix3.create();
-    matrix3.fromRotation(R, rotation);
-    matrix3.mul(R, R, CI);
-    matrix3.mul(R, CN, R);
-
-    const T = matrix3.create();
-    matrix3.fromTranslation(T, [translationS, translationT, 0]);
-
-    matrix3.mul(m, T, R);
-    matrix3.mul(m, m, S);
-
+    // TODO(jstpierre): Remove these.
+    matrix3.fromTranslation(c, [centerS, centerT, centerQ]);
+    matrix3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
+    matrix3.fromTranslation(m, [translationS, translationT, 0]);
+    matrix3.fromRotation(t, rotation);
+    matrix3.mul(t, t, ci);
+    matrix3.mul(t, c, t);
+    matrix3.mul(m, m, t);
+    matrix3.fromScaling(t, [scaleS, scaleT, 1]);
+    matrix3.mul(t, t, ci);
+    matrix3.mul(t, c, t);
+    matrix3.mul(m, m, t);
     return m;
 }
 
@@ -1050,7 +1042,7 @@ export class BTK {
         for (let i = 0; i < numChunks; i++) {
             const chunkStart = offs;
             const chunkId = readString(buffer, chunkStart + 0x00, 4);
-            const chunkSize = view.getUint32(chunkStart + 0x04);
+            const chunkSize = view.getUint32(chunkStart + 0x04) - 0x04;
 
             const parseFunc = parseFuncs[chunkId];
             if (parseFunc === undefined)

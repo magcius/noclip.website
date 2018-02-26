@@ -3604,22 +3604,18 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         return (n + mask) & ~mask;
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
-        var CN = gl_matrix_4.mat3.create();
-        gl_matrix_4.mat3.fromTranslation(CN, [centerS, centerT, centerQ]);
-        var CI = gl_matrix_4.mat3.create();
-        gl_matrix_4.mat3.fromTranslation(CI, [-centerS, -centerT, -centerQ]);
-        var S = gl_matrix_4.mat3.create();
-        gl_matrix_4.mat3.fromScaling(S, [scaleS, scaleT, 1]);
-        gl_matrix_4.mat3.mul(S, S, CI);
-        gl_matrix_4.mat3.mul(S, CN, S);
-        var R = gl_matrix_4.mat3.create();
-        gl_matrix_4.mat3.fromRotation(R, rotation);
-        gl_matrix_4.mat3.mul(R, R, CI);
-        gl_matrix_4.mat3.mul(R, CN, R);
-        var T = gl_matrix_4.mat3.create();
-        gl_matrix_4.mat3.fromTranslation(T, [translationS, translationT, 0]);
-        gl_matrix_4.mat3.mul(m, T, R);
-        gl_matrix_4.mat3.mul(m, m, S);
+        // TODO(jstpierre): Remove these.
+        gl_matrix_4.mat3.fromTranslation(c, [centerS, centerT, centerQ]);
+        gl_matrix_4.mat3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
+        gl_matrix_4.mat3.fromTranslation(m, [translationS, translationT, 0]);
+        gl_matrix_4.mat3.fromRotation(t, rotation);
+        gl_matrix_4.mat3.mul(t, t, ci);
+        gl_matrix_4.mat3.mul(t, c, t);
+        gl_matrix_4.mat3.mul(m, m, t);
+        gl_matrix_4.mat3.fromScaling(t, [scaleS, scaleT, 1]);
+        gl_matrix_4.mat3.mul(t, t, ci);
+        gl_matrix_4.mat3.mul(t, c, t);
+        gl_matrix_4.mat3.mul(m, m, t);
         return m;
     }
     function readSHP1Chunk(bmd, buffer, chunkStart, chunkSize) {
@@ -4083,13 +4079,13 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             var centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
             var centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
             var s = readAnimationComponent();
-            var t = readAnimationComponent();
+            var t_1 = readAnimationComponent();
             var q = readAnimationComponent();
-            materialAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, texMtxIndex: texMtxIndex, centerS: centerS, centerT: centerT, centerQ: centerQ, s: s, t: t, q: q });
+            materialAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, texMtxIndex: texMtxIndex, centerS: centerS, centerT: centerT, centerQ: centerQ, s: s, t: t_1, q: q });
         }
         btk.ttk1 = { duration: duration, loopMode: loopMode, rotationScale: rotationScale, materialAnimationEntries: materialAnimationEntries };
     }
-    var GX, endian_2, util_5, gl_matrix_4, HierarchyType, BMD, BTK, BMT;
+    var GX, endian_2, util_5, gl_matrix_4, HierarchyType, t, c, ci, BMD, BTK, BMT;
     return {
         setters: [
             function (GX_2) {
@@ -4115,6 +4111,8 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 HierarchyType[HierarchyType["Shape"] = 18] = "Shape";
             })(HierarchyType || (HierarchyType = {}));
             exports_19("HierarchyType", HierarchyType);
+            // temp, center, center inverse
+            t = gl_matrix_4.mat3.create(), c = gl_matrix_4.mat3.create(), ci = gl_matrix_4.mat3.create();
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
@@ -4236,7 +4234,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                     for (var i = 0; i < numChunks; i++) {
                         var chunkStart = offs;
                         var chunkId = util_5.readString(buffer, chunkStart + 0x00, 4);
-                        var chunkSize = view.getUint32(chunkStart + 0x04);
+                        var chunkSize = view.getUint32(chunkStart + 0x04) - 0x04;
                         var parseFunc = parseFuncs[chunkId];
                         if (parseFunc === undefined)
                             throw new Error("Unknown chunk " + chunkId + "!");
@@ -4776,7 +4774,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     // LOD Bias.
                     var width = state.viewport.canvas.width;
                     var height = state.viewport.canvas.height;
-                    var bias = Math.log2(Math.min(width / 640, height / 480));
+                    // GC's internal EFB is sized at 640x528. Bias our mips so that it's like the user
+                    // is rendering things in that resolution.
+                    var bias = Math.log2(Math.min(width / 640, height / 528));
                     gl.uniform1f(this.program.texLodBiasLocation, bias);
                     try {
                         // Bind our scale uniforms.
@@ -5229,6 +5229,8 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                     new RARCDesc("data/j3d/GalaxySky.arc"),
                 ]),
                 new WindWakerSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
+                new WindWakerSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
+                new WindWakerSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
             ];
             exports_23("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
