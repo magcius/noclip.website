@@ -3246,7 +3246,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     }
                 };
                 GX_Program.prototype.generateTexAccess = function (stage) {
-                    return "textureProj(u_Texture[" + stage.texMap + "], v_TexCoord" + stage.texCoordId + ")";
+                    return "textureProj(u_Texture[" + stage.texMap + "], v_TexCoord" + stage.texCoordId + ", u_TextureLODBias)";
                 };
                 GX_Program.prototype.generateColorIn = function (stage, colorIn) {
                     var i = stage.index;
@@ -3377,10 +3377,11 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\n\nvoid main() {\n    const vec4 s_kColor0 = " + this.generateColorConstant(kColors[0]) + ";\n    const vec4 s_kColor1 = " + this.generateColorConstant(kColors[1]) + ";\n    const vec4 s_kColor2 = " + this.generateColorConstant(kColors[2]) + ";\n    const vec4 s_kColor3 = " + this.generateColorConstant(kColors[3]) + ";\n\n    vec4 t_Color0    = " + this.generateColorConstant(rColors[0]) + ";\n    vec4 t_Color1    = " + this.generateColorConstant(rColors[1]) + ";\n    vec4 t_Color2    = " + this.generateColorConstant(rColors[2]) + ";\n    vec4 t_ColorPrev = " + this.generateColorConstant(rColors[3]) + ";\n" + this.generateTevStages(tevStages) + "\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\nuniform sampler2D u_Texture[8];\nuniform float u_TextureLODBias;\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\n\nvoid main() {\n    const vec4 s_kColor0 = " + this.generateColorConstant(kColors[0]) + ";\n    const vec4 s_kColor1 = " + this.generateColorConstant(kColors[1]) + ";\n    const vec4 s_kColor2 = " + this.generateColorConstant(kColors[2]) + ";\n    const vec4 s_kColor3 = " + this.generateColorConstant(kColors[3]) + ";\n\n    vec4 t_Color0    = " + this.generateColorConstant(rColors[0]) + ";\n    vec4 t_Color1    = " + this.generateColorConstant(rColors[1]) + ";\n    vec4 t_Color2    = " + this.generateColorConstant(rColors[2]) + ";\n    vec4 t_ColorPrev = " + this.generateColorConstant(rColors[3]) + ";\n" + this.generateTevStages(tevStages) + "\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 GX_Program.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
+                    this.texLodBiasLocation = gl.getUniformLocation(prog, 'u_TextureLODBias');
                     try {
                         for (var vtxAttributeGenDefs_1 = __values(vtxAttributeGenDefs), vtxAttributeGenDefs_1_1 = vtxAttributeGenDefs_1.next(); !vtxAttributeGenDefs_1_1.done; vtxAttributeGenDefs_1_1 = vtxAttributeGenDefs_1.next()) {
                             var a = vtxAttributeGenDefs_1_1.value;
@@ -4772,6 +4773,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     var gl = state.gl;
                     state.useProgram(this.program);
                     state.useFlags(this.renderFlags);
+                    // LOD Bias.
+                    var width = state.viewport.canvas.width;
+                    var height = state.viewport.canvas.height;
+                    var bias = Math.log2(Math.min(width / 640, height / 480));
+                    gl.uniform1f(this.program.texLodBiasLocation, bias);
                     try {
                         // Bind our scale uniforms.
                         for (var _a = __values(this.bmd.vtx1.vertexArrays.values()), _b = _a.next(); !_b.done; _b = _a.next()) {
