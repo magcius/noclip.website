@@ -178,6 +178,8 @@ const sceneDescs: Viewer.SceneDesc[] = [
     ]),
 
     new WindWakerSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
+    new WindWakerSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
+    new WindWakerSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
