@@ -795,7 +795,7 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     var camera = this.camera;
                     var mult = 10;
                     if (inputManager.isKeyDownRaw(SHIFT))
-                        mult *= 50;
+                        mult *= 5;
                     mult *= (dt / 16.0);
                     var amt;
                     amt = 0;
