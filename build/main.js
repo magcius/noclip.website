@@ -333,7 +333,7 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
         a.push(v);
         return v;
     }
-    var gl_matrix_1, FrontFaceMode, CullMode, BlendFactor, RenderFlags, RenderState, Program, RenderArena;
+    var gl_matrix_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, RenderFlags, RenderState, Program, RenderArena;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -341,6 +341,17 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
             }
         ],
         execute: function () {
+            (function (CompareMode) {
+                CompareMode[CompareMode["NEVER"] = WebGL2RenderingContext.NEVER] = "NEVER";
+                CompareMode[CompareMode["LESS"] = WebGL2RenderingContext.LESS] = "LESS";
+                CompareMode[CompareMode["EQUAL"] = WebGL2RenderingContext.EQUAL] = "EQUAL";
+                CompareMode[CompareMode["LEQUAL"] = WebGL2RenderingContext.LEQUAL] = "LEQUAL";
+                CompareMode[CompareMode["GREATER"] = WebGL2RenderingContext.GREATER] = "GREATER";
+                CompareMode[CompareMode["NEQUAL"] = WebGL2RenderingContext.NOTEQUAL] = "NEQUAL";
+                CompareMode[CompareMode["GEQUAL"] = WebGL2RenderingContext.GEQUAL] = "GEQUAL";
+                CompareMode[CompareMode["ALWAYS"] = WebGL2RenderingContext.ALWAYS] = "ALWAYS";
+            })(CompareMode || (CompareMode = {}));
+            exports_4("CompareMode", CompareMode);
             (function (FrontFaceMode) {
                 FrontFaceMode[FrontFaceMode["CCW"] = WebGL2RenderingContext.CCW] = "CCW";
                 FrontFaceMode[FrontFaceMode["CW"] = WebGL2RenderingContext.CW] = "CW";
@@ -370,6 +381,7 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                 function RenderFlags() {
                     this.depthWrite = undefined;
                     this.depthTest = undefined;
+                    this.depthFunc = undefined;
                     this.blend = undefined;
                     this.blendSrc = undefined;
                     this.blendDst = undefined;
@@ -381,6 +393,8 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                         dst.depthWrite = src.depthWrite;
                     if (dst.depthTest === undefined)
                         dst.depthTest = src.depthTest;
+                    if (dst.depthFunc === undefined)
+                        dst.depthFunc = src.depthFunc;
                     if (dst.blend === undefined)
                         dst.blend = src.blend;
                     if (dst.blendSrc === undefined)
@@ -413,6 +427,9 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                     if (oldFlags.blendSrc !== newFlags.blendSrc || oldFlags.blendDst !== newFlags.blendDst) {
                         gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
                     }
+                    if (oldFlags.depthFunc !== newFlags.depthFunc) {
+                        gl.depthFunc(newFlags.depthFunc);
+                    }
                     if (oldFlags.cullMode !== newFlags.cullMode) {
                         if (oldFlags.cullMode === CullMode.NONE)
                             gl.enable(gl.CULL_FACE);
@@ -439,6 +456,7 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
             RenderFlags.default.cullMode = CullMode.NONE;
             RenderFlags.default.depthTest = false;
             RenderFlags.default.depthWrite = true;
+            RenderFlags.default.depthFunc = CompareMode.LEQUAL;
             RenderFlags.default.frontFace = FrontFaceMode.CCW;
             RenderState = /** @class */ (function () {
                 function RenderState(viewport) {
@@ -777,7 +795,7 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     var camera = this.camera;
                     var mult = 10;
                     if (inputManager.isKeyDownRaw(SHIFT))
-                        mult *= 5;
+                        mult *= 50;
                     mult *= (dt / 16.0);
                     var amt;
                     amt = 0;
@@ -2987,11 +3005,32 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                 return render_4.BlendFactor.ONE_MINUS_DST_ALPHA;
         }
     }
+    function translateCompareType(compareType) {
+        switch (compareType) {
+            case 0 /* NEVER */:
+                return render_4.CompareMode.NEVER;
+            case 1 /* LESS */:
+                return render_4.CompareMode.LESS;
+            case 2 /* EQUAL */:
+                return render_4.CompareMode.EQUAL;
+            case 3 /* LEQUAL */:
+                return render_4.CompareMode.LEQUAL;
+            case 4 /* GREATER */:
+                return render_4.CompareMode.GREATER;
+            case 5 /* NEQUAL */:
+                return render_4.CompareMode.NEQUAL;
+            case 6 /* GEQUAL */:
+                return render_4.CompareMode.GEQUAL;
+            case 7 /* ALWAYS */:
+                return render_4.CompareMode.ALWAYS;
+        }
+    }
     function translateRenderFlags(material) {
         var renderFlags = new render_4.RenderFlags();
         renderFlags.cullMode = translateCullMode(material.cullMode);
         renderFlags.depthWrite = material.ropInfo.depthWrite;
         renderFlags.depthTest = material.ropInfo.depthTest;
+        renderFlags.depthFunc = translateCompareType(material.ropInfo.depthFunc);
         renderFlags.frontFace = render_4.FrontFaceMode.CW;
         renderFlags.blend = material.ropInfo.blendMode.type === 1 /* BLEND */;
         renderFlags.blendSrc = translateBlendFactor(material.ropInfo.blendMode.srcFactor);
@@ -3541,16 +3580,6 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         return (n + mask) & ~mask;
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
-        /*
-        const sin = Math.sin(rotation * Math.PI);
-        const cos = Math.cos(rotation * Math.PI);
-        const m = mat2d.fromValues(
-            scaleS * cos, scaleS * -sin,
-            scaleT * sin, scaleS *  cos,
-            translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS *  sin),
-            translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos)
-        );
-        */
         var CN = gl_matrix_4.mat3.create();
         gl_matrix_4.mat3.fromTranslation(CN, [centerS, centerT, centerQ]);
         var CI = gl_matrix_4.mat3.create();
@@ -3567,7 +3596,6 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         gl_matrix_4.mat3.fromTranslation(T, [translationS, translationT, 0]);
         gl_matrix_4.mat3.mul(m, T, R);
         gl_matrix_4.mat3.mul(m, m, S);
-        // matrix3.transpose(m, m);
         return m;
     }
     function readSHP1Chunk(bmd, buffer, chunkStart, chunkSize) {
@@ -4037,7 +4065,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         }
         btk.ttk1 = { duration: duration, loopMode: loopMode, rotationScale: rotationScale, materialAnimationEntries: materialAnimationEntries };
     }
-    var GX, endian_2, util_5, gl_matrix_4, HierarchyType, BMD, BTK;
+    var GX, endian_2, util_5, gl_matrix_4, HierarchyType, BMD, BTK, BMT;
     return {
         setters: [
             function (GX_2) {
@@ -4197,6 +4225,38 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 return BTK;
             }());
             exports_19("BTK", BTK);
+            BMT = /** @class */ (function () {
+                function BMT() {
+                }
+                BMT.parse = function (buffer) {
+                    var bmt = new BMT();
+                    var view = new DataView(buffer);
+                    var magic = util_5.readString(buffer, 0, 8);
+                    util_5.assert(magic === 'J3D2bmt3');
+                    var size = view.getUint32(0x08);
+                    var numChunks = view.getUint32(0x0C);
+                    var offs = 0x20;
+                    var parseFuncs = {
+                        MAT3: readMAT3Chunk,
+                        TEX1: readTEX1Chunk,
+                        MDL3: null,
+                    };
+                    for (var i = 0; i < numChunks; i++) {
+                        var chunkStart = offs;
+                        var chunkId = util_5.readString(buffer, chunkStart + 0x00, 4);
+                        var chunkSize = view.getUint32(chunkStart + 0x04);
+                        var parseFunc = parseFuncs[chunkId];
+                        if (parseFunc === undefined)
+                            throw new Error("Unknown chunk " + chunkId + "!");
+                        if (parseFunc !== null)
+                            parseFunc(bmt, buffer, chunkStart, chunkSize);
+                        offs += chunkSize;
+                    }
+                    return bmt;
+                };
+                return BMT;
+            }());
+            exports_19("BMT", BMT);
         }
     };
 });
@@ -4735,21 +4795,23 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 return Command_Shape;
             }());
             Command_Material = /** @class */ (function () {
-                function Command_Material(gl, bmd, btk, material) {
+                function Command_Material(gl, bmd, btk, bmt, material) {
                     this.textures = [];
                     this.bmd = bmd;
                     this.btk = btk;
+                    this.bmt = bmt;
                     this.material = material;
                     this.program = new GX_Material.GX_Program(material);
                     this.renderFlags = GX_Material.translateRenderFlags(this.material);
                     this.textures = this.translateTextures(gl);
                 }
                 Command_Material.prototype.translateTextures = function (gl) {
+                    var tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
                     var textures = [];
                     for (var i = 0; i < this.material.textureIndexes.length; i++) {
                         var texIndex = this.material.textureIndexes[i];
                         if (texIndex >= 0)
-                            textures[i] = Command_Material.translateTexture(gl, this.bmd.tex1.textures[texIndex]);
+                            textures[i] = Command_Material.translateTexture(gl, tex1.textures[texIndex]);
                         else
                             textures[i] = null;
                     }
@@ -4859,15 +4921,17 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 return Command_Material;
             }());
             Scene = /** @class */ (function () {
-                function Scene(gl, bmd, btk) {
+                function Scene(gl, bmd, btk, bmt) {
                     var _this = this;
                     this.cameraController = Viewer.FPSCameraController;
                     this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.gl = gl;
                     this.bmd = bmd;
                     this.btk = btk;
+                    this.bmt = bmt;
                     this.translateModel(this.bmd);
-                    this.textures = this.bmd.tex1.textures.map(function (tex) { return _this.translateTextureToCanvas(tex); });
+                    var tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
+                    this.textures = tex1.textures.map(function (tex) { return _this.translateTextureToCanvas(tex); });
                 }
                 Scene.prototype.translateTextureToCanvas = function (texture) {
                     var rgbaTexture = GX_Texture.decodeTexture(texture, false);
@@ -4900,8 +4964,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 };
                 Scene.prototype.translateModel = function (bmd) {
                     var _this = this;
-                    this.materialCommands = bmd.mat3.materialEntries.map(function (material) {
-                        return new Command_Material(_this.gl, _this.bmd, _this.btk, material);
+                    var mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
+                    this.materialCommands = mat3.materialEntries.map(function (material) {
+                        return new Command_Material(_this.gl, _this.bmd, _this.btk, _this.bmt, material);
                     });
                     this.shapeCommands = bmd.shp1.shapes.map(function (shape) {
                         return new Command_Shape(_this.gl, _this.bmd, shape);
@@ -4914,6 +4979,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     this.translateSceneGraph(bmd.inf1.sceneGraph, context);
                 };
                 Scene.prototype.translateSceneGraph = function (node, context) {
+                    var mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
                     switch (node.type) {
                         case j3d_1.HierarchyType.Shape:
                             context.currentCommandList.push(this.shapeCommands[node.shapeIdx]);
@@ -4922,7 +4988,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                             // XXX: Implement joints...
                             break;
                         case j3d_1.HierarchyType.Material:
-                            var materialIdx = this.bmd.mat3.remapTable[node.materialIdx];
+                            var materialIdx = mat3.remapTable[node.materialIdx];
                             var materialCommand = this.materialCommands[materialIdx];
                             context.currentCommandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
                             context.currentCommandList.push(materialCommand);
@@ -4956,12 +5022,13 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
 System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "viewer", "progress", "util"], function (exports_23, context_23) {
     "use strict";
     var __moduleName = context_23 && context_23.id;
-    function createScene(gl, bmdFile, btkFile) {
+    function createScene(gl, bmdFile, btkFile, bmtFile) {
         var bmd = j3d_2.BMD.parse(bmdFile.buffer);
         var btk = btkFile ? j3d_2.BTK.parse(btkFile.buffer) : null;
-        return new render_5.Scene(gl, bmd, btk);
+        var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
+        return new render_5.Scene(gl, bmd, btk, bmt);
     }
-    var render_5, j3d_2, RARC, Yaz0, Viewer, progress_3, util_7, id, name, MultiScene, SunshineSceneDesc, RARCDesc, MultiSceneDesc, WindWakerSceneDesc, sceneDescs, sceneGroup;
+    var render_5, j3d_2, RARC, Yaz0, Viewer, progress_3, util_7, id, name, MultiScene, SunshineClearScene, SunshineSceneDesc, RARCDesc, MultiSceneDesc, WindWakerSceneDesc, sceneDescs, sceneGroup;
     return {
         setters: [
             function (render_5_1) {
@@ -4992,7 +5059,7 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
             MultiScene = /** @class */ (function () {
                 function MultiScene(scenes) {
                     this.cameraController = Viewer.FPSCameraController;
-                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
+                    this.renderPasses = [0 /* CLEAR */, 2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.scenes = scenes;
                     this.textures = [];
                     try {
@@ -5012,6 +5079,8 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
+                        if (!scene.renderPasses.includes(renderState.currentPass))
+                            return;
                         scene.render(renderState);
                     });
                 };
@@ -5021,6 +5090,21 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                 return MultiScene;
             }());
             exports_23("MultiScene", MultiScene);
+            SunshineClearScene = /** @class */ (function () {
+                function SunshineClearScene() {
+                    this.cameraController = Viewer.FPSCameraController;
+                    this.textures = [];
+                    this.renderPasses = [0 /* CLEAR */];
+                }
+                SunshineClearScene.prototype.render = function (renderState) {
+                    var gl = renderState.gl;
+                    gl.clearColor(0, 0, 0.125, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                };
+                SunshineClearScene.prototype.destroy = function () {
+                };
+                return SunshineClearScene;
+            }());
             SunshineSceneDesc = /** @class */ (function () {
                 function SunshineSceneDesc(path, name) {
                     this.name = name;
@@ -5031,7 +5115,8 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                     var _this = this;
                     return util_7.fetch(this.path).then(function (result) {
                         var rarc = RARC.parse(Yaz0.decompress(result));
-                        var scenes = _this.createSceneForPrefixes(gl, rarc, ['map/map/map', 'map/map/sea']);
+                        var scenes = _this.createSceneForPrefixes(gl, rarc, ['map/map/map', 'map/map/sea', 'map/map/sky']);
+                        scenes.unshift(new SunshineClearScene());
                         return new MultiScene(scenes);
                     });
                 };
@@ -5044,7 +5129,8 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                     if (!bmdFile)
                         return null;
                     var btkFile = rarc.findFile(fn + ".btk");
-                    return createScene(gl, bmdFile, btkFile);
+                    var bmtFile = rarc.findFile(fn + ".bmt");
+                    return createScene(gl, bmdFile, btkFile, bmtFile);
                 };
                 return SunshineSceneDesc;
             }());
@@ -5061,7 +5147,7 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                         // Find a BMD and a BTK.
                         var bmdFile = rarc.files.find(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
                         var btkFile = rarc.files.find(function (f) { return f.name.endsWith('.btk'); });
-                        return createScene(gl, bmdFile, btkFile);
+                        return createScene(gl, bmdFile, btkFile, null);
                     });
                 };
                 return RARCDesc;
@@ -5093,7 +5179,7 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                             // Find the corresponding btk.
                             var basename = bdlFile.name.split('.')[0];
                             var btkFile = rarc.findFile("btk/" + basename + ".btk");
-                            return createScene(gl, bdlFile, btkFile);
+                            return createScene(gl, bdlFile, btkFile, null);
                         });
                         return new MultiScene(scenes.filter(function (s) { return !!s; }));
                     });

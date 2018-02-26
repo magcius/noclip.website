@@ -5,7 +5,7 @@ import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, FrontFaceMode, RenderFlags, Program, BlendFactor } from '../render';
+import { CullMode, FrontFaceMode, RenderFlags, Program, BlendFactor, CompareMode } from '../render';
 
 // #region Material definition.
 export interface Color {
@@ -617,11 +617,33 @@ function translateBlendFactor(blendFactor: GX.BlendFactor): BlendFactor {
     }
 }
 
+function translateCompareType(compareType: GX.CompareType): CompareMode {
+    switch (compareType) {
+    case GX.CompareType.NEVER:
+        return CompareMode.NEVER;
+    case GX.CompareType.LESS:
+        return CompareMode.LESS;
+    case GX.CompareType.EQUAL:
+        return CompareMode.EQUAL;
+    case GX.CompareType.LEQUAL:
+        return CompareMode.LEQUAL;
+    case GX.CompareType.GREATER:
+        return CompareMode.GREATER;
+    case GX.CompareType.NEQUAL:
+        return CompareMode.NEQUAL;
+    case GX.CompareType.GEQUAL:
+        return CompareMode.GEQUAL;
+    case GX.CompareType.ALWAYS:
+        return CompareMode.ALWAYS;
+    }
+}
+
 export function translateRenderFlags(material: GXMaterial): RenderFlags {
     const renderFlags = new RenderFlags();
     renderFlags.cullMode = translateCullMode(material.cullMode);
     renderFlags.depthWrite = material.ropInfo.depthWrite;
     renderFlags.depthTest = material.ropInfo.depthTest;
+    renderFlags.depthFunc = translateCompareType(material.ropInfo.depthFunc);
     renderFlags.frontFace = FrontFaceMode.CW;
     renderFlags.blend = material.ropInfo.blendMode.type === GX.BlendMode.BLEND;
     renderFlags.blendSrc = translateBlendFactor(material.ropInfo.blendMode.srcFactor);
