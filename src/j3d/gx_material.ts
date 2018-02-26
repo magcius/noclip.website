@@ -393,9 +393,6 @@ export class GX_Program extends Program {
     }
 
     private generateColorOp(stage: TevStage) {
-        if (this.material.name === 'lambert119_v_x' && stage.index === 1)
-            return 't_ColorPrev.rgb = vec3(1, 1, 1);';
-
         const a = this.generateColorIn(stage, stage.colorInA);
         const b = this.generateColorIn(stage, stage.colorInB);
         const c = this.generateColorIn(stage, stage.colorInC);
@@ -504,7 +501,6 @@ void main() {
     v_Color0 = ${this.generateColorChannel(this.material.colorChannels[0], `ReadAttrib_Color0()`)};
     v_Color1 = ${this.generateColorChannel(this.material.colorChannels[1], `ReadAttrib_Color1()`)};
 ${this.generateTexGens(this.material.texGens)}
-
     gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);
 }
 `;

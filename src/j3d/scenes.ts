@@ -137,7 +137,7 @@ class WindWakerSceneDesc implements Viewer.SceneDesc {
                 const btkFile = rarc.findFile(`btk/${basename}.btk`);
                 return createScene(gl, bdlFile, btkFile);
             });
-            return new MultiScene(scenes);
+            return new MultiScene(scenes.filter((s) => !!s));
         });
     }
 }

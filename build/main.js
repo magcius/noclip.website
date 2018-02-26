@@ -3258,8 +3258,6 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     }
                 };
                 GX_Program.prototype.generateColorOp = function (stage) {
-                    if (this.material.name === 'lambert119_v_x' && stage.index === 1)
-                        return 't_ColorPrev.rgb = vec3(1, 1, 1);';
                     var a = this.generateColorIn(stage, stage.colorInA);
                     var b = this.generateColorIn(stage, stage.colorInB);
                     var c = this.generateColorIn(stage, stage.colorInC);
@@ -3312,7 +3310,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     var vertAttributeDefs = vtxAttributeGenDefs.map(function (a) {
                         return "\nlayout(location = " + a.attrib + ") in " + a.storage + " a_" + a.name + ";\n" + (a.scale ? "uniform float u_scale_" + a.name + ";" : "") + "\n" + a.storage + " ReadAttrib_" + a.name + "() {\n    return a_" + a.name + (a.scale ? " * u_scale_" + a.name : "") + ";\n}\n";
                     }).join('');
-                    this.vert = "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + vertAttributeDefs + "\nuniform mat3 u_TexMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n\n    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);\n}\n";
+                    this.vert = "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + vertAttributeDefs + "\nuniform mat3 u_TexMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);\n}\n";
                     var tevStages = this.material.tevStages;
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
@@ -3383,8 +3381,8 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         var packetCount = view.getUint32(0x0C);
         var vertexCount = view.getUint32(0x10);
         var hierarchyOffs = view.getUint32(0x14);
-        var parentStack = [];
-        var node = { type: HierarchyType.Open, children: [] };
+        var node = { type: HierarchyType.End, children: [] };
+        var parentStack = [node];
         var offs = hierarchyOffs;
         outer: while (true) {
             var type = view.getUint16(offs + 0x00);
@@ -3394,25 +3392,27 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 case HierarchyType.End:
                     break outer;
                 case HierarchyType.Open:
-                    parentStack.push(node);
-                    node.children.push(node = { type: HierarchyType.Open, children: [] });
+                    parentStack.unshift(node);
                     break;
                 case HierarchyType.Close:
-                    node = parentStack.pop();
+                    node = parentStack.shift();
                     break;
                 case HierarchyType.Joint:
-                    node.children.push({ type: type, jointIdx: value });
+                    node = { type: type, children: [], jointIdx: value };
+                    parentStack[0].children.unshift(node);
                     break;
                 case HierarchyType.Material:
-                    node.children.push({ type: type, materialIdx: value });
+                    node = { type: type, children: [], materialIdx: value };
+                    parentStack[0].children.unshift(node);
                     break;
                 case HierarchyType.Shape:
-                    node.children.push({ type: type, shapeIdx: value });
+                    node = { type: type, children: [], shapeIdx: value };
+                    parentStack[0].children.unshift(node);
                     break;
             }
         }
-        util_5.assert(parentStack.length === 0);
-        bmd.inf1 = { sceneGraph: node };
+        util_5.assert(parentStack.length === 1);
+        bmd.inf1 = { sceneGraph: parentStack.pop() };
     }
     function getComponentSize(dataType) {
         switch (dataType) {
@@ -3539,6 +3539,37 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         var mask = (multiple - 1);
         return (n + mask) & ~mask;
     }
+    function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
+        /*
+        const sin = Math.sin(rotation * Math.PI);
+        const cos = Math.cos(rotation * Math.PI);
+        const m = mat2d.fromValues(
+            scaleS * cos, scaleS * -sin,
+            scaleT * sin, scaleS *  cos,
+            translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS *  sin),
+            translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos)
+        );
+        */
+        var CN = gl_matrix_4.mat3.create();
+        gl_matrix_4.mat3.fromTranslation(CN, [centerS, centerT, centerQ]);
+        var CI = gl_matrix_4.mat3.create();
+        gl_matrix_4.mat3.fromTranslation(CI, [-centerS, -centerT, -centerQ]);
+        var S = gl_matrix_4.mat3.create();
+        gl_matrix_4.mat3.fromScaling(S, [scaleS, scaleT, 1]);
+        gl_matrix_4.mat3.mul(S, S, CI);
+        gl_matrix_4.mat3.mul(S, CN, S);
+        var R = gl_matrix_4.mat3.create();
+        gl_matrix_4.mat3.fromRotation(R, rotation);
+        gl_matrix_4.mat3.mul(R, R, CI);
+        gl_matrix_4.mat3.mul(R, CN, R);
+        var T = gl_matrix_4.mat3.create();
+        gl_matrix_4.mat3.fromTranslation(T, [translationS, translationT, 0]);
+        gl_matrix_4.mat3.mul(m, T, R);
+        gl_matrix_4.mat3.mul(m, m, S);
+        // matrix3.transpose(m, m);
+        return m;
+    }
+    exports_19("createTexMtx", createTexMtx);
     function readSHP1Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = new DataView(buffer, chunkStart, chunkSize);
         var shapeCount = view.getUint16(0x08);
@@ -3762,7 +3793,7 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 util_5.assert(view.getUint16(texMtxOffs + 0x02) == 0xFFFF);
                 var centerS = view.getFloat32(texMtxOffs + 0x04);
                 var centerT = view.getFloat32(texMtxOffs + 0x08);
-                var centerW = view.getFloat32(texMtxOffs + 0x0C);
+                var centerQ = view.getFloat32(texMtxOffs + 0x0C);
                 var scaleS = view.getFloat32(texMtxOffs + 0x10);
                 var scaleT = view.getFloat32(texMtxOffs + 0x14);
                 var rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
@@ -3787,25 +3818,8 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 var p32 = view.getFloat32(texMtxOffs + 0x5C);
                 var p33 = view.getFloat32(texMtxOffs + 0x60);
                 var p = gl_matrix_4.mat4.fromValues(p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33);
-                var S = gl_matrix_4.mat2d.create();
-                gl_matrix_4.mat2d.fromScaling(S, [scaleS, scaleT]);
-                var CI = gl_matrix_4.mat2d.create();
-                gl_matrix_4.mat2d.fromTranslation(CI, [-centerS, -centerT, -centerW]);
-                var C = gl_matrix_4.mat2d.create();
-                gl_matrix_4.mat2d.fromTranslation(C, [centerS, centerT, centerW]);
-                var T = gl_matrix_4.mat2d.create();
-                gl_matrix_4.mat2d.fromTranslation(T, [translationS, translationT, 0]);
-                /*
-                const m = mat2d.create();
-                mat2d.mul(m, T, CI);
-                mat2d.mul(S, S, C);
-                mat2d.mul(m, m, S);
-                */
-                var sin = Math.sin(rotation * Math.PI);
-                var cos = Math.cos(rotation * Math.PI);
-                var m = gl_matrix_4.mat2d.fromValues(scaleS * cos, scaleS * -sin, scaleT * sin, scaleS * cos, translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS * sin), translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos));
                 var matrix = gl_matrix_4.mat3.create();
-                gl_matrix_4.mat3.fromMat2d(matrix, m);
+                createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
                 texMatrices[j] = { projection: projection, matrix: matrix };
             }
             var colorConstants = [];
@@ -4019,7 +4033,7 @@ System.register("j3d/bmd", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         }
     };
 });
-System.register("j3d/btk", ["gl-matrix", "endian", "util"], function (exports_20, context_20) {
+System.register("j3d/btk", ["j3d/bmd", "endian", "util"], function (exports_20, context_20) {
     "use strict";
     var __moduleName = context_20 && context_20.id;
     function readStringTable(buffer, offs) {
@@ -4097,14 +4111,13 @@ System.register("j3d/btk", ["gl-matrix", "endian", "util"], function (exports_20
             var materialName = materialNameTable[i];
             var remapIndex = view.getUint16(remapTableOffs + i * 0x02);
             var texMtxIndex = view.getUint8(texMtxIndexTableOffs + i);
-            var centerX = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
-            var centerY = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
-            var centerZ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
-            var center = gl_matrix_5.vec3.fromValues(centerX, centerY, centerZ);
+            var centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
+            var centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
+            var centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
             var s = readAnimationComponent();
             var t = readAnimationComponent();
             var q = readAnimationComponent();
-            materialAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, texMtxIndex: texMtxIndex, center: center, s: s, t: t, q: q });
+            materialAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, texMtxIndex: texMtxIndex, centerS: centerS, centerT: centerT, centerQ: centerQ, s: s, t: t, q: q });
         }
         btk.ttk1 = { duration: duration, loopMode: loopMode, rotationScale: rotationScale, materialAnimationEntries: materialAnimationEntries };
     }
@@ -4133,11 +4146,11 @@ System.register("j3d/btk", ["gl-matrix", "endian", "util"], function (exports_20
         return btk;
     }
     exports_20("parse", parse);
-    var gl_matrix_5, endian_3, util_6, BTK, FPS;
+    var bmd_1, endian_3, util_6, BTK, FPS;
     return {
         setters: [
-            function (gl_matrix_5_1) {
-                gl_matrix_5 = gl_matrix_5_1;
+            function (bmd_1_1) {
+                bmd_1 = bmd_1_1;
             },
             function (endian_3_1) {
                 endian_3 = endian_3_1;
@@ -4168,6 +4181,9 @@ System.register("j3d/btk", ["gl-matrix", "endian", "util"], function (exports_20
                 BTK.prototype.cubicEval = function (cf0, cf1, cf2, cf3, t) {
                     return (((cf0 * t + cf1) * t + cf2) * t + cf3);
                 };
+                BTK.prototype.lerp = function (k0, k1, t) {
+                    return k0.value + (k1.value - k0.value) * t;
+                };
                 BTK.prototype.hermiteInterpolate = function (k0, k1, t) {
                     var length = k1.time - k0.time;
                     var p0 = k0.value;
@@ -4185,13 +4201,14 @@ System.register("j3d/btk", ["gl-matrix", "endian", "util"], function (exports_20
                     if (frames.length === 1)
                         return frames[0].value;
                     // Find the first frame.
-                    var idx0 = frames.findIndex(function (key) { return (frame >= key.time); });
-                    var idx1 = idx0 + 1;
+                    var idx1 = frames.findIndex(function (key) { return (frame < key.time); });
+                    var idx0 = idx1 - 1;
                     if (idx1 >= frames.length)
                         return frames[idx0].value;
                     var k0 = frames[idx0];
                     var k1 = frames[idx1];
                     var t = (frame - k0.time) / (k1.time - k0.time);
+                    // return this.lerp(k0, k1, t);
                     return this.hermiteInterpolate(k0, k1, t);
                 };
                 BTK.prototype.applyAnimation = function (dst, materialName, texMtxIndex, time) {
@@ -4202,16 +4219,13 @@ System.register("j3d/btk", ["gl-matrix", "endian", "util"], function (exports_20
                     var frame = time / FPS;
                     var normTime = frame / duration;
                     var animFrame = this.applyLoopMode(normTime, this.ttk1.loopMode) * duration;
-                    var centerS = animationEntry.center[0], centerT = animationEntry.center[1];
+                    var centerS = animationEntry.centerS, centerT = animationEntry.centerT, centerQ = animationEntry.centerQ;
                     var scaleS = this.sampleAnimationData(animationEntry.s.scale, animFrame);
                     var scaleT = this.sampleAnimationData(animationEntry.t.scale, animFrame);
-                    var rotation = this.sampleAnimationData(animationEntry.s.rotation, animFrame);
+                    var rotation = this.sampleAnimationData(animationEntry.s.rotation, animFrame) * this.ttk1.rotationScale;
                     var translationS = this.sampleAnimationData(animationEntry.s.translation, animFrame);
                     var translationT = this.sampleAnimationData(animationEntry.t.translation, animFrame);
-                    var sin = Math.sin(rotation * this.ttk1.rotationScale * Math.PI);
-                    var cos = Math.cos(rotation * this.ttk1.rotationScale * Math.PI);
-                    var m = gl_matrix_5.mat2d.fromValues(scaleS * cos, scaleS * -sin, scaleT * sin, scaleS * cos, translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS * sin), translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos));
-                    gl_matrix_5.mat3.fromMat2d(dst, m);
+                    bmd_1.createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
                     return true;
                 };
                 return BTK;
@@ -4469,8 +4483,8 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_21, context
         var srcOffs = 0;
         return decode_Tiled(texture, 8, 4, function (pixels, dstOffs) {
             var ia = view.getUint8(srcOffs);
-            var i = expand4to8(ia >>> 4);
-            var a = expand4to8(ia & 0x0F);
+            var i = expand4to8(ia & 0x0F);
+            var a = expand4to8(ia >>> 4);
             pixels[dstOffs + 0] = i;
             pixels[dstOffs + 1] = i;
             pixels[dstOffs + 2] = i;
@@ -4690,11 +4704,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/bmd", "j3d/gx_enum", "j3d/gx_ma
                 throw new Error("Unknown PrimType " + primType);
         }
     }
-    var gl_matrix_6, BMD, GX, GX_Material, GX_Texture, Viewer, Command_Shape, Command_Material, Scene;
+    var gl_matrix_5, BMD, GX, GX_Material, GX_Texture, Viewer, Command_Shape, Command_Material, Scene;
     return {
         setters: [
-            function (gl_matrix_6_1) {
-                gl_matrix_6 = gl_matrix_6_1;
+            function (gl_matrix_5_1) {
+                gl_matrix_5 = gl_matrix_5_1;
             },
             function (BMD_1) {
                 BMD = BMD_1;
@@ -4852,13 +4866,13 @@ System.register("j3d/render", ["gl-matrix", "j3d/bmd", "j3d/gx_enum", "j3d/gx_ma
                         finally { if (e_22) throw e_22.error; }
                     }
                     // Bind our texture matrices.
-                    var matrix = gl_matrix_6.mat3.create();
+                    var matrix = gl_matrix_5.mat3.create();
                     for (var i = 0; i < this.material.texMatrices.length; i++) {
                         var texMtx = this.material.texMatrices[i];
                         if (texMtx === null)
                             continue;
                         if (!(this.btk && this.btk.applyAnimation(matrix, this.material.name, i, state.time)))
-                            gl_matrix_6.mat3.copy(matrix, texMtx.matrix);
+                            gl_matrix_5.mat3.copy(matrix, texMtx.matrix);
                         var location_4 = this.program.getTexMtxLocation(i);
                         gl.uniformMatrix3fv(location_4, false, matrix);
                     }
@@ -4936,21 +4950,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/bmd", "j3d/gx_enum", "j3d/gx_ma
                 };
                 Scene.prototype.translateSceneGraph = function (node, context) {
                     switch (node.type) {
-                        case BMD.HierarchyType.Open:
-                            try {
-                                for (var _a = __values(node.children), _b = _a.next(); !_b.done; _b = _a.next()) {
-                                    var child = _b.value;
-                                    this.translateSceneGraph(child, context);
-                                }
-                            }
-                            catch (e_23_1) { e_23 = { error: e_23_1 }; }
-                            finally {
-                                try {
-                                    if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                                }
-                                finally { if (e_23) throw e_23.error; }
-                            }
-                            break;
                         case BMD.HierarchyType.Shape:
                             context.currentCommandList.push(this.shapeCommands[node.shapeIdx]);
                             break;
@@ -4963,6 +4962,19 @@ System.register("j3d/render", ["gl-matrix", "j3d/bmd", "j3d/gx_enum", "j3d/gx_ma
                             context.currentCommandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
                             context.currentCommandList.push(materialCommand);
                             break;
+                    }
+                    try {
+                        for (var _a = __values(node.children), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var child = _b.value;
+                            this.translateSceneGraph(child, context);
+                        }
+                    }
+                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_23) throw e_23.error; }
                     }
                     var e_23, _c;
                 };
@@ -5121,7 +5133,7 @@ System.register("j3d/scenes", ["j3d/render", "j3d/bmd", "j3d/btk", "j3d/rarc", "
                             var btkFile = rarc.findFile("btk/" + basename + ".btk");
                             return createScene(gl, bdlFile, btkFile);
                         });
-                        return new MultiScene(scenes);
+                        return new MultiScene(scenes.filter(function (s) { return !!s; }));
                     });
                 };
                 return WindWakerSceneDesc;
@@ -7207,7 +7219,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var offs = bmd.materialOffsBase + idx * 0x30;
         var material = new Material();
         material.name = util_16.readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
-        material.texCoordMat = gl_matrix_7.mat2d.create();
+        material.texCoordMat = gl_matrix_6.mat2d.create();
         var textureIdx = view.getUint32(offs + 0x04, true);
         if (textureIdx !== 0xFFFFFFFF) {
             var paletteIdx = view.getUint32(offs + 0x08, true);
@@ -7219,11 +7231,11 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 var scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
                 var transS = view.getInt32(offs + 0x18, true) / 4096.0;
                 var transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-                gl_matrix_7.mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-                gl_matrix_7.mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
+                gl_matrix_6.mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
+                gl_matrix_6.mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
             }
             var texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
-            gl_matrix_7.mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
+            gl_matrix_6.mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
         }
         else {
             material.texture = null;
@@ -7304,11 +7316,11 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         return bmd;
     }
     exports_36("parse", parse);
-    var gl_matrix_7, NITRO_GX, NITRO_Tex, util_16, Material, Model, TextureKey, Texture, BMD;
+    var gl_matrix_6, NITRO_GX, NITRO_Tex, util_16, Material, Model, TextureKey, Texture, BMD;
     return {
         setters: [
-            function (gl_matrix_7_1) {
-                gl_matrix_7 = gl_matrix_7_1;
+            function (gl_matrix_6_1) {
+                gl_matrix_6 = gl_matrix_6_1;
             },
             function (NITRO_GX_1) {
                 NITRO_GX = NITRO_GX_1;
@@ -7373,11 +7385,11 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
         ctx.putImageData(imgData, 0, 0);
         return canvas;
     }
-    var gl_matrix_8, CRG0, LZ77, NITRO_BMD, Viewer, render_10, util_17, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, Scene, MultiScene, SceneDesc;
+    var gl_matrix_7, CRG0, LZ77, NITRO_BMD, Viewer, render_10, util_17, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, Scene, MultiScene, SceneDesc;
     return {
         setters: [
-            function (gl_matrix_8_1) {
-                gl_matrix_8 = gl_matrix_8_1;
+            function (gl_matrix_7_1) {
+                gl_matrix_7 = gl_matrix_7_1;
             },
             function (CRG0_1) {
                 CRG0 = CRG0_1;
@@ -7507,8 +7519,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     }
                     // Find any possible material animations.
                     var crg0mat = this.crg0Level.materials.find(function (c) { return c.name === material.name; });
-                    var texCoordMat = gl_matrix_8.mat3.create();
-                    gl_matrix_8.mat3.fromMat2d(texCoordMat, material.texCoordMat);
+                    var texCoordMat = gl_matrix_7.mat3.create();
+                    gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                     var renderFlags = new render_10.RenderFlags();
                     renderFlags.blend = true;
                     renderFlags.depthTest = true;
@@ -7516,20 +7528,20 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
                     return function (state) {
                         if (crg0mat !== undefined) {
-                            var texAnimMat = gl_matrix_8.mat3.create();
+                            var texAnimMat = gl_matrix_7.mat3.create();
                             try {
                                 for (var _a = __values(crg0mat.animations), _b = _a.next(); !_b.done; _b = _a.next()) {
                                     var anim = _b.value;
                                     var time = state.time / 30;
                                     var value = anim.values[(time | 0) % anim.values.length];
                                     if (anim.property === 'x')
-                                        gl_matrix_8.mat3.translate(texAnimMat, texAnimMat, [0, value]);
+                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [0, value]);
                                     else if (anim.property === 'y')
-                                        gl_matrix_8.mat3.translate(texAnimMat, texAnimMat, [value, 0]);
+                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [value, 0]);
                                     else if (anim.property === 'scale')
-                                        gl_matrix_8.mat3.scale(texAnimMat, texAnimMat, [value, value]);
+                                        gl_matrix_7.mat3.scale(texAnimMat, texAnimMat, [value, value]);
                                     else if (anim.property === 'rotation')
-                                        gl_matrix_8.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
+                                        gl_matrix_7.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
                             catch (e_28_1) { e_28 = { error: e_28_1 }; }
@@ -7539,8 +7551,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                 }
                                 finally { if (e_28) throw e_28.error; }
                             }
-                            gl_matrix_8.mat3.fromMat2d(texCoordMat, material.texCoordMat);
-                            gl_matrix_8.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
+                            gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
+                            gl_matrix_7.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
                         }
                         if (texture !== null) {
                             gl.uniformMatrix3fv(_this.program.texCoordMatLocation, false, texCoordMat);
@@ -7563,16 +7575,16 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 };
                 Scene.prototype.translateModel = function (gl, bmdm) {
                     var _this = this;
-                    var skyboxCameraMat = gl_matrix_8.mat4.create();
-                    var localMatrix = gl_matrix_8.mat4.create();
+                    var skyboxCameraMat = gl_matrix_7.mat4.create();
+                    var localMatrix = gl_matrix_7.mat4.create();
                     var bmd = this.bmd;
                     var scaleFactor = bmd.scaleFactor * this.localScale;
-                    gl_matrix_8.mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+                    gl_matrix_7.mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
                     var batches = bmdm.batches.map(function (batch) { return _this.translateBatch(gl, batch); });
                     return function (state) {
                         if (_this.isSkybox) {
                             // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
-                            gl_matrix_8.mat4.copy(skyboxCameraMat, state.modelView);
+                            gl_matrix_7.mat4.copy(skyboxCameraMat, state.modelView);
                             skyboxCameraMat[12] = 0;
                             skyboxCameraMat[13] = 0;
                             skyboxCameraMat[14] = 0;
@@ -7867,11 +7879,11 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
                 var b = rom.view.getUint16(offs + 0x08, false) / 0xFFFF * (Math.PI * 2) + Math.PI;
                 var c = rom.view.getUint16(offs + 0x0A, false) / 0xFFFF * (Math.PI * 2);
                 var d = rom.view.getUint16(offs + 0x0C, false);
-                var mtx = gl_matrix_9.mat4.create();
-                gl_matrix_9.mat4.translate(mtx, mtx, [x, y, z]);
-                gl_matrix_9.mat4.rotateZ(mtx, mtx, c);
-                gl_matrix_9.mat4.rotateY(mtx, mtx, b);
-                gl_matrix_9.mat4.rotateX(mtx, mtx, -a);
+                var mtx = gl_matrix_8.mat4.create();
+                gl_matrix_8.mat4.translate(mtx, mtx, [x, y, z]);
+                gl_matrix_8.mat4.rotateZ(mtx, mtx, c);
+                gl_matrix_8.mat4.rotateY(mtx, mtx, b);
+                gl_matrix_8.mat4.rotateX(mtx, mtx, -a);
                 return mtx;
             }
             var cameraAddr = rom.view.getUint32(offs + 0x20, false);
@@ -8030,11 +8042,11 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
         var banks = { scene: file };
         return readHeaders(gl, zelview0, file.vStart, banks);
     }
-    var gl_matrix_9, F3DEX2, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
+    var gl_matrix_8, F3DEX2, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
     return {
         setters: [
-            function (gl_matrix_9_1) {
-                gl_matrix_9 = gl_matrix_9_1;
+            function (gl_matrix_8_1) {
+                gl_matrix_8 = gl_matrix_8_1;
             },
             function (F3DEX2_1) {
                 F3DEX2 = F3DEX2_1;
@@ -8146,8 +8158,8 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_40,
         var posX = rom.view.getInt16(offs + 0, false);
         var posY = rom.view.getInt16(offs + 2, false);
         var posZ = rom.view.getInt16(offs + 4, false);
-        var pos = gl_matrix_10.vec3.clone([posX, posY, posZ]);
-        gl_matrix_10.vec3.transformMat4(pos, pos, state.mtx);
+        var pos = gl_matrix_9.vec3.clone([posX, posY, posZ]);
+        gl_matrix_9.vec3.transformMat4(pos, pos, state.mtx);
         var txU = rom.view.getInt16(offs + 8, false) * (1 / 32);
         var txV = rom.view.getInt16(offs + 10, false) * (1 / 32);
         var vtxArray = new Float32Array(state.vertexBuffer.buffer, which * VERTEX_BYTES, VERTEX_SIZE);
@@ -8314,10 +8326,10 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_40,
         state.geometryMode = 0;
         state.otherModeL = 0;
         state.mtxStack.push(state.mtx);
-        state.mtx = gl_matrix_10.mat4.clone(state.mtx);
+        state.mtx = gl_matrix_9.mat4.clone(state.mtx);
         var rom = state.rom;
         var offs = state.lookupAddress(w1);
-        var mtx = gl_matrix_10.mat4.create();
+        var mtx = gl_matrix_9.mat4.create();
         for (var x = 0; x < 4; x++) {
             for (var y = 0; y < 4; y++) {
                 var mt1 = rom.view.getUint16(offs, false);
@@ -8326,7 +8338,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_40,
                 offs += 2;
             }
         }
-        gl_matrix_10.mat4.multiply(state.mtx, state.mtx, mtx);
+        gl_matrix_9.mat4.multiply(state.mtx, state.mtx, mtx);
     }
     function cmd_POPMTX(state, w0, w1) {
         state.mtx = state.mtxStack.pop();
@@ -8824,7 +8836,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_40,
         state.gl = gl;
         state.cmds = [];
         state.textures = [];
-        state.mtx = gl_matrix_10.mat4.create();
+        state.mtx = gl_matrix_9.mat4.create();
         state.mtxStack = [state.mtx];
         state.vertexBuffer = new Float32Array(32 * VERTEX_SIZE);
         state.verticesDirty = [];
@@ -8835,11 +8847,11 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_40,
         return new DL(state.cmds, state.textures);
     }
     exports_40("readDL", readDL);
-    var gl_matrix_10, render_12, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
+    var gl_matrix_9, render_12, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
-            function (gl_matrix_10_1) {
-                gl_matrix_10 = gl_matrix_10_1;
+            function (gl_matrix_9_1) {
+                gl_matrix_9 = gl_matrix_9_1;
             },
             function (render_12_1) {
                 render_12 = render_12_1;

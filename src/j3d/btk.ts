@@ -1,5 +1,7 @@
 
-import { mat2d, mat3, vec3 } from 'gl-matrix';
+import { mat3 } from 'gl-matrix';
+
+import { createTexMtx } from './bmd';
 
 import { betoh } from '../endian';
 import { assert, readString } from '../util';
@@ -53,7 +55,9 @@ export interface MaterialAnimationEntry {
     materialName: string;
     remapIndex: number;
     texMtxIndex: number;
-    center: vec3;
+    centerS: number;
+    centerT: number;
+    centerQ: number;
     s: AnimationComponent;
     t: AnimationComponent;
     q: AnimationComponent;
@@ -68,7 +72,7 @@ export interface TTK1 {
 
 function readTTK1Chunk(btk: BTK, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
     const view = new DataView(buffer, chunkStart, chunkSize);
-    const loopMode = view.getUint8(0x08);
+    const loopMode: LoopMode = view.getUint8(0x08);
     const rotationDecimal = view.getUint8(0x09);
     const duration = view.getUint16(0x0A);
     const animationCount = view.getUint16(0x0C) / 3;
@@ -135,14 +139,13 @@ function readTTK1Chunk(btk: BTK, buffer: ArrayBuffer, chunkStart: number, chunkS
         const materialName = materialNameTable[i];
         const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
         const texMtxIndex = view.getUint8(texMtxIndexTableOffs + i);
-        const centerX = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
-        const centerY = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
-        const centerZ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
-        const center: vec3 = vec3.fromValues(centerX, centerY, centerZ);
+        const centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
+        const centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
+        const centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
         const s = readAnimationComponent();
         const t = readAnimationComponent();
         const q = readAnimationComponent();
-        materialAnimationEntries.push({ materialName, remapIndex, texMtxIndex, center, s, t, q });
+        materialAnimationEntries.push({ materialName, remapIndex, texMtxIndex, centerS, centerT, centerQ, s, t, q });
     }
 
     btk.ttk1 = { duration, loopMode, rotationScale, materialAnimationEntries };
@@ -172,6 +175,10 @@ export class BTK {
         return (((cf0 * t + cf1) * t + cf2) * t + cf3);
     }
 
+    public lerp(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number) {
+        return k0.value + (k1.value - k0.value) * t;
+    }
+
     public hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number): number {
         const length = k1.time - k0.time;
         const p0 = k0.value;
@@ -192,14 +199,15 @@ export class BTK {
             return frames[0].value;
 
         // Find the first frame.
-        const idx0 = frames.findIndex((key) => (frame >= key.time));
-        const idx1 = idx0 + 1;
+        const idx1 = frames.findIndex((key) => (frame < key.time));
+        const idx0 = idx1 - 1;
         if (idx1 >= frames.length)
             return frames[idx0].value;
 
         const k0 = frames[idx0];
         const k1 = frames[idx1];
         const t = (frame - k0.time) / (k1.time - k0.time);
+        // return this.lerp(k0, k1, t);
         return this.hermiteInterpolate(k0, k1, t);
     }
 
@@ -213,22 +221,14 @@ export class BTK {
         const normTime = frame / duration;
         const animFrame = this.applyLoopMode(normTime, this.ttk1.loopMode) * duration;
 
-        const centerS = animationEntry.center[0], centerT = animationEntry.center[1];
+        const centerS = animationEntry.centerS, centerT = animationEntry.centerT, centerQ = animationEntry.centerQ;
         const scaleS = this.sampleAnimationData(animationEntry.s.scale, animFrame);
         const scaleT = this.sampleAnimationData(animationEntry.t.scale, animFrame);
-        const rotation = this.sampleAnimationData(animationEntry.s.rotation, animFrame);
+        const rotation = this.sampleAnimationData(animationEntry.s.rotation, animFrame) * this.ttk1.rotationScale;
         const translationS = this.sampleAnimationData(animationEntry.s.translation, animFrame);
         const translationT = this.sampleAnimationData(animationEntry.t.translation, animFrame);
 
-        const sin = Math.sin(rotation * this.ttk1.rotationScale * Math.PI);
-        const cos = Math.cos(rotation * this.ttk1.rotationScale * Math.PI);
-        const m = mat2d.fromValues(
-            scaleS * cos, scaleS * -sin,
-            scaleT * sin, scaleS *  cos,
-            translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS *  sin),
-            translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos)
-        );
-        mat3.fromMat2d(dst, m);
+        createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
 
         return true;
     }

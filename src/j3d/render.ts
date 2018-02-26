@@ -310,10 +310,6 @@ export class Scene implements Viewer.Scene {
 
     private translateSceneGraph(node: BMD.HierarchyNode, context) {
         switch (node.type) {
-        case BMD.HierarchyType.Open:
-            for (const child of node.children)
-                this.translateSceneGraph(child, context);
-            break;
         case BMD.HierarchyType.Shape:
             context.currentCommandList.push(this.shapeCommands[node.shapeIdx]);
             break;
@@ -327,6 +323,9 @@ export class Scene implements Viewer.Scene {
             context.currentCommandList.push(materialCommand);
             break;
         }
+
+        for (const child of node.children)
+            this.translateSceneGraph(child, context);
     }
 
     public destroy(gl: WebGL2RenderingContext) {

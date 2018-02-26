@@ -35,23 +35,26 @@ export enum HierarchyType {
 // XXX: Nintendo doesn't seem to actually use this as a tree,
 // because they make some super deep stuff... we should linearize this...
 
-export interface HierarchyTreeNode {
-    type: HierarchyType.Open;
+export interface HierarchyRootNode {
+    type: HierarchyType.End;
     children: HierarchyNode[];
 }
 export interface HierarchyShapeNode {
     type: HierarchyType.Shape;
+    children: HierarchyNode[];
     shapeIdx: number;
 }
 export interface HierarchyJointNode {
     type: HierarchyType.Joint;
+    children: HierarchyNode[];
     jointIdx: number;
 }
 export interface HierarchyMaterialNode {
     type: HierarchyType.Material;
+    children: HierarchyNode[];
     materialIdx: number;
 }
-export type HierarchyNode = HierarchyTreeNode | HierarchyShapeNode | HierarchyJointNode | HierarchyMaterialNode;
+export type HierarchyNode = HierarchyRootNode | HierarchyShapeNode | HierarchyJointNode | HierarchyMaterialNode;
 
 export interface INF1 {
     sceneGraph: HierarchyNode;
@@ -64,8 +67,8 @@ function readINF1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
 
-    const parentStack: HierarchyTreeNode[] = [];
-    let node: HierarchyTreeNode = { type: HierarchyType.Open, children: [] };
+    let node: HierarchyNode = { type: HierarchyType.End, children: [] };
+    const parentStack: HierarchyNode[] = [node];
     let offs = hierarchyOffs;
 
     outer:
@@ -78,26 +81,28 @@ function readINF1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         case HierarchyType.End:
             break outer;
         case HierarchyType.Open:
-            parentStack.push(node);
-            node.children.push(node = { type: HierarchyType.Open, children: [] });
+            parentStack.unshift(node);
             break;
         case HierarchyType.Close:
-            node = parentStack.pop();
+            node = parentStack.shift();
             break;
         case HierarchyType.Joint:
-            node.children.push({ type, jointIdx: value });
+            node = { type, children: [], jointIdx: value };
+            parentStack[0].children.unshift(node);
             break;
         case HierarchyType.Material:
-            node.children.push({ type, materialIdx: value });
+            node = { type, children: [], materialIdx: value };
+            parentStack[0].children.unshift(node);
             break;
         case HierarchyType.Shape:
-            node.children.push({ type, shapeIdx: value });
+            node = { type, children: [], shapeIdx: value };
+            parentStack[0].children.unshift(node);
             break;
         }
     }
 
-    assert(parentStack.length === 0);
-    bmd.inf1 = { sceneGraph: node };
+    assert(parentStack.length === 1);
+    bmd.inf1 = { sceneGraph: parentStack.pop() };
 }
 
 type CompSize = 1 | 2 | 4;
@@ -283,6 +288,44 @@ function readIndex(view: DataView, offs: number, type: GX.CompType) {
 function align(n: number, multiple: number): number {
     const mask = (multiple - 1);
     return (n + mask) & ~mask;
+}
+
+export function createTexMtx(m: matrix3, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
+    /*
+    const sin = Math.sin(rotation * Math.PI);
+    const cos = Math.cos(rotation * Math.PI);
+    const m = mat2d.fromValues(
+        scaleS * cos, scaleS * -sin,
+        scaleT * sin, scaleS *  cos,
+        translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS *  sin),
+        translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos)
+    );
+    */
+
+    const CN = matrix3.create();
+    matrix3.fromTranslation(CN, [centerS, centerT, centerQ]);
+    
+    const CI = matrix3.create();
+    matrix3.fromTranslation(CI, [-centerS, -centerT, -centerQ]);
+
+    const S = matrix3.create();
+    matrix3.fromScaling(S, [scaleS, scaleT, 1]);
+    matrix3.mul(S, S, CI);
+    matrix3.mul(S, CN, S);
+
+    const R = matrix3.create();
+    matrix3.fromRotation(R, rotation);
+    matrix3.mul(R, R, CI);
+    matrix3.mul(R, CN, R);
+
+    const T = matrix3.create();
+    matrix3.fromTranslation(T, [translationS, translationT, 0]);
+
+    matrix3.mul(m, T, R);
+    matrix3.mul(m, m, S);
+    // matrix3.transpose(m, m);
+
+    return m;
 }
 
 function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
@@ -515,13 +558,12 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                 continue;
 
             const texMtxOffs = texMtxTableOffs + texMtxIndex * 0x64;
-
             const projection: GX_Material.TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
             const type = view.getUint8(texMtxOffs + 0x01);
             assert(view.getUint16(texMtxOffs + 0x02) == 0xFFFF);
             const centerS = view.getFloat32(texMtxOffs + 0x04);
             const centerT = view.getFloat32(texMtxOffs + 0x08);
-            const centerW = view.getFloat32(texMtxOffs + 0x0C);
+            const centerQ = view.getFloat32(texMtxOffs + 0x0C);
             const scaleS = view.getFloat32(texMtxOffs + 0x10);
             const scaleT = view.getFloat32(texMtxOffs + 0x14);
             const rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
@@ -554,33 +596,8 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                 p30, p31, p32, p33,
             );
 
-            const S = mat2d.create();
-            mat2d.fromScaling(S, [scaleS, scaleT]);
-            const CI = mat2d.create();
-            mat2d.fromTranslation(CI, [-centerS, -centerT, -centerW]);
-            const C = mat2d.create();
-            mat2d.fromTranslation(C, [centerS, centerT, centerW]);
-            const T = mat2d.create();
-            mat2d.fromTranslation(T, [translationS, translationT, 0]);
-
-            /*
-            const m = mat2d.create();
-            mat2d.mul(m, T, CI);
-            mat2d.mul(S, S, C);
-            mat2d.mul(m, m, S);
-            */
-
-            const sin = Math.sin(rotation * Math.PI);
-            const cos = Math.cos(rotation * Math.PI);
-            const m = mat2d.fromValues(
-                scaleS * cos, scaleS * -sin,
-                scaleT * sin, scaleS *  cos,
-                translationS + centerS + (centerS * scaleS * -cos) + (centerT * scaleS *  sin),
-                translationT + centerT + (centerS * scaleT * -sin) + (centerT * scaleS * -cos)
-            );
-
             const matrix = matrix3.create();
-            matrix3.fromMat2d(matrix, m);
+            createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
             texMatrices[j] = { projection, matrix };
         }
 
