@@ -315,7 +315,6 @@ function readJNT1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
         const matrix = mat4.create();
         mat4.fromRotationTranslationScale(matrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
-        // mat4.translate(matrix, matrix, [translationX, translationY, translationZ]);
 
         bones.push({ name, matrix });
         boneDataTableIdx += 0x40;

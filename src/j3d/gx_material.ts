@@ -372,7 +372,7 @@ export class GX_Program extends Program {
         if (scale === GX.TevScale.SCALE_2)
             v = `(${v}) * 2.0`;
         else if (scale === GX.TevScale.SCALE_4)
-            v = `(${v}) * 1.0`;
+            v = `(${v}) * 4.0`;
         else if (scale === GX.TevScale.DIVIDE_2)
             v = `(${v}) * 0.5`;
 

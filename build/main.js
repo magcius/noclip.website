@@ -796,12 +796,15 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                 function FPSCameraController() {
                     this.tmp = gl_matrix_2.mat4.create();
                     this.camera = gl_matrix_2.mat4.create();
+                    this.speed = 10;
                 }
                 FPSCameraController.prototype.update = function (outCamera, inputManager, dt) {
                     var SHIFT = 16;
                     var tmp = this.tmp;
                     var camera = this.camera;
-                    var mult = 10;
+                    this.speed += inputManager.dz;
+                    this.speed = Math.max(this.speed, 1);
+                    var mult = this.speed;
                     if (inputManager.isKeyDownRaw(SHIFT))
                         mult *= 5;
                     mult *= (dt / 16.0);
@@ -3300,7 +3303,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     if (scale === 1 /* SCALE_2 */)
                         v = "(" + v + ") * 2.0";
                     else if (scale === 2 /* SCALE_4 */)
-                        v = "(" + v + ") * 1.0";
+                        v = "(" + v + ") * 4.0";
                     else if (scale === 3 /* DIVIDE_2 */)
                         v = "(" + v + ") * 0.5";
                     if (clamp)
@@ -3625,7 +3628,6 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             gl_matrix_4.quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
             var matrix = gl_matrix_4.mat4.create();
             gl_matrix_4.mat4.fromRotationTranslationScale(matrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
-            // mat4.translate(matrix, matrix, [translationX, translationY, translationZ]);
             bones.push({ name: name_8, matrix: matrix });
             boneDataTableIdx += 0x40;
         }
