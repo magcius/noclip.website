@@ -5142,7 +5142,22 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
         var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
         return new render_5.Scene(gl, bmd, btk, bmt);
     }
-    var render_5, j3d_2, RARC, Yaz0, Viewer, progress_3, util_7, id, name, MultiScene, SunshineClearScene, SunshineSceneDesc, RARCDesc, MultiSceneDesc, WindWakerSceneDesc, sceneDescs, sceneGroup;
+    function createSceneFromRARCBuffer(gl, buffer) {
+        if (util_7.readString(buffer, 0, 4) === 'Yaz0')
+            buffer = Yaz0.decompress(buffer);
+        var rarc = RARC.parse(buffer);
+        var bmdFiles = rarc.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
+        var scenes = bmdFiles.map(function (bmdFile) {
+            // Find the corresponding btk.
+            var basename = bmdFile.name.split('.')[0];
+            var btkFile = rarc.files.find(function (f) { return f.name === basename + ".btk"; });
+            var bmtFile = rarc.files.find(function (f) { return f.name === basename + ".bmt"; });
+            return createScene(gl, bmdFile, btkFile, bmtFile);
+        });
+        return new MultiScene(scenes);
+    }
+    exports_23("createSceneFromRARCBuffer", createSceneFromRARCBuffer);
+    var render_5, j3d_2, RARC, Yaz0, Viewer, progress_3, util_7, id, name, MultiScene, SunshineClearScene, SunshineSceneDesc, MultiSceneDesc, RARCSceneDesc, sceneDescs, sceneGroup;
     return {
         setters: [
             function (render_5_1) {
@@ -5248,24 +5263,6 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                 };
                 return SunshineSceneDesc;
             }());
-            RARCDesc = /** @class */ (function () {
-                function RARCDesc(path, name) {
-                    if (name === void 0) { name = ""; }
-                    this.name = name;
-                    this.path = path;
-                    this.id = this.path;
-                }
-                RARCDesc.prototype.createScene = function (gl) {
-                    return util_7.fetch(this.path).then(function (result) {
-                        var rarc = RARC.parse(Yaz0.decompress(result));
-                        // Find a BMD and a BTK.
-                        var bmdFile = rarc.files.find(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
-                        var btkFile = rarc.files.find(function (f) { return f.name.endsWith('.btk'); });
-                        return createScene(gl, bmdFile, btkFile, null);
-                    });
-                };
-                return RARCDesc;
-            }());
             MultiSceneDesc = /** @class */ (function () {
                 function MultiSceneDesc(id, name, subscenes) {
                     this.id = id;
@@ -5279,28 +5276,18 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                 };
                 return MultiSceneDesc;
             }());
-            WindWakerSceneDesc = /** @class */ (function () {
-                function WindWakerSceneDesc(path, name) {
+            RARCSceneDesc = /** @class */ (function () {
+                function RARCSceneDesc(path, name) {
                     this.name = name || path;
                     this.path = path;
                     this.id = this.path;
                 }
-                WindWakerSceneDesc.prototype.createScene = function (gl) {
+                RARCSceneDesc.prototype.createScene = function (gl) {
                     return util_7.fetch(this.path).then(function (result) {
-                        if (util_7.readString(result, 0, 4) === 'Yaz0')
-                            result = Yaz0.decompress(result);
-                        var rarc = RARC.parse(result);
-                        var bmdFiles = rarc.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
-                        var scenes = bmdFiles.map(function (bmdFile) {
-                            // Find the corresponding btk.
-                            var basename = bmdFile.name.split('.')[0];
-                            var btkFile = rarc.findFile("btk/" + basename + ".btk");
-                            return createScene(gl, bmdFile, btkFile, null);
-                        });
-                        return new MultiScene(scenes);
+                        return createSceneFromRARCBuffer(gl, result);
                     });
                 };
-                return WindWakerSceneDesc;
+                return RARCSceneDesc;
             }());
             sceneDescs = [
                 new SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
@@ -5308,15 +5295,15 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                 new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach"),
                 new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor"),
                 new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
-                new RARCDesc("data/j3d/MarioFaceShipPlanet.arc", "Faceship"),
+                new RARCSceneDesc("data/j3d/MarioFaceShipPlanet.arc", "Faceship"),
                 new MultiSceneDesc("data/j3d/PeachCastleGardenPlanet.arc", "Peach's Castle Garden", [
-                    new RARCDesc("data/j3d/PeachCastleGardenPlanet.arc"),
-                    new RARCDesc("data/j3d/GalaxySky.arc"),
+                    new RARCSceneDesc("data/j3d/PeachCastleGardenPlanet.arc"),
+                    new RARCSceneDesc("data/j3d/GalaxySky.arc"),
                 ]),
-                new WindWakerSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
-                new WindWakerSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
-                new WindWakerSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
-                new WindWakerSceneDesc("data/j3d/Room44.arc", "Outset Island"),
+                new RARCSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
+                new RARCSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
+                new RARCSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
+                new RARCSceneDesc("data/j3d/Room44.arc", "Outset Island"),
             ];
             exports_23("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
@@ -9791,10 +9778,10 @@ System.register("zelview/scenes", ["zelview/render"], function (exports_41, cont
         }
     };
 });
-System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes", "zelview/scenes"], function (exports_42, context_42) {
+System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes", "zelview/scenes", "progress"], function (exports_42, context_42) {
     "use strict";
     var __moduleName = context_42 && context_42.id;
-    var viewer_1, FRES, J3D, MDL0, OOT3D, SM64DS, ZELVIEW, ProgressBar, Main;
+    var viewer_1, FRES, J3D, MDL0, OOT3D, SM64DS, ZELVIEW, progress_5, ProgressBar, DroppedFileSceneDesc, Main;
     return {
         setters: [
             function (viewer_1_1) {
@@ -9817,6 +9804,9 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
             },
             function (ZELVIEW_1) {
                 ZELVIEW = ZELVIEW_1;
+            },
+            function (progress_5_1) {
+                progress_5 = progress_5_1;
             }
         ],
         execute: function () {
@@ -9851,6 +9841,37 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                 };
                 return ProgressBar;
             }());
+            DroppedFileSceneDesc = /** @class */ (function () {
+                function DroppedFileSceneDesc(file) {
+                    this.file = file;
+                    this.id = file.name;
+                    this.name = file.name;
+                }
+                DroppedFileSceneDesc.prototype._loadFileAsPromise = function (file) {
+                    var request = new FileReader();
+                    request.readAsArrayBuffer(file);
+                    var p = new Promise(function (resolve, reject) {
+                        request.onload = function () {
+                            resolve(request.result);
+                        };
+                        request.onerror = function () {
+                            reject();
+                        };
+                        request.onprogress = function (e) {
+                            if (e.lengthComputable)
+                                pr.setProgress(e.loaded / e.total);
+                        };
+                    });
+                    var pr = new progress_5.Progressable(p);
+                    return pr;
+                };
+                DroppedFileSceneDesc.prototype.createScene = function (gl) {
+                    return this._loadFileAsPromise(this.file).then(function (result) {
+                        return J3D.createSceneFromRARCBuffer(gl, result);
+                    });
+                };
+                return DroppedFileSceneDesc;
+            }());
             Main = /** @class */ (function () {
                 function Main() {
                     var _this = this;
@@ -9858,12 +9879,22 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this.canvas.onmousedown = function () {
                         _this._deselectUI();
                     };
+                    this.canvas.ondragover = function (e) {
+                        _this.dragHighlight.style.display = 'block';
+                        e.preventDefault();
+                    };
+                    this.canvas.ondragleave = function (e) {
+                        _this.dragHighlight.style.display = 'none';
+                        e.preventDefault();
+                    };
+                    this.canvas.ondrop = this._onDrop.bind(this);
                     document.body.appendChild(this.canvas);
                     window.onresize = this._onResize.bind(this);
                     this._onResize();
                     window.addEventListener('keydown', this._onKeyDown.bind(this));
                     this.viewer = new viewer_1.Viewer(this.canvas);
                     this.viewer.start();
+                    this._makeUI();
                     this.groups = [];
                     // The "plugin" part of this.
                     this.groups.push(SM64DS.sceneGroup);
@@ -9872,13 +9903,26 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this.groups.push(OOT3D.sceneGroup);
                     this.groups.push(FRES.sceneGroup);
                     this.groups.push(J3D.sceneGroup);
-                    this._makeUI();
+                    this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
+                    this.groups.push(this.droppedFileGroup);
+                    this._loadSceneGroups();
                     // Load the state from the hash
                     this._loadState(window.location.hash.slice(1));
                     // If it didn't work, fall back to defaults.
                     if (!this.currentSceneDesc)
                         this._loadSceneGroup(this.groups[0]);
                 }
+                Main.prototype._onDrop = function (e) {
+                    this.dragHighlight.style.display = 'none';
+                    e.preventDefault();
+                    var transfer = e.dataTransfer;
+                    var file = transfer.files[0];
+                    var sceneDesc = new DroppedFileSceneDesc(file);
+                    this.droppedFileGroup.sceneDescs.push(sceneDesc);
+                    this._loadSceneGroups();
+                    this._loadSceneGroup(this.droppedFileGroup, false);
+                    this._loadSceneDesc(sceneDesc);
+                };
                 Main.prototype._onResize = function () {
                     this.canvas.width = window.innerWidth;
                     this.canvas.height = window.innerHeight;
@@ -9955,6 +9999,28 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     var group = option.group;
                     this._loadSceneGroup(group);
                 };
+                Main.prototype._loadSceneGroups = function () {
+                    this.groupSelect.innerHTML = '';
+                    try {
+                        for (var _a = __values(this.groups), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var group = _b.value;
+                            if (!group.sceneDescs.length)
+                                continue;
+                            var groupOption = document.createElement('option');
+                            groupOption.textContent = group.name;
+                            groupOption.group = group;
+                            this.groupSelect.appendChild(groupOption);
+                        }
+                    }
+                    catch (e_32_1) { e_32 = { error: e_32_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_32) throw e_32.error; }
+                    }
+                    var e_32, _c;
+                };
                 Main.prototype._loadSceneGroup = function (group, loadDefaultSceneInGroup) {
                     if (loadDefaultSceneInGroup === void 0) { loadDefaultSceneInGroup = true; }
                     if (this.currentSceneGroup === group)
@@ -9977,16 +10043,16 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                             this.sceneSelect.appendChild(sceneOption);
                         }
                     }
-                    catch (e_32_1) { e_32 = { error: e_32_1 }; }
+                    catch (e_33_1) { e_33 = { error: e_33_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_32) throw e_32.error; }
+                        finally { if (e_33) throw e_33.error; }
                     }
                     if (loadDefaultSceneInGroup)
                         this._loadSceneDesc(group.sceneDescs[0]);
-                    var e_32, _c;
+                    var e_33, _c;
                 };
                 Main.prototype._onSceneSelectChange = function () {
                     var option = this.sceneSelect.selectedOptions.item(0);
@@ -9994,6 +10060,17 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this._loadSceneDesc(sceneDesc);
                 };
                 Main.prototype._makeUI = function () {
+                    this.dragHighlight = document.createElement('div');
+                    document.body.appendChild(this.dragHighlight);
+                    this.dragHighlight.style.position = 'absolute';
+                    this.dragHighlight.style.left = '0';
+                    this.dragHighlight.style.right = '0';
+                    this.dragHighlight.style.top = '0';
+                    this.dragHighlight.style.bottom = '0';
+                    this.dragHighlight.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+                    this.dragHighlight.style.boxShadow = '0 0 40px 5px white inset';
+                    this.dragHighlight.style.display = 'none';
+                    this.dragHighlight.style.pointerEvents = 'none';
                     this.uiContainers = document.createElement('div');
                     document.body.appendChild(this.uiContainers);
                     var progressBarContainer = document.createElement('div');
@@ -10018,22 +10095,6 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     uiContainerR.style.bottom = '2em';
                     this.uiContainers.appendChild(uiContainerR);
                     this.groupSelect = document.createElement('select');
-                    try {
-                        for (var _a = __values(this.groups), _b = _a.next(); !_b.done; _b = _a.next()) {
-                            var group = _b.value;
-                            var groupOption = document.createElement('option');
-                            groupOption.textContent = group.name;
-                            groupOption.group = group;
-                            this.groupSelect.appendChild(groupOption);
-                        }
-                    }
-                    catch (e_33_1) { e_33 = { error: e_33_1 }; }
-                    finally {
-                        try {
-                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                        }
-                        finally { if (e_33) throw e_33.error; }
-                    }
                     this.groupSelect.onchange = this._onGroupSelectChange.bind(this);
                     this.groupSelect.style.marginRight = '1em';
                     uiContainerL.appendChild(this.groupSelect);
@@ -10078,7 +10139,6 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     gearButton.textContent = '⚙';
                     gearButton.onclick = this._onGearButtonClicked.bind(this);
                     uiContainerR.appendChild(gearButton);
-                    var e_33, _c;
                 };
                 Main.prototype._toggleUI = function () {
                     this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? 'block' : 'none';

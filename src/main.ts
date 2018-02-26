@@ -54,12 +54,53 @@ class ProgressBar {
     }
 }
 
+class DroppedFileSceneDesc implements SceneDesc {
+    public id: string;
+    public name: string;
+    public file: File;
+
+    constructor(file: File) {
+        this.file = file;
+        this.id = file.name;
+        this.name = file.name;
+    }
+
+    private _loadFileAsPromise(file: File): Progressable<ArrayBuffer> {
+        const request = new FileReader();
+        request.readAsArrayBuffer(file);
+
+        const p = new Promise<ArrayBuffer>((resolve, reject) => {
+            request.onload = () => {
+                resolve(request.result);
+            };
+            request.onerror = () => {
+                reject();
+            };
+            request.onprogress = (e) => {
+                if (e.lengthComputable)
+                    pr.setProgress(e.loaded / e.total);
+            };
+        });
+        const pr = new Progressable<ArrayBuffer>(p);
+        return pr;
+    }
+
+    public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
+        return this._loadFileAsPromise(this.file).then((result) => {
+            return J3D.createSceneFromRARCBuffer(gl, result);
+        });
+    }
+}
+
 class Main {
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
     public groups: SceneGroup[];
 
+    private droppedFileGroup: SceneGroup;
+
     private uiContainers: HTMLElement;
+    private dragHighlight: HTMLElement;
     private groupSelect: HTMLSelectElement;
     private sceneSelect: HTMLSelectElement;
     private gearSettings: HTMLElement;
@@ -74,6 +115,16 @@ class Main {
         this.canvas.onmousedown = () => {
             this._deselectUI();
         };
+        this.canvas.ondragover = (e) => {
+            this.dragHighlight.style.display = 'block';
+            e.preventDefault();
+        };
+        this.canvas.ondragleave = (e) => {
+            this.dragHighlight.style.display = 'none';
+            e.preventDefault();
+        };
+        this.canvas.ondrop = this._onDrop.bind(this);
+
         document.body.appendChild(this.canvas);
         window.onresize = this._onResize.bind(this);
         this._onResize();
@@ -82,6 +133,8 @@ class Main {
 
         this.viewer = new Viewer(this.canvas);
         this.viewer.start();
+
+        this._makeUI();
 
         this.groups = [];
 
@@ -93,13 +146,28 @@ class Main {
         this.groups.push(FRES.sceneGroup);
         this.groups.push(J3D.sceneGroup);
 
-        this._makeUI();
+        this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
+        this.groups.push(this.droppedFileGroup);
+
+        this._loadSceneGroups();
 
         // Load the state from the hash
         this._loadState(window.location.hash.slice(1));
         // If it didn't work, fall back to defaults.
         if (!this.currentSceneDesc)
             this._loadSceneGroup(this.groups[0]);
+    }
+
+    private _onDrop(e: DragEvent) {
+        this.dragHighlight.style.display = 'none';
+        e.preventDefault();
+        const transfer = e.dataTransfer;
+        const file = transfer.files[0];
+        const sceneDesc = new DroppedFileSceneDesc(file);
+        this.droppedFileGroup.sceneDescs.push(sceneDesc);
+        this._loadSceneGroups();
+        this._loadSceneGroup(this.droppedFileGroup, false);
+        this._loadSceneDesc(sceneDesc);
     }
 
     private _onResize() {
@@ -119,6 +187,7 @@ class Main {
         this._loadSceneGroup(group, false);
         this._loadSceneDesc(desc);
     }
+
     private _saveState() {
         const groupId = this.currentSceneGroup.id;
         const sceneId = this.currentSceneDesc.id;
@@ -190,6 +259,20 @@ class Main {
         this._loadSceneGroup(group);
     }
 
+    private _loadSceneGroups() {
+        this.groupSelect.innerHTML = '';
+
+        for (const group of this.groups) {
+            if (!group.sceneDescs.length)
+                continue;
+
+            const groupOption = document.createElement('option');
+            groupOption.textContent = group.name;
+            (<any> groupOption).group = group;
+            this.groupSelect.appendChild(groupOption);
+        }
+    }
+
     private _loadSceneGroup(group: SceneGroup, loadDefaultSceneInGroup: boolean = true) {
         if (this.currentSceneGroup === group)
             return;
@@ -222,6 +305,18 @@ class Main {
     }
 
     private _makeUI() {
+        this.dragHighlight = document.createElement('div');
+        document.body.appendChild(this.dragHighlight);
+        this.dragHighlight.style.position = 'absolute';
+        this.dragHighlight.style.left = '0';
+        this.dragHighlight.style.right = '0';
+        this.dragHighlight.style.top = '0';
+        this.dragHighlight.style.bottom = '0';
+        this.dragHighlight.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+        this.dragHighlight.style.boxShadow = '0 0 40px 5px white inset';
+        this.dragHighlight.style.display = 'none';
+        this.dragHighlight.style.pointerEvents = 'none';
+
         this.uiContainers = document.createElement('div');
         document.body.appendChild(this.uiContainers);
 
@@ -251,12 +346,6 @@ class Main {
         this.uiContainers.appendChild(uiContainerR);
 
         this.groupSelect = document.createElement('select');
-        for (const group of this.groups) {
-            const groupOption = document.createElement('option');
-            groupOption.textContent = group.name;
-            (<any> groupOption).group = group;
-            this.groupSelect.appendChild(groupOption);
-        }
         this.groupSelect.onchange = this._onGroupSelectChange.bind(this);
         this.groupSelect.style.marginRight = '1em';
         uiContainerL.appendChild(this.groupSelect);
@@ -326,6 +415,7 @@ class Main {
     private _getSliderT(slider: HTMLInputElement) {
         return (+slider.value - +slider.min) / (+slider.max - +slider.min);
     }
+
     private _onFovSliderChange(e: UIEvent) {
         const slider = (<HTMLInputElement> e.target);
         const value = this._getSliderT(slider);

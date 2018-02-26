@@ -95,28 +95,6 @@ class SunshineSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-class RARCDesc implements Viewer.SceneDesc {
-    public name: string;
-    public path: string;
-    public id: string;
-
-    constructor(path: string, name: string = "") {
-        this.name = name;
-        this.path = path;
-        this.id = this.path;
-    }
-
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
-        return fetch(this.path).then((result: ArrayBuffer) => {
-            const rarc = RARC.parse(Yaz0.decompress(result));
-            // Find a BMD and a BTK.
-            const bmdFile = rarc.files.find((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
-            const btkFile = rarc.files.find((f) => f.name.endsWith('.btk'));
-            return createScene(gl, bmdFile, btkFile, null);
-        });
-    }
-}
-
 class MultiSceneDesc implements Viewer.SceneDesc {
     public id: string;
     public name: string;
@@ -135,7 +113,22 @@ class MultiSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-class WindWakerSceneDesc implements Viewer.SceneDesc {
+export function createSceneFromRARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer): Viewer.Scene {
+    if (readString(buffer, 0, 4) === 'Yaz0')
+        buffer = Yaz0.decompress(buffer);
+    const rarc = RARC.parse(buffer);
+    const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
+    const scenes = bmdFiles.map((bmdFile) => {
+        // Find the corresponding btk.
+        const basename = bmdFile.name.split('.')[0];
+        const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
+        const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
+        return createScene(gl, bmdFile, btkFile, bmtFile);
+    });
+    return new MultiScene(scenes);
+}
+
+class RARCSceneDesc implements Viewer.SceneDesc {
     public name: string;
     public path: string;
     public id: string;
@@ -148,17 +141,7 @@ class WindWakerSceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
-            if (readString(result, 0, 4) === 'Yaz0')
-                result = Yaz0.decompress(result);
-            const rarc = RARC.parse(result);
-            const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
-            const scenes = bmdFiles.map((bmdFile) => {
-                // Find the corresponding btk.
-                const basename = bmdFile.name.split('.')[0];
-                const btkFile = rarc.findFile(`btk/${basename}.btk`);
-                return createScene(gl, bmdFile, btkFile, null);
-            });
-            return new MultiScene(scenes);
+            return createSceneFromRARCBuffer(gl, result);
         });
     }
 }
@@ -170,17 +153,17 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor",),
     new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
 
-    new RARCDesc("data/j3d/MarioFaceShipPlanet.arc", "Faceship"),
+    new RARCSceneDesc("data/j3d/MarioFaceShipPlanet.arc", "Faceship"),
 
     new MultiSceneDesc("data/j3d/PeachCastleGardenPlanet.arc", "Peach's Castle Garden", [
-        new RARCDesc("data/j3d/PeachCastleGardenPlanet.arc"),
-        new RARCDesc("data/j3d/GalaxySky.arc"),
+        new RARCSceneDesc("data/j3d/PeachCastleGardenPlanet.arc"),
+        new RARCSceneDesc("data/j3d/GalaxySky.arc"),
     ]),
 
-    new WindWakerSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
-    new WindWakerSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
-    new WindWakerSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
-    new WindWakerSceneDesc("data/j3d/Room44.arc", "Outset Island"),
+    new RARCSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
+    new RARCSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
+    new RARCSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
+    new RARCSceneDesc("data/j3d/Room44.arc", "Outset Island"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
