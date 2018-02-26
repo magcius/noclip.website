@@ -138,6 +138,7 @@ export class GX_Program extends Program {
     private vtxAttributeScaleLocations: WebGLUniformLocation[] = [];
     private texMtxLocations: WebGLUniformLocation[] = [];
     private samplerLocations: WebGLUniformLocation[] = [];
+    public texLodBiasLocation: WebGLUniformLocation;
 
     private material: GXMaterial;
 
@@ -310,7 +311,7 @@ export class GX_Program extends Program {
     }
 
     private generateTexAccess(stage: TevStage) {
-        return `textureProj(u_Texture[${stage.texMap}], v_TexCoord${stage.texCoordId})`;
+        return `textureProj(u_Texture[${stage.texMap}], v_TexCoord${stage.texCoordId}, u_TextureLODBias)`;
     }
 
     private generateColorIn(stage: TevStage, colorIn: GX.CombineColorInput) {
@@ -517,6 +518,7 @@ ${this.generateTexGens(this.material.texGens)}
 // ${this.material.name}
 precision mediump float;
 uniform sampler2D u_Texture[8];
+uniform float u_TextureLODBias;
 
 in vec3 v_Position;
 in vec3 v_Normal;
@@ -555,6 +557,8 @@ ${this.generateAlphaTest(alphaTest)}
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
+
+        this.texLodBiasLocation = gl.getUniformLocation(prog, 'u_TextureLODBias');
 
         for (const a of vtxAttributeGenDefs) {
             if (a.scale === false)

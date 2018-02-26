@@ -195,6 +195,14 @@ class Command_Material {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
+        // LOD Bias.
+        const width = state.viewport.canvas.width;
+        const height = state.viewport.canvas.height;
+        // GC's internal EFB is sized at 640x528. Bias our mips so that it's like the user
+        // is rendering things in that resolution.
+        const bias = Math.log2(Math.min(width / 640, height / 528));
+        gl.uniform1f(this.program.texLodBiasLocation, bias);
+
         // Bind our scale uniforms.
         for (const vertexArray of this.bmd.vtx1.vertexArrays.values()) {
             const location = this.program.getScaleUniformLocation(vertexArray.vtxAttrib);
