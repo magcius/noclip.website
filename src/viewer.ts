@@ -174,7 +174,7 @@ export class FPSCameraController implements CameraController {
 
         let mult = 10;
         if (inputManager.isKeyDownRaw(SHIFT))
-            mult *= 50;
+            mult *= 5;
         mult *= (dt / 16.0);
 
         let amt;
