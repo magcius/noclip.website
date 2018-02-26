@@ -5,7 +5,7 @@ import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, FrontFaceMode, RenderFlags, Program, BlendFactor, CompareMode } from '../render';
+import { BlendFactor, CompareMode, BlendMode as RenderBlendMode, CullMode, FrontFaceMode, RenderFlags, Program } from '../render';
 
 // #region Material definition.
 export interface Color {
@@ -475,6 +475,7 @@ ${a.storage} ReadAttrib_${a.name}() {
 
     private generateShaders() {
         this.vert = `
+// ${this.material.name}
 precision highp float;
 // Viewer
 uniform mat4 u_projection;
@@ -502,7 +503,8 @@ void main() {
     v_Color0 = ${this.generateColorChannel(this.material.colorChannels[0], `ReadAttrib_Color0()`)};
     v_Color1 = ${this.generateColorChannel(this.material.colorChannels[1], `ReadAttrib_Color1()`)};
 ${this.generateTexGens(this.material.texGens)}
-    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);
+    vec3 p = v_Position;
+    gl_Position = u_projection * u_modelView * vec4(p, 1.0);
 }
 `;
 
@@ -512,6 +514,7 @@ ${this.generateTexGens(this.material.texGens)}
         const rColors = this.material.colorRegisters;
 
         this.frag = `
+// ${this.material.name}
 precision mediump float;
 uniform sampler2D u_Texture[8];
 
@@ -647,9 +650,19 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
     renderFlags.depthTest = material.ropInfo.depthTest;
     renderFlags.depthFunc = translateCompareType(material.ropInfo.depthFunc);
     renderFlags.frontFace = FrontFaceMode.CW;
-    renderFlags.blend = material.ropInfo.blendMode.type === GX.BlendMode.BLEND;
-    renderFlags.blendSrc = translateBlendFactor(material.ropInfo.blendMode.srcFactor);
-    renderFlags.blendDst = translateBlendFactor(material.ropInfo.blendMode.dstFactor);
+    if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
+        renderFlags.blendMode = RenderBlendMode.NONE;
+    } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
+        renderFlags.blendMode = RenderBlendMode.ADD;
+        renderFlags.blendSrc = translateBlendFactor(material.ropInfo.blendMode.srcFactor);
+        renderFlags.blendDst = translateBlendFactor(material.ropInfo.blendMode.dstFactor);
+    } else if (material.ropInfo.blendMode.type === GX.BlendMode.SUBTRACT) {
+        renderFlags.blendMode = RenderBlendMode.REVERSE_SUBTRACT;
+        renderFlags.blendSrc = BlendFactor.ONE;
+        renderFlags.blendDst = BlendFactor.ONE;
+    } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
+        throw "whoops";
+    }
     return renderFlags;
 }
 // #endregion

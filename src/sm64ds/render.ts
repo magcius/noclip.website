@@ -8,7 +8,7 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass } from '../render';
+import { CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass, BlendMode } from '../render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
 
@@ -198,7 +198,7 @@ class Scene implements Viewer.Scene {
         mat3.fromMat2d(texCoordMat, material.texCoordMat);
 
         const renderFlags = new RenderFlags();
-        renderFlags.blend = true;
+        renderFlags.blendMode = BlendMode.ADD;
         renderFlags.depthTest = true;
         renderFlags.depthWrite = material.depthWrite;
         renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);

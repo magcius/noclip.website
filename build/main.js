@@ -333,7 +333,7 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
         a.push(v);
         return v;
     }
-    var gl_matrix_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, RenderFlags, RenderState, Program, RenderArena;
+    var gl_matrix_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderState, Program, RenderArena;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -377,14 +377,21 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                 BlendFactor[BlendFactor["ONE_MINUS_DST_ALPHA"] = WebGL2RenderingContext.ONE_MINUS_DST_ALPHA] = "ONE_MINUS_DST_ALPHA";
             })(BlendFactor || (BlendFactor = {}));
             exports_4("BlendFactor", BlendFactor);
+            (function (BlendMode) {
+                BlendMode[BlendMode["NONE"] = 0] = "NONE";
+                BlendMode[BlendMode["ADD"] = WebGL2RenderingContext.FUNC_ADD] = "ADD";
+                BlendMode[BlendMode["SUBTRACT"] = WebGL2RenderingContext.FUNC_SUBTRACT] = "SUBTRACT";
+                BlendMode[BlendMode["REVERSE_SUBTRACT"] = WebGL2RenderingContext.FUNC_REVERSE_SUBTRACT] = "REVERSE_SUBTRACT";
+            })(BlendMode || (BlendMode = {}));
+            exports_4("BlendMode", BlendMode);
             RenderFlags = /** @class */ (function () {
                 function RenderFlags() {
                     this.depthWrite = undefined;
                     this.depthTest = undefined;
                     this.depthFunc = undefined;
-                    this.blend = undefined;
                     this.blendSrc = undefined;
                     this.blendDst = undefined;
+                    this.blendMode = undefined;
                     this.cullMode = undefined;
                     this.frontFace = undefined;
                 }
@@ -395,8 +402,8 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                         dst.depthTest = src.depthTest;
                     if (dst.depthFunc === undefined)
                         dst.depthFunc = src.depthFunc;
-                    if (dst.blend === undefined)
-                        dst.blend = src.blend;
+                    if (dst.blendMode === undefined)
+                        dst.blendMode = src.blendMode;
                     if (dst.blendSrc === undefined)
                         dst.blendSrc = src.blendSrc;
                     if (dst.blendDst === undefined)
@@ -416,9 +423,10 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                         else
                             gl.disable(gl.DEPTH_TEST);
                     }
-                    if (oldFlags.blend !== newFlags.blend) {
-                        if (newFlags.blend) {
+                    if (oldFlags.blendMode !== newFlags.blendMode) {
+                        if (newFlags.blendMode !== BlendMode.NONE) {
                             gl.enable(gl.BLEND);
+                            gl.blendEquation(newFlags.blendMode);
                         }
                         else {
                             gl.disable(gl.BLEND);
@@ -450,7 +458,7 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                 return RenderFlags;
             }());
             exports_4("RenderFlags", RenderFlags);
-            RenderFlags.default.blend = false;
+            RenderFlags.default.blendMode = BlendMode.NONE;
             RenderFlags.default.blendSrc = BlendFactor.SRC_ALPHA;
             RenderFlags.default.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
             RenderFlags.default.cullMode = CullMode.NONE;
@@ -3032,9 +3040,22 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
         renderFlags.depthTest = material.ropInfo.depthTest;
         renderFlags.depthFunc = translateCompareType(material.ropInfo.depthFunc);
         renderFlags.frontFace = render_4.FrontFaceMode.CW;
-        renderFlags.blend = material.ropInfo.blendMode.type === 1 /* BLEND */;
-        renderFlags.blendSrc = translateBlendFactor(material.ropInfo.blendMode.srcFactor);
-        renderFlags.blendDst = translateBlendFactor(material.ropInfo.blendMode.dstFactor);
+        if (material.ropInfo.blendMode.type === 0 /* NONE */) {
+            renderFlags.blendMode = render_4.BlendMode.NONE;
+        }
+        else if (material.ropInfo.blendMode.type === 1 /* BLEND */) {
+            renderFlags.blendMode = render_4.BlendMode.ADD;
+            renderFlags.blendSrc = translateBlendFactor(material.ropInfo.blendMode.srcFactor);
+            renderFlags.blendDst = translateBlendFactor(material.ropInfo.blendMode.dstFactor);
+        }
+        else if (material.ropInfo.blendMode.type === 3 /* SUBTRACT */) {
+            renderFlags.blendMode = render_4.BlendMode.REVERSE_SUBTRACT;
+            renderFlags.blendSrc = render_4.BlendFactor.ONE;
+            renderFlags.blendDst = render_4.BlendFactor.ONE;
+        }
+        else if (material.ropInfo.blendMode.type === 2 /* LOGIC */) {
+            throw "whoops";
+        }
         return renderFlags;
     }
     exports_18("translateRenderFlags", translateRenderFlags);
@@ -3351,12 +3372,12 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     }).join('');
                 };
                 GX_Program.prototype.generateShaders = function () {
-                    this.vert = "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + this.generateVertAttributeDefs() + "\nuniform mat3 u_TexMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * vec4(v_Position, 1.0);\n}\n";
+                    this.vert = "\n// " + this.material.name + "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + this.generateVertAttributeDefs() + "\nuniform mat3 u_TexMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    v_Position = ReadAttrib_Position();\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    vec3 p = v_Position;\n    gl_Position = u_projection * u_modelView * vec4(p, 1.0);\n}\n";
                     var tevStages = this.material.tevStages;
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\nprecision mediump float;\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\n\nvoid main() {\n    const vec4 s_kColor0 = " + this.generateColorConstant(kColors[0]) + ";\n    const vec4 s_kColor1 = " + this.generateColorConstant(kColors[1]) + ";\n    const vec4 s_kColor2 = " + this.generateColorConstant(kColors[2]) + ";\n    const vec4 s_kColor3 = " + this.generateColorConstant(kColors[3]) + ";\n\n    vec4 t_Color0    = " + this.generateColorConstant(rColors[0]) + ";\n    vec4 t_Color1    = " + this.generateColorConstant(rColors[1]) + ";\n    vec4 t_Color2    = " + this.generateColorConstant(rColors[2]) + ";\n    vec4 t_ColorPrev = " + this.generateColorConstant(rColors[3]) + ";\n" + this.generateTevStages(tevStages) + "\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\n\nvoid main() {\n    const vec4 s_kColor0 = " + this.generateColorConstant(kColors[0]) + ";\n    const vec4 s_kColor1 = " + this.generateColorConstant(kColors[1]) + ";\n    const vec4 s_kColor2 = " + this.generateColorConstant(kColors[2]) + ";\n    const vec4 s_kColor3 = " + this.generateColorConstant(kColors[3]) + ";\n\n    vec4 t_Color0    = " + this.generateColorConstant(rColors[0]) + ";\n    vec4 t_Color1    = " + this.generateColorConstant(rColors[1]) + ";\n    vec4 t_Color2    = " + this.generateColorConstant(rColors[2]) + ";\n    vec4 t_ColorPrev = " + this.generateColorConstant(rColors[3]) + ";\n" + this.generateTevStages(tevStages) + "\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 GX_Program.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
@@ -4750,6 +4771,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 Command_Material.prototype.exec = function (state) {
                     var gl = state.gl;
                     state.useProgram(this.program);
+                    state.useFlags(this.renderFlags);
                     try {
                         // Bind our scale uniforms.
                         for (var _a = __values(this.bmd.vtx1.vertexArrays.values()), _b = _a.next(); !_b.done; _b = _a.next()) {
@@ -4778,7 +4800,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         var location_4 = this.program.getTexMtxLocation(i);
                         gl.uniformMatrix3fv(location_4, false, matrix);
                     }
-                    state.useFlags(this.renderFlags);
                     for (var i = 0; i < this.textures.length; i++) {
                         var texture = this.textures[i];
                         if (texture === null)
@@ -5335,7 +5356,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
                     this.program = new FancyGrid_Program();
                     this._createBuffers(gl);
                     this.renderFlags = new render_6.RenderFlags();
-                    this.renderFlags.blend = true;
+                    this.renderFlags.blendMode = render_6.BlendMode.ADD;
                 }
                 FancyGrid.prototype.render = function (state) {
                     var gl = state.viewport.gl;
@@ -6405,7 +6426,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                     var opaque = this.translateCmb(gl, mesh.opaque);
                     var transparent = this.translateCmb(gl, mesh.transparent);
                     var renderFlags = new render_8.RenderFlags();
-                    renderFlags.blend = true;
+                    renderFlags.blendMode = render_8.BlendMode.ADD;
                     renderFlags.depthTest = true;
                     renderFlags.cullMode = render_8.CullMode.BACK;
                     return function (state) {
@@ -7575,7 +7596,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     var texCoordMat = gl_matrix_7.mat3.create();
                     gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                     var renderFlags = new render_10.RenderFlags();
-                    renderFlags.blend = true;
+                    renderFlags.blendMode = render_10.BlendMode.ADD;
                     renderFlags.depthTest = true;
                     renderFlags.depthWrite = material.depthWrite;
                     renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
@@ -8347,12 +8368,12 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_39,
             var alphaTestMode_1;
             if (newMode_1 & OtherModeL.FORCE_BL) {
                 alphaTestMode_1 = 0;
-                renderFlags_1.blend = true;
+                renderFlags_1.blendMode = render_12.BlendMode.ADD;
             }
             else {
                 alphaTestMode_1 = ((newMode_1 & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
                     (newMode_1 & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
-                renderFlags_1.blend = false;
+                renderFlags_1.blendMode = render_12.BlendMode.NONE;
             }
             state.cmds.push(function (renderState) {
                 var gl = renderState.gl;
@@ -9150,7 +9171,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                     gl.bufferData(gl.ARRAY_BUFFER, coll.verts, gl.STATIC_DRAW);
                     var renderFlags = new render_13.RenderFlags();
                     renderFlags.depthTest = true;
-                    renderFlags.blend = true;
+                    renderFlags.blendMode = render_13.BlendMode.ADD;
                     return function (state) {
                         var prog = _this.program_COLL;
                         state.useProgram(prog);
@@ -9176,7 +9197,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
                     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
                     var renderFlags = new render_13.RenderFlags();
-                    renderFlags.blend = true;
+                    renderFlags.blendMode = render_13.BlendMode.ADD;
                     renderFlags.cullMode = render_13.CullMode.NONE;
                     return function (state) {
                         var prog = _this.program_WATERS;

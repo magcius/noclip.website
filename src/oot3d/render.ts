@@ -5,7 +5,7 @@ import * as ZSI from './zsi';
 import * as Viewer from '../viewer';
 
 import { Progressable } from '../progress';
-import { CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass } from '../render';
+import { BlendMode, CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass } from '../render';
 import { fetch } from '../util';
 
 class OoT3D_Program extends Program {
@@ -276,7 +276,7 @@ class Scene implements Viewer.Scene {
         const transparent = this.translateCmb(gl, mesh.transparent);
 
         const renderFlags = new RenderFlags();
-        renderFlags.blend = true;
+        renderFlags.blendMode = BlendMode.ADD;
         renderFlags.depthTest = true;
         renderFlags.cullMode = CullMode.BACK;
 
