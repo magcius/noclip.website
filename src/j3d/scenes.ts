@@ -1,8 +1,7 @@
 
 import { Scene } from 'render';
 
-import * as BMD from './bmd';
-import * as BTK from './btk';
+import { BMD, BTK } from './j3d';
 import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';
@@ -144,6 +143,7 @@ class WindWakerSceneDesc implements Viewer.SceneDesc {
 
 const sceneDescs: Viewer.SceneDesc[] = [
     new SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
+    new SunshineSceneDesc("data/j3d/mare0.szs", "Noki Bay"),
     new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach",),
     new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor",),
     new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
