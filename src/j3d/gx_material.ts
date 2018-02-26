@@ -120,24 +120,26 @@ interface VertexAttributeGenDef {
 };
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrib: GX.VertexAttribute.POS,  name: "Position", storage: "vec3", scale: true },
-    { attrib: GX.VertexAttribute.NRM,  name: "Normal",   storage: "vec3", scale: true },
-    { attrib: GX.VertexAttribute.CLR0, name: "Color0",   storage: "vec4", scale: false },
-    { attrib: GX.VertexAttribute.CLR1, name: "Color1",   storage: "vec4", scale: false },
-    { attrib: GX.VertexAttribute.TEX0, name: "Tex0",     storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX1, name: "Tex1",     storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX2, name: "Tex2",     storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX3, name: "Tex3",     storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX4, name: "Tex4",     storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX5, name: "Tex5",     storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX6, name: "Tex6",     storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX7, name: "Tex7",     storage: "vec2", scale: true },
+    { attrib: GX.VertexAttribute.PTMTXIDX, name: "PosMtxIdx", storage: "float", scale: false },
+    { attrib: GX.VertexAttribute.POS,      name: "Position",  storage: "vec3", scale: true },
+    { attrib: GX.VertexAttribute.NRM,      name: "Normal",    storage: "vec3", scale: true },
+    { attrib: GX.VertexAttribute.CLR0,     name: "Color0",    storage: "vec4", scale: false },
+    { attrib: GX.VertexAttribute.CLR1,     name: "Color1",    storage: "vec4", scale: false },
+    { attrib: GX.VertexAttribute.TEX0,     name: "Tex0",      storage: "vec2", scale: true },
+    { attrib: GX.VertexAttribute.TEX1,     name: "Tex1",      storage: "vec2", scale: true },
+    { attrib: GX.VertexAttribute.TEX2,     name: "Tex2",      storage: "vec2", scale: true },
+    { attrib: GX.VertexAttribute.TEX3,     name: "Tex3",      storage: "vec2", scale: true },
+    { attrib: GX.VertexAttribute.TEX4,     name: "Tex4",      storage: "vec2", scale: true },
+    { attrib: GX.VertexAttribute.TEX5,     name: "Tex5",      storage: "vec2", scale: true },
+    { attrib: GX.VertexAttribute.TEX6,     name: "Tex6",      storage: "vec2", scale: true },
+    { attrib: GX.VertexAttribute.TEX7,     name: "Tex7",      storage: "vec2", scale: true },
 ];
 
 export class GX_Program extends Program {
     private vtxAttributeScaleLocations: WebGLUniformLocation[] = [];
-    private texMtxLocations: WebGLUniformLocation[] = [];
-    private samplerLocations: WebGLUniformLocation[] = [];
+    public texMtxLocations: WebGLUniformLocation[] = [];
+    public samplerLocations: WebGLUniformLocation[] = [];
+    public posMtxLocation: WebGLUniformLocation;
     public texLodBiasLocation: WebGLUniformLocation;
 
     private material: GXMaterial;
@@ -484,6 +486,7 @@ uniform mat4 u_modelView;
 // GX_Material
 ${this.generateVertAttributeDefs()}
 uniform mat3 u_TexMtx[10];
+uniform mat4 u_PosMtx[10];
 
 out vec3 v_Position;
 out vec3 v_Normal;
@@ -499,13 +502,14 @@ out vec3 v_TexCoord6;
 out vec3 v_TexCoord7;
 
 void main() {
-    v_Position = ReadAttrib_Position();
+    mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];
+    vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);
+    v_Position = t_Position.xyz;
     v_Normal = ReadAttrib_Normal();
     v_Color0 = ${this.generateColorChannel(this.material.colorChannels[0], `ReadAttrib_Color0()`)};
     v_Color1 = ${this.generateColorChannel(this.material.colorChannels[1], `ReadAttrib_Color1()`)};
 ${this.generateTexGens(this.material.texGens)}
-    vec3 p = v_Position;
-    gl_Position = u_projection * u_modelView * vec4(p, 1.0);
+    gl_Position = u_projection * u_modelView * t_Position;
 }
 `;
 
@@ -559,6 +563,7 @@ ${this.generateAlphaTest(alphaTest)}
         super.bind(gl, prog);
 
         this.texLodBiasLocation = gl.getUniformLocation(prog, 'u_TextureLODBias');
+        this.posMtxLocation = gl.getUniformLocation(prog, `u_PosMtx`);
 
         for (const a of vtxAttributeGenDefs) {
             if (a.scale === false)
@@ -574,19 +579,11 @@ ${this.generateAlphaTest(alphaTest)}
             this.samplerLocations[i] = gl.getUniformLocation(prog, `u_Texture[${i}]`);
     }
 
-    public getTexMtxLocation(i: number) {
-        return this.texMtxLocations[i];
-    }
-
     public getScaleUniformLocation(vtxAttrib: GX.VertexAttribute) {
         const location = this.vtxAttributeScaleLocations[vtxAttrib];
         if (location === undefined)
             return null;
         return location;
-    }
-
-    public getSamplerLocation(i: number) {
-        return this.samplerLocations[i];
     }
 }
 // #endregion

@@ -4,9 +4,9 @@
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
 
-import { betoh } from 'endian';
+import { betoh, be16toh } from 'endian';
 import { assert, readString } from 'util';
-import { mat2d, mat4, mat3 as matrix3 } from 'gl-matrix';
+import { mat2d, mat4, mat3 as matrix3, quat } from 'gl-matrix';
 
 function readStringTable(buffer: ArrayBuffer, offs: number): string[] {
     const view = new DataView(buffer, offs);
@@ -244,14 +244,84 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     }
 }
 
-export interface Shape {
-    // The vertex data. Converted to a modern-esque buffer per-shape.
-    packedData: ArrayBuffer;
-    // The size of an individual vertex.
-    packedVertexSize: number;
-    packedVertexAttributes: PackedVertexAttribute[];
-    // The draw calls.
-    drawCalls: DrawCall[];
+interface WeightedJoint {
+    isWeighted: boolean;
+    jointIndex: number;
+}
+
+export interface DRW1 {
+    weightedJoints: WeightedJoint[];
+}
+
+function readDRW1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
+    const view = new DataView(buffer, chunkStart, chunkSize);
+    const weightedJointCount = view.getUint16(0x08);
+    const isWeightedTableOffs = view.getUint32(0x0C);
+    const jointIndexTableOffs = view.getUint32(0x10);
+
+    const weightedJoints: WeightedJoint[] = [];
+    for (let i = 0; i < weightedJointCount; i++) {
+        const isWeighted = !!view.getUint8(isWeightedTableOffs + i);
+        const jointIndex = view.getUint16(jointIndexTableOffs + i * 0x02);
+        weightedJoints.push({ isWeighted, jointIndex });
+    }
+
+    bmd.drw1 = { weightedJoints };
+}
+
+export interface Bone {
+    name: string;
+    matrix: mat4;
+}
+
+export interface JNT1 {
+    remapTable: number[];
+    bones: Bone[];
+}
+
+function readJNT1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
+    const view = new DataView(buffer, chunkStart, chunkSize);
+
+    const boneDataCount = view.getUint16(0x08);
+    assert(view.getUint16(0x0A) === 0xFFFF);
+
+    const boneDataTableOffs = view.getUint32(0x0C);
+    const remapTableOffs = view.getUint32(0x10);
+
+    const remapTable: number[] = [];
+    for (let i = 0; i < boneDataCount; i++)
+        remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
+
+    const nameTableOffs = view.getUint32(0x14);
+    const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
+
+    const q = quat.create();
+
+    const bones: Bone[] = [];
+    let boneDataTableIdx = boneDataTableOffs;
+    for (let i = 0; i < boneDataCount; i++) {
+        const name = nameTable[i];
+        const scaleX = view.getFloat32(boneDataTableIdx + 0x04);
+        const scaleY = view.getFloat32(boneDataTableIdx + 0x08);
+        const scaleZ = view.getFloat32(boneDataTableIdx + 0x0C);
+        const rotationX = view.getUint16(boneDataTableIdx + 0x10) / 0x7FFF;
+        const rotationY = view.getUint16(boneDataTableIdx + 0x12) / 0x7FFF;
+        const rotationZ = view.getUint16(boneDataTableIdx + 0x14) / 0x7FFF;
+        const translationX = view.getFloat32(boneDataTableIdx + 0x18);
+        const translationY = view.getFloat32(boneDataTableIdx + 0x1C);
+        const translationZ = view.getFloat32(boneDataTableIdx + 0x20);
+        // Skipping bounding box data for now.
+
+        quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
+        const matrix = mat4.create();
+        mat4.fromRotationTranslationScale(matrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
+        // mat4.translate(matrix, matrix, [translationX, translationY, translationZ]);
+
+        bones.push({ name, matrix });
+        boneDataTableIdx += 0x40;
+    }
+
+    bmd.jnt1 = { remapTable, bones };
 }
 
 // Describes an individual vertex attribute in the packed data.
@@ -261,6 +331,12 @@ export interface PackedVertexAttribute {
     offset: number;
 }
 
+// A packet is a series of draw calls that use the same matrix table.
+interface Packet {
+    weightedJointTable: Uint16Array;
+    drawCalls: DrawCall[];
+}
+
 interface DrawCall {
     primType: GX.PrimitiveType;
     vertexCount: number;
@@ -268,6 +344,15 @@ interface DrawCall {
     first: number;
     // For internal use while building.
     srcOffs: number;
+}
+
+export interface Shape {
+    // The vertex data. Converted to a modern-esque buffer per-shape.
+    packedData: ArrayBuffer;
+    // The size of an individual vertex.
+    packedVertexSize: number;
+    packedVertexAttributes: PackedVertexAttribute[];
+    packets: Packet[];
 }
 
 export interface SHP1 {
@@ -290,24 +375,6 @@ function readIndex(view: DataView, offs: number, type: GX.CompType) {
 function align(n: number, multiple: number): number {
     const mask = (multiple - 1);
     return (n + mask) & ~mask;
-}
-
-// temp, center, center inverse
-const t = matrix3.create(), c = matrix3.create(), ci = matrix3.create();
-function createTexMtx(m: matrix3, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
-    // TODO(jstpierre): Remove these.
-    matrix3.fromTranslation(c, [centerS, centerT, centerQ]);
-    matrix3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
-    matrix3.fromTranslation(m, [translationS, translationT, 0]);
-    matrix3.fromRotation(t, rotation);
-    matrix3.mul(t, t, ci);
-    matrix3.mul(t, c, t);
-    matrix3.mul(m, m, t);
-    matrix3.fromScaling(t, [scaleS, scaleT, 1]);
-    matrix3.mul(t, t, ci);
-    matrix3.mul(t, c, t);
-    matrix3.mul(m, m, t);
-    return m;
 }
 
 function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
@@ -368,14 +435,23 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
         // Now parse out the packets.
         let packetIdx = packetTableOffs + (firstPacket * 0x08);
-        const drawCalls: DrawCall[] = [];
+        const allDrawCalls: DrawCall[] = [];
+        const packets: Packet[] = [];
 
         let totalVertexCount = 0;
         for (let j = 0; j < packetCount; j++) {
             const packetSize = view.getUint32(packetIdx + 0x00);
             const packetStart = primDataOffs + view.getUint32(packetIdx + 0x04);
 
-            // XXX: We need an "update matrix table" command here in the draw call list.
+            const packetMatrixDataOffs = matrixDataOffs + (firstMatrix + j) * 0x08;
+            const matrixCount = view.getUint16(packetMatrixDataOffs + 0x02);
+            const matrixFirstIndex = view.getUint32(packetMatrixDataOffs + 0x04);
+
+            const packetMatrixTableOffs = chunkStart + matrixTableOffs + matrixFirstIndex * 0x02;
+            const packetMatrixTableEnd = packetMatrixTableOffs + matrixCount * 0x02;
+            const weightedJointTable = new Uint16Array(be16toh(buffer.slice(packetMatrixTableOffs, packetMatrixTableEnd)));
+
+            const drawCalls: DrawCall[] = [];
 
             const drawCallEnd = packetStart + packetSize;
             let drawCallIdx = packetStart;
@@ -392,8 +468,12 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                 totalVertexCount += vertexCount;
                 // Skip over the index data.
                 drawCallIdx += vertexIndexSize * vertexCount;
-                drawCalls.push({ primType, vertexCount, first, srcOffs });
+                const drawCall = { primType, vertexCount, first, srcOffs };
+                drawCalls.push(drawCall);
+                allDrawCalls.push(drawCall);
             }
+
+            packets.push({ weightedJointTable, drawCalls });
 
             packetIdx += 0x08;
         }
@@ -402,7 +482,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const packedDataSize = packedVertexSize * totalVertexCount;
         const packedDataView = new Uint8Array(packedDataSize);
         let packedDataOffs = 0;
-        for (const drawCall of drawCalls) {
+        for (const drawCall of allDrawCalls) {
             let drawCallIdx = drawCall.srcOffs;
             for (let j = 0; j < drawCall.vertexCount; j++) {
                 const packedDataOffs_ = packedDataOffs;
@@ -425,7 +505,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const packedData = packedDataView.buffer;
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ packedData, packedVertexSize, packedVertexAttributes, drawCalls });
+        shapes.push({ packedData, packedVertexSize, packedVertexAttributes, packets });
 
         shapeIdx += 0x28;
     }
@@ -437,6 +517,24 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 export interface MAT3 {
     remapTable: number[];
     materialEntries: GX_Material.GXMaterial[];
+}
+
+// temp, center, center inverse
+const t = matrix3.create(), c = matrix3.create(), ci = matrix3.create();
+function createTexMtx(m: matrix3, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
+    // TODO(jstpierre): Remove these.
+    matrix3.fromTranslation(c, [centerS, centerT, centerQ]);
+    matrix3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
+    matrix3.fromTranslation(m, [translationS, translationT, 0]);
+    matrix3.fromRotation(t, rotation);
+    matrix3.mul(t, t, ci);
+    matrix3.mul(t, c, t);
+    matrix3.mul(m, m, t);
+    matrix3.fromScaling(t, [scaleS, scaleT, 1]);
+    matrix3.mul(t, t, ci);
+    matrix3.mul(t, c, t);
+    matrix3.mul(m, m, t);
+    return m;
 }
 
 function readColor32(view: DataView, srcOffs: number): GX_Material.Color {
@@ -729,7 +827,7 @@ export interface TEX1 {
     textures: TEX1_Texture[];
 }
 
-export function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
+function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
     const view = new DataView(buffer, chunkStart, chunkSize);
     const textureCount = view.getUint16(0x08);
     const textureHeaderOffs = view.getUint32(0x0C);
@@ -764,6 +862,8 @@ export function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number,
 export class BMD {
     public inf1: INF1;
     public vtx1: VTX1;
+    public drw1: DRW1;
+    public jnt1: JNT1;
     public shp1: SHP1;
     public mat3: MAT3;
     public tex1: TEX1;
@@ -784,8 +884,8 @@ export class BMD {
             INF1: readINF1Chunk,
             VTX1: readVTX1Chunk,
             EVP1: null,
-            DRW1: null,
-            JNT1: null,
+            DRW1: readDRW1Chunk,
+            JNT1: readJNT1Chunk,
             SHP1: readSHP1Chunk,
             MAT3: readMAT3Chunk,
             TEX1: readTEX1Chunk,
@@ -1042,14 +1142,14 @@ export class BTK {
         for (let i = 0; i < numChunks; i++) {
             const chunkStart = offs;
             const chunkId = readString(buffer, chunkStart + 0x00, 4);
-            const chunkSize = view.getUint32(chunkStart + 0x04) - 0x04;
+            const chunkSize = view.getUint32(chunkStart + 0x04);
 
             const parseFunc = parseFuncs[chunkId];
             if (parseFunc === undefined)
                 throw new Error(`Unknown chunk ${chunkId}!`);
 
             if (parseFunc !== null)
-                parseFunc(btk, buffer, chunkStart, chunkSize);
+                parseFunc(btk, buffer, chunkStart, chunkSize - 0x04);
 
             offs += chunkSize;
         }

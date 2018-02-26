@@ -1,5 +1,5 @@
 
-import { mat3 } from 'gl-matrix';
+import { mat3, mat4 } from 'gl-matrix';
 
 import { BMD, BTK, BMT, TEX1_Texture, Shape, HierarchyNode, HierarchyType } from './j3d';
 
@@ -40,15 +40,19 @@ function translatePrimType(gl: WebGL2RenderingContext, primType: GX.PrimitiveTyp
     }
 }
 
+const posMtxTable = new Float32Array(16 * 10);
 class Command_Shape {
     public bmd: BMD;
     public shape: Shape;
     public buffer: WebGLBuffer;
     public vao: WebGLVertexArrayObject;
+    private jointMatrices: mat4[];
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, shape: Shape) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD, shape: Shape, jointMatrices: mat4[]) {
         this.bmd = bmd;
         this.shape = shape;
+        this.jointMatrices = jointMatrices;
+
         this.vao = gl.createVertexArray();
         gl.bindVertexArray(this.vao);
 
@@ -76,11 +80,29 @@ class Command_Shape {
 
     public exec(state: RenderState) {
         const gl = state.gl;
+        const prog = (<GX_Material.GX_Program> state.currentProgram);
 
         gl.bindVertexArray(this.vao);
 
-        this.shape.drawCalls.forEach((drawCall) => {
-            gl.drawArrays(translatePrimType(gl, drawCall.primType), drawCall.first, drawCall.vertexCount);
+        this.shape.packets.forEach((packet) => {
+            // Update our matrix table.
+            for (let i = 0; i < packet.weightedJointTable.length; i++) {
+                const weightedJointIndex = packet.weightedJointTable[i];
+                // Leave existing joint.
+                if (weightedJointIndex === 0xFFFF)
+                    continue;
+                const weightedJoint = this.bmd.drw1.weightedJoints[weightedJointIndex];
+                if (weightedJoint.isWeighted)
+                    throw "whoops";
+
+                const posMtx = this.jointMatrices[weightedJoint.jointIndex];
+                posMtxTable.set(posMtx, i * 16);
+            }
+            gl.uniformMatrix4fv(prog.posMtxLocation, false, posMtxTable);
+
+            packet.drawCalls.forEach((drawCall) => {
+                gl.drawArrays(translatePrimType(gl, drawCall.primType), drawCall.first, drawCall.vertexCount);
+            });
         });
 
         gl.bindVertexArray(null);
@@ -221,7 +243,7 @@ class Command_Material {
             if (!(this.btk && this.btk.applyAnimation(matrix, this.material.name, i, state.time)))
                 mat3.copy(matrix, texMtx.matrix);
 
-            const location = this.program.getTexMtxLocation(i);
+            const location = this.program.texMtxLocations[i];
             gl.uniformMatrix3fv(location, false, matrix);
         }
 
@@ -230,7 +252,7 @@ class Command_Material {
             if (texture === null)
                 continue;
             gl.activeTexture(gl.TEXTURE0 + i);
-            gl.uniform1i(this.program.getSamplerLocation(i), i);
+            gl.uniform1i(this.program.samplerLocations[i], i);
             gl.bindTexture(gl.TEXTURE_2D, texture);
         }
     }
@@ -242,6 +264,11 @@ class Command_Material {
 }
 
 type Command = Command_Shape | Command_Material;
+
+interface HierarchyTraverseContext {
+    commandList: Command[];
+    parentJointMatrix: mat4;
+}
 
 export class Scene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
@@ -257,6 +284,7 @@ export class Scene implements Viewer.Scene {
 
     private materialCommands: Command_Material[];
     private shapeCommands: Command_Shape[];
+    private jointMatrices: mat4[];
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT) {
         this.gl = gl;
@@ -302,43 +330,55 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateModel(bmd: BMD) {
+        this.opaqueCommands = [];
+        this.transparentCommands = [];
+        this.jointMatrices = [];
+
         const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
         this.materialCommands = mat3.materialEntries.map((material) => {
             return new Command_Material(this.gl, this.bmd, this.btk, this.bmt, material);
         });
         this.shapeCommands = bmd.shp1.shapes.map((shape) => {
-            return new Command_Shape(this.gl, this.bmd, shape);
+            return new Command_Shape(this.gl, this.bmd, shape, this.jointMatrices);
         });
 
-        this.opaqueCommands = [];
-        this.transparentCommands = [];
-
         // Iterate through scene graph.
-        // TODO(jstpierre): Clean this up.
-        const context = {};
+        const context: HierarchyTraverseContext = {
+            commandList: null,
+            parentJointMatrix: mat4.create(),
+        };
         this.translateSceneGraph(bmd.inf1.sceneGraph, context);
     }
 
-    private translateSceneGraph(node: HierarchyNode, context) {
+    private translateSceneGraph(node: HierarchyNode, context: HierarchyTraverseContext) {
         const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
+        const jnt1 = this.bmd.jnt1;
 
+        let commandList = context.commandList;
+        let parentJointMatrix = context.parentJointMatrix;
         switch (node.type) {
         case HierarchyType.Shape:
-            context.currentCommandList.push(this.shapeCommands[node.shapeIdx]);
+            commandList.push(this.shapeCommands[node.shapeIdx]);
             break;
         case HierarchyType.Joint:
-            // XXX: Implement joints...
+            const boneMatrix = jnt1.bones[jnt1.remapTable[node.jointIdx]].matrix;
+            const jointMatrix = mat4.create();
+            mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
+            this.jointMatrices[node.jointIdx] = jointMatrix;
+            parentJointMatrix = jointMatrix;
             break;
         case HierarchyType.Material:
             const materialIdx = mat3.remapTable[node.materialIdx];
             const materialCommand = this.materialCommands[materialIdx];
-            context.currentCommandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
-            context.currentCommandList.push(materialCommand);
+            commandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
+            commandList.push(materialCommand);
             break;
         }
 
+        const childContext = { commandList, parentJointMatrix };
+
         for (const child of node.children)
-            this.translateSceneGraph(child, context);
+            this.translateSceneGraph(child, childContext);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
