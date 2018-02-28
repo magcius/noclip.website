@@ -1,5 +1,5 @@
 
-import { Scene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController } from 'viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController } from 'viewer';
 
 import * as FRES from 'fres/scenes';
 import * as J3D from 'j3d/scenes';
@@ -16,7 +16,7 @@ class ProgressBar {
 
     private toplevel: HTMLDivElement;
     private barFill: HTMLDivElement;
-    private progressable: Progressable<Scene>;
+    private progressable: Progressable<MainScene>;
 
     constructor() {
         this.toplevel = document.createElement('div');
@@ -42,7 +42,7 @@ class ProgressBar {
         }
     }
 
-    set(p: Progressable<Scene>) {
+    set(p: Progressable<MainScene>) {
         if (this.progressable)
             this.progressable.onProgress = null;
 
@@ -98,7 +98,7 @@ class DroppedFileSceneDesc implements SceneDesc {
         return null;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<MainScene> {
         return this._loadFileAsPromise(this.file).then((result: ArrayBuffer) => {
             return this.createSceneFromFile(gl, this.file, result);
         });
@@ -237,7 +237,7 @@ class Main {
         this.viewer.setScene(null);
         this.progressBar.set(progressable);
 
-        progressable.promise.then((result: Scene) => {
+        progressable.promise.then((result: MainScene) => {
             this.progressBar.set(null);
             this.viewer.setScene(result);
 

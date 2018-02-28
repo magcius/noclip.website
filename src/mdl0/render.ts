@@ -171,7 +171,7 @@ void main() {
     }
 }
 
-class Scene implements Viewer.Scene {
+class Scene implements Viewer.MainScene {
     public cameraController = Viewer.OrbitCameraController;
     public renderPasses = [ RenderPass.OPAQUE ];
     public textures: HTMLCanvasElement[] = [];

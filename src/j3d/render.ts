@@ -293,7 +293,6 @@ interface HierarchyTraverseContext {
 }
 
 export class Scene implements Viewer.Scene {
-    public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
 
     public gl: WebGL2RenderingContext;

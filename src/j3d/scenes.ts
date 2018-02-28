@@ -14,7 +14,7 @@ import { fetch, readString } from '../util';
 const id = "j3d";
 const name = "GameCube Models";
 
-export class MultiScene implements Viewer.Scene {
+export class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
@@ -52,7 +52,6 @@ function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile
 }
 
 class SunshineClearScene implements Viewer.Scene {
-    public cameraController = Viewer.FPSCameraController;
     public textures = [];
     public renderPasses = [ RenderPass.CLEAR ];
 
@@ -77,7 +76,7 @@ class SunshineSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const rarc = RARC.parse(Yaz0.decompress(result));
             return new MultiScene([
@@ -110,7 +109,7 @@ class MultiSceneDesc implements Viewer.SceneDesc {
         this.subscenes = subscenes;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return Progressable.all(this.subscenes.map((sceneDesc) => sceneDesc.createScene(gl))).then((scenes) => {
             return new MultiScene(scenes);
         });
@@ -153,7 +152,7 @@ export class RARCSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             return createSceneFromBuffer(gl, result);
         });

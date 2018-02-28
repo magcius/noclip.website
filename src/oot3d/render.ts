@@ -80,7 +80,6 @@ function textureToCanvas(texture: CMB.Texture) {
 type RenderFunc = (renderState: RenderState) => void;
 
 class Scene implements Viewer.Scene {
-    public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public textures: HTMLCanvasElement[];
     public program: OoT3D_Program;
@@ -295,7 +294,7 @@ class Scene implements Viewer.Scene {
     }
 }
 
-class MultiScene implements Viewer.Scene {
+class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
@@ -337,7 +336,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             return this._createSceneFromData(gl, result);
         });

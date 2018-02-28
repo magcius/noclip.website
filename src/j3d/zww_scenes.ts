@@ -171,7 +171,7 @@ class WindWakerScene extends MultiScene {
 }
 
 class WindWakerSceneDesc extends RARCSceneDesc {
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
 
         return Progressable.all([

@@ -2360,7 +2360,7 @@ System.register("yaz0", ["util"], function (exports_14, context_14) {
         }
     };
 });
-System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "viewer", "render", "endian", "util"], function (exports_15, context_15) {
+System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render", "endian", "util"], function (exports_15, context_15) {
     "use strict";
     var __moduleName = context_15 && context_15.id;
     function getAttribFormatInfo(gl, format) {
@@ -2394,7 +2394,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "viewer"
                 throw new Error("Unsupported attribute format " + format);
         }
     }
-    var gx2_swizzle_2, GX2Texture, Viewer, render_2, endian_1, util_4, ProgramGambit_UBER, Scene;
+    var gx2_swizzle_2, GX2Texture, render_2, endian_1, util_4, ProgramGambit_UBER, Scene;
     return {
         setters: [
             function (gx2_swizzle_2_1) {
@@ -2402,9 +2402,6 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "viewer"
             },
             function (GX2Texture_2) {
                 GX2Texture = GX2Texture_2;
-            },
-            function (Viewer_1) {
-                Viewer = Viewer_1;
             },
             function (render_2_1) {
                 render_2 = render_2_1;
@@ -2441,7 +2438,6 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "viewer"
                 function Scene(gl, fres, isSkybox) {
                     this.fres = fres;
                     this.isSkybox = isSkybox;
-                    this.cameraController = Viewer.FPSCameraController;
                     this.renderPasses = [2 /* OPAQUE */];
                     this.fres = fres;
                     this.arena = new render_2.RenderArena();
@@ -2896,8 +2892,8 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
             function (render_3_1) {
                 render_3 = render_3_1;
             },
-            function (Viewer_2) {
-                Viewer = Viewer_2;
+            function (Viewer_1) {
+                Viewer = Viewer_1;
             },
             function (progress_2_1) {
                 progress_2 = progress_2_1;
@@ -4712,7 +4708,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_20, context
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_material", "j3d/gx_texture", "viewer"], function (exports_21, context_21) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_material", "j3d/gx_texture"], function (exports_21, context_21) {
     "use strict";
     var __moduleName = context_21 && context_21.id;
     function translateCompType(gl, compType) {
@@ -4733,7 +4729,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 throw new Error("Unknown CompType " + compType);
         }
     }
-    var gl_matrix_4, j3d_1, GX, GX_Material, GX_Texture, Viewer, posMtxTable, Command_Shape, Command_Material, Scene;
+    var gl_matrix_4, j3d_1, GX, GX_Material, GX_Texture, posMtxTable, Command_Shape, Command_Material, Scene;
     return {
         setters: [
             function (gl_matrix_4_1) {
@@ -4750,9 +4746,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
             },
             function (GX_Texture_1) {
                 GX_Texture = GX_Texture_1;
-            },
-            function (Viewer_3) {
-                Viewer = Viewer_3;
             }
         ],
         execute: function () {
@@ -4969,7 +4962,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, btk, bmt, isSkybox) {
                     var _this = this;
-                    this.cameraController = Viewer.FPSCameraController;
                     this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.konstColorOverrides = [null, null, null, null];
                     this.gl = gl;
@@ -5281,8 +5273,8 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
             function (Yaz0_2) {
                 Yaz0 = Yaz0_2;
             },
-            function (Viewer_4) {
-                Viewer = Viewer_4;
+            function (Viewer_2) {
+                Viewer = Viewer_2;
             },
             function (progress_3_1) {
                 progress_3 = progress_3_1;
@@ -5333,7 +5325,6 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
             exports_23("MultiScene", MultiScene);
             SunshineClearScene = /** @class */ (function () {
                 function SunshineClearScene() {
-                    this.cameraController = Viewer.FPSCameraController;
                     this.textures = [];
                     this.renderPasses = [0 /* CLEAR */];
                 }
@@ -5515,8 +5506,8 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
             function (MDL0_1) {
                 MDL0 = MDL0_1;
             },
-            function (Viewer_5) {
-                Viewer = Viewer_5;
+            function (Viewer_3) {
+                Viewer = Viewer_3;
             },
             function (render_6_1) {
                 render_6 = render_6_1;
@@ -6402,8 +6393,8 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
             function (ZSI_1) {
                 ZSI = ZSI_1;
             },
-            function (Viewer_6) {
-                Viewer = Viewer_6;
+            function (Viewer_4) {
+                Viewer = Viewer_4;
             },
             function (progress_4_1) {
                 progress_4 = progress_4_1;
@@ -6437,7 +6428,6 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
             }(render_8.Program));
             Scene = /** @class */ (function () {
                 function Scene(gl, zsi) {
-                    this.cameraController = Viewer.FPSCameraController;
                     this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.program = new OoT3D_Program();
                     this.textures = zsi.mesh.textures.map(function (texture) {
@@ -7665,8 +7655,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
             function (NITRO_BMD_1) {
                 NITRO_BMD = NITRO_BMD_1;
             },
-            function (Viewer_7) {
-                Viewer = Viewer_7;
+            function (Viewer_5) {
+                Viewer = Viewer_5;
             },
             function (render_10_1) {
                 render_10 = render_10_1;
@@ -7700,7 +7690,6 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, localScale, crg0Level) {
                     var _this = this;
-                    this.cameraController = Viewer.FPSCameraController;
                     this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.program = new NITRO_Program();
                     this.bmd = bmd;
@@ -9211,8 +9200,8 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
             function (util_18_1) {
                 util_18 = util_18_1;
             },
-            function (Viewer_8) {
-                Viewer = Viewer_8;
+            function (Viewer_6) {
+                Viewer = Viewer_6;
             }
         ],
         execute: function () {
