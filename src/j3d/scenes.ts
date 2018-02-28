@@ -2,6 +2,7 @@
 import { Scene } from 'render';
 
 import { BMD, BTK, BMT } from './j3d';
+import * as GX_Material from './gx_material';
 import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';
@@ -11,7 +12,7 @@ import { RenderPass, RenderState } from '../render';
 import { fetch, readString } from '../util';
 
 const id = "j3d";
-const name = "J3D Models";
+const name = "GameCube Models";
 
 export class MultiScene implements Viewer.Scene {
     public cameraController = Viewer.FPSCameraController;
@@ -20,6 +21,10 @@ export class MultiScene implements Viewer.Scene {
     public textures: HTMLCanvasElement[];
 
     constructor(scenes: Viewer.Scene[]) {
+        this.setScenes(scenes);
+    }
+
+    protected setScenes(scenes: Viewer.Scene[]) {
         this.scenes = scenes;
         this.textures = [];
         for (const scene of this.scenes)
@@ -137,7 +142,7 @@ export function createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayB
     return null;
 }
 
-class RARCSceneDesc implements Viewer.SceneDesc {
+export class RARCSceneDesc implements Viewer.SceneDesc {
     public name: string;
     public path: string;
     public id: string;
@@ -168,11 +173,6 @@ const sceneDescs: Viewer.SceneDesc[] = [
         new RARCSceneDesc("data/j3d/PeachCastleGardenPlanet.arc"),
         new RARCSceneDesc("data/j3d/GalaxySky.arc"),
     ]),
-
-    new RARCSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
-    new RARCSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
-    new RARCSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
-    new RARCSceneDesc("data/j3d/Room44.arc", "Outset Island"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

@@ -25,7 +25,7 @@ export class RARC {
         let dir = this.root;
         for (const part of parts) {
             dir = dir.subdirs.find((subdir) => subdir.name === part);
-            if (dir === null)
+            if (dir === undefined)
                 return null;
         }
         return dir;

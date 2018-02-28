@@ -8,11 +8,16 @@ import * as Viewer from '../viewer';
 import { BlendFactor, CompareMode, BlendMode as RenderBlendMode, CullMode, FrontFaceMode, RenderFlags, Program } from '../render';
 
 // #region Material definition.
-export interface Color {
-    r: number;
-    g: number;
-    b: number;
-    a: number;
+export class Color {
+    constructor(public r, public g, public b, public a) {
+    }
+
+    set(n: Float32Array, i: number) {
+        n[i + 0] = this.r;
+        n[i + 1] = this.g;
+        n[i + 2] = this.b;
+        n[i + 3] = this.a;
+    }
 }
 
 export interface ColorChannelControl {
@@ -140,10 +145,11 @@ export const scaledVtxAttributes: GX.VertexAttribute[] = vtxAttributeGenDefs.fil
 export class GX_Program extends Program {
     public ub_SceneStatic: number;
 
-    public samplerLocation: WebGLUniformLocation;
-    public posMtxLocation: WebGLUniformLocation;
-    public texMtxLocation: WebGLUniformLocation;
-    public texLodBiasLocation: WebGLUniformLocation;
+    public u_PosMtx: WebGLUniformLocation;
+    public u_TexMtx: WebGLUniformLocation;
+    public u_Texture: WebGLUniformLocation;
+    public u_TextureLODBias: WebGLUniformLocation;
+    public u_KonstColor: WebGLUniformLocation;
 
     private material: GXMaterial;
 
@@ -532,7 +538,6 @@ ${this.generateTexGens(this.material.texGens)}
 
         const tevStages = this.material.tevStages;
         const alphaTest = this.material.alphaTest;
-        const kColors = this.material.colorConstants;
         const rColors = this.material.colorRegisters;
 
         this.frag = `
@@ -540,6 +545,7 @@ ${this.generateTexGens(this.material.texGens)}
 precision mediump float;
 uniform sampler2D u_Texture[8];
 uniform float u_TextureLODBias;
+uniform vec4 u_KonstColor[8];
 
 in vec3 v_Position;
 in vec3 v_Normal;
@@ -562,15 +568,15 @@ vec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }
 float TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }
 
 void main() {
-    const vec4 s_kColor0 = ${this.generateColorConstant(kColors[0])};
-    const vec4 s_kColor1 = ${this.generateColorConstant(kColors[1])};
-    const vec4 s_kColor2 = ${this.generateColorConstant(kColors[2])};
-    const vec4 s_kColor3 = ${this.generateColorConstant(kColors[3])};
+    vec4 s_kColor0 = u_KonstColor[0];
+    vec4 s_kColor1 = u_KonstColor[1];
+    vec4 s_kColor2 = u_KonstColor[2];
+    vec4 s_kColor3 = u_KonstColor[3];
 
-    vec4 t_Color0    = ${this.generateColorConstant(rColors[0])};
-    vec4 t_Color1    = ${this.generateColorConstant(rColors[1])};
-    vec4 t_Color2    = ${this.generateColorConstant(rColors[2])};
-    vec4 t_ColorPrev = ${this.generateColorConstant(rColors[3])};
+    vec4 t_Color0    = u_KonstColor[4];
+    vec4 t_Color1    = u_KonstColor[5];
+    vec4 t_Color2    = u_KonstColor[6];
+    vec4 t_ColorPrev = u_KonstColor[7];
 ${this.generateTevStages(tevStages)}
 ${this.generateAlphaTest(alphaTest)}
     gl_FragColor = t_ColorPrev;
@@ -583,10 +589,11 @@ ${this.generateAlphaTest(alphaTest)}
 
         this.ub_SceneStatic = gl.getUniformBlockIndex(prog, `ub_SceneStatic`);
 
-        this.texLodBiasLocation = gl.getUniformLocation(prog, 'u_TextureLODBias');
-        this.posMtxLocation = gl.getUniformLocation(prog, `u_PosMtx`);
-        this.texMtxLocation = gl.getUniformLocation(prog, `u_TexMtx`);
-        this.samplerLocation = gl.getUniformLocation(prog, `u_Texture`);
+        this.u_PosMtx = gl.getUniformLocation(prog, `u_PosMtx`);
+        this.u_TexMtx = gl.getUniformLocation(prog, `u_TexMtx`);
+        this.u_Texture = gl.getUniformLocation(prog, `u_Texture`);
+        this.u_TextureLODBias = gl.getUniformLocation(prog, 'u_TextureLODBias');
+        this.u_KonstColor = gl.getUniformLocation(prog, `u_KonstColor`);
     }
 }
 // #endregion
