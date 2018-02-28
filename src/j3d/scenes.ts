@@ -112,19 +112,29 @@ class MultiSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-export function createSceneFromRARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer): Viewer.Scene {
+export function createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer): Viewer.Scene {
     if (readString(buffer, 0, 4) === 'Yaz0')
         buffer = Yaz0.decompress(buffer);
-    const rarc = RARC.parse(buffer);
-    const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
-    const scenes = bmdFiles.map((bmdFile) => {
-        // Find the corresponding btk.
-        const basename = bmdFile.name.split('.')[0];
-        const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
-        const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
-        return createScene(gl, bmdFile, btkFile, bmtFile);
-    });
-    return new MultiScene(scenes);
+
+    if (readString(buffer, 0, 4) === 'RARC') {
+        const rarc = RARC.parse(buffer);
+        const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
+        const scenes = bmdFiles.map((bmdFile) => {
+            // Find the corresponding btk.
+            const basename = bmdFile.name.split('.')[0];
+            const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
+            const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
+            return createScene(gl, bmdFile, btkFile, bmtFile);
+        });
+        return new MultiScene(scenes);
+    }
+
+    if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
+        const bmd = BMD.parse(buffer);
+        return new Scene(gl, bmd, null, null, false);
+    }
+
+    return null;
 }
 
 class RARCSceneDesc implements Viewer.SceneDesc {
@@ -140,7 +150,7 @@ class RARCSceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
-            return createSceneFromRARCBuffer(gl, result);
+            return createSceneFromBuffer(gl, result);
         });
     }
 }
