@@ -5214,21 +5214,28 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
         var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
         return new render_5.Scene(gl, bmd, btk, bmt, isSkybox);
     }
-    function createSceneFromRARCBuffer(gl, buffer) {
+    function createSceneFromBuffer(gl, buffer) {
         if (util_8.readString(buffer, 0, 4) === 'Yaz0')
             buffer = Yaz0.decompress(buffer);
-        var rarc = RARC.parse(buffer);
-        var bmdFiles = rarc.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
-        var scenes = bmdFiles.map(function (bmdFile) {
-            // Find the corresponding btk.
-            var basename = bmdFile.name.split('.')[0];
-            var btkFile = rarc.files.find(function (f) { return f.name === basename + ".btk"; });
-            var bmtFile = rarc.files.find(function (f) { return f.name === basename + ".bmt"; });
-            return createScene(gl, bmdFile, btkFile, bmtFile);
-        });
-        return new MultiScene(scenes);
+        if (util_8.readString(buffer, 0, 4) === 'RARC') {
+            var rarc_1 = RARC.parse(buffer);
+            var bmdFiles = rarc_1.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
+            var scenes = bmdFiles.map(function (bmdFile) {
+                // Find the corresponding btk.
+                var basename = bmdFile.name.split('.')[0];
+                var btkFile = rarc_1.files.find(function (f) { return f.name === basename + ".btk"; });
+                var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
+                return createScene(gl, bmdFile, btkFile, bmtFile);
+            });
+            return new MultiScene(scenes);
+        }
+        if (['J3D2bmd3', 'J3D2bdl4'].includes(util_8.readString(buffer, 0, 8))) {
+            var bmd = j3d_2.BMD.parse(buffer);
+            return new render_5.Scene(gl, bmd, null, null, false);
+        }
+        return null;
     }
-    exports_23("createSceneFromRARCBuffer", createSceneFromRARCBuffer);
+    exports_23("createSceneFromBuffer", createSceneFromBuffer);
     var render_5, j3d_2, RARC, Yaz0, Viewer, progress_3, util_8, id, name, MultiScene, SunshineClearScene, SunshineSceneDesc, MultiSceneDesc, RARCSceneDesc, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -5355,7 +5362,7 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                 }
                 RARCSceneDesc.prototype.createScene = function (gl) {
                     return util_8.fetch(this.path).then(function (result) {
-                        return createSceneFromRARCBuffer(gl, result);
+                        return createSceneFromBuffer(gl, result);
                     });
                 };
                 return RARCSceneDesc;
@@ -9931,12 +9938,19 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     var pr = new progress_5.Progressable(p);
                     return pr;
                 };
+                DroppedFileSceneDesc.prototype.createSceneFromFile = function (gl, file, buffer) {
+                    var scene;
+                    if (file.name.endsWith('.bfres'))
+                        return FRES.createSceneFromFRESBuffer(gl, buffer);
+                    scene = J3D.createSceneFromBuffer(gl, buffer);
+                    if (scene)
+                        return scene;
+                    return null;
+                };
                 DroppedFileSceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
                     return this._loadFileAsPromise(this.file).then(function (result) {
-                        if (_this.file.name.endsWith('.bfres'))
-                            return FRES.createSceneFromFRESBuffer(gl, result);
-                        return J3D.createSceneFromRARCBuffer(gl, result);
+                        return _this.createSceneFromFile(gl, _this.file, result);
                     });
                 };
                 return DroppedFileSceneDesc;

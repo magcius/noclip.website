@@ -85,11 +85,21 @@ class DroppedFileSceneDesc implements SceneDesc {
         return pr;
     }
 
+    private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBuffer) {
+        let scene;
+        if (file.name.endsWith('.bfres'))
+            return FRES.createSceneFromFRESBuffer(gl, buffer);
+
+        scene = J3D.createSceneFromBuffer(gl, buffer);
+        if (scene)
+            return scene;
+
+        return null;
+    }
+
     public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
         return this._loadFileAsPromise(this.file).then((result: ArrayBuffer) => {
-            if (this.file.name.endsWith('.bfres'))
-                return FRES.createSceneFromFRESBuffer(gl, result);
-            return J3D.createSceneFromRARCBuffer(gl, result);
+            return this.createSceneFromFile(gl, this.file, result);
         });
     }
 }
