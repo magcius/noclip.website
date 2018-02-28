@@ -461,12 +461,12 @@ class Main {
         this.popup.style.padding = '1em';
         this.popup.style.display = 'none';
         this.popup.style.overflow = 'auto';
-        this.popup.style.font = '120% sans-serif';
+        this.popup.style.font = '100% sans-serif';
 
         const closeButton = document.createElement('button');
-        closeButton.style.position = 'absolute';
-        closeButton.style.top = '1em';
-        closeButton.style.right = '1em';
+        closeButton.style.position = 'fixed';
+        closeButton.style.top = '3em';
+        closeButton.style.right = '4em';
         closeButton.textContent = 'X';
         closeButton.onclick = this._onCloseButtonClicked.bind(this);
         this.popup.appendChild(closeButton);
