@@ -42,11 +42,13 @@ function translatePrimType(gl: WebGL2RenderingContext, primType: GX.PrimitiveTyp
 
 const posMtxTable = new Float32Array(16 * 10);
 class Command_Shape {
-    public bmd: BMD;
-    public shape: Shape;
-    public buffer: WebGLBuffer;
-    public vao: WebGLVertexArrayObject;
+    private bmd: BMD;
+    private shape: Shape;
+    private vao: WebGLVertexArrayObject;
+    private vertexBuffer: WebGLBuffer;
+    private indexBuffer: WebGLBuffer;
     private jointMatrices: mat4[];
+    private numTriangles: number;
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD, shape: Shape, jointMatrices: mat4[]) {
         this.bmd = bmd;
@@ -56,9 +58,13 @@ class Command_Shape {
         this.vao = gl.createVertexArray();
         gl.bindVertexArray(this.vao);
 
-        this.buffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+        this.vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, this.shape.packedData, gl.STATIC_DRAW);
+
+        this.indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.shape.indexData, gl.STATIC_DRAW);
 
         for (const attrib of this.shape.packedVertexAttributes) {
             const vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
@@ -84,7 +90,7 @@ class Command_Shape {
 
         gl.bindVertexArray(this.vao);
 
-        this.shape.packets.forEach((packet) => {
+        this.shape.packets.forEach((packet, packetIndex) => {
             // Update our matrix table.
             for (let i = 0; i < packet.weightedJointTable.length; i++) {
                 const weightedJointIndex = packet.weightedJointTable[i];
@@ -100,9 +106,7 @@ class Command_Shape {
             }
             gl.uniformMatrix4fv(prog.posMtxLocation, false, posMtxTable);
 
-            packet.drawCalls.forEach((drawCall) => {
-                gl.drawArrays(translatePrimType(gl, drawCall.primType), drawCall.first, drawCall.vertexCount);
-            });
+            gl.drawElements(gl.TRIANGLES, packet.numTriangles * 3, gl.UNSIGNED_SHORT, packet.firstTriangle * 3);
         });
 
         gl.bindVertexArray(null);
@@ -110,7 +114,8 @@ class Command_Shape {
 
     public destroy(gl: WebGL2RenderingContext) {
         gl.deleteVertexArray(this.vao);
-        gl.deleteBuffer(this.buffer);
+        gl.deleteBuffer(this.indexBuffer);
+        gl.deleteBuffer(this.vertexBuffer);
     }
 }
 
