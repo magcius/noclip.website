@@ -86,7 +86,9 @@ class DroppedFileSceneDesc implements SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
-        return this._loadFileAsPromise(this.file).then((result) => {
+        return this._loadFileAsPromise(this.file).then((result: ArrayBuffer) => {
+            if (this.file.name.endsWith('.bfres'))
+                return FRES.createSceneFromFRESBuffer(gl, result);
             return J3D.createSceneFromRARCBuffer(gl, result);
         });
     }
@@ -156,6 +158,13 @@ class Main {
         // If it didn't work, fall back to defaults.
         if (!this.currentSceneDesc)
             this._loadSceneGroup(this.groups[0]);
+    }
+
+    private _deselectUI() {
+        // Take focus off of the select.
+        this.groupSelect.blur();
+        this.sceneSelect.blur();
+        this.canvas.focus();
     }
 
     private _onDrop(e: DragEvent) {
@@ -243,22 +252,6 @@ class Main {
         window.history.replaceState('', '', '#' + this._saveState());
     }
 
-    private _deselectUI() {
-        // Take focus off of the select.
-        this.groupSelect.blur();
-        this.sceneSelect.blur();
-        this.canvas.focus();
-    }
-
-    private _onGearButtonClicked() {
-        this.gearSettings.style.display = this.gearSettings.style.display === 'block' ? 'none' : 'block';
-    }
-    private _onGroupSelectChange() {
-        const option = this.groupSelect.selectedOptions.item(0);
-        const group: SceneGroup = (<any> option).group;
-        this._loadSceneGroup(group);
-    }
-
     private _loadSceneGroups() {
         this.groupSelect.innerHTML = '';
 
@@ -274,17 +267,14 @@ class Main {
     }
 
     private _loadSceneGroup(group: SceneGroup, loadDefaultSceneInGroup: boolean = true) {
-        if (this.currentSceneGroup === group)
-            return;
-
-        this.currentSceneGroup = group;
-
         // Make sure combobox is selected
         for (let i = 0; i < this.groupSelect.options.length; i++) {
             const groupOption = this.groupSelect.options[i];
             if ((<any> groupOption).group === group)
                 this.groupSelect.selectedIndex = i;
         }
+
+        this.currentSceneGroup = group;
 
         // Clear.
         this.sceneSelect.innerHTML = '';
@@ -298,10 +288,21 @@ class Main {
         if (loadDefaultSceneInGroup)
             this._loadSceneDesc(group.sceneDescs[0]);
     }
+
     private _onSceneSelectChange() {
         const option = this.sceneSelect.selectedOptions.item(0);
         const sceneDesc: SceneDesc = (<any> option).sceneDesc;
         this._loadSceneDesc(sceneDesc);
+    }
+
+    private _onGearButtonClicked() {
+        this.gearSettings.style.display = this.gearSettings.style.display === 'block' ? 'none' : 'block';
+    }
+
+    private _onGroupSelectChange() {
+        const option = this.groupSelect.selectedOptions.item(0);
+        const group: SceneGroup = (<any> option).group;
+        this._loadSceneGroup(group);
     }
 
     private _makeUI() {

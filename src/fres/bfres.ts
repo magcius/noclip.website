@@ -509,8 +509,13 @@ export function parse(buffer: ArrayBuffer): FRES {
 
     const version = view.getUint32(0x04, littleEndian);
 
-    // v3.5.0.3, as seen in Splatoon.
-    assert(version === 0x03050003);
+    const supportedVersions = [
+        0x03050003, // v3.5.0.3 - Splatoon.
+
+        // TODO(jstpierre): Figure out WWHD.
+        // 0x03040001, // v3.4.0.1 - Wind Waker HD
+    ];
+    assert(supportedVersions.includes(version));
 
     const fileNameOffs = readBinPtrT(view, 0x14, littleEndian);
     const fileName = readString(buffer, fileNameOffs);
