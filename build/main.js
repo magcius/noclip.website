@@ -10350,8 +10350,26 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     var sceneDesc = option.sceneDesc;
                     this._loadSceneDesc(sceneDesc);
                 };
+                Main.prototype.showPopup = function (contents) {
+                    if (contents === null) {
+                        this.popup.innerHTML = '';
+                        this.popup.style.display = 'none';
+                        return;
+                    }
+                    if (contents.parentNode) {
+                        // Showing these contents, hide popup.
+                        this.showPopup(null);
+                        return;
+                    }
+                    this.popup.innerHTML = '';
+                    this.popup.appendChild(contents);
+                    this.popup.style.display = 'block';
+                };
                 Main.prototype._onGearButtonClicked = function () {
-                    this.gearSettings.style.display = this.gearSettings.style.display === 'block' ? 'none' : 'block';
+                    this.showPopup(this.popupSettingsPane);
+                };
+                Main.prototype._onHelpButtonClicked = function () {
+                    this.showPopup(this.popupHelpPane);
                 };
                 Main.prototype._onGroupSelectChange = function () {
                     var option = this.groupSelect.selectedOptions.item(0);
@@ -10359,8 +10377,10 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this._loadSceneGroup(group);
                 };
                 Main.prototype._makeUI = function () {
+                    this.uiContainers = document.createElement('div');
+                    document.body.appendChild(this.uiContainers);
                     this.dragHighlight = document.createElement('div');
-                    document.body.appendChild(this.dragHighlight);
+                    this.uiContainers.appendChild(this.dragHighlight);
                     this.dragHighlight.style.position = 'absolute';
                     this.dragHighlight.style.left = '0';
                     this.dragHighlight.style.right = '0';
@@ -10370,12 +10390,10 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this.dragHighlight.style.boxShadow = '0 0 40px 5px white inset';
                     this.dragHighlight.style.display = 'none';
                     this.dragHighlight.style.pointerEvents = 'none';
-                    this.uiContainers = document.createElement('div');
-                    document.body.appendChild(this.uiContainers);
                     var progressBarContainer = document.createElement('div');
                     progressBarContainer.style.position = 'absolute';
-                    progressBarContainer.style.left = '100px';
-                    progressBarContainer.style.right = '100px';
+                    progressBarContainer.style.left = '2em';
+                    progressBarContainer.style.right = '2em';
                     progressBarContainer.style.top = '50%';
                     progressBarContainer.style.marginTop = '-20px';
                     progressBarContainer.style.pointerEvents = 'none';
@@ -10401,16 +10419,20 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this.sceneSelect.onchange = this._onSceneSelectChange.bind(this);
                     this.sceneSelect.style.marginRight = '1em';
                     uiContainerL.appendChild(this.sceneSelect);
-                    this.gearSettings = document.createElement('div');
-                    this.gearSettings.style.backgroundColor = 'white';
-                    this.gearSettings.style.position = 'absolute';
-                    this.gearSettings.style.top = this.gearSettings.style.bottom =
-                        this.gearSettings.style.left = this.gearSettings.style.right = '4em';
-                    this.gearSettings.style.boxShadow = '0px 0px 10px rgba(0, 0, 0, 0.4)';
-                    this.gearSettings.style.padding = '1em';
-                    this.gearSettings.style.display = 'none';
-                    this.gearSettings.style.overflow = 'auto';
-                    document.body.appendChild(this.gearSettings);
+                    this.popup = document.createElement('div');
+                    this.popup.style.backgroundColor = 'white';
+                    this.popup.style.position = 'absolute';
+                    this.popup.style.top = '2em';
+                    this.popup.style.left = '2em';
+                    this.popup.style.right = '2em';
+                    this.popup.style.bottom = '5em';
+                    this.popup.style.border = '1px solid #666';
+                    this.popup.style.padding = '1em';
+                    this.popup.style.display = 'none';
+                    this.popup.style.overflow = 'auto';
+                    this.uiContainers.appendChild(this.popup);
+                    // Settings.
+                    this.popupSettingsPane = document.createElement('div');
                     var fovSlider = document.createElement('input');
                     fovSlider.type = 'range';
                     fovSlider.max = '100';
@@ -10418,8 +10440,8 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     fovSlider.oninput = this._onFovSliderChange.bind(this);
                     var fovSliderLabel = document.createElement('label');
                     fovSliderLabel.textContent = "Field of View";
-                    this.gearSettings.appendChild(fovSliderLabel);
-                    this.gearSettings.appendChild(fovSlider);
+                    this.popupSettingsPane.appendChild(fovSliderLabel);
+                    this.popupSettingsPane.appendChild(fovSlider);
                     this.cameraControllerSelect = document.createElement('select');
                     var cameraControllerFPS = document.createElement('option');
                     cameraControllerFPS.textContent = 'WASD';
@@ -10428,16 +10450,32 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     cameraControllerOrbit.textContent = 'Orbit';
                     this.cameraControllerSelect.appendChild(cameraControllerOrbit);
                     this.cameraControllerSelect.onchange = this._onCameraControllerSelect.bind(this);
-                    this.gearSettings.appendChild(this.cameraControllerSelect);
+                    this.popupSettingsPane.appendChild(this.cameraControllerSelect);
                     var texturesHeader = document.createElement('h3');
                     texturesHeader.textContent = 'Textures';
-                    this.gearSettings.appendChild(texturesHeader);
+                    this.popupSettingsPane.appendChild(texturesHeader);
                     this.texturesView = document.createElement('div');
-                    this.gearSettings.appendChild(this.texturesView);
+                    this.popupSettingsPane.appendChild(this.texturesView);
                     var gearButton = document.createElement('button');
+                    gearButton.style.width = '2em';
+                    gearButton.style.height = '2em';
+                    gearButton.style.padding = '0';
+                    gearButton.style.marginLeft = '1em';
                     gearButton.textContent = '⚙';
                     gearButton.onclick = this._onGearButtonClicked.bind(this);
                     uiContainerR.appendChild(gearButton);
+                    this.popupHelpPane = document.createElement('div');
+                    this.popupHelpPane.style.padding = '2em';
+                    this.popupHelpPane.style.font = '120% sans-serif';
+                    this.popupHelpPane.innerHTML = "\n<h1>Jasper's Model Viewer</h1>\n<h2>Created by <a href=\"http://github.com/magcius\">Jasper St. Pierre</a></h2>\n\n<p> Basic controls: Use WASD to move around, B to reset the camera, and Z to toggle the UI. </p>\n\n<p> Based on reverse engineering work by myself and a large collection of people. Special thanks to\n  <a href=\"https://twitter.com/LordNed\">LordNed</a>,\n  <a href=\"https://twitter.com/SageOfMirrors\">SageOfMirrors</a>,\n  <a href=\"https://twitter.com/StapleButter\">StapleButter</a>,\n  <a href=\"https://twitter.com/xdanieldzd\">xdanieldzd</a>,\n  <a href=\"https://twitter.com/Jewelots_\">Jewel</a>,\n  <a href=\"https://twitter.com/instant_grat\">Simon</a>,\n  and the rest of the Dolphin and Citra crews.\n</p>\n";
+                    var helpButton = document.createElement('button');
+                    helpButton.style.width = '2em';
+                    helpButton.style.height = '2em';
+                    helpButton.style.padding = '0';
+                    helpButton.style.marginLeft = '1em';
+                    helpButton.textContent = '?';
+                    helpButton.onclick = this._onHelpButtonClicked.bind(this);
+                    uiContainerR.appendChild(helpButton);
                 };
                 Main.prototype._toggleUI = function () {
                     this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? 'block' : 'none';
