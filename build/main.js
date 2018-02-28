@@ -10430,6 +10430,9 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this.sceneUIContainer.style.position = 'absolute';
                     this.sceneUIContainer.style.right = '2em';
                     this.sceneUIContainer.style.top = '2em';
+                    this.sceneUIContainer.onkeydown = function (e) {
+                        e.preventDefault();
+                    };
                     this.uiContainers.appendChild(this.sceneUIContainer);
                     this.groupSelect = document.createElement('select');
                     this.groupSelect.onchange = this._onGroupSelectChange.bind(this);
