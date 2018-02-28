@@ -93,7 +93,7 @@ class Command_Shape {
                 const posMtx = this.jointMatrices[weightedJoint.jointIndex];
                 posMtxTable.set(posMtx, i * 16);
             }
-            gl.uniformMatrix4fv(prog.posMtxLocation, false, posMtxTable);
+            gl.uniformMatrix4fv(prog.u_PosMtx, false, posMtxTable);
 
             gl.drawElements(gl.TRIANGLES, packet.numTriangles * 3, gl.UNSIGNED_SHORT, packet.firstTriangle * 3);
         });
@@ -111,7 +111,8 @@ class Command_Shape {
 class Command_Material {
     static matrixTableScratch = new Float32Array(9 * 10);
     static matrixScratch = mat3.create();
-    static samplerLocationsScratch = new Int32Array(8);
+    static textureScratch = new Int32Array(8);
+    static konstColorScratch = new Float32Array(4 * 8);
 
     private scene: Scene;
 
@@ -225,7 +226,7 @@ class Command_Material {
         // GC's internal EFB is sized at 640x528. Bias our mips so that it's like the user
         // is rendering things in that resolution.
         const bias = Math.log2(Math.min(width / 640, height / 528));
-        gl.uniform1f(this.program.texLodBiasLocation, bias);
+        gl.uniform1f(this.program.u_TextureLODBias, bias);
 
         // Bind our static scene data.
         gl.bindBufferBase(gl.UNIFORM_BUFFER, this.program.ub_SceneStatic, this.scene.uniformBufferSceneStatic);
@@ -233,7 +234,6 @@ class Command_Material {
         // Bind our texture matrices.
         const matrixScratch = Command_Material.matrixScratch;
         const matrixTableScratch = Command_Material.matrixTableScratch;
-
         for (let i = 0; i < this.material.texMatrices.length; i++) {
             const texMtx = this.material.texMatrices[i];
             if (texMtx === null)
@@ -249,19 +249,34 @@ class Command_Material {
             matrixTableScratch.set(matrix, i * 9);
         }
 
-        const location = this.program.texMtxLocation;
+        const location = this.program.u_TexMtx;
         gl.uniformMatrix3fv(location, false, matrixTableScratch);
 
-        const samplerLocationsScratch = Command_Material.samplerLocationsScratch;
+        const textureScratch = Command_Material.textureScratch;
         for (let i = 0; i < this.textures.length; i++) {
             const texture = this.textures[i];
             if (texture === null)
                 continue;
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, texture);
-            samplerLocationsScratch[i] = i;
+            textureScratch[i] = i;
         }
-        gl.uniform1iv(this.program.samplerLocation, samplerLocationsScratch);
+        gl.uniform1iv(this.program.u_Texture, textureScratch);
+
+        const konstColorScratch = Command_Material.konstColorScratch;
+        for (let i = 0; i < 8; i++) {
+            let color: GX_Material.Color;
+            if (this.scene.konstColorOverrides[i]) {
+                color = this.scene.konstColorOverrides[i];
+            } else {
+                if (i >= 4)
+                    color = this.material.colorRegisters[i - 4];
+                else
+                    color = this.material.colorConstants[i];
+            }
+            color.set(konstColorScratch, i*4);
+        }
+        gl.uniform4fv(this.program.u_KonstColor, konstColorScratch);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -298,6 +313,8 @@ export class Scene implements Viewer.Scene {
     // Shared data
     public uniformBufferSceneStatic: WebGLBuffer;
 
+    public konstColorOverrides: GX_Material.Color[] = [null, null, null, null];
+
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT, isSkybox: boolean) {
         this.gl = gl;
         this.bmd = bmd;
@@ -309,6 +326,10 @@ export class Scene implements Viewer.Scene {
 
         const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
         this.textures = tex1.textures.map((tex) => this.translateTextureToCanvas(tex));
+    }
+
+    public setKonstColorOverride(i: number, color: GX_Material.Color) {
+        this.konstColorOverrides[i] = color;
     }
 
     private translateTextureToCanvas(texture: TEX1_Texture): HTMLCanvasElement {
@@ -425,6 +446,7 @@ export class Scene implements Viewer.Scene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        gl.deleteBuffer(this.uniformBufferSceneStatic);
         this.materialCommands.forEach((command) => command.destroy(gl));
         this.shapeCommands.forEach((command) => command.destroy(gl));
     }

@@ -586,7 +586,7 @@ function readColor32(view: DataView, srcOffs: number): GX_Material.Color {
     const g = view.getUint8(srcOffs + 0x01) / 255;
     const b = view.getUint8(srcOffs + 0x02) / 255;
     const a = view.getUint8(srcOffs + 0x03) / 255;
-    return { r, g, b, a };
+    return new GX_Material.Color(r, g, b, a);
 }
 
 function readColorShort(view: DataView, srcOffs: number): GX_Material.Color {
@@ -594,7 +594,7 @@ function readColorShort(view: DataView, srcOffs: number): GX_Material.Color {
     const g = view.getUint16(srcOffs + 0x02) / 255;
     const b = view.getUint16(srcOffs + 0x04) / 255;
     const a = view.getUint16(srcOffs + 0x06) / 255;
-    return { r, g, b, a };
+    return new GX_Material.Color(r, g, b, a);
 }
 
 function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {

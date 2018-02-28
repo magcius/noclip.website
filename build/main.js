@@ -3086,7 +3086,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
         return renderFlags;
     }
     exports_18("translateRenderFlags", translateRenderFlags);
-    var GX, render_4, vtxAttributeGenDefs, scaledVtxAttributes, GX_Program;
+    var GX, render_4, Color, vtxAttributeGenDefs, scaledVtxAttributes, GX_Program;
     return {
         setters: [
             function (GX_1) {
@@ -3097,6 +3097,23 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
             }
         ],
         execute: function () {
+            // #region Material definition.
+            Color = /** @class */ (function () {
+                function Color(r, g, b, a) {
+                    this.r = r;
+                    this.g = g;
+                    this.b = b;
+                    this.a = a;
+                }
+                Color.prototype.set = function (n, i) {
+                    n[i + 0] = this.r;
+                    n[i + 1] = this.g;
+                    n[i + 2] = this.b;
+                    n[i + 3] = this.a;
+                };
+                return Color;
+            }());
+            exports_18("Color", Color);
             ;
             exports_18("vtxAttributeGenDefs", vtxAttributeGenDefs = [
                 { attrib: 0 /* PTMTXIDX */, name: "PosMtxIdx", storage: "float", scale: false },
@@ -3410,17 +3427,17 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     this.vert = "\n// " + this.material.name + "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + this.generateVertAttributeScaleBlock() + "\n" + this.generateVertAttributeDefs() + "\nuniform mat3 u_TexMtx[10];\nuniform mat4 u_PosMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];\n    vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);\n    v_Position = t_Position.xyz;\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * t_Position;\n}\n";
                     var tevStages = this.material.tevStages;
                     var alphaTest = this.material.alphaTest;
-                    var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\nuniform sampler2D u_Texture[8];\nuniform float u_TextureLODBias;\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    const vec4 s_kColor0 = " + this.generateColorConstant(kColors[0]) + ";\n    const vec4 s_kColor1 = " + this.generateColorConstant(kColors[1]) + ";\n    const vec4 s_kColor2 = " + this.generateColorConstant(kColors[2]) + ";\n    const vec4 s_kColor3 = " + this.generateColorConstant(kColors[3]) + ";\n\n    vec4 t_Color0    = " + this.generateColorConstant(rColors[0]) + ";\n    vec4 t_Color1    = " + this.generateColorConstant(rColors[1]) + ";\n    vec4 t_Color2    = " + this.generateColorConstant(rColors[2]) + ";\n    vec4 t_ColorPrev = " + this.generateColorConstant(rColors[3]) + ";\n" + this.generateTevStages(tevStages) + "\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\nuniform sampler2D u_Texture[8];\nuniform float u_TextureLODBias;\nuniform vec4 u_KonstColor[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0 = u_KonstColor[0];\n    vec4 s_kColor1 = u_KonstColor[1];\n    vec4 s_kColor2 = u_KonstColor[2];\n    vec4 s_kColor3 = u_KonstColor[3];\n\n    vec4 t_Color0    = u_KonstColor[4];\n    vec4 t_Color1    = u_KonstColor[5];\n    vec4 t_Color2    = u_KonstColor[6];\n    vec4 t_ColorPrev = u_KonstColor[7];\n" + this.generateTevStages(tevStages) + "\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 GX_Program.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
                     this.ub_SceneStatic = gl.getUniformBlockIndex(prog, "ub_SceneStatic");
-                    this.texLodBiasLocation = gl.getUniformLocation(prog, 'u_TextureLODBias');
-                    this.posMtxLocation = gl.getUniformLocation(prog, "u_PosMtx");
-                    this.texMtxLocation = gl.getUniformLocation(prog, "u_TexMtx");
-                    this.samplerLocation = gl.getUniformLocation(prog, "u_Texture");
+                    this.u_PosMtx = gl.getUniformLocation(prog, "u_PosMtx");
+                    this.u_TexMtx = gl.getUniformLocation(prog, "u_TexMtx");
+                    this.u_Texture = gl.getUniformLocation(prog, "u_Texture");
+                    this.u_TextureLODBias = gl.getUniformLocation(prog, 'u_TextureLODBias');
+                    this.u_KonstColor = gl.getUniformLocation(prog, "u_KonstColor");
                 };
                 return GX_Program;
             }(render_4.Program));
@@ -3429,7 +3446,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
     };
 });
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
-System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], function (exports_19, context_19) {
+System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", "gl-matrix"], function (exports_19, context_19) {
     "use strict";
     var __moduleName = context_19 && context_19.id;
     function readStringTable(buffer, offs) {
@@ -3853,14 +3870,14 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         var g = view.getUint8(srcOffs + 0x01) / 255;
         var b = view.getUint8(srcOffs + 0x02) / 255;
         var a = view.getUint8(srcOffs + 0x03) / 255;
-        return { r: r, g: g, b: b, a: a };
+        return new GX_Material.Color(r, g, b, a);
     }
     function readColorShort(view, srcOffs) {
         var r = view.getUint16(srcOffs + 0x00) / 255;
         var g = view.getUint16(srcOffs + 0x02) / 255;
         var b = view.getUint16(srcOffs + 0x04) / 255;
         var a = view.getUint16(srcOffs + 0x06) / 255;
-        return { r: r, g: g, b: b, a: a };
+        return new GX_Material.Color(r, g, b, a);
     }
     function readMAT3Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = new DataView(buffer, chunkStart, chunkSize);
@@ -4184,11 +4201,14 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         }
         btk.ttk1 = { duration: duration, loopMode: loopMode, rotationScale: rotationScale, materialAnimationEntries: materialAnimationEntries };
     }
-    var GX, endian_2, util_6, gl_matrix_3, HierarchyType, t, c, ci, BMD, BTK, BMT;
+    var GX, GX_Material, endian_2, util_6, gl_matrix_3, HierarchyType, t, c, ci, BMD, BTK, BMT;
     return {
         setters: [
             function (GX_2) {
                 GX = GX_2;
+            },
+            function (GX_Material_1) {
+                GX_Material = GX_Material_1;
             },
             function (endian_2_1) {
                 endian_2 = endian_2_1;
@@ -4725,8 +4745,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
             function (GX_4) {
                 GX = GX_4;
             },
-            function (GX_Material_1) {
-                GX_Material = GX_Material_1;
+            function (GX_Material_2) {
+                GX_Material = GX_Material_2;
             },
             function (GX_Texture_1) {
                 GX_Texture = GX_Texture_1;
@@ -4787,7 +4807,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                             var posMtx = _this.jointMatrices[weightedJoint.jointIndex];
                             posMtxTable.set(posMtx, i * 16);
                         }
-                        gl.uniformMatrix4fv(prog.posMtxLocation, false, posMtxTable);
+                        gl.uniformMatrix4fv(prog.u_PosMtx, false, posMtxTable);
                         gl.drawElements(gl.TRIANGLES, packet.numTriangles * 3, gl.UNSIGNED_SHORT, packet.firstTriangle * 3);
                     });
                     gl.bindVertexArray(null);
@@ -4889,7 +4909,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     // GC's internal EFB is sized at 640x528. Bias our mips so that it's like the user
                     // is rendering things in that resolution.
                     var bias = Math.log2(Math.min(width / 640, height / 528));
-                    gl.uniform1f(this.program.texLodBiasLocation, bias);
+                    gl.uniform1f(this.program.u_TextureLODBias, bias);
                     // Bind our static scene data.
                     gl.bindBufferBase(gl.UNIFORM_BUFFER, this.program.ub_SceneStatic, this.scene.uniformBufferSceneStatic);
                     // Bind our texture matrices.
@@ -4908,18 +4928,33 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         }
                         matrixTableScratch.set(matrix, i * 9);
                     }
-                    var location = this.program.texMtxLocation;
+                    var location = this.program.u_TexMtx;
                     gl.uniformMatrix3fv(location, false, matrixTableScratch);
-                    var samplerLocationsScratch = Command_Material.samplerLocationsScratch;
+                    var textureScratch = Command_Material.textureScratch;
                     for (var i = 0; i < this.textures.length; i++) {
                         var texture = this.textures[i];
                         if (texture === null)
                             continue;
                         gl.activeTexture(gl.TEXTURE0 + i);
                         gl.bindTexture(gl.TEXTURE_2D, texture);
-                        samplerLocationsScratch[i] = i;
+                        textureScratch[i] = i;
                     }
-                    gl.uniform1iv(this.program.samplerLocation, samplerLocationsScratch);
+                    gl.uniform1iv(this.program.u_Texture, textureScratch);
+                    var konstColorScratch = Command_Material.konstColorScratch;
+                    for (var i = 0; i < 8; i++) {
+                        var color = void 0;
+                        if (this.scene.konstColorOverrides[i]) {
+                            color = this.scene.konstColorOverrides[i];
+                        }
+                        else {
+                            if (i >= 4)
+                                color = this.material.colorRegisters[i - 4];
+                            else
+                                color = this.material.colorConstants[i];
+                        }
+                        color.set(konstColorScratch, i * 4);
+                    }
+                    gl.uniform4fv(this.program.u_KonstColor, konstColorScratch);
                 };
                 Command_Material.prototype.destroy = function (gl) {
                     this.textures.forEach(function (texture) { return gl.deleteTexture(texture); });
@@ -4927,7 +4962,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 };
                 Command_Material.matrixTableScratch = new Float32Array(9 * 10);
                 Command_Material.matrixScratch = gl_matrix_4.mat3.create();
-                Command_Material.samplerLocationsScratch = new Int32Array(8);
+                Command_Material.textureScratch = new Int32Array(8);
+                Command_Material.konstColorScratch = new Float32Array(4 * 8);
                 return Command_Material;
             }());
             Scene = /** @class */ (function () {
@@ -4935,6 +4971,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     var _this = this;
                     this.cameraController = Viewer.FPSCameraController;
                     this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
+                    this.konstColorOverrides = [null, null, null, null];
                     this.gl = gl;
                     this.bmd = bmd;
                     this.btk = btk;
@@ -4944,6 +4981,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     var tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
                     this.textures = tex1.textures.map(function (tex) { return _this.translateTextureToCanvas(tex); });
                 }
+                Scene.prototype.setKonstColorOverride = function (i, color) {
+                    this.konstColorOverrides[i] = color;
+                };
                 Scene.prototype.translateTextureToCanvas = function (texture) {
                     var rgbaTexture = GX_Texture.decodeTexture(texture, false);
                     // Should never happen.
@@ -5057,6 +5097,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     var e_20, _c;
                 };
                 Scene.prototype.destroy = function (gl) {
+                    gl.deleteBuffer(this.uniformBufferSceneStatic);
                     this.materialCommands.forEach(function (command) { return command.destroy(gl); });
                     this.shapeCommands.forEach(function (command) { return command.destroy(gl); });
                 };
@@ -5155,7 +5196,7 @@ System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
                     var dir = this.root;
                     var _loop_2 = function (part) {
                         dir = dir.subdirs.find(function (subdir) { return subdir.name === part; });
-                        if (dir === null)
+                        if (dir === undefined)
                             return { value: null };
                     };
                     try {
@@ -5252,11 +5293,14 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
         ],
         execute: function () {
             id = "j3d";
-            name = "J3D Models";
+            name = "GameCube Models";
             MultiScene = /** @class */ (function () {
                 function MultiScene(scenes) {
                     this.cameraController = Viewer.FPSCameraController;
                     this.renderPasses = [0 /* CLEAR */, 2 /* OPAQUE */, 3 /* TRANSPARENT */];
+                    this.setScenes(scenes);
+                }
+                MultiScene.prototype.setScenes = function (scenes) {
                     this.scenes = scenes;
                     this.textures = [];
                     try {
@@ -5273,7 +5317,7 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                         finally { if (e_22) throw e_22.error; }
                     }
                     var e_22, _c;
-                }
+                };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
                         if (!scene.renderPasses.includes(renderState.currentPass))
@@ -5356,6 +5400,7 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                 };
                 return RARCSceneDesc;
             }());
+            exports_23("RARCSceneDesc", RARCSceneDesc);
             sceneDescs = [
                 new SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
                 new SunshineSceneDesc("data/j3d/mare0.szs", "Noki Bay"),
@@ -5367,10 +5412,6 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                     new RARCSceneDesc("data/j3d/PeachCastleGardenPlanet.arc"),
                     new RARCSceneDesc("data/j3d/GalaxySky.arc"),
                 ]),
-                new RARCSceneDesc("data/j3d/Room11.arc", "Windfall Island"),
-                new RARCSceneDesc("data/j3d/Room13.arc", "Dragon Roost Island"),
-                new RARCSceneDesc("data/j3d/Room41.arc", "Forest Haven"),
-                new RARCSceneDesc("data/j3d/Room44.arc", "Outset Island"),
             ];
             exports_23("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
@@ -9840,10 +9881,194 @@ System.register("zelview/scenes", ["zelview/render"], function (exports_41, cont
         }
     };
 });
-System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes", "zelview/scenes", "progress"], function (exports_42, context_42) {
+System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_material", "j3d/scenes", "j3d/render", "progress", "util"], function (exports_42, context_42) {
     "use strict";
     var __moduleName = context_42 && context_42.id;
-    var viewer_1, FRES, J3D, MDL0, OOT3D, SM64DS, ZELVIEW, progress_5, ProgressBar, DroppedFileSceneDesc, Main;
+    var j3d_3, RARC, Yaz0, GX_Material, scenes_1, render_15, progress_5, util_19, WindWakerScene, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
+    return {
+        setters: [
+            function (j3d_3_1) {
+                j3d_3 = j3d_3_1;
+            },
+            function (RARC_2) {
+                RARC = RARC_2;
+            },
+            function (Yaz0_3) {
+                Yaz0 = Yaz0_3;
+            },
+            function (GX_Material_3) {
+                GX_Material = GX_Material_3;
+            },
+            function (scenes_1_1) {
+                scenes_1 = scenes_1_1;
+            },
+            function (render_15_1) {
+                render_15 = render_15_1;
+            },
+            function (progress_5_1) {
+                progress_5 = progress_5_1;
+            },
+            function (util_19_1) {
+                util_19 = util_19_1;
+            }
+        ],
+        execute: function () {
+            WindWakerScene = /** @class */ (function (_super) {
+                __extends(WindWakerScene, _super);
+                function WindWakerScene(gl, roomIdx, stageRarc, roomRarc) {
+                    var _this = _super.call(this, []) || this;
+                    _this.roomIdx = roomIdx;
+                    _this.stageRarc = stageRarc;
+                    _this.roomRarc = roomRarc;
+                    function createScene(rarc, name, isSkybox) {
+                        var bdlFile = rarc.findFile("bdl/" + name + ".bdl");
+                        if (!bdlFile)
+                            return null;
+                        var btkFile = rarc.findFile("btk/" + name + ".btk");
+                        var bdl = j3d_3.BMD.parse(bdlFile.buffer);
+                        var btk = btkFile ? j3d_3.BTK.parse(btkFile.buffer) : null;
+                        return new render_15.Scene(gl, bdl, btk, null, isSkybox);
+                    }
+                    var scenes = [];
+                    // Skybox.
+                    _this.vr_sky = createScene(stageRarc, "vr_sky", true);
+                    scenes.push(_this.vr_sky);
+                    _this.vr_kasumi_mae = createScene(stageRarc, "vr_kasumi_mae", true);
+                    scenes.push(_this.vr_kasumi_mae);
+                    _this.vr_uso_umi = createScene(stageRarc, "vr_uso_umi", true);
+                    scenes.push(_this.vr_uso_umi);
+                    _this.vr_back_cloud = createScene(stageRarc, "vr_back_cloud", true);
+                    scenes.push(_this.vr_back_cloud);
+                    _this.model = createScene(roomRarc, "model", false);
+                    scenes.push(_this.model);
+                    // Ocean.
+                    _this.model1 = createScene(roomRarc, "model1", false);
+                    if (_this.model1)
+                        scenes.push(_this.model1);
+                    // Windows / doors.
+                    _this.model3 = createScene(roomRarc, "model3", false);
+                    if (_this.model3)
+                        scenes.push(_this.model3);
+                    // Noon.
+                    _this.setTimeOfDay(0x02);
+                    _this = _super.call(this, scenes) || this;
+                    return _this;
+                }
+                WindWakerScene.getColorsFromDZS = function (buffer, roomIdx, timeOfDay) {
+                    var view = new DataView(buffer);
+                    var chunkCount = view.getUint32(0x00);
+                    var chunkOffsets = new Map();
+                    var chunkTableIdx = 0x04;
+                    for (var i = 0; i < chunkCount; i++) {
+                        var type = util_19.readString(buffer, chunkTableIdx + 0x00, 0x04);
+                        var offs = view.getUint32(chunkTableIdx + 0x08);
+                        chunkOffsets.set(type, offs);
+                        chunkTableIdx += 0x0C;
+                    }
+                    var coloIdx = view.getUint8(chunkOffsets.get('EnvR') + (roomIdx * 0x08));
+                    var coloOffs = chunkOffsets.get('Colo') + (coloIdx * 0x0C);
+                    var whichPale = timeOfDay;
+                    var paleIdx = view.getUint8(coloOffs + whichPale);
+                    var paleOffs = chunkOffsets.get('Pale') + (paleIdx * 0x2C);
+                    var virtIdx = view.getUint8(paleOffs + 0x21);
+                    var virtOffs = chunkOffsets.get('Virt') + (virtIdx * 0x24);
+                    var ambR = view.getUint8(paleOffs + 0x06) / 0xFF;
+                    var ambG = view.getUint8(paleOffs + 0x07) / 0xFF;
+                    var ambB = view.getUint8(paleOffs + 0x08) / 0xFF;
+                    var amb = new GX_Material.Color(ambR, ambG, ambB, 1);
+                    var lightR = view.getUint8(paleOffs + 0x09) / 0xFF;
+                    var lightG = view.getUint8(paleOffs + 0x0A) / 0xFF;
+                    var lightB = view.getUint8(paleOffs + 0x0B) / 0xFF;
+                    var light = new GX_Material.Color(lightR, lightG, lightB, 1);
+                    var waveR = view.getUint8(paleOffs + 0x0C) / 0xFF;
+                    var waveG = view.getUint8(paleOffs + 0x0D) / 0xFF;
+                    var waveB = view.getUint8(paleOffs + 0x0E) / 0xFF;
+                    var wave = new GX_Material.Color(waveR, waveG, waveB, 1);
+                    var oceanR = view.getUint8(paleOffs + 0x0F) / 0xFF;
+                    var oceanG = view.getUint8(paleOffs + 0x10) / 0xFF;
+                    var oceanB = view.getUint8(paleOffs + 0x11) / 0xFF;
+                    var ocean = new GX_Material.Color(oceanR, oceanG, oceanB, 1);
+                    var splashR = view.getUint8(paleOffs + 0x12) / 0xFF;
+                    var splashG = view.getUint8(paleOffs + 0x13) / 0xFF;
+                    var splashB = view.getUint8(paleOffs + 0x14) / 0xFF;
+                    var splash = new GX_Material.Color(splashR, splashG, splashB, 1);
+                    var doorsR = view.getUint8(paleOffs + 0x18) / 0xFF;
+                    var doorsG = view.getUint8(paleOffs + 0x19) / 0xFF;
+                    var doorsB = view.getUint8(paleOffs + 0x1A) / 0xFF;
+                    var doors = new GX_Material.Color(doorsR, doorsG, doorsB, 1);
+                    var vr_back_cloudR = view.getUint8(virtOffs + 0x10) / 0xFF;
+                    var vr_back_cloudG = view.getUint8(virtOffs + 0x11) / 0xFF;
+                    var vr_back_cloudB = view.getUint8(virtOffs + 0x12) / 0xFF;
+                    var vr_back_cloudA = view.getUint8(virtOffs + 0x13) / 0xFF;
+                    var vr_back_cloud = new GX_Material.Color(vr_back_cloudR, vr_back_cloudG, vr_back_cloudB, vr_back_cloudA);
+                    var vr_skyR = view.getUint8(virtOffs + 0x18) / 0xFF;
+                    var vr_skyG = view.getUint8(virtOffs + 0x19) / 0xFF;
+                    var vr_skyB = view.getUint8(virtOffs + 0x1A) / 0xFF;
+                    var vr_sky = new GX_Material.Color(vr_skyR, vr_skyG, vr_skyB, 1);
+                    var vr_uso_umiR = view.getUint8(virtOffs + 0x1B) / 0xFF;
+                    var vr_uso_umiG = view.getUint8(virtOffs + 0x1C) / 0xFF;
+                    var vr_uso_umiB = view.getUint8(virtOffs + 0x1D) / 0xFF;
+                    var vr_uso_umi = new GX_Material.Color(vr_uso_umiR, vr_uso_umiG, vr_uso_umiB, 1);
+                    var vr_kasumi_maeG = view.getUint8(virtOffs + 0x1F) / 0xFF;
+                    var vr_kasumi_maeR = view.getUint8(virtOffs + 0x1E) / 0xFF;
+                    var vr_kasumi_maeB = view.getUint8(virtOffs + 0x20) / 0xFF;
+                    var vr_kasumi_mae = new GX_Material.Color(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
+                    return { amb: amb, light: light, wave: wave, ocean: ocean, splash: splash, doors: doors, vr_back_cloud: vr_back_cloud, vr_sky: vr_sky, vr_uso_umi: vr_uso_umi, vr_kasumi_mae: vr_kasumi_mae };
+                };
+                WindWakerScene.prototype.setTimeOfDay = function (timeOfDay) {
+                    var dzsFile = this.stageRarc.findFile("dzs/stage.dzs");
+                    var colors = WindWakerScene.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay);
+                    this.model.setKonstColorOverride(0, colors.light);
+                    this.model.setKonstColorOverride(4, colors.amb);
+                    if (this.model1) {
+                        this.model1.setKonstColorOverride(0, colors.ocean);
+                        this.model1.setKonstColorOverride(4, colors.wave);
+                        this.model1.setKonstColorOverride(5, colors.splash);
+                    }
+                    if (this.model3)
+                        this.model3.setKonstColorOverride(4, colors.doors);
+                    this.vr_sky.setKonstColorOverride(0, colors.vr_sky);
+                    this.vr_uso_umi.setKonstColorOverride(0, colors.vr_uso_umi);
+                    this.vr_kasumi_mae.setKonstColorOverride(4, colors.vr_kasumi_mae);
+                    this.vr_back_cloud.setKonstColorOverride(0, colors.vr_back_cloud);
+                };
+                return WindWakerScene;
+            }(scenes_1.MultiScene));
+            WindWakerSceneDesc = /** @class */ (function (_super) {
+                __extends(WindWakerSceneDesc, _super);
+                function WindWakerSceneDesc() {
+                    return _super !== null && _super.apply(this, arguments) || this;
+                }
+                WindWakerSceneDesc.prototype.createScene = function (gl) {
+                    var roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
+                    return progress_5.Progressable.all([
+                        util_19.fetch("data/j3d/ww/sea/Stage.arc"),
+                        util_19.fetch(this.path),
+                    ]).then(function (_a) {
+                        var _b = __read(_a, 2), stage = _b[0], room = _b[1];
+                        var stageRarc = RARC.parse(Yaz0.decompress(stage));
+                        var roomRarc = RARC.parse(room);
+                        return new WindWakerScene(gl, roomIdx, stageRarc, roomRarc);
+                    });
+                };
+                return WindWakerSceneDesc;
+            }(scenes_1.RARCSceneDesc));
+            sceneDescs = [
+                new WindWakerSceneDesc("data/j3d/ww/sea/Room11.arc", "Windfall Island"),
+                new WindWakerSceneDesc("data/j3d/ww/sea/Room13.arc", "Dragon Roost Island"),
+                new WindWakerSceneDesc("data/j3d/ww/sea/Room41.arc", "Forest Haven"),
+                new WindWakerSceneDesc("data/j3d/ww/sea/Room44.arc", "Outset Island"),
+            ];
+            id = "zww";
+            name = "The Legend of Zelda: The Wind Waker";
+            exports_42("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+        }
+    };
+});
+System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes", "zelview/scenes", "j3d/zww_scenes", "progress"], function (exports_43, context_43) {
+    "use strict";
+    var __moduleName = context_43 && context_43.id;
+    var viewer_1, FRES, J3D, MDL0, OOT3D, SM64DS, ZELVIEW, ZWW, progress_6, ProgressBar, DroppedFileSceneDesc, Main;
     return {
         setters: [
             function (viewer_1_1) {
@@ -9867,8 +10092,11 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
             function (ZELVIEW_1) {
                 ZELVIEW = ZELVIEW_1;
             },
-            function (progress_5_1) {
-                progress_5 = progress_5_1;
+            function (ZWW_1) {
+                ZWW = ZWW_1;
+            },
+            function (progress_6_1) {
+                progress_6 = progress_6_1;
             }
         ],
         execute: function () {
@@ -9924,7 +10152,7 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                                 pr.setProgress(e.loaded / e.total);
                         };
                     });
-                    var pr = new progress_5.Progressable(p);
+                    var pr = new progress_6.Progressable(p);
                     return pr;
                 };
                 DroppedFileSceneDesc.prototype.createSceneFromFile = function (gl, file, buffer) {
@@ -9969,12 +10197,13 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this._makeUI();
                     this.groups = [];
                     // The "plugin" part of this.
+                    this.groups.push(ZWW.sceneGroup);
+                    this.groups.push(J3D.sceneGroup);
                     this.groups.push(SM64DS.sceneGroup);
                     this.groups.push(MDL0.sceneGroup);
                     this.groups.push(ZELVIEW.sceneGroup);
                     this.groups.push(OOT3D.sceneGroup);
                     this.groups.push(FRES.sceneGroup);
-                    this.groups.push(J3D.sceneGroup);
                     this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
                     this.groups.push(this.droppedFileGroup);
                     this._loadSceneGroups();
