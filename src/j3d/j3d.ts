@@ -865,9 +865,11 @@ export interface TEX1_Texture {
     magFilter: GX.TexFilter;
     mipCount: number;
     data: ArrayBuffer;
+    dataStart: number;
 }
 
 export interface TEX1 {
+    remapTable: number[];
     textures: TEX1_Texture[];
 }
 
@@ -878,9 +880,21 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const nameTableOffs = view.getUint32(0x10);
     const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
 
+    // XXX(jstpierre): For some reason textures aren't deduplicated in a remap table?
+    // It's very wasteful, so dedupe ourselves based on dataStart.
+    const remapTable = [];
+
     const textures: TEX1_Texture[] = [];
-    let textureIdx = textureHeaderOffs;
     for (let i = 0; i < textureCount; i++) {
+        const textureIdx = textureHeaderOffs + i * 0x20;
+        const dataOffs = view.getUint32(textureIdx + 0x1C);
+        const dataStart = chunkStart + textureIdx + dataOffs;
+        const existingIndex = textures.findIndex((tex) => tex.dataStart === dataStart);
+        if (existingIndex >= 0) {
+            remapTable.push(existingIndex);
+            continue;
+        }
+
         const name = nameTable[i];
         const format: GX.TexFormat = view.getUint8(textureIdx + 0x00);
         const width = view.getUint16(textureIdx + 0x02);
@@ -893,14 +907,13 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const minFilter = view.getUint8(textureIdx + 0x14);
         const magFilter = view.getUint8(textureIdx + 0x15);
         const mipCount = view.getUint8(textureIdx + 0x18);
-        const dataOffs = view.getUint32(textureIdx + 0x1C);
-        const data = buffer.slice(chunkStart + textureIdx + dataOffs);
+        const data = buffer.slice(dataStart);
 
-        textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, mipCount, data });
-        textureIdx += 0x20;
+        textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, mipCount, data, dataStart });
+        remapTable.push(textures.length - 1);
     }
 
-    bmd.tex1 = { textures };
+    bmd.tex1 = { remapTable, textures };
 }
 
 export class BMD {

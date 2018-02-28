@@ -153,7 +153,7 @@ class Scene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE ];
 
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
     public zelview0: ZELVIEW0.ZELVIEW0;
     public program_BG: BillboardBGProgram;
     public program_COLL: CollisionProgram;

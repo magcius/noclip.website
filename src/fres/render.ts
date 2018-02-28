@@ -113,7 +113,7 @@ function getAttribFormatInfo(gl: WebGL2RenderingContext, format: GX2AttribFormat
 
 export class Scene implements Viewer.Scene {
     public renderPasses = [ RenderPass.OPAQUE ];
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
 
     private modelFuncs: RenderFunc[];
     private glTextures: WebGLTexture[];
@@ -141,7 +141,8 @@ export class Scene implements Viewer.Scene {
             GX2Texture.decodeSurface(tex.surface, tex.texData, tex.mipData).then((decodedTexture) => {
                 GX2Texture.textureToCanvas(canvas, decodedTexture);
             });
-            return canvas;
+            const surfaces = [ canvas ];
+            return { name: textureEntry.entry.name, surfaces };
         });
     }
 

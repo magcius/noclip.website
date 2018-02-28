@@ -112,7 +112,7 @@ class Command_Material {
     static matrixTableScratch = new Float32Array(9 * 10);
     static matrixScratch = mat3.create();
     static textureScratch = new Int32Array(8);
-    static konstColorScratch = new Float32Array(4 * 8);
+    static colorScratch = new Float32Array(4 * 8);
 
     private scene: Scene;
 
@@ -124,6 +124,7 @@ class Command_Material {
     private textures: WebGLTexture[] = [];
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
+    private localMatrix: mat4;
 
     constructor(gl: WebGL2RenderingContext, scene: Scene, material: GX_Material.GXMaterial) {
         this.scene = scene;
@@ -135,6 +136,7 @@ class Command_Material {
         this.renderFlags = GX_Material.translateRenderFlags(this.material);
 
         this.textures = this.translateTextures(gl);
+        this.localMatrix = mat4.create();
     }
 
     private translateTextures(gl: WebGL2RenderingContext): WebGLTexture[] {
@@ -143,7 +145,7 @@ class Command_Material {
         for (let i = 0; i < this.material.textureIndexes.length; i++) {
             const texIndex = this.material.textureIndexes[i];
             if (texIndex >= 0)
-                textures[i] = Command_Material.translateTexture(gl, tex1.textures[texIndex]);
+                textures[i] = Command_Material.translateTexture(gl, tex1.textures[tex1.remapTable[texIndex]]);
             else
                 textures[i] = null;
         }
@@ -263,20 +265,36 @@ class Command_Material {
         }
         gl.uniform1iv(this.program.u_Texture, textureScratch);
 
-        const konstColorScratch = Command_Material.konstColorScratch;
+        const colorScratch = Command_Material.colorScratch;
         for (let i = 0; i < 8; i++) {
+            let fallbackColor: GX_Material.Color;
+            if (i >= 4)
+                fallbackColor = this.material.colorRegisters[i - 4];
+            else
+                fallbackColor = this.material.colorConstants[i];
+
             let color: GX_Material.Color;
-            if (this.scene.konstColorOverrides[i]) {
-                color = this.scene.konstColorOverrides[i];
+            if (this.scene.colorOverrides[i]) {
+                color = this.scene.colorOverrides[i];
             } else {
-                if (i >= 4)
-                    color = this.material.colorRegisters[i - 4];
-                else
-                    color = this.material.colorConstants[i];
+                color = fallbackColor;
             }
-            color.set(konstColorScratch, i*4);
+
+            let alpha: number;
+            if (this.scene.alphaOverrides[i] !== undefined) {
+                alpha = this.scene.alphaOverrides[i];
+            } else {
+                alpha = fallbackColor.a;
+            }
+
+            colorScratch[i*4+0] = color.r;
+            colorScratch[i*4+1] = color.g;
+            colorScratch[i*4+2] = color.b;
+            colorScratch[i*4+3] = alpha;
         }
-        gl.uniform4fv(this.program.u_KonstColor, konstColorScratch);
+        gl.uniform4fv(this.program.u_KonstColor, colorScratch);
+
+        gl.uniformMatrix4fv(this.program.u_LocalPosMtx, false, this.localMatrix);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -292,11 +310,16 @@ interface HierarchyTraverseContext {
     parentJointMatrix: mat4;
 }
 
+export enum ColorOverride {
+    K0, K1, K2, K3,
+    C0, C1, C2, C3,
+}
+
 export class Scene implements Viewer.Scene {
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
 
     public gl: WebGL2RenderingContext;
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
     public bmd: BMD;
     public btk: BTK;
     public bmt: BMT;
@@ -312,7 +335,8 @@ export class Scene implements Viewer.Scene {
     // Shared data
     public uniformBufferSceneStatic: WebGLBuffer;
 
-    public konstColorOverrides: GX_Material.Color[] = [null, null, null, null];
+    public colorOverrides: GX_Material.Color[] = [];
+    public alphaOverrides: number[] = [];
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT, isSkybox: boolean) {
         this.gl = gl;
@@ -327,25 +351,44 @@ export class Scene implements Viewer.Scene {
         this.textures = tex1.textures.map((tex) => this.translateTextureToCanvas(tex));
     }
 
-    public setKonstColorOverride(i: number, color: GX_Material.Color) {
-        this.konstColorOverrides[i] = color;
+    public setColorOverride(i: ColorOverride, color: GX_Material.Color) {
+        this.colorOverrides[i] = color;
     }
 
-    private translateTextureToCanvas(texture: TEX1_Texture): HTMLCanvasElement {
-        const rgbaTexture = GX_Texture.decodeTexture(texture, false);
-        // Should never happen.
-        if (rgbaTexture.type === 'S3TC')
-            return null;
-        const canvas = document.createElement('canvas');
-        canvas.width = rgbaTexture.width;
-        canvas.height = rgbaTexture.height;
-        canvas.title = `${texture.name} ${texture.format}`;
-        canvas.style.backgroundColor = 'black';
-        const ctx = canvas.getContext('2d');
-        const imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
-        imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-        ctx.putImageData(imgData, 0, 0);
-        return canvas;
+    public setAlphaOverride(i: ColorOverride, alpha: number) {
+        this.alphaOverrides[i] = alpha;
+    }
+
+    private translateTextureToCanvas(texture: TEX1_Texture): Viewer.Texture {
+        const surfaces = [];
+
+        let width = texture.width, height = texture.height, offs = 0;
+        const format = texture.format;
+        for (let i = 0; i < texture.mipCount; i++) {
+            const size = GX_Texture.calcTextureSize(format, width, height);
+            const data = texture.data.slice(offs, offs + size);
+            const surface = { name, format, width, height, data };
+            const rgbaTexture = GX_Texture.decodeTexture(surface, false);
+            // Should never happen.
+            if (rgbaTexture.type === 'S3TC')
+                throw "whoops";
+
+            const canvas = document.createElement('canvas');
+            canvas.width = rgbaTexture.width;
+            canvas.height = rgbaTexture.height;
+            canvas.title = `${texture.name} ${texture.format}`;
+            const ctx = canvas.getContext('2d');
+            const imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
+            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
+            ctx.putImageData(imgData, 0, 0);
+            surfaces.push(canvas);
+        
+            width /= 2;
+            height /= 2;
+            offs += size;
+        }
+
+        return { name: texture.name, surfaces };
     }
 
     private execCommands(state: RenderState, commands: Command[]) {

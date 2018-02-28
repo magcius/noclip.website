@@ -174,7 +174,7 @@ void main() {
 class Scene implements Viewer.MainScene {
     public cameraController = Viewer.OrbitCameraController;
     public renderPasses = [ RenderPass.OPAQUE ];
-    public textures: HTMLCanvasElement[] = [];
+    public textures: Viewer.Texture[] = [];
     public program: MDL0_Program;
     public mdl0: MDL0.MDL0;
     public fancyGrid: FancyGrid;

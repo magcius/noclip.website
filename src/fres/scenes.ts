@@ -14,7 +14,7 @@ class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE ];
     public scenes: Viewer.Scene[];
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
 
     constructor(scenes: Viewer.Scene[]) {
         this.scenes = scenes;

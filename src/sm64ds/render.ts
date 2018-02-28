@@ -64,7 +64,7 @@ void main() {
 const VERTEX_SIZE = 9;
 const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
+function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
     canvas.width = bmdTex.width;
     canvas.height = bmdTex.height;
@@ -72,19 +72,17 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
 
     const ctx = canvas.getContext("2d");
     const imgData = ctx.createImageData(canvas.width, canvas.height);
-
-    for (let i = 0; i < imgData.data.length; i++)
-        imgData.data[i] = bmdTex.pixels[i];
-
+    imgData.data.set(bmdTex.pixels);
     ctx.putImageData(imgData, 0, 0);
-    return canvas;
+    const surfaces = [ canvas ];
+    return { name: bmdTex.name, surfaces };
 }
 
 type RenderFunc = (state: RenderState) => void;
 
 class Scene implements Viewer.Scene {
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
     public modelFuncs: RenderFunc[];
     public program: NITRO_Program;
     public bmd: NITRO_BMD.BMD;
@@ -279,7 +277,7 @@ class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
 
     constructor(scenes: Viewer.Scene[]) {
         this.scenes = scenes;

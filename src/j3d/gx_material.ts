@@ -11,13 +11,6 @@ import { BlendFactor, CompareMode, BlendMode as RenderBlendMode, CullMode, Front
 export class Color {
     constructor(public r, public g, public b, public a) {
     }
-
-    set(n: Float32Array, i: number) {
-        n[i + 0] = this.r;
-        n[i + 1] = this.g;
-        n[i + 2] = this.b;
-        n[i + 3] = this.a;
-    }
 }
 
 export interface ColorChannelControl {
@@ -150,6 +143,7 @@ export class GX_Program extends Program {
     public u_Texture: WebGLUniformLocation;
     public u_TextureLODBias: WebGLUniformLocation;
     public u_KonstColor: WebGLUniformLocation;
+    public u_LocalPosMtx: WebGLUniformLocation;
 
     private material: GXMaterial;
 
@@ -510,6 +504,7 @@ ${this.generateVertAttributeScaleBlock()}
 ${this.generateVertAttributeDefs()}
 uniform mat3 u_TexMtx[10];
 uniform mat4 u_PosMtx[10];
+uniform mat4 u_LocalPosMtx;
 
 out vec3 v_Position;
 out vec3 v_Normal;
@@ -526,7 +521,7 @@ out vec3 v_TexCoord7;
 
 void main() {
     mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];
-    vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);
+    vec4 t_Position = t_PosMtx * u_LocalPosMtx * vec4(ReadAttrib_Position(), 1.0);
     v_Position = t_Position.xyz;
     v_Normal = ReadAttrib_Normal();
     v_Color0 = ${this.generateColorChannel(this.material.colorChannels[0], `ReadAttrib_Color0()`)};
@@ -595,6 +590,7 @@ ${this.generateAlphaTest(alphaTest)}
         this.u_Texture = gl.getUniformLocation(prog, `u_Texture`);
         this.u_TextureLODBias = gl.getUniformLocation(prog, 'u_TextureLODBias');
         this.u_KonstColor = gl.getUniformLocation(prog, `u_KonstColor`);
+        this.u_LocalPosMtx = gl.getUniformLocation(prog, `u_LocalPosMtx`);
     }
 }
 // #endregion
