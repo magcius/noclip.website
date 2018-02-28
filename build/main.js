@@ -3722,9 +3722,10 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             packedVertexSize = align(packedVertexSize, firstAlign);
             // Now parse out the packets.
             var packetIdx = packetTableOffs + (firstPacket * 0x08);
-            var allDrawCalls = [];
             var packets = [];
+            var totalTriangleCount = 0;
             var totalVertexCount = 0;
+            var drawCalls = [];
             for (var j = 0; j < packetCount; j++) {
                 var packetSize = view.getUint32(packetIdx + 0x00);
                 var packetStart = primDataOffs + view.getUint32(packetIdx + 0x04);
@@ -3734,9 +3735,9 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 var packetMatrixTableOffs = chunkStart + matrixTableOffs + matrixFirstIndex * 0x02;
                 var packetMatrixTableEnd = packetMatrixTableOffs + matrixCount * 0x02;
                 var weightedJointTable = new Uint16Array(endian_2.be16toh(buffer.slice(packetMatrixTableOffs, packetMatrixTableEnd)));
-                var drawCalls = [];
                 var drawCallEnd = packetStart + packetSize;
                 var drawCallIdx = packetStart;
+                var firstTriangle = totalTriangleCount;
                 while (true) {
                     if (drawCallIdx > drawCallEnd)
                         break;
@@ -3748,24 +3749,59 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                     var srcOffs = drawCallIdx;
                     var first = totalVertexCount;
                     totalVertexCount += vertexCount;
+                    switch (primType) {
+                        case 160 /* TRIANGLEFAN */:
+                        case 152 /* TRIANGLESTRIP */:
+                            totalTriangleCount += (vertexCount - 2);
+                            break;
+                        default:
+                            throw "whoops";
+                    }
+                    drawCalls.push({ primType: primType, srcOffs: srcOffs, vertexCount: vertexCount });
                     // Skip over the index data.
                     drawCallIdx += vertexIndexSize * vertexCount;
-                    var drawCall = { primType: primType, vertexCount: vertexCount, first: first, srcOffs: srcOffs };
-                    drawCalls.push(drawCall);
-                    allDrawCalls.push(drawCall);
                 }
-                packets.push({ weightedJointTable: weightedJointTable, drawCalls: drawCalls });
+                var numTriangles = totalTriangleCount - firstTriangle;
+                packets.push({ weightedJointTable: weightedJointTable, firstTriangle: firstTriangle, numTriangles: numTriangles });
                 packetIdx += 0x08;
             }
-            // Now copy our data into it.
+            // Make sure the whole thing fits in 16 bits.
+            util_6.assert(totalVertexCount <= 0xFFFF);
+            // Now make the data.
+            var indexDataIdx = 0;
+            var indexData = new Uint16Array(totalTriangleCount * 3);
+            var vertexId = 0;
             var packedDataSize = packedVertexSize * totalVertexCount;
             var packedDataView = new Uint8Array(packedDataSize);
             var packedDataOffs = 0;
             try {
-                for (var allDrawCalls_1 = __values(allDrawCalls), allDrawCalls_1_1 = allDrawCalls_1.next(); !allDrawCalls_1_1.done; allDrawCalls_1_1 = allDrawCalls_1.next()) {
-                    var drawCall = allDrawCalls_1_1.value;
+                for (var drawCalls_1 = __values(drawCalls), drawCalls_1_1 = drawCalls_1.next(); !drawCalls_1_1.done; drawCalls_1_1 = drawCalls_1.next()) {
+                    var drawCall = drawCalls_1_1.value;
+                    // Convert topology to triangles.
+                    var firstVertex = vertexId;
+                    // First triangle is the same for all topo.
+                    for (var i_1 = 0; i_1 < 3; i_1++)
+                        indexData[indexDataIdx++] = vertexId++;
+                    switch (drawCall.primType) {
+                        case 152 /* TRIANGLESTRIP */:
+                            for (var i_2 = 3; i_2 < drawCall.vertexCount; i_2++) {
+                                indexData[indexDataIdx++] = vertexId - ((i_2 & 1) ? 1 : 2);
+                                indexData[indexDataIdx++] = vertexId - ((i_2 & 1) ? 2 : 1);
+                                indexData[indexDataIdx++] = vertexId++;
+                            }
+                            break;
+                        case 160 /* TRIANGLEFAN */:
+                            for (var i_3 = 3; i_3 < drawCall.vertexCount; i_3++) {
+                                indexData[indexDataIdx++] = firstVertex;
+                                indexData[indexDataIdx++] = vertexId - 1;
+                                indexData[indexDataIdx++] = vertexId++;
+                            }
+                            break;
+                    }
+                    util_6.assert((vertexId - firstVertex) === drawCall.vertexCount);
                     var drawCallIdx = drawCall.srcOffs;
                     for (var j = 0; j < drawCall.vertexCount; j++) {
+                        // Copy attribute data.
                         var packedDataOffs_ = packedDataOffs;
                         try {
                             for (var packedVertexAttributes_1 = __values(packedVertexAttributes), packedVertexAttributes_1_1 = packedVertexAttributes_1.next(); !packedVertexAttributes_1_1.done; packedVertexAttributes_1_1 = packedVertexAttributes_1.next()) {
@@ -3796,14 +3832,15 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             catch (e_19_1) { e_19 = { error: e_19_1 }; }
             finally {
                 try {
-                    if (allDrawCalls_1_1 && !allDrawCalls_1_1.done && (_b = allDrawCalls_1.return)) _b.call(allDrawCalls_1);
+                    if (drawCalls_1_1 && !drawCalls_1_1.done && (_b = drawCalls_1.return)) _b.call(drawCalls_1);
                 }
                 finally { if (e_19) throw e_19.error; }
             }
+            util_6.assert(indexDataIdx === totalTriangleCount * 3);
             util_6.assert((packedVertexSize * totalVertexCount) === packedDataOffs);
             var packedData = packedDataView.buffer;
             // Now we should have a complete shape. Onto the next!
-            shapes.push({ packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, packets: packets });
+            shapes.push({ indexData: indexData, packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, packets: packets });
             shapeIdx += 0x28;
         }
         var shp1 = { shapes: shapes };
@@ -4731,9 +4768,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     this.jointMatrices = jointMatrices;
                     this.vao = gl.createVertexArray();
                     gl.bindVertexArray(this.vao);
-                    this.buffer = gl.createBuffer();
-                    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+                    this.vertexBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
                     gl.bufferData(gl.ARRAY_BUFFER, this.shape.packedData, gl.STATIC_DRAW);
+                    this.indexBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+                    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.shape.indexData, gl.STATIC_DRAW);
                     try {
                         for (var _a = __values(this.shape.packedVertexAttributes), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var attrib = _b.value;
@@ -4758,7 +4798,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     var gl = state.gl;
                     var prog = state.currentProgram;
                     gl.bindVertexArray(this.vao);
-                    this.shape.packets.forEach(function (packet) {
+                    this.shape.packets.forEach(function (packet, packetIndex) {
                         // Update our matrix table.
                         for (var i = 0; i < packet.weightedJointTable.length; i++) {
                             var weightedJointIndex = packet.weightedJointTable[i];
@@ -4772,15 +4812,14 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                             posMtxTable.set(posMtx, i * 16);
                         }
                         gl.uniformMatrix4fv(prog.posMtxLocation, false, posMtxTable);
-                        packet.drawCalls.forEach(function (drawCall) {
-                            gl.drawArrays(translatePrimType(gl, drawCall.primType), drawCall.first, drawCall.vertexCount);
-                        });
+                        gl.drawElements(gl.TRIANGLES, packet.numTriangles * 3, gl.UNSIGNED_SHORT, packet.firstTriangle * 3);
                     });
                     gl.bindVertexArray(null);
                 };
                 Command_Shape.prototype.destroy = function (gl) {
                     gl.deleteVertexArray(this.vao);
-                    gl.deleteBuffer(this.buffer);
+                    gl.deleteBuffer(this.indexBuffer);
+                    gl.deleteBuffer(this.vertexBuffer);
                 };
                 return Command_Shape;
             }());
@@ -5055,7 +5094,7 @@ System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
             var subdirIndexes = [];
             // Go through and parse the file table.
             var fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x14);
-            for (var i_1 = 0; i_1 < fileEntryCount_1; i_1++) {
+            for (var i_4 = 0; i_4 < fileEntryCount_1; i_4++) {
                 var id = view.getUint16(fileEntryIdx + 0x00);
                 var nameHash_1 = view.getUint16(fileEntryIdx + 0x02);
                 var flags = view.getUint8(fileEntryIdx + 0x04);

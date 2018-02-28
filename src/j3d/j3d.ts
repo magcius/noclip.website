@@ -333,19 +333,12 @@ export interface PackedVertexAttribute {
 // A packet is a series of draw calls that use the same matrix table.
 interface Packet {
     weightedJointTable: Uint16Array;
-    drawCalls: DrawCall[];
-}
-
-interface DrawCall {
-    primType: GX.PrimitiveType;
-    vertexCount: number;
-    // The "index" of the vertex into the packedData.
-    first: number;
-    // For internal use while building.
-    srcOffs: number;
+    firstTriangle: number;
+    numTriangles: number;
 }
 
 export interface Shape {
+    indexData: Uint16Array;
     // The vertex data. Converted to a modern-esque buffer per-shape.
     packedData: ArrayBuffer;
     // The size of an individual vertex.
@@ -434,10 +427,17 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
         // Now parse out the packets.
         let packetIdx = packetTableOffs + (firstPacket * 0x08);
-        const allDrawCalls: DrawCall[] = [];
         const packets: Packet[] = [];
 
+        interface DrawCall {
+            primType: number;
+            srcOffs: number;
+            vertexCount: number;
+        }
+
+        let totalTriangleCount = 0;
         let totalVertexCount = 0;
+        const drawCalls: DrawCall[] = [];
         for (let j = 0; j < packetCount; j++) {
             const packetSize = view.getUint32(packetIdx + 0x00);
             const packetStart = primDataOffs + view.getUint32(packetIdx + 0x04);
@@ -450,10 +450,11 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const packetMatrixTableEnd = packetMatrixTableOffs + matrixCount * 0x02;
             const weightedJointTable = new Uint16Array(be16toh(buffer.slice(packetMatrixTableOffs, packetMatrixTableEnd)));
 
-            const drawCalls: DrawCall[] = [];
-
             const drawCallEnd = packetStart + packetSize;
             let drawCallIdx = packetStart;
+
+            const firstTriangle = totalTriangleCount;
+
             while (true) {
                 if (drawCallIdx > drawCallEnd)
                     break;
@@ -465,25 +466,68 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                 const srcOffs = drawCallIdx;
                 const first = totalVertexCount;
                 totalVertexCount += vertexCount;
+
+                switch (primType) {
+                case GX.PrimitiveType.TRIANGLEFAN:
+                case GX.PrimitiveType.TRIANGLESTRIP:
+                    totalTriangleCount += (vertexCount - 2);
+                    break;
+                default:
+                    throw "whoops";
+                }
+
+                drawCalls.push({ primType, srcOffs, vertexCount });
+
                 // Skip over the index data.
                 drawCallIdx += vertexIndexSize * vertexCount;
-                const drawCall = { primType, vertexCount, first, srcOffs };
-                drawCalls.push(drawCall);
-                allDrawCalls.push(drawCall);
             }
 
-            packets.push({ weightedJointTable, drawCalls });
+            const numTriangles = totalTriangleCount - firstTriangle;
+            packets.push({ weightedJointTable, firstTriangle, numTriangles });
 
             packetIdx += 0x08;
         }
 
-        // Now copy our data into it.
+        // Make sure the whole thing fits in 16 bits.
+        assert(totalVertexCount <= 0xFFFF);
+
+        // Now make the data.
+        let indexDataIdx = 0;
+        const indexData = new Uint16Array(totalTriangleCount * 3);
+        let vertexId = 0;
+
         const packedDataSize = packedVertexSize * totalVertexCount;
         const packedDataView = new Uint8Array(packedDataSize);
         let packedDataOffs = 0;
-        for (const drawCall of allDrawCalls) {
+        for (const drawCall of drawCalls) {
+            // Convert topology to triangles.
+            const firstVertex = vertexId;
+
+            // First triangle is the same for all topo.
+            for (let i = 0; i < 3; i++)
+                indexData[indexDataIdx++] = vertexId++;
+
+            switch (drawCall.primType) {
+            case GX.PrimitiveType.TRIANGLESTRIP:
+                for (let i = 3; i < drawCall.vertexCount; i++) {
+                    indexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);
+                    indexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);
+                    indexData[indexDataIdx++] = vertexId++;
+                }
+                break;
+            case GX.PrimitiveType.TRIANGLEFAN:
+                for (let i = 3; i < drawCall.vertexCount; i++) {
+                    indexData[indexDataIdx++] = firstVertex;
+                    indexData[indexDataIdx++] = vertexId - 1;
+                    indexData[indexDataIdx++] = vertexId++;
+                }
+                break;
+            }
+            assert((vertexId - firstVertex) === drawCall.vertexCount);
+
             let drawCallIdx = drawCall.srcOffs;
             for (let j = 0; j < drawCall.vertexCount; j++) {
+                // Copy attribute data.
                 const packedDataOffs_ = packedDataOffs;
                 for (const attrib of packedVertexAttributes) {
                     const index = readIndex(view, drawCallIdx, attrib.indexDataType);
@@ -500,11 +544,12 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                 assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
             }
         }
+        assert(indexDataIdx === totalTriangleCount * 3);
         assert((packedVertexSize * totalVertexCount) === packedDataOffs);
         const packedData = packedDataView.buffer;
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ packedData, packedVertexSize, packedVertexAttributes, packets });
+        shapes.push({ indexData, packedData, packedVertexSize, packedVertexAttributes, packets });
 
         shapeIdx += 0x28;
     }
