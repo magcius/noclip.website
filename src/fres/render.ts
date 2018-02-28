@@ -112,7 +112,6 @@ function getAttribFormatInfo(gl: WebGL2RenderingContext, format: GX2AttribFormat
 }
 
 export class Scene implements Viewer.Scene {
-    public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE ];
     public textures: HTMLCanvasElement[];
 

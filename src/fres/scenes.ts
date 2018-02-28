@@ -10,7 +10,7 @@ import { RenderPass, RenderState } from '../render';
 import { Progressable } from '../progress';
 import { fetch, readString } from '../util';
 
-class MultiScene implements Viewer.Scene {
+class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE ];
     public scenes: Viewer.Scene[];
@@ -58,7 +58,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return Progressable.all([
             this._createSceneFromPath(gl, this.path, false),
             this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),

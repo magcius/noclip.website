@@ -83,9 +83,7 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture) {
 type RenderFunc = (state: RenderState) => void;
 
 class Scene implements Viewer.Scene {
-    public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
-
     public textures: HTMLCanvasElement[];
     public modelFuncs: RenderFunc[];
     public program: NITRO_Program;
@@ -277,7 +275,7 @@ class Scene implements Viewer.Scene {
     }
 }
 
-class MultiScene implements Viewer.Scene {
+class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
@@ -321,14 +319,14 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = '' + this.levelId;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return fetch('data/sm64ds/sm64ds.crg0').then((result: ArrayBuffer) => {
             const crg0 = CRG0.parse(result);
             return this._createSceneFromCRG0(gl, crg0);
         });
     }
 
-    private _createBmdScene(gl: WebGL2RenderingContext, filename: string, localScale: number, level: CRG0.Level, isSkybox: boolean): PromiseLike<Viewer.Scene> {
+    private _createBmdScene(gl: WebGL2RenderingContext, filename: string, localScale: number, level: CRG0.Level, isSkybox: boolean): PromiseLike<Scene> {
         return fetch(`data/sm64ds/${filename}`).then((result: ArrayBuffer) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
@@ -338,12 +336,12 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createSceneFromCRG0(gl: WebGL2RenderingContext, crg0: CRG0.CRG0): PromiseLike<Viewer.Scene> {
+    private _createSceneFromCRG0(gl: WebGL2RenderingContext, crg0: CRG0.CRG0): PromiseLike<Viewer.MainScene> {
         const level = crg0.levels[this.levelId];
         const scenes = [this._createBmdScene(gl, level.attributes.get('bmd'), 100, level, false)];
         if (level.attributes.get('vrbox'))
             scenes.unshift(this._createBmdScene(gl, level.attributes.get('vrbox'), 0.8, level, true));
-        return Promise.all(scenes).then((results) => {
+        return Promise.all(scenes).then((results: Viewer.Scene[]) => {
             return new MultiScene(results);
         });
     }

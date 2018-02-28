@@ -14,7 +14,6 @@ interface CameraController {
 type CameraControllerClass = typeof FPSCameraController | typeof OrbitCameraController;
 
 export interface Scene {
-    cameraController: CameraControllerClass;
     renderPasses: RenderPass[];
     textures: HTMLCanvasElement[];
     render(state: RenderState): void;
@@ -328,7 +327,7 @@ export class Viewer {
     public resetCamera() {
         mat4.identity(this.camera);
     }
-    public setScene(scene: Scene) {
+    public setScene(scene: MainScene) {
         this.sceneGraph.reset();
         if (scene) {
             this.sceneGraph.setScene(scene);
@@ -365,10 +364,14 @@ export class Viewer {
     }
 }
 
+export interface MainScene extends Scene {
+    cameraController: CameraControllerClass;
+}
+
 export interface SceneDesc {
     id: string;
     name: string;
-    createScene(gl: WebGL2RenderingContext): Progressable<Scene>;
+    createScene(gl: WebGL2RenderingContext): Progressable<MainScene>;
 }
 
 export interface SceneGroup {
