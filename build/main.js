@@ -477,7 +477,15 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                     this.fov = Math.PI / 4;
                     this.projection = gl_matrix_1.mat4.create();
                     this.modelView = gl_matrix_1.mat4.create();
+                    this.skyboxModelView = gl_matrix_1.mat4.create();
                 }
+                RenderState.prototype.setModelView = function (m) {
+                    gl_matrix_1.mat4.copy(this.modelView, m);
+                    gl_matrix_1.mat4.copy(this.skyboxModelView, m);
+                    this.skyboxModelView[12] = 0;
+                    this.skyboxModelView[13] = 0;
+                    this.skyboxModelView[14] = 0;
+                };
                 RenderState.prototype.checkResize = function () {
                     // TODO(jstpierre): Make viewport explicit
                     var canvas = this.viewport.canvas;
@@ -495,7 +503,15 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
                     this.currentProgram = prog;
                     gl.useProgram(prog.compile(gl));
                     gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
-                    gl.uniformMatrix4fv(prog.modelViewLocation, false, this.modelView);
+                };
+                RenderState.prototype.bindModelView = function (isSkybox) {
+                    if (isSkybox === void 0) { isSkybox = false; }
+                    var gl = this.gl;
+                    var prog = this.currentProgram;
+                    if (isSkybox)
+                        gl.uniformMatrix4fv(prog.modelViewLocation, false, this.skyboxModelView);
+                    else
+                        gl.uniformMatrix4fv(prog.modelViewLocation, false, this.modelView);
                 };
                 RenderState.prototype.useFlags = function (flags) {
                     var gl = this.gl;
@@ -747,8 +763,8 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                         this.scene.destroy(this.renderState.gl);
                     this.scene = scene;
                 };
-                SceneGraph.prototype.setCamera = function (matrix) {
-                    gl_matrix_2.mat4.copy(this.renderState.modelView, matrix);
+                SceneGraph.prototype.setCamera = function (camera) {
+                    this.renderState.setModelView(camera);
                 };
                 return SceneGraph;
             }());
@@ -2344,7 +2360,7 @@ System.register("yaz0", ["util"], function (exports_14, context_14) {
         }
     };
 });
-System.register("fres/render", ["gl-matrix", "fres/gx2_swizzle", "fres/gx2_texture", "viewer", "render", "endian", "util"], function (exports_15, context_15) {
+System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "viewer", "render", "endian", "util"], function (exports_15, context_15) {
     "use strict";
     var __moduleName = context_15 && context_15.id;
     function getAttribFormatInfo(gl, format) {
@@ -2378,12 +2394,9 @@ System.register("fres/render", ["gl-matrix", "fres/gx2_swizzle", "fres/gx2_textu
                 throw new Error("Unsupported attribute format " + format);
         }
     }
-    var gl_matrix_3, gx2_swizzle_2, GX2Texture, Viewer, render_2, endian_1, util_4, ProgramGambit_UBER, Scene;
+    var gx2_swizzle_2, GX2Texture, Viewer, render_2, endian_1, util_4, ProgramGambit_UBER, Scene;
     return {
         setters: [
-            function (gl_matrix_3_1) {
-                gl_matrix_3 = gl_matrix_3_1;
-            },
             function (gx2_swizzle_2_1) {
                 gx2_swizzle_2 = gx2_swizzle_2_1;
             },
@@ -2579,18 +2592,10 @@ System.register("fres/render", ["gl-matrix", "fres/gx2_swizzle", "fres/gx2_textu
                     }
                     var prog = new ProgramGambit_UBER();
                     this.arena.trackProgram(prog);
-                    var skyboxCameraMat = gl_matrix_3.mat4.create();
                     var renderState = fmat.renderState;
                     return function (state) {
                         state.useProgram(prog);
-                        if (_this.isSkybox) {
-                            // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
-                            gl_matrix_3.mat4.copy(skyboxCameraMat, state.modelView);
-                            skyboxCameraMat[12] = 0;
-                            skyboxCameraMat[13] = 0;
-                            skyboxCameraMat[14] = 0;
-                            gl.uniformMatrix4fv(prog.modelViewLocation, false, skyboxCameraMat);
-                        }
+                        state.bindModelView(_this.isSkybox);
                         // Render state.
                         gl.frontFace(_this.translateFrontFaceMode(gl, renderState.frontFaceMode));
                         if (renderState.cullFront || renderState.cullBack) {
@@ -3631,7 +3636,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
         var nameTableOffs = view.getUint32(0x14);
         var nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
-        var q = gl_matrix_4.quat.create();
+        var q = gl_matrix_3.quat.create();
         var bones = [];
         var boneDataTableIdx = boneDataTableOffs;
         for (var i = 0; i < boneDataCount; i++) {
@@ -3646,9 +3651,9 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             var translationY = view.getFloat32(boneDataTableIdx + 0x1C);
             var translationZ = view.getFloat32(boneDataTableIdx + 0x20);
             // Skipping bounding box data for now.
-            gl_matrix_4.quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
-            var matrix = gl_matrix_4.mat4.create();
-            gl_matrix_4.mat4.fromRotationTranslationScale(matrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
+            gl_matrix_3.quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
+            var matrix = gl_matrix_3.mat4.create();
+            gl_matrix_3.mat4.fromRotationTranslationScale(matrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
             bones.push({ name: name_8, matrix: matrix });
             boneDataTableIdx += 0x40;
         }
@@ -3849,17 +3854,17 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
         // TODO(jstpierre): Remove these.
-        gl_matrix_4.mat3.fromTranslation(c, [centerS, centerT, centerQ]);
-        gl_matrix_4.mat3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
-        gl_matrix_4.mat3.fromTranslation(m, [translationS, translationT, 0]);
-        gl_matrix_4.mat3.fromRotation(t, rotation);
-        gl_matrix_4.mat3.mul(t, t, ci);
-        gl_matrix_4.mat3.mul(t, c, t);
-        gl_matrix_4.mat3.mul(m, m, t);
-        gl_matrix_4.mat3.fromScaling(t, [scaleS, scaleT, 1]);
-        gl_matrix_4.mat3.mul(t, t, ci);
-        gl_matrix_4.mat3.mul(t, c, t);
-        gl_matrix_4.mat3.mul(m, m, t);
+        gl_matrix_3.mat3.fromTranslation(c, [centerS, centerT, centerQ]);
+        gl_matrix_3.mat3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
+        gl_matrix_3.mat3.fromTranslation(m, [translationS, translationT, 0]);
+        gl_matrix_3.mat3.fromRotation(t, rotation);
+        gl_matrix_3.mat3.mul(t, t, ci);
+        gl_matrix_3.mat3.mul(t, c, t);
+        gl_matrix_3.mat3.mul(m, m, t);
+        gl_matrix_3.mat3.fromScaling(t, [scaleS, scaleT, 1]);
+        gl_matrix_3.mat3.mul(t, t, ci);
+        gl_matrix_3.mat3.mul(t, c, t);
+        gl_matrix_3.mat3.mul(m, m, t);
         return m;
     }
     function readColor32(view, srcOffs) {
@@ -3979,8 +3984,8 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
                 var p31 = view.getFloat32(texMtxOffs + 0x58);
                 var p32 = view.getFloat32(texMtxOffs + 0x5C);
                 var p33 = view.getFloat32(texMtxOffs + 0x60);
-                var p = gl_matrix_4.mat4.fromValues(p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33);
-                var matrix = gl_matrix_4.mat3.create();
+                var p = gl_matrix_3.mat4.fromValues(p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33);
+                var matrix = gl_matrix_3.mat3.create();
                 createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
                 texMatrices[j] = { projection: projection, matrix: matrix };
             }
@@ -4198,7 +4203,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
         }
         btk.ttk1 = { duration: duration, loopMode: loopMode, rotationScale: rotationScale, materialAnimationEntries: materialAnimationEntries };
     }
-    var GX, endian_2, util_6, gl_matrix_4, HierarchyType, t, c, ci, BMD, BTK, BMT;
+    var GX, endian_2, util_6, gl_matrix_3, HierarchyType, t, c, ci, BMD, BTK, BMT;
     return {
         setters: [
             function (GX_2) {
@@ -4210,8 +4215,8 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             function (util_6_1) {
                 util_6 = util_6_1;
             },
-            function (gl_matrix_4_1) {
-                gl_matrix_4 = gl_matrix_4_1;
+            function (gl_matrix_3_1) {
+                gl_matrix_3 = gl_matrix_3_1;
             }
         ],
         execute: function () {
@@ -4225,7 +4230,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "endian", "util", "gl-matrix"], funct
             })(HierarchyType || (HierarchyType = {}));
             exports_19("HierarchyType", HierarchyType);
             // temp, center, center inverse
-            t = gl_matrix_4.mat3.create(), c = gl_matrix_4.mat3.create(), ci = gl_matrix_4.mat3.create();
+            t = gl_matrix_3.mat3.create(), c = gl_matrix_3.mat3.create(), ci = gl_matrix_3.mat3.create();
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
@@ -4727,11 +4732,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 throw new Error("Unknown CompType " + compType);
         }
     }
-    var gl_matrix_5, j3d_1, GX, GX_Material, GX_Texture, Viewer, posMtxTable, Command_Shape, Command_Material, Scene;
+    var gl_matrix_4, j3d_1, GX, GX_Material, GX_Texture, Viewer, posMtxTable, Command_Shape, Command_Material, Scene;
     return {
         setters: [
-            function (gl_matrix_5_1) {
-                gl_matrix_5 = gl_matrix_5_1;
+            function (gl_matrix_4_1) {
+                gl_matrix_4 = gl_matrix_4_1;
             },
             function (j3d_1_1) {
                 j3d_1 = j3d_1_1;
@@ -4814,11 +4819,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 return Command_Shape;
             }());
             Command_Material = /** @class */ (function () {
-                function Command_Material(gl, bmd, btk, bmt, material) {
+                function Command_Material(gl, scene, material) {
                     this.textures = [];
-                    this.bmd = bmd;
-                    this.btk = btk;
-                    this.bmt = bmt;
+                    this.scene = scene;
+                    this.bmd = scene.bmd;
+                    this.btk = scene.btk;
+                    this.bmt = scene.bmt;
                     this.material = material;
                     this.program = new GX_Material.GX_Program(material);
                     this.renderFlags = GX_Material.translateRenderFlags(this.material);
@@ -4894,6 +4900,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 Command_Material.prototype.exec = function (state) {
                     var gl = state.gl;
                     state.useProgram(this.program);
+                    state.bindModelView(this.scene.isSkybox);
                     state.useFlags(this.renderFlags);
                     // LOD Bias.
                     var width = state.viewport.canvas.width;
@@ -4920,13 +4927,13 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         finally { if (e_21) throw e_21.error; }
                     }
                     // Bind our texture matrices.
-                    var matrix = gl_matrix_5.mat3.create();
+                    var matrix = gl_matrix_4.mat3.create();
                     for (var i = 0; i < this.material.texMatrices.length; i++) {
                         var texMtx = this.material.texMatrices[i];
                         if (texMtx === null)
                             continue;
                         if (!(this.btk && this.btk.applyAnimation(matrix, this.material.name, i, state.time)))
-                            gl_matrix_5.mat3.copy(matrix, texMtx.matrix);
+                            gl_matrix_4.mat3.copy(matrix, texMtx.matrix);
                         var location_4 = this.program.texMtxLocations[i];
                         gl.uniformMatrix3fv(location_4, false, matrix);
                     }
@@ -4947,7 +4954,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 return Command_Material;
             }());
             Scene = /** @class */ (function () {
-                function Scene(gl, bmd, btk, bmt) {
+                function Scene(gl, bmd, btk, bmt, isSkybox) {
                     var _this = this;
                     this.cameraController = Viewer.FPSCameraController;
                     this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
@@ -4955,6 +4962,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     this.bmd = bmd;
                     this.btk = btk;
                     this.bmt = bmt;
+                    this.isSkybox = isSkybox;
                     this.translateModel(this.bmd);
                     var tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
                     this.textures = tex1.textures.map(function (tex) { return _this.translateTextureToCanvas(tex); });
@@ -4975,18 +4983,31 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     ctx.putImageData(imgData, 0, 0);
                     return canvas;
                 };
-                Scene.prototype.render = function (state) {
-                    state.setClipPlanes(10, 500000);
-                    var commands;
-                    if (state.currentPass === 2 /* OPAQUE */) {
-                        commands = this.opaqueCommands;
-                    }
-                    else if (state.currentPass === 3 /* TRANSPARENT */) {
-                        commands = this.transparentCommands;
-                    }
+                Scene.prototype.execCommands = function (state, commands) {
                     commands.forEach(function (command) {
                         command.exec(state);
                     });
+                };
+                Scene.prototype.render = function (state) {
+                    state.setClipPlanes(10, 500000);
+                    if (this.isSkybox) {
+                        // The Super Mario Sunshine skyboxes are authored in this strange way where they are transparent,
+                        // and expect to be drawn directly on top of the clear color with blending on. I don't know why
+                        // Nintendo chose to do things this way -- there might be a flag for sorting in the BMD I'm not
+                        // correctly pulling out right now, or this might be explicitly done in the engine.
+                        // Draw them in the opaque pass, first thing.
+                        if (state.currentPass === 2 /* OPAQUE */) {
+                            this.execCommands(state, this.opaqueCommands);
+                            this.execCommands(state, this.transparentCommands);
+                        }
+                        return;
+                    }
+                    if (state.currentPass === 2 /* OPAQUE */) {
+                        this.execCommands(state, this.opaqueCommands);
+                    }
+                    else if (state.currentPass === 3 /* TRANSPARENT */) {
+                        this.execCommands(state, this.transparentCommands);
+                    }
                 };
                 Scene.prototype.translateModel = function (bmd) {
                     var _this = this;
@@ -4995,7 +5016,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     this.jointMatrices = [];
                     var mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
                     this.materialCommands = mat3.materialEntries.map(function (material) {
-                        return new Command_Material(_this.gl, _this.bmd, _this.btk, _this.bmt, material);
+                        return new Command_Material(_this.gl, _this, material);
                     });
                     this.shapeCommands = bmd.shp1.shapes.map(function (shape) {
                         return new Command_Shape(_this.gl, _this.bmd, shape, _this.jointMatrices);
@@ -5003,7 +5024,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     // Iterate through scene graph.
                     var context = {
                         commandList: null,
-                        parentJointMatrix: gl_matrix_5.mat4.create(),
+                        parentJointMatrix: gl_matrix_4.mat4.create(),
                     };
                     this.translateSceneGraph(bmd.inf1.sceneGraph, context);
                 };
@@ -5018,8 +5039,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                             break;
                         case j3d_1.HierarchyType.Joint:
                             var boneMatrix = jnt1.bones[jnt1.remapTable[node.jointIdx]].matrix;
-                            var jointMatrix = gl_matrix_5.mat4.create();
-                            gl_matrix_5.mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
+                            var jointMatrix = gl_matrix_4.mat4.create();
+                            gl_matrix_4.mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
                             this.jointMatrices[node.jointIdx] = jointMatrix;
                             parentJointMatrix = jointMatrix;
                             break;
@@ -5186,11 +5207,12 @@ System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
 System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "viewer", "progress", "util"], function (exports_23, context_23) {
     "use strict";
     var __moduleName = context_23 && context_23.id;
-    function createScene(gl, bmdFile, btkFile, bmtFile) {
+    function createScene(gl, bmdFile, btkFile, bmtFile, isSkybox) {
+        if (isSkybox === void 0) { isSkybox = false; }
         var bmd = j3d_2.BMD.parse(bmdFile.buffer);
         var btk = btkFile ? j3d_2.BTK.parse(btkFile.buffer) : null;
         var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
-        return new render_5.Scene(gl, bmd, btk, bmt);
+        return new render_5.Scene(gl, bmd, btk, bmt, isSkybox);
     }
     function createSceneFromRARCBuffer(gl, buffer) {
         if (util_8.readString(buffer, 0, 4) === 'Yaz0')
@@ -5294,22 +5316,21 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                     var _this = this;
                     return util_8.fetch(this.path).then(function (result) {
                         var rarc = RARC.parse(Yaz0.decompress(result));
-                        var scenes = _this.createSceneForPrefixes(gl, rarc, ['map/map/map', 'map/map/sea', 'map/map/sky']);
-                        scenes.unshift(new SunshineClearScene());
-                        return new MultiScene(scenes);
+                        return new MultiScene([
+                            new SunshineClearScene(),
+                            _this.createSceneForBasename(gl, rarc, 'map/map/sky', true),
+                            _this.createSceneForBasename(gl, rarc, 'map/map/map', false),
+                            _this.createSceneForBasename(gl, rarc, 'map/map/sea', false),
+                        ]);
                     });
                 };
-                SunshineSceneDesc.prototype.createSceneForPrefixes = function (gl, rarc, fns) {
-                    var _this = this;
-                    return fns.map(function (fn) { return _this.createSceneForPrefix(gl, rarc, fn); }).filter(function (x) { return x !== null; });
-                };
-                SunshineSceneDesc.prototype.createSceneForPrefix = function (gl, rarc, fn) {
+                SunshineSceneDesc.prototype.createSceneForBasename = function (gl, rarc, fn, isSkybox) {
                     var bmdFile = rarc.findFile(fn + ".bmd");
                     if (!bmdFile)
                         return null;
                     var btkFile = rarc.findFile(fn + ".btk");
                     var bmtFile = rarc.findFile(fn + ".bmt");
-                    return createScene(gl, bmdFile, btkFile, bmtFile);
+                    return createScene(gl, bmdFile, btkFile, bmtFile, isSkybox);
                 };
                 return SunshineSceneDesc;
             }());
@@ -5492,6 +5513,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
                 FancyGrid.prototype.render = function (state) {
                     var gl = state.viewport.gl;
                     state.useProgram(this.program);
+                    state.bindModelView();
                     state.useFlags(this.renderFlags);
                     gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
                     gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, 0, 0);
@@ -6391,6 +6413,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                 Scene.prototype.render = function (state) {
                     var gl = state.viewport.gl;
                     state.useProgram(this.program);
+                    state.bindModelView();
                     this.model(state);
                 };
                 Scene.prototype.translateDataType = function (gl, dataType) {
@@ -7424,7 +7447,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var offs = bmd.materialOffsBase + idx * 0x30;
         var material = new Material();
         material.name = util_16.readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
-        material.texCoordMat = gl_matrix_6.mat2d.create();
+        material.texCoordMat = gl_matrix_5.mat2d.create();
         var textureIdx = view.getUint32(offs + 0x04, true);
         if (textureIdx !== 0xFFFFFFFF) {
             var paletteIdx = view.getUint32(offs + 0x08, true);
@@ -7436,11 +7459,11 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 var scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
                 var transS = view.getInt32(offs + 0x18, true) / 4096.0;
                 var transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-                gl_matrix_6.mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-                gl_matrix_6.mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
+                gl_matrix_5.mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
+                gl_matrix_5.mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
             }
             var texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
-            gl_matrix_6.mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
+            gl_matrix_5.mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
         }
         else {
             material.texture = null;
@@ -7521,11 +7544,11 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         return bmd;
     }
     exports_35("parse", parse);
-    var gl_matrix_6, NITRO_GX, NITRO_Tex, util_16, Material, Model, TextureKey, Texture, BMD;
+    var gl_matrix_5, NITRO_GX, NITRO_Tex, util_16, Material, Model, TextureKey, Texture, BMD;
     return {
         setters: [
-            function (gl_matrix_6_1) {
-                gl_matrix_6 = gl_matrix_6_1;
+            function (gl_matrix_5_1) {
+                gl_matrix_5 = gl_matrix_5_1;
             },
             function (NITRO_GX_1) {
                 NITRO_GX = NITRO_GX_1;
@@ -7590,11 +7613,11 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
         ctx.putImageData(imgData, 0, 0);
         return canvas;
     }
-    var gl_matrix_7, CRG0, LZ77, NITRO_BMD, Viewer, render_10, util_17, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, Scene, MultiScene, SceneDesc;
+    var gl_matrix_6, CRG0, LZ77, NITRO_BMD, Viewer, render_10, util_17, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, Scene, MultiScene, SceneDesc;
     return {
         setters: [
-            function (gl_matrix_7_1) {
-                gl_matrix_7 = gl_matrix_7_1;
+            function (gl_matrix_6_1) {
+                gl_matrix_6 = gl_matrix_6_1;
             },
             function (CRG0_1) {
                 CRG0 = CRG0_1;
@@ -7724,8 +7747,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     }
                     // Find any possible material animations.
                     var crg0mat = this.crg0Level.materials.find(function (c) { return c.name === material.name; });
-                    var texCoordMat = gl_matrix_7.mat3.create();
-                    gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
+                    var texCoordMat = gl_matrix_6.mat3.create();
+                    gl_matrix_6.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                     var renderFlags = new render_10.RenderFlags();
                     renderFlags.blendMode = render_10.BlendMode.ADD;
                     renderFlags.depthTest = true;
@@ -7733,20 +7756,20 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
                     return function (state) {
                         if (crg0mat !== undefined) {
-                            var texAnimMat = gl_matrix_7.mat3.create();
+                            var texAnimMat = gl_matrix_6.mat3.create();
                             try {
                                 for (var _a = __values(crg0mat.animations), _b = _a.next(); !_b.done; _b = _a.next()) {
                                     var anim = _b.value;
                                     var time = state.time / 30;
                                     var value = anim.values[(time | 0) % anim.values.length];
                                     if (anim.property === 'x')
-                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [0, value]);
+                                        gl_matrix_6.mat3.translate(texAnimMat, texAnimMat, [0, value]);
                                     else if (anim.property === 'y')
-                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [value, 0]);
+                                        gl_matrix_6.mat3.translate(texAnimMat, texAnimMat, [value, 0]);
                                     else if (anim.property === 'scale')
-                                        gl_matrix_7.mat3.scale(texAnimMat, texAnimMat, [value, value]);
+                                        gl_matrix_6.mat3.scale(texAnimMat, texAnimMat, [value, value]);
                                     else if (anim.property === 'rotation')
-                                        gl_matrix_7.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
+                                        gl_matrix_6.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
                             catch (e_28_1) { e_28 = { error: e_28_1 }; }
@@ -7756,8 +7779,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                 }
                                 finally { if (e_28) throw e_28.error; }
                             }
-                            gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
-                            gl_matrix_7.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
+                            gl_matrix_6.mat3.fromMat2d(texCoordMat, material.texCoordMat);
+                            gl_matrix_6.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
                         }
                         if (texture !== null) {
                             gl.uniformMatrix3fv(_this.program.texCoordMatLocation, false, texCoordMat);
@@ -7780,21 +7803,12 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 };
                 Scene.prototype.translateModel = function (gl, bmdm) {
                     var _this = this;
-                    var skyboxCameraMat = gl_matrix_7.mat4.create();
-                    var localMatrix = gl_matrix_7.mat4.create();
+                    var localMatrix = gl_matrix_6.mat4.create();
                     var bmd = this.bmd;
                     var scaleFactor = bmd.scaleFactor * this.localScale;
-                    gl_matrix_7.mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+                    gl_matrix_6.mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
                     var batches = bmdm.batches.map(function (batch) { return _this.translateBatch(gl, batch); });
                     return function (state) {
-                        if (_this.isSkybox) {
-                            // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
-                            gl_matrix_7.mat4.copy(skyboxCameraMat, state.modelView);
-                            skyboxCameraMat[12] = 0;
-                            skyboxCameraMat[13] = 0;
-                            skyboxCameraMat[14] = 0;
-                            gl.uniformMatrix4fv(_this.program.modelViewLocation, false, skyboxCameraMat);
-                        }
                         gl.uniformMatrix4fv(_this.program.localMatrixLocation, false, localMatrix);
                         batches.forEach(function (f) { f(state); });
                     };
@@ -7807,6 +7821,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 Scene.prototype.render = function (state) {
                     var gl = state.viewport.gl;
                     state.useProgram(this.program);
+                    state.bindModelView(this.isSkybox);
                     this.renderModels(state);
                 };
                 Scene.prototype.destroy = function (gl) {
@@ -8084,11 +8099,11 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
                 var b = rom.view.getUint16(offs + 0x08, false) / 0xFFFF * (Math.PI * 2) + Math.PI;
                 var c = rom.view.getUint16(offs + 0x0A, false) / 0xFFFF * (Math.PI * 2);
                 var d = rom.view.getUint16(offs + 0x0C, false);
-                var mtx = gl_matrix_8.mat4.create();
-                gl_matrix_8.mat4.translate(mtx, mtx, [x, y, z]);
-                gl_matrix_8.mat4.rotateZ(mtx, mtx, c);
-                gl_matrix_8.mat4.rotateY(mtx, mtx, b);
-                gl_matrix_8.mat4.rotateX(mtx, mtx, -a);
+                var mtx = gl_matrix_7.mat4.create();
+                gl_matrix_7.mat4.translate(mtx, mtx, [x, y, z]);
+                gl_matrix_7.mat4.rotateZ(mtx, mtx, c);
+                gl_matrix_7.mat4.rotateY(mtx, mtx, b);
+                gl_matrix_7.mat4.rotateX(mtx, mtx, -a);
                 return mtx;
             }
             var cameraAddr = rom.view.getUint32(offs + 0x20, false);
@@ -8247,11 +8262,11 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
         var banks = { scene: file };
         return readHeaders(gl, zelview0, file.vStart, banks);
     }
-    var gl_matrix_8, F3DEX2, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
+    var gl_matrix_7, F3DEX2, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
     return {
         setters: [
-            function (gl_matrix_8_1) {
-                gl_matrix_8 = gl_matrix_8_1;
+            function (gl_matrix_7_1) {
+                gl_matrix_7 = gl_matrix_7_1;
             },
             function (F3DEX2_1) {
                 F3DEX2 = F3DEX2_1;
@@ -8363,8 +8378,8 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_39,
         var posX = rom.view.getInt16(offs + 0, false);
         var posY = rom.view.getInt16(offs + 2, false);
         var posZ = rom.view.getInt16(offs + 4, false);
-        var pos = gl_matrix_9.vec3.clone([posX, posY, posZ]);
-        gl_matrix_9.vec3.transformMat4(pos, pos, state.mtx);
+        var pos = gl_matrix_8.vec3.clone([posX, posY, posZ]);
+        gl_matrix_8.vec3.transformMat4(pos, pos, state.mtx);
         var txU = rom.view.getInt16(offs + 8, false) * (1 / 32);
         var txV = rom.view.getInt16(offs + 10, false) * (1 / 32);
         var vtxArray = new Float32Array(state.vertexBuffer.buffer, which * VERTEX_BYTES, VERTEX_SIZE);
@@ -8531,10 +8546,10 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_39,
         state.geometryMode = 0;
         state.otherModeL = 0;
         state.mtxStack.push(state.mtx);
-        state.mtx = gl_matrix_9.mat4.clone(state.mtx);
+        state.mtx = gl_matrix_8.mat4.clone(state.mtx);
         var rom = state.rom;
         var offs = state.lookupAddress(w1);
-        var mtx = gl_matrix_9.mat4.create();
+        var mtx = gl_matrix_8.mat4.create();
         for (var x = 0; x < 4; x++) {
             for (var y = 0; y < 4; y++) {
                 var mt1 = rom.view.getUint16(offs, false);
@@ -8543,7 +8558,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_39,
                 offs += 2;
             }
         }
-        gl_matrix_9.mat4.multiply(state.mtx, state.mtx, mtx);
+        gl_matrix_8.mat4.multiply(state.mtx, state.mtx, mtx);
     }
     function cmd_POPMTX(state, w0, w1) {
         state.mtx = state.mtxStack.pop();
@@ -9041,7 +9056,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_39,
         state.gl = gl;
         state.cmds = [];
         state.textures = [];
-        state.mtx = gl_matrix_9.mat4.create();
+        state.mtx = gl_matrix_8.mat4.create();
         state.mtxStack = [state.mtx];
         state.vertexBuffer = new Float32Array(32 * VERTEX_SIZE);
         state.verticesDirty = [];
@@ -9052,11 +9067,11 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_39,
         return new DL(state.cmds, state.textures);
     }
     exports_39("readDL", readDL);
-    var gl_matrix_9, render_12, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
+    var gl_matrix_8, render_12, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
-            function (gl_matrix_9_1) {
-                gl_matrix_9 = gl_matrix_9_1;
+            function (gl_matrix_8_1) {
+                gl_matrix_8 = gl_matrix_8_1;
             },
             function (render_12_1) {
                 render_12 = render_12_1;
@@ -9333,6 +9348,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                     return function (state) {
                         var prog = _this.program_WATERS;
                         state.useProgram(prog);
+                        state.bindModelView();
                         state.useFlags(renderFlags);
                         gl.bindBuffer(gl.ARRAY_BUFFER, wbVtx);
                         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);

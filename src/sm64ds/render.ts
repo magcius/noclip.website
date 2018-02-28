@@ -245,7 +245,6 @@ class Scene implements Viewer.Scene {
     }
 
     private translateModel(gl: WebGL2RenderingContext, bmdm: NITRO_BMD.Model): RenderFunc {
-        const skyboxCameraMat = mat4.create();
         const localMatrix = mat4.create();
         const bmd = this.bmd;
 
@@ -255,15 +254,6 @@ class Scene implements Viewer.Scene {
 
         const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
         return (state: RenderState) => {
-            if (this.isSkybox) {
-                // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
-                mat4.copy(skyboxCameraMat, state.modelView);
-                skyboxCameraMat[12] = 0;
-                skyboxCameraMat[13] = 0;
-                skyboxCameraMat[14] = 0;
-                gl.uniformMatrix4fv(this.program.modelViewLocation, false, skyboxCameraMat);
-            }
-
             gl.uniformMatrix4fv(this.program.localMatrixLocation, false, localMatrix);
             batches.forEach((f) => { f(state); });
         };
@@ -278,6 +268,7 @@ class Scene implements Viewer.Scene {
     public render(state: RenderState) {
         const gl = state.viewport.gl;
         state.useProgram(this.program);
+        state.bindModelView(this.isSkybox);
         this.renderModels(state);
     }
 

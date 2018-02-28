@@ -282,21 +282,12 @@ export class Scene implements Viewer.Scene {
 
         const prog = new ProgramGambit_UBER();
         this.arena.trackProgram(prog);
-        const skyboxCameraMat = mat4.create();
 
         const renderState = fmat.renderState;
 
         return (state: RenderState) => {
             state.useProgram(prog);
-
-            if (this.isSkybox) {
-                // XXX: Kind of disgusting. Calculate a skybox camera matrix by removing translation.
-                mat4.copy(skyboxCameraMat, state.modelView);
-                skyboxCameraMat[12] = 0;
-                skyboxCameraMat[13] = 0;
-                skyboxCameraMat[14] = 0;
-                gl.uniformMatrix4fv(prog.modelViewLocation, false, skyboxCameraMat);
-            }
+            state.bindModelView(this.isSkybox);
 
             // Render state.
             gl.frontFace(this.translateFrontFaceMode(gl, renderState.frontFaceMode));

@@ -95,6 +95,7 @@ class FancyGrid {
         const gl = state.viewport.gl;
 
         state.useProgram(this.program);
+        state.bindModelView();
         state.useFlags(this.renderFlags);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);

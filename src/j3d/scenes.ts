@@ -39,11 +39,11 @@ export class MultiScene implements Viewer.Scene {
     }
 }
 
-function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
+function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile, isSkybox: boolean = false) {
     const bmd = BMD.parse(bmdFile.buffer);
     const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    return new Scene(gl, bmd, btk, bmt);
+    return new Scene(gl, bmd, btk, bmt, isSkybox);
 }
 
 class SunshineClearScene implements Viewer.Scene {
@@ -75,23 +75,22 @@ class SunshineSceneDesc implements Viewer.SceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const rarc = RARC.parse(Yaz0.decompress(result));
-            const scenes: Viewer.Scene[] = this.createSceneForPrefixes(gl, rarc, ['map/map/map', 'map/map/sea', 'map/map/sky']);
-            scenes.unshift(new SunshineClearScene());
-            return new MultiScene(scenes);
+            return new MultiScene([
+                new SunshineClearScene(),
+                this.createSceneForBasename(gl, rarc, 'map/map/sky', true),
+                this.createSceneForBasename(gl, rarc, 'map/map/map', false),
+                this.createSceneForBasename(gl, rarc, 'map/map/sea', false),
+            ]);
         });
     }
 
-    private createSceneForPrefixes(gl: WebGL2RenderingContext, rarc: RARC.RARC, fns: string[]) {
-        return fns.map((fn) => this.createSceneForPrefix(gl, rarc, fn)).filter((x) => x !== null);
-    }
-
-    private createSceneForPrefix(gl: WebGL2RenderingContext, rarc: RARC.RARC, fn: string) {
+    private createSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, fn: string, isSkybox: boolean) {
         const bmdFile = rarc.findFile(`${fn}.bmd`);
         if (!bmdFile)
             return null;
         const btkFile = rarc.findFile(`${fn}.btk`);
         const bmtFile = rarc.findFile(`${fn}.bmt`);
-        return createScene(gl, bmdFile, btkFile, bmtFile);
+        return createScene(gl, bmdFile, btkFile, bmtFile, isSkybox);
     }
 }
 

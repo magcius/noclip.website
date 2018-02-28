@@ -161,6 +161,7 @@ export class RenderState {
 
     public projection: mat4;
     public modelView: mat4;
+    public skyboxModelView: mat4;
 
     public nearClipPlane: number;
     public farClipPlane: number;
@@ -173,6 +174,16 @@ export class RenderState {
 
         this.projection = mat4.create();
         this.modelView = mat4.create();
+        this.skyboxModelView = mat4.create();
+    }
+
+    public setModelView(m: mat4) {
+        mat4.copy(this.modelView, m);
+
+        mat4.copy(this.skyboxModelView, m);
+        this.skyboxModelView[12] = 0;
+        this.skyboxModelView[13] = 0;
+        this.skyboxModelView[14] = 0;
     }
 
     public checkResize() {
@@ -196,7 +207,16 @@ export class RenderState {
         this.currentProgram = prog;
         gl.useProgram(prog.compile(gl));
         gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
-        gl.uniformMatrix4fv(prog.modelViewLocation, false, this.modelView);
+    }
+
+    public bindModelView(isSkybox: boolean = false) {
+        const gl = this.gl;
+        const prog = this.currentProgram;
+
+        if (isSkybox)
+            gl.uniformMatrix4fv(prog.modelViewLocation, false, this.skyboxModelView);
+        else
+            gl.uniformMatrix4fv(prog.modelViewLocation, false, this.modelView);
     }
 
     public useFlags(flags: RenderFlags) {
