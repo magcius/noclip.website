@@ -4727,16 +4727,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 throw new Error("Unknown CompType " + compType);
         }
     }
-    function translatePrimType(gl, primType) {
-        switch (primType) {
-            case 152 /* TRIANGLESTRIP */:
-                return gl.TRIANGLE_STRIP;
-            case 160 /* TRIANGLEFAN */:
-                return gl.TRIANGLE_FAN;
-            default:
-                throw new Error("Unknown PrimType " + primType);
-        }
-    }
     var gl_matrix_5, j3d_1, GX, GX_Material, GX_Texture, Viewer, posMtxTable, Command_Shape, Command_Material, Scene;
     return {
         setters: [
