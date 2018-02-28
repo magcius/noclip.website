@@ -389,6 +389,8 @@ export class GX_Program extends Program {
             const o = (op === GX.TevOp.ADD) ? '+' : '-';
             const v = `mix(${a}, ${b}, ${c}) ${o} ${d}`;
             return this.generateTevOpBiasScaleClamp(v, bias, scale, clamp);
+        case GX.TevOp.COMP_R8_GT:
+            return `TevCompR8GT(${a}, ${b}, ${c})`;
         default:
             throw new Error("whoops");
         }
@@ -541,6 +543,8 @@ vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
 vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
 float TevSaturate(float a) { return clamp(a, 0.0, 1.0); }
+vec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }
+float TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }
 
 void main() {
     const vec4 s_kColor0 = ${this.generateColorConstant(kColors[0])};
