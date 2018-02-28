@@ -341,7 +341,7 @@ export class GX_Program extends Program {
         case GX.CombineColorInput.RASC:  return `${this.generateRas(stage)}.rgb`;
         case GX.CombineColorInput.RASA:  return `${this.generateRas(stage)}.aaa`;
         case GX.CombineColorInput.ONE:   return `vec3(1)`;
-        case GX.CombineColorInput.HALF:  return `vec3(1/2)`;
+        case GX.CombineColorInput.HALF:  return `vec3(1.0/2.0)`;
         case GX.CombineColorInput.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}`;
         case GX.CombineColorInput.ZERO:  return `vec3(0)`;
         }
@@ -538,6 +538,7 @@ ${this.generateTexGens(this.material.texGens)}
 
         const tevStages = this.material.tevStages;
         const alphaTest = this.material.alphaTest;
+        const kColors = this.material.colorConstants;
         const rColors = this.material.colorRegisters;
 
         this.frag = `
@@ -568,15 +569,15 @@ vec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }
 float TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }
 
 void main() {
-    vec4 s_kColor0 = u_KonstColor[0];
-    vec4 s_kColor1 = u_KonstColor[1];
-    vec4 s_kColor2 = u_KonstColor[2];
-    vec4 s_kColor3 = u_KonstColor[3];
+    vec4 s_kColor0   = u_KonstColor[0]; // ${this.generateColorConstant(kColors[0])}
+    vec4 s_kColor1   = u_KonstColor[1]; // ${this.generateColorConstant(kColors[1])}
+    vec4 s_kColor2   = u_KonstColor[2]; // ${this.generateColorConstant(kColors[2])}
+    vec4 s_kColor3   = u_KonstColor[3]; // ${this.generateColorConstant(kColors[3])}
 
-    vec4 t_Color0    = u_KonstColor[4];
-    vec4 t_Color1    = u_KonstColor[5];
-    vec4 t_Color2    = u_KonstColor[6];
-    vec4 t_ColorPrev = u_KonstColor[7];
+    vec4 t_Color0    = u_KonstColor[4]; // ${this.generateColorConstant(rColors[0])}
+    vec4 t_Color1    = u_KonstColor[5]; // ${this.generateColorConstant(rColors[1])}
+    vec4 t_Color2    = u_KonstColor[6]; // ${this.generateColorConstant(rColors[2])}
+    vec4 t_ColorPrev = u_KonstColor[7]; // ${this.generateColorConstant(rColors[3])}
 ${this.generateTevStages(tevStages)}
 ${this.generateAlphaTest(alphaTest)}
     gl_FragColor = t_ColorPrev;
