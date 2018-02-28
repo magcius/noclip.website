@@ -29,17 +29,6 @@ function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): {
     }
 }
 
-function translatePrimType(gl: WebGL2RenderingContext, primType: GX.PrimitiveType): number {
-    switch (primType) {
-    case GX.PrimitiveType.TRIANGLESTRIP:
-        return gl.TRIANGLE_STRIP;
-    case GX.PrimitiveType.TRIANGLEFAN:
-        return gl.TRIANGLE_FAN;
-    default:
-        throw new Error(`Unknown PrimType ${primType}`);
-    }
-}
-
 const posMtxTable = new Float32Array(16 * 10);
 class Command_Shape {
     private bmd: BMD;
