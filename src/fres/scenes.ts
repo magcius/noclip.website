@@ -1,7 +1,80 @@
 
-import { SceneGroup } from '../viewer';
-import { SceneDesc } from './render';
+import * as BFRES from './bfres';
+import * as SARC from './sarc';
+import * as Yaz0 from '../yaz0';
+import { Scene } from './render';
 
+import * as Viewer from '../viewer';
+
+import { RenderPass, RenderState } from '../render';
+import { Progressable } from '../progress';
+import { fetch, readString } from '../util';
+
+class MultiScene implements Viewer.Scene {
+    public cameraController = Viewer.FPSCameraController;
+    public renderPasses = [ RenderPass.OPAQUE ];
+    public scenes: Viewer.Scene[];
+    public textures: HTMLCanvasElement[];
+
+    constructor(scenes: Viewer.Scene[]) {
+        this.scenes = scenes;
+        this.textures = [];
+        for (const scene of this.scenes)
+            this.textures = this.textures.concat(scene.textures);
+    }
+
+    public render(state: RenderState) {
+        const gl = state.viewport.gl;
+        this.scenes.forEach((scene) => scene.render(state));
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.scenes.forEach((scene) => scene.destroy(gl));
+    }
+}
+
+export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer, isSkybox: boolean = false) {
+    const fres = BFRES.parse(buffer);
+    return new Scene(gl, fres, isSkybox);
+}
+
+export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer, isSkybox: boolean = false) {
+    if (readString(buffer, 0, 4) === 'Yaz0')
+        buffer = Yaz0.decompress(buffer);
+
+    const sarc = SARC.parse(buffer);
+    const file = sarc.files.find((file) => file.name.endsWith('.bfres'));
+    return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
+}
+
+export class SceneDesc implements Viewer.SceneDesc {
+    public id: string;
+    public name: string;
+    public path: string;
+
+    constructor(name: string, path: string) {
+        this.name = name;
+        this.path = path;
+        this.id = this.path;
+    }
+
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+        return Progressable.all([
+            this._createSceneFromPath(gl, this.path, false),
+            this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
+        ]).then((scenes): Viewer.Scene => {
+            return new MultiScene(scenes);
+        });
+    }
+
+    private _createSceneFromPath(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): Progressable<Scene> {
+        return fetch(path).then((result: ArrayBuffer) => {
+            return createSceneFromSARCBuffer(gl, result, isSkybox);
+        });
+    }
+}
+
+// Splatoon Models
 const name = "Splatoon";
 const id = "fres";
 const sceneDescs: SceneDesc[] = [
@@ -32,4 +105,4 @@ const sceneDescs: SceneDesc[] = [
     return new SceneDesc(name, path);
 });
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
