@@ -119,27 +119,30 @@ interface VertexAttributeGenDef {
     scale: boolean;
 };
 
-const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
+export const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
     { attrib: GX.VertexAttribute.PTMTXIDX, name: "PosMtxIdx", storage: "float", scale: false },
-    { attrib: GX.VertexAttribute.POS,      name: "Position",  storage: "vec3", scale: true },
-    { attrib: GX.VertexAttribute.NRM,      name: "Normal",    storage: "vec3", scale: true },
-    { attrib: GX.VertexAttribute.CLR0,     name: "Color0",    storage: "vec4", scale: false },
-    { attrib: GX.VertexAttribute.CLR1,     name: "Color1",    storage: "vec4", scale: false },
-    { attrib: GX.VertexAttribute.TEX0,     name: "Tex0",      storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX1,     name: "Tex1",      storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX2,     name: "Tex2",      storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX3,     name: "Tex3",      storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX4,     name: "Tex4",      storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX5,     name: "Tex5",      storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX6,     name: "Tex6",      storage: "vec2", scale: true },
-    { attrib: GX.VertexAttribute.TEX7,     name: "Tex7",      storage: "vec2", scale: true },
+    { attrib: GX.VertexAttribute.POS,      name: "Position",  storage: "vec3",  scale: true },
+    { attrib: GX.VertexAttribute.NRM,      name: "Normal",    storage: "vec3",  scale: true },
+    { attrib: GX.VertexAttribute.CLR0,     name: "Color0",    storage: "vec4",  scale: false },
+    { attrib: GX.VertexAttribute.CLR1,     name: "Color1",    storage: "vec4",  scale: false },
+    { attrib: GX.VertexAttribute.TEX0,     name: "Tex0",      storage: "vec2",  scale: true },
+    { attrib: GX.VertexAttribute.TEX1,     name: "Tex1",      storage: "vec2",  scale: true },
+    { attrib: GX.VertexAttribute.TEX2,     name: "Tex2",      storage: "vec2",  scale: true },
+    { attrib: GX.VertexAttribute.TEX3,     name: "Tex3",      storage: "vec2",  scale: true },
+    { attrib: GX.VertexAttribute.TEX4,     name: "Tex4",      storage: "vec2",  scale: true },
+    { attrib: GX.VertexAttribute.TEX5,     name: "Tex5",      storage: "vec2",  scale: true },
+    { attrib: GX.VertexAttribute.TEX6,     name: "Tex6",      storage: "vec2",  scale: true },
+    { attrib: GX.VertexAttribute.TEX7,     name: "Tex7",      storage: "vec2",  scale: true },
 ];
 
+export const scaledVtxAttributes: GX.VertexAttribute[] = vtxAttributeGenDefs.filter((a) => a.scale).map((a) => a.attrib);
+
 export class GX_Program extends Program {
-    private vtxAttributeScaleLocations: WebGLUniformLocation[] = [];
-    public texMtxLocations: WebGLUniformLocation[] = [];
-    public samplerLocations: WebGLUniformLocation[] = [];
+    public ub_SceneStatic: number;
+
+    public samplerLocation: WebGLUniformLocation;
     public posMtxLocation: WebGLUniformLocation;
+    public texMtxLocation: WebGLUniformLocation;
     public texLodBiasLocation: WebGLUniformLocation;
 
     private material: GXMaterial;
@@ -466,13 +469,24 @@ export class GX_Program extends Program {
 `;
     }
 
+    private generateVertAttributeScaleBlock() {
+        const scaleCount = Math.ceil(scaledVtxAttributes.length / 4);
+        return `
+layout(std140) uniform ub_SceneStatic {
+    vec4 u_AttrScale[${scaleCount}];
+};`;
+    }
+
     private generateVertAttributeDefs() {
         return vtxAttributeGenDefs.map((a) => {
+            const scaleIdx = scaledVtxAttributes.indexOf(a.attrib);
+            const scaleVecIdx = (scaleIdx / 4) | 0;
+            const scaleFltIdx = (scaleIdx % 4);
+
             return `
 layout(location = ${a.attrib}) in ${a.storage} a_${a.name};
-${a.scale ? `uniform float u_scale_${a.name};` : ``}
 ${a.storage} ReadAttrib_${a.name}() {
-    return a_${a.name}${a.scale ? ` * u_scale_${a.name}` : ``};
+    return a_${a.name}${a.scale ? ` * u_AttrScale[${scaleVecIdx}][${scaleFltIdx}]` : ``};
 }
 `;
         }).join('');
@@ -486,6 +500,7 @@ precision highp float;
 uniform mat4 u_projection;
 uniform mat4 u_modelView;
 // GX_Material
+${this.generateVertAttributeScaleBlock()}
 ${this.generateVertAttributeDefs()}
 uniform mat3 u_TexMtx[10];
 uniform mat4 u_PosMtx[10];
@@ -566,28 +581,12 @@ ${this.generateAlphaTest(alphaTest)}
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
+        this.ub_SceneStatic = gl.getUniformBlockIndex(prog, `ub_SceneStatic`);
+
         this.texLodBiasLocation = gl.getUniformLocation(prog, 'u_TextureLODBias');
         this.posMtxLocation = gl.getUniformLocation(prog, `u_PosMtx`);
-
-        for (const a of vtxAttributeGenDefs) {
-            if (a.scale === false)
-                continue;
-            const uniformName = `u_scale_${a.name}`;
-            this.vtxAttributeScaleLocations[a.attrib] = gl.getUniformLocation(prog, uniformName);
-        }
-
-        for (let i = 0; i < 10; i++)
-            this.texMtxLocations[i] = gl.getUniformLocation(prog, `u_TexMtx[${i}]`);
-
-        for (let i = 0; i < 8; i++)
-            this.samplerLocations[i] = gl.getUniformLocation(prog, `u_Texture[${i}]`);
-    }
-
-    public getScaleUniformLocation(vtxAttrib: GX.VertexAttribute) {
-        const location = this.vtxAttributeScaleLocations[vtxAttrib];
-        if (location === undefined)
-            return null;
-        return location;
+        this.texMtxLocation = gl.getUniformLocation(prog, `u_TexMtx`);
+        this.samplerLocation = gl.getUniformLocation(prog, `u_Texture`);
     }
 }
 // #endregion

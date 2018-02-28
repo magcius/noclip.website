@@ -109,6 +109,10 @@ class Command_Shape {
 }
 
 class Command_Material {
+    static matrixTableScratch = new Float32Array(9 * 10);
+    static matrixScratch = mat3.create();
+    static samplerLocationsScratch = new Int32Array(8);
+
     private scene: Scene;
 
     public bmd: BMD;
@@ -223,36 +227,41 @@ class Command_Material {
         const bias = Math.log2(Math.min(width / 640, height / 528));
         gl.uniform1f(this.program.texLodBiasLocation, bias);
 
-        // Bind our scale uniforms.
-        for (const vertexArray of this.bmd.vtx1.vertexArrays.values()) {
-            const location = this.program.getScaleUniformLocation(vertexArray.vtxAttrib);
-            if (location === null)
-                continue;
-            gl.uniform1f(location, vertexArray.scale);
-        }
+        // Bind our static scene data.
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, this.program.ub_SceneStatic, this.scene.uniformBufferSceneStatic);
 
         // Bind our texture matrices.
-        const matrix = mat3.create();
+        const matrixScratch = Command_Material.matrixScratch;
+        const matrixTableScratch = Command_Material.matrixTableScratch;
+
         for (let i = 0; i < this.material.texMatrices.length; i++) {
             const texMtx = this.material.texMatrices[i];
             if (texMtx === null)
                 continue;
 
-            if (!(this.btk && this.btk.applyAnimation(matrix, this.material.name, i, state.time)))
-                mat3.copy(matrix, texMtx.matrix);
+            let matrix;
+            if (this.btk && this.btk.applyAnimation(matrixScratch, this.material.name, i, state.time)) {
+                matrix = matrixScratch;
+            } else {
+                matrix = texMtx.matrix;
+            }
 
-            const location = this.program.texMtxLocations[i];
-            gl.uniformMatrix3fv(location, false, matrix);
+            matrixTableScratch.set(matrix, i * 9);
         }
 
+        const location = this.program.texMtxLocation;
+        gl.uniformMatrix3fv(location, false, matrixTableScratch);
+
+        const samplerLocationsScratch = Command_Material.samplerLocationsScratch;
         for (let i = 0; i < this.textures.length; i++) {
             const texture = this.textures[i];
             if (texture === null)
                 continue;
             gl.activeTexture(gl.TEXTURE0 + i);
-            gl.uniform1i(this.program.samplerLocations[i], i);
             gl.bindTexture(gl.TEXTURE_2D, texture);
+            samplerLocationsScratch[i] = i;
         }
+        gl.uniform1iv(this.program.samplerLocation, samplerLocationsScratch);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -286,12 +295,16 @@ export class Scene implements Viewer.Scene {
     private shapeCommands: Command_Shape[];
     private jointMatrices: mat4[];
 
+    // Shared data
+    public uniformBufferSceneStatic: WebGLBuffer;
+
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT, isSkybox: boolean) {
         this.gl = gl;
         this.bmd = bmd;
         this.btk = btk;
         this.bmt = bmt;
         this.isSkybox = isSkybox;
+
         this.translateModel(this.bmd);
 
         const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
@@ -346,6 +359,20 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateModel(bmd: BMD) {
+        const gl = this.gl;
+
+        const attrScalesCount = (GX_Material.scaledVtxAttributes.length + 3) & ~3;
+        const attrScalesData = new Float32Array(attrScalesCount);
+        for (let i = 0; i < GX_Material.scaledVtxAttributes.length; i++) {
+            const attrib = GX_Material.scaledVtxAttributes[i];
+            const vtxArray = this.bmd.vtx1.vertexArrays.get(attrib);
+            const scale = vtxArray !== undefined ? vtxArray.scale : 1;
+            attrScalesData[i] = scale;
+        }
+        this.uniformBufferSceneStatic = gl.createBuffer();
+        gl.bindBuffer(gl.UNIFORM_BUFFER, this.uniformBufferSceneStatic);
+        gl.bufferData(gl.UNIFORM_BUFFER, attrScalesData, gl.STATIC_DRAW);
+
         this.opaqueCommands = [];
         this.transparentCommands = [];
         this.jointMatrices = [];
