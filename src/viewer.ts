@@ -324,9 +324,11 @@ export class Viewer {
         this.inputManager = new InputManager(this.sceneGraph.renderState.viewport.canvas);
         this.cameraController = null;
     }
+
     public resetCamera() {
         mat4.identity(this.camera);
     }
+
     public setScene(scene: MainScene) {
         this.sceneGraph.reset();
         if (scene) {
@@ -366,6 +368,7 @@ export class Viewer {
 
 export interface MainScene extends Scene {
     cameraController: CameraControllerClass;
+    createUI?(): HTMLElement;
 }
 
 export interface SceneDesc {

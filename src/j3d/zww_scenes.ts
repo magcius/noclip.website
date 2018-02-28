@@ -25,6 +25,8 @@ class WindWakerScene extends MultiScene {
     public vr_kasumi_mae: Scene;
     public vr_back_cloud: Scene;
 
+    private timeOfDaySelect: HTMLSelectElement;
+
     static getColorsFromDZS(buffer: ArrayBuffer, roomIdx: number, timeOfDay: number) {
         const view = new DataView(buffer);
         const chunkCount = view.getUint32(0x00);
@@ -71,6 +73,11 @@ class WindWakerScene extends MultiScene {
         const splashB = view.getUint8(paleOffs + 0x14) / 0xFF;
         const splash = new GX_Material.Color(splashR, splashG, splashB, 1);
 
+        const splash2R = view.getUint8(paleOffs + 0x15) / 0xFF;
+        const splash2G = view.getUint8(paleOffs + 0x16) / 0xFF;
+        const splash2B = view.getUint8(paleOffs + 0x17) / 0xFF;
+        const splash2 = new GX_Material.Color(splash2R, splash2G, splash2B, 1);
+
         const doorsR = view.getUint8(paleOffs + 0x18) / 0xFF;
         const doorsG = view.getUint8(paleOffs + 0x19) / 0xFF;
         const doorsB = view.getUint8(paleOffs + 0x1A) / 0xFF;
@@ -97,7 +104,7 @@ class WindWakerScene extends MultiScene {
         const vr_kasumi_maeB = view.getUint8(virtOffs + 0x20) / 0xFF;
         const vr_kasumi_mae = new GX_Material.Color(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
 
-        return { amb, light, wave, ocean, splash, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
+        return { amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
     }
 
     constructor(gl: WebGL2RenderingContext, roomIdx: number, stageRarc: RARC.RARC, roomRarc: RARC.RARC) {
@@ -158,7 +165,9 @@ class WindWakerScene extends MultiScene {
         if (this.model1) {
             this.model1.setKonstColorOverride(0, colors.ocean);
             this.model1.setKonstColorOverride(4, colors.wave);
-            this.model1.setKonstColorOverride(5, colors.splash);
+            colors.splash.a = 0.2;
+            this.model1.setKonstColorOverride(1, colors.splash);
+            this.model1.setKonstColorOverride(5, colors.splash2);
         }
         if (this.model3)
             this.model3.setKonstColorOverride(4, colors.doors);
@@ -167,6 +176,28 @@ class WindWakerScene extends MultiScene {
         this.vr_uso_umi.setKonstColorOverride(0, colors.vr_uso_umi);
         this.vr_kasumi_mae.setKonstColorOverride(4, colors.vr_kasumi_mae);
         this.vr_back_cloud.setKonstColorOverride(0, colors.vr_back_cloud);
+    }
+
+    private _onTimeOfDayChange(e: UIEvent) {
+        this.setTimeOfDay(this.timeOfDaySelect.selectedIndex);
+    }
+
+    public createUI(): HTMLElement {
+        const elem = document.createElement('div');
+
+        this.timeOfDaySelect = document.createElement('select');
+        this.timeOfDaySelect.onchange = this._onTimeOfDayChange.bind(this);
+
+        [ 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night', ].forEach((label) => {
+            const option = document.createElement('option');
+            option.textContent = label;
+            this.timeOfDaySelect.appendChild(option);
+        });
+
+        this.timeOfDaySelect.selectedIndex = 0x02;
+        elem.appendChild(this.timeOfDaySelect);
+
+        return elem;
     }
 }
 

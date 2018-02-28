@@ -122,6 +122,8 @@ class Main {
     private progressBar: ProgressBar;
     private cameraControllerSelect: HTMLSelectElement;
 
+    private sceneUIContainer: HTMLElement;
+
     private popup: HTMLElement;
     private popupSettingsPane: HTMLElement;
     private popupHelpPane: HTMLElement;
@@ -241,8 +243,6 @@ class Main {
             this.progressBar.set(null);
             this.viewer.setScene(result);
 
-            // XXX: Provide a UI for textures eventually?
-
             this.texturesView.innerHTML = '';
             result.textures.forEach((canvas) => {
                 const tex = document.createElement('div');
@@ -255,6 +255,11 @@ class Main {
                 tex.appendChild(label);
                 this.texturesView.appendChild(tex);
             });
+
+            this.sceneUIContainer.innerHTML = '';
+
+            if (result.createUI)
+                this.sceneUIContainer.appendChild(result.createUI());
 
             if (result.cameraController === FPSCameraController) {
                 this.cameraControllerSelect.selectedIndex = 0;
@@ -382,6 +387,12 @@ class Main {
         uiContainerR.style.right = '2em';
         uiContainerR.style.bottom = '2em';
         this.uiContainers.appendChild(uiContainerR);
+
+        this.sceneUIContainer = document.createElement('div');
+        this.sceneUIContainer.style.position = 'absolute';
+        this.sceneUIContainer.style.right = '2em';
+        this.sceneUIContainer.style.top = '2em';
+        this.uiContainers.appendChild(this.sceneUIContainer);
 
         this.groupSelect = document.createElement('select');
         this.groupSelect.onchange = this._onGroupSelectChange.bind(this);

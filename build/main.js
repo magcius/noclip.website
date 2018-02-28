@@ -3303,7 +3303,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                         case 10 /* RASC */: return this.generateRas(stage) + ".rgb";
                         case 11 /* RASA */: return this.generateRas(stage) + ".aaa";
                         case 12 /* ONE */: return "vec3(1)";
-                        case 13 /* HALF */: return "vec3(1/2)";
+                        case 13 /* HALF */: return "vec3(1.0/2.0)";
                         case 14 /* KONST */: return "" + this.generateKonstColorSel(stage.konstColorSel);
                         case 15 /* ZERO */: return "vec3(0)";
                     }
@@ -3423,8 +3423,9 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     this.vert = "\n// " + this.material.name + "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + this.generateVertAttributeScaleBlock() + "\n" + this.generateVertAttributeDefs() + "\nuniform mat3 u_TexMtx[10];\nuniform mat4 u_PosMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];\n    vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);\n    v_Position = t_Position.xyz;\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * t_Position;\n}\n";
                     var tevStages = this.material.tevStages;
                     var alphaTest = this.material.alphaTest;
+                    var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\nuniform sampler2D u_Texture[8];\nuniform float u_TextureLODBias;\nuniform vec4 u_KonstColor[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0 = u_KonstColor[0];\n    vec4 s_kColor1 = u_KonstColor[1];\n    vec4 s_kColor2 = u_KonstColor[2];\n    vec4 s_kColor3 = u_KonstColor[3];\n\n    vec4 t_Color0    = u_KonstColor[4];\n    vec4 t_Color1    = u_KonstColor[5];\n    vec4 t_Color2    = u_KonstColor[6];\n    vec4 t_ColorPrev = u_KonstColor[7];\n" + this.generateTevStages(tevStages) + "\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\nuniform sampler2D u_Texture[8];\nuniform float u_TextureLODBias;\nuniform vec4 u_KonstColor[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_KonstColor[4]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_KonstColor[5]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_KonstColor[6]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_KonstColor[7]; // " + this.generateColorConstant(rColors[3]) + "\n" + this.generateTevStages(tevStages) + "\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 GX_Program.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
@@ -9981,6 +9982,10 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     var splashG = view.getUint8(paleOffs + 0x13) / 0xFF;
                     var splashB = view.getUint8(paleOffs + 0x14) / 0xFF;
                     var splash = new GX_Material.Color(splashR, splashG, splashB, 1);
+                    var splash2R = view.getUint8(paleOffs + 0x15) / 0xFF;
+                    var splash2G = view.getUint8(paleOffs + 0x16) / 0xFF;
+                    var splash2B = view.getUint8(paleOffs + 0x17) / 0xFF;
+                    var splash2 = new GX_Material.Color(splash2R, splash2G, splash2B, 1);
                     var doorsR = view.getUint8(paleOffs + 0x18) / 0xFF;
                     var doorsG = view.getUint8(paleOffs + 0x19) / 0xFF;
                     var doorsB = view.getUint8(paleOffs + 0x1A) / 0xFF;
@@ -10002,7 +10007,7 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     var vr_kasumi_maeR = view.getUint8(virtOffs + 0x1E) / 0xFF;
                     var vr_kasumi_maeB = view.getUint8(virtOffs + 0x20) / 0xFF;
                     var vr_kasumi_mae = new GX_Material.Color(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
-                    return { amb: amb, light: light, wave: wave, ocean: ocean, splash: splash, doors: doors, vr_back_cloud: vr_back_cloud, vr_sky: vr_sky, vr_uso_umi: vr_uso_umi, vr_kasumi_mae: vr_kasumi_mae };
+                    return { amb: amb, light: light, wave: wave, ocean: ocean, splash: splash, splash2: splash2, doors: doors, vr_back_cloud: vr_back_cloud, vr_sky: vr_sky, vr_uso_umi: vr_uso_umi, vr_kasumi_mae: vr_kasumi_mae };
                 };
                 WindWakerScene.prototype.setTimeOfDay = function (timeOfDay) {
                     var dzsFile = this.stageRarc.findFile("dzs/stage.dzs");
@@ -10012,7 +10017,9 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     if (this.model1) {
                         this.model1.setKonstColorOverride(0, colors.ocean);
                         this.model1.setKonstColorOverride(4, colors.wave);
-                        this.model1.setKonstColorOverride(5, colors.splash);
+                        colors.splash.a = 0.2;
+                        this.model1.setKonstColorOverride(1, colors.splash);
+                        this.model1.setKonstColorOverride(5, colors.splash2);
                     }
                     if (this.model3)
                         this.model3.setKonstColorOverride(4, colors.doors);
@@ -10020,6 +10027,23 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     this.vr_uso_umi.setKonstColorOverride(0, colors.vr_uso_umi);
                     this.vr_kasumi_mae.setKonstColorOverride(4, colors.vr_kasumi_mae);
                     this.vr_back_cloud.setKonstColorOverride(0, colors.vr_back_cloud);
+                };
+                WindWakerScene.prototype._onTimeOfDayChange = function (e) {
+                    this.setTimeOfDay(this.timeOfDaySelect.selectedIndex);
+                };
+                WindWakerScene.prototype.createUI = function () {
+                    var _this = this;
+                    var elem = document.createElement('div');
+                    this.timeOfDaySelect = document.createElement('select');
+                    this.timeOfDaySelect.onchange = this._onTimeOfDayChange.bind(this);
+                    ['Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night',].forEach(function (label) {
+                        var option = document.createElement('option');
+                        option.textContent = label;
+                        _this.timeOfDaySelect.appendChild(option);
+                    });
+                    this.timeOfDaySelect.selectedIndex = 0x02;
+                    elem.appendChild(this.timeOfDaySelect);
+                    return elem;
                 };
                 return WindWakerScene;
             }(scenes_1.MultiScene));
@@ -10258,7 +10282,6 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     progressable.promise.then(function (result) {
                         _this.progressBar.set(null);
                         _this.viewer.setScene(result);
-                        // XXX: Provide a UI for textures eventually?
                         _this.texturesView.innerHTML = '';
                         result.textures.forEach(function (canvas) {
                             var tex = document.createElement('div');
@@ -10271,6 +10294,9 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                             tex.appendChild(label);
                             _this.texturesView.appendChild(tex);
                         });
+                        _this.sceneUIContainer.innerHTML = '';
+                        if (result.createUI)
+                            _this.sceneUIContainer.appendChild(result.createUI());
                         if (result.cameraController === viewer_1.FPSCameraController) {
                             _this.cameraControllerSelect.selectedIndex = 0;
                         }
@@ -10400,6 +10426,11 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     uiContainerR.style.right = '2em';
                     uiContainerR.style.bottom = '2em';
                     this.uiContainers.appendChild(uiContainerR);
+                    this.sceneUIContainer = document.createElement('div');
+                    this.sceneUIContainer.style.position = 'absolute';
+                    this.sceneUIContainer.style.right = '2em';
+                    this.sceneUIContainer.style.top = '2em';
+                    this.uiContainers.appendChild(this.sceneUIContainer);
                     this.groupSelect = document.createElement('select');
                     this.groupSelect.onchange = this._onGroupSelectChange.bind(this);
                     this.groupSelect.style.marginRight = '1em';
