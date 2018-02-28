@@ -392,6 +392,9 @@ class Main {
         this.sceneUIContainer.style.position = 'absolute';
         this.sceneUIContainer.style.right = '2em';
         this.sceneUIContainer.style.top = '2em';
+        this.sceneUIContainer.onkeydown = (e) => {
+            e.preventDefault();
+        };
         this.uiContainers.appendChild(this.sceneUIContainer);
 
         this.groupSelect = document.createElement('select');
@@ -498,6 +501,7 @@ class Main {
             event.preventDefault();
         }
     }
+
     private _getSliderT(slider: HTMLInputElement) {
         return (+slider.value - +slider.min) / (+slider.max - +slider.min);
     }
