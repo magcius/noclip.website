@@ -3,6 +3,7 @@ import { mat4 } from 'gl-matrix';
 
 import * as F3DEX2 from './f3dex2';
 import * as Render from './render';
+import * as Viewer from '../viewer';
 
 // Loads the ZELVIEW0 format.
 
@@ -71,7 +72,7 @@ export class Mesh {
     public opaque: F3DEX2.DL[] = [];
     public transparent: F3DEX2.DL[] = [];
     public bg: Render.RenderFunc;
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
 }
 
 export class Headers {

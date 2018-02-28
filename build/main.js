@@ -678,40 +678,6 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
 System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_5) {
     "use strict";
     var __moduleName = context_5 && context_5.id;
-    // XXX: Port to a class at some point.
-    function elemDragger(elem, callback) {
-        var lastX;
-        var lastY;
-        function setGrabbing(v) {
-            elem.grabbing = v;
-            elem.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
-            elem.style.cursor = v ? 'grabbing' : 'grab';
-        }
-        function mousemove(e) {
-            var dx = e.pageX - lastX;
-            var dy = e.pageY - lastY;
-            lastX = e.pageX;
-            lastY = e.pageY;
-            callback(dx, dy);
-        }
-        function mouseup(e) {
-            document.removeEventListener('mouseup', mouseup);
-            document.removeEventListener('mousemove', mousemove);
-            setGrabbing(false);
-        }
-        elem.addEventListener('mousedown', function (e) {
-            lastX = e.pageX;
-            lastY = e.pageY;
-            document.addEventListener('mouseup', mouseup);
-            document.addEventListener('mousemove', mousemove);
-            setGrabbing(true);
-            // XXX(jstpierre): Needed to make the cursor update in Chrome. See:
-            // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
-            elem.focus();
-            e.preventDefault();
-        });
-        setGrabbing(false);
-    }
     function clamp(v, min, max) {
         return Math.max(min, Math.min(v, max));
     }
@@ -770,13 +736,16 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
             }());
             InputManager = /** @class */ (function () {
                 function InputManager(toplevel) {
+                    this.grabbing = false;
                     this.toplevel = toplevel;
                     this.keysDown = new Map();
                     window.addEventListener('keydown', this._onKeyDown.bind(this));
                     window.addEventListener('keyup', this._onKeyUp.bind(this));
                     window.addEventListener('wheel', this._onWheel.bind(this), { passive: true });
                     this.resetMouse();
-                    elemDragger(this.toplevel, this._onElemDragger.bind(this));
+                    this.toplevel.addEventListener('mousedown', this._onMouseDown.bind(this));
+                    this.toplevel.addEventListener('mouseup', this._onMouseUp.bind(this));
+                    this.toplevel.addEventListener('mousemove', this._onMouseMove.bind(this));
                 }
                 InputManager.prototype.isKeyDown = function (key) {
                     return this.keysDown.get(key.charCodeAt(0));
@@ -785,8 +754,7 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     return this.keysDown.get(keyCode);
                 };
                 InputManager.prototype.isDragging = function () {
-                    // XXX: Should be an explicit flag.
-                    return this.toplevel.grabbing;
+                    return this.grabbing;
                 };
                 InputManager.prototype.resetMouse = function () {
                     this.dx = 0;
@@ -799,12 +767,37 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                 InputManager.prototype._onKeyUp = function (e) {
                     this.keysDown.delete(e.keyCode);
                 };
-                InputManager.prototype._onElemDragger = function (dx, dy) {
+                InputManager.prototype._onWheel = function (e) {
+                    this.dz += Math.sign(e.deltaY) * -4;
+                };
+                InputManager.prototype._setGrabbing = function (v) {
+                    this.grabbing = v;
+                    this.toplevel.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
+                    this.toplevel.style.cursor = v ? 'grabbing' : 'grab';
+                };
+                InputManager.prototype._onMouseMove = function (e) {
+                    if (!this.grabbing)
+                        return;
+                    var dx = e.pageX - this.lastX;
+                    var dy = e.pageY - this.lastY;
+                    this.lastX = e.pageX;
+                    this.lastY = e.pageY;
                     this.dx += dx;
                     this.dy += dy;
                 };
-                InputManager.prototype._onWheel = function (e) {
-                    this.dz += Math.sign(e.deltaY) * -4;
+                InputManager.prototype._onMouseUp = function (e) {
+                    this._setGrabbing(false);
+                    this.button = 0;
+                };
+                InputManager.prototype._onMouseDown = function (e) {
+                    this.button = e.button;
+                    this.lastX = e.pageX;
+                    this.lastY = e.pageY;
+                    this._setGrabbing(true);
+                    // Needed to make the cursor update in Chrome. See:
+                    // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
+                    this.toplevel.focus();
+                    e.preventDefault();
                 };
                 return InputManager;
             }());
@@ -874,11 +867,21 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     this.xVel = 0;
                     this.yVel = 0;
                     this.zVel = 0;
+                    this.tx = 0;
+                    this.ty = 0;
+                    this.txVel = 0;
+                    this.tyVel = 0;
                 }
                 OrbitCameraController.prototype.update = function (camera, inputManager, dt) {
                     // Get new velocities from inputs.
-                    this.xVel += inputManager.dx / 200;
-                    this.yVel += inputManager.dy / 200;
+                    if (inputManager.button === 1) {
+                        this.txVel += inputManager.dx * 1;
+                        this.tyVel += inputManager.dy * -1;
+                    }
+                    else {
+                        this.xVel += inputManager.dx / 200;
+                        this.yVel += inputManager.dy / 200;
+                    }
                     this.zVel += inputManager.dz;
                     if (inputManager.isKeyDown('A')) {
                         this.xVel += 0.05;
@@ -900,6 +903,10 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     this.xVel *= drag;
                     this.y += this.yVel / 10;
                     this.yVel *= drag;
+                    this.tx += this.txVel;
+                    this.txVel *= drag;
+                    this.ty += this.tyVel;
+                    this.tyVel *= drag;
                     if (this.y < 0.04) {
                         this.y = 0.04;
                         this.yVel = 0;
@@ -919,7 +926,7 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     var cosX = Math.cos(this.x);
                     var sinY = Math.sin(this.y);
                     var cosY = Math.cos(this.y);
-                    gl_matrix_2.mat4.copy(camera, gl_matrix_2.mat4.fromValues(cosX, sinY * sinX, -cosY * sinX, 0, 0, cosY, sinY, 0, sinX, -sinY * cosX, cosY * cosX, 0, 0, 0, this.z, 1));
+                    gl_matrix_2.mat4.copy(camera, gl_matrix_2.mat4.fromValues(cosX, sinY * sinX, -cosY * sinX, 0, 0, cosY, sinY, 0, sinX, -sinY * cosX, cosY * cosX, 0, this.tx, this.ty, this.z, 1));
                 };
                 return OrbitCameraController;
             }());
@@ -2455,7 +2462,8 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         GX2Texture.decodeSurface(tex.surface, tex.texData, tex.mipData).then(function (decodedTexture) {
                             GX2Texture.textureToCanvas(canvas, decodedTexture);
                         });
-                        return canvas;
+                        var surfaces = [canvas];
+                        return { name: textureEntry.entry.name, surfaces: surfaces };
                     });
                 }
                 Scene.prototype.translateVertexBuffer = function (gl, attrib, buffer) {
@@ -3101,12 +3109,6 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     this.b = b;
                     this.a = a;
                 }
-                Color.prototype.set = function (n, i) {
-                    n[i + 0] = this.r;
-                    n[i + 1] = this.g;
-                    n[i + 2] = this.b;
-                    n[i + 3] = this.a;
-                };
                 return Color;
             }());
             exports_18("Color", Color);
@@ -3420,7 +3422,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     }).join('');
                 };
                 GX_Program.prototype.generateShaders = function () {
-                    this.vert = "\n// " + this.material.name + "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + this.generateVertAttributeScaleBlock() + "\n" + this.generateVertAttributeDefs() + "\nuniform mat3 u_TexMtx[10];\nuniform mat4 u_PosMtx[10];\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];\n    vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);\n    v_Position = t_Position.xyz;\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * t_Position;\n}\n";
+                    this.vert = "\n// " + this.material.name + "\nprecision highp float;\n// Viewer\nuniform mat4 u_projection;\nuniform mat4 u_modelView;\n// GX_Material\n" + this.generateVertAttributeScaleBlock() + "\n" + this.generateVertAttributeDefs() + "\nuniform mat3 u_TexMtx[10];\nuniform mat4 u_PosMtx[10];\nuniform mat4 u_LocalPosMtx;\n\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];\n    vec4 t_Position = t_PosMtx * u_LocalPosMtx * vec4(ReadAttrib_Position(), 1.0);\n    v_Position = t_Position.xyz;\n    v_Normal = ReadAttrib_Normal();\n    v_Color0 = " + this.generateColorChannel(this.material.colorChannels[0], "ReadAttrib_Color0()") + ";\n    v_Color1 = " + this.generateColorChannel(this.material.colorChannels[1], "ReadAttrib_Color1()") + ";\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_projection * u_modelView * t_Position;\n}\n";
                     var tevStages = this.material.tevStages;
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
@@ -3435,6 +3437,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render"], function (exports_
                     this.u_Texture = gl.getUniformLocation(prog, "u_Texture");
                     this.u_TextureLODBias = gl.getUniformLocation(prog, 'u_TextureLODBias');
                     this.u_KonstColor = gl.getUniformLocation(prog, "u_KonstColor");
+                    this.u_LocalPosMtx = gl.getUniformLocation(prog, "u_LocalPosMtx");
                 };
                 return GX_Program;
             }(render_4.Program));
@@ -4104,9 +4107,19 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
         var textureHeaderOffs = view.getUint32(0x0C);
         var nameTableOffs = view.getUint32(0x10);
         var nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
+        // XXX(jstpierre): For some reason textures aren't deduplicated in a remap table?
+        // It's very wasteful, so dedupe ourselves based on dataStart.
+        var remapTable = [];
         var textures = [];
-        var textureIdx = textureHeaderOffs;
-        for (var i = 0; i < textureCount; i++) {
+        var _loop_2 = function (i) {
+            var textureIdx = textureHeaderOffs + i * 0x20;
+            var dataOffs = view.getUint32(textureIdx + 0x1C);
+            var dataStart = chunkStart + textureIdx + dataOffs;
+            var existingIndex = textures.findIndex(function (tex) { return tex.dataStart === dataStart; });
+            if (existingIndex >= 0) {
+                remapTable.push(existingIndex);
+                return "continue";
+            }
             var name_10 = nameTable[i];
             var format = view.getUint8(textureIdx + 0x00);
             var width = view.getUint16(textureIdx + 0x02);
@@ -4119,12 +4132,14 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
             var minFilter = view.getUint8(textureIdx + 0x14);
             var magFilter = view.getUint8(textureIdx + 0x15);
             var mipCount = view.getUint8(textureIdx + 0x18);
-            var dataOffs = view.getUint32(textureIdx + 0x1C);
-            var data = buffer.slice(chunkStart + textureIdx + dataOffs);
-            textures.push({ name: name_10, format: format, width: width, height: height, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter, mipCount: mipCount, data: data });
-            textureIdx += 0x20;
+            var data = buffer.slice(dataStart);
+            textures.push({ name: name_10, format: format, width: width, height: height, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter, mipCount: mipCount, data: data, dataStart: dataStart });
+            remapTable.push(textures.length - 1);
+        };
+        for (var i = 0; i < textureCount; i++) {
+            _loop_2(i);
         }
-        bmd.tex1 = { textures: textures };
+        bmd.tex1 = { remapTable: remapTable, textures: textures };
     }
     function readTTK1Chunk(btk, buffer, chunkStart, chunkSize) {
         var view = new DataView(buffer, chunkStart, chunkSize);
@@ -4730,7 +4745,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 throw new Error("Unknown CompType " + compType);
         }
     }
-    var gl_matrix_4, j3d_1, GX, GX_Material, GX_Texture, posMtxTable, Command_Shape, Command_Material, Scene;
+    var gl_matrix_4, j3d_1, GX, GX_Material, GX_Texture, posMtxTable, Command_Shape, Command_Material, ColorOverride, Scene;
     return {
         setters: [
             function (gl_matrix_4_1) {
@@ -4824,6 +4839,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     this.program = new GX_Material.GX_Program(material);
                     this.renderFlags = GX_Material.translateRenderFlags(this.material);
                     this.textures = this.translateTextures(gl);
+                    this.localMatrix = gl_matrix_4.mat4.create();
                 }
                 Command_Material.prototype.translateTextures = function (gl) {
                     var tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
@@ -4831,7 +4847,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     for (var i = 0; i < this.material.textureIndexes.length; i++) {
                         var texIndex = this.material.textureIndexes[i];
                         if (texIndex >= 0)
-                            textures[i] = Command_Material.translateTexture(gl, tex1.textures[texIndex]);
+                            textures[i] = Command_Material.translateTexture(gl, tex1.textures[tex1.remapTable[texIndex]]);
                         else
                             textures[i] = null;
                     }
@@ -4934,21 +4950,34 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         textureScratch[i] = i;
                     }
                     gl.uniform1iv(this.program.u_Texture, textureScratch);
-                    var konstColorScratch = Command_Material.konstColorScratch;
+                    var colorScratch = Command_Material.colorScratch;
                     for (var i = 0; i < 8; i++) {
+                        var fallbackColor = void 0;
+                        if (i >= 4)
+                            fallbackColor = this.material.colorRegisters[i - 4];
+                        else
+                            fallbackColor = this.material.colorConstants[i];
                         var color = void 0;
-                        if (this.scene.konstColorOverrides[i]) {
-                            color = this.scene.konstColorOverrides[i];
+                        if (this.scene.colorOverrides[i]) {
+                            color = this.scene.colorOverrides[i];
                         }
                         else {
-                            if (i >= 4)
-                                color = this.material.colorRegisters[i - 4];
-                            else
-                                color = this.material.colorConstants[i];
+                            color = fallbackColor;
                         }
-                        color.set(konstColorScratch, i * 4);
+                        var alpha = void 0;
+                        if (this.scene.alphaOverrides[i] !== undefined) {
+                            alpha = this.scene.alphaOverrides[i];
+                        }
+                        else {
+                            alpha = fallbackColor.a;
+                        }
+                        colorScratch[i * 4 + 0] = color.r;
+                        colorScratch[i * 4 + 1] = color.g;
+                        colorScratch[i * 4 + 2] = color.b;
+                        colorScratch[i * 4 + 3] = alpha;
                     }
-                    gl.uniform4fv(this.program.u_KonstColor, konstColorScratch);
+                    gl.uniform4fv(this.program.u_KonstColor, colorScratch);
+                    gl.uniformMatrix4fv(this.program.u_LocalPosMtx, false, this.localMatrix);
                 };
                 Command_Material.prototype.destroy = function (gl) {
                     this.textures.forEach(function (texture) { return gl.deleteTexture(texture); });
@@ -4957,14 +4986,26 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 Command_Material.matrixTableScratch = new Float32Array(9 * 10);
                 Command_Material.matrixScratch = gl_matrix_4.mat3.create();
                 Command_Material.textureScratch = new Int32Array(8);
-                Command_Material.konstColorScratch = new Float32Array(4 * 8);
+                Command_Material.colorScratch = new Float32Array(4 * 8);
                 return Command_Material;
             }());
+            (function (ColorOverride) {
+                ColorOverride[ColorOverride["K0"] = 0] = "K0";
+                ColorOverride[ColorOverride["K1"] = 1] = "K1";
+                ColorOverride[ColorOverride["K2"] = 2] = "K2";
+                ColorOverride[ColorOverride["K3"] = 3] = "K3";
+                ColorOverride[ColorOverride["C0"] = 4] = "C0";
+                ColorOverride[ColorOverride["C1"] = 5] = "C1";
+                ColorOverride[ColorOverride["C2"] = 6] = "C2";
+                ColorOverride[ColorOverride["C3"] = 7] = "C3";
+            })(ColorOverride || (ColorOverride = {}));
+            exports_21("ColorOverride", ColorOverride);
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, btk, bmt, isSkybox) {
                     var _this = this;
                     this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
-                    this.konstColorOverrides = [null, null, null, null];
+                    this.colorOverrides = [];
+                    this.alphaOverrides = [];
                     this.gl = gl;
                     this.bmd = bmd;
                     this.btk = btk;
@@ -4974,24 +5015,38 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     var tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
                     this.textures = tex1.textures.map(function (tex) { return _this.translateTextureToCanvas(tex); });
                 }
-                Scene.prototype.setKonstColorOverride = function (i, color) {
-                    this.konstColorOverrides[i] = color;
+                Scene.prototype.setColorOverride = function (i, color) {
+                    this.colorOverrides[i] = color;
+                };
+                Scene.prototype.setAlphaOverride = function (i, alpha) {
+                    this.alphaOverrides[i] = alpha;
                 };
                 Scene.prototype.translateTextureToCanvas = function (texture) {
-                    var rgbaTexture = GX_Texture.decodeTexture(texture, false);
-                    // Should never happen.
-                    if (rgbaTexture.type === 'S3TC')
-                        return null;
-                    var canvas = document.createElement('canvas');
-                    canvas.width = rgbaTexture.width;
-                    canvas.height = rgbaTexture.height;
-                    canvas.title = texture.name + " " + texture.format;
-                    canvas.style.backgroundColor = 'black';
-                    var ctx = canvas.getContext('2d');
-                    var imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
-                    imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-                    ctx.putImageData(imgData, 0, 0);
-                    return canvas;
+                    var surfaces = [];
+                    var width = texture.width, height = texture.height, offs = 0;
+                    var format = texture.format;
+                    for (var i = 0; i < texture.mipCount; i++) {
+                        var size = GX_Texture.calcTextureSize(format, width, height);
+                        var data = texture.data.slice(offs, offs + size);
+                        var surface = { name: name, format: format, width: width, height: height, data: data };
+                        var rgbaTexture = GX_Texture.decodeTexture(surface, false);
+                        // Should never happen.
+                        if (rgbaTexture.type === 'S3TC')
+                            throw "whoops";
+                        var canvas = document.createElement('canvas');
+                        canvas.width = rgbaTexture.width;
+                        canvas.height = rgbaTexture.height;
+                        canvas.title = texture.name + " " + texture.format;
+                        var ctx = canvas.getContext('2d');
+                        var imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
+                        imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
+                        ctx.putImageData(imgData, 0, 0);
+                        surfaces.push(canvas);
+                        width /= 2;
+                        height /= 2;
+                        offs += size;
+                    }
+                    return { name: texture.name, surfaces: surfaces };
                 };
                 Scene.prototype.execCommands = function (state, commands) {
                     commands.forEach(function (command) {
@@ -5187,7 +5242,7 @@ System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
                 }
                 RARC.prototype.findDirParts = function (parts) {
                     var dir = this.root;
-                    var _loop_2 = function (part) {
+                    var _loop_3 = function (part) {
                         dir = dir.subdirs.find(function (subdir) { return subdir.name === part; });
                         if (dir === undefined)
                             return { value: null };
@@ -5195,7 +5250,7 @@ System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
                     try {
                         for (var parts_1 = __values(parts), parts_1_1 = parts_1.next(); !parts_1_1.done; parts_1_1 = parts_1.next()) {
                             var part = parts_1_1.value;
-                            var state_1 = _loop_2(part);
+                            var state_1 = _loop_3(part);
                             if (typeof state_1 === "object")
                                 return state_1.value;
                         }
@@ -6378,7 +6433,8 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
         for (var i = 0; i < imgData.data.length; i++)
             imgData.data[i] = texture.pixels[i];
         ctx.putImageData(imgData, 0, 0);
-        return canvas;
+        var surfaces = [canvas];
+        return { name: texture.name, surfaces: surfaces };
     }
     function dirname(path) {
         var parts = path.split('/');
@@ -7636,10 +7692,10 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
         canvas.title = bmdTex.name + " (" + bmdTex.format + ")";
         var ctx = canvas.getContext("2d");
         var imgData = ctx.createImageData(canvas.width, canvas.height);
-        for (var i = 0; i < imgData.data.length; i++)
-            imgData.data[i] = bmdTex.pixels[i];
+        imgData.data.set(bmdTex.pixels);
         ctx.putImageData(imgData, 0, 0);
-        return canvas;
+        var surfaces = [canvas];
+        return { name: bmdTex.name, surfaces: surfaces };
     }
     var gl_matrix_6, CRG0, LZ77, NITRO_BMD, Viewer, render_10, util_17, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, Scene, MultiScene, SceneDesc;
     return {
@@ -8853,12 +8909,12 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_39,
             }
         }
         else if (texture.dstFormat === "rgba8") {
-            for (var i = 0; i < imgData.data.length; i++)
-                imgData.data[i] = texture.pixels[i];
+            imgData.data.set(texture.pixels);
         }
         canvas.title = '0x' + texture.addr.toString(16) + '  ' + texture.format.toString(16) + '  ' + texture.dstFormat;
         ctx.putImageData(imgData, 0, 0);
-        return canvas;
+        var surfaces = [canvas];
+        return { name: canvas.title, surfaces: surfaces };
     }
     function translateTexture(state, texture) {
         var gl = state.gl;
@@ -10012,21 +10068,21 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                 WindWakerScene.prototype.setTimeOfDay = function (timeOfDay) {
                     var dzsFile = this.stageRarc.findFile("dzs/stage.dzs");
                     var colors = WindWakerScene.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay);
-                    this.model.setKonstColorOverride(0, colors.light);
-                    this.model.setKonstColorOverride(4, colors.amb);
+                    this.model.setColorOverride(render_15.ColorOverride.K0, colors.light);
+                    this.model.setColorOverride(render_15.ColorOverride.C0, colors.amb);
                     if (this.model1) {
-                        this.model1.setKonstColorOverride(0, colors.ocean);
-                        this.model1.setKonstColorOverride(4, colors.wave);
-                        colors.splash.a = 0.2;
-                        this.model1.setKonstColorOverride(1, colors.splash);
-                        this.model1.setKonstColorOverride(5, colors.splash2);
+                        this.model1.setColorOverride(render_15.ColorOverride.K0, colors.ocean);
+                        this.model1.setColorOverride(render_15.ColorOverride.C0, colors.wave);
+                        this.model1.setColorOverride(render_15.ColorOverride.C1, colors.splash);
+                        this.model1.setColorOverride(render_15.ColorOverride.K1, colors.splash2);
                     }
                     if (this.model3)
-                        this.model3.setKonstColorOverride(4, colors.doors);
-                    this.vr_sky.setKonstColorOverride(0, colors.vr_sky);
-                    this.vr_uso_umi.setKonstColorOverride(0, colors.vr_uso_umi);
-                    this.vr_kasumi_mae.setKonstColorOverride(4, colors.vr_kasumi_mae);
-                    this.vr_back_cloud.setKonstColorOverride(0, colors.vr_back_cloud);
+                        this.model3.setColorOverride(render_15.ColorOverride.C0, colors.doors);
+                    this.vr_sky.setColorOverride(render_15.ColorOverride.K0, colors.vr_sky);
+                    this.vr_uso_umi.setColorOverride(render_15.ColorOverride.K0, colors.vr_uso_umi);
+                    this.vr_kasumi_mae.setColorOverride(render_15.ColorOverride.C0, colors.vr_kasumi_mae);
+                    this.vr_back_cloud.setColorOverride(render_15.ColorOverride.K0, colors.vr_back_cloud);
+                    this.vr_back_cloud.setAlphaOverride(render_15.ColorOverride.K0, colors.vr_back_cloud.a);
                 };
                 WindWakerScene.prototype._onTimeOfDayChange = function (e) {
                     this.setTimeOfDay(this.timeOfDaySelect.selectedIndex);
@@ -10264,6 +10320,61 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     var sceneId = this.currentSceneDesc.id;
                     return groupId + "/" + sceneId;
                 };
+                Main.prototype._makeTextureElem = function (texture) {
+                    var tex = document.createElement('div');
+                    tex.style.margin = '.5em';
+                    tex.style.padding = '.5em';
+                    tex.style.backgroundColor = 'rgb(245, 237, 222)';
+                    tex.style.border = '1px solid #666';
+                    tex.style.textAlign = 'center';
+                    tex.style.verticalAlign = 'bottom';
+                    var canvases = [];
+                    try {
+                        for (var _a = __values(texture.surfaces), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var canvas = _b.value;
+                            canvas.style.margin = '2px';
+                            canvas.style.border = '1px dashed black';
+                            canvases.push(canvas);
+                            tex.appendChild(canvas);
+                        }
+                    }
+                    catch (e_30_1) { e_30 = { error: e_30_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_30) throw e_30.error; }
+                    }
+                    tex.onmouseover = function () {
+                        canvases.forEach(function (canvas) {
+                            canvas.style.backgroundColor = '';
+                            canvas.style.backgroundImage = 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAGElEQVQYlWNgYGCQwoKxgqGgcJA5h3yFAAs8BRWVSwooAAAAAElFTkSuQmCC")';
+                        });
+                    };
+                    tex.onmouseout = function () {
+                        canvases.forEach(function (canvas) {
+                            canvas.style.backgroundColor = 'black';
+                            canvas.style.backgroundImage = '';
+                        });
+                    };
+                    tex.onmouseout(null);
+                    var label = document.createElement('div');
+                    label.textContent = texture.name;
+                    tex.appendChild(label);
+                    tex.style.cssFloat = 'left';
+                    return tex;
+                    var e_30, _c;
+                };
+                Main.prototype._makeTextureSection = function (textures) {
+                    var _this = this;
+                    var toplevel = document.createElement('div');
+                    toplevel.innerHTML = "\n<h2>Textures</h2>\n";
+                    textures.forEach(function (texture) {
+                        var elem = _this._makeTextureElem(texture);
+                        toplevel.appendChild(elem);
+                    });
+                    return toplevel;
+                };
                 Main.prototype._loadSceneDesc = function (sceneDesc) {
                     var _this = this;
                     if (this.currentSceneDesc === sceneDesc)
@@ -10283,17 +10394,7 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                         _this.progressBar.set(null);
                         _this.viewer.setScene(result);
                         _this.texturesView.innerHTML = '';
-                        result.textures.forEach(function (canvas) {
-                            var tex = document.createElement('div');
-                            tex.style.margin = '1em';
-                            canvas.style.margin = '2px';
-                            canvas.style.border = '1px dashed black';
-                            tex.appendChild(canvas);
-                            var label = document.createElement('span');
-                            label.textContent = canvas.title;
-                            tex.appendChild(label);
-                            _this.texturesView.appendChild(tex);
-                        });
+                        _this.texturesView.appendChild(_this._makeTextureSection(result.textures));
                         _this.sceneUIContainer.innerHTML = '';
                         if (result.createUI)
                             _this.sceneUIContainer.appendChild(result.createUI());
@@ -10320,14 +10421,14 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                             this.groupSelect.appendChild(groupOption);
                         }
                     }
-                    catch (e_30_1) { e_30 = { error: e_30_1 }; }
+                    catch (e_31_1) { e_31 = { error: e_31_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_30) throw e_30.error; }
+                        finally { if (e_31) throw e_31.error; }
                     }
-                    var e_30, _c;
+                    var e_31, _c;
                 };
                 Main.prototype._loadSceneGroup = function (group, loadDefaultSceneInGroup) {
                     if (loadDefaultSceneInGroup === void 0) { loadDefaultSceneInGroup = true; }
@@ -10349,16 +10450,16 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                             this.sceneSelect.appendChild(sceneOption);
                         }
                     }
-                    catch (e_31_1) { e_31 = { error: e_31_1 }; }
+                    catch (e_32_1) { e_32 = { error: e_32_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_31) throw e_31.error; }
+                        finally { if (e_32) throw e_32.error; }
                     }
                     if (loadDefaultSceneInGroup)
                         this._loadSceneDesc(group.sceneDescs[0]);
-                    var e_31, _c;
+                    var e_32, _c;
                 };
                 Main.prototype._onSceneSelectChange = function () {
                     var option = this.sceneSelect.selectedOptions.item(0);
@@ -10367,24 +10468,27 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                 };
                 Main.prototype.showPopup = function (contents) {
                     if (contents === null) {
-                        this.popup.innerHTML = '';
+                        this.popupPaneContainer.innerHTML = '';
                         this.popup.style.display = 'none';
-                        return;
                     }
-                    if (contents.parentNode) {
-                        // Showing these contents, hide popup.
+                    else if (contents.parentNode) {
+                        // Already sowing these contents, hide popup.
                         this.showPopup(null);
-                        return;
                     }
-                    this.popup.innerHTML = '';
-                    this.popup.appendChild(contents);
-                    this.popup.style.display = 'block';
+                    else {
+                        this.popupPaneContainer.innerHTML = '';
+                        this.popupPaneContainer.appendChild(contents);
+                        this.popup.style.display = 'block';
+                    }
                 };
                 Main.prototype._onGearButtonClicked = function () {
                     this.showPopup(this.popupSettingsPane);
                 };
                 Main.prototype._onHelpButtonClicked = function () {
                     this.showPopup(this.popupHelpPane);
+                };
+                Main.prototype._onCloseButtonClicked = function () {
+                    this.showPopup(null);
                 };
                 Main.prototype._onGroupSelectChange = function () {
                     var option = this.groupSelect.selectedOptions.item(0);
@@ -10453,18 +10557,33 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this.popup.style.padding = '1em';
                     this.popup.style.display = 'none';
                     this.popup.style.overflow = 'auto';
+                    this.popup.style.font = '120% sans-serif';
+                    var closeButton = document.createElement('button');
+                    closeButton.style.position = 'absolute';
+                    closeButton.style.top = '1em';
+                    closeButton.style.right = '1em';
+                    closeButton.textContent = 'X';
+                    closeButton.onclick = this._onCloseButtonClicked.bind(this);
+                    this.popup.appendChild(closeButton);
+                    this.popupPaneContainer = document.createElement('div');
+                    this.popup.appendChild(this.popupPaneContainer);
                     this.uiContainers.appendChild(this.popup);
                     // Settings.
                     this.popupSettingsPane = document.createElement('div');
+                    this.popupSettingsPane.innerHTML = "\n<h2>Settings</h2>\n";
+                    var fovSliderLabel = document.createElement('label');
+                    fovSliderLabel.textContent = "Field of View";
+                    this.popupSettingsPane.appendChild(fovSliderLabel);
                     var fovSlider = document.createElement('input');
                     fovSlider.type = 'range';
                     fovSlider.max = '100';
                     fovSlider.min = '1';
                     fovSlider.oninput = this._onFovSliderChange.bind(this);
-                    var fovSliderLabel = document.createElement('label');
-                    fovSliderLabel.textContent = "Field of View";
-                    this.popupSettingsPane.appendChild(fovSliderLabel);
                     this.popupSettingsPane.appendChild(fovSlider);
+                    this.popupSettingsPane.appendChild(document.createElement('br'));
+                    var cameraControllerLabel = document.createElement('label');
+                    cameraControllerLabel.textContent = "Camera Controller";
+                    this.popupSettingsPane.appendChild(cameraControllerLabel);
                     this.cameraControllerSelect = document.createElement('select');
                     var cameraControllerFPS = document.createElement('option');
                     cameraControllerFPS.textContent = 'WASD';
@@ -10474,9 +10593,6 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     this.cameraControllerSelect.appendChild(cameraControllerOrbit);
                     this.cameraControllerSelect.onchange = this._onCameraControllerSelect.bind(this);
                     this.popupSettingsPane.appendChild(this.cameraControllerSelect);
-                    var texturesHeader = document.createElement('h3');
-                    texturesHeader.textContent = 'Textures';
-                    this.popupSettingsPane.appendChild(texturesHeader);
                     this.texturesView = document.createElement('div');
                     this.popupSettingsPane.appendChild(this.texturesView);
                     var gearButton = document.createElement('button');
@@ -10489,8 +10605,7 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     uiContainerR.appendChild(gearButton);
                     this.popupHelpPane = document.createElement('div');
                     this.popupHelpPane.style.padding = '2em';
-                    this.popupHelpPane.style.font = '120% sans-serif';
-                    this.popupHelpPane.innerHTML = "\n<h1>Jasper's Model Viewer</h1>\n<h2>Created by <a href=\"http://github.com/magcius\">Jasper St. Pierre</a></h2>\n\n<p> Basic controls: Use WASD to move around, B to reset the camera, and Z to toggle the UI. </p>\n\n<p> Based on reverse engineering work by myself and a large collection of people. Special thanks to\n  <a href=\"https://twitter.com/LordNed\">LordNed</a>,\n  <a href=\"https://twitter.com/SageOfMirrors\">SageOfMirrors</a>,\n  <a href=\"https://twitter.com/StapleButter\">StapleButter</a>,\n  <a href=\"https://twitter.com/xdanieldzd\">xdanieldzd</a>,\n  <a href=\"https://twitter.com/Jewelots_\">Jewel</a>,\n  <a href=\"https://twitter.com/instant_grat\">Simon</a>,\n  and the rest of the Dolphin and Citra crews.\n</p>\n";
+                    this.popupHelpPane.innerHTML = "\n<h1>Jasper's Model Viewer</h1>\n<h2>Created by <a href=\"http://github.com/magcius\">Jasper St. Pierre</a></h2>\n\n<p> Basic controls: Use WASD to move around, B to reset the camera, and Z to toggle the UI. </p>\n\n<p> Based on reverse engineering work by myself and a large collection of people. Special thanks to\n  <a href=\"https://twitter.com/LordNed\">LordNed</a>,\n  <a href=\"https://twitter.com/SageOfMirrors\">SageOfMirrors</a>,\n  <a href=\"https://twitter.com/StapleButter\">StapleButter</a>,\n  <a href=\"https://twitter.com/xdanieldzd\">xdanieldzd</a>,\n  <a href=\"https://twitter.com/Jewelots_\">Jewel</a>,\n  <a href=\"https://twitter.com/instant_grat\">Simon</a>,\n  and the rest of the Dolphin and Citra crews.\n</p>\n\n<p> All art belongs to the original creators. Nintendo's artists especially are fantastic.\n";
                     var helpButton = document.createElement('button');
                     helpButton.style.width = '2em';
                     helpButton.style.height = '2em';

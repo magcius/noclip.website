@@ -13,9 +13,14 @@ interface CameraController {
 // XXX: Is there any way to do this properly and reference the interface?
 type CameraControllerClass = typeof FPSCameraController | typeof OrbitCameraController;
 
+export interface Texture {
+    name: string;
+    surfaces: HTMLCanvasElement[];
+}
+
 export interface Scene {
     renderPasses: RenderPass[];
-    textures: HTMLCanvasElement[];
+    textures: Texture[];
     render(state: RenderState): void;
     destroy(gl: WebGL2RenderingContext): void;
 }
@@ -68,50 +73,16 @@ class SceneGraph {
     }
 }
 
-// XXX: Port to a class at some point.
-function elemDragger(elem: HTMLElement, callback: (dx: number, dy: number) => void): void {
-    let lastX: number;
-    let lastY: number;
-
-    function setGrabbing(v: boolean) {
-        (<any> elem).grabbing = v;
-        elem.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
-        elem.style.cursor = v ? 'grabbing' : 'grab';
-    }
-
-    function mousemove(e: MouseEvent) {
-        const dx = e.pageX - lastX;
-        const dy = e.pageY - lastY;
-        lastX = e.pageX;
-        lastY = e.pageY;
-        callback(dx, dy);
-    }
-    function mouseup(e: MouseEvent) {
-        document.removeEventListener('mouseup', mouseup);
-        document.removeEventListener('mousemove', mousemove);
-        setGrabbing(false);
-    }
-    elem.addEventListener('mousedown', (e) => {
-        lastX = e.pageX;
-        lastY = e.pageY;
-        document.addEventListener('mouseup', mouseup);
-        document.addEventListener('mousemove', mousemove);
-        setGrabbing(true);
-        // XXX(jstpierre): Needed to make the cursor update in Chrome. See:
-        // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
-        elem.focus();
-        e.preventDefault();
-    });
-
-    setGrabbing(false);
-}
-
 class InputManager {
     public toplevel: HTMLElement;
     public keysDown: Map<number, boolean>;
     public dx: number;
     public dy: number;
     public dz: number;
+    public button: number;
+    private lastX: number;
+    private lastY: number;
+    public grabbing: boolean = false;
 
     constructor(toplevel: HTMLElement) {
         this.toplevel = toplevel;
@@ -123,7 +94,9 @@ class InputManager {
 
         this.resetMouse();
 
-        elemDragger(this.toplevel, this._onElemDragger.bind(this));
+        this.toplevel.addEventListener('mousedown', this._onMouseDown.bind(this));
+        this.toplevel.addEventListener('mouseup', this._onMouseUp.bind(this));
+        this.toplevel.addEventListener('mousemove', this._onMouseMove.bind(this));
     }
 
     public isKeyDown(key: string) {
@@ -133,8 +106,7 @@ class InputManager {
         return this.keysDown.get(keyCode);
     }
     public isDragging(): boolean {
-        // XXX: Should be an explicit flag.
-        return (<any> this.toplevel).grabbing;
+        return this.grabbing;
     }
     public resetMouse() {
         this.dx = 0;
@@ -149,12 +121,39 @@ class InputManager {
         this.keysDown.delete(e.keyCode);
     }
 
-    private _onElemDragger(dx: number, dy: number) {
+    private _onWheel(e: WheelEvent) {
+        this.dz += Math.sign(e.deltaY) * -4;
+    }
+
+    private _setGrabbing(v: boolean) {
+        this.grabbing = v;
+        this.toplevel.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
+        this.toplevel.style.cursor = v ? 'grabbing' : 'grab';
+    }
+
+    private _onMouseMove(e: MouseEvent) {
+        if (!this.grabbing)
+            return;
+        const dx = e.pageX - this.lastX;
+        const dy = e.pageY - this.lastY;
+        this.lastX = e.pageX;
+        this.lastY = e.pageY;
         this.dx += dx;
         this.dy += dy;
     }
-    private _onWheel(e: WheelEvent) {
-        this.dz += Math.sign(e.deltaY) * -4;
+    private _onMouseUp(e: MouseEvent) {
+        this._setGrabbing(false);
+        this.button = 0;
+    }
+    private _onMouseDown(e: MouseEvent) {
+        this.button = e.button;
+        this.lastX = e.pageX;
+        this.lastY = e.pageY;
+        this._setGrabbing(true);
+        // Needed to make the cursor update in Chrome. See:
+        // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
+        this.toplevel.focus();
+        e.preventDefault();
     }
 }
 
@@ -234,27 +233,30 @@ function clampRange(v: number, lim: number): number {
 }
 
 export class OrbitCameraController implements CameraController {
-    public x: number;
-    public y: number;
-    public z: number;
+    public x: number = 0.15;
+    public y: number = 0.35;
+    public z: number = -150;
+    public xVel: number = 0;
+    public yVel: number = 0;
+    public zVel: number = 0;
 
-    public xVel: number;
-    public yVel: number;
-    public zVel: number;
+    public tx: number = 0;
+    public ty: number = 0;
+    public txVel: number = 0;
+    public tyVel: number = 0;
 
     constructor() {
-        this.x = 0.15;
-        this.y = 0.35;
-        this.z = -150;
-        this.xVel = 0;
-        this.yVel = 0;
-        this.zVel = 0;
     }
 
     public update(camera: mat4, inputManager: InputManager, dt: number): void {
         // Get new velocities from inputs.
-        this.xVel += inputManager.dx / 200;
-        this.yVel += inputManager.dy / 200;
+        if (inputManager.button === 1) {
+            this.txVel += inputManager.dx * 1;
+            this.tyVel += inputManager.dy * -1;
+        } else {
+            this.xVel += inputManager.dx / 200;
+            this.yVel += inputManager.dy / 200;
+        }
         this.zVel += inputManager.dz;
         if (inputManager.isKeyDown('A')) {
             this.xVel += 0.05;
@@ -279,6 +281,13 @@ export class OrbitCameraController implements CameraController {
 
         this.y += this.yVel / 10;
         this.yVel *= drag;
+
+        this.tx += this.txVel;
+        this.txVel *= drag;
+
+        this.ty += this.tyVel;
+        this.tyVel *= drag;
+
         if (this.y < 0.04) {
             this.y = 0.04;
             this.yVel = 0;
@@ -304,7 +313,7 @@ export class OrbitCameraController implements CameraController {
             cosX, sinY * sinX, -cosY * sinX, 0,
             0, cosY, sinY, 0,
             sinX, -sinY * cosX, cosY * cosX, 0,
-            0, 0, this.z, 1,
+            this.tx, this.ty, this.z, 1,
         ));
     }
 }

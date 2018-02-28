@@ -1,5 +1,5 @@
 
-import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController } from 'viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController, Texture } from 'viewer';
 
 import * as FRES from 'fres/scenes';
 import * as J3D from 'j3d/scenes';
@@ -127,6 +127,7 @@ class Main {
     private popup: HTMLElement;
     private popupSettingsPane: HTMLElement;
     private popupHelpPane: HTMLElement;
+    private popupPaneContainer: HTMLElement;
 
     constructor() {
         this.canvas = document.createElement('canvas');
@@ -220,6 +221,58 @@ class Main {
         return `${groupId}/${sceneId}`;
     }
 
+    private _makeTextureElem(texture: Texture): HTMLElement {
+        const tex = document.createElement('div');
+        tex.style.margin = '.5em';
+        tex.style.padding = '.5em';
+        tex.style.backgroundColor = 'rgb(245, 237, 222)';
+        tex.style.border = '1px solid #666';
+        tex.style.textAlign = 'center';
+        tex.style.verticalAlign = 'bottom';
+
+        const canvases = [];
+
+        for (const canvas of texture.surfaces) {
+            canvas.style.margin = '2px';
+            canvas.style.border = '1px dashed black';
+            canvases.push(canvas);
+            tex.appendChild(canvas);
+        }
+
+        tex.onmouseover = () => {
+            canvases.forEach((canvas) => {
+                canvas.style.backgroundColor = '';
+                canvas.style.backgroundImage = 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAGElEQVQYlWNgYGCQwoKxgqGgcJA5h3yFAAs8BRWVSwooAAAAAElFTkSuQmCC")';
+            });
+        };
+        tex.onmouseout = () => {
+            canvases.forEach((canvas) => {
+                canvas.style.backgroundColor = 'black';
+                canvas.style.backgroundImage = '';
+            });
+        }
+        tex.onmouseout(null);
+
+        const label = document.createElement('div');
+        label.textContent = texture.name;
+        tex.appendChild(label);
+
+        tex.style.cssFloat = 'left';
+        return tex;
+    }
+
+    private _makeTextureSection(textures: Texture[]): HTMLElement {
+        const toplevel = document.createElement('div');
+        toplevel.innerHTML = `
+<h2>Textures</h2>
+`;
+        textures.forEach((texture) => {
+            const elem = this._makeTextureElem(texture);
+            toplevel.appendChild(elem);
+        });
+        return toplevel;
+    }
+
     private _loadSceneDesc(sceneDesc: SceneDesc) {
         if (this.currentSceneDesc === sceneDesc)
             return;
@@ -244,17 +297,7 @@ class Main {
             this.viewer.setScene(result);
 
             this.texturesView.innerHTML = '';
-            result.textures.forEach((canvas) => {
-                const tex = document.createElement('div');
-                tex.style.margin = '1em';
-                canvas.style.margin = '2px';
-                canvas.style.border = '1px dashed black';
-                tex.appendChild(canvas);
-                const label = document.createElement('span');
-                label.textContent = canvas.title;
-                tex.appendChild(label);
-                this.texturesView.appendChild(tex);
-            });
+            this.texturesView.appendChild(this._makeTextureSection(result.textures));
 
             this.sceneUIContainer.innerHTML = '';
 
@@ -317,20 +360,16 @@ class Main {
 
     private showPopup(contents: HTMLElement) {
         if (contents === null) {
-            this.popup.innerHTML = '';
+            this.popupPaneContainer.innerHTML = '';
             this.popup.style.display = 'none';
-            return;
-        }
-
-        if (contents.parentNode) {
-            // Showing these contents, hide popup.
+        } else if (contents.parentNode) {
+            // Already sowing these contents, hide popup.
             this.showPopup(null);
-            return;
+        } else {
+            this.popupPaneContainer.innerHTML = '';
+            this.popupPaneContainer.appendChild(contents);
+            this.popup.style.display = 'block';
         }
-
-        this.popup.innerHTML = '';
-        this.popup.appendChild(contents);
-        this.popup.style.display = 'block';
     }
 
     private _onGearButtonClicked() {
@@ -339,6 +378,10 @@ class Main {
 
     private _onHelpButtonClicked() {
         this.showPopup(this.popupHelpPane);
+    }
+
+    private _onCloseButtonClicked() {
+        this.showPopup(null);
     }
 
     private _onGroupSelectChange() {
@@ -418,23 +461,43 @@ class Main {
         this.popup.style.padding = '1em';
         this.popup.style.display = 'none';
         this.popup.style.overflow = 'auto';
+        this.popup.style.font = '120% sans-serif';
+
+        const closeButton = document.createElement('button');
+        closeButton.style.position = 'absolute';
+        closeButton.style.top = '1em';
+        closeButton.style.right = '1em';
+        closeButton.textContent = 'X';
+        closeButton.onclick = this._onCloseButtonClicked.bind(this);
+        this.popup.appendChild(closeButton);
+
+        this.popupPaneContainer = document.createElement('div');
+        this.popup.appendChild(this.popupPaneContainer);
         this.uiContainers.appendChild(this.popup);
 
         // Settings.
         this.popupSettingsPane = document.createElement('div');
+
+        this.popupSettingsPane.innerHTML = `
+<h2>Settings</h2>
+`;
+
+        const fovSliderLabel = document.createElement('label');
+        fovSliderLabel.textContent = "Field of View";
+        this.popupSettingsPane.appendChild(fovSliderLabel);
 
         const fovSlider = document.createElement('input');
         fovSlider.type = 'range';
         fovSlider.max = '100';
         fovSlider.min = '1';
         fovSlider.oninput = this._onFovSliderChange.bind(this);
-
-        const fovSliderLabel = document.createElement('label');
-        fovSliderLabel.textContent = "Field of View";
-
-        this.popupSettingsPane.appendChild(fovSliderLabel);
         this.popupSettingsPane.appendChild(fovSlider);
 
+        this.popupSettingsPane.appendChild(document.createElement('br'));
+
+        const cameraControllerLabel = document.createElement('label');
+        cameraControllerLabel.textContent = "Camera Controller";
+        this.popupSettingsPane.appendChild(cameraControllerLabel);
         this.cameraControllerSelect = document.createElement('select');
         const cameraControllerFPS = document.createElement('option');
         cameraControllerFPS.textContent = 'WASD';
@@ -443,12 +506,7 @@ class Main {
         cameraControllerOrbit.textContent = 'Orbit';
         this.cameraControllerSelect.appendChild(cameraControllerOrbit);
         this.cameraControllerSelect.onchange = this._onCameraControllerSelect.bind(this);
-
         this.popupSettingsPane.appendChild(this.cameraControllerSelect);
-
-        const texturesHeader = document.createElement('h3');
-        texturesHeader.textContent = 'Textures';
-        this.popupSettingsPane.appendChild(texturesHeader);
 
         this.texturesView = document.createElement('div');
         this.popupSettingsPane.appendChild(this.texturesView);
@@ -464,7 +522,6 @@ class Main {
 
         this.popupHelpPane = document.createElement('div');
         this.popupHelpPane.style.padding = '2em';
-        this.popupHelpPane.style.font = '120% sans-serif';
         this.popupHelpPane.innerHTML = `
 <h1>Jasper's Model Viewer</h1>
 <h2>Created by <a href="http://github.com/magcius">Jasper St. Pierre</a></h2>
@@ -480,6 +537,8 @@ class Main {
   <a href="https://twitter.com/instant_grat">Simon</a>,
   and the rest of the Dolphin and Citra crews.
 </p>
+
+<p> All art belongs to the original creators. Nintendo's artists especially are fantastic.
 `;
         const helpButton = document.createElement('button');
         helpButton.style.width = '2em';

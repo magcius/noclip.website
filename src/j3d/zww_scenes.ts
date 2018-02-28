@@ -6,7 +6,7 @@ import * as Yaz0 from '../yaz0';
 import * as GX_Material from './gx_material';
 import * as Viewer from '../viewer';
 import { MultiScene, RARCSceneDesc } from './scenes';
-import { Scene } from './render';
+import { Scene, ColorOverride } from './render';
 
 import { Progressable } from '../progress';
 import { fetch, readString } from '../util';
@@ -159,23 +159,23 @@ class WindWakerScene extends MultiScene {
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`);
         const colors = WindWakerScene.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay);
 
-        this.model.setKonstColorOverride(0, colors.light);
-        this.model.setKonstColorOverride(4, colors.amb);
+        this.model.setColorOverride(ColorOverride.K0, colors.light);
+        this.model.setColorOverride(ColorOverride.C0, colors.amb);
 
         if (this.model1) {
-            this.model1.setKonstColorOverride(0, colors.ocean);
-            this.model1.setKonstColorOverride(4, colors.wave);
-            colors.splash.a = 0.2;
-            this.model1.setKonstColorOverride(1, colors.splash);
-            this.model1.setKonstColorOverride(5, colors.splash2);
+            this.model1.setColorOverride(ColorOverride.K0, colors.ocean);
+            this.model1.setColorOverride(ColorOverride.C0, colors.wave);
+            this.model1.setColorOverride(ColorOverride.C1, colors.splash);
+            this.model1.setColorOverride(ColorOverride.K1, colors.splash2);
         }
         if (this.model3)
-            this.model3.setKonstColorOverride(4, colors.doors);
+            this.model3.setColorOverride(ColorOverride.C0, colors.doors);
 
-        this.vr_sky.setKonstColorOverride(0, colors.vr_sky);
-        this.vr_uso_umi.setKonstColorOverride(0, colors.vr_uso_umi);
-        this.vr_kasumi_mae.setKonstColorOverride(4, colors.vr_kasumi_mae);
-        this.vr_back_cloud.setKonstColorOverride(0, colors.vr_back_cloud);
+        this.vr_sky.setColorOverride(ColorOverride.K0, colors.vr_sky);
+        this.vr_uso_umi.setColorOverride(ColorOverride.K0, colors.vr_uso_umi);
+        this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, colors.vr_kasumi_mae);
+        this.vr_back_cloud.setColorOverride(ColorOverride.K0, colors.vr_back_cloud);
+        this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, colors.vr_back_cloud.a);
     }
 
     private _onTimeOfDayChange(e: UIEvent) {

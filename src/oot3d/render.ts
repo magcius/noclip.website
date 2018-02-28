@@ -61,7 +61,7 @@ void main() {
     }
 }
 
-function textureToCanvas(texture: CMB.Texture) {
+function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
     canvas.width = texture.width;
     canvas.height = texture.height;
@@ -74,14 +74,15 @@ function textureToCanvas(texture: CMB.Texture) {
         imgData.data[i] = texture.pixels[i];
 
     ctx.putImageData(imgData, 0, 0);
-    return canvas;
+    const surfaces = [ canvas ];
+    return { name: texture.name, surfaces };
 }
 
 type RenderFunc = (renderState: RenderState) => void;
 
 class Scene implements Viewer.Scene {
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
     public program: OoT3D_Program;
     public zsi: ZSI.ZSI;
     public model: RenderFunc;
@@ -298,7 +299,7 @@ class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
 
     constructor(scenes: Viewer.Scene[]) {
         this.scenes = scenes;

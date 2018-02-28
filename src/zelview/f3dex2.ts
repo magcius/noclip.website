@@ -51,7 +51,7 @@ class State {
     public gl: WebGL2RenderingContext;
 
     public cmds: CmdFunc[];
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
 
     public mtx: mat4;
     public mtxStack: mat4[];
@@ -604,7 +604,7 @@ function convert_IA16(state, texture) {
     texture.pixels = dst;
 }
 
-function textureToCanvas(texture) {
+function textureToCanvas(texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
     canvas.width = texture.width;
     canvas.height = texture.height;
@@ -627,13 +627,14 @@ function textureToCanvas(texture) {
             imgData.data[di + 3] = texture.pixels[si + 1];
         }
     } else if (texture.dstFormat === "rgba8") {
-        for (let i = 0; i < imgData.data.length; i++)
-            imgData.data[i] = texture.pixels[i];
+        imgData.data.set(texture.pixels);
     }
 
     canvas.title = '0x' + texture.addr.toString(16) + '  ' + texture.format.toString(16) + '  ' + texture.dstFormat;
     ctx.putImageData(imgData, 0, 0);
-    return canvas;
+
+    const surfaces = [ canvas ];
+    return { name: canvas.title, surfaces };
 }
 
 function translateTexture(state, texture) {
@@ -863,9 +864,9 @@ function runDL(state, addr) {
 
 export class DL {
     public cmds: CmdFunc[];
-    public textures: HTMLCanvasElement[];
+    public textures: Viewer.Texture[];
 
-    constructor(cmds: CmdFunc[], textures: HTMLCanvasElement[]) {
+    constructor(cmds: CmdFunc[], textures: Viewer.Texture[]) {
         this.cmds = cmds;
         this.textures = textures;
     }
