@@ -278,6 +278,7 @@ class Scene implements Viewer.Scene {
         return (state: RenderState) => {
             const prog = this.program_WATERS;
             state.useProgram(prog);
+            state.bindModelView();
             state.useFlags(renderFlags);
             gl.bindBuffer(gl.ARRAY_BUFFER, wbVtx);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);

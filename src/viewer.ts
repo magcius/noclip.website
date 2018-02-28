@@ -63,8 +63,9 @@ class SceneGraph {
             this.scene.destroy(this.renderState.gl);
         this.scene = scene;
     }
-    public setCamera(matrix: mat4) {
-        mat4.copy(this.renderState.modelView, matrix);
+
+    public setCamera(camera: mat4) {
+        this.renderState.setModelView(camera);
     }
 }
 

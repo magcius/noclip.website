@@ -109,6 +109,8 @@ class Command_Shape {
 }
 
 class Command_Material {
+    private scene: Scene;
+
     public bmd: BMD;
     public btk: BTK;
     public bmt: BMT;
@@ -118,10 +120,11 @@ class Command_Material {
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT, material: GX_Material.GXMaterial) {
-        this.bmd = bmd;
-        this.btk = btk;
-        this.bmt = bmt;
+    constructor(gl: WebGL2RenderingContext, scene: Scene, material: GX_Material.GXMaterial) {
+        this.scene = scene;
+        this.bmd = scene.bmd;
+        this.btk = scene.btk;
+        this.bmt = scene.bmt;
         this.material = material;
         this.program = new GX_Material.GX_Program(material);
         this.renderFlags = GX_Material.translateRenderFlags(this.material);
@@ -209,6 +212,7 @@ class Command_Material {
         const gl = state.gl;
 
         state.useProgram(this.program);
+        state.bindModelView(this.scene.isSkybox);
         state.useFlags(this.renderFlags);
 
         // LOD Bias.
@@ -270,9 +274,11 @@ export class Scene implements Viewer.Scene {
 
     public gl: WebGL2RenderingContext;
     public textures: HTMLCanvasElement[];
-    private bmd: BMD;
-    private btk: BTK;
-    private bmt: BMT;
+    public bmd: BMD;
+    public btk: BTK;
+    public bmt: BMT;
+    public isSkybox: boolean;
+
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
 
@@ -280,11 +286,12 @@ export class Scene implements Viewer.Scene {
     private shapeCommands: Command_Shape[];
     private jointMatrices: mat4[];
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT, isSkybox: boolean) {
         this.gl = gl;
         this.bmd = bmd;
         this.btk = btk;
         this.bmt = bmt;
+        this.isSkybox = isSkybox;
         this.translateModel(this.bmd);
 
         const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
@@ -308,19 +315,34 @@ export class Scene implements Viewer.Scene {
         return canvas;
     }
 
-    public render(state: RenderState) {
-        state.setClipPlanes(10, 500000);
-
-        let commands;
-        if (state.currentPass === RenderPass.OPAQUE) {
-            commands = this.opaqueCommands;
-        } else if (state.currentPass === RenderPass.TRANSPARENT) {
-            commands = this.transparentCommands;
-        }
-
+    private execCommands(state: RenderState, commands: Command[]) {
         commands.forEach((command) => {
             command.exec(state);
         });
+    }
+
+    public render(state: RenderState) {
+        state.setClipPlanes(10, 500000);
+
+        if (this.isSkybox) {
+            // The Super Mario Sunshine skyboxes are authored in this strange way where they are transparent,
+            // and expect to be drawn directly on top of the clear color with blending on. I don't know why
+            // Nintendo chose to do things this way -- there might be a flag for sorting in the BMD I'm not
+            // correctly pulling out right now, or this might be explicitly done in the engine.
+            // Draw them in the opaque pass, first thing.
+
+            if (state.currentPass === RenderPass.OPAQUE) {
+                this.execCommands(state, this.opaqueCommands);
+                this.execCommands(state, this.transparentCommands);
+            }
+            return;
+        }
+
+        if (state.currentPass === RenderPass.OPAQUE) {
+            this.execCommands(state, this.opaqueCommands);
+        } else if (state.currentPass === RenderPass.TRANSPARENT) {
+            this.execCommands(state, this.transparentCommands);
+        }
     }
 
     private translateModel(bmd: BMD) {
@@ -330,7 +352,7 @@ export class Scene implements Viewer.Scene {
 
         const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
         this.materialCommands = mat3.materialEntries.map((material) => {
-            return new Command_Material(this.gl, this.bmd, this.btk, this.bmt, material);
+            return new Command_Material(this.gl, this, material);
         });
         this.shapeCommands = bmd.shp1.shapes.map((shape) => {
             return new Command_Shape(this.gl, this.bmd, shape, this.jointMatrices);
