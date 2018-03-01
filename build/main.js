@@ -3855,7 +3855,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
         gl_matrix_3.mat3.fromTranslation(c, [centerS, centerT, centerQ]);
         gl_matrix_3.mat3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
         gl_matrix_3.mat3.fromTranslation(m, [translationS, translationT, 0]);
-        gl_matrix_3.mat3.fromRotation(t, rotation);
+        gl_matrix_3.mat3.fromRotation(t, rotation * Math.PI);
         gl_matrix_3.mat3.mul(t, t, ci);
         gl_matrix_3.mat3.mul(t, c, t);
         gl_matrix_3.mat3.mul(m, m, t);
@@ -3985,7 +3985,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
                 var p = gl_matrix_3.mat4.fromValues(p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33);
                 var matrix = gl_matrix_3.mat3.create();
                 createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-                texMatrices[j] = { projection: projection, matrix: matrix };
+                texMatrices[j] = { type: type, projection: projection, matrix: matrix };
             }
             var colorConstants = [];
             for (var j = 0; j < 4; j++) {
@@ -4333,15 +4333,13 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
                     // return this.lerp(k0, k1, t);
                     return this.hermiteInterpolate(k0, k1, t);
                 };
-                BTK.prototype.applyAnimation = function (dst, materialName, texMtxIndex, time) {
-                    var FPS = 30;
+                BTK.prototype.calcAnimatedTexMtx = function (dst, materialName, texMtxIndex, frame) {
                     var animationEntry = this.findAnimationEntry(materialName, texMtxIndex);
                     if (!animationEntry)
                         return false;
-                    var duration = this.ttk1.duration;
-                    var frame = time / FPS;
-                    var normTime = frame / duration;
-                    var animFrame = this.applyLoopMode(normTime, this.ttk1.loopMode) * duration;
+                    var durationInFrames = this.ttk1.duration;
+                    var normTime = frame / durationInFrames;
+                    var animFrame = this.applyLoopMode(normTime, this.ttk1.loopMode) * durationInFrames;
                     var centerS = animationEntry.centerS, centerT = animationEntry.centerT, centerQ = animationEntry.centerQ;
                     var scaleS = this.sampleAnimationData(animationEntry.s.scale, animFrame);
                     var scaleT = this.sampleAnimationData(animationEntry.t.scale, animFrame);
@@ -4929,14 +4927,17 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         var texMtx = this.material.texMatrices[i];
                         if (texMtx === null)
                             continue;
-                        var matrix = void 0;
-                        if (this.btk && this.btk.applyAnimation(matrixScratch, this.material.name, i, state.time)) {
-                            matrix = matrixScratch;
+                        var finalMatrix = void 0;
+                        if (this.btk && this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, this.scene.getTimeInFrames(state.time))) {
+                            finalMatrix = matrixScratch;
+                            // Multiply in the material matrix if we want that.
+                            if (this.scene.useMaterialTexMtx)
+                                gl_matrix_4.mat3.mul(matrixScratch, matrixScratch, texMtx.matrix);
                         }
                         else {
-                            matrix = texMtx.matrix;
+                            finalMatrix = texMtx.matrix;
                         }
-                        matrixTableScratch.set(matrix, i * 9);
+                        matrixTableScratch.set(finalMatrix, i * 9);
                     }
                     var location = this.program.u_TexMtx;
                     gl.uniformMatrix3fv(location, false, matrixTableScratch);
@@ -5001,16 +5002,17 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
             })(ColorOverride || (ColorOverride = {}));
             exports_21("ColorOverride", ColorOverride);
             Scene = /** @class */ (function () {
-                function Scene(gl, bmd, btk, bmt, isSkybox) {
+                function Scene(gl, bmd, btk, bmt) {
                     var _this = this;
                     this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
+                    this.useMaterialTexMtx = true;
+                    this.fps = 30;
                     this.colorOverrides = [];
                     this.alphaOverrides = [];
                     this.gl = gl;
                     this.bmd = bmd;
                     this.btk = btk;
                     this.bmt = bmt;
-                    this.isSkybox = isSkybox;
                     this.translateModel(this.bmd);
                     var tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
                     this.textures = tex1.textures.map(function (tex) { return _this.translateTextureToCanvas(tex); });
@@ -5020,6 +5022,21 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 };
                 Scene.prototype.setAlphaOverride = function (i, alpha) {
                     this.alphaOverrides[i] = alpha;
+                };
+                Scene.prototype.setIsSkybox = function (v) {
+                    this.isSkybox = v;
+                };
+                Scene.prototype.setFPS = function (v) {
+                    this.fps = v;
+                };
+                Scene.prototype.setUseMaterialTexMtx = function (v) {
+                    // Wind Waker's BTK animations seem to override the existing baked-in TexMtx.
+                    // Super Mario Galaxy seems to stack them. I couldn't find any flag behavior for this,
+                    // implying it's probably an engine change rather than separate BMD behavior.
+                    this.useMaterialTexMtx = v;
+                };
+                Scene.prototype.getTimeInFrames = function (milliseconds) {
+                    return (milliseconds / 1000) * this.fps;
                 };
                 Scene.prototype.translateTextureToCanvas = function (texture) {
                     var surfaces = [];
@@ -5282,15 +5299,14 @@ System.register("j3d/rarc", ["util"], function (exports_22, context_22) {
         }
     };
 });
-System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "viewer", "progress", "util"], function (exports_23, context_23) {
+System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "viewer", "progress", "util"], function (exports_23, context_23) {
     "use strict";
     var __moduleName = context_23 && context_23.id;
-    function createScene(gl, bmdFile, btkFile, bmtFile, isSkybox) {
-        if (isSkybox === void 0) { isSkybox = false; }
+    function createScene(gl, bmdFile, btkFile, bmtFile) {
         var bmd = j3d_2.BMD.parse(bmdFile.buffer);
         var btk = btkFile ? j3d_2.BTK.parse(btkFile.buffer) : null;
         var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
-        return new render_5.Scene(gl, bmd, btk, bmt, isSkybox);
+        return new render_5.Scene(gl, bmd, btk, bmt);
     }
     function createSceneFromBuffer(gl, buffer) {
         if (util_8.readString(buffer, 0, 4) === 'Yaz0')
@@ -5303,25 +5319,31 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                 var basename = bmdFile.name.split('.')[0];
                 var btkFile = rarc_1.files.find(function (f) { return f.name === basename + ".btk"; });
                 var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
-                return createScene(gl, bmdFile, btkFile, bmtFile);
+                try {
+                    return createScene(gl, bmdFile, btkFile, bmtFile);
+                }
+                catch (e) {
+                    console.log("Error parsing", bmdFile.name);
+                    return null;
+                }
             });
-            return new MultiScene(scenes);
+            return new MultiScene(scenes.filter(function (s) { return !!s; }));
         }
         if (['J3D2bmd3', 'J3D2bdl4'].includes(util_8.readString(buffer, 0, 8))) {
             var bmd = j3d_2.BMD.parse(buffer);
-            return new render_5.Scene(gl, bmd, null, null, false);
+            return new MultiScene([new render_5.Scene(gl, bmd, null, null)]);
         }
         return null;
     }
     exports_23("createSceneFromBuffer", createSceneFromBuffer);
-    var render_5, j3d_2, RARC, Yaz0, Viewer, progress_3, util_8, id, name, MultiScene, SunshineClearScene, SunshineSceneDesc, MultiSceneDesc, RARCSceneDesc, sceneDescs, sceneGroup;
+    var j3d_2, render_5, RARC, Yaz0, Viewer, progress_3, util_8, id, name, MultiScene, SunshineClearScene, SunshineSceneDesc, RARCSceneDesc, SMGSceneDesc, sceneDescs, sceneGroup;
     return {
         setters: [
-            function (render_5_1) {
-                render_5 = render_5_1;
-            },
             function (j3d_2_1) {
                 j3d_2 = j3d_2_1;
+            },
+            function (render_5_1) {
+                render_5 = render_5_1;
             },
             function (RARC_1) {
                 RARC = RARC_1;
@@ -5417,22 +5439,12 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                         return null;
                     var btkFile = rarc.findFile(fn + ".btk");
                     var bmtFile = rarc.findFile(fn + ".bmt");
-                    return createScene(gl, bmdFile, btkFile, bmtFile, isSkybox);
+                    var scene = createScene(gl, bmdFile, btkFile, bmtFile);
+                    scene.setIsSkybox(isSkybox);
+                    scene.setUseMaterialTexMtx(false);
+                    return scene;
                 };
                 return SunshineSceneDesc;
-            }());
-            MultiSceneDesc = /** @class */ (function () {
-                function MultiSceneDesc(id, name, subscenes) {
-                    this.id = id;
-                    this.name = name;
-                    this.subscenes = subscenes;
-                }
-                MultiSceneDesc.prototype.createScene = function (gl) {
-                    return progress_3.Progressable.all(this.subscenes.map(function (sceneDesc) { return sceneDesc.createScene(gl); })).then(function (scenes) {
-                        return new MultiScene(scenes);
-                    });
-                };
-                return MultiSceneDesc;
             }());
             RARCSceneDesc = /** @class */ (function () {
                 function RARCSceneDesc(path, name) {
@@ -5448,17 +5460,38 @@ System.register("j3d/scenes", ["j3d/render", "j3d/j3d", "j3d/rarc", "yaz0", "vie
                 return RARCSceneDesc;
             }());
             exports_23("RARCSceneDesc", RARCSceneDesc);
+            SMGSceneDesc = /** @class */ (function () {
+                function SMGSceneDesc(paths, name) {
+                    this.id = paths[0];
+                    this.paths = paths;
+                    this.name = name;
+                }
+                SMGSceneDesc.prototype.createScene = function (gl) {
+                    var _this = this;
+                    return progress_3.Progressable.all(this.paths.map(function (path) { return util_8.fetch(path).then(function (buffer) {
+                        return _this.createSceneFromBuffer(gl, buffer);
+                    }); })).then(function (scenes) {
+                        return new MultiScene(scenes);
+                    });
+                };
+                SMGSceneDesc.prototype.createSceneFromBuffer = function (gl, buffer) {
+                    var multiScene = createSceneFromBuffer(gl, buffer);
+                    util_8.assert(multiScene.scenes.length === 1);
+                    var scene = multiScene.scenes[0];
+                    scene.setFPS(60);
+                    scene.setUseMaterialTexMtx(true);
+                    return multiScene;
+                };
+                return SMGSceneDesc;
+            }());
             sceneDescs = [
                 new SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
                 new SunshineSceneDesc("data/j3d/mare0.szs", "Noki Bay"),
                 new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach"),
                 new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor"),
                 new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
-                new RARCSceneDesc("data/j3d/MarioFaceShipPlanet.arc", "Faceship"),
-                new MultiSceneDesc("data/j3d/PeachCastleGardenPlanet.arc", "Peach's Castle Garden", [
-                    new RARCSceneDesc("data/j3d/PeachCastleGardenPlanet.arc"),
-                    new RARCSceneDesc("data/j3d/GalaxySky.arc"),
-                ]),
+                new SMGSceneDesc(["data/j3d/MarioFaceShipPlanet.arc"], "Faceship"),
+                new SMGSceneDesc(["data/j3d/PeachCastleGardenPlanet.arc", "data/j3d/GalaxySky.arc"], "Peach's Castle Garden"),
             ];
             exports_23("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
@@ -9973,7 +10006,10 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                         var btkFile = rarc.findFile("btk/" + name + ".btk");
                         var bdl = j3d_3.BMD.parse(bdlFile.buffer);
                         var btk = btkFile ? j3d_3.BTK.parse(btkFile.buffer) : null;
-                        return new render_15.Scene(gl, bdl, btk, null, isSkybox);
+                        var scene = new render_15.Scene(gl, bdl, btk, null);
+                        scene.setIsSkybox(isSkybox);
+                        scene.setUseMaterialTexMtx(false);
+                        return scene;
                     }
                     var scenes = [];
                     // Skybox.
@@ -10092,7 +10128,7 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     var elem = document.createElement('div');
                     this.timeOfDaySelect = document.createElement('select');
                     this.timeOfDaySelect.onchange = this._onTimeOfDayChange.bind(this);
-                    ['Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night',].forEach(function (label) {
+                    ['Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night'].forEach(function (label) {
                         var option = document.createElement('option');
                         option.textContent = label;
                         _this.timeOfDaySelect.appendChild(option);

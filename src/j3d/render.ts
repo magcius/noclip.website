@@ -241,14 +241,18 @@ class Command_Material {
             if (texMtx === null)
                 continue;
 
-            let matrix;
-            if (this.btk && this.btk.applyAnimation(matrixScratch, this.material.name, i, state.time)) {
-                matrix = matrixScratch;
+            let finalMatrix;
+            if (this.btk && this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, this.scene.getTimeInFrames(state.time))) {
+                finalMatrix = matrixScratch;
+
+                // Multiply in the material matrix if we want that.
+                if (this.scene.useMaterialTexMtx)
+                    mat3.mul(matrixScratch, matrixScratch, texMtx.matrix);
             } else {
-                matrix = texMtx.matrix;
+                finalMatrix = texMtx.matrix;
             }
 
-            matrixTableScratch.set(matrix, i * 9);
+            matrixTableScratch.set(finalMatrix, i * 9);
         }
 
         const location = this.program.u_TexMtx;
@@ -324,6 +328,8 @@ export class Scene implements Viewer.Scene {
     public btk: BTK;
     public bmt: BMT;
     public isSkybox: boolean;
+    public useMaterialTexMtx: boolean = true;
+    public fps: number = 30;
 
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
@@ -338,12 +344,11 @@ export class Scene implements Viewer.Scene {
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: number[] = [];
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT, isSkybox: boolean) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT) {
         this.gl = gl;
         this.bmd = bmd;
         this.btk = btk;
         this.bmt = bmt;
-        this.isSkybox = isSkybox;
 
         this.translateModel(this.bmd);
 
@@ -357,6 +362,25 @@ export class Scene implements Viewer.Scene {
 
     public setAlphaOverride(i: ColorOverride, alpha: number) {
         this.alphaOverrides[i] = alpha;
+    }
+
+    public setIsSkybox(v: boolean) {
+        this.isSkybox = v;
+    }
+
+    public setFPS(v: number) {
+        this.fps = v;
+    }
+
+    public setUseMaterialTexMtx(v: boolean) {
+        // Wind Waker's BTK animations seem to override the existing baked-in TexMtx.
+        // Super Mario Galaxy seems to stack them. I couldn't find any flag behavior for this,
+        // implying it's probably an engine change rather than separate BMD behavior.
+        this.useMaterialTexMtx = v;
+    }
+
+    public getTimeInFrames(milliseconds: number) {
+        return (milliseconds / 1000) * this.fps;
     }
 
     private translateTextureToCanvas(texture: TEX1_Texture): Viewer.Texture {

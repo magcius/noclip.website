@@ -34,6 +34,7 @@ export const enum TexMtxProjection {
 }
 
 export interface TexMtx {
+    type: number;
     projection: TexMtxProjection;
     matrix: mat3;
 }
