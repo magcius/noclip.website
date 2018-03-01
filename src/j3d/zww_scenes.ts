@@ -10,6 +10,14 @@ import { Scene, ColorOverride } from './render';
 
 import { Progressable } from '../progress';
 import { fetch, readString } from '../util';
+import { mat4 } from 'gl-matrix';
+
+class CameraPos {
+    constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
+    public set(m: mat4) {
+        mat4.lookAt(m, [this.x, this.y, this.z], [this.lx, this.ly, this.lz], [0, 1, 0]);
+    }
+}
 
 class WindWakerScene extends MultiScene {
     public roomIdx: number;
@@ -107,7 +115,7 @@ class WindWakerScene extends MultiScene {
         return { amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
     }
 
-    constructor(gl: WebGL2RenderingContext, roomIdx: number, stageRarc: RARC.RARC, roomRarc: RARC.RARC) {
+    constructor(gl: WebGL2RenderingContext, roomIdx: number, stageRarc: RARC.RARC, roomRarc: RARC.RARC, public cameraPos: CameraPos) {
         super([]);
 
         this.roomIdx = roomIdx;
@@ -202,9 +210,17 @@ class WindWakerScene extends MultiScene {
 
         return elem;
     }
+
+    public resetCamera(m: mat4) {
+        this.cameraPos.set(m);
+    }
 }
 
 class WindWakerSceneDesc extends RARCSceneDesc {
+    public constructor(path, name, public cameraPos: CameraPos) {
+        super(path, name);
+    }
+
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
 
@@ -214,17 +230,17 @@ class WindWakerSceneDesc extends RARCSceneDesc {
         ]).then(([stage, room]) => {
             const stageRarc = RARC.parse(Yaz0.decompress(stage));
             const roomRarc = RARC.parse(room);
-            return new WindWakerScene(gl, roomIdx, stageRarc, roomRarc);
+            return new WindWakerScene(gl, roomIdx, stageRarc, roomRarc, this.cameraPos);
         });
     }
 }
 
 const sceneDescs: Viewer.SceneDesc[] = [
-    new WindWakerSceneDesc("data/j3d/ww/sea/Room11.arc", "Windfall Island"),
-    new WindWakerSceneDesc("data/j3d/ww/sea/Room13.arc", "Dragon Roost Island"),
-    new WindWakerSceneDesc("data/j3d/ww/sea/Room41.arc", "Forest Haven"),
-    new WindWakerSceneDesc("data/j3d/ww/sea/Room44.arc", "Outset Island"),
-]
+    new WindWakerSceneDesc("data/j3d/ww/sea/Room11.arc", "Windfall Island",     new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
+    new WindWakerSceneDesc("data/j3d/ww/sea/Room13.arc", "Dragon Roost Island", new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
+    new WindWakerSceneDesc("data/j3d/ww/sea/Room41.arc", "Forest Haven",        new CameraPos(20000, 1760, -5500, 16000, 1000, 0)),
+    new WindWakerSceneDesc("data/j3d/ww/sea/Room44.arc", "Outset Island",       new CameraPos(6000, 6000, 6000, 0, 0, 20000)),
+];
 
 const id = "zww";
 const name = "The Legend of Zelda: The Wind Waker";

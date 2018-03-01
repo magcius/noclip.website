@@ -684,7 +684,7 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
     function clampRange(v, lim) {
         return clamp(v, -lim, lim);
     }
-    var render_1, gl_matrix_2, SceneGraph, InputManager, FPSCameraController, OrbitCameraController, Viewer;
+    var render_1, gl_matrix_2, InputManager, FPSCameraController, OrbitCameraController, Viewer;
     return {
         setters: [
             function (render_1_1) {
@@ -695,45 +695,6 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
             }
         ],
         execute: function () {
-            SceneGraph = /** @class */ (function () {
-                function SceneGraph(viewport) {
-                    this.scene = null;
-                    this.renderState = new render_1.RenderState(viewport);
-                    this.reset();
-                }
-                SceneGraph.prototype.reset = function () {
-                    var gl = this.renderState.gl;
-                    gl.activeTexture(gl.TEXTURE0);
-                    gl.clearColor(0.88, 0.88, 0.88, 1);
-                    this.renderState.setClipPlanes(0.2, 50000);
-                };
-                SceneGraph.prototype.render = function () {
-                    var gl = this.renderState.gl;
-                    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-                    this.renderState.useFlags(render_1.RenderFlags.default);
-                    if (!this.scene)
-                        return;
-                    var state = this.renderState;
-                    var scene = this.scene;
-                    for (var i = 0; i < 4 /* COUNT */; i++) {
-                        state.currentPass = i;
-                        if (scene.renderPasses.includes(state.currentPass))
-                            scene.render(state);
-                    }
-                };
-                SceneGraph.prototype.checkResize = function () {
-                    this.renderState.checkResize();
-                };
-                SceneGraph.prototype.setScene = function (scene) {
-                    if (this.scene)
-                        this.scene.destroy(this.renderState.gl);
-                    this.scene = scene;
-                };
-                SceneGraph.prototype.setCamera = function (camera) {
-                    this.renderState.setModelView(camera);
-                };
-                return SceneGraph;
-            }());
             InputManager = /** @class */ (function () {
                 function InputManager(toplevel) {
                     this.grabbing = false;
@@ -807,6 +768,9 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     this.camera = gl_matrix_2.mat4.create();
                     this.speed = 10;
                 }
+                FPSCameraController.prototype.setInitialCamera = function (camera) {
+                    gl_matrix_2.mat4.invert(this.camera, camera);
+                };
                 FPSCameraController.prototype.update = function (outCamera, inputManager, dt) {
                     var SHIFT = 16;
                     var tmp = this.tmp;
@@ -872,6 +836,9 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     this.txVel = 0;
                     this.tyVel = 0;
                 }
+                OrbitCameraController.prototype.setInitialCamera = function (camera) {
+                    // TODO(jstpierre)
+                };
                 OrbitCameraController.prototype.update = function (camera, inputManager, dt) {
                     // Get new velocities from inputs.
                     if (inputManager.button === 1) {
@@ -935,41 +902,71 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                 function Viewer(canvas) {
                     var gl = canvas.getContext("webgl2", { alpha: false });
                     var viewport = { canvas: canvas, gl: gl };
-                    this.sceneGraph = new SceneGraph(viewport);
+                    this.renderState = new render_1.RenderState(viewport);
+                    this.inputManager = new InputManager(this.renderState.viewport.canvas);
                     this.camera = gl_matrix_2.mat4.create();
-                    this.inputManager = new InputManager(this.sceneGraph.renderState.viewport.canvas);
                     this.cameraController = null;
                 }
-                Viewer.prototype.resetCamera = function () {
-                    gl_matrix_2.mat4.identity(this.camera);
+                Viewer.prototype.reset = function () {
+                    var gl = this.renderState.gl;
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.clearColor(0.88, 0.88, 0.88, 1);
+                    this.renderState.setClipPlanes(0.2, 50000);
+                };
+                Viewer.prototype.render = function () {
+                    var gl = this.renderState.gl;
+                    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+                    this.renderState.useFlags(render_1.RenderFlags.default);
+                    if (!this.scene)
+                        return;
+                    var state = this.renderState;
+                    var scene = this.scene;
+                    for (var i = 0; i < 4 /* COUNT */; i++) {
+                        state.currentPass = i;
+                        if (scene.renderPasses.includes(state.currentPass))
+                            scene.render(state);
+                    }
+                };
+                Viewer.prototype.checkResize = function () {
+                    this.renderState.checkResize();
                 };
                 Viewer.prototype.setScene = function (scene) {
-                    this.sceneGraph.reset();
+                    var gl = this.renderState.gl;
+                    this.reset();
+                    if (this.scene) {
+                        this.scene.destroy(gl);
+                    }
                     if (scene) {
-                        this.sceneGraph.setScene(scene);
+                        this.scene = scene;
+                        if (this.scene.resetCamera) {
+                            this.scene.resetCamera(this.camera);
+                        }
+                        else {
+                            gl_matrix_2.mat4.identity(this.camera);
+                        }
                         this.cameraController = new scene.cameraController();
+                        this.cameraController.setInitialCamera(this.camera);
                     }
                     else {
-                        this.sceneGraph.setScene(null);
+                        this.scene = null;
                     }
-                    this.resetCamera();
                 };
                 Viewer.prototype.start = function () {
                     var _this = this;
                     var camera = this.camera;
-                    var canvas = this.sceneGraph.renderState.viewport.canvas;
+                    var canvas = this.renderState.viewport.canvas;
                     var t = 0;
                     var update = function (nt) {
                         var dt = nt - t;
                         t = nt;
-                        _this.sceneGraph.checkResize();
+                        _this.checkResize();
                         if (_this.cameraController) {
                             _this.cameraController.update(camera, _this.inputManager, dt);
                         }
                         _this.inputManager.resetMouse();
-                        _this.sceneGraph.setCamera(camera);
-                        _this.sceneGraph.renderState.time += dt;
-                        _this.sceneGraph.render();
+                        _this.renderState.setModelView(camera);
+                        _this.renderState.time += dt;
+                        _this.render();
                         window.requestAnimationFrame(update);
                     };
                     update(0);
@@ -9960,10 +9957,10 @@ System.register("zelview/scenes", ["zelview/render"], function (exports_41, cont
         }
     };
 });
-System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_material", "j3d/scenes", "j3d/render", "progress", "util"], function (exports_42, context_42) {
+System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_material", "j3d/scenes", "j3d/render", "progress", "util", "gl-matrix"], function (exports_42, context_42) {
     "use strict";
     var __moduleName = context_42 && context_42.id;
-    var j3d_3, RARC, Yaz0, GX_Material, scenes_1, render_15, progress_5, util_19, WindWakerScene, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
+    var j3d_3, RARC, Yaz0, GX_Material, scenes_1, render_15, progress_5, util_19, gl_matrix_9, CameraPos, WindWakerScene, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
         setters: [
             function (j3d_3_1) {
@@ -9989,13 +9986,31 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
             },
             function (util_19_1) {
                 util_19 = util_19_1;
+            },
+            function (gl_matrix_9_1) {
+                gl_matrix_9 = gl_matrix_9_1;
             }
         ],
         execute: function () {
+            CameraPos = /** @class */ (function () {
+                function CameraPos(x, y, z, lx, ly, lz) {
+                    this.x = x;
+                    this.y = y;
+                    this.z = z;
+                    this.lx = lx;
+                    this.ly = ly;
+                    this.lz = lz;
+                }
+                CameraPos.prototype.set = function (m) {
+                    gl_matrix_9.mat4.lookAt(m, [this.x, this.y, this.z], [this.lx, this.ly, this.lz], [0, 1, 0]);
+                };
+                return CameraPos;
+            }());
             WindWakerScene = /** @class */ (function (_super) {
                 __extends(WindWakerScene, _super);
-                function WindWakerScene(gl, roomIdx, stageRarc, roomRarc) {
+                function WindWakerScene(gl, roomIdx, stageRarc, roomRarc, cameraPos) {
                     var _this = _super.call(this, []) || this;
+                    _this.cameraPos = cameraPos;
                     _this.roomIdx = roomIdx;
                     _this.stageRarc = stageRarc;
                     _this.roomRarc = roomRarc;
@@ -10137,14 +10152,20 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     elem.appendChild(this.timeOfDaySelect);
                     return elem;
                 };
+                WindWakerScene.prototype.resetCamera = function (m) {
+                    this.cameraPos.set(m);
+                };
                 return WindWakerScene;
             }(scenes_1.MultiScene));
             WindWakerSceneDesc = /** @class */ (function (_super) {
                 __extends(WindWakerSceneDesc, _super);
-                function WindWakerSceneDesc() {
-                    return _super !== null && _super.apply(this, arguments) || this;
+                function WindWakerSceneDesc(path, name, cameraPos) {
+                    var _this = _super.call(this, path, name) || this;
+                    _this.cameraPos = cameraPos;
+                    return _this;
                 }
                 WindWakerSceneDesc.prototype.createScene = function (gl) {
+                    var _this = this;
                     var roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
                     return progress_5.Progressable.all([
                         util_19.fetch("data/j3d/ww/sea/Stage.arc"),
@@ -10153,16 +10174,16 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                         var _b = __read(_a, 2), stage = _b[0], room = _b[1];
                         var stageRarc = RARC.parse(Yaz0.decompress(stage));
                         var roomRarc = RARC.parse(room);
-                        return new WindWakerScene(gl, roomIdx, stageRarc, roomRarc);
+                        return new WindWakerScene(gl, roomIdx, stageRarc, roomRarc, _this.cameraPos);
                     });
                 };
                 return WindWakerSceneDesc;
             }(scenes_1.RARCSceneDesc));
             sceneDescs = [
-                new WindWakerSceneDesc("data/j3d/ww/sea/Room11.arc", "Windfall Island"),
-                new WindWakerSceneDesc("data/j3d/ww/sea/Room13.arc", "Dragon Roost Island"),
-                new WindWakerSceneDesc("data/j3d/ww/sea/Room41.arc", "Forest Haven"),
-                new WindWakerSceneDesc("data/j3d/ww/sea/Room44.arc", "Outset Island"),
+                new WindWakerSceneDesc("data/j3d/ww/sea/Room11.arc", "Windfall Island", new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
+                new WindWakerSceneDesc("data/j3d/ww/sea/Room13.arc", "Dragon Roost Island", new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
+                new WindWakerSceneDesc("data/j3d/ww/sea/Room41.arc", "Forest Haven", new CameraPos(20000, 1760, -5500, 16000, 1000, 0)),
+                new WindWakerSceneDesc("data/j3d/ww/sea/Room44.arc", "Outset Island", new CameraPos(6000, 6000, 6000, 0, 0, 20000)),
             ];
             id = "zww";
             name = "The Legend of Zelda: The Wind Waker";
@@ -10422,7 +10443,7 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                         if (sceneOption.sceneDesc === sceneDesc)
                             this.sceneSelect.selectedIndex = i;
                     }
-                    var gl = this.viewer.sceneGraph.renderState.viewport.gl;
+                    var gl = this.viewer.renderState.viewport.gl;
                     var progressable = sceneDesc.createScene(gl);
                     this.viewer.setScene(null);
                     this.progressBar.set(progressable);
@@ -10641,7 +10662,7 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                     uiContainerR.appendChild(gearButton);
                     this.popupHelpPane = document.createElement('div');
                     this.popupHelpPane.style.padding = '2em';
-                    this.popupHelpPane.innerHTML = "\n<h1>Jasper's Model Viewer</h1>\n<h2>Created by <a href=\"http://github.com/magcius\">Jasper St. Pierre</a></h2>\n\n<p> Basic controls: Use WASD to move around, B to reset the camera, and Z to toggle the UI. </p>\n\n<p> Based on reverse engineering work by myself and a large collection of people. Special thanks to\n  <a href=\"https://twitter.com/LordNed\">LordNed</a>,\n  <a href=\"https://twitter.com/SageOfMirrors\">SageOfMirrors</a>,\n  <a href=\"https://twitter.com/StapleButter\">StapleButter</a>,\n  <a href=\"https://twitter.com/xdanieldzd\">xdanieldzd</a>,\n  <a href=\"https://twitter.com/Jewelots_\">Jewel</a>,\n  <a href=\"https://twitter.com/instant_grat\">Simon</a>,\n  and the rest of the Dolphin and Citra crews.\n</p>\n\n<p> All art belongs to the original creators. Nintendo's artists especially are fantastic.\n";
+                    this.popupHelpPane.innerHTML = "\n<h1>Jasper's Model Viewer</h1>\n<h2>Created by <a href=\"http://github.com/magcius\">Jasper St. Pierre</a></h2>\n\n<p> Basic controls: Use WASD to move around, B to reset the camera, and Z to toggle the UI. Hold\n Shift to go faster, twiddle the mouse wheel to go even faster than that. </p>\n\n<p> Based on reverse engineering work by myself and a large collection of people. Special thanks to\n  <a href=\"https://twitter.com/LordNed\">LordNed</a>,\n  <a href=\"https://twitter.com/SageOfMirrors\">SageOfMirrors</a>,\n  <a href=\"https://twitter.com/StapleButter\">StapleButter</a>,\n  <a href=\"https://twitter.com/xdanieldzd\">xdanieldzd</a>,\n  <a href=\"https://twitter.com/Jewelots_\">Jewel</a>,\n  <a href=\"https://twitter.com/instant_grat\">Simon</a>,\n  and the rest of the Dolphin and Citra crews.\n</p>\n\n<p> All art belongs to the original creators. Nintendo's artists especially are fantastic.\n";
                     var helpButton = document.createElement('button');
                     helpButton.style.width = '2em';
                     helpButton.style.height = '2em';
@@ -10666,7 +10687,7 @@ System.register("main", ["viewer", "fres/scenes", "j3d/scenes", "mdl0/scenes", "
                 Main.prototype._onFovSliderChange = function (e) {
                     var slider = e.target;
                     var value = this._getSliderT(slider);
-                    this.viewer.sceneGraph.renderState.fov = value * (Math.PI * 0.995);
+                    this.viewer.renderState.fov = value * (Math.PI * 0.995);
                 };
                 Main.prototype._onCameraControllerSelect = function (e) {
                     var index = this.cameraControllerSelect.selectedIndex;
