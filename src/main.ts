@@ -286,7 +286,7 @@ class Main {
                 this.sceneSelect.selectedIndex = i;
         }
 
-        const gl = this.viewer.sceneGraph.renderState.viewport.gl;
+        const gl = this.viewer.renderState.viewport.gl;
 
         const progressable = sceneDesc.createScene(gl);
         this.viewer.setScene(null);
@@ -526,7 +526,8 @@ class Main {
 <h1>Jasper's Model Viewer</h1>
 <h2>Created by <a href="http://github.com/magcius">Jasper St. Pierre</a></h2>
 
-<p> Basic controls: Use WASD to move around, B to reset the camera, and Z to toggle the UI. </p>
+<p> Basic controls: Use WASD to move around, B to reset the camera, and Z to toggle the UI. Hold
+ Shift to go faster, twiddle the mouse wheel to go even faster than that. </p>
 
 <p> Based on reverse engineering work by myself and a large collection of people. Special thanks to
   <a href="https://twitter.com/LordNed">LordNed</a>,
@@ -568,7 +569,7 @@ class Main {
     private _onFovSliderChange(e: UIEvent) {
         const slider = (<HTMLInputElement> e.target);
         const value = this._getSliderT(slider);
-        this.viewer.sceneGraph.renderState.fov = value * (Math.PI * 0.995);
+        this.viewer.renderState.fov = value * (Math.PI * 0.995);
     }
 
     private _onCameraControllerSelect(e: UIEvent) {

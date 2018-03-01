@@ -7,6 +7,7 @@ import { RenderState, RenderFlags, Viewport, RenderPass } from './render';
 import { mat4, vec3 } from 'gl-matrix';
 
 interface CameraController {
+    setInitialCamera(camera: mat4): void;
     update(camera: mat4, inputManager: InputManager, dt: number): void;
 }
 
@@ -23,54 +24,6 @@ export interface Scene {
     textures: Texture[];
     render(state: RenderState): void;
     destroy(gl: WebGL2RenderingContext): void;
-}
-
-class SceneGraph {
-    public renderState: RenderState;
-    public scene: Scene = null;
-
-    constructor(viewport: Viewport) {
-        this.renderState = new RenderState(viewport);
-        this.reset();
-    }
-
-    public reset() {
-        const gl = this.renderState.gl;
-        gl.activeTexture(gl.TEXTURE0);
-        gl.clearColor(0.88, 0.88, 0.88, 1);
-        this.renderState.setClipPlanes(0.2, 50000);
-    }
-
-    public render() {
-        const gl = this.renderState.gl;
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        this.renderState.useFlags(RenderFlags.default);
-
-        if (!this.scene)
-            return;
-
-        const state = this.renderState;
-        const scene = this.scene;
-        for (let i = 0; i < RenderPass.COUNT; i++) {
-            state.currentPass = i;
-            if (scene.renderPasses.includes(state.currentPass))
-                scene.render(state);
-        }
-    }
-
-    public checkResize() {
-        this.renderState.checkResize();
-    }
-
-    public setScene(scene: Scene) {
-        if (this.scene)
-            this.scene.destroy(this.renderState.gl);
-        this.scene = scene;
-    }
-
-    public setCamera(camera: mat4) {
-        this.renderState.setModelView(camera);
-    }
 }
 
 class InputManager {
@@ -168,6 +121,10 @@ export class FPSCameraController implements CameraController {
         this.speed = 10;
     }
 
+    public setInitialCamera(camera: mat4) {
+        mat4.invert(this.camera, camera);
+    }
+
     public update(outCamera: mat4, inputManager: InputManager, dt: number): void {
         const SHIFT = 16;
         const tmp = this.tmp;
@@ -248,6 +205,10 @@ export class OrbitCameraController implements CameraController {
     constructor() {
     }
 
+    public setInitialCamera(camera: mat4) {
+        // TODO(jstpierre)
+    }
+
     public update(camera: mat4, inputManager: InputManager, dt: number): void {
         // Get new velocities from inputs.
         if (inputManager.button === 1) {
@@ -319,46 +280,87 @@ export class OrbitCameraController implements CameraController {
 }
 
 export class Viewer {
-    public sceneGraph: SceneGraph;
     public camera: mat4;
     public inputManager: InputManager;
     public cameraController: CameraController;
+
+    public renderState: RenderState;
+    public scene: MainScene;
 
     constructor(canvas: HTMLCanvasElement) {
         const gl = canvas.getContext("webgl2", { alpha: false });
         const viewport = { canvas, gl };
 
-        this.sceneGraph = new SceneGraph(viewport);
+        this.renderState = new RenderState(viewport);
+
+        this.inputManager = new InputManager(this.renderState.viewport.canvas);
+
         this.camera = mat4.create();
-        this.inputManager = new InputManager(this.sceneGraph.renderState.viewport.canvas);
         this.cameraController = null;
     }
 
-    public resetCamera() {
-        mat4.identity(this.camera);
+    public reset() {
+        const gl = this.renderState.gl;
+        gl.activeTexture(gl.TEXTURE0);
+        gl.clearColor(0.88, 0.88, 0.88, 1);
+        this.renderState.setClipPlanes(0.2, 50000);
+    }
+
+    public render() {
+        const gl = this.renderState.gl;
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        this.renderState.useFlags(RenderFlags.default);
+
+        if (!this.scene)
+            return;
+
+        const state = this.renderState;
+        const scene = this.scene;
+        for (let i = 0; i < RenderPass.COUNT; i++) {
+            state.currentPass = i;
+            if (scene.renderPasses.includes(state.currentPass))
+                scene.render(state);
+        }
+    }
+
+    public checkResize() {
+        this.renderState.checkResize();
     }
 
     public setScene(scene: MainScene) {
-        this.sceneGraph.reset();
-        if (scene) {
-            this.sceneGraph.setScene(scene);
-            this.cameraController = new scene.cameraController();
-        } else {
-            this.sceneGraph.setScene(null);
+        const gl = this.renderState.gl;
+
+        this.reset();
+
+        if (this.scene) {
+            this.scene.destroy(gl);
         }
-        this.resetCamera();
+
+        if (scene) {
+            this.scene = scene;
+            if (this.scene.resetCamera) {
+                this.scene.resetCamera(this.camera);
+            } else {
+                mat4.identity(this.camera);
+            }
+
+            this.cameraController = new scene.cameraController();
+            this.cameraController.setInitialCamera(this.camera);
+        } else {
+            this.scene = null;
+        }
     }
 
     public start() {
         const camera = this.camera;
-        const canvas = this.sceneGraph.renderState.viewport.canvas;
+        const canvas = this.renderState.viewport.canvas;
 
         let t = 0;
         const update = (nt: number) => {
             const dt = nt - t;
             t = nt;
 
-            this.sceneGraph.checkResize();
+            this.checkResize();
 
             if (this.cameraController) {
                 this.cameraController.update(camera, this.inputManager, dt);
@@ -366,9 +368,9 @@ export class Viewer {
 
             this.inputManager.resetMouse();
 
-            this.sceneGraph.setCamera(camera);
-            this.sceneGraph.renderState.time += dt;
-            this.sceneGraph.render();
+            this.renderState.setModelView(camera);
+            this.renderState.time += dt;
+            this.render();
             window.requestAnimationFrame(update);
         };
         update(0);
@@ -377,6 +379,7 @@ export class Viewer {
 
 export interface MainScene extends Scene {
     cameraController: CameraControllerClass;
+    resetCamera?(m: mat4): void;
     createUI?(): HTMLElement;
 }
 
