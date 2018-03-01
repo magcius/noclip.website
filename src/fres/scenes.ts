@@ -35,7 +35,7 @@ class MultiScene implements Viewer.MainScene {
 
 export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer, isSkybox: boolean = false) {
     const fres = BFRES.parse(buffer);
-    return new Scene(gl, fres, isSkybox);
+    return new MultiScene([new Scene(gl, fres, isSkybox)]);
 }
 
 export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer, isSkybox: boolean = false) {
