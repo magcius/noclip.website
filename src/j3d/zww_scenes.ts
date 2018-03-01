@@ -121,7 +121,10 @@ class WindWakerScene extends MultiScene {
             const btkFile = rarc.findFile(`btk/${name}.btk`);
             const bdl = BMD.parse(bdlFile.buffer);
             const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
-            return new Scene(gl, bdl, btk, null, isSkybox);
+            const scene = new Scene(gl, bdl, btk, null);
+            scene.setIsSkybox(isSkybox);
+            scene.setUseMaterialTexMtx(false);
+            return scene;
         }
 
         const scenes = [];
@@ -188,7 +191,7 @@ class WindWakerScene extends MultiScene {
         this.timeOfDaySelect = document.createElement('select');
         this.timeOfDaySelect.onchange = this._onTimeOfDayChange.bind(this);
 
-        [ 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night', ].forEach((label) => {
+        [ 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ].forEach((label) => {
             const option = document.createElement('option');
             option.textContent = label;
             this.timeOfDaySelect.appendChild(option);

@@ -570,7 +570,7 @@ function createTexMtx(m: matrix3, scaleS: number, scaleT: number, rotation: numb
     matrix3.fromTranslation(c, [centerS, centerT, centerQ]);
     matrix3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
     matrix3.fromTranslation(m, [translationS, translationT, 0]);
-    matrix3.fromRotation(t, rotation);
+    matrix3.fromRotation(t, rotation * Math.PI);
     matrix3.mul(t, t, ci);
     matrix3.mul(t, c, t);
     matrix3.mul(m, m, t);
@@ -722,7 +722,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
             const matrix = matrix3.create();
             createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-            texMatrices[j] = { projection, matrix };
+            texMatrices[j] = { type, projection, matrix };
         }
 
         const colorConstants: GX_Material.Color[] = [];
@@ -1157,17 +1157,14 @@ export class BTK {
         return this.hermiteInterpolate(k0, k1, t);
     }
 
-    public applyAnimation(dst: matrix3, materialName: string, texMtxIndex: number, time: number): boolean {
-        const FPS = 30;
-
+    public calcAnimatedTexMtx(dst: matrix3, materialName: string, texMtxIndex: number, frame: number): boolean {
         const animationEntry = this.findAnimationEntry(materialName, texMtxIndex);
         if (!animationEntry)
             return false;
 
-        const duration = this.ttk1.duration;
-        const frame = time / FPS;
-        const normTime = frame / duration;
-        const animFrame = this.applyLoopMode(normTime, this.ttk1.loopMode) * duration;
+        const durationInFrames = this.ttk1.duration;
+        const normTime = frame / durationInFrames;
+        const animFrame = this.applyLoopMode(normTime, this.ttk1.loopMode) * durationInFrames;
 
         const centerS = animationEntry.centerS, centerT = animationEntry.centerT, centerQ = animationEntry.centerQ;
         const scaleS = this.sampleAnimationData(animationEntry.s.scale, animFrame);
@@ -1175,7 +1172,6 @@ export class BTK {
         const rotation = this.sampleAnimationData(animationEntry.s.rotation, animFrame) * this.ttk1.rotationScale;
         const translationS = this.sampleAnimationData(animationEntry.s.translation, animFrame);
         const translationT = this.sampleAnimationData(animationEntry.t.translation, animFrame);
-
         createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
         return true;
     }

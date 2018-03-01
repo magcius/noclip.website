@@ -86,7 +86,7 @@ class DroppedFileSceneDesc implements SceneDesc {
         return pr;
     }
 
-    private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBuffer) {
+    private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBuffer): MainScene {
         let scene;
         if (file.name.endsWith('.bfres'))
             return FRES.createSceneFromFRESBuffer(gl, buffer);
