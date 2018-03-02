@@ -1,6 +1,7 @@
 
 import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController, Texture } from 'viewer';
 
+import * as DKSIV from 'dksiv/scenes';
 import * as FRES from 'fres/scenes';
 import * as J3D from 'j3d/scenes';
 import * as MDL0 from 'mdl0/scenes';
@@ -165,6 +166,7 @@ class Main {
         this.groups.push(ZELVIEW.sceneGroup);
         this.groups.push(OOT3D.sceneGroup);
         this.groups.push(FRES.sceneGroup);
+        this.groups.push(DKSIV.sceneGroup);
 
         this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
         this.groups.push(this.droppedFileGroup);
@@ -536,6 +538,7 @@ class Main {
   <a href="https://twitter.com/xdanieldzd">xdanieldzd</a>,
   <a href="https://twitter.com/Jewelots_">Jewel</a>,
   <a href="https://twitter.com/instant_grat">Simon</a>,
+  <a href="https://github.com/vlad001">vlad001</a>,
   and the rest of the Dolphin and Citra crews.
 </p>
 

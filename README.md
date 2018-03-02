@@ -10,6 +10,7 @@ Currently, it supports:
  * The Legend of Zelda: Ocarina of Time 3DS (3DS remaster with brand new art)
  * Nintendo's BMD model format, as used by quite a few games.
  * Splatoon
+ * The Dark Souls Collision Data format
  
 Other tools I've written:
 

@@ -41,3 +41,8 @@ export function readString(buffer: ArrayBuffer, offs: number, length: number = -
     }
     return S;
 }
+
+let counter = 0;
+export function generateFormID() {
+    return `FormGeneratedID_${counter++}`;
+}
