@@ -198,10 +198,12 @@ class Scene implements Viewer.MainScene {
             const renderMesh = (mesh: ZELVIEW0.Mesh) => {
                 if (mesh.bg) {
                     state.useProgram(this.program_BG);
+                    state.bindModelView();
                     mesh.bg(state);
                 }
 
                 state.useProgram(this.program_DL);
+                state.bindModelView();
                 mesh.opaque.forEach(renderDL);
                 mesh.transparent.forEach(renderDL);
             };
@@ -248,6 +250,7 @@ class Scene implements Viewer.MainScene {
         return (state: RenderState) => {
             const prog = this.program_COLL;
             state.useProgram(prog);
+            state.bindModelView();
             state.useFlags(renderFlags);
             gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, collIdxBuffer);
