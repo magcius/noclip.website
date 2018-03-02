@@ -10810,6 +10810,7 @@ System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", 
                     var progressable = sceneDesc.createScene(gl);
                     this.viewer.setScene(null);
                     this.progressBar.set(progressable);
+                    this.sceneUIContainer.innerHTML = '';
                     progressable.promise.then(function (result) {
                         _this.progressBar.set(null);
                         _this.viewer.setScene(result);
