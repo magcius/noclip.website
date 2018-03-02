@@ -294,6 +294,8 @@ class Main {
         this.viewer.setScene(null);
         this.progressBar.set(progressable);
 
+        this.sceneUIContainer.innerHTML = '';
+
         progressable.promise.then((result: MainScene) => {
             this.progressBar.set(null);
             this.viewer.setScene(result);
