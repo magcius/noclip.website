@@ -9391,9 +9391,11 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                         var renderMesh = function (mesh) {
                             if (mesh.bg) {
                                 state.useProgram(_this.program_BG);
+                                state.bindModelView();
                                 mesh.bg(state);
                             }
                             state.useProgram(_this.program_DL);
+                            state.bindModelView();
                             mesh.opaque.forEach(renderDL);
                             mesh.transparent.forEach(renderDL);
                         };
@@ -9434,6 +9436,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                     return function (state) {
                         var prog = _this.program_COLL;
                         state.useProgram(prog);
+                        state.bindModelView();
                         state.useFlags(renderFlags);
                         gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
                         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, collIdxBuffer);
