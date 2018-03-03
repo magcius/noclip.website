@@ -160,11 +160,12 @@ export class RenderState {
     public time: number;
 
     public projection: mat4;
-    public modelView: mat4;
-    public skyboxModelView: mat4;
+    public view: mat4;
 
     public nearClipPlane: number;
     public farClipPlane: number;
+
+    private scratchMatrix: mat4;
 
     constructor(viewport: Viewport) {
         this.viewport = viewport;
@@ -173,17 +174,12 @@ export class RenderState {
         this.fov = Math.PI / 4;
 
         this.projection = mat4.create();
-        this.modelView = mat4.create();
-        this.skyboxModelView = mat4.create();
+        this.view = mat4.create();
+        this.scratchMatrix = mat4.create();
     }
 
-    public setModelView(m: mat4) {
-        mat4.copy(this.modelView, m);
-
-        mat4.copy(this.skyboxModelView, m);
-        this.skyboxModelView[12] = 0;
-        this.skyboxModelView[13] = 0;
-        this.skyboxModelView[14] = 0;
+    public setView(m: mat4) {
+        mat4.copy(this.view, m);
     }
 
     public checkResize() {
@@ -209,14 +205,23 @@ export class RenderState {
         gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
     }
 
-    public bindModelView(isSkybox: boolean = false) {
+    public bindModelView(isSkybox: boolean = false, model: mat4 = null) {
         const gl = this.gl;
         const prog = this.currentProgram;
 
-        if (isSkybox)
-            gl.uniformMatrix4fv(prog.modelViewLocation, false, this.skyboxModelView);
-        else
-            gl.uniformMatrix4fv(prog.modelViewLocation, false, this.modelView);
+        const scratch = this.scratchMatrix;
+
+        mat4.copy(scratch, this.view);
+        if (isSkybox) {
+            scratch[12] = 0;
+            scratch[13] = 0;
+            scratch[14] = 0;
+        }
+
+        if (model)
+            mat4.mul(scratch, model, scratch);
+
+        gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);
     }
 
     public useFlags(flags: RenderFlags) {

@@ -137,14 +137,12 @@ export const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
 export const scaledVtxAttributes: GX.VertexAttribute[] = vtxAttributeGenDefs.filter((a) => a.scale).map((a) => a.attrib);
 
 export class GX_Program extends Program {
-    public ub_SceneStatic: number;
-
     public u_PosMtx: WebGLUniformLocation;
     public u_TexMtx: WebGLUniformLocation;
     public u_Texture: WebGLUniformLocation;
     public u_TextureLODBias: WebGLUniformLocation;
     public u_KonstColor: WebGLUniformLocation;
-    public u_LocalPosMtx: WebGLUniformLocation;
+    public u_AttrScale: WebGLUniformLocation;
 
     private material: GXMaterial;
 
@@ -471,23 +469,18 @@ export class GX_Program extends Program {
     }
 
     private generateVertAttributeScaleBlock() {
-        const scaleCount = Math.ceil(scaledVtxAttributes.length / 4);
-        return `
-layout(std140) uniform ub_SceneStatic {
-    vec4 u_AttrScale[${scaleCount}];
-};`;
+        const scaleCount = scaledVtxAttributes.length;
+        return `uniform float u_AttrScale[${scaleCount}];`
     }
 
     private generateVertAttributeDefs() {
         return vtxAttributeGenDefs.map((a) => {
             const scaleIdx = scaledVtxAttributes.indexOf(a.attrib);
-            const scaleVecIdx = (scaleIdx / 4) | 0;
-            const scaleFltIdx = (scaleIdx % 4);
 
             return `
 layout(location = ${a.attrib}) in ${a.storage} a_${a.name};
 ${a.storage} ReadAttrib_${a.name}() {
-    return a_${a.name}${a.scale ? ` * u_AttrScale[${scaleVecIdx}][${scaleFltIdx}]` : ``};
+    return a_${a.name}${a.scale ? ` * u_AttrScale[${scaleIdx}]` : ``};
 }
 `;
         }).join('');
@@ -505,7 +498,6 @@ ${this.generateVertAttributeScaleBlock()}
 ${this.generateVertAttributeDefs()}
 uniform mat3 u_TexMtx[10];
 uniform mat4 u_PosMtx[10];
-uniform mat4 u_LocalPosMtx;
 
 out vec3 v_Position;
 out vec3 v_Normal;
@@ -522,7 +514,7 @@ out vec3 v_TexCoord7;
 
 void main() {
     mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];
-    vec4 t_Position = t_PosMtx * u_LocalPosMtx * vec4(ReadAttrib_Position(), 1.0);
+    vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);
     v_Position = t_Position.xyz;
     v_Normal = ReadAttrib_Normal();
     v_Color0 = ${this.generateColorChannel(this.material.colorChannels[0], `ReadAttrib_Color0()`)};
@@ -584,14 +576,12 @@ ${this.generateAlphaTest(alphaTest)}
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
-        this.ub_SceneStatic = gl.getUniformBlockIndex(prog, `ub_SceneStatic`);
-
         this.u_PosMtx = gl.getUniformLocation(prog, `u_PosMtx`);
         this.u_TexMtx = gl.getUniformLocation(prog, `u_TexMtx`);
         this.u_Texture = gl.getUniformLocation(prog, `u_Texture`);
         this.u_TextureLODBias = gl.getUniformLocation(prog, 'u_TextureLODBias');
         this.u_KonstColor = gl.getUniformLocation(prog, `u_KonstColor`);
-        this.u_LocalPosMtx = gl.getUniformLocation(prog, `u_LocalPosMtx`);
+        this.u_AttrScale = gl.getUniformLocation(prog, `u_AttrScale`);
     }
 }
 // #endregion

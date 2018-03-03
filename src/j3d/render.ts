@@ -108,7 +108,7 @@ class Command_Shape {
     }
 }
 
-class Command_Material {
+export class Command_Material {
     static matrixTableScratch = new Float32Array(9 * 10);
     static matrixScratch = mat3.create();
     static textureScratch = new Int32Array(8);
@@ -124,7 +124,6 @@ class Command_Material {
     private textures: WebGLTexture[] = [];
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
-    private localMatrix: mat4;
 
     constructor(gl: WebGL2RenderingContext, scene: Scene, material: GX_Material.GXMaterial) {
         this.scene = scene;
@@ -136,7 +135,6 @@ class Command_Material {
         this.renderFlags = GX_Material.translateRenderFlags(this.material);
 
         this.textures = this.translateTextures(gl);
-        this.localMatrix = mat4.create();
     }
 
     private translateTextures(gl: WebGL2RenderingContext): WebGLTexture[] {
@@ -219,7 +217,7 @@ class Command_Material {
         const gl = state.gl;
 
         state.useProgram(this.program);
-        state.bindModelView(this.scene.isSkybox);
+        state.bindModelView(this.scene.isSkybox, this.scene.modelMatrix);
         state.useFlags(this.renderFlags);
 
         // LOD Bias.
@@ -230,8 +228,7 @@ class Command_Material {
         const bias = Math.log2(Math.min(width / 640, height / 528));
         gl.uniform1f(this.program.u_TextureLODBias, bias);
 
-        // Bind our static scene data.
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, this.program.ub_SceneStatic, this.scene.uniformBufferSceneStatic);
+        gl.uniform1fv(this.program.u_AttrScale, this.scene.attrScaleData, 0, 0);
 
         // Bind our texture matrices.
         const matrixScratch = Command_Material.matrixScratch;
@@ -297,8 +294,6 @@ class Command_Material {
             colorScratch[i*4+3] = alpha;
         }
         gl.uniform4fv(this.program.u_KonstColor, colorScratch);
-
-        gl.uniformMatrix4fv(this.program.u_LocalPosMtx, false, this.localMatrix);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -322,7 +317,6 @@ export enum ColorOverride {
 export class Scene implements Viewer.Scene {
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
 
-    public gl: WebGL2RenderingContext;
     public textures: Viewer.Texture[];
     public bmd: BMD;
     public btk: BTK;
@@ -331,6 +325,13 @@ export class Scene implements Viewer.Scene {
     public useMaterialTexMtx: boolean = true;
     public fps: number = 30;
 
+    public modelMatrix: mat4;
+
+    public attrScaleData: Float32Array;
+
+    public colorOverrides: GX_Material.Color[] = [];
+    public alphaOverrides: number[] = [];
+
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
 
@@ -338,19 +339,14 @@ export class Scene implements Viewer.Scene {
     private shapeCommands: Command_Shape[];
     private jointMatrices: mat4[];
 
-    // Shared data
-    public uniformBufferSceneStatic: WebGLBuffer;
-
-    public colorOverrides: GX_Material.Color[] = [];
-    public alphaOverrides: number[] = [];
-
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT) {
-        this.gl = gl;
         this.bmd = bmd;
         this.btk = btk;
         this.bmt = bmt;
 
-        this.translateModel(this.bmd);
+        this.translateModel(gl, this.bmd);
+
+        this.modelMatrix = mat4.create();
 
         const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
         this.textures = tex1.textures.map((tex) => this.translateTextureToCanvas(tex));
@@ -445,20 +441,16 @@ export class Scene implements Viewer.Scene {
         }
     }
 
-    private translateModel(bmd: BMD) {
-        const gl = this.gl;
-
-        const attrScalesCount = (GX_Material.scaledVtxAttributes.length + 3) & ~3;
-        const attrScalesData = new Float32Array(attrScalesCount);
+    private translateModel(gl: WebGL2RenderingContext, bmd: BMD) {
+        const attrScaleCount = (GX_Material.scaledVtxAttributes.length + 3) & ~3;
+        const attrScaleData = new Float32Array(attrScaleCount);
         for (let i = 0; i < GX_Material.scaledVtxAttributes.length; i++) {
             const attrib = GX_Material.scaledVtxAttributes[i];
             const vtxArray = this.bmd.vtx1.vertexArrays.get(attrib);
             const scale = vtxArray !== undefined ? vtxArray.scale : 1;
-            attrScalesData[i] = scale;
+            attrScaleData[i] = scale;
         }
-        this.uniformBufferSceneStatic = gl.createBuffer();
-        gl.bindBuffer(gl.UNIFORM_BUFFER, this.uniformBufferSceneStatic);
-        gl.bufferData(gl.UNIFORM_BUFFER, attrScalesData, gl.STATIC_DRAW);
+        this.attrScaleData = attrScaleData;
 
         this.opaqueCommands = [];
         this.transparentCommands = [];
@@ -466,10 +458,11 @@ export class Scene implements Viewer.Scene {
 
         const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
         this.materialCommands = mat3.materialEntries.map((material) => {
-            return new Command_Material(this.gl, this, material);
+            const cmdMaterial = new Command_Material(gl, this, material);
+            return cmdMaterial;
         });
         this.shapeCommands = bmd.shp1.shapes.map((shape) => {
-            return new Command_Shape(this.gl, this.bmd, shape, this.jointMatrices);
+            return new Command_Shape(gl, this.bmd, shape, this.jointMatrices);
         });
 
         // Iterate through scene graph.
@@ -512,7 +505,6 @@ export class Scene implements Viewer.Scene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        gl.deleteBuffer(this.uniformBufferSceneStatic);
         this.materialCommands.forEach((command) => command.destroy(gl));
         this.shapeCommands.forEach((command) => command.destroy(gl));
     }
