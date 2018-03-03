@@ -845,8 +845,8 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                 OrbitCameraController.prototype.update = function (camera, inputManager, dt) {
                     // Get new velocities from inputs.
                     if (inputManager.button === 1) {
-                        this.txVel += inputManager.dx * 1;
-                        this.tyVel += inputManager.dy * -1;
+                        this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / 5000;
+                        this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) / -5000;
                     }
                     else {
                         this.xVel += inputManager.dx / 200;
