@@ -4,7 +4,7 @@ import { mat3, mat4 } from 'gl-matrix';
 import * as RARC from 'j3d/rarc';
 import * as Yaz0 from 'yaz0';
 
-import { BMD, BTK, BMT } from 'j3d/j3d';
+import { BMD, BTK, BMT, TEX1 } from 'j3d/j3d';
 import * as GX from 'j3d/gx_enum';
 import * as GX_Material from 'j3d/gx_material';
 
@@ -74,16 +74,64 @@ class SeaPlaneScene implements Scene {
     private seaCmd: Command_Material;
     private plane: PlaneShape;
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, configName: string) {
         this.bmd = bmd;
         this.btk = btk;
 
         this.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
-        const scene = this as any; // Play make-believe.
-        this.seaCmd = new Command_Material(gl, scene, seaMaterial);
+        this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
         this.plane = new PlaneShape(gl);
+    }
+
+    public makeMaterialCommand(gl: WebGL2RenderingContext, material: GX_Material.GXMaterial, configName: string) {
+        if (configName.includes('noalpha')) {
+            // Disable alpha test
+            material.alphaTest.compareA = GX.CompareType.ALWAYS;
+            material.alphaTest.op = GX.AlphaOp.OR;
+        }
+        
+        if (configName.includes('noblend')) {
+            // Disable blending.
+            material.tevStages[0].alphaInD = GX.CombineAlphaInput.KONST;
+            material.tevStages[1].alphaInD = GX.CombineAlphaInput.KONST;
+            material.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
+        }
+
+        if (configName.includes('opaque')) {
+            // Make it always opaque.
+            material.tevStages[0].colorInB = GX.CombineColorInput.TEXA;
+            material.tevStages[0].colorInC = GX.CombineColorInput.RASA;
+            material.tevStages[0].colorInD = GX.CombineColorInput.CPREV;
+            material.tevStages[0].colorScale = GX.TevScale.SCALE_1;
+            material.tevStages[1].colorInB = GX.CombineColorInput.TEXA;
+            material.tevStages[1].colorInC = GX.CombineColorInput.RASA;
+            material.tevStages[1].colorInD = GX.CombineColorInput.CPREV;
+            material.tevStages[1].colorScale = GX.TevScale.SCALE_1;
+
+            // Use one TEV stage.
+            if (configName.includes('layer0')) {
+                material.tevStages.length = 1;
+            } else if (configName.includes('layer1')) {
+                material.tevStages[0] = material.tevStages[1];
+                material.tevStages.length = 1;
+            }
+        }
+
+        const scene = this as any; // Play make-believe.
+        const cmd = new Command_Material(gl, scene, material);
+
+        if (configName.includes('nomip')) {
+            gl.bindTexture(gl.TEXTURE_2D, cmd.textures[0]);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, 1);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
+            gl.bindTexture(gl.TEXTURE_2D, cmd.textures[1]);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, 1);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
+        }
+
+        return cmd;
     }
 
     public render(renderState: RenderState) {
@@ -171,7 +219,7 @@ class PlaneShape {
     }
 }
 
-export function createScene(gl: WebGL2RenderingContext): Progressable<MainScene> {
+export function createScene(gl: WebGL2RenderingContext, name: string): Progressable<MainScene> {
     return fetch("data/j3d/dolpic0.szs").then((buffer: ArrayBuffer) => {
         buffer = Yaz0.decompress(buffer);
         const rarc = RARC.parse(buffer);
@@ -183,7 +231,7 @@ export function createScene(gl: WebGL2RenderingContext): Progressable<MainScene>
         const bmd = BMD.parse(bmdFile.buffer);
         const btk = BTK.parse(btkFile.buffer);
 
-        const seaScene = new SeaPlaneScene(gl, bmd, btk);
+        const seaScene = new SeaPlaneScene(gl, bmd, btk, name);
         return new MultiScene([
             new SunshineClearScene(),
             skyScene,

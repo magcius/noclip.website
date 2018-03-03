@@ -95,7 +95,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
                 createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true),
                 createSunshineSceneForBasename(gl, rarc, 'map/map/map', false),
                 createSunshineSceneForBasename(gl, rarc, 'map/map/sea', false),
-            ]);
+            ].filter((s) => !!s));
         });
     }
 }

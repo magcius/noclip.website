@@ -5789,7 +5789,7 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                             createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true),
                             createSunshineSceneForBasename(gl, rarc, 'map/map/map', false),
                             createSunshineSceneForBasename(gl, rarc, 'map/map/sea', false),
-                        ]);
+                        ].filter(function (s) { return !!s; }));
                     });
                 };
                 return SunshineSceneDesc;
@@ -11068,7 +11068,7 @@ System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", 
 System.register("embeds/main", ["viewer"], function (exports_47, context_47) {
     "use strict";
     var __moduleName = context_47 && context_47.id;
-    var Viewer, Main;
+    var Viewer, FsButton, Main;
     return {
         setters: [
             function (Viewer_7) {
@@ -11076,23 +11076,69 @@ System.register("embeds/main", ["viewer"], function (exports_47, context_47) {
             }
         ],
         execute: function () {
+            FsButton = /** @class */ (function () {
+                function FsButton() {
+                    var _this = this;
+                    this.hover = false;
+                    this.elem = document.createElement('div');
+                    this.elem.style.border = '1px solid rgba(255, 255, 255, 0.4)';
+                    this.elem.style.borderRadius = '4px';
+                    this.elem.style.color = 'white';
+                    this.elem.style.position = 'absolute';
+                    this.elem.style.bottom = '8px';
+                    this.elem.style.right = '8px';
+                    this.elem.style.width = '32px';
+                    this.elem.style.height = '32px';
+                    this.elem.style.font = '130% bold sans-serif';
+                    this.elem.style.textAlign = 'center';
+                    this.elem.style.cursor = 'pointer';
+                    this.elem.onmouseover = function () {
+                        _this.hover = true;
+                        _this.style();
+                    };
+                    this.elem.onmouseout = function () {
+                        _this.hover = false;
+                        _this.style();
+                    };
+                    this.elem.onclick = this.onClick.bind(this);
+                    document.addEventListener('fullscreenchange', this.style.bind(this));
+                    this.style();
+                }
+                FsButton.prototype.isFS = function () {
+                    return document.fullscreenElement === document.body;
+                };
+                FsButton.prototype.style = function () {
+                    this.elem.style.backgroundColor = this.hover ? 'rgba(50, 50, 50, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+                    this.elem.textContent = this.isFS() ? '🡼' : '🡾';
+                };
+                FsButton.prototype.onClick = function () {
+                    if (this.isFS())
+                        document.exitFullscreen();
+                    else
+                        document.body.requestFullscreen();
+                };
+                return FsButton;
+            }());
             Main = /** @class */ (function () {
                 function Main() {
                     this.canvas = document.createElement('canvas');
                     document.body.appendChild(this.canvas);
                     window.onresize = this.onResize.bind(this);
-                    this.onResize();
+                    this.fsButton = new FsButton();
+                    document.body.appendChild(this.fsButton.elem);
                     this.viewer = new Viewer.Viewer(this.canvas);
                     this.viewer.start();
                     // Dispatch to the main embed.
                     var hash = window.location.hash.slice(1);
+                    this.onResize();
                     this.loadScene(hash);
                 }
                 Main.prototype.loadScene = function (hash) {
                     var _this = this;
-                    System.import("embeds/" + hash).then(function (embedModule) {
+                    var _a = __read(hash.split('/'), 2), file = _a[0], name = _a[1];
+                    System.import("embeds/" + file).then(function (embedModule) {
                         var gl = _this.viewer.renderState.gl;
-                        embedModule.createScene(gl).then(function (scene) {
+                        embedModule.createScene(gl, name).then(function (scene) {
                             _this.viewer.setScene(scene);
                         });
                     });
@@ -11100,6 +11146,8 @@ System.register("embeds/main", ["viewer"], function (exports_47, context_47) {
                 Main.prototype.onResize = function () {
                     this.canvas.width = window.innerWidth;
                     this.canvas.height = window.innerHeight;
+                };
+                Main.prototype.onFsButtonClick = function () {
                 };
                 return Main;
             }());
@@ -11110,7 +11158,7 @@ System.register("embeds/main", ["viewer"], function (exports_47, context_47) {
 System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/j3d", "j3d/gx_enum", "j3d/gx_material", "viewer", "util", "j3d/render", "j3d/scenes"], function (exports_48, context_48) {
     "use strict";
     var __moduleName = context_48 && context_48.id;
-    function createScene(gl) {
+    function createScene(gl, name) {
         return util_21.fetch("data/j3d/dolpic0.szs").then(function (buffer) {
             buffer = Yaz0.decompress(buffer);
             var rarc = RARC.parse(buffer);
@@ -11119,7 +11167,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/
             var btkFile = rarc.findFile('map/map/sea.btk');
             var bmd = j3d_4.BMD.parse(bmdFile.buffer);
             var btk = j3d_4.BTK.parse(btkFile.buffer);
-            var seaScene = new SeaPlaneScene(gl, bmd, btk);
+            var seaScene = new SeaPlaneScene(gl, bmd, btk, name);
             return new MultiScene([
                 new scenes_2.SunshineClearScene(),
                 skyScene,
@@ -11207,7 +11255,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/
                 return MultiScene;
             }());
             SeaPlaneScene = /** @class */ (function () {
-                function SeaPlaneScene(gl, bmd, btk) {
+                function SeaPlaneScene(gl, bmd, btk, configName) {
                     this.renderPasses = [3 /* TRANSPARENT */];
                     this.textures = [];
                     this.animationScale = 5;
@@ -11222,10 +11270,52 @@ System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/
                     this.btk = btk;
                     this.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(function () { return 1; }));
                     var seaMaterial = bmd.mat3.materialEntries.find(function (m) { return m.name === '_umi'; });
-                    var scene = this; // Play make-believe.
-                    this.seaCmd = new render_18.Command_Material(gl, scene, seaMaterial);
+                    this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
                     this.plane = new PlaneShape(gl);
                 }
+                SeaPlaneScene.prototype.makeMaterialCommand = function (gl, material, configName) {
+                    if (configName.includes('noalpha')) {
+                        // Disable alpha test
+                        material.alphaTest.compareA = 7 /* ALWAYS */;
+                        material.alphaTest.op = 1 /* OR */;
+                    }
+                    if (configName.includes('noblend')) {
+                        // Disable blending.
+                        material.tevStages[0].alphaInD = 6 /* KONST */;
+                        material.tevStages[1].alphaInD = 6 /* KONST */;
+                        material.ropInfo.blendMode.dstFactor = 5 /* INVSRCALPHA */;
+                    }
+                    if (configName.includes('opaque')) {
+                        // Make it always opaque.
+                        material.tevStages[0].colorInB = 9 /* TEXA */;
+                        material.tevStages[0].colorInC = 11 /* RASA */;
+                        material.tevStages[0].colorInD = 0 /* CPREV */;
+                        material.tevStages[0].colorScale = 0 /* SCALE_1 */;
+                        material.tevStages[1].colorInB = 9 /* TEXA */;
+                        material.tevStages[1].colorInC = 11 /* RASA */;
+                        material.tevStages[1].colorInD = 0 /* CPREV */;
+                        material.tevStages[1].colorScale = 0 /* SCALE_1 */;
+                        // Use one TEV stage.
+                        if (configName.includes('layer0')) {
+                            material.tevStages.length = 1;
+                        }
+                        else if (configName.includes('layer1')) {
+                            material.tevStages[0] = material.tevStages[1];
+                            material.tevStages.length = 1;
+                        }
+                    }
+                    var scene = this; // Play make-believe.
+                    var cmd = new render_18.Command_Material(gl, scene, material);
+                    if (configName.includes('nomip')) {
+                        gl.bindTexture(gl.TEXTURE_2D, cmd.textures[0]);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, 1);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
+                        gl.bindTexture(gl.TEXTURE_2D, cmd.textures[1]);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, 1);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
+                    }
+                    return cmd;
+                };
                 SeaPlaneScene.prototype.render = function (renderState) {
                     this.seaCmd.exec(renderState);
                     this.plane.render(renderState);
