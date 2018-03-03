@@ -5,6 +5,7 @@
     "gl-matrix": "^2.4.0"
   },
   "dependencies": {
+    "@types/systemjs": "^0.20.6",
     "@types/webgl2": "0.0.2"
   }
 }

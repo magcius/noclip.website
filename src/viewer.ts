@@ -368,7 +368,7 @@ export class Viewer {
 
             this.inputManager.resetMouse();
 
-            this.renderState.setModelView(camera);
+            this.renderState.setView(camera);
             this.renderState.time += dt;
             this.render();
             window.requestAnimationFrame(update);

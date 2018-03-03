@@ -50,7 +50,7 @@ function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile
     return new Scene(gl, bmd, btk, bmt);
 }
 
-class SunshineClearScene implements Viewer.Scene {
+export class SunshineClearScene implements Viewer.Scene {
     public textures = [];
     public renderPasses = [ RenderPass.CLEAR ];
 
@@ -64,7 +64,19 @@ class SunshineClearScene implements Viewer.Scene {
     }
 }
 
-class SunshineSceneDesc implements Viewer.SceneDesc {
+export function createSunshineSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, fn: string, isSkybox: boolean) {
+    const bmdFile = rarc.findFile(`${fn}.bmd`);
+    if (!bmdFile)
+        return null;
+    const btkFile = rarc.findFile(`${fn}.btk`);
+    const bmtFile = rarc.findFile(`${fn}.bmt`);
+    const scene = createScene(gl, bmdFile, btkFile, bmtFile);
+    scene.setIsSkybox(isSkybox);
+    scene.setUseMaterialTexMtx(false);
+    return scene;
+}
+
+export class SunshineSceneDesc implements Viewer.SceneDesc {
     public name: string;
     public path: string;
     public id: string;
@@ -80,23 +92,11 @@ class SunshineSceneDesc implements Viewer.SceneDesc {
             const rarc = RARC.parse(Yaz0.decompress(result));
             return new MultiScene([
                 new SunshineClearScene(),
-                this.createSceneForBasename(gl, rarc, 'map/map/sky', true),
-                this.createSceneForBasename(gl, rarc, 'map/map/map', false),
-                this.createSceneForBasename(gl, rarc, 'map/map/sea', false),
+                createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true),
+                createSunshineSceneForBasename(gl, rarc, 'map/map/map', false),
+                createSunshineSceneForBasename(gl, rarc, 'map/map/sea', false),
             ]);
         });
-    }
-
-    private createSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, fn: string, isSkybox: boolean) {
-        const bmdFile = rarc.findFile(`${fn}.bmd`);
-        if (!bmdFile)
-            return null;
-        const btkFile = rarc.findFile(`${fn}.btk`);
-        const bmtFile = rarc.findFile(`${fn}.bmt`);
-        const scene = createScene(gl, bmdFile, btkFile, bmtFile);
-        scene.setIsSkybox(isSkybox);
-        scene.setUseMaterialTexMtx(false);
-        return scene;
     }
 }
 
