@@ -342,19 +342,19 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
         ],
         execute: function () {
             (function (CompareMode) {
-                CompareMode[CompareMode["NEVER"] = WebGL2RenderingContext.NEVER] = "NEVER";
-                CompareMode[CompareMode["LESS"] = WebGL2RenderingContext.LESS] = "LESS";
-                CompareMode[CompareMode["EQUAL"] = WebGL2RenderingContext.EQUAL] = "EQUAL";
-                CompareMode[CompareMode["LEQUAL"] = WebGL2RenderingContext.LEQUAL] = "LEQUAL";
-                CompareMode[CompareMode["GREATER"] = WebGL2RenderingContext.GREATER] = "GREATER";
-                CompareMode[CompareMode["NEQUAL"] = WebGL2RenderingContext.NOTEQUAL] = "NEQUAL";
-                CompareMode[CompareMode["GEQUAL"] = WebGL2RenderingContext.GEQUAL] = "GEQUAL";
-                CompareMode[CompareMode["ALWAYS"] = WebGL2RenderingContext.ALWAYS] = "ALWAYS";
+                CompareMode[CompareMode["NEVER"] = WebGLRenderingContext.NEVER] = "NEVER";
+                CompareMode[CompareMode["LESS"] = WebGLRenderingContext.LESS] = "LESS";
+                CompareMode[CompareMode["EQUAL"] = WebGLRenderingContext.EQUAL] = "EQUAL";
+                CompareMode[CompareMode["LEQUAL"] = WebGLRenderingContext.LEQUAL] = "LEQUAL";
+                CompareMode[CompareMode["GREATER"] = WebGLRenderingContext.GREATER] = "GREATER";
+                CompareMode[CompareMode["NEQUAL"] = WebGLRenderingContext.NOTEQUAL] = "NEQUAL";
+                CompareMode[CompareMode["GEQUAL"] = WebGLRenderingContext.GEQUAL] = "GEQUAL";
+                CompareMode[CompareMode["ALWAYS"] = WebGLRenderingContext.ALWAYS] = "ALWAYS";
             })(CompareMode || (CompareMode = {}));
             exports_4("CompareMode", CompareMode);
             (function (FrontFaceMode) {
-                FrontFaceMode[FrontFaceMode["CCW"] = WebGL2RenderingContext.CCW] = "CCW";
-                FrontFaceMode[FrontFaceMode["CW"] = WebGL2RenderingContext.CW] = "CW";
+                FrontFaceMode[FrontFaceMode["CCW"] = WebGLRenderingContext.CCW] = "CCW";
+                FrontFaceMode[FrontFaceMode["CW"] = WebGLRenderingContext.CW] = "CW";
             })(FrontFaceMode || (FrontFaceMode = {}));
             exports_4("FrontFaceMode", FrontFaceMode);
             (function (CullMode) {
@@ -365,23 +365,23 @@ System.register("render", ["gl-matrix"], function (exports_4, context_4) {
             })(CullMode || (CullMode = {}));
             exports_4("CullMode", CullMode);
             (function (BlendFactor) {
-                BlendFactor[BlendFactor["ZERO"] = WebGL2RenderingContext.ZERO] = "ZERO";
-                BlendFactor[BlendFactor["ONE"] = WebGL2RenderingContext.ONE] = "ONE";
-                BlendFactor[BlendFactor["SRC_COLOR"] = WebGL2RenderingContext.SRC_COLOR] = "SRC_COLOR";
-                BlendFactor[BlendFactor["ONE_MINUS_SRC_COLOR"] = WebGL2RenderingContext.ONE_MINUS_SRC_COLOR] = "ONE_MINUS_SRC_COLOR";
-                BlendFactor[BlendFactor["DST_COLOR"] = WebGL2RenderingContext.DST_COLOR] = "DST_COLOR";
-                BlendFactor[BlendFactor["ONE_MINUS_DST_COLOR"] = WebGL2RenderingContext.ONE_MINUS_DST_COLOR] = "ONE_MINUS_DST_COLOR";
-                BlendFactor[BlendFactor["SRC_ALPHA"] = WebGL2RenderingContext.SRC_ALPHA] = "SRC_ALPHA";
-                BlendFactor[BlendFactor["ONE_MINUS_SRC_ALPHA"] = WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA] = "ONE_MINUS_SRC_ALPHA";
-                BlendFactor[BlendFactor["DST_ALPHA"] = WebGL2RenderingContext.DST_ALPHA] = "DST_ALPHA";
-                BlendFactor[BlendFactor["ONE_MINUS_DST_ALPHA"] = WebGL2RenderingContext.ONE_MINUS_DST_ALPHA] = "ONE_MINUS_DST_ALPHA";
+                BlendFactor[BlendFactor["ZERO"] = WebGLRenderingContext.ZERO] = "ZERO";
+                BlendFactor[BlendFactor["ONE"] = WebGLRenderingContext.ONE] = "ONE";
+                BlendFactor[BlendFactor["SRC_COLOR"] = WebGLRenderingContext.SRC_COLOR] = "SRC_COLOR";
+                BlendFactor[BlendFactor["ONE_MINUS_SRC_COLOR"] = WebGLRenderingContext.ONE_MINUS_SRC_COLOR] = "ONE_MINUS_SRC_COLOR";
+                BlendFactor[BlendFactor["DST_COLOR"] = WebGLRenderingContext.DST_COLOR] = "DST_COLOR";
+                BlendFactor[BlendFactor["ONE_MINUS_DST_COLOR"] = WebGLRenderingContext.ONE_MINUS_DST_COLOR] = "ONE_MINUS_DST_COLOR";
+                BlendFactor[BlendFactor["SRC_ALPHA"] = WebGLRenderingContext.SRC_ALPHA] = "SRC_ALPHA";
+                BlendFactor[BlendFactor["ONE_MINUS_SRC_ALPHA"] = WebGLRenderingContext.ONE_MINUS_SRC_ALPHA] = "ONE_MINUS_SRC_ALPHA";
+                BlendFactor[BlendFactor["DST_ALPHA"] = WebGLRenderingContext.DST_ALPHA] = "DST_ALPHA";
+                BlendFactor[BlendFactor["ONE_MINUS_DST_ALPHA"] = WebGLRenderingContext.ONE_MINUS_DST_ALPHA] = "ONE_MINUS_DST_ALPHA";
             })(BlendFactor || (BlendFactor = {}));
             exports_4("BlendFactor", BlendFactor);
             (function (BlendMode) {
                 BlendMode[BlendMode["NONE"] = 0] = "NONE";
-                BlendMode[BlendMode["ADD"] = WebGL2RenderingContext.FUNC_ADD] = "ADD";
-                BlendMode[BlendMode["SUBTRACT"] = WebGL2RenderingContext.FUNC_SUBTRACT] = "SUBTRACT";
-                BlendMode[BlendMode["REVERSE_SUBTRACT"] = WebGL2RenderingContext.FUNC_REVERSE_SUBTRACT] = "REVERSE_SUBTRACT";
+                BlendMode[BlendMode["ADD"] = WebGLRenderingContext.FUNC_ADD] = "ADD";
+                BlendMode[BlendMode["SUBTRACT"] = WebGLRenderingContext.FUNC_SUBTRACT] = "SUBTRACT";
+                BlendMode[BlendMode["REVERSE_SUBTRACT"] = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT] = "REVERSE_SUBTRACT";
             })(BlendMode || (BlendMode = {}));
             exports_4("BlendMode", BlendMode);
             RenderFlags = /** @class */ (function () {
