@@ -121,7 +121,7 @@ export class Command_Material {
     public bmt: BMT;
     public material: GX_Material.GXMaterial;
 
-    private textures: WebGLTexture[] = [];
+    public textures: WebGLTexture[] = [];
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
 
