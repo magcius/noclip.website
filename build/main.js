@@ -705,7 +705,7 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     this.keysDown = new Map();
                     window.addEventListener('keydown', this._onKeyDown.bind(this));
                     window.addEventListener('keyup', this._onKeyUp.bind(this));
-                    window.addEventListener('wheel', this._onWheel.bind(this), { passive: true });
+                    window.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
                     this.resetMouse();
                     this.toplevel.addEventListener('mousedown', this._onMouseDown.bind(this));
                     this.toplevel.addEventListener('mouseup', this._onMouseUp.bind(this));
@@ -732,6 +732,7 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_5, context_
                     this.keysDown.delete(e.keyCode);
                 };
                 InputManager.prototype._onWheel = function (e) {
+                    e.preventDefault();
                     this.dz += Math.sign(e.deltaY) * -4;
                 };
                 InputManager.prototype._setGrabbing = function (v) {

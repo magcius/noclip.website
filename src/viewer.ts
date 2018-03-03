@@ -43,7 +43,7 @@ class InputManager {
         this.keysDown = new Map<number, boolean>();
         window.addEventListener('keydown', this._onKeyDown.bind(this));
         window.addEventListener('keyup', this._onKeyUp.bind(this));
-        window.addEventListener('wheel', this._onWheel.bind(this), { passive: true });
+        window.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
 
         this.resetMouse();
 
@@ -75,6 +75,7 @@ class InputManager {
     }
 
     private _onWheel(e: WheelEvent) {
+        e.preventDefault();
         this.dz += Math.sign(e.deltaY) * -4;
     }
 
