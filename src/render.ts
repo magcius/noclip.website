@@ -10,19 +10,19 @@ export const enum RenderPass {
 }
 
 export enum CompareMode {
-    NEVER   = WebGL2RenderingContext.NEVER,
-    LESS    = WebGL2RenderingContext.LESS,
-    EQUAL   = WebGL2RenderingContext.EQUAL,
-    LEQUAL  = WebGL2RenderingContext.LEQUAL,
-    GREATER = WebGL2RenderingContext.GREATER,
-    NEQUAL  = WebGL2RenderingContext.NOTEQUAL,
-    GEQUAL  = WebGL2RenderingContext.GEQUAL,
-    ALWAYS  = WebGL2RenderingContext.ALWAYS,
+    NEVER   = WebGLRenderingContext.NEVER,
+    LESS    = WebGLRenderingContext.LESS,
+    EQUAL   = WebGLRenderingContext.EQUAL,
+    LEQUAL  = WebGLRenderingContext.LEQUAL,
+    GREATER = WebGLRenderingContext.GREATER,
+    NEQUAL  = WebGLRenderingContext.NOTEQUAL,
+    GEQUAL  = WebGLRenderingContext.GEQUAL,
+    ALWAYS  = WebGLRenderingContext.ALWAYS,
 }
 
 export enum FrontFaceMode {
-    CCW = WebGL2RenderingContext.CCW,
-    CW  = WebGL2RenderingContext.CW,
+    CCW = WebGLRenderingContext.CCW,
+    CW  = WebGLRenderingContext.CW,
 }
 
 export enum CullMode {
@@ -33,23 +33,23 @@ export enum CullMode {
 }
 
 export enum BlendFactor {
-    ZERO                = WebGL2RenderingContext.ZERO,
-    ONE                 = WebGL2RenderingContext.ONE,
-    SRC_COLOR           = WebGL2RenderingContext.SRC_COLOR,
-    ONE_MINUS_SRC_COLOR = WebGL2RenderingContext.ONE_MINUS_SRC_COLOR,
-    DST_COLOR           = WebGL2RenderingContext.DST_COLOR,
-    ONE_MINUS_DST_COLOR = WebGL2RenderingContext.ONE_MINUS_DST_COLOR,
-    SRC_ALPHA           = WebGL2RenderingContext.SRC_ALPHA,
-    ONE_MINUS_SRC_ALPHA = WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
-    DST_ALPHA           = WebGL2RenderingContext.DST_ALPHA,
-    ONE_MINUS_DST_ALPHA = WebGL2RenderingContext.ONE_MINUS_DST_ALPHA,
+    ZERO                = WebGLRenderingContext.ZERO,
+    ONE                 = WebGLRenderingContext.ONE,
+    SRC_COLOR           = WebGLRenderingContext.SRC_COLOR,
+    ONE_MINUS_SRC_COLOR = WebGLRenderingContext.ONE_MINUS_SRC_COLOR,
+    DST_COLOR           = WebGLRenderingContext.DST_COLOR,
+    ONE_MINUS_DST_COLOR = WebGLRenderingContext.ONE_MINUS_DST_COLOR,
+    SRC_ALPHA           = WebGLRenderingContext.SRC_ALPHA,
+    ONE_MINUS_SRC_ALPHA = WebGLRenderingContext.ONE_MINUS_SRC_ALPHA,
+    DST_ALPHA           = WebGLRenderingContext.DST_ALPHA,
+    ONE_MINUS_DST_ALPHA = WebGLRenderingContext.ONE_MINUS_DST_ALPHA,
 }
 
 export enum BlendMode {
     NONE             = 0,
-    ADD              = WebGL2RenderingContext.FUNC_ADD,
-    SUBTRACT         = WebGL2RenderingContext.FUNC_SUBTRACT,
-    REVERSE_SUBTRACT = WebGL2RenderingContext.FUNC_REVERSE_SUBTRACT,
+    ADD              = WebGLRenderingContext.FUNC_ADD,
+    SUBTRACT         = WebGLRenderingContext.FUNC_SUBTRACT,
+    REVERSE_SUBTRACT = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
 }
 
 export class RenderFlags {
