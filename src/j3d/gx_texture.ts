@@ -49,6 +49,25 @@ function s3tcblend(a: number, b: number): number {
     return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
 }
 
+export function calcPaletteSize(format: GX.TexFormat, palette: GX.TexPalette) {
+    let paletteSize = 0;
+
+    switch (format) {
+    case GX.TexFormat.C4:
+        paletteSize = 16;
+        break;
+    case GX.TexFormat.C8:
+        paletteSize = 256;
+        break;
+    case GX.TexFormat.C14X2:
+    default:
+        throw "whoops";
+    }
+
+    // All palette-formats are 16-bit.
+    return paletteSize * 2;
+}
+
 export function calcTextureSize(format: GX.TexFormat, width: number, height: number) {
     const numPixels = width * height;
     switch (format) {
@@ -60,6 +79,10 @@ export function calcTextureSize(format: GX.TexFormat, width: number, height: num
         return numPixels;
     case GX.TexFormat.IA8:
         return numPixels * 2;
+    case GX.TexFormat.C4:
+        return numPixels / 2;
+    case GX.TexFormat.C8:
+        return numPixels;
     case GX.TexFormat.RGB565:
         return numPixels * 2;
     case GX.TexFormat.RGB5A3:
@@ -71,6 +94,16 @@ export function calcTextureSize(format: GX.TexFormat, width: number, height: num
     default:
         throw "whoops";
     }
+}
+
+export function calcFullTextureSize(format: GX.TexFormat, width: number, height: number, mipCount: number) {
+    let textureSize = 0;
+    while (mipCount--) {
+        textureSize += calcTextureSize(format, width, height);
+        width /= 2;
+        height /= 2;
+    }
+    return textureSize;
 }
 
 // GX's CMPR format is S3TC but using GX's tiled addressing.
@@ -343,9 +376,9 @@ export function decodeTexture(texture: Texture, supportsS3TC: boolean): DecodedT
         return decode_IA4(texture);
     case GX.TexFormat.IA8:
         return decode_IA8(texture);
-    case GX.TexFormat.CI4:
-    case GX.TexFormat.CI8:
-    case GX.TexFormat.CI14:
+    case GX.TexFormat.C4:
+    case GX.TexFormat.C8:
+    case GX.TexFormat.C14X2:
     default:
         throw new Error(`Unsupported texture format ${texture.format}`);
     }

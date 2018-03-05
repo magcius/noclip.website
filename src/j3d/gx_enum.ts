@@ -2,6 +2,7 @@
 // GX constants. Mostly taken from libogc.
 
 export const enum PrimitiveType {
+    TRIANGLES = 0x90,
     TRIANGLESTRIP = 0x98,
     TRIANGLEFAN = 0xA0,
 }
@@ -234,9 +235,9 @@ export const enum TexFormat {
     RGB565 = 0x4,
     RGB5A3 = 0x5,
     RGBA8 = 0x6,
-    CI4 = 0x8,
-    CI8 = 0x9,
-    CI14 = 0xa,
+    C4 = 0x8,
+    C8 = 0x9,
+    C14X2 = 0xa,
     CMPR = 0xE, /*!< Compressed */
 }
 
@@ -346,4 +347,15 @@ export const enum ColorChannelId {
     COLOR_ZERO = 6,
     ALPHA_BUMP = 7,
     ALPHA_BUMP_N = 8,
+}
+
+export const enum VtxFmt {
+    VTXFMT0 = 0,
+    VTXFMT1 = 1,
+    VTXFMT2 = 2,
+    VTXFMT3 = 3,
+    VTXFMT4 = 4,
+    VTXFMT5 = 5,
+    VTXFMT6 = 6,
+    VTXFMT7 = 7,
 }

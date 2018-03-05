@@ -558,9 +558,30 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     bmd.shp1 = shp1;
 }
 
+export const enum TexMtxProjection {
+    ST = 0,
+    STQ = 1,
+}
+
+export interface TexMtx {
+    type: number;
+    projection: TexMtxProjection;
+    matrix: matrix3;
+}
+
+export interface MaterialEntry {
+    index: number;
+    name: string;
+    translucent: boolean;
+    textureIndexes: number[];
+    gxMaterial: GX_Material.GXMaterial;
+    texMatrices: TexMtx[];
+    colorMatRegs: GX_Material.Color[];
+}
+
 export interface MAT3 {
     remapTable: number[];
-    materialEntries: GX_Material.GXMaterial[];
+    materialEntries: MaterialEntry[];
 }
 
 // temp, center, center inverse
@@ -625,7 +646,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const blendModeTableOffs = view.getUint32(0x70);
     const depthModeTableOffs = view.getUint32(0x74);
 
-    const materialEntries: GX_Material.GXMaterial[] = [];
+    const materialEntries: MaterialEntry[] = [];
     let materialEntryIdx = view.getUint32(0x0C);
     for (let i = 0; i <= maxIndex; i++) {
         const index = i;
@@ -640,6 +661,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         // unk
 
         const colorChannels: GX_Material.ColorChannelControl[] = [];
+        const colorMatRegs: GX_Material.Color[] = [null, null];
         for (let j = 0; j < 2; j++) {
             const colorChanIndex = view.getInt16(materialEntryIdx + 0x0C + j * 0x02);
             if (colorChanIndex < 0)
@@ -655,7 +677,8 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
             const matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
             const matColorReg = readColor32(view, matColorOffs);
-            const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, matColorReg, ambColorSource };
+            colorMatRegs[j] = matColorReg;
+            const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, ambColorSource };
             colorChannels.push(colorChan);
         }
 
@@ -673,7 +696,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             texGens.push(texGen);
         }
 
-        const texMatrices: GX_Material.TexMtx[] = [];
+        const texMatrices: TexMtx[] = [];
         for (let j = 0; j < 10; j++) {
             texMatrices[j] = null;
 
@@ -682,7 +705,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
                 continue;
 
             const texMtxOffs = texMtxTableOffs + texMtxIndex * 0x64;
-            const projection: GX_Material.TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
+            const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
             const type = view.getUint8(texMtxOffs + 0x01);
             assert(view.getUint16(texMtxOffs + 0x02) == 0xFFFF);
             const centerS = view.getFloat32(texMtxOffs + 0x04);
@@ -834,10 +857,8 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const ropInfo: GX_Material.RopInfo = { blendMode, depthTest, depthFunc, depthWrite };
         const translucent = !(flags & 0x03);
 
-        materialEntries.push({
+        const gxMaterial: GX_Material.GXMaterial = {
             index, name,
-            translucent,
-            textureIndexes,
             cullMode,
             colorChannels,
             texGens,
@@ -846,7 +867,15 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             tevStages,
             alphaTest,
             ropInfo,
+        };
+
+        materialEntries.push({
+            index, name,
+            translucent,
+            textureIndexes,
             texMatrices,
+            gxMaterial,
+            colorMatRegs,
         });
         materialEntryIdx += 0x014C;
     }

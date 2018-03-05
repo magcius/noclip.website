@@ -9,14 +9,13 @@ import { BlendFactor, CompareMode, BlendMode as RenderBlendMode, CullMode, Front
 
 // #region Material definition.
 export class Color {
-    constructor(public r, public g, public b, public a) {
+    constructor(public r: number, public g: number, public b: number, public a: number) {
     }
 }
 
 export interface ColorChannelControl {
     lightingEnabled: boolean;
     matColorSource: GX.ColorSrc;
-    matColorReg: Color;
     ambColorSource: GX.ColorSrc;
 }
 
@@ -26,17 +25,6 @@ export interface TexGen {
     type: GX.TexGenType;
     source: GX.TexGenSrc;
     matrix: GX.TexGenMatrix;
-}
-
-export const enum TexMtxProjection {
-    ST = 0,
-    STQ = 1,
-}
-
-export interface TexMtx {
-    type: number;
-    projection: TexMtxProjection;
-    matrix: mat3;
 }
 
 export interface TevStage {
@@ -96,8 +84,6 @@ export interface RopInfo {
 export interface GXMaterial {
     index: number;
     name: string;
-    translucent: boolean;
-    textureIndexes: number[];
     cullMode: GX.CullMode;
     colorRegisters: Color[];
     colorConstants: Color[];
@@ -106,7 +92,6 @@ export interface GXMaterial {
     tevStages: TevStage[];
     alphaTest: AlphaTest;
     ropInfo: RopInfo;
-    texMatrices: TexMtx[];
 }
 // #endregion
 
@@ -136,6 +121,10 @@ export const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
 
 export const scaledVtxAttributes: GX.VertexAttribute[] = vtxAttributeGenDefs.filter((a) => a.scale).map((a) => a.attrib);
 
+export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
+    return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrib === vtxAttrib);
+}
+
 export class GX_Program extends Program {
     public u_PosMtx: WebGLUniformLocation;
     public u_TexMtx: WebGLUniformLocation;
@@ -143,6 +132,7 @@ export class GX_Program extends Program {
     public u_TextureLODBias: WebGLUniformLocation;
     public u_KonstColor: WebGLUniformLocation;
     public u_AttrScale: WebGLUniformLocation;
+    public u_ColorMatReg: WebGLUniformLocation;
 
     private material: GXMaterial;
 
@@ -164,11 +154,12 @@ export class GX_Program extends Program {
     }
 
     // Color Channels
-    private generateColorChannel(chan: ColorChannelControl, vtxSource: string) {
-        // TODO(jstpierre): Ambient and lighting.
+    private generateColorChannel(i: number) {
+        // TODO(jstpierre): amb & lighting
+        const chan = this.material.colorChannels[i];
         switch (chan.matColorSource) {
-        case GX.ColorSrc.VTX: return vtxSource;
-        case GX.ColorSrc.REG: return this.generateColorConstant(chan.matColorReg);
+        case GX.ColorSrc.VTX: return `ReadAttrib_Color${i}()`;
+        case GX.ColorSrc.REG: return `u_ColorMatReg[${i}]`;
         }
     }
 
@@ -206,11 +197,7 @@ export class GX_Program extends Program {
 
         const matrixIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
         const matrixSrc = `u_TexMtx[${matrixIdx}]`;
-        const texMtx = this.material.texMatrices[matrixIdx];
-        if (texMtx.projection === TexMtxProjection.ST)
-            return `(${matrixSrc} * vec3(${src}.xy, 1.0))`;
-        else
-            return `(${matrixSrc} * ${src})`;
+        return `(${matrixSrc} * ${src})`;
     }
 
     private generateTexGenType(texCoordGen: TexGen) {
@@ -303,12 +290,11 @@ export class GX_Program extends Program {
 
     private generateRas(stage: TevStage) {
         switch (stage.channelId) {
-        case GX.ColorChannelId.COLOR0:     return `v_Color0`;
-        case GX.ColorChannelId.COLOR1:     return `v_Color1`;
-        case GX.ColorChannelId.COLOR_ZERO: return `vec4(0, 0, 0, 0)`;
-        // XXX(jstpierre): Shouldn't appear but do in practice? WTF?
+        case GX.ColorChannelId.COLOR0:     return `v_Color0.rgb`;
+        case GX.ColorChannelId.COLOR1:     return `v_Color1.rgb`;
         case GX.ColorChannelId.COLOR0A0:   return `v_Color0`;
         case GX.ColorChannelId.COLOR1A1:   return `v_Color1`;
+        case GX.ColorChannelId.COLOR_ZERO: return `vec4(0, 0, 0, 0)`;
         default:
             throw new Error(`whoops ${stage.channelId}`);
         }
@@ -474,11 +460,11 @@ export class GX_Program extends Program {
     }
 
     private generateVertAttributeDefs() {
-        return vtxAttributeGenDefs.map((a) => {
+        return vtxAttributeGenDefs.map((a, i) => {
             const scaleIdx = scaledVtxAttributes.indexOf(a.attrib);
 
             return `
-layout(location = ${a.attrib}) in ${a.storage} a_${a.name};
+layout(location = ${i}) in ${a.storage} a_${a.name};
 ${a.storage} ReadAttrib_${a.name}() {
     return a_${a.name}${a.scale ? ` * u_AttrScale[${scaleIdx}]` : ``};
 }
@@ -498,6 +484,7 @@ ${this.generateVertAttributeScaleBlock()}
 ${this.generateVertAttributeDefs()}
 uniform mat3 u_TexMtx[10];
 uniform mat4 u_PosMtx[10];
+uniform vec4 u_ColorMatReg[2];
 
 out vec3 v_Position;
 out vec3 v_Normal;
@@ -517,8 +504,8 @@ void main() {
     vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);
     v_Position = t_Position.xyz;
     v_Normal = ReadAttrib_Normal();
-    v_Color0 = ${this.generateColorChannel(this.material.colorChannels[0], `ReadAttrib_Color0()`)};
-    v_Color1 = ${this.generateColorChannel(this.material.colorChannels[1], `ReadAttrib_Color1()`)};
+    v_Color0 = ${this.generateColorChannel(0)};
+    v_Color1 = ${this.generateColorChannel(1)};
 ${this.generateTexGens(this.material.texGens)}
     gl_Position = u_projection * u_modelView * t_Position;
 }
@@ -582,6 +569,7 @@ ${this.generateAlphaTest(alphaTest)}
         this.u_TextureLODBias = gl.getUniformLocation(prog, 'u_TextureLODBias');
         this.u_KonstColor = gl.getUniformLocation(prog, `u_KonstColor`);
         this.u_AttrScale = gl.getUniformLocation(prog, `u_AttrScale`);
+        this.u_ColorMatReg = gl.getUniformLocation(prog, `u_ColorMatReg`);
     }
 }
 // #endregion
