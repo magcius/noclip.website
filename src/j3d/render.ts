@@ -1,7 +1,7 @@
 
 import { mat3, mat4 } from 'gl-matrix';
 
-import { BMD, BTK, BMT, TEX1_Texture, Shape, HierarchyNode, HierarchyType } from './j3d';
+import { BMD, BTK, BMT, TEX1_Texture, Shape, HierarchyNode, HierarchyType, MaterialEntry } from './j3d';
 
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
@@ -37,7 +37,6 @@ class Command_Shape {
     private vertexBuffer: WebGLBuffer;
     private indexBuffer: WebGLBuffer;
     private jointMatrices: mat4[];
-    private numTriangles: number;
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD, shape: Shape, jointMatrices: mat4[]) {
         this.bmd = bmd;
@@ -58,7 +57,7 @@ class Command_Shape {
         for (const attrib of this.shape.packedVertexAttributes) {
             const vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
 
-            const attribLocation = attrib.vtxAttrib;
+            const attribLocation = GX_Material.getVertexAttribLocation(attrib.vtxAttrib);
             gl.enableVertexAttribArray(attribLocation);
 
             const { type, normalized } = translateCompType(gl, vertexArray.compType);
@@ -119,20 +118,20 @@ export class Command_Material {
     public bmd: BMD;
     public btk: BTK;
     public bmt: BMT;
-    public material: GX_Material.GXMaterial;
+    public material: MaterialEntry;
 
     public textures: WebGLTexture[] = [];
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
 
-    constructor(gl: WebGL2RenderingContext, scene: Scene, material: GX_Material.GXMaterial) {
+    constructor(gl: WebGL2RenderingContext, scene: Scene, material: MaterialEntry) {
         this.scene = scene;
         this.bmd = scene.bmd;
         this.btk = scene.btk;
         this.bmt = scene.bmt;
         this.material = material;
-        this.program = new GX_Material.GX_Program(material);
-        this.renderFlags = GX_Material.translateRenderFlags(this.material);
+        this.program = new GX_Material.GX_Program(material.gxMaterial);
+        this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
         this.textures = this.translateTextures(gl);
     }
@@ -270,9 +269,9 @@ export class Command_Material {
         for (let i = 0; i < 8; i++) {
             let fallbackColor: GX_Material.Color;
             if (i >= 4)
-                fallbackColor = this.material.colorRegisters[i - 4];
+                fallbackColor = this.material.gxMaterial.colorRegisters[i - 4];
             else
-                fallbackColor = this.material.colorConstants[i];
+                fallbackColor = this.material.gxMaterial.colorConstants[i];
 
             let color: GX_Material.Color;
             if (this.scene.colorOverrides[i]) {
@@ -294,6 +293,17 @@ export class Command_Material {
             colorScratch[i*4+3] = alpha;
         }
         gl.uniform4fv(this.program.u_KonstColor, colorScratch);
+
+        for (let i = 0; i < 2; i++) {
+            const color = this.material.colorMatRegs[i];
+            if (color !== null) {
+                colorScratch[i*4+0] = color.r;
+                colorScratch[i*4+1] = color.g;
+                colorScratch[i*4+2] = color.b;
+                colorScratch[i*4+3] = color.a;
+            }
+        }
+        gl.uniform4fv(this.program.u_ColorMatReg, colorScratch.slice(0, 8));
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -349,7 +359,7 @@ export class Scene implements Viewer.Scene {
         this.modelMatrix = mat4.create();
 
         const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
-        this.textures = tex1.textures.map((tex) => this.translateTextureToCanvas(tex));
+        this.textures = tex1.textures.map((tex) => this.translateTextureToViewer(tex));
     }
 
     public setColorOverride(i: ColorOverride, color: GX_Material.Color) {
@@ -379,7 +389,7 @@ export class Scene implements Viewer.Scene {
         return (milliseconds / 1000) * this.fps;
     }
 
-    private translateTextureToCanvas(texture: TEX1_Texture): Viewer.Texture {
+    private translateTextureToViewer(texture: TEX1_Texture): Viewer.Texture {
         const surfaces = [];
 
         let width = texture.width, height = texture.height, offs = 0;

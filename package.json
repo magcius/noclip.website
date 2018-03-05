@@ -2,10 +2,13 @@
   "name": "@jstpierre/model-viewer",
   "private": true,
   "devDependencies": {
-    "gl-matrix": "^2.4.0"
+    "gl-matrix": "^2.4.0",
+    "pako": "^1.0.6"
   },
   "dependencies": {
+    "@types/pako": "^1.0.0",
     "@types/systemjs": "^0.20.6",
+    "@types/text-encoding": "0.0.32",
     "@types/webgl2": "0.0.2"
   }
 }

@@ -9,6 +9,7 @@ import * as OOT3D from 'oot3d/scenes';
 import * as SM64DS from 'sm64ds/scenes';
 import * as ZELVIEW from 'zelview/scenes';
 import * as ZWW from 'j3d/zww_scenes';
+import * as MP1 from './metroid_prime/scenes';
 
 import { Progressable } from './progress';
 
@@ -167,6 +168,7 @@ class Main {
         this.groups.push(OOT3D.sceneGroup);
         this.groups.push(FRES.sceneGroup);
         this.groups.push(DKSIV.sceneGroup);
+        // this.groups.push(MP1.sceneGroup);
 
         this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
         this.groups.push(this.droppedFileGroup);

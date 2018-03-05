@@ -15,9 +15,11 @@
       System.config({
         meta: {
           'gl-matrix': { 'format': 'cjs' },
+          'pako': { 'format': 'cjs' },
         },
         map: {
           'gl-matrix': 'https://cdn.rawgit.com/toji/gl-matrix/master/dist/gl-matrix-min.js',
+          'pako': 'https://cdn.rawgit.com/nodeca/pako/master/dist/pako_inflate.min.js',
         }
       });
       System.import('main');

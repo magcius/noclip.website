@@ -4,7 +4,7 @@ import { mat3, mat4 } from 'gl-matrix';
 import * as RARC from 'j3d/rarc';
 import * as Yaz0 from 'yaz0';
 
-import { BMD, BTK, BMT, TEX1 } from 'j3d/j3d';
+import { BMD, BTK, BMT, TEX1, MaterialEntry } from 'j3d/j3d';
 import * as GX from 'j3d/gx_enum';
 import * as GX_Material from 'j3d/gx_material';
 
@@ -85,37 +85,39 @@ class SeaPlaneScene implements Scene {
         this.plane = new PlaneShape(gl);
     }
 
-    public makeMaterialCommand(gl: WebGL2RenderingContext, material: GX_Material.GXMaterial, configName: string) {
+    public makeMaterialCommand(gl: WebGL2RenderingContext, material: MaterialEntry, configName: string) {
+        const gxMaterial = material.gxMaterial;
+
         if (configName.includes('noalpha')) {
             // Disable alpha test
-            material.alphaTest.compareA = GX.CompareType.ALWAYS;
-            material.alphaTest.op = GX.AlphaOp.OR;
+            gxMaterial.alphaTest.compareA = GX.CompareType.ALWAYS;
+            gxMaterial.alphaTest.op = GX.AlphaOp.OR;
         }
         
         if (configName.includes('noblend')) {
             // Disable blending.
-            material.tevStages[0].alphaInD = GX.CombineAlphaInput.KONST;
-            material.tevStages[1].alphaInD = GX.CombineAlphaInput.KONST;
-            material.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
+            gxMaterial.tevStages[0].alphaInD = GX.CombineAlphaInput.KONST;
+            gxMaterial.tevStages[1].alphaInD = GX.CombineAlphaInput.KONST;
+            gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
         }
 
         if (configName.includes('opaque')) {
             // Make it always opaque.
-            material.tevStages[0].colorInB = GX.CombineColorInput.TEXA;
-            material.tevStages[0].colorInC = GX.CombineColorInput.RASA;
-            material.tevStages[0].colorInD = GX.CombineColorInput.CPREV;
-            material.tevStages[0].colorScale = GX.TevScale.SCALE_1;
-            material.tevStages[1].colorInB = GX.CombineColorInput.TEXA;
-            material.tevStages[1].colorInC = GX.CombineColorInput.RASA;
-            material.tevStages[1].colorInD = GX.CombineColorInput.CPREV;
-            material.tevStages[1].colorScale = GX.TevScale.SCALE_1;
+            gxMaterial.tevStages[0].colorInB = GX.CombineColorInput.TEXA;
+            gxMaterial.tevStages[0].colorInC = GX.CombineColorInput.RASA;
+            gxMaterial.tevStages[0].colorInD = GX.CombineColorInput.CPREV;
+            gxMaterial.tevStages[0].colorScale = GX.TevScale.SCALE_1;
+            gxMaterial.tevStages[1].colorInB = GX.CombineColorInput.TEXA;
+            gxMaterial.tevStages[1].colorInC = GX.CombineColorInput.RASA;
+            gxMaterial.tevStages[1].colorInD = GX.CombineColorInput.CPREV;
+            gxMaterial.tevStages[1].colorScale = GX.TevScale.SCALE_1;
 
             // Use one TEV stage.
             if (configName.includes('layer0')) {
-                material.tevStages.length = 1;
+                gxMaterial.tevStages.length = 1;
             } else if (configName.includes('layer1')) {
-                material.tevStages[0] = material.tevStages[1];
-                material.tevStages.length = 1;
+                gxMaterial.tevStages[0] = gxMaterial.tevStages[1];
+                gxMaterial.tevStages.length = 1;
             }
         }
 
@@ -179,8 +181,9 @@ class PlaneShape {
         this.posBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, posData, gl.STATIC_DRAW);
-        gl.vertexAttribPointer(GX.VertexAttribute.POS, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(GX.VertexAttribute.POS);
+        const posAttribLocation = GX_Material.getVertexAttribLocation(GX.VertexAttribute.POS);
+        gl.vertexAttribPointer(posAttribLocation, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(posAttribLocation);
 
         const txcData = new Float32Array(4 * 2);
         txcData[0] = 0;
@@ -195,8 +198,9 @@ class PlaneShape {
         this.txcBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.txcBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, txcData, gl.STATIC_DRAW);
-        gl.vertexAttribPointer(GX.VertexAttribute.TEX0, 2, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(GX.VertexAttribute.TEX0);
+        const tex0AttribLocation = GX_Material.getVertexAttribLocation(GX.VertexAttribute.TEX0);
+        gl.vertexAttribPointer(tex0AttribLocation, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(tex0AttribLocation);
 
         gl.bindVertexArray(null);
     }
