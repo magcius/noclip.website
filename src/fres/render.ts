@@ -11,7 +11,7 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import { Progressable } from '../progress';
-import { RenderState, Program, RenderArena, RenderPass } from '../render';
+import { RenderState, Program, RenderArena, RenderPass, RenderFlags, FrontFaceMode, CompareMode, CullMode } from '../render';
 import { be16toh, be32toh } from '../endian';
 import { assert, fetch } from '../util';
 
@@ -231,34 +231,55 @@ export class Scene implements Viewer.Scene {
         throw new Error(`Unknown texture filter mode`);
     }
 
-    private translateFrontFaceMode(gl: WebGL2RenderingContext, frontFaceMode: GX2FrontFaceMode) {
+    private translateFrontFaceMode(frontFaceMode: GX2FrontFaceMode): FrontFaceMode {
         switch (frontFaceMode) {
         case GX2FrontFaceMode.CCW:
-            return gl.CCW;
+            return FrontFaceMode.CCW;
         case GX2FrontFaceMode.CW:
-            return gl.CW;
+            return FrontFaceMode.CW;
         }
     }
 
-    private translateCompareFunction(gl: WebGL2RenderingContext, compareFunc: GX2CompareFunction) {
+    private translateCompareFunction(compareFunc: GX2CompareFunction): CompareMode {
         switch (compareFunc) {
         case GX2CompareFunction.NEVER:
-            return gl.NEVER;
+            return CompareMode.NEVER;
         case GX2CompareFunction.LESS:
-            return gl.LESS;
+            return CompareMode.LESS;
         case GX2CompareFunction.EQUAL:
-            return gl.EQUAL;
+            return CompareMode.EQUAL;
         case GX2CompareFunction.LEQUAL:
-            return gl.LEQUAL;
+            return CompareMode.LEQUAL;
         case GX2CompareFunction.GREATER:
-            return gl.GREATER;
+            return CompareMode.GREATER;
         case GX2CompareFunction.NOTEQUAL:
-            return gl.NOTEQUAL;
+            return CompareMode.NEQUAL;
         case GX2CompareFunction.GEQUAL:
-            return gl.GEQUAL;
+            return CompareMode.GEQUAL;
         case GX2CompareFunction.ALWAYS:
-            return gl.ALWAYS;
+            return CompareMode.ALWAYS;
         }
+    }
+
+    private translateCullMode(cullFront: boolean, cullBack: boolean): CullMode {
+        if (cullFront && cullBack)
+            return CullMode.FRONT_AND_BACK;
+        else if (cullFront)
+            return CullMode.FRONT;
+        else if (cullBack)
+            return CullMode.BACK;
+        else
+            return CullMode.NONE;
+    }
+
+    private translateRenderState(renderState: BFRES.RenderState): RenderFlags {
+        const renderFlags = new RenderFlags();
+        renderFlags.frontFace = this.translateFrontFaceMode(renderState.frontFaceMode);
+        renderFlags.depthTest = renderState.depthTest;
+        renderFlags.depthFunc = this.translateCompareFunction(renderState.depthCompareFunc);
+        renderFlags.depthWrite = renderState.depthWrite;
+        renderFlags.cullMode = this.translateCullMode(renderState.cullFront, renderState.cullBack);
+        return renderFlags;
     }
 
     private translateFMAT(gl: WebGL2RenderingContext, fmat: BFRES.FMAT): RenderFunc {
@@ -283,34 +304,13 @@ export class Scene implements Viewer.Scene {
         const prog = new ProgramGambit_UBER();
         this.arena.trackProgram(prog);
 
-        const renderState = fmat.renderState;
+        const renderFlags = this.translateRenderState(fmat.renderState);
 
         return (state: RenderState) => {
             state.useProgram(prog);
             state.bindModelView(this.isSkybox);
 
-            // Render state.
-            gl.frontFace(this.translateFrontFaceMode(gl, renderState.frontFaceMode));
-
-            if (renderState.cullFront || renderState.cullBack) {
-                gl.enable(gl.CULL_FACE);
-                if (renderState.cullFront && renderState.cullBack)
-                    gl.cullFace(gl.FRONT_AND_BACK);
-                else if (renderState.cullFront)
-                    gl.cullFace(gl.FRONT);
-                else
-                    gl.cullFace(gl.BACK);
-            } else {
-                gl.disable(gl.CULL_FACE);
-            }
-
-            if (renderState.depthTest)
-                gl.enable(gl.DEPTH_TEST);
-            else
-                gl.disable(gl.DEPTH_TEST);
-
-            gl.depthMask(renderState.depthWrite);
-            gl.depthFunc(this.translateCompareFunction(gl, renderState.depthCompareFunc));
+            state.useFlags(renderFlags);
 
             // Textures.
             for (let i = 0; i < attribNames.length; i++) {
