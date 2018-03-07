@@ -42,6 +42,11 @@ export function readString(buffer: ArrayBuffer, offs: number, length: number = -
     return S;
 }
 
+export function align(n: number, multiple: number): number {
+    const mask = (multiple - 1);
+    return (n + mask) & ~mask;
+}
+
 let counter = 0;
 export function generateFormID() {
     return `FormGeneratedID_${counter++}`;

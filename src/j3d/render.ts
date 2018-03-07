@@ -8,7 +8,7 @@ import * as GX_Material from './gx_material';
 import * as GX_Texture from './gx_texture';
 import * as Viewer from 'viewer';
 
-import { RenderFlags, RenderState, RenderPass } from '../render';
+import { RenderFlags, RenderState, RenderPass, CompareMode, CoalescedBuffers, BufferCoalescer } from '../render';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
@@ -34,25 +34,20 @@ class Command_Shape {
     private bmd: BMD;
     private shape: Shape;
     private vao: WebGLVertexArrayObject;
-    private vertexBuffer: WebGLBuffer;
-    private indexBuffer: WebGLBuffer;
     private jointMatrices: mat4[];
+    private coalescedBuffers: CoalescedBuffers;
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, shape: Shape, jointMatrices: mat4[]) {
+    constructor(gl: WebGL2RenderingContext, bmd: BMD, shape: Shape, coalescedBuffers: CoalescedBuffers, jointMatrices: mat4[]) {
         this.bmd = bmd;
         this.shape = shape;
+        this.coalescedBuffers = coalescedBuffers;
         this.jointMatrices = jointMatrices;
 
         this.vao = gl.createVertexArray();
         gl.bindVertexArray(this.vao);
 
-        this.vertexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, this.shape.packedData, gl.STATIC_DRAW);
-
-        this.indexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.shape.indexData, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, coalescedBuffers.vertexBuffer.buffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, coalescedBuffers.indexBuffer.buffer);
 
         for (const attrib of this.shape.packedVertexAttributes) {
             const vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
@@ -67,9 +62,11 @@ class Command_Shape {
                 vertexArray.compCount,
                 type, normalized,
                 this.shape.packedVertexSize,
-                attrib.offset,
+                coalescedBuffers.vertexBuffer.offset + attrib.offset,
             );
         }
+
+        gl.bindVertexArray(null);
     }
 
     public exec(state: RenderState) {
@@ -77,6 +74,8 @@ class Command_Shape {
         const prog = (<GX_Material.GX_Program> state.currentProgram);
 
         gl.bindVertexArray(this.vao);
+
+        const indexOffset = this.coalescedBuffers.indexBuffer.offset;
 
         this.shape.packets.forEach((packet, packetIndex) => {
             // Update our matrix table.
@@ -94,7 +93,7 @@ class Command_Shape {
             }
             gl.uniformMatrix4fv(prog.u_PosMtx, false, posMtxTable);
 
-            gl.drawElements(gl.TRIANGLES, packet.numTriangles * 3, gl.UNSIGNED_SHORT, packet.firstTriangle * 3);
+            gl.drawElements(gl.TRIANGLES, packet.numTriangles * 3, gl.UNSIGNED_SHORT, indexOffset + packet.firstTriangle * 3 * 2);
         });
 
         gl.bindVertexArray(null);
@@ -102,8 +101,6 @@ class Command_Shape {
 
     public destroy(gl: WebGL2RenderingContext) {
         gl.deleteVertexArray(this.vao);
-        gl.deleteBuffer(this.indexBuffer);
-        gl.deleteBuffer(this.vertexBuffer);
     }
 }
 
@@ -342,6 +339,8 @@ export class Scene implements Viewer.Scene {
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: number[] = [];
 
+    private bufferCoalescer: BufferCoalescer;
+
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
 
@@ -468,11 +467,16 @@ export class Scene implements Viewer.Scene {
 
         const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
         this.materialCommands = mat3.materialEntries.map((material) => {
-            const cmdMaterial = new Command_Material(gl, this, material);
-            return cmdMaterial;
+            return new Command_Material(gl, this, material);
         });
-        this.shapeCommands = bmd.shp1.shapes.map((shape) => {
-            return new Command_Shape(gl, this.bmd, shape, this.jointMatrices);
+
+        this.bufferCoalescer = new BufferCoalescer(gl,
+            bmd.shp1.shapes.map((shape) => shape.packedData),
+            bmd.shp1.shapes.map((shape) => shape.indexData.buffer)
+        );
+
+        this.shapeCommands = bmd.shp1.shapes.map((shape, i) => {
+            return new Command_Shape(gl, this.bmd, shape, this.bufferCoalescer.coalescedBuffers[i], this.jointMatrices);
         });
 
         // Iterate through scene graph.
@@ -515,6 +519,7 @@ export class Scene implements Viewer.Scene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        this.bufferCoalescer.destroy(gl);
         this.materialCommands.forEach((command) => command.destroy(gl));
         this.shapeCommands.forEach((command) => command.destroy(gl));
     }

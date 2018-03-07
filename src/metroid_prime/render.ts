@@ -9,7 +9,7 @@ import * as GX_Texture from '../j3d/gx_texture';
 import * as GX_Material from '../j3d/gx_material';
 
 import * as Viewer from '../viewer';
-import { RenderPass, RenderState, RenderFlags } from '../render';
+import { RenderPass, RenderState, RenderFlags, CoalescedBuffers, BufferCoalescer } from '../render';
 
 export class Scene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
@@ -18,6 +18,7 @@ export class Scene implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
 
     public glTextures: WebGLTexture[] = [];
+    private bufferCoalescer: BufferCoalescer;
     private materialCommands: Command_Material[] = [];
     private surfaceCommands: Command_Surface[] = [];
 
@@ -66,9 +67,24 @@ export class Scene implements Viewer.MainScene {
         this.materialCommands = this.mrea.materialSet.materials.map((material) => {
             return new Command_Material(gl, this, material);
         });
+
+        const vertexDatas: ArrayBuffer[] = [];
+        const indexDatas: ArrayBuffer[] = [];
+
         this.mrea.worldModels.map((worldModel) => {
             worldModel.surfaces.forEach((surface) => {
-                this.surfaceCommands.push(new Command_Surface(gl, surface));
+                vertexDatas.push(surface.packedData.buffer);
+                indexDatas.push(surface.indexData.buffer);
+            });
+        });
+
+        this.bufferCoalescer = new BufferCoalescer(gl, vertexDatas, indexDatas);
+
+        let i = 0;
+        this.mrea.worldModels.map((worldModel) => {
+            worldModel.surfaces.forEach((surface) => {
+                this.surfaceCommands.push(new Command_Surface(gl, surface, this.bufferCoalescer.coalescedBuffers[i]));
+                ++i;
             });
         });
     }
@@ -127,28 +143,22 @@ export class Scene implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.textures.forEach((texture) => gl.deleteTexture(texture));
+        this.glTextures.forEach((texture) => gl.deleteTexture(texture));
         this.materialCommands.forEach((cmd) => cmd.destroy(gl));
         this.surfaceCommands.forEach((cmd) => cmd.destroy(gl));
+        this.bufferCoalescer.destroy(gl);
     }
 }
 
 class Command_Surface {
     private vao: WebGLVertexArrayObject;
-    private vertexBuffer: WebGLBuffer;
-    private indexBuffer: WebGLBuffer;
 
-    constructor(gl: WebGL2RenderingContext, public surface: Surface) {
+    constructor(gl: WebGL2RenderingContext, public surface: Surface, private coalescedBuffers: CoalescedBuffers) {
         this.vao = gl.createVertexArray();
         gl.bindVertexArray(this.vao);
 
-        this.vertexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, this.surface.packedData, gl.STATIC_DRAW);
-
-        this.indexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.surface.indexData, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, coalescedBuffers.vertexBuffer.buffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, coalescedBuffers.indexBuffer.buffer);
 
         let offset = 0;
         for (const attrib of vtxAttrFormats) {
@@ -163,7 +173,7 @@ class Command_Surface {
                 attrib.compCount,
                 gl.FLOAT, false,
                 4 * this.surface.packedVertexSize,
-                offset,
+                coalescedBuffers.vertexBuffer.offset + offset,
             );
 
             offset += 4 * attrib.compCount;
@@ -175,13 +185,13 @@ class Command_Surface {
         const prog = (<GX_Material.GX_Program> state.currentProgram);
 
         gl.bindVertexArray(this.vao);
-        gl.drawElements(gl.TRIANGLES, this.surface.numTriangles * 3, gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, this.surface.numTriangles * 3, gl.UNSIGNED_SHORT, this.coalescedBuffers.indexBuffer.offset);
         gl.bindVertexArray(null);
+
+        state.drawCallCount++;
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        gl.deleteBuffer(this.indexBuffer);
-        gl.deleteBuffer(this.vertexBuffer);
         gl.deleteVertexArray(this.vao);
     }
 }
@@ -282,4 +292,5 @@ class Command_Material {
 
     public destroy(gl: WebGL2RenderingContext) {
         this.program.destroy(gl);
-    }}
+    }
+}
