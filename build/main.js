@@ -2971,33 +2971,52 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         return gl.NEAREST;
                     throw new Error("Unknown texture filter mode");
                 };
-                Scene.prototype.translateFrontFaceMode = function (gl, frontFaceMode) {
+                Scene.prototype.translateFrontFaceMode = function (frontFaceMode) {
                     switch (frontFaceMode) {
                         case 0 /* CCW */:
-                            return gl.CCW;
+                            return render_4.FrontFaceMode.CCW;
                         case 1 /* CW */:
-                            return gl.CW;
+                            return render_4.FrontFaceMode.CW;
                     }
                 };
-                Scene.prototype.translateCompareFunction = function (gl, compareFunc) {
+                Scene.prototype.translateCompareFunction = function (compareFunc) {
                     switch (compareFunc) {
                         case 0 /* NEVER */:
-                            return gl.NEVER;
+                            return render_4.CompareMode.NEVER;
                         case 1 /* LESS */:
-                            return gl.LESS;
+                            return render_4.CompareMode.LESS;
                         case 2 /* EQUAL */:
-                            return gl.EQUAL;
+                            return render_4.CompareMode.EQUAL;
                         case 3 /* LEQUAL */:
-                            return gl.LEQUAL;
+                            return render_4.CompareMode.LEQUAL;
                         case 4 /* GREATER */:
-                            return gl.GREATER;
+                            return render_4.CompareMode.GREATER;
                         case 5 /* NOTEQUAL */:
-                            return gl.NOTEQUAL;
+                            return render_4.CompareMode.NEQUAL;
                         case 6 /* GEQUAL */:
-                            return gl.GEQUAL;
+                            return render_4.CompareMode.GEQUAL;
                         case 7 /* ALWAYS */:
-                            return gl.ALWAYS;
+                            return render_4.CompareMode.ALWAYS;
                     }
+                };
+                Scene.prototype.translateCullMode = function (cullFront, cullBack) {
+                    if (cullFront && cullBack)
+                        return render_4.CullMode.FRONT_AND_BACK;
+                    else if (cullFront)
+                        return render_4.CullMode.FRONT;
+                    else if (cullBack)
+                        return render_4.CullMode.BACK;
+                    else
+                        return render_4.CullMode.NONE;
+                };
+                Scene.prototype.translateRenderState = function (renderState) {
+                    var renderFlags = new render_4.RenderFlags();
+                    renderFlags.frontFace = this.translateFrontFaceMode(renderState.frontFaceMode);
+                    renderFlags.depthTest = renderState.depthTest;
+                    renderFlags.depthFunc = this.translateCompareFunction(renderState.depthCompareFunc);
+                    renderFlags.depthWrite = renderState.depthWrite;
+                    renderFlags.cullMode = this.translateCullMode(renderState.cullFront, renderState.cullBack);
+                    return renderFlags;
                 };
                 Scene.prototype.translateFMAT = function (gl, fmat) {
                     var _this = this;
@@ -3029,30 +3048,11 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     }
                     var prog = new ProgramGambit_UBER();
                     this.arena.trackProgram(prog);
-                    var renderState = fmat.renderState;
+                    var renderFlags = this.translateRenderState(fmat.renderState);
                     return function (state) {
                         state.useProgram(prog);
                         state.bindModelView(_this.isSkybox);
-                        // Render state.
-                        gl.frontFace(_this.translateFrontFaceMode(gl, renderState.frontFaceMode));
-                        if (renderState.cullFront || renderState.cullBack) {
-                            gl.enable(gl.CULL_FACE);
-                            if (renderState.cullFront && renderState.cullBack)
-                                gl.cullFace(gl.FRONT_AND_BACK);
-                            else if (renderState.cullFront)
-                                gl.cullFace(gl.FRONT);
-                            else
-                                gl.cullFace(gl.BACK);
-                        }
-                        else {
-                            gl.disable(gl.CULL_FACE);
-                        }
-                        if (renderState.depthTest)
-                            gl.enable(gl.DEPTH_TEST);
-                        else
-                            gl.disable(gl.DEPTH_TEST);
-                        gl.depthMask(renderState.depthWrite);
-                        gl.depthFunc(_this.translateCompareFunction(gl, renderState.depthCompareFunc));
+                        state.useFlags(renderFlags);
                         var _loop_1 = function (i) {
                             var attribName = attribNames[i];
                             gl.activeTexture(gl.TEXTURE0 + i);
