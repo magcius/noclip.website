@@ -210,15 +210,10 @@ export class RenderState {
         const gl = this.gl;
         this.currentProgram = prog;
         gl.useProgram(prog.compile(gl));
-        gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
     }
 
-    public bindModelView(isSkybox: boolean = false, model: mat4 = null) {
-        const gl = this.gl;
-        const prog = this.currentProgram;
-
+    public updateModelView(isSkybox: boolean = false, model: mat4 = null): mat4 {
         const scratch = this.scratchMatrix;
-
         mat4.copy(scratch, this.view);
         if (isSkybox) {
             scratch[12] = 0;
@@ -228,7 +223,14 @@ export class RenderState {
 
         if (model)
             mat4.mul(scratch, model, scratch);
+        return scratch;
+    }
 
+    public bindModelView(isSkybox: boolean = false, model: mat4 = null) {
+        const gl = this.gl;
+        const prog = this.currentProgram;
+        const scratch = this.updateModelView(isSkybox, model);
+        gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
         gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);
     }
 
@@ -279,6 +281,12 @@ export class Program {
         gl.attachShader(prog, vertShader);
         gl.attachShader(prog, fragShader);
         gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            console.error(vert);
+            console.error(frag);
+            console.error(gl.getProgramInfoLog(prog));
+            throw new Error();
+        }
         gl.deleteShader(vertShader);
         gl.deleteShader(fragShader);
         this.glProg = prog;

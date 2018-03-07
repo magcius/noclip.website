@@ -72,7 +72,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 assert(mlvlEntry.fourCC === 'MLVL');
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
                 // Crash my browser please.
-                const areas = mlvl.areaTable.slice(0, 1);
+                const areas = mlvl.areaTable;
                 const scenes = areas.map((mreaEntry) => {
                     const mrea = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
                     return new Scene(gl, mrea);
