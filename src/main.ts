@@ -168,7 +168,7 @@ class Main {
         this.groups.push(OOT3D.sceneGroup);
         this.groups.push(FRES.sceneGroup);
         this.groups.push(DKSIV.sceneGroup);
-        this.groups.push(MP1.sceneGroup);
+        // this.groups.push(MP1.sceneGroup);
 
         this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
         this.groups.push(this.droppedFileGroup);
