@@ -1,5 +1,6 @@
 
 import { mat4 } from 'gl-matrix';
+import { assert, align } from './util';
 
 export const enum RenderPass {
     CLEAR,
@@ -167,6 +168,9 @@ export class RenderState {
 
     private scratchMatrix: mat4;
 
+    public drawCallCount: number;
+    public frameStartTime: number;
+
     constructor(viewport: Viewport) {
         this.viewport = viewport;
         this.gl = this.viewport.gl;
@@ -191,6 +195,10 @@ export class RenderState {
         mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
 
         gl.viewport(0, 0, canvas.width, canvas.height);
+
+        // XXX(jstpierre): move into reset
+        this.drawCallCount = 0;
+        this.frameStartTime = window.performance.now();
     }
 
     public setClipPlanes(near: number, far: number) {
@@ -366,5 +374,68 @@ export class RenderArena {
         for (const program of this.programs)
             gl.deleteProgram(program);
         this.programs = [];
+    }
+}
+
+interface CoalescedBuffer {
+    buffer: WebGLBuffer;
+    offset: number;
+}
+
+export interface CoalescedBuffers {
+    vertexBuffer: CoalescedBuffer;
+    indexBuffer: CoalescedBuffer;
+}
+
+function coalesceBuffer(gl: WebGL2RenderingContext, target: number, datas: ArrayBuffer[]): CoalescedBuffer[] {
+    let dataLength = 0;
+    for (const data of datas) {
+        dataLength += data.byteLength;
+        dataLength = align(dataLength, 4);
+    }
+
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(target, buffer);
+    gl.bufferData(target, dataLength, gl.STATIC_DRAW);
+
+    const coalescedBuffers: CoalescedBuffer[] = [];
+
+    let offset = 0;
+    for (const data of datas) {
+        const size = data.byteLength;
+        coalescedBuffers.push({ buffer, offset });
+        gl.bufferSubData(target, offset, data);
+        offset += size;
+        offset = align(offset, 4);
+    }
+
+    return coalescedBuffers;
+}
+
+export class BufferCoalescer {
+    public coalescedBuffers: CoalescedBuffers[];
+    private vertexBuffer: WebGLBuffer;
+    private indexBuffer: WebGLBuffer;
+
+    constructor(gl: WebGL2RenderingContext, vertexDatas: ArrayBuffer[], indexDatas: ArrayBuffer[]) {
+        assert(vertexDatas.length === indexDatas.length);
+        const vertexCoalescedBuffers = coalesceBuffer(gl, gl.ARRAY_BUFFER, vertexDatas);
+        const indexCoalescedBuffers = coalesceBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, indexDatas);
+    
+        const coalescedBuffers = [];
+        for (let i = 0; i < vertexCoalescedBuffers.length; i++) {
+            const vertexBuffer = vertexCoalescedBuffers[i];
+            const indexBuffer = indexCoalescedBuffers[i];
+            coalescedBuffers.push({ vertexBuffer, indexBuffer });
+        }
+
+        this.coalescedBuffers = coalescedBuffers;
+        this.vertexBuffer = this.coalescedBuffers[0].vertexBuffer.buffer;
+        this.indexBuffer = this.coalescedBuffers[0].indexBuffer.buffer;
+    }
+
+    public destroy(gl: WebGL2RenderingContext): void {
+        gl.deleteBuffer(this.vertexBuffer);
+        gl.deleteBuffer(this.indexBuffer);
     }
 }

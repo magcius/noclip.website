@@ -322,6 +322,10 @@ export class Viewer {
             if (scene.renderPasses.includes(state.currentPass))
                 scene.render(state);
         }
+
+        const frameEndTime = window.performance.now();
+        const diff = frameEndTime - state.frameStartTime;
+        // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
     }
 
     public checkResize() {
