@@ -67,6 +67,7 @@ type UVAnimation = UVAnimation_Mat | UVAnimation_UVScroll | UVAnimation_Rotation
 
 export interface Material {
     flags: MaterialFlags;
+    groupIndex: number;
     textureIndexes: number[];
     vtxAttrFormat: number;
     gxMaterial: GX_Material.GXMaterial;
@@ -334,7 +335,7 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBuffer, o
             op: GX.AlphaOp.OR,
             compareA: GX.CompareType.GREATER,
             referenceA: 0.25,
-            compareB: GX.CompareType.ALWAYS,
+            compareB: GX.CompareType.NEVER,
             referenceB: 0,
         };
 
@@ -364,7 +365,7 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBuffer, o
             ropInfo,
         };
 
-        materials.push({ flags, textureIndexes, vtxAttrFormat, gxMaterial, uvAnimations });
+        materials.push({ flags, groupIndex, textureIndexes, vtxAttrFormat, gxMaterial, uvAnimations });
         assert((offs - materialsStart) === materialEndTable[i]);
     }
 

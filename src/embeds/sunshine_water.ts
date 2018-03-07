@@ -18,9 +18,9 @@ import { createSunshineSceneForBasename, SunshineClearScene } from '../j3d/scene
 const scale = 200;
 const posMtx = mat4.create();
 mat4.fromScaling(posMtx, [scale, scale, scale]);
-const posMtxTable = new Float32Array(16 * 10);
+const packetParamsData = new Float32Array(16 * 10);
 for (let i = 0; i < 10; i++) {
-    posMtxTable.set(posMtx, i * 16);
+    packetParamsData.set(posMtx, i * 16);
 }
 
 class MultiScene implements MainScene {
@@ -53,6 +53,7 @@ class MultiScene implements MainScene {
     }
 }
 
+const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
 class SeaPlaneScene implements Scene {
     public renderPasses = [ RenderPass.TRANSPARENT ];
     public textures: Texture[] = [];
@@ -73,6 +74,7 @@ class SeaPlaneScene implements Scene {
 
     private seaCmd: Command_Material;
     private plane: PlaneShape;
+    private sceneParamsBuffer: WebGLBuffer;
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, configName: string) {
         this.bmd = bmd;
@@ -83,6 +85,8 @@ class SeaPlaneScene implements Scene {
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
         this.plane = new PlaneShape(gl);
+
+        this.sceneParamsBuffer = gl.createBuffer();
     }
 
     public makeMaterialCommand(gl: WebGL2RenderingContext, material: MaterialEntry, configName: string) {
@@ -136,14 +140,30 @@ class SeaPlaneScene implements Scene {
         return cmd;
     }
 
-    public render(renderState: RenderState) {
-        this.seaCmd.exec(renderState);
-        this.plane.render(renderState);
+    public render(state: RenderState) {
+        const gl = state.gl;
+        
+        // Update our SceneParams UBO.
+        let offs = 0;
+        sceneParamsData.set(state.projection, offs);
+        offs += 4*4;
+        sceneParamsData.set(state.updateModelView(this.isSkybox), offs);
+        offs += 4*4;
+        sceneParamsData.set(this.attrScaleData, offs);
+        offs += 4*4;
+        sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
+
+        gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
+        gl.bufferData(gl.UNIFORM_BUFFER, sceneParamsData, gl.DYNAMIC_DRAW);
+
+        this.seaCmd.exec(state);
+        this.plane.render(state);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.plane.destroy(gl);
         this.seaCmd.destroy(gl);
+        gl.deleteBuffer(this.sceneParamsBuffer);
     }
 
     public getTimeInFrames(milliseconds: number) {
@@ -155,9 +175,13 @@ class PlaneShape {
     private vao: WebGLVertexArrayObject;
     private posBuffer: WebGLBuffer;
     private txcBuffer: WebGLBuffer;
+    private packetParamsBuffer: WebGLBuffer;
 
     constructor(gl: WebGL2RenderingContext) {
         this.createBuffers(gl);
+        this.packetParamsBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
+        gl.bufferData(gl.UNIFORM_BUFFER, packetParamsData, gl.STATIC_DRAW);
     }
 
     private createBuffers(gl: WebGL2RenderingContext) {
@@ -208,8 +232,7 @@ class PlaneShape {
     public render(state: RenderState) {
         const gl = state.viewport.gl;
 
-        const prog = (<GX_Material.GX_Program> state.currentProgram);
-        gl.uniformMatrix4fv(prog.u_PosMtx, false, posMtxTable);
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
 
         gl.bindVertexArray(this.vao);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -220,6 +243,7 @@ class PlaneShape {
         gl.deleteVertexArray(this.vao);
         gl.deleteBuffer(this.posBuffer);
         gl.deleteBuffer(this.txcBuffer);
+        gl.deleteBuffer(this.packetParamsBuffer);
     }
 }
 

@@ -9,6 +9,7 @@ import * as GX_Texture from './gx_texture';
 import * as Viewer from 'viewer';
 
 import { RenderFlags, RenderState, RenderPass, CompareMode, CoalescedBuffers, BufferCoalescer } from '../render';
+import { assert, align } from '../util';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
@@ -29,19 +30,24 @@ function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): {
     }
 }
 
-const posMtxTable = new Float32Array(16 * 10);
+const packetParamsData = new Float32Array(10 * 16);
 class Command_Shape {
     private bmd: BMD;
     private shape: Shape;
     private vao: WebGLVertexArrayObject;
     private jointMatrices: mat4[];
     private coalescedBuffers: CoalescedBuffers;
+    private packetParamsBuffer: WebGLBuffer;
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD, shape: Shape, coalescedBuffers: CoalescedBuffers, jointMatrices: mat4[]) {
         this.bmd = bmd;
         this.shape = shape;
         this.coalescedBuffers = coalescedBuffers;
         this.jointMatrices = jointMatrices;
+
+        this.packetParamsBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
+        gl.bufferData(gl.UNIFORM_BUFFER, packetParamsData, gl.DYNAMIC_DRAW);
 
         this.vao = gl.createVertexArray();
         gl.bindVertexArray(this.vao);
@@ -71,14 +77,17 @@ class Command_Shape {
 
     public exec(state: RenderState) {
         const gl = state.gl;
-        const prog = (<GX_Material.GX_Program> state.currentProgram);
 
         gl.bindVertexArray(this.vao);
 
         const indexOffset = this.coalescedBuffers.indexBuffer.offset;
 
+        gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
+
         this.shape.packets.forEach((packet, packetIndex) => {
             // Update our matrix table.
+            let updated = false;
             for (let i = 0; i < packet.weightedJointTable.length; i++) {
                 const weightedJointIndex = packet.weightedJointTable[i];
                 // Leave existing joint.
@@ -89,9 +98,11 @@ class Command_Shape {
                     throw "whoops";
 
                 const posMtx = this.jointMatrices[weightedJoint.jointIndex];
-                posMtxTable.set(posMtx, i * 16);
+                packetParamsData.set(posMtx, i * 16);
+                updated = true;
             }
-            gl.uniformMatrix4fv(prog.u_PosMtx, false, posMtxTable);
+            if (updated)
+                gl.bufferData(gl.UNIFORM_BUFFER, packetParamsData, gl.DYNAMIC_DRAW);
 
             gl.drawElements(gl.TRIANGLES, packet.numTriangles * 3, gl.UNSIGNED_SHORT, indexOffset + packet.firstTriangle * 3 * 2);
         });
@@ -101,14 +112,14 @@ class Command_Shape {
 
     public destroy(gl: WebGL2RenderingContext) {
         gl.deleteVertexArray(this.vao);
+        gl.deleteBuffer(this.packetParamsBuffer);
     }
 }
 
+const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10);
 export class Command_Material {
-    static matrixTableScratch = new Float32Array(9 * 10);
     static matrixScratch = mat3.create();
     static textureScratch = new Int32Array(8);
-    static colorScratch = new Float32Array(4 * 8);
 
     private scene: Scene;
 
@@ -121,6 +132,8 @@ export class Command_Material {
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
 
+    private materialParamsBuffer: WebGLBuffer;
+
     constructor(gl: WebGL2RenderingContext, scene: Scene, material: MaterialEntry) {
         this.scene = scene;
         this.bmd = scene.bmd;
@@ -131,6 +144,8 @@ export class Command_Material {
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
         this.textures = this.translateTextures(gl);
+
+        this.materialParamsBuffer = gl.createBuffer();
     }
 
     private translateTextures(gl: WebGL2RenderingContext): WebGLTexture[] {
@@ -213,56 +228,18 @@ export class Command_Material {
         const gl = state.gl;
 
         state.useProgram(this.program);
-        state.bindModelView(this.scene.isSkybox, this.scene.modelMatrix);
         state.useFlags(this.renderFlags);
 
-        // LOD Bias.
-        const width = state.viewport.canvas.width;
-        const height = state.viewport.canvas.height;
-        // GC's internal EFB is sized at 640x528. Bias our mips so that it's like the user
-        // is rendering things in that resolution.
-        const bias = Math.log2(Math.min(width / 640, height / 528));
-        gl.uniform1f(this.program.u_TextureLODBias, bias);
-
-        gl.uniform1fv(this.program.u_AttrScale, this.scene.attrScaleData, 0, 0);
-
-        // Bind our texture matrices.
-        const matrixScratch = Command_Material.matrixScratch;
-        const matrixTableScratch = Command_Material.matrixTableScratch;
-        for (let i = 0; i < this.material.texMatrices.length; i++) {
-            const texMtx = this.material.texMatrices[i];
-            if (texMtx === null)
-                continue;
-
-            let finalMatrix;
-            if (this.btk && this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, this.scene.getTimeInFrames(state.time))) {
-                finalMatrix = matrixScratch;
-
-                // Multiply in the material matrix if we want that.
-                if (this.scene.useMaterialTexMtx)
-                    mat3.mul(matrixScratch, matrixScratch, texMtx.matrix);
-            } else {
-                finalMatrix = texMtx.matrix;
+        for (let i = 0; i < 2; i++) {
+            const color = this.material.colorMatRegs[i];
+            if (color !== null) {
+                materialParamsData[i*4+0] = color.r;
+                materialParamsData[i*4+1] = color.g;
+                materialParamsData[i*4+2] = color.b;
+                materialParamsData[i*4+3] = color.a;
             }
-
-            matrixTableScratch.set(finalMatrix, i * 9);
         }
 
-        const location = this.program.u_TexMtx;
-        gl.uniformMatrix3fv(location, false, matrixTableScratch);
-
-        const textureScratch = Command_Material.textureScratch;
-        for (let i = 0; i < this.textures.length; i++) {
-            const texture = this.textures[i];
-            if (texture === null)
-                continue;
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            textureScratch[i] = i;
-        }
-        gl.uniform1iv(this.program.u_Texture, textureScratch);
-
-        const colorScratch = Command_Material.colorScratch;
         for (let i = 0; i < 8; i++) {
             let fallbackColor: GX_Material.Color;
             if (i >= 4)
@@ -284,28 +261,67 @@ export class Command_Material {
                 alpha = fallbackColor.a;
             }
 
-            colorScratch[i*4+0] = color.r;
-            colorScratch[i*4+1] = color.g;
-            colorScratch[i*4+2] = color.b;
-            colorScratch[i*4+3] = alpha;
+            const offs = 4*2 + 4*i;
+            materialParamsData[offs+0] = color.r;
+            materialParamsData[offs+1] = color.g;
+            materialParamsData[offs+2] = color.b;
+            materialParamsData[offs+3] = alpha;
         }
-        gl.uniform4fv(this.program.u_KonstColor, colorScratch);
 
-        for (let i = 0; i < 2; i++) {
-            const color = this.material.colorMatRegs[i];
-            if (color !== null) {
-                colorScratch[i*4+0] = color.r;
-                colorScratch[i*4+1] = color.g;
-                colorScratch[i*4+2] = color.b;
-                colorScratch[i*4+3] = color.a;
+        // Bind our texture matrices.
+        const matrixScratch = Command_Material.matrixScratch;
+        for (let i = 0; i < this.material.texMatrices.length; i++) {
+            const texMtx = this.material.texMatrices[i];
+            if (texMtx === null)
+                continue;
+
+            let finalMatrix;
+            if (this.btk && this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, this.scene.getTimeInFrames(state.time))) {
+                finalMatrix = matrixScratch;
+
+                // Multiply in the material matrix if we want that.
+                if (this.scene.useMaterialTexMtx)
+                    mat3.mul(matrixScratch, matrixScratch, texMtx.matrix);
+            } else {
+                finalMatrix = texMtx.matrix;
             }
+
+            const offs = 4*2 + 4*8 + 12*i;
+            // XXX(jstpierre): mat3's are effectively a mat4x3.
+            materialParamsData[offs +  0] = finalMatrix[0];
+            materialParamsData[offs +  1] = finalMatrix[1];
+            materialParamsData[offs +  2] = finalMatrix[2];
+            materialParamsData[offs +  4] = finalMatrix[3];
+            materialParamsData[offs +  5] = finalMatrix[4];
+            materialParamsData[offs +  6] = finalMatrix[5];
+            materialParamsData[offs +  8] = finalMatrix[6];
+            materialParamsData[offs +  9] = finalMatrix[7];
+            materialParamsData[offs + 10] = finalMatrix[8];
         }
-        gl.uniform4fv(this.program.u_ColorMatReg, colorScratch.slice(0, 8));
+
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);
+
+        gl.bindBuffer(gl.UNIFORM_BUFFER, this.materialParamsBuffer);
+        gl.bufferData(gl.UNIFORM_BUFFER, materialParamsData, gl.DYNAMIC_DRAW);
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_MaterialParams, this.materialParamsBuffer);
+
+        // Bind textures.
+        const textureScratch = Command_Material.textureScratch;
+        for (let i = 0; i < this.textures.length; i++) {
+            const texture = this.textures[i];
+            if (texture === null)
+                continue;
+            gl.activeTexture(gl.TEXTURE0 + i);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            textureScratch[i] = i;
+        }
+        gl.uniform1iv(this.program.u_Texture, textureScratch);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.textures.forEach((texture) => gl.deleteTexture(texture));
         this.program.destroy(gl);
+        gl.deleteBuffer(this.materialParamsBuffer);
     }
 }
 
@@ -321,6 +337,7 @@ export enum ColorOverride {
     C0, C1, C2, C3,
 }
 
+const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
 export class Scene implements Viewer.Scene {
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
 
@@ -348,6 +365,8 @@ export class Scene implements Viewer.Scene {
     private shapeCommands: Command_Shape[];
     private jointMatrices: mat4[];
 
+    public sceneParamsBuffer: WebGLBuffer;
+
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT) {
         this.bmd = bmd;
         this.btk = btk;
@@ -355,6 +374,7 @@ export class Scene implements Viewer.Scene {
 
         this.translateModel(gl, this.bmd);
 
+        this.sceneParamsBuffer = gl.createBuffer();
         this.modelMatrix = mat4.create();
 
         const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
@@ -427,7 +447,22 @@ export class Scene implements Viewer.Scene {
     }
 
     public render(state: RenderState) {
+        const gl = state.gl;
+
         state.setClipPlanes(10, 500000);
+
+        // Update our SceneParams UBO.
+        let offs = 0;
+        sceneParamsData.set(state.projection, offs);
+        offs += 4*4;
+        sceneParamsData.set(state.updateModelView(this.isSkybox, this.modelMatrix), offs);
+        offs += 4*4;
+        sceneParamsData.set(this.attrScaleData, offs);
+        offs += 4*4;
+        sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
+
+        gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
+        gl.bufferData(gl.UNIFORM_BUFFER, sceneParamsData, gl.DYNAMIC_DRAW);
 
         if (this.isSkybox) {
             // The Super Mario Sunshine skyboxes are authored in this strange way where they are transparent,
@@ -451,7 +486,7 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateModel(gl: WebGL2RenderingContext, bmd: BMD) {
-        const attrScaleCount = (GX_Material.scaledVtxAttributes.length + 3) & ~3;
+        const attrScaleCount = GX_Material.scaledVtxAttributes.length;
         const attrScaleData = new Float32Array(attrScaleCount);
         for (let i = 0; i < GX_Material.scaledVtxAttributes.length; i++) {
             const attrib = GX_Material.scaledVtxAttributes[i];
@@ -522,5 +557,6 @@ export class Scene implements Viewer.Scene {
         this.bufferCoalescer.destroy(gl);
         this.materialCommands.forEach((command) => command.destroy(gl));
         this.shapeCommands.forEach((command) => command.destroy(gl));
+        gl.deleteBuffer(this.sceneParamsBuffer);
     }
 }

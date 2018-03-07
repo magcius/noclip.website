@@ -5,7 +5,8 @@ import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';
 
-import { BlendFactor, CompareMode, BlendMode as RenderBlendMode, CullMode, FrontFaceMode, RenderFlags, Program } from '../render';
+import { BlendFactor, CompareMode, BlendMode as RenderBlendMode, CullMode, FrontFaceMode, RenderFlags, Program, RenderState } from '../render';
+import { align } from '../util';
 
 // #region Material definition.
 export class Color {
@@ -121,18 +122,19 @@ export const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
 
 export const scaledVtxAttributes: GX.VertexAttribute[] = vtxAttributeGenDefs.filter((a) => a.scale).map((a) => a.attrib);
 
+while (scaledVtxAttributes.length < align(scaledVtxAttributes.length, 4))
+    scaledVtxAttributes.push(-1);
+
 export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
     return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrib === vtxAttrib);
 }
 
 export class GX_Program extends Program {
-    public u_PosMtx: WebGLUniformLocation;
-    public u_TexMtx: WebGLUniformLocation;
+    static ub_SceneParams = 0;
+    static ub_MaterialParams = 1;
+    static ub_PacketParams = 2;
+
     public u_Texture: WebGLUniformLocation;
-    public u_TextureLODBias: WebGLUniformLocation;
-    public u_KonstColor: WebGLUniformLocation;
-    public u_AttrScale: WebGLUniformLocation;
-    public u_ColorMatReg: WebGLUniformLocation;
 
     private material: GXMaterial;
 
@@ -454,38 +456,57 @@ export class GX_Program extends Program {
 `;
     }
 
-    private generateVertAttributeScaleBlock() {
-        const scaleCount = scaledVtxAttributes.length;
-        return `uniform float u_AttrScale[${scaleCount}];`
-    }
-
     private generateVertAttributeDefs() {
         return vtxAttributeGenDefs.map((a, i) => {
             const scaleIdx = scaledVtxAttributes.indexOf(a.attrib);
+            const scaleVecIdx = scaleIdx >> 2;
+            const scaleScalarIdx = scaleIdx & 3;
 
             return `
 layout(location = ${i}) in ${a.storage} a_${a.name};
 ${a.storage} ReadAttrib_${a.name}() {
-    return a_${a.name}${a.scale ? ` * u_AttrScale[${scaleIdx}]` : ``};
+    return a_${a.name}${a.scale ? ` * u_AttrScale[${scaleVecIdx}][${scaleScalarIdx}]` : ``};
 }
 `;
         }).join('');
     }
 
+    private generateUBO() {
+        const scaledVecCount = scaledVtxAttributes.length >> 2;
+
+        return `
+// Expected to be constant across the entire scene.
+layout(std140) uniform ub_SceneParams {
+    mat4 u_Projection;
+    mat4 u_ModelView;
+    vec4 u_AttrScale[${scaledVecCount}];
+    vec4 u_Misc0;
+};
+
+#define u_TextureLODBias u_Misc0[0]
+
+// Expected to change with each material.
+layout(std140) uniform ub_MaterialParams {
+    vec4 u_ColorMatReg[2];
+    vec4 u_KonstColor[8];
+    mat3 u_TexMtx[10];
+};
+
+// Expected to change with each shape packet.
+layout(std140) uniform ub_PacketParams {
+    mat4 u_PosMtx[10];
+};
+`;
+    }
+
     private generateShaders() {
+        const ubo = this.generateUBO();
+
         this.vert = `
 // ${this.material.name}
-precision highp float;
-// Viewer
-uniform mat4 u_projection;
-uniform mat4 u_modelView;
-// GX_Material
-${this.generateVertAttributeScaleBlock()}
+precision mediump float;
+${ubo}
 ${this.generateVertAttributeDefs()}
-uniform mat3 u_TexMtx[10];
-uniform mat4 u_PosMtx[10];
-uniform vec4 u_ColorMatReg[2];
-
 out vec3 v_Position;
 out vec3 v_Normal;
 out vec4 v_Color0;
@@ -507,7 +528,7 @@ void main() {
     v_Color0 = ${this.generateColorChannel(0)};
     v_Color1 = ${this.generateColorChannel(1)};
 ${this.generateTexGens(this.material.texGens)}
-    gl_Position = u_projection * u_modelView * t_Position;
+    gl_Position = u_Projection * u_ModelView * t_Position;
 }
 `;
 
@@ -519,9 +540,8 @@ ${this.generateTexGens(this.material.texGens)}
         this.frag = `
 // ${this.material.name}
 precision mediump float;
+${ubo}
 uniform sampler2D u_Texture[8];
-uniform float u_TextureLODBias;
-uniform vec4 u_KonstColor[8];
 
 in vec3 v_Position;
 in vec3 v_Normal;
@@ -563,13 +583,11 @@ ${this.generateAlphaTest(alphaTest)}
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
-        this.u_PosMtx = gl.getUniformLocation(prog, `u_PosMtx`);
-        this.u_TexMtx = gl.getUniformLocation(prog, `u_TexMtx`);
+        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_SceneParams`), GX_Program.ub_SceneParams);
+        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_MaterialParams`), GX_Program.ub_MaterialParams);
+        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_PacketParams`), GX_Program.ub_PacketParams);
+
         this.u_Texture = gl.getUniformLocation(prog, `u_Texture`);
-        this.u_TextureLODBias = gl.getUniformLocation(prog, 'u_TextureLODBias');
-        this.u_KonstColor = gl.getUniformLocation(prog, `u_KonstColor`);
-        this.u_AttrScale = gl.getUniformLocation(prog, `u_AttrScale`);
-        this.u_ColorMatReg = gl.getUniformLocation(prog, `u_ColorMatReg`);
     }
 }
 // #endregion
@@ -653,3 +671,14 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
     return renderFlags;
 }
 // #endregion
+
+// XXX(jstpierre): Put this somewhere better.
+export function getTextureLODBias(state: RenderState): number {
+    // LOD Bias.
+    const width = state.viewport.canvas.width;
+    const height = state.viewport.canvas.height;
+    // GC's internal EFB is sized at 640x528. Bias our mips so that it's like the user
+    // is rendering things in that resolution.
+    const textureLODBias = Math.log2(Math.min(width / 640, height / 528));
+    return textureLODBias;
+}
