@@ -11,8 +11,8 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import { Progressable } from '../progress';
-import { RenderState, Program, RenderArena, RenderPass, RenderFlags, FrontFaceMode, CompareMode, CullMode } from '../render';
-import { be16toh, be32toh } from '../endian';
+import { RenderState, Program, RenderArena, RenderPass, RenderFlags, FrontFaceMode, CompareMode, CullMode, BufferCoalescer, coalesceBuffer, CoalescedBuffer } from '../render';
+import { be16toh, be32toh, betoh } from '../endian';
 import { assert, fetch } from '../util';
 
 type RenderFunc = (renderState: RenderState) => void;
@@ -74,37 +74,37 @@ void main() {
 
 interface GX2AttribFormatInfo {
     size: number;
-    elemSize: number;
+    elemSize: 1 | 2 | 4;
     type: number;
     normalized: boolean;
 }
 
-function getAttribFormatInfo(gl: WebGL2RenderingContext, format: GX2AttribFormat) {
+function getAttribFormatInfo(format: GX2AttribFormat): GX2AttribFormatInfo {
     switch (format) {
     case GX2AttribFormat._8_SINT:
-        return { size: 1, elemSize: 1, type: gl.BYTE, normalized: false };
+        return { size: 1, elemSize: 1, type: WebGL2RenderingContext.BYTE, normalized: false };
     case GX2AttribFormat._8_SNORM:
-        return { size: 1, elemSize: 1, type: gl.BYTE, normalized: true };
+        return { size: 1, elemSize: 1, type: WebGL2RenderingContext.BYTE, normalized: true };
     case GX2AttribFormat._8_UINT:
-        return { size: 1, elemSize: 1, type: gl.UNSIGNED_BYTE, normalized: false };
+        return { size: 1, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: false };
     case GX2AttribFormat._8_UNORM:
-        return { size: 1, elemSize: 1, type: gl.UNSIGNED_BYTE, normalized: true };
+        return { size: 1, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
     case GX2AttribFormat._8_8_UNORM:
-        return { size: 2, elemSize: 1, type: gl.UNSIGNED_BYTE, normalized: true };
+        return { size: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
     case GX2AttribFormat._8_8_SNORM:
-        return { size: 2, elemSize: 1, type: gl.UNSIGNED_BYTE, normalized: true };
+        return { size: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
     case GX2AttribFormat._16_16_UNORM:
-        return { size: 2, elemSize: 2, type: gl.UNSIGNED_SHORT, normalized: true };
+        return { size: 2, elemSize: 2, type: WebGL2RenderingContext.UNSIGNED_SHORT, normalized: true };
     case GX2AttribFormat._16_16_SNORM:
-        return { size: 2, elemSize: 2, type: gl.SHORT, normalized: true };
+        return { size: 2, elemSize: 2, type: WebGL2RenderingContext.SHORT, normalized: true };
     case GX2AttribFormat._16_16_FLOAT:
-        return { size: 2, elemSize: 2, type: gl.HALF_FLOAT, normalized: false };
+        return { size: 2, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
     case GX2AttribFormat._16_16_16_16_FLOAT:
-        return { size: 4, elemSize: 2, type: gl.HALF_FLOAT, normalized: false };
+        return { size: 4, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
     case GX2AttribFormat._32_32_FLOAT:
-        return { size: 2, elemSize: 4, type: gl.FLOAT, normalized: false };
+        return { size: 2, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
     case GX2AttribFormat._32_32_32_FLOAT:
-        return { size: 4, elemSize: 4, type: gl.FLOAT, normalized: false };
+        return { size: 4, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
     default:
         const m_: never = format;
         throw new Error(`Unsupported attribute format ${format}`);
@@ -146,30 +146,7 @@ export class Scene implements Viewer.Scene {
         });
     }
 
-    private translateVertexBuffer(gl: WebGL2RenderingContext, attrib: BFRES.VtxAttrib, buffer: BFRES.BufferData): WebGLBuffer {
-        let bufferData = buffer.data;
-        switch (getAttribFormatInfo(gl, attrib.format).elemSize) {
-        case 1:
-            break;
-        case 2:
-            bufferData = be16toh(buffer.data);
-            break;
-        case 4:
-            bufferData = be32toh(buffer.data);
-            break;
-        default:
-            throw new Error(`Unsupported vertex format ${attrib}`);
-        }
-
-        const glBuffer = this.arena.createBuffer(gl);
-        gl.bindBuffer(gl.ARRAY_BUFFER, glBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, bufferData, gl.STATIC_DRAW);
-        return glBuffer;
-    }
-
-    private translateFVTX(gl: WebGL2RenderingContext, fvtx: BFRES.FVTX): WebGLVertexArrayObject {
-        const glBuffers: WebGLBuffer[] = [];
-
+    private translateFVTXBuffers(fvtx: BFRES.FVTX, vertexDatas: ArrayBuffer[]) {
         for (let i = 0; i < fvtx.attribs.length; i++) {
             const attrib = fvtx.attribs[i];
             const location = ProgramGambit_UBER.attribLocations[attrib.name];
@@ -180,9 +157,12 @@ export class Scene implements Viewer.Scene {
             const buffer = fvtx.buffers[attrib.bufferIndex];
             assert(buffer.stride === 0);
             assert(attrib.bufferStart === 0);
-            glBuffers[i] = this.translateVertexBuffer(gl, attrib, buffer);
+            const vertexData = betoh(buffer.data, getAttribFormatInfo(attrib.format).elemSize);
+            vertexDatas.push(vertexData);
         }
+    }
 
+    private translateFVTX(gl: WebGL2RenderingContext, fvtx: BFRES.FVTX, coalescedVertex: CoalescedBuffer[]): WebGLVertexArrayObject {
         const vao = this.arena.createVertexArray(gl);
         gl.bindVertexArray(vao);
 
@@ -193,9 +173,10 @@ export class Scene implements Viewer.Scene {
             if (location === undefined)
                 continue;
 
-            const formatInfo = getAttribFormatInfo(gl, attrib.format);
-            gl.bindBuffer(gl.ARRAY_BUFFER, glBuffers[i]);
-            gl.vertexAttribPointer(location, formatInfo.size, formatInfo.type, formatInfo.normalized, 0, 0);
+            const formatInfo = getAttribFormatInfo(attrib.format);
+            const buffer = coalescedVertex.shift();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer.buffer);
+            gl.vertexAttribPointer(location, formatInfo.size, formatInfo.type, formatInfo.normalized, 0, buffer.offset);
             gl.enableVertexAttribArray(location);
         }
 
@@ -349,39 +330,27 @@ export class Scene implements Viewer.Scene {
         };
     }
 
-    private translatePrimType(gl: WebGL2RenderingContext, primType: GX2PrimitiveType) {
-        switch (primType) {
-        case GX2PrimitiveType.TRIANGLES:
-            return gl.TRIANGLES;
-        default:
-            throw new Error(`Unsupported primitive type ${primType}`);
-        }
-    }
-
-    private translateIndexBuffer(gl: WebGL2RenderingContext, indexFormat: GX2IndexFormat, indexBufferData: ArrayBuffer) {
-        const view = new DataView(indexBufferData);
-        let out: ArrayBuffer;
-
+    private translateIndexBuffer( indexFormat: GX2IndexFormat, indexBufferData: ArrayBuffer): ArrayBuffer {
         switch (indexFormat) {
         case GX2IndexFormat.U16_LE:
         case GX2IndexFormat.U32_LE:
-            out = indexBufferData;
-            break;
+            return indexBufferData;
         case GX2IndexFormat.U16:
-            out = be16toh(indexBufferData);
-            break;
+            return be16toh(indexBufferData);
         case GX2IndexFormat.U32:
-            out = be32toh(indexBufferData);
-            break;
+            return be32toh(indexBufferData);
         }
-
-        const glBuffer = this.arena.createBuffer(gl);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, out, gl.STATIC_DRAW);
-        return glBuffer;
     }
 
-    private translateIndexFormat(gl: WebGL2RenderingContext, indexFormat: GX2IndexFormat) {
+    private translateFSHPBuffers(fshp: BFRES.FSHP, indexDatas: ArrayBuffer[]) {
+        for (const mesh of fshp.meshes) {
+            assert(mesh.indexBufferData.stride === 0);
+            const indexData = this.translateIndexBuffer(mesh.indexFormat, mesh.indexBufferData.data);
+            indexDatas.push(indexData);
+        }
+    }
+
+    private translateIndexFormat(gl: WebGL2RenderingContext, indexFormat: GX2IndexFormat): GLenum {
         // Little-endian translation was done above.
         switch (indexFormat) {
         case GX2IndexFormat.U16:
@@ -395,35 +364,42 @@ export class Scene implements Viewer.Scene {
         }
     }
  
-    private translateFSHP(gl: WebGL2RenderingContext, fshp: BFRES.FSHP): RenderFunc {
-        const glIndexBuffers: WebGLBuffer[] = [];
+    private translatePrimType(gl: WebGL2RenderingContext, primType: GX2PrimitiveType) {
+        switch (primType) {
+        case GX2PrimitiveType.TRIANGLES:
+            return gl.TRIANGLES;
+        default:
+            throw new Error(`Unsupported primitive type ${primType}`);
+        }
+    }
+
+    private translateFSHP(gl: WebGL2RenderingContext, fshp: BFRES.FSHP, coalescedIndex: CoalescedBuffer[]): RenderFunc {
+        const glIndexBuffers: CoalescedBuffer[] = [];
         for (const mesh of fshp.meshes) {
-            assert(mesh.indexBufferData.stride === 0);
-            const buffer = this.translateIndexBuffer(gl, mesh.indexFormat, mesh.indexBufferData.data);
-            glIndexBuffers.push(buffer);
+            glIndexBuffers.push(coalescedIndex.shift());
         }
 
         return (state: RenderState) => {
             const lod = 0;
             const mesh = fshp.meshes[lod];
             const glIndexBuffer = glIndexBuffers[lod];
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndexBuffer);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndexBuffer.buffer);
 
             for (const submesh of mesh.submeshes) {
                 gl.drawElements(this.translatePrimType(gl, mesh.primType),
                     submesh.indexBufferCount,
                     this.translateIndexFormat(gl, mesh.indexFormat),
-                    submesh.indexBufferOffset
+                    glIndexBuffer.offset + submesh.indexBufferOffset,
                 );
             }
         }
     }
 
-    private translateModel(gl: WebGL2RenderingContext, model: BFRES.ModelEntry): RenderFunc {
+    private translateModel(gl: WebGL2RenderingContext, model: BFRES.ModelEntry, coalescedVertex: CoalescedBuffer[], coalescedIndex: CoalescedBuffer[]): RenderFunc {
         const fmdl = model.fmdl;
-        const fvtxVaos: WebGLVertexArrayObject[] = fmdl.fvtx.map((fvtx) => this.translateFVTX(gl, fvtx));
+        const fvtxVaos: WebGLVertexArrayObject[] = fmdl.fvtx.map((fvtx) => this.translateFVTX(gl, fvtx, coalescedVertex));
         const fmatFuncs: RenderFunc[] = fmdl.fmat.map((fmat) => this.translateFMAT(gl, fmat));
-        const fshpFuncs: RenderFunc[] = fmdl.fshp.map((fshp) => this.translateFSHP(gl, fshp));
+        const fshpFuncs: RenderFunc[] = fmdl.fshp.map((fshp) => this.translateFSHP(gl, fshp, coalescedIndex));
 
         return (state: RenderState) => {
             // _drcmap is the map used for the Gamepad. It does nothing but cause Z-fighting.
@@ -544,9 +520,28 @@ export class Scene implements Viewer.Scene {
         return glTexture;
     }
 
+    private translateModelBuffers(modelEntry: BFRES.ModelEntry, vertexDatas: ArrayBuffer[], indexDatas: ArrayBuffer[]) {
+        // Translate vertex data.
+        modelEntry.fmdl.fvtx.forEach((fvtx) => this.translateFVTXBuffers(fvtx, vertexDatas));
+        modelEntry.fmdl.fshp.forEach((fshp) => this.translateFSHPBuffers(fshp, indexDatas));
+    }
+
     private translateFRES(gl: WebGL2RenderingContext, fres: BFRES.FRES): RenderFunc[] {
         this.glTextures = fres.textures.map((ftex) => this.translateTexture(gl, ftex));
-        return fres.models.map((modelEntry) => this.translateModel(gl, modelEntry));
+
+        // Gather buffers.
+        const vertexDatas: ArrayBuffer[] = [];
+        const indexDatas: ArrayBuffer[] = [];
+        fres.models.forEach((modelEntry) => {
+            this.translateModelBuffers(modelEntry, vertexDatas, indexDatas);
+        });
+
+        const coalescedVertex = coalesceBuffer(gl, gl.ARRAY_BUFFER, vertexDatas);
+        const coalescedIndex = coalesceBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, indexDatas);
+        this.arena.buffers.push(coalescedVertex[0].buffer);
+        this.arena.buffers.push(coalescedIndex[0].buffer);
+
+        return fres.models.map((modelEntry) => this.translateModel(gl, modelEntry, coalescedVertex, coalescedIndex));
     }
 
     public render(state: RenderState) {
