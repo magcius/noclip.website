@@ -377,7 +377,7 @@ export class RenderArena {
     }
 }
 
-interface CoalescedBuffer {
+export interface CoalescedBuffer {
     buffer: WebGLBuffer;
     offset: number;
 }
@@ -387,7 +387,7 @@ export interface CoalescedBuffers {
     indexBuffer: CoalescedBuffer;
 }
 
-function coalesceBuffer(gl: WebGL2RenderingContext, target: number, datas: ArrayBuffer[]): CoalescedBuffer[] {
+export function coalesceBuffer(gl: WebGL2RenderingContext, target: number, datas: ArrayBuffer[]): CoalescedBuffer[] {
     let dataLength = 0;
     for (const data of datas) {
         dataLength += data.byteLength;
