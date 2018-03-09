@@ -46,24 +46,24 @@ export class F3DEX2Program extends Program {
     public txsLocation: WebGLUniformLocation;
     public useVertexColorsLocation: WebGLUniformLocation;
     public alphaTestLocation: WebGLUniformLocation;
-    public positionLocation: number;
-    public uvLocation: number;
-    public colorLocation: number;
+    static a_Position = 0;
+    static a_UV = 1;
+    static a_Color = 2;
 
     public vert = `
 uniform mat4 u_modelView;
 uniform mat4 u_projection;
-attribute vec3 a_position;
-attribute vec2 a_uv;
-attribute vec4 a_color;
-varying vec4 v_color;
-varying vec2 v_uv;
+layout(location = ${F3DEX2Program.a_Position}) attribute vec3 a_Position;
+layout(location = ${F3DEX2Program.a_UV}) attribute vec2 a_UV;
+layout(location = ${F3DEX2Program.a_Color}) attribute vec4 a_Color;
+out vec4 v_color;
+out vec2 v_uv;
 uniform vec2 u_txs;
 
 void main() {
-    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);
-    v_color = a_color;
-    v_uv = a_uv * u_txs;
+    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);
+    v_uv = a_UV * u_txs;
+    v_color = a_Color;
 }
 `;
 
@@ -90,9 +90,6 @@ void main() {
         this.txsLocation = gl.getUniformLocation(prog, "u_txs");
         this.useVertexColorsLocation = gl.getUniformLocation(prog, "u_useVertexColors");
         this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
-        this.positionLocation = gl.getAttribLocation(prog, "a_position");
-        this.colorLocation = gl.getAttribLocation(prog, "a_color");
-        this.uvLocation = gl.getAttribLocation(prog, "a_uv");
     }
 }
 
