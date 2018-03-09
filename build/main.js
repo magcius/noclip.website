@@ -9672,27 +9672,6 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             offs += 8;
         }
         flushDraw(state);
-        var gl = state.gl;
-        var vao = gl.createVertexArray();
-        gl.bindVertexArray(vao);
-        var vertBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(state.vertexData), gl.STATIC_DRAW);
-        gl.vertexAttribPointer(Render.F3DEX2Program.a_Position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-        gl.vertexAttribPointer(Render.F3DEX2Program.a_UV, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-        gl.vertexAttribPointer(Render.F3DEX2Program.a_Color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
-        gl.enableVertexAttribArray(Render.F3DEX2Program.a_Position);
-        gl.enableVertexAttribArray(Render.F3DEX2Program.a_UV);
-        gl.enableVertexAttribArray(Render.F3DEX2Program.a_Color);
-        gl.bindVertexArray(null);
-        state.cmds.unshift(function (state) {
-            var gl = state.gl;
-            gl.bindVertexArray(vao);
-        });
-        state.cmds.push(function (state) {
-            var gl = state.gl;
-            gl.bindVertexArray(null);
-        });
     }
     function readDL(gl, rom, banks, startAddr) {
         var state = new State();
@@ -9708,7 +9687,19 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         state.rom = rom;
         state.banks = banks;
         runDL(state, startAddr);
-        return new DL(state.cmds, state.textures);
+        var vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+        var vertBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(state.vertexData), gl.STATIC_DRAW);
+        gl.vertexAttribPointer(Render.F3DEX2Program.a_Position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+        gl.vertexAttribPointer(Render.F3DEX2Program.a_UV, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+        gl.vertexAttribPointer(Render.F3DEX2Program.a_Color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
+        gl.enableVertexAttribArray(Render.F3DEX2Program.a_Position);
+        gl.enableVertexAttribArray(Render.F3DEX2Program.a_UV);
+        gl.enableVertexAttribArray(Render.F3DEX2Program.a_Color);
+        gl.bindVertexArray(null);
+        return new DL(vao, state.cmds, state.textures);
     }
     exports_42("readDL", readDL);
     var gl_matrix_9, Render, render_15, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
@@ -9796,10 +9787,19 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             CommandDispatch[UCodeCommands.SETTILESIZE] = cmd_SETTILESIZE;
             F3DEX2 = {};
             DL = /** @class */ (function () {
-                function DL(cmds, textures) {
+                function DL(vao, cmds, textures) {
+                    this.vao = vao;
                     this.cmds = cmds;
                     this.textures = textures;
                 }
+                DL.prototype.render = function (renderState) {
+                    var gl = renderState.gl;
+                    gl.bindVertexArray(this.vao);
+                    this.cmds.forEach(function (cmd) {
+                        cmd(renderState);
+                    });
+                    gl.bindVertexArray(null);
+                };
                 return DL;
             }());
             exports_42("DL", DL);
@@ -9918,9 +9918,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                     return function (state) {
                         var gl = state.gl;
                         var renderDL = function (dl) {
-                            dl.cmds.forEach(function (cmd) {
-                                cmd(state);
-                            });
+                            dl.render(state);
                         };
                         var renderMesh = function (mesh) {
                             if (mesh.bg) {

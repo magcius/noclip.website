@@ -831,42 +831,19 @@ function runDL(state: State, addr: number) {
     }
 
     flushDraw(state);
-
-    const gl = state.gl;
-
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-
-    const vertBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(state.vertexData), gl.STATIC_DRAW);
-
-    gl.vertexAttribPointer(Render.F3DEX2Program.a_Position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-    gl.vertexAttribPointer(Render.F3DEX2Program.a_UV, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-    gl.vertexAttribPointer(Render.F3DEX2Program.a_Color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
-    gl.enableVertexAttribArray(Render.F3DEX2Program.a_Position);
-    gl.enableVertexAttribArray(Render.F3DEX2Program.a_UV);
-    gl.enableVertexAttribArray(Render.F3DEX2Program.a_Color);
-
-    gl.bindVertexArray(null);
-
-    state.cmds.unshift((state: RenderState) => {
-        const gl = state.gl;
-        gl.bindVertexArray(vao);
-    });
-    state.cmds.push((state: RenderState) => {
-        const gl = state.gl;
-        gl.bindVertexArray(null);
-    });
 }
 
 export class DL {
-    public cmds: CmdFunc[];
-    public textures: Viewer.Texture[];
+    constructor(public vao: WebGLVertexArrayObject, public cmds: CmdFunc[], public textures: Viewer.Texture[]) {
+    }
 
-    constructor(cmds: CmdFunc[], textures: Viewer.Texture[]) {
-        this.cmds = cmds;
-        this.textures = textures;
+    render(renderState: RenderState) {
+        const gl = renderState.gl;
+        gl.bindVertexArray(this.vao);
+        this.cmds.forEach((cmd) => {
+            cmd(renderState);
+        })
+        gl.bindVertexArray(null);
     }
 }
 
@@ -889,5 +866,22 @@ export function readDL(gl: WebGL2RenderingContext, rom, banks, startAddr): DL {
     state.banks = banks;
 
     runDL(state, startAddr);
-    return new DL(state.cmds, state.textures);
+
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+
+    const vertBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(state.vertexData), gl.STATIC_DRAW);
+
+    gl.vertexAttribPointer(Render.F3DEX2Program.a_Position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+    gl.vertexAttribPointer(Render.F3DEX2Program.a_UV, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+    gl.vertexAttribPointer(Render.F3DEX2Program.a_Color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
+    gl.enableVertexAttribArray(Render.F3DEX2Program.a_Position);
+    gl.enableVertexAttribArray(Render.F3DEX2Program.a_UV);
+    gl.enableVertexAttribArray(Render.F3DEX2Program.a_Color);
+
+    gl.bindVertexArray(null);
+
+    return new DL(vao, state.cmds, state.textures);
 }
