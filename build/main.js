@@ -12122,10 +12122,10 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
         }
     };
 });
-System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes", "zelview/scenes", "j3d/zww_scenes", "metroid_prime/scenes", "progress"], function (exports_54, context_54) {
+System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes", "zelview/scenes", "j3d/zww_scenes", "progress"], function (exports_54, context_54) {
     "use strict";
     var __moduleName = context_54 && context_54.id;
-    var viewer_2, DKSIV, FRES, J3D, MDL0, OOT3D, SM64DS, ZELVIEW, ZWW, MP1, progress_8, ProgressBar, DroppedFileSceneDesc, Main;
+    var viewer_2, DKSIV, FRES, J3D, MDL0, OOT3D, SM64DS, ZELVIEW, ZWW, progress_8, ProgressBar, DroppedFileSceneDesc, Main;
     return {
         setters: [
             function (viewer_2_1) {
@@ -12154,9 +12154,6 @@ System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", 
             },
             function (ZWW_1) {
                 ZWW = ZWW_1;
-            },
-            function (MP1_1) {
-                MP1 = MP1_1;
             },
             function (progress_8_1) {
                 progress_8 = progress_8_1;
@@ -12268,7 +12265,7 @@ System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", 
                     this.groups.push(OOT3D.sceneGroup);
                     this.groups.push(FRES.sceneGroup);
                     this.groups.push(DKSIV.sceneGroup);
-                    this.groups.push(MP1.sceneGroup);
+                    // this.groups.push(MP1.sceneGroup);
                     this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
                     this.groups.push(this.droppedFileGroup);
                     this._loadSceneGroups();
