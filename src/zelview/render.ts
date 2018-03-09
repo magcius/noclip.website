@@ -187,9 +187,7 @@ class Scene implements Viewer.MainScene {
             const gl = state.gl;
 
             const renderDL = (dl: F3DEX2.DL) => {
-                dl.cmds.forEach((cmd) => {
-                    cmd(state);
-                });
+                dl.render(state);
             };
 
             const renderMesh = (mesh: ZELVIEW0.Mesh) => {
