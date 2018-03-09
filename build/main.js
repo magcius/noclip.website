@@ -9274,8 +9274,6 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             tile.textureId = otherTile.textureId;
             tile.width = otherTile.width;
             tile.height = otherTile.height;
-            tile.wrapS = otherTile.wrapS;
-            tile.wrapT = otherTile.wrapT;
         }
     }
     function convert_CI4(state, texture) {
@@ -9498,12 +9496,12 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
                 default: return gl.REPEAT;
             }
         }
-        texture.wrapT = translateWrap(texture.cmt);
-        texture.wrapS = translateWrap(texture.cms);
         var texId = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texId);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, translateWrap(texture.cms));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, translateWrap(texture.cmt));
         var glFormat;
         if (texture.dstFormat === "i8")
             glFormat = gl.LUMINANCE;
@@ -9626,8 +9624,6 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         state.cmds.push(function (renderState) {
             var gl = renderState.gl;
             gl.bindTexture(gl.TEXTURE_2D, tile.textureId);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, tile.wrapS);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, tile.wrapT);
             var prog = renderState.currentProgram;
             gl.uniform2fv(prog.txsLocation, [1 / tile.width, 1 / tile.height]);
         });
