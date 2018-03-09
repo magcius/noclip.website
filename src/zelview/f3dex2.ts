@@ -392,8 +392,6 @@ function loadTile(state: State, tile: any) {
         tile.textureId = otherTile.textureId;
         tile.width = otherTile.width;
         tile.height = otherTile.height;
-        tile.wrapS = otherTile.wrapS;
-        tile.wrapT = otherTile.wrapT;
     }
 }
 
@@ -659,13 +657,12 @@ function translateTexture(state, texture) {
         }
     }
 
-    texture.wrapT = translateWrap(texture.cmt);
-    texture.wrapS = translateWrap(texture.cms);
-
     const texId = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texId);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, translateWrap(texture.cms));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, translateWrap(texture.cmt));
 
     let glFormat;
     if (texture.dstFormat === "i8")
@@ -780,8 +777,6 @@ function loadTextureBlock(state, cmds) {
     state.cmds.push((renderState: RenderState) => {
         const gl = renderState.gl;
         gl.bindTexture(gl.TEXTURE_2D, tile.textureId);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, tile.wrapS);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, tile.wrapT);
         const prog = (<Render.F3DEX2Program> renderState.currentProgram);
         gl.uniform2fv(prog.txsLocation, [1 / tile.width, 1 / tile.height]);
     });
