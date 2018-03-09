@@ -9028,7 +9028,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
         }
     };
 });
-System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_42, context_42) {
+System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_42, context_42) {
     "use strict";
     var __moduleName = context_42 && context_42.id;
     function readVertex(state, which, addr) {
@@ -9060,63 +9060,28 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_42,
             var which = V0 + i;
             readVertex(state, which, addr);
             addr += 16;
-            state.verticesDirty[which] = true;
         }
     }
-    function translateTRI(state, idxData) {
+    function flushDraw(state) {
         var gl = state.gl;
-        function anyVertsDirty() {
-            try {
-                for (var idxData_1 = __values(idxData), idxData_1_1 = idxData_1.next(); !idxData_1_1.done; idxData_1_1 = idxData_1.next()) {
-                    var idx = idxData_1_1.value;
-                    if (state.verticesDirty[idx])
-                        return true;
-                }
-            }
-            catch (e_33_1) { e_33 = { error: e_33_1 }; }
-            finally {
-                try {
-                    if (idxData_1_1 && !idxData_1_1.done && (_a = idxData_1.return)) _a.call(idxData_1);
-                }
-                finally { if (e_33) throw e_33.error; }
-            }
-            return false;
-            var e_33, _a;
-        }
-        function createGLVertBuffer() {
-            var vertBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, state.vertexBuffer, gl.STATIC_DRAW);
-            return vertBuffer;
-        }
-        function getVertexBufferGL() {
-            if (anyVertsDirty() || !state.vertexBufferGL) {
-                state.vertexBufferGL = createGLVertBuffer();
-                state.verticesDirty = [];
-            }
-            return state.vertexBufferGL;
-        }
-        var vertBuffer = getVertexBufferGL();
-        var idxBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxData, gl.STATIC_DRAW);
-        var nPrim = idxData.length;
-        return function drawTri(renderState) {
-            var prog = renderState.currentProgram;
+        var vtxBufSize = state.vertexData.length / VERTEX_SIZE;
+        var vtxOffs = state.vertexOffs;
+        var vtxCount = vtxBufSize - vtxOffs;
+        state.vertexOffs = vtxBufSize;
+        if (vtxCount === 0)
+            return;
+        state.cmds.push(function (renderState) {
             var gl = renderState.gl;
-            gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-            gl.vertexAttribPointer(prog.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-            gl.vertexAttribPointer(prog.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-            gl.vertexAttribPointer(prog.colorLocation, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
-            gl.enableVertexAttribArray(prog.positionLocation);
-            gl.enableVertexAttribArray(prog.colorLocation);
-            gl.enableVertexAttribArray(prog.uvLocation);
-            gl.drawElements(gl.TRIANGLES, nPrim, gl.UNSIGNED_BYTE, 0);
-            gl.disableVertexAttribArray(prog.positionLocation);
-            gl.disableVertexAttribArray(prog.uvLocation);
-            gl.disableVertexAttribArray(prog.colorLocation);
-        };
+            gl.drawArrays(gl.TRIANGLES, vtxOffs, vtxCount);
+        });
+    }
+    function translateTRI(state, idxData) {
+        idxData.forEach(function (idx, i) {
+            var offs = idx * VERTEX_SIZE;
+            for (var i_5 = 0; i_5 < VERTEX_SIZE; i_5++) {
+                state.vertexData.push(state.vertexBuffer[offs + i_5]);
+            }
+        });
     }
     function tri(idxData, offs, cmd) {
         idxData[offs + 0] = (cmd >> 17) & 0x7F;
@@ -9131,14 +9096,14 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_42,
         flushTexture(state);
         var idxData = new Uint8Array(3);
         tri(idxData, 0, w0);
-        state.cmds.push(translateTRI(state, idxData));
+        translateTRI(state, idxData);
     }
     function cmd_TRI2(state, w0, w1) {
         flushTexture(state);
         var idxData = new Uint8Array(6);
         tri(idxData, 0, w0);
         tri(idxData, 3, w1);
-        state.cmds.push(translateTRI(state, idxData));
+        translateTRI(state, idxData);
     }
     function cmd_GEOMETRYMODE(state, w0, w1) {
         state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
@@ -9154,6 +9119,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_42,
             renderFlags.cullMode = render_15.CullMode.BACK;
         else
             renderFlags.cullMode = render_15.CullMode.NONE;
+        flushDraw(state);
         state.cmds.push(function (renderState) {
             var gl = renderState.gl;
             var prog = renderState.currentProgram;
@@ -9180,6 +9146,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_42,
                     (newMode_1 & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
                 renderFlags_1.blendMode = render_15.BlendMode.NONE;
             }
+            flushDraw(state);
             state.cmds.push(function (renderState) {
                 var gl = renderState.gl;
                 var prog = renderState.currentProgram;
@@ -9655,10 +9622,9 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_42,
         var tile = state.tile;
         state.textureTile = tile;
         tile.addr = state.textureImage.addr;
+        flushDraw(state);
         state.cmds.push(function (renderState) {
             var gl = renderState.gl;
-            if (!tile.textureId)
-                return;
             gl.bindTexture(gl.TEXTURE_2D, tile.textureId);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, tile.wrapS);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, tile.wrapT);
@@ -9709,6 +9675,28 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_42,
                 func(state, cmd0, cmd1);
             offs += 8;
         }
+        flushDraw(state);
+        var gl = state.gl;
+        var vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+        var vertBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(state.vertexData), gl.STATIC_DRAW);
+        gl.vertexAttribPointer(Render.F3DEX2Program.a_Position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+        gl.vertexAttribPointer(Render.F3DEX2Program.a_UV, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+        gl.vertexAttribPointer(Render.F3DEX2Program.a_Color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
+        gl.enableVertexAttribArray(Render.F3DEX2Program.a_Position);
+        gl.enableVertexAttribArray(Render.F3DEX2Program.a_UV);
+        gl.enableVertexAttribArray(Render.F3DEX2Program.a_Color);
+        gl.bindVertexArray(null);
+        state.cmds.unshift(function (state) {
+            var gl = state.gl;
+            gl.bindVertexArray(vao);
+        });
+        state.cmds.push(function (state) {
+            var gl = state.gl;
+            gl.bindVertexArray(null);
+        });
     }
     function readDL(gl, rom, banks, startAddr) {
         var state = new State();
@@ -9718,7 +9706,8 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_42,
         state.mtx = gl_matrix_9.mat4.create();
         state.mtxStack = [state.mtx];
         state.vertexBuffer = new Float32Array(32 * VERTEX_SIZE);
-        state.verticesDirty = [];
+        state.vertexData = [];
+        state.vertexOffs = 0;
         state.paletteTile = {};
         state.rom = rom;
         state.banks = banks;
@@ -9726,11 +9715,14 @@ System.register("zelview/f3dex2", ["gl-matrix", "render"], function (exports_42,
         return new DL(state.cmds, state.textures);
     }
     exports_42("readDL", readDL);
-    var gl_matrix_9, render_15, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
+    var gl_matrix_9, Render, render_15, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
             function (gl_matrix_9_1) {
                 gl_matrix_9 = gl_matrix_9_1;
+            },
+            function (Render_1) {
+                Render = Render_1;
             },
             function (render_15_1) {
                 render_15 = render_15_1;
@@ -9857,7 +9849,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                 __extends(F3DEX2Program, _super);
                 function F3DEX2Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nattribute vec3 a_position;\nattribute vec2 a_uv;\nattribute vec4 a_color;\nvarying vec4 v_color;\nvarying vec2 v_uv;\nuniform vec2 u_txs;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n    v_color = a_color;\n    v_uv = a_uv * u_txs;\n}\n";
+                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + F3DEX2Program.a_Position + ") attribute vec3 a_Position;\nlayout(location = " + F3DEX2Program.a_UV + ") attribute vec2 a_UV;\nlayout(location = " + F3DEX2Program.a_Color + ") attribute vec4 a_Color;\nout vec4 v_color;\nout vec2 v_uv;\nuniform vec2 u_txs;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);\n    v_uv = a_UV * u_txs;\n    v_color = a_Color;\n}\n";
                     _this.frag = "\nprecision mediump float;\nvarying vec2 v_uv;\nvarying vec4 v_color;\nuniform sampler2D u_texture;\nuniform bool u_useVertexColors;\nuniform int u_alphaTest;\n\nvoid main() {\n    gl_FragColor = texture2D(u_texture, v_uv);\n    if (u_useVertexColors)\n        gl_FragColor *= v_color;\n    if (u_alphaTest > 0 && gl_FragColor.a < 0.0125)\n        discard;\n}\n";
                     return _this;
                 }
@@ -9866,10 +9858,10 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                     this.txsLocation = gl.getUniformLocation(prog, "u_txs");
                     this.useVertexColorsLocation = gl.getUniformLocation(prog, "u_useVertexColors");
                     this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
-                    this.positionLocation = gl.getAttribLocation(prog, "a_position");
-                    this.colorLocation = gl.getAttribLocation(prog, "a_color");
-                    this.uvLocation = gl.getAttribLocation(prog, "a_uv");
                 };
+                F3DEX2Program.a_Position = 0;
+                F3DEX2Program.a_UV = 1;
+                F3DEX2Program.a_Color = 2;
                 return F3DEX2Program;
             }(render_16.Program));
             exports_43("F3DEX2Program", F3DEX2Program);
@@ -11175,12 +11167,12 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                     vertexIndexSize += 0x02;
                 }
             }
-            catch (e_34_1) { e_34 = { error: e_34_1 }; }
+            catch (e_33_1) { e_33 = { error: e_33_1 }; }
             finally {
                 try {
                     if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
                 }
-                finally { if (e_34) throw e_34.error; }
+                finally { if (e_33) throw e_33.error; }
             }
             var totalVertexCount = 0;
             var totalTriangleCount = 0;
@@ -11230,23 +11222,23 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                     // Convert topology to triangles.
                     var firstVertex = vertexId;
                     // First triangle is the same for all topo.
-                    for (var i_5 = 0; i_5 < 3; i_5++)
+                    for (var i_6 = 0; i_6 < 3; i_6++)
                         indexData[indexDataIdx++] = vertexId++;
                     switch (drawCall.primType) {
                         case 144 /* TRIANGLES */:
-                            for (var i_6 = 3; i_6 < drawCall.vertexCount; i_6++) {
+                            for (var i_7 = 3; i_7 < drawCall.vertexCount; i_7++) {
                                 indexData[indexDataIdx++] = vertexId++;
                             }
                             break;
                         case 152 /* TRIANGLESTRIP */:
-                            for (var i_7 = 3; i_7 < drawCall.vertexCount; i_7++) {
-                                indexData[indexDataIdx++] = vertexId - ((i_7 & 1) ? 1 : 2);
-                                indexData[indexDataIdx++] = vertexId - ((i_7 & 1) ? 2 : 1);
+                            for (var i_8 = 3; i_8 < drawCall.vertexCount; i_8++) {
+                                indexData[indexDataIdx++] = vertexId - ((i_8 & 1) ? 1 : 2);
+                                indexData[indexDataIdx++] = vertexId - ((i_8 & 1) ? 2 : 1);
                                 indexData[indexDataIdx++] = vertexId++;
                             }
                             break;
                         case 160 /* TRIANGLEFAN */:
-                            for (var i_8 = 3; i_8 < drawCall.vertexCount; i_8++) {
+                            for (var i_9 = 3; i_9 < drawCall.vertexCount; i_9++) {
                                 indexData[indexDataIdx++] = firstVertex;
                                 indexData[indexDataIdx++] = vertexId - 1;
                                 indexData[indexDataIdx++] = vertexId++;
@@ -11328,23 +11320,23 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                                 util_24.assert((packedDataOffs - packedDataOffs__) === format.compCount);
                             }
                         }
-                        catch (e_35_1) { e_35 = { error: e_35_1 }; }
+                        catch (e_34_1) { e_34 = { error: e_34_1 }; }
                         finally {
                             try {
                                 if (vtxAttrFormats_2_1 && !vtxAttrFormats_2_1.done && (_b = vtxAttrFormats_2.return)) _b.call(vtxAttrFormats_2);
                             }
-                            finally { if (e_35) throw e_35.error; }
+                            finally { if (e_34) throw e_34.error; }
                         }
                         util_24.assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
                     }
                 }
             }
-            catch (e_36_1) { e_36 = { error: e_36_1 }; }
+            catch (e_35_1) { e_35 = { error: e_35_1 }; }
             finally {
                 try {
                     if (drawCalls_2_1 && !drawCalls_2_1.done && (_c = drawCalls_2.return)) _c.call(drawCalls_2);
                 }
-                finally { if (e_36) throw e_36.error; }
+                finally { if (e_35) throw e_35.error; }
             }
             var surface = {
                 materialIndex: materialIndex,
@@ -11359,7 +11351,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
         }
         var geometry = { surfaces: surfaces };
         return [geometry, sectionIndex];
-        var e_34, _a, e_36, _c, e_35, _b;
+        var e_33, _a, e_35, _c, e_34, _b;
     }
     function parse(resourceSystem, buffer) {
         var view = new DataView(buffer);
@@ -11559,15 +11551,15 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                                 return resource;
                         }
                     }
-                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
+                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_37) throw e_37.error; }
+                        finally { if (e_36) throw e_36.error; }
                     }
                     return null;
-                    var e_37, _c;
+                    var e_36, _c;
                 };
                 ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
                     var cached = this._cache.get(assetID);
@@ -11779,8 +11771,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                     var _this = this;
                     // Pull out the first material of each group, which should be identical except for textures.
                     var groupMaterials = [];
-                    for (var i_9 = 0; i_9 < this.mrea.materialSet.materials.length; i_9++) {
-                        var material = this.mrea.materialSet.materials[i_9];
+                    for (var i_10 = 0; i_10 < this.mrea.materialSet.materials.length; i_10++) {
+                        var material = this.mrea.materialSet.materials[i_10];
                         if (!groupMaterials[material.groupIndex])
                             groupMaterials[material.groupIndex] = material;
                     }
@@ -11908,14 +11900,14 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                             offset += 4 * attrib.compCount;
                         }
                     }
-                    catch (e_38_1) { e_38 = { error: e_38_1 }; }
+                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
                     finally {
                         try {
                             if (vtxAttrFormats_3_1 && !vtxAttrFormats_3_1.done && (_a = vtxAttrFormats_3.return)) _a.call(vtxAttrFormats_3);
                         }
-                        finally { if (e_38) throw e_38.error; }
+                        finally { if (e_37) throw e_37.error; }
                     }
-                    var e_38, _a;
+                    var e_37, _a;
                 }
                 Command_Surface.prototype.exec = function (state) {
                     var gl = state.gl;
@@ -12046,14 +12038,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_39_1) { e_39 = { error: e_39_1 }; }
+                    catch (e_38_1) { e_38 = { error: e_38_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_39) throw e_39.error; }
+                        finally { if (e_38) throw e_38.error; }
                     }
-                    var e_39, _c;
+                    var e_38, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -12099,15 +12091,15 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                                 return new MultiScene(scenes);
                             }
                         }
-                        catch (e_40_1) { e_40 = { error: e_40_1 }; }
+                        catch (e_39_1) { e_39 = { error: e_39_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_40) throw e_40.error; }
+                            finally { if (e_39) throw e_39.error; }
                         }
                         return null;
-                        var e_40, _c;
+                        var e_39, _c;
                     });
                 };
                 return MP1SceneDesc;
@@ -12331,12 +12323,12 @@ System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", 
                             tex.appendChild(canvas);
                         }
                     }
-                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
+                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_41) throw e_41.error; }
+                        finally { if (e_40) throw e_40.error; }
                     }
                     tex.onmouseover = function () {
                         canvases.forEach(function (canvas) {
@@ -12356,7 +12348,7 @@ System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", 
                     tex.appendChild(label);
                     tex.style.cssFloat = 'left';
                     return tex;
-                    var e_41, _c;
+                    var e_40, _c;
                 };
                 Main.prototype._makeTextureSection = function (textures) {
                     var _this = this;
@@ -12415,14 +12407,14 @@ System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", 
                             this.groupSelect.appendChild(groupOption);
                         }
                     }
-                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
+                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_42) throw e_42.error; }
+                        finally { if (e_41) throw e_41.error; }
                     }
-                    var e_42, _c;
+                    var e_41, _c;
                 };
                 Main.prototype._loadSceneGroup = function (group, loadDefaultSceneInGroup) {
                     if (loadDefaultSceneInGroup === void 0) { loadDefaultSceneInGroup = true; }
@@ -12444,16 +12436,16 @@ System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", 
                             this.sceneSelect.appendChild(sceneOption);
                         }
                     }
-                    catch (e_43_1) { e_43 = { error: e_43_1 }; }
+                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_43) throw e_43.error; }
+                        finally { if (e_42) throw e_42.error; }
                     }
                     if (loadDefaultSceneInGroup)
                         this._loadSceneDesc(group.sceneDescs[0]);
-                    var e_43, _c;
+                    var e_42, _c;
                 };
                 Main.prototype._onSceneSelectChange = function () {
                     var option = this.sceneSelect.selectedOptions.item(0);
@@ -12809,14 +12801,14 @@ System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_44_1) { e_44 = { error: e_44_1 }; }
+                    catch (e_43_1) { e_43 = { error: e_43_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_44) throw e_44.error; }
+                        finally { if (e_43) throw e_43.error; }
                     }
-                    var e_44, _c;
+                    var e_43, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {

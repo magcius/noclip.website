@@ -57,8 +57,9 @@ class State {
     public mtxStack: mat4[];
 
     public vertexBuffer: Float32Array;
-    public vertexBufferGL: WebGLBuffer;
-    public verticesDirty: boolean[];
+    public vertexData: number[];
+    public vertexOffs: number;
+
     public geometryMode: number;
     public otherModeL: number;
 
@@ -112,59 +113,32 @@ function cmd_VTX(state: State, w0: number, w1: number) {
         const which = V0 + i;
         readVertex(state, which, addr);
         addr += 16;
-
-        state.verticesDirty[which] = true;
     }
 }
 
-function translateTRI(state: State, idxData: Uint8Array) {
+function flushDraw(state: State) {
     const gl = state.gl;
 
-    function anyVertsDirty() {
-        for (const idx of idxData)
-            if (state.verticesDirty[idx])
-                return true;
-        return false;
-    }
+    const vtxBufSize = state.vertexData.length / VERTEX_SIZE;
+    const vtxOffs = state.vertexOffs;
+    const vtxCount = vtxBufSize - vtxOffs;
+    state.vertexOffs = vtxBufSize;
+    if (vtxCount === 0)
+        return;
 
-    function createGLVertBuffer() {
-        const vertBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, state.vertexBuffer, gl.STATIC_DRAW);
-        return vertBuffer;
-    }
-    function getVertexBufferGL() {
-        if (anyVertsDirty() || !state.vertexBufferGL) {
-            state.vertexBufferGL = createGLVertBuffer();
-            state.verticesDirty = [];
-        }
-        return state.vertexBufferGL;
-    }
-
-    const vertBuffer = getVertexBufferGL();
-    const idxBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxData, gl.STATIC_DRAW);
-
-    const nPrim = idxData.length;
-
-    return function drawTri(renderState: RenderState) {
-        const prog = (<Render.F3DEX2Program> renderState.currentProgram);
+    state.cmds.push((renderState: RenderState) => {
         const gl = renderState.gl;
+        gl.drawArrays(gl.TRIANGLES, vtxOffs, vtxCount);
+    });
+}
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-        gl.vertexAttribPointer(prog.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-        gl.vertexAttribPointer(prog.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-        gl.vertexAttribPointer(prog.colorLocation, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
-        gl.enableVertexAttribArray(prog.positionLocation);
-        gl.enableVertexAttribArray(prog.colorLocation);
-        gl.enableVertexAttribArray(prog.uvLocation);
-        gl.drawElements(gl.TRIANGLES, nPrim, gl.UNSIGNED_BYTE, 0);
-        gl.disableVertexAttribArray(prog.positionLocation);
-        gl.disableVertexAttribArray(prog.uvLocation);
-        gl.disableVertexAttribArray(prog.colorLocation);
-    };
+function translateTRI(state: State, idxData: Uint8Array) {
+    idxData.forEach((idx, i) => {
+        const offs = idx * VERTEX_SIZE;
+        for (let i = 0; i < VERTEX_SIZE; i++) {
+            state.vertexData.push(state.vertexBuffer[offs + i]);
+        }
+    });
 }
 
 function tri(idxData: Uint8Array, offs: number, cmd: number) {
@@ -182,14 +156,14 @@ function cmd_TRI1(state: State, w0: number, w1: number) {
     flushTexture(state);
     const idxData = new Uint8Array(3);
     tri(idxData, 0, w0);
-    state.cmds.push(translateTRI(state, idxData));
+    translateTRI(state, idxData);
 }
 
 function cmd_TRI2(state: State, w0: number, w1: number) {
     flushTexture(state);
     const idxData = new Uint8Array(6);
     tri(idxData, 0, w0); tri(idxData, 3, w1);
-    state.cmds.push(translateTRI(state, idxData));
+    translateTRI(state, idxData);
 }
 
 const GeometryMode = {
@@ -216,6 +190,7 @@ function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
     else
         renderFlags.cullMode = CullMode.NONE;
 
+    flushDraw(state);
     state.cmds.push((renderState: RenderState) => {
         const gl = renderState.gl;
         const prog = (<Render.F3DEX2Program> renderState.currentProgram);
@@ -255,7 +230,8 @@ function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
                              (newMode & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
             renderFlags.blendMode = BlendMode.NONE;
         }
-   
+
+        flushDraw(state);
         state.cmds.push((renderState: RenderState) => {
             const gl = renderState.gl;
             const prog = (<Render.F3DEX2Program> renderState.currentProgram);
@@ -799,12 +775,10 @@ function loadTextureBlock(state, cmds) {
     const tile = state.tile;
     state.textureTile = tile;
     tile.addr = state.textureImage.addr;
+
+    flushDraw(state);
     state.cmds.push((renderState: RenderState) => {
         const gl = renderState.gl;
-
-        if (!tile.textureId)
-            return;
-
         gl.bindTexture(gl.TEXTURE_2D, tile.textureId);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, tile.wrapS);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, tile.wrapT);
@@ -813,7 +787,7 @@ function loadTextureBlock(state, cmds) {
     });
 }
 
-function runDL(state, addr) {
+function runDL(state: State, addr: number) {
     function collectNextCmds() {
         const L = [];
         let voffs = offs;
@@ -860,6 +834,35 @@ function runDL(state, addr) {
             func(state, cmd0, cmd1);
         offs += 8;
     }
+
+    flushDraw(state);
+
+    const gl = state.gl;
+
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+
+    const vertBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(state.vertexData), gl.STATIC_DRAW);
+
+    gl.vertexAttribPointer(Render.F3DEX2Program.a_Position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+    gl.vertexAttribPointer(Render.F3DEX2Program.a_UV, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+    gl.vertexAttribPointer(Render.F3DEX2Program.a_Color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
+    gl.enableVertexAttribArray(Render.F3DEX2Program.a_Position);
+    gl.enableVertexAttribArray(Render.F3DEX2Program.a_UV);
+    gl.enableVertexAttribArray(Render.F3DEX2Program.a_Color);
+
+    gl.bindVertexArray(null);
+
+    state.cmds.unshift((state: RenderState) => {
+        const gl = state.gl;
+        gl.bindVertexArray(vao);
+    });
+    state.cmds.push((state: RenderState) => {
+        const gl = state.gl;
+        gl.bindVertexArray(null);
+    });
 }
 
 export class DL {
@@ -883,7 +886,8 @@ export function readDL(gl: WebGL2RenderingContext, rom, banks, startAddr): DL {
     state.mtxStack = [state.mtx];
 
     state.vertexBuffer = new Float32Array(32 * VERTEX_SIZE);
-    state.verticesDirty = [];
+    state.vertexData = [];
+    state.vertexOffs = 0;
 
     state.paletteTile = {};
     state.rom = rom;
