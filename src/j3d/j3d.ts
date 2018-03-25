@@ -1126,64 +1126,64 @@ function readTTK1Chunk(btk: BTK, buffer: ArrayBuffer, chunkStart: number, chunkS
     btk.ttk1 = { duration, loopMode, rotationScale, materialAnimationEntries };
 }
 
+function applyLoopMode(t: number, loopMode: LoopMode) {
+    switch (loopMode) {
+    case LoopMode.ONCE:
+        return Math.min(t, 1);
+    case LoopMode.REPEAT:
+        return t % 1;
+    case LoopMode.MIRRORED_ONCE:
+        return 1 - Math.abs((Math.min(t, 2) - 1));
+    case LoopMode.MIRRORED_REPEAT:
+        return 1 - Math.abs((t % 2) - 1);
+    }
+}
+
+function cubicEval(cf0, cf1, cf2, cf3, t) {
+    return (((cf0 * t + cf1) * t + cf2) * t + cf3);
+}
+
+function lerp(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number) {
+    return k0.value + (k1.value - k0.value) * t;
+}
+
+function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number): number {
+    const length = k1.time - k0.time;
+    const p0 = k0.value;
+    const p1 = k1.value;
+    const s0 = k0.tangentOut * length;
+    const s1 = k1.tangentIn * length;
+    const cf0 = (p0 *  2) + (p1 * -2) + (s0 *  1) +  (s1 *  1);
+    const cf1 = (p0 * -3) + (p1 *  3) + (s0 * -2) +  (s1 * -1);
+    const cf2 = (p0 *  0) + (p1 *  0) + (s0 *  1) +  (s1 *  0);
+    const cf3 = (p0 *  1) + (p1 *  0) + (s0 *  0) +  (s1 *  0);
+    return cubicEval(cf0, cf1, cf2, cf3, t);
+}
+
+function sampleAnimationData(track: AnimationTrack, frame: number) {
+    const frames = track.frames;
+
+    if (frames.length === 1)
+        return frames[0].value;
+
+    // Find the first frame.
+    const idx1 = frames.findIndex((key) => (frame < key.time));
+    const idx0 = idx1 - 1;
+    if (idx1 >= frames.length)
+        return frames[idx0].value;
+
+    const k0 = frames[idx0];
+    const k1 = frames[idx1];
+    const t = (frame - k0.time) / (k1.time - k0.time);
+    // return this.lerp(k0, k1, t);
+    return hermiteInterpolate(k0, k1, t);
+}
+
 export class BTK {
     ttk1: TTK1;
 
     public findAnimationEntry(materialName: string, texMtxIndex: number) {
         return this.ttk1.materialAnimationEntries.find((e) => e.materialName === materialName && e.texMtxIndex === texMtxIndex);
-    }
-
-    public applyLoopMode(t: number, loopMode: LoopMode) {
-        switch (loopMode) {
-        case LoopMode.ONCE:
-            return Math.min(t, 1);
-        case LoopMode.REPEAT:
-            return t % 1;
-        case LoopMode.MIRRORED_ONCE:
-            return 1 - Math.abs((Math.min(t, 2) - 1));
-        case LoopMode.MIRRORED_REPEAT:
-            return 1 - Math.abs((t % 2) - 1);
-        }
-    }
-
-    public cubicEval(cf0, cf1, cf2, cf3, t) {
-        return (((cf0 * t + cf1) * t + cf2) * t + cf3);
-    }
-
-    public lerp(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number) {
-        return k0.value + (k1.value - k0.value) * t;
-    }
-
-    public hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number): number {
-        const length = k1.time - k0.time;
-        const p0 = k0.value;
-        const p1 = k1.value;
-        const s0 = k0.tangentOut * length;
-        const s1 = k1.tangentIn * length;
-		const cf0 = (p0 *  2) + (p1 * -2) + (s0 *  1) +  (s1 *  1);
-		const cf1 = (p0 * -3) + (p1 *  3) + (s0 * -2) +  (s1 * -1);
-		const cf2 = (p0 *  0) + (p1 *  0) + (s0 *  1) +  (s1 *  0);
-		const cf3 = (p0 *  1) + (p1 *  0) + (s0 *  0) +  (s1 *  0);
-        return this.cubicEval(cf0, cf1, cf2, cf3, t);
-    }
-
-    public sampleAnimationData(track: AnimationTrack, frame: number) {
-        const frames = track.frames;
-
-        if (frames.length === 1)
-            return frames[0].value;
-
-        // Find the first frame.
-        const idx1 = frames.findIndex((key) => (frame < key.time));
-        const idx0 = idx1 - 1;
-        if (idx1 >= frames.length)
-            return frames[idx0].value;
-
-        const k0 = frames[idx0];
-        const k1 = frames[idx1];
-        const t = (frame - k0.time) / (k1.time - k0.time);
-        // return this.lerp(k0, k1, t);
-        return this.hermiteInterpolate(k0, k1, t);
     }
 
     public calcAnimatedTexMtx(dst: matrix3, materialName: string, texMtxIndex: number, frame: number): boolean {
@@ -1193,14 +1193,14 @@ export class BTK {
 
         const durationInFrames = this.ttk1.duration;
         const normTime = frame / durationInFrames;
-        const animFrame = this.applyLoopMode(normTime, this.ttk1.loopMode) * durationInFrames;
+        const animFrame = applyLoopMode(normTime, this.ttk1.loopMode) * durationInFrames;
 
         const centerS = animationEntry.centerS, centerT = animationEntry.centerT, centerQ = animationEntry.centerQ;
-        const scaleS = this.sampleAnimationData(animationEntry.s.scale, animFrame);
-        const scaleT = this.sampleAnimationData(animationEntry.t.scale, animFrame);
-        const rotation = this.sampleAnimationData(animationEntry.s.rotation, animFrame) * this.ttk1.rotationScale;
-        const translationS = this.sampleAnimationData(animationEntry.s.translation, animFrame);
-        const translationT = this.sampleAnimationData(animationEntry.t.translation, animFrame);
+        const scaleS = sampleAnimationData(animationEntry.s.scale, animFrame);
+        const scaleT = sampleAnimationData(animationEntry.t.scale, animFrame);
+        const rotation = sampleAnimationData(animationEntry.s.rotation, animFrame) * this.ttk1.rotationScale;
+        const translationS = sampleAnimationData(animationEntry.s.translation, animFrame);
+        const translationT = sampleAnimationData(animationEntry.t.translation, animFrame);
         createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
         return true;
     }
