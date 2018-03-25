@@ -64,18 +64,6 @@ export class SunshineClearScene implements Viewer.Scene {
     }
 }
 
-export function createSunshineSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, fn: string, isSkybox: boolean) {
-    const bmdFile = rarc.findFile(`${fn}.bmd`);
-    if (!bmdFile)
-        return null;
-    const btkFile = rarc.findFile(`${fn}.btk`);
-    const bmtFile = rarc.findFile(`${fn}.bmt`);
-    const scene = createScene(gl, bmdFile, btkFile, bmtFile);
-    scene.setIsSkybox(isSkybox);
-    scene.setUseMaterialTexMtx(false);
-    return scene;
-}
-
 export class SunshineSceneDesc implements Viewer.SceneDesc {
     public name: string;
     public path: string;
@@ -84,18 +72,49 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     constructor(path: string, name: string) {
         this.name = name;
         this.path = path;
-        this.id = this.path;
+        this.id = this.name;
+    }
+
+    private createSunshineSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, basename: string, isSkybox: boolean): Scene {
+        const bmdFile = rarc.findFile(`map/map/${basename}.bmd`);
+        const btkFile = rarc.findFile(`map/map/${basename}.btk`);
+        const bmtFile = rarc.findFile(`map/map/${basename}.bmt`);
+        const scene = createScene(gl, bmdFile, btkFile, bmtFile);
+        scene.name = basename;
+        scene.setIsSkybox(isSkybox);
+        scene.setUseMaterialTexMtx(false);
+        return scene;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return fetch(this.path).then((result: ArrayBuffer) => {
             const rarc = RARC.parse(Yaz0.decompress(result));
-            return new MultiScene([
-                new SunshineClearScene(),
-                createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true),
-                createSunshineSceneForBasename(gl, rarc, 'map/map/map', false),
-                createSunshineSceneForBasename(gl, rarc, 'map/map/sea', false),
-            ].filter((s) => !!s));
+
+            // For those curious, the "actual" way the engine loads files is done through
+            // the scene description in scene.bin, with the "map/map" paths hardcoded in
+            // the binary, and for a lot of objects, too. My heuristics below are a cheap
+            // approximation of the actual scene data...
+
+            const scenes: Viewer.Scene[] = [];
+            for (const file of rarc.findDir('map/map').files) {
+                const [basename, extension] = file.name.split('.');
+                if (extension !== 'bmd')
+                    continue;
+                // Indirect stuff would require engine support.
+                if (basename.includes('indirect'))
+                    continue;
+
+                // Sky always gets sorted first.
+                if (basename === 'sky')
+                    continue;
+                const scene = this.createSunshineSceneForBasename(gl, rarc, basename, false);
+                scenes.push(scene);
+            }
+
+            scenes.unshift(this.createSunshineSceneForBasename(gl, rarc, `sky`, true));
+            scenes.unshift(new SunshineClearScene());
+
+            return new MultiScene(scenes);
         });
     }
 }

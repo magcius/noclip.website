@@ -340,12 +340,14 @@ export enum ColorOverride {
 const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
 export class Scene implements Viewer.Scene {
     public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
-
     public textures: Viewer.Texture[];
+
+    public name: string = '';
+    public visible: boolean = true;
     public bmd: BMD;
     public btk: BTK;
     public bmt: BMT;
-    public isSkybox: boolean;
+    public isSkybox: boolean = false;
     public useMaterialTexMtx: boolean = true;
     public fps: number = 30;
 
@@ -447,6 +449,9 @@ export class Scene implements Viewer.Scene {
     }
 
     public render(state: RenderState) {
+        if (!this.visible)
+            return;
+
         const gl = state.gl;
 
         state.setClipPlanes(10, 500000);
