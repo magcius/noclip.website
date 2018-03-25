@@ -203,6 +203,7 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach",),
     new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor",),
     new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
+    new SunshineSceneDesc("data/j3d/monte3.szs", "Pianta Village"),
 
     new SMGSceneDesc(["data/j3d/MarioFaceShipPlanet.arc"], "Faceship"),
     new SMGSceneDesc(["data/j3d/PeachCastleGardenPlanet.arc", "data/j3d/GalaxySky.arc"], "Peach's Castle Garden"),
