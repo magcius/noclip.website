@@ -208,7 +208,7 @@ class Main {
 
     private _loadState(state: string) {
         const [groupId, ...sceneRest] = state.split('/');
-        const sceneId = sceneRest.join('/');
+        const sceneId = decodeURIComponent(sceneRest.join('/'));
         const group = this.groups.find((g) => g.id === groupId);
         if (!group)
             return;
