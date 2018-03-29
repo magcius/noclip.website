@@ -54,9 +54,9 @@ export class Scene implements Viewer.MainScene {
 
         let offs = 0, width = texture.width, height = texture.height;
         for (let i = 0; i < texture.mipCount; i++) {
-            const size = GX_Texture.calcTextureSize(format, width, height);
-            const data = texture.data.slice(offs, offs + size);
-            const surface = { name, format, width, height, data };
+            const data = texture.data;
+            const dataStart = texture.dataStart + offs;
+            const surface = { format, width, height, data, dataStart };
             const decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
 
             if (decodedTexture.type === 'RGBA') {
@@ -65,6 +65,7 @@ export class Scene implements Viewer.MainScene {
                 gl.compressedTexImage2D(gl.TEXTURE_2D, i, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
             }
 
+            const size = GX_Texture.calcTextureSize(format, width, height);
             offs += size;
             width /= 2;
             height /= 2;
@@ -123,9 +124,9 @@ export class Scene implements Viewer.MainScene {
         let width = texture.width, height = texture.height, offs = 0;
         const format = texture.format;
         for (let i = 0; i < texture.mipCount; i++) {
-            const size = GX_Texture.calcTextureSize(format, width, height);
-            const data = texture.data.slice(offs, offs + size);
-            const surface = { name, format, width, height, data };
+            const data = texture.data;
+            const dataStart = texture.dataStart;
+            const surface = { format, width, height, data, dataStart };
             const rgbaTexture = GX_Texture.decodeTexture(surface, false);
             // Should never happen.
             if (rgbaTexture.type === 'S3TC')
@@ -140,9 +141,10 @@ export class Scene implements Viewer.MainScene {
             ctx.putImageData(imgData, 0, 0);
             surfaces.push(canvas);
 
+            const size = GX_Texture.calcTextureSize(format, width, height);
+            offs += size;
             width /= 2;
             height /= 2;
-            offs += size;
         }
 
         return { name, surfaces };

@@ -223,7 +223,7 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const dataSize: number = dataEnd - dataStart;
         const compCount = getNumComponents(vtxAttrib, compCnt);
         const compSize = getComponentSize(compType);
-        const vtxDataBuffer = betoh(buffer, compSize, dataOffs, dataOffs + dataSize);
+        const vtxDataBuffer = betoh(buffer, compSize, dataOffs, dataSize);
         const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compSize, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }
@@ -446,8 +446,8 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const matrixFirstIndex = view.getUint32(packetMatrixDataOffs + 0x04);
 
             const packetMatrixTableOffs = chunkStart + matrixTableOffs + matrixFirstIndex * 0x02;
-            const packetMatrixTableEnd = packetMatrixTableOffs + matrixCount * 0x02;
-            const weightedJointTable = new Uint16Array(betoh(buffer, 2, packetMatrixTableOffs, packetMatrixTableEnd));
+            const packetMatrixTableSize = matrixCount * 0x02;
+            const weightedJointTable = new Uint16Array(betoh(buffer, 2, packetMatrixTableOffs, packetMatrixTableSize));
 
             const drawCallEnd = packetStart + packetSize;
             let drawCallIdx = packetStart;
@@ -935,7 +935,7 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const minFilter = view.getUint8(textureIdx + 0x14);
         const magFilter = view.getUint8(textureIdx + 0x15);
         const mipCount = view.getUint8(textureIdx + 0x18);
-        const data = buffer.slice(dataStart);
+        const data = buffer;
 
         textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, mipCount, data, dataStart });
         remapTable.push(textures.length - 1);
@@ -1062,9 +1062,9 @@ function readTTK1Chunk(btk: BTK, buffer: ArrayBuffer, chunkStart: number, chunkS
     const rTableOffs = chunkStart + view.getUint32(0x2C);
     const tTableOffs = chunkStart + view.getUint32(0x30);
 
-    const sTable = new Float32Array(betoh(buffer, 4, sTableOffs, sTableOffs + sCount * 4));
-    const rTable = new Int16Array(betoh(buffer, 2, rTableOffs, rTableOffs + rCount * 2));
-    const tTable = new Float32Array(betoh(buffer, 4, tTableOffs, tTableOffs + tCount * 4));
+    const sTable = new Float32Array(betoh(buffer, 4, sTableOffs, sCount * 4));
+    const rTable = new Int16Array(betoh(buffer, 2, rTableOffs, rCount * 2));
+    const tTable = new Float32Array(betoh(buffer, 4, tTableOffs, tCount * 4));
 
     const rotationScale = Math.pow(2, rotationDecimal);
     const materialNameTable = readStringTable(buffer, chunkStart + materialNameTableOffs);
@@ -1245,7 +1245,7 @@ export class BMT {
 
     static parse(buffer: ArrayBuffer) {
         const bmt = new BMT();
-    
+
         const view = new DataView(buffer);
         const magic = readString(buffer, 0, 8);
         assert(magic === 'J3D2bmt3');

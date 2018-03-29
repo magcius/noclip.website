@@ -61,36 +61,36 @@ System.register("endian", [], function (exports_1, context_1) {
         }
         return o.buffer;
     }
+    // XXX(jstpierre): Zero-copy.
     function be16toh(m, byteOffset, byteLength) {
         if (isLittleEndian())
             return bswap16(m, byteOffset, byteLength);
         else
-            return m.slice(byteOffset, byteLength);
+            return m.slice(byteOffset, byteOffset + byteLength);
     }
     function le16toh(m, byteOffset, byteLength) {
         if (!isLittleEndian())
             return bswap16(m, byteOffset, byteLength);
         else
-            return m.slice(byteOffset, byteLength);
+            return m.slice(byteOffset, byteOffset + byteLength);
     }
     function be32toh(m, byteOffset, byteLength) {
         if (isLittleEndian())
             return bswap32(m, byteOffset, byteLength);
         else
-            return m.slice(byteOffset, byteLength);
+            return m.slice(byteOffset, byteOffset + byteLength);
     }
     function le32toh(m, byteOffset, byteLength) {
         if (!isLittleEndian())
             return bswap32(m, byteOffset, byteLength);
         else
-            return m.slice(byteOffset, byteLength);
+            return m.slice(byteOffset, byteOffset + byteLength);
     }
     function betoh(m, componentSize, byteOffset, byteLength) {
         if (byteOffset === void 0) { byteOffset = 0; }
         if (byteLength === void 0) { byteLength = m.byteLength; }
         switch (componentSize) {
             case 1:
-                // XXX(jstpierre): Zero-copy.
                 return m.slice(byteOffset, byteOffset + byteLength);
             case 2:
                 return be16toh(m, byteOffset, byteLength);
@@ -1759,7 +1759,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
             var dataSize = dataEnd - dataStart;
             var compCount = getNumComponents(vtxAttrib, compCnt);
             var compSize = getComponentSize(compType);
-            var vtxDataBuffer = endian_1.betoh(buffer, compSize, dataOffs, dataOffs + dataSize);
+            var vtxDataBuffer = endian_1.betoh(buffer, compSize, dataOffs, dataSize);
             var vertexArray = { vtxAttrib: vtxAttrib, compType: compType, compCount: compCount, compSize: compSize, scale: scale, dataOffs: dataOffs, dataSize: dataSize, buffer: vtxDataBuffer };
             vertexArrays.set(vtxAttrib, vertexArray);
         }
@@ -1902,8 +1902,8 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
                 var matrixCount = view.getUint16(packetMatrixDataOffs + 0x02);
                 var matrixFirstIndex = view.getUint32(packetMatrixDataOffs + 0x04);
                 var packetMatrixTableOffs = chunkStart + matrixTableOffs + matrixFirstIndex * 0x02;
-                var packetMatrixTableEnd = packetMatrixTableOffs + matrixCount * 0x02;
-                var weightedJointTable = new Uint16Array(endian_1.betoh(buffer, 2, packetMatrixTableOffs, packetMatrixTableEnd));
+                var packetMatrixTableSize = matrixCount * 0x02;
+                var weightedJointTable = new Uint16Array(endian_1.betoh(buffer, 2, packetMatrixTableOffs, packetMatrixTableSize));
                 var drawCallEnd = packetStart + packetSize;
                 var drawCallIdx = packetStart;
                 var firstTriangle = totalTriangleCount;
@@ -2305,7 +2305,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
             var minFilter = view.getUint8(textureIdx + 0x14);
             var magFilter = view.getUint8(textureIdx + 0x15);
             var mipCount = view.getUint8(textureIdx + 0x18);
-            var data = buffer.slice(dataStart);
+            var data = buffer;
             textures.push({ name: name_3, format: format, width: width, height: height, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter, mipCount: mipCount, data: data, dataStart: dataStart });
             remapTable.push(textures.length - 1);
         };
@@ -2331,9 +2331,9 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
         var sTableOffs = chunkStart + view.getUint32(0x28);
         var rTableOffs = chunkStart + view.getUint32(0x2C);
         var tTableOffs = chunkStart + view.getUint32(0x30);
-        var sTable = new Float32Array(endian_1.betoh(buffer, 4, sTableOffs, sTableOffs + sCount * 4));
-        var rTable = new Int16Array(endian_1.betoh(buffer, 2, rTableOffs, rTableOffs + rCount * 2));
-        var tTable = new Float32Array(endian_1.betoh(buffer, 4, tTableOffs, tTableOffs + tCount * 4));
+        var sTable = new Float32Array(endian_1.betoh(buffer, 4, sTableOffs, sCount * 4));
+        var rTable = new Int16Array(endian_1.betoh(buffer, 2, rTableOffs, rCount * 2));
+        var tTable = new Float32Array(endian_1.betoh(buffer, 4, tTableOffs, tCount * 4));
         var rotationScale = Math.pow(2, rotationDecimal);
         var materialNameTable = readStringTable(buffer, chunkStart + materialNameTableOffs);
         var animationTableIdx = animationTableOffs;
@@ -2845,7 +2845,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_12, context
             return ((v & 0x03) << 6) | ((v & 0x0c) << 2) | ((v & 0x30) >>> 2) | ((v & 0xc0) >>> 6);
         }
         var pixels = new Uint8Array(texture.width * texture.height / 2);
-        var view = new DataView(texture.data);
+        var view = new DataView(texture.data, texture.dataStart);
         // "Macroblocks"
         var w4 = texture.width >>> 2;
         var h4 = texture.height >>> 2;
@@ -2947,7 +2947,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_12, context
         return { type: "RGBA", pixels: pixels, width: texture.width, height: texture.height };
     }
     function decode_RGB565(texture) {
-        var view = new DataView(texture.data);
+        var view = new DataView(texture.data, texture.dataStart);
         var srcOffs = 0;
         return decode_Tiled(texture, 4, 4, function (pixels, dstOffs) {
             var p = view.getUint16(srcOffs);
@@ -2959,7 +2959,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_12, context
         });
     }
     function decode_RGB5A3(texture) {
-        var view = new DataView(texture.data);
+        var view = new DataView(texture.data, texture.dataStart);
         var srcOffs = 0;
         return decode_Tiled(texture, 4, 4, function (pixels, dstOffs) {
             var p = view.getUint16(srcOffs);
@@ -2981,7 +2981,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_12, context
         });
     }
     function decode_RGBA8(texture) {
-        var view = new DataView(texture.data);
+        var view = new DataView(texture.data, texture.dataStart);
         var srcOffs = 0;
         // RGBA8 is a bit special, so we hand-code this one.
         var bw = 4, bh = 4;
@@ -3011,7 +3011,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_12, context
         return { type: "RGBA", pixels: pixels, width: texture.width, height: texture.height };
     }
     function decode_I4(texture) {
-        var view = new DataView(texture.data);
+        var view = new DataView(texture.data, texture.dataStart);
         var srcOffs = 0;
         return decode_Tiled(texture, 8, 8, function (pixels, dstOffs) {
             var ii = view.getUint8(srcOffs >> 1);
@@ -3025,7 +3025,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_12, context
         });
     }
     function decode_I8(texture) {
-        var view = new DataView(texture.data);
+        var view = new DataView(texture.data, texture.dataStart);
         var srcOffs = 0;
         return decode_Tiled(texture, 8, 4, function (pixels, dstOffs) {
             var i = view.getUint8(srcOffs);
@@ -3037,7 +3037,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_12, context
         });
     }
     function decode_IA4(texture) {
-        var view = new DataView(texture.data);
+        var view = new DataView(texture.data, texture.dataStart);
         var srcOffs = 0;
         return decode_Tiled(texture, 8, 4, function (pixels, dstOffs) {
             var ia = view.getUint8(srcOffs);
@@ -3051,7 +3051,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_12, context
         });
     }
     function decode_IA8(texture) {
-        var view = new DataView(texture.data);
+        var view = new DataView(texture.data, texture.dataStart);
         var srcOffs = 0;
         return decode_Tiled(texture, 4, 4, function (pixels, dstOffs) {
             var i = view.getUint8(srcOffs + 0);
@@ -3278,13 +3278,13 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, texture.wrapT));
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
                     var ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
-                    var name = texture.name;
                     var format = texture.format;
                     var offs = 0, width = texture.width, height = texture.height;
                     for (var i = 0; i < texture.mipCount; i++) {
                         var size = GX_Texture.calcTextureSize(format, width, height);
-                        var data = texture.data.slice(offs, offs + size);
-                        var surface = { name: name, format: format, width: width, height: height, data: data };
+                        var data = texture.data;
+                        var dataStart = texture.dataStart + offs;
+                        var surface = { format: format, width: width, height: height, data: data, dataStart: dataStart };
                         var decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
                         if (decodedTexture.type === 'RGBA') {
                             gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
@@ -3449,9 +3449,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     var width = texture.width, height = texture.height, offs = 0;
                     var format = texture.format;
                     for (var i = 0; i < texture.mipCount; i++) {
-                        var size = GX_Texture.calcTextureSize(format, width, height);
-                        var data = texture.data.slice(offs, offs + size);
-                        var surface = { name: name, format: format, width: width, height: height, data: data };
+                        var data = texture.data;
+                        var dataStart = texture.dataStart + offs;
+                        var surface = { format: format, width: width, height: height, data: data, dataStart: dataStart };
                         var rgbaTexture = GX_Texture.decodeTexture(surface, false);
                         // Should never happen.
                         if (rgbaTexture.type === 'S3TC')
@@ -3465,9 +3465,10 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
                         ctx.putImageData(imgData, 0, 0);
                         surfaces.push(canvas);
+                        var size = GX_Texture.calcTextureSize(format, width, height);
+                        offs += size;
                         width /= 2;
                         height /= 2;
-                        offs += size;
                     }
                     return { name: texture.name, surfaces: surfaces };
                 };
@@ -10884,8 +10885,9 @@ System.register("metroid_prime/txtr", ["j3d/gx_enum", "j3d/gx_texture"], functio
             case 10 /* C14X2 */:
                 throw "whoops";
         }
-        var data = buffer.slice(offs, offs + GX_Texture.calcFullTextureSize(format, width, height, mipCount));
-        return { format: format, width: width, height: height, mipCount: mipCount, data: data, paletteFormat: paletteFormat, paletteData: paletteData };
+        var dataStart = offs;
+        var data = buffer;
+        return { format: format, width: width, height: height, mipCount: mipCount, data: data, dataStart: dataStart, paletteFormat: paletteFormat, paletteData: paletteData };
     }
     exports_48("parse", parse);
     var GX, GX_Texture, txtrFormatRemap;
@@ -11789,9 +11791,9 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                     var format = texture.format;
                     var offs = 0, width = texture.width, height = texture.height;
                     for (var i = 0; i < texture.mipCount; i++) {
-                        var size = GX_Texture.calcTextureSize(format, width, height);
-                        var data = texture.data.slice(offs, offs + size);
-                        var surface = { name: name, format: format, width: width, height: height, data: data };
+                        var data = texture.data;
+                        var dataStart = texture.dataStart + offs;
+                        var surface = { format: format, width: width, height: height, data: data, dataStart: dataStart };
                         var decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
                         if (decodedTexture.type === 'RGBA') {
                             gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
@@ -11799,6 +11801,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                         else if (decodedTexture.type === 'S3TC') {
                             gl.compressedTexImage2D(gl.TEXTURE_2D, i, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
                         }
+                        var size = GX_Texture.calcTextureSize(format, width, height);
                         offs += size;
                         width /= 2;
                         height /= 2;
@@ -11847,9 +11850,9 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                     var width = texture.width, height = texture.height, offs = 0;
                     var format = texture.format;
                     for (var i = 0; i < texture.mipCount; i++) {
-                        var size = GX_Texture.calcTextureSize(format, width, height);
-                        var data = texture.data.slice(offs, offs + size);
-                        var surface = { name: name, format: format, width: width, height: height, data: data };
+                        var data = texture.data;
+                        var dataStart = texture.dataStart;
+                        var surface = { format: format, width: width, height: height, data: data, dataStart: dataStart };
                         var rgbaTexture = GX_Texture.decodeTexture(surface, false);
                         // Should never happen.
                         if (rgbaTexture.type === 'S3TC')
@@ -11862,9 +11865,10 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                         imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
                         ctx.putImageData(imgData, 0, 0);
                         surfaces.push(canvas);
+                        var size = GX_Texture.calcTextureSize(format, width, height);
+                        offs += size;
                         width /= 2;
                         height /= 2;
-                        offs += size;
                     }
                     return { name: name, surfaces: surfaces };
                 };
