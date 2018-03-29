@@ -11,7 +11,7 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import { Progressable } from '../progress';
-import { RenderState, Program, RenderArena, RenderPass, RenderFlags, FrontFaceMode, CompareMode, CullMode, BufferCoalescer, coalesceBuffer, CoalescedBuffer } from '../render';
+import { RenderState, Program, RenderArena, RenderFlags, FrontFaceMode, CompareMode, CullMode, BufferCoalescer, coalesceBuffer, CoalescedBuffer } from '../render';
 import { be16toh, be32toh, betoh } from '../endian';
 import { assert, fetch } from '../util';
 
@@ -112,7 +112,6 @@ function getAttribFormatInfo(format: GX2AttribFormat): GX2AttribFormatInfo {
 }
 
 export class Scene implements Viewer.Scene {
-    public renderPasses = [ RenderPass.OPAQUE ];
     public textures: Viewer.Texture[];
 
     private modelFuncs: RenderFunc[];

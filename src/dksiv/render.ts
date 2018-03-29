@@ -2,7 +2,7 @@
 import { vec3 } from 'gl-matrix';
 
 import * as IV from './iv';
-import { RenderFlags, RenderPass, RenderState, Program, CullMode } from '../render';
+import { RenderFlags, RenderState, Program, CullMode } from '../render';
 import * as Viewer from '../viewer';
 
 class IVProgram extends Program {
@@ -141,7 +141,6 @@ class Chunk {
 }
 
 export class Scene implements Viewer.Scene {
-    public renderPasses = [ RenderPass.OPAQUE ];
     public textures: Viewer.Texture[] = [];
 
     public visible: boolean = true;

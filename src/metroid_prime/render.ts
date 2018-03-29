@@ -22,7 +22,6 @@ const textureScratch = new Int32Array(8);
 export class Scene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
 
-    public renderPasses = [ RenderPass.OPAQUE ];
     public textures: Viewer.Texture[] = [];
 
     public glTextures: WebGLTexture[] = [];

@@ -20,7 +20,7 @@ export interface Texture {
 }
 
 export interface Scene {
-    renderPasses: RenderPass[];
+    renderPasses?: RenderPass[];
     textures: Texture[];
     render(state: RenderState): void;
     destroy(gl: WebGL2RenderingContext): void;
@@ -315,16 +315,19 @@ export class Viewer {
         if (!this.scene)
             return;
 
-        const state = this.renderState;
         const scene = this.scene;
-        for (let i = 0; i < RenderPass.COUNT; i++) {
-            state.currentPass = i;
-            if (scene.renderPasses.includes(state.currentPass))
-                scene.render(state);
+        if (scene.renderPasses) {
+            for (const pass of scene.renderPasses) {
+                this.renderState.currentPass = pass;
+                scene.render(this.renderState);
+            }
+        } else {
+            this.renderState.currentPass = RenderPass.OPAQUE;
+            scene.render(this.renderState);
         }
 
         const frameEndTime = window.performance.now();
-        const diff = frameEndTime - state.frameStartTime;
+        const diff = frameEndTime - this.renderState.frameStartTime;
         // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
     }
 

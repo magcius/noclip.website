@@ -6,13 +6,12 @@ import { Scene } from './render';
 
 import * as Viewer from '../viewer';
 
-import { RenderPass, RenderState } from '../render';
+import { RenderState } from '../render';
 import { Progressable } from '../progress';
 import { fetch, readString } from '../util';
 
 class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
-    public renderPasses = [ RenderPass.OPAQUE ];
     public scenes: Viewer.Scene[];
     public textures: Viewer.Texture[];
 
