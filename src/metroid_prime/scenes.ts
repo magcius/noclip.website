@@ -7,7 +7,7 @@ import { Scene } from './render';
 import * as Viewer from '../viewer';
 import { fetch, assert } from '../util';
 import { Progressable } from '../progress';
-import { RenderPass, RenderState } from '../render';
+import { RenderState } from '../render';
 
 // Files are too big for GitHub.
 function findPakBase() {
@@ -22,7 +22,6 @@ const pakBase = findPakBase();
 
 export class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
-    public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
     public textures: Viewer.Texture[];
 

@@ -3,10 +3,10 @@ import { parseIV } from './iv';
 import { Scene } from './render';
 
 import { MainScene, SceneGroup, FPSCameraController, Texture } from '../viewer';
+import { RenderState } from '../render';
 
 import { Progressable } from '../progress';
 import { fetch, generateFormID } from '../util';
-import { RenderPass, RenderState } from '../render';
 
 const name = "Dark Souls Collision Data";
 const id = "dksiv";
@@ -60,7 +60,6 @@ const dks2Paths = [
 
 class MultiScene implements MainScene {
     public cameraController = FPSCameraController;
-    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Scene[];
     public textures: Texture[];
 
@@ -118,8 +117,7 @@ class MultiScene implements MainScene {
 
     public render(renderState: RenderState) {
         this.scenes.forEach((scene) => {
-            if (scene.renderPasses.includes(renderState.currentPass))
-                scene.render(renderState);
+            scene.render(renderState);
         });
     }
 
