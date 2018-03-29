@@ -12749,7 +12749,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/
         return util_30.fetch("data/j3d/dolpic0.szs").then(function (buffer) {
             buffer = Yaz0.decompress(buffer);
             var rarc = RARC.parse(buffer);
-            var skyScene = scenes_2.SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
+            var skyScene = scenes_2.SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
             var bmdFile = rarc.findFile('map/map/sea.bmd');
             var btkFile = rarc.findFile('map/map/sea.btk');
             var bmd = j3d_4.BMD.parse(bmdFile.buffer);
