@@ -5853,17 +5853,6 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
         var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
         return new render_8.Scene(gl, bmd, btk, bmt);
     }
-    function createSunshineSceneForBasename(gl, rarc, basename, isSkybox) {
-        var bmdFile = rarc.findFile("map/map/" + basename + ".bmd");
-        var btkFile = rarc.findFile("map/map/" + basename + ".btk");
-        var bmtFile = rarc.findFile("map/map/" + basename + ".bmt");
-        var scene = createScene(gl, bmdFile, btkFile, bmtFile);
-        scene.name = basename;
-        scene.setIsSkybox(isSkybox);
-        scene.setUseMaterialTexMtx(false);
-        return scene;
-    }
-    exports_26("createSunshineSceneForBasename", createSunshineSceneForBasename);
     function createSceneFromBuffer(gl, buffer) {
         if (util_11.readString(buffer, 0, 4) === 'Yaz0')
             buffer = Yaz0.decompress(buffer);
@@ -5978,9 +5967,23 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                     this.path = path;
                     this.id = this.name;
                 }
+                SunshineSceneDesc.createSunshineSceneForBasename = function (gl, rarc, basename, isSkybox) {
+                    var bmdFile = rarc.findFile("map/map/" + basename + ".bmd");
+                    var btkFile = rarc.findFile("map/map/" + basename + ".btk");
+                    var bmtFile = rarc.findFile("map/map/" + basename + ".bmt");
+                    var scene = createScene(gl, bmdFile, btkFile, bmtFile);
+                    scene.name = basename;
+                    scene.setIsSkybox(isSkybox);
+                    scene.setUseMaterialTexMtx(false);
+                    return scene;
+                };
                 SunshineSceneDesc.prototype.createScene = function (gl) {
                     return util_11.fetch(this.path).then(function (result) {
                         var rarc = RARC.parse(Yaz0.decompress(result));
+                        // For those curious, the "actual" way the engine loads files is done through
+                        // the scene description in scene.bin, with the "map/map" paths hardcoded in
+                        // the binary, and for a lot of objects, too. My heuristics below are a cheap
+                        // approximation of the actual scene data...
                         var scenes = [];
                         try {
                             for (var _a = __values(rarc.findDir('map/map').files), _b = _a.next(); !_b.done; _b = _a.next()) {
@@ -5991,10 +5994,10 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                                 // Indirect stuff would require engine support.
                                 if (basename.includes('indirect'))
                                     continue;
-                                // Sky goes first.
+                                // Sky always gets sorted first.
                                 if (basename === 'sky')
                                     continue;
-                                var scene = createSunshineSceneForBasename(gl, rarc, basename, false);
+                                var scene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, basename, false);
                                 scenes.push(scene);
                             }
                         }
@@ -6005,7 +6008,7 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                             }
                             finally { if (e_27) throw e_27.error; }
                         }
-                        scenes.unshift(createSunshineSceneForBasename(gl, rarc, "sky", true));
+                        scenes.unshift(SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, "sky", true));
                         scenes.unshift(new SunshineClearScene());
                         return new MultiScene(scenes);
                         var e_27, _d;
@@ -12746,7 +12749,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/
         return util_30.fetch("data/j3d/dolpic0.szs").then(function (buffer) {
             buffer = Yaz0.decompress(buffer);
             var rarc = RARC.parse(buffer);
-            var skyScene = scenes_2.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
+            var skyScene = scenes_2.SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
             var bmdFile = rarc.findFile('map/map/sea.bmd');
             var btkFile = rarc.findFile('map/map/sea.btk');
             var bmd = j3d_4.BMD.parse(bmdFile.buffer);
