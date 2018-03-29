@@ -23,7 +23,7 @@ const sceneGroups = [
     OOT3D.sceneGroup,
     FRES.sceneGroup,
     DKSIV.sceneGroup,
-    // MP1.sceneGroup,
+    MP1.sceneGroup,
 ];
 
 class ProgressBar {

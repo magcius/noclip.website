@@ -109,7 +109,6 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBuffer, o
             const newIndex = textures.push(txtr) - 1;
             textureRemapTable.push(newIndex);
         }
-        textures.push(txtr);
         offs += 0x04;
     }
 
@@ -350,7 +349,7 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBuffer, o
             blendMode,
             depthTest: true,
             depthFunc: GX.CompareType.LESS,
-            depthWrite: !!(flags & MaterialFlags.DEPTH_WRITE),
+            depthWrite: (!!(flags & MaterialFlags.DEPTH_WRITE)) && !translucent,
         };
 
         const gxMaterial: GX_Material.GXMaterial = {
@@ -530,7 +529,7 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBuffer, mate
         const packedDataView = new Float32Array(packedDataSize);
         const littleEndian = isLittleEndian();
         let packedDataOffs = 0;
-        for (const drawCall of drawCalls) {
+        drawCalls.forEach((drawCall) => {
             // Convert topology to triangles.
             const firstVertex = vertexId;
 
@@ -565,7 +564,8 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBuffer, mate
             for (let j = 0; j < drawCall.vertexCount; j++) {
                 // Copy attribute data.
                 const packedDataOffs_ = packedDataOffs;
-                for (const format of vtxAttrFormats) {
+                for (let k = 0; k < vtxAttrFormats.length; k++) {
+                    const format = vtxAttrFormats[k];
                     const packedDataOffs__ = packedDataOffs;
                     if (!(vtxAttrFormat & format.mask))
                         continue;
@@ -637,7 +637,7 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBuffer, mate
                 }
                 assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
             }
-        }
+        });
 
         const surface: Surface = {
             materialIndex,

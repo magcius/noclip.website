@@ -125,7 +125,7 @@ export class Scene implements Viewer.MainScene {
         const format = texture.format;
         for (let i = 0; i < texture.mipCount; i++) {
             const data = texture.data;
-            const dataStart = texture.dataStart;
+            const dataStart = texture.dataStart + offs;
             const surface = { format, width, height, data, dataStart };
             const rgbaTexture = GX_Texture.decodeTexture(surface, false);
             // Should never happen.
@@ -147,7 +147,7 @@ export class Scene implements Viewer.MainScene {
             height /= 2;
         }
 
-        return { name, surfaces };
+        return { name: `${name} (0x${texture.dataStart.toString(16)})`, surfaces };
     }
 
     private bindTextures(state: RenderState, material: Material) {
@@ -249,11 +249,11 @@ class Command_Surface {
 
             offset += 4 * attrib.compCount;
         }
+        gl.bindVertexArray(null);
     }
 
     public exec(state: RenderState) {
         const gl = state.gl;
-        const prog = (<GX_Material.GX_Program> state.currentProgram);
 
         gl.bindVertexArray(this.vao);
         gl.drawElements(gl.TRIANGLES, this.surface.numTriangles * 3, gl.UNSIGNED_SHORT, this.coalescedBuffers.indexBuffer.offset);
