@@ -387,7 +387,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_5, context_5)
         var shader = gl.createShader(type);
         gl.shaderSource(shader, str);
         gl.compileShader(shader);
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        if (DEBUG && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
             console.error(str);
             if (gl.getExtension('WEBGL_debug_shaders'))
                 console.error(gl.getExtension('WEBGL_debug_shaders').getTranslatedShaderSource(shader));
@@ -442,7 +442,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_5, context_5)
         var e_1, _a, e_2, _b;
     }
     exports_5("coalesceBuffer", coalesceBuffer);
-    var gl_matrix_1, util_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderState, Program, RenderArena, BufferCoalescer;
+    var gl_matrix_1, util_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderState, DEBUG, Program, RenderArena, BufferCoalescer;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -647,6 +647,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_5, context_5)
                 return RenderState;
             }());
             exports_5("RenderState", RenderState);
+            DEBUG = false;
             Program = /** @class */ (function () {
                 function Program() {
                 }
@@ -661,7 +662,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_5, context_5)
                     gl.attachShader(prog, vertShader);
                     gl.attachShader(prog, fragShader);
                     gl.linkProgram(prog);
-                    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+                    if (DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
                         console.error(vert);
                         console.error(frag);
                         console.error(gl.getProgramInfoLog(prog));
@@ -5363,6 +5364,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     this.bmt = scene.bmt;
                     this.material = material;
                     this.program = new GX_Material.GX_Program(material.gxMaterial);
+                    this.program.compile(gl);
                     this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
                     this.textures = this.translateTextures(gl);
                     this.materialParamsBuffer = gl.createBuffer();
@@ -5854,108 +5856,26 @@ System.register("j3d/rarc", ["util"], function (exports_25, context_25) {
         }
     };
 });
-System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "viewer", "progress", "util"], function (exports_26, context_26) {
+System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], function (exports_26, context_26) {
     "use strict";
     var __moduleName = context_26 && context_26.id;
-    function createScene(gl, bmdFile, btkFile, bmtFile) {
-        var bmd = j3d_2.BMD.parse(bmdFile.buffer);
-        var btk = btkFile ? j3d_2.BTK.parse(btkFile.buffer) : null;
-        var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
-        return new render_8.Scene(gl, bmd, btk, bmt);
-    }
-    function createSceneFromBuffer(gl, buffer) {
-        if (util_11.readString(buffer, 0, 4) === 'Yaz0')
-            buffer = Yaz0.decompress(buffer);
-        if (util_11.readString(buffer, 0, 4) === 'RARC') {
-            var rarc_1 = RARC.parse(buffer);
-            var bmdFiles = rarc_1.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
-            var scenes = bmdFiles.map(function (bmdFile) {
-                // Find the corresponding btk.
-                var basename = bmdFile.name.split('.')[0];
-                var btkFile = rarc_1.files.find(function (f) { return f.name === basename + ".btk"; });
-                var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
-                try {
-                    return createScene(gl, bmdFile, btkFile, bmtFile);
-                }
-                catch (e) {
-                    console.log("Error parsing", bmdFile.name);
-                    return null;
-                }
-            });
-            return new MultiScene(scenes.filter(function (s) { return !!s; }));
-        }
-        if (['J3D2bmd3', 'J3D2bdl4'].includes(util_11.readString(buffer, 0, 8))) {
-            var bmd = j3d_2.BMD.parse(buffer);
-            return new MultiScene([new render_8.Scene(gl, bmd, null, null)]);
-        }
-        return null;
-    }
-    exports_26("createSceneFromBuffer", createSceneFromBuffer);
-    var j3d_2, render_8, RARC, Yaz0, Viewer, progress_4, util_11, id, name, MultiScene, SunshineClearScene, SunshineSceneDesc, RARCSceneDesc, SMGSceneDesc, sceneDescs, sceneGroup;
+    var RARC, Yaz0, scenes_1, util_11, SunshineClearScene, SunshineSceneDesc;
     return {
         setters: [
-            function (j3d_2_1) {
-                j3d_2 = j3d_2_1;
-            },
-            function (render_8_1) {
-                render_8 = render_8_1;
-            },
             function (RARC_1) {
                 RARC = RARC_1;
             },
             function (Yaz0_2) {
                 Yaz0 = Yaz0_2;
             },
-            function (Viewer_2) {
-                Viewer = Viewer_2;
-            },
-            function (progress_4_1) {
-                progress_4 = progress_4_1;
+            function (scenes_1_1) {
+                scenes_1 = scenes_1_1;
             },
             function (util_11_1) {
                 util_11 = util_11_1;
             }
         ],
         execute: function () {
-            id = "j3d";
-            name = "GameCube Models";
-            MultiScene = /** @class */ (function () {
-                function MultiScene(scenes) {
-                    this.cameraController = Viewer.FPSCameraController;
-                    this.renderPasses = [0 /* CLEAR */, 2 /* OPAQUE */, 3 /* TRANSPARENT */];
-                    this.setScenes(scenes);
-                }
-                MultiScene.prototype.setScenes = function (scenes) {
-                    this.scenes = scenes;
-                    this.textures = [];
-                    try {
-                        for (var _a = __values(this.scenes), _b = _a.next(); !_b.done; _b = _a.next()) {
-                            var scene = _b.value;
-                            this.textures = this.textures.concat(scene.textures);
-                        }
-                    }
-                    catch (e_27_1) { e_27 = { error: e_27_1 }; }
-                    finally {
-                        try {
-                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                        }
-                        finally { if (e_27) throw e_27.error; }
-                    }
-                    var e_27, _c;
-                };
-                MultiScene.prototype.render = function (renderState) {
-                    this.scenes.forEach(function (scene) {
-                        if (!scene.renderPasses.includes(renderState.currentPass))
-                            return;
-                        scene.render(renderState);
-                    });
-                };
-                MultiScene.prototype.destroy = function (gl) {
-                    this.scenes.forEach(function (scene) { return scene.destroy(gl); });
-                };
-                return MultiScene;
-            }());
-            exports_26("MultiScene", MultiScene);
             SunshineClearScene = /** @class */ (function () {
                 function SunshineClearScene() {
                     this.textures = [];
@@ -5981,7 +5901,7 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                     var bmdFile = rarc.findFile("map/map/" + basename + ".bmd");
                     var btkFile = rarc.findFile("map/map/" + basename + ".btk");
                     var bmtFile = rarc.findFile("map/map/" + basename + ".bmt");
-                    var scene = createScene(gl, bmdFile, btkFile, bmtFile);
+                    var scene = scenes_1.createScene(gl, bmdFile, btkFile, bmtFile);
                     scene.name = basename;
                     scene.setIsSkybox(isSkybox);
                     scene.setUseMaterialTexMtx(false);
@@ -6011,22 +5931,131 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                                 scenes.push(scene);
                             }
                         }
-                        catch (e_28_1) { e_28 = { error: e_28_1 }; }
+                        catch (e_27_1) { e_27 = { error: e_27_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                             }
-                            finally { if (e_28) throw e_28.error; }
+                            finally { if (e_27) throw e_27.error; }
                         }
                         scenes.unshift(SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, "sky", true));
                         scenes.unshift(new SunshineClearScene());
-                        return new MultiScene(scenes);
-                        var e_28, _d;
+                        return new scenes_1.MultiScene(scenes);
+                        var e_27, _d;
                     });
                 };
                 return SunshineSceneDesc;
             }());
             exports_26("SunshineSceneDesc", SunshineSceneDesc);
+        }
+    };
+});
+System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "viewer", "progress", "util", "j3d/sms_scenes"], function (exports_27, context_27) {
+    "use strict";
+    var __moduleName = context_27 && context_27.id;
+    function createScene(gl, bmdFile, btkFile, bmtFile) {
+        var bmd = j3d_2.BMD.parse(bmdFile.buffer);
+        var btk = btkFile ? j3d_2.BTK.parse(btkFile.buffer) : null;
+        var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
+        return new render_8.Scene(gl, bmd, btk, bmt);
+    }
+    exports_27("createScene", createScene);
+    function createSceneFromBuffer(gl, buffer) {
+        if (util_12.readString(buffer, 0, 4) === 'Yaz0')
+            buffer = Yaz0.decompress(buffer);
+        if (util_12.readString(buffer, 0, 4) === 'RARC') {
+            var rarc_1 = RARC.parse(buffer);
+            var bmdFiles = rarc_1.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
+            var scenes = bmdFiles.map(function (bmdFile) {
+                // Find the corresponding btk.
+                var basename = bmdFile.name.split('.')[0];
+                var btkFile = rarc_1.files.find(function (f) { return f.name === basename + ".btk"; });
+                var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
+                try {
+                    return createScene(gl, bmdFile, btkFile, bmtFile);
+                }
+                catch (e) {
+                    console.log("Error parsing", bmdFile.name);
+                    return null;
+                }
+            });
+            return new MultiScene(scenes.filter(function (s) { return !!s; }));
+        }
+        if (['J3D2bmd3', 'J3D2bdl4'].includes(util_12.readString(buffer, 0, 8))) {
+            var bmd = j3d_2.BMD.parse(buffer);
+            return new MultiScene([new render_8.Scene(gl, bmd, null, null)]);
+        }
+        return null;
+    }
+    exports_27("createSceneFromBuffer", createSceneFromBuffer);
+    var j3d_2, render_8, RARC, Yaz0, Viewer, progress_4, util_12, sms_scenes_1, id, name, MultiScene, RARCSceneDesc, SMGSceneDesc, sceneDescs, sceneGroup;
+    return {
+        setters: [
+            function (j3d_2_1) {
+                j3d_2 = j3d_2_1;
+            },
+            function (render_8_1) {
+                render_8 = render_8_1;
+            },
+            function (RARC_2) {
+                RARC = RARC_2;
+            },
+            function (Yaz0_3) {
+                Yaz0 = Yaz0_3;
+            },
+            function (Viewer_2) {
+                Viewer = Viewer_2;
+            },
+            function (progress_4_1) {
+                progress_4 = progress_4_1;
+            },
+            function (util_12_1) {
+                util_12 = util_12_1;
+            },
+            function (sms_scenes_1_1) {
+                sms_scenes_1 = sms_scenes_1_1;
+            }
+        ],
+        execute: function () {
+            id = "j3d";
+            name = "GameCube Models";
+            MultiScene = /** @class */ (function () {
+                function MultiScene(scenes) {
+                    this.cameraController = Viewer.FPSCameraController;
+                    this.renderPasses = [0 /* CLEAR */, 2 /* OPAQUE */, 3 /* TRANSPARENT */];
+                    this.setScenes(scenes);
+                }
+                MultiScene.prototype.setScenes = function (scenes) {
+                    this.scenes = scenes;
+                    this.textures = [];
+                    try {
+                        for (var _a = __values(this.scenes), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var scene = _b.value;
+                            this.textures = this.textures.concat(scene.textures);
+                        }
+                    }
+                    catch (e_28_1) { e_28 = { error: e_28_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_28) throw e_28.error; }
+                    }
+                    var e_28, _c;
+                };
+                MultiScene.prototype.render = function (renderState) {
+                    this.scenes.forEach(function (scene) {
+                        if (!scene.renderPasses.includes(renderState.currentPass))
+                            return;
+                        scene.render(renderState);
+                    });
+                };
+                MultiScene.prototype.destroy = function (gl) {
+                    this.scenes.forEach(function (scene) { return scene.destroy(gl); });
+                };
+                return MultiScene;
+            }());
+            exports_27("MultiScene", MultiScene);
             RARCSceneDesc = /** @class */ (function () {
                 function RARCSceneDesc(path, name) {
                     this.name = name || path;
@@ -6034,13 +6063,13 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                     this.id = this.path;
                 }
                 RARCSceneDesc.prototype.createScene = function (gl) {
-                    return util_11.fetch(this.path).then(function (result) {
+                    return util_12.fetch(this.path).then(function (result) {
                         return createSceneFromBuffer(gl, result);
                     });
                 };
                 return RARCSceneDesc;
             }());
-            exports_26("RARCSceneDesc", RARCSceneDesc);
+            exports_27("RARCSceneDesc", RARCSceneDesc);
             SMGSceneDesc = /** @class */ (function () {
                 function SMGSceneDesc(paths, name) {
                     this.id = paths[0];
@@ -6049,7 +6078,7 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                 }
                 SMGSceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return progress_4.Progressable.all(this.paths.map(function (path) { return util_11.fetch(path).then(function (buffer) {
+                    return progress_4.Progressable.all(this.paths.map(function (path) { return util_12.fetch(path).then(function (buffer) {
                         return _this.createSceneFromBuffer(gl, buffer);
                     }); })).then(function (scenes) {
                         return new MultiScene(scenes);
@@ -6057,7 +6086,7 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                 };
                 SMGSceneDesc.prototype.createSceneFromBuffer = function (gl, buffer) {
                     var multiScene = createSceneFromBuffer(gl, buffer);
-                    util_11.assert(multiScene.scenes.length === 1);
+                    util_12.assert(multiScene.scenes.length === 1);
                     var scene = multiScene.scenes[0];
                     scene.setFPS(60);
                     scene.setUseMaterialTexMtx(true);
@@ -6066,22 +6095,22 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                 return SMGSceneDesc;
             }());
             sceneDescs = [
-                new SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
-                new SunshineSceneDesc("data/j3d/mare0.szs", "Noki Bay"),
-                new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach"),
-                new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor"),
-                new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
-                new SunshineSceneDesc("data/j3d/monte3.szs", "Pianta Village"),
+                new sms_scenes_1.SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
+                new sms_scenes_1.SunshineSceneDesc("data/j3d/mare0.szs", "Noki Bay"),
+                new sms_scenes_1.SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach"),
+                new sms_scenes_1.SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor"),
+                new sms_scenes_1.SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
+                new sms_scenes_1.SunshineSceneDesc("data/j3d/monte3.szs", "Pianta Village"),
                 new SMGSceneDesc(["data/j3d/MarioFaceShipPlanet.arc"], "Faceship"),
                 new SMGSceneDesc(["data/j3d/PeachCastleGardenPlanet.arc", "data/j3d/GalaxySky.arc"], "Peach's Castle Garden"),
             ];
-            exports_26("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_27("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("mdl0/mdl0", ["util"], function (exports_27, context_27) {
+System.register("mdl0/mdl0", ["util"], function (exports_28, context_28) {
     "use strict";
-    var __moduleName = context_27 && context_27.id;
+    var __moduleName = context_28 && context_28.id;
     function readString(buffer, offs, length) {
         var buf = new Uint8Array(buffer, offs, length);
         var S = '';
@@ -6097,7 +6126,7 @@ System.register("mdl0/mdl0", ["util"], function (exports_27, context_27) {
             HAS_COLOR: 0x04,
         };
         var view = new DataView(buffer);
-        util_12.assert(readString(buffer, 0, 4) === 'MDL\0');
+        util_13.assert(readString(buffer, 0, 4) === 'MDL\0');
         var flags = view.getUint8(0x04);
         var primType = view.getUint8(0x05);
         var vertCount = view.getUint16(0x06, true);
@@ -6153,25 +6182,25 @@ System.register("mdl0/mdl0", ["util"], function (exports_27, context_27) {
             vtxData = new Uint16Array(buffer.slice(start, end));
             offs = end;
         }
-        util_12.assert(offs === buffer.byteLength);
+        util_13.assert(offs === buffer.byteLength);
         return { clrData: clrData, idxData: idxData, vtxData: vtxData, animCount: animCount, animSize: animSize, vertCount: vertCount, vertSize: vertSize };
     }
-    exports_27("parse", parse);
-    var util_12;
+    exports_28("parse", parse);
+    var util_13;
     return {
         setters: [
-            function (util_12_1) {
-                util_12 = util_12_1;
+            function (util_13_1) {
+                util_13 = util_13_1;
             }
         ],
         execute: function () {
         }
     };
 });
-System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], function (exports_28, context_28) {
+System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], function (exports_29, context_29) {
     "use strict";
-    var __moduleName = context_28 && context_28.id;
-    var MDL0, Viewer, render_9, util_13, FancyGrid_Program, FancyGrid, MDL0_Program, Scene, SceneDesc;
+    var __moduleName = context_29 && context_29.id;
+    var MDL0, Viewer, render_9, util_14, FancyGrid_Program, FancyGrid, MDL0_Program, Scene, SceneDesc;
     return {
         setters: [
             function (MDL0_1) {
@@ -6183,8 +6212,8 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
             function (render_9_1) {
                 render_9 = render_9_1;
             },
-            function (util_13_1) {
-                util_13 = util_13_1;
+            function (util_14_1) {
+                util_14 = util_14_1;
             }
         ],
         execute: function () {
@@ -6312,20 +6341,20 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    return util_13.fetch(this.path).then(function (result) {
+                    return util_14.fetch(this.path).then(function (result) {
                         var mdl0 = MDL0.parse(result);
                         return new Scene(gl, mdl0);
                     });
                 };
                 return SceneDesc;
             }());
-            exports_28("SceneDesc", SceneDesc);
+            exports_29("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("mdl0/scenes", ["mdl0/render"], function (exports_29, context_29) {
+System.register("mdl0/scenes", ["mdl0/render"], function (exports_30, context_30) {
     "use strict";
-    var __moduleName = context_29 && context_29.id;
+    var __moduleName = context_30 && context_30.id;
     var render_10, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -6391,16 +6420,16 @@ System.register("mdl0/scenes", ["mdl0/render"], function (exports_29, context_29
                 var name = filename;
                 return new render_10.SceneDesc(name, path);
             });
-            exports_29("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_30("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
+System.register("oot3d/cmb", ["util"], function (exports_31, context_31) {
     "use strict";
-    var __moduleName = context_30 && context_30.id;
+    var __moduleName = context_31 && context_31.id;
     function readMatsChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'mats');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'mats');
         var count = view.getUint32(0x08, true);
         var offs = 0x0C;
         for (var i = 0; i < count; i++) {
@@ -6684,7 +6713,7 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
     }
     function readTexChunk(cmb, buffer, texData) {
         var view = new DataView(buffer);
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'tex ');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'tex ');
         var count = view.getUint32(0x08, true);
         var offs = 0x0C;
         for (var i = 0; i < count; i++) {
@@ -6694,7 +6723,7 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
             texture.height = view.getUint16(offs + 0x0A, true);
             texture.format = view.getUint32(offs + 0x0C, true);
             var dataOffs = view.getUint32(offs + 0x10, true);
-            texture.name = util_14.readString(buffer, offs + 0x14, 0x10);
+            texture.name = util_15.readString(buffer, offs + 0x14, 0x10);
             texture.name = texture.name + "  (" + texture.format + ")";
             offs += 0x24;
             texture.pixels = decodeTexture(texture, texData.slice(dataOffs, dataOffs + size));
@@ -6703,7 +6732,7 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
     }
     function readVatrChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'vatr');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'vatr');
         cmb.vertexBufferSlices = new VertexBufferSlices();
         var posSize = view.getUint32(0x0C, true);
         var posOffs = view.getUint32(0x10, true);
@@ -6720,7 +6749,7 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
     }
     function readMshsChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'mshs');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'mshs');
         var count = view.getUint32(0x08, true);
         var offs = 0x10;
         for (var i = 0; i < count; i++) {
@@ -6733,7 +6762,7 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
     }
     function readPrmChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'prm ');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'prm ');
         var prm = new Prm();
         prm.indexType = view.getUint32(0x10, true);
         prm.count = view.getUint16(0x14, true);
@@ -6742,13 +6771,13 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
     }
     function readPrmsChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'prms');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'prms');
         var prmOffs = view.getUint32(0x14, true);
         return readPrmChunk(cmb, buffer.slice(prmOffs));
     }
     function readSepdChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'sepd');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'sepd');
         var count = view.getUint16(0x08, true);
         var sepd = new Sepd();
         var offs = 0x108;
@@ -6773,7 +6802,7 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
     }
     function readShpChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'shp ');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'shp ');
         var count = view.getUint32(0x08, true);
         var offs = 0x10;
         for (var i = 0; i < count; i++) {
@@ -6785,7 +6814,7 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
     }
     function readSklmChunk(cmb, buffer) {
         var view = new DataView(buffer);
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'sklm');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'sklm');
         var mshsChunkOffs = view.getUint32(0x08, true);
         readMshsChunk(cmb, buffer.slice(mshsChunkOffs));
         var shpChunkOffs = view.getUint32(0x0C, true);
@@ -6794,9 +6823,9 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
     function parse(buffer) {
         var view = new DataView(buffer);
         var cmb = new CMB();
-        util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'cmb ');
+        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'cmb ');
         var size = view.getUint32(0x04, true);
-        cmb.name = util_14.readString(buffer, 0x10, 0x10);
+        cmb.name = util_15.readString(buffer, 0x10, 0x10);
         var matsChunkOffs = view.getUint32(0x28, true);
         readMatsChunk(cmb, buffer.slice(matsChunkOffs));
         var texDataOffs = view.getUint32(0x40, true);
@@ -6811,12 +6840,12 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
         cmb.indexBuffer = buffer.slice(idxDataOffs, idxDataOffs + idxDataCount * 2);
         return cmb;
     }
-    exports_30("parse", parse);
-    var util_14, VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
+    exports_31("parse", parse);
+    var util_15, VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
     return {
         setters: [
-            function (util_14_1) {
-                util_14 = util_14_1;
+            function (util_15_1) {
+                util_15 = util_15_1;
             }
         ],
         execute: function () {
@@ -6834,7 +6863,7 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
                 }
                 return CMB;
             }());
-            exports_30("CMB", CMB);
+            exports_31("CMB", CMB);
             (function (TextureFilter) {
                 TextureFilter[TextureFilter["NEAREST"] = 9728] = "NEAREST";
                 TextureFilter[TextureFilter["LINEAR"] = 9729] = "LINEAR";
@@ -6843,12 +6872,12 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
                 TextureFilter[TextureFilter["NEAREST_MIPMIP_LINEAR"] = 9986] = "NEAREST_MIPMIP_LINEAR";
                 TextureFilter[TextureFilter["LINEAR_MIPMAP_LINEAR"] = 9987] = "LINEAR_MIPMAP_LINEAR";
             })(TextureFilter || (TextureFilter = {}));
-            exports_30("TextureFilter", TextureFilter);
+            exports_31("TextureFilter", TextureFilter);
             (function (TextureWrapMode) {
                 TextureWrapMode[TextureWrapMode["CLAMP"] = 10496] = "CLAMP";
                 TextureWrapMode[TextureWrapMode["REPEAT"] = 10497] = "REPEAT";
             })(TextureWrapMode || (TextureWrapMode = {}));
-            exports_30("TextureWrapMode", TextureWrapMode);
+            exports_31("TextureWrapMode", TextureWrapMode);
             TextureBinding = /** @class */ (function () {
                 function TextureBinding() {
                 }
@@ -6860,7 +6889,7 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
                 }
                 return Material;
             }());
-            exports_30("Material", Material);
+            exports_31("Material", Material);
             (function (TextureFormat) {
                 TextureFormat[TextureFormat["ETC1"] = 26458] = "ETC1";
                 TextureFormat[TextureFormat["ETC1A4"] = 26459] = "ETC1A4";
@@ -6875,13 +6904,13 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
                 }
                 return Texture;
             }());
-            exports_30("Texture", Texture);
+            exports_31("Texture", Texture);
             Mesh = /** @class */ (function () {
                 function Mesh() {
                 }
                 return Mesh;
             }());
-            exports_30("Mesh", Mesh);
+            exports_31("Mesh", Mesh);
             (function (DataType) {
                 DataType[DataType["Byte"] = 5120] = "Byte";
                 DataType[DataType["UByte"] = 5121] = "UByte";
@@ -6891,30 +6920,30 @@ System.register("oot3d/cmb", ["util"], function (exports_30, context_30) {
                 DataType[DataType["UInt"] = 5125] = "UInt";
                 DataType[DataType["Float"] = 5126] = "Float";
             })(DataType || (DataType = {}));
-            exports_30("DataType", DataType);
+            exports_31("DataType", DataType);
             Prm = /** @class */ (function () {
                 function Prm() {
                 }
                 return Prm;
             }());
-            exports_30("Prm", Prm);
+            exports_31("Prm", Prm);
             Sepd = /** @class */ (function () {
                 function Sepd() {
                     this.prms = [];
                 }
                 return Sepd;
             }());
-            exports_30("Sepd", Sepd);
+            exports_31("Sepd", Sepd);
         }
     };
 });
-System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_31, context_31) {
+System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_32, context_32) {
     "use strict";
-    var __moduleName = context_31 && context_31.id;
+    var __moduleName = context_32 && context_32.id;
     function readRooms(view, nRooms, offs) {
         var rooms = [];
         for (var i = 0; i < nRooms; i++) {
-            rooms.push(util_15.readString(view.buffer, offs, 0x44));
+            rooms.push(util_16.readString(view.buffer, offs, 0x44));
             offs += 0x44;
         }
         return rooms;
@@ -6925,8 +6954,8 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_31, contex
         var type = (hdr >> 24);
         var nEntries = (hdr >> 16) & 0xFF;
         var entriesAddr = view.getUint32(offs + 4, true);
-        util_15.assert(type === 0x02);
-        util_15.assert(nEntries === 0x01);
+        util_16.assert(type === 0x02);
+        util_16.assert(nEntries === 0x01);
         var opaqueAddr = view.getUint32(entriesAddr + 0x08, true);
         var transparentAddr = view.getUint32(entriesAddr + 0x0C, true);
         if (opaqueAddr !== 0)
@@ -6995,21 +7024,21 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_31, contex
         return zsi;
     }
     function parse(buffer) {
-        util_15.assert(util_15.readString(buffer, 0x00, 0x04) === 'ZSI\x01');
-        var name = util_15.readString(buffer, 0x04, 0x0C);
+        util_16.assert(util_16.readString(buffer, 0x00, 0x04) === 'ZSI\x01');
+        var name = util_16.readString(buffer, 0x04, 0x0C);
         // ZSI header is done. It's that simple! Now for the actual data.
         var headersBuf = buffer.slice(0x10);
         return readHeaders(headersBuf);
     }
-    exports_31("parse", parse);
-    var CMB, util_15, ZSI, HeaderCommands, Mesh;
+    exports_32("parse", parse);
+    var CMB, util_16, ZSI, HeaderCommands, Mesh;
     return {
         setters: [
             function (CMB_1) {
                 CMB = CMB_1;
             },
-            function (util_15_1) {
-                util_15 = util_15_1;
+            function (util_16_1) {
+                util_16 = util_16_1;
             }
         ],
         execute: function () {
@@ -7018,7 +7047,7 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_31, contex
                 }
                 return ZSI;
             }());
-            exports_31("ZSI", ZSI);
+            exports_32("ZSI", ZSI);
             // Subset of Z64 command types.
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Collision"] = 3] = "Collision";
@@ -7031,13 +7060,13 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_31, contex
                 }
                 return Mesh;
             }());
-            exports_31("Mesh", Mesh);
+            exports_32("Mesh", Mesh);
         }
     };
 });
-System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress", "render", "util"], function (exports_32, context_32) {
+System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress", "render", "util"], function (exports_33, context_33) {
     "use strict";
-    var __moduleName = context_32 && context_32.id;
+    var __moduleName = context_33 && context_33.id;
     function textureToCanvas(texture) {
         var canvas = document.createElement("canvas");
         canvas.width = texture.width;
@@ -7056,7 +7085,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
         parts.pop();
         return parts.join('/');
     }
-    var CMB, ZSI, Viewer, progress_5, render_11, util_16, OoT3D_Program, Scene, MultiScene, SceneDesc;
+    var CMB, ZSI, Viewer, progress_5, render_11, util_17, OoT3D_Program, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (CMB_2) {
@@ -7074,8 +7103,8 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
             function (render_11_1) {
                 render_11 = render_11_1;
             },
-            function (util_16_1) {
-                util_16 = util_16_1;
+            function (util_17_1) {
+                util_17 = util_17_1;
             }
         ],
         execute: function () {
@@ -7100,7 +7129,6 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
             }(render_11.Program));
             Scene = /** @class */ (function () {
                 function Scene(gl, zsi) {
-                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.program = new OoT3D_Program();
                     this.textures = zsi.mesh.textures.map(function (texture) {
                         return textureToCanvas(texture);
@@ -7318,8 +7346,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
-                        if (scene.renderPasses.includes(renderState.currentPass))
-                            scene.render(renderState);
+                        scene.render(renderState);
                     });
                 };
                 MultiScene.prototype.destroy = function (gl) {
@@ -7335,7 +7362,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                 }
                 SceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return util_16.fetch(this.path).then(function (result) {
+                    return util_17.fetch(this.path).then(function (result) {
                         return _this._createSceneFromData(gl, result);
                     });
                 };
@@ -7352,7 +7379,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                             return basePath_1 + '/' + filename;
                         });
                         return progress_5.Progressable.all(roomFilenames.map(function (filename) {
-                            return util_16.fetch(filename).then(function (roomResult) { return _this._createSceneFromData(gl, roomResult); });
+                            return util_17.fetch(filename).then(function (roomResult) { return _this._createSceneFromData(gl, roomResult); });
                         })).then(function (scenes) {
                             return new MultiScene(scenes);
                         });
@@ -7363,13 +7390,13 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                 };
                 return SceneDesc;
             }());
-            exports_32("SceneDesc", SceneDesc);
+            exports_33("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("oot3d/scenes", ["oot3d/render"], function (exports_33, context_33) {
+System.register("oot3d/scenes", ["oot3d/render"], function (exports_34, context_34) {
     "use strict";
-    var __moduleName = context_33 && context_33.id;
+    var __moduleName = context_34 && context_34.id;
     var render_12, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -7483,22 +7510,22 @@ System.register("oot3d/scenes", ["oot3d/render"], function (exports_33, context_
                 var name = entry.name || entry.filename;
                 return new render_12.SceneDesc(name, path);
             });
-            exports_33("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_34("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("sm64ds/crg0", ["util"], function (exports_34, context_34) {
+System.register("sm64ds/crg0", ["util"], function (exports_35, context_35) {
     "use strict";
-    var __moduleName = context_34 && context_34.id;
+    var __moduleName = context_35 && context_35.id;
     function parse(buffer) {
         var view = new DataView(buffer);
-        util_17.assert(util_17.readString(buffer, 0, 0x04) === 'CRG0');
+        util_18.assert(util_18.readString(buffer, 0, 0x04) === 'CRG0');
         var levelTableCount = view.getUint32(0x08, false);
         var levelTableOffs = view.getUint32(0x0C, false);
         var levels = [];
         var levelTableIdx = levelTableOffs;
         for (var i = 0; i < levelTableCount; i++) {
-            util_17.assert(view.getUint8(levelTableIdx) === 0x4d);
+            util_18.assert(view.getUint8(levelTableIdx) === 0x4d);
             var levelId = view.getUint8(levelTableIdx + 0x01);
             var levelAttributesCount = view.getUint8(levelTableIdx + 0x02);
             var levelMaterialsCount = view.getUint8(levelTableIdx + 0x03);
@@ -7507,15 +7534,15 @@ System.register("sm64ds/crg0", ["util"], function (exports_34, context_34) {
             for (var j = 0; j < levelAttributesCount; j++) {
                 var keyOffs = view.getUint32(levelTableIdx + 0x00, false);
                 var valueOffs = view.getUint32(levelTableIdx + 0x04, false);
-                var key = util_17.readString(buffer, keyOffs, 0x20);
-                var value = util_17.readString(buffer, valueOffs, 0x20);
+                var key = util_18.readString(buffer, keyOffs, 0x20);
+                var value = util_18.readString(buffer, valueOffs, 0x20);
                 levelTableIdx += 0x08;
                 levelAttributes.set(key, value);
             }
             var materials = [];
             for (var j = 0; j < levelMaterialsCount; j++) {
                 var materialNameOffs = view.getUint32(levelTableIdx + 0x00, false);
-                var materialName = util_17.readString(buffer, materialNameOffs, 0x20);
+                var materialName = util_18.readString(buffer, materialNameOffs, 0x20);
                 levelTableIdx += 0x04;
                 var scaleOffs = view.getUint32(levelTableIdx + 0x00, false);
                 var scaleCount = view.getUint32(levelTableIdx + 0x04, false);
@@ -7546,40 +7573,10 @@ System.register("sm64ds/crg0", ["util"], function (exports_34, context_34) {
         }
         return { levels: levels };
     }
-    exports_34("parse", parse);
-    var util_17;
+    exports_35("parse", parse);
+    var util_18;
     return {
         setters: [
-            function (util_17_1) {
-                util_17 = util_17_1;
-            }
-        ],
-        execute: function () {
-        }
-    };
-});
-// SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
-System.register("sm64ds/lz77", ["lz77", "util"], function (exports_35, context_35) {
-    "use strict";
-    var __moduleName = context_35 && context_35.id;
-    function isLZ77(srcBuffer) {
-        var srcView = new DataView(srcBuffer);
-        return (util_18.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
-    }
-    exports_35("isLZ77", isLZ77);
-    function maybeDecompress(srcBuffer) {
-        if (isLZ77(srcBuffer))
-            return lz77_1.decompress(srcBuffer.slice(4));
-        else
-            return srcBuffer;
-    }
-    exports_35("maybeDecompress", maybeDecompress);
-    var lz77_1, util_18;
-    return {
-        setters: [
-            function (lz77_1_1) {
-                lz77_1 = lz77_1_1;
-            },
             function (util_18_1) {
                 util_18 = util_18_1;
             }
@@ -7588,10 +7585,40 @@ System.register("sm64ds/lz77", ["lz77", "util"], function (exports_35, context_3
         }
     };
 });
-// Read DS texture formats.
-System.register("sm64ds/nitro_tex", [], function (exports_36, context_36) {
+// SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
+System.register("sm64ds/lz77", ["lz77", "util"], function (exports_36, context_36) {
     "use strict";
     var __moduleName = context_36 && context_36.id;
+    function isLZ77(srcBuffer) {
+        var srcView = new DataView(srcBuffer);
+        return (util_19.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
+    }
+    exports_36("isLZ77", isLZ77);
+    function maybeDecompress(srcBuffer) {
+        if (isLZ77(srcBuffer))
+            return lz77_1.decompress(srcBuffer.slice(4));
+        else
+            return srcBuffer;
+    }
+    exports_36("maybeDecompress", maybeDecompress);
+    var lz77_1, util_19;
+    return {
+        setters: [
+            function (lz77_1_1) {
+                lz77_1 = lz77_1_1;
+            },
+            function (util_19_1) {
+                util_19 = util_19_1;
+            }
+        ],
+        execute: function () {
+        }
+    };
+});
+// Read DS texture formats.
+System.register("sm64ds/nitro_tex", [], function (exports_37, context_37) {
+    "use strict";
+    var __moduleName = context_37 && context_37.id;
     function expand3to8(n) {
         return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
     }
@@ -7607,7 +7634,7 @@ System.register("sm64ds/nitro_tex", [], function (exports_36, context_36) {
         pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
         pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
     }
-    exports_36("bgr5", bgr5);
+    exports_37("bgr5", bgr5);
     function readTexture_A3I5(width, height, texData, palData) {
         var pixels = new Uint8Array(width * height * 4);
         var texView = new DataView(texData);
@@ -7791,7 +7818,7 @@ System.register("sm64ds/nitro_tex", [], function (exports_36, context_36) {
                 throw new Error("Unsupported texture type! " + format);
         }
     }
-    exports_36("readTexture", readTexture);
+    exports_37("readTexture", readTexture);
     var Format;
     return {
         setters: [],
@@ -7806,20 +7833,20 @@ System.register("sm64ds/nitro_tex", [], function (exports_36, context_36) {
                 Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
                 Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
             })(Format || (Format = {}));
-            exports_36("Format", Format);
+            exports_37("Format", Format);
         }
     };
 });
 // Read DS Geometry Engine commands.
-System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_37, context_37) {
+System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_38, context_38) {
     "use strict";
-    var __moduleName = context_37 && context_37.id;
+    var __moduleName = context_38 && context_38.id;
     function bgr5(pixel) {
         nitro_tex_1.bgr5(tmp, 0, pixel);
         var r = tmp[0], g = tmp[1], b = tmp[2];
         return { r: r, g: g, b: b };
     }
-    exports_37("bgr5", bgr5);
+    exports_38("bgr5", bgr5);
     function cmd_MTX_RESTORE(ctx) {
         // XXX: We don't implement the matrix stack yet.
         ctx.readParam();
@@ -8038,7 +8065,7 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_37, c
         }
         return ctx.packets;
     }
-    exports_37("readCmds", readCmds);
+    exports_38("readCmds", readCmds);
     var nitro_tex_1, CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, tmp, Context, ContextInternal;
     return {
         setters: [
@@ -8078,7 +8105,7 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_37, c
                 }
                 return Context;
             }());
-            exports_37("Context", Context);
+            exports_38("Context", Context);
             ContextInternal = /** @class */ (function () {
                 function ContextInternal(buffer, baseCtx) {
                     this.offs = 0;
@@ -8100,14 +8127,14 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_37, c
         }
     };
 });
-System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_38, context_38) {
+System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_39, context_39) {
     "use strict";
-    var __moduleName = context_38 && context_38.id;
+    var __moduleName = context_39 && context_39.id;
     function parseModel(bmd, view, idx) {
         var offs = bmd.modelOffsBase + idx * 0x40;
         var model = new Model();
         model.id = view.getUint32(offs + 0x00, true);
-        model.name = util_19.readString(view.buffer, view.getUint32(offs + 0x04, true), 0xFF);
+        model.name = util_20.readString(view.buffer, view.getUint32(offs + 0x04, true), 0xFF);
         model.parentID = view.getUint16(offs + 0x08, true);
         // Local transform.
         var xs = view.getUint32(offs + 0x10, true);
@@ -8145,7 +8172,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
     function parseMaterial(bmd, view, idx) {
         var offs = bmd.materialOffsBase + idx * 0x30;
         var material = new Material();
-        material.name = util_19.readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
+        material.name = util_20.readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
         material.texCoordMat = gl_matrix_6.mat2d.create();
         var textureIdx = view.getUint32(offs + 0x04, true);
         if (textureIdx !== 0xFFFFFFFF) {
@@ -8197,7 +8224,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var texOffs = bmd.textureOffsBase + key.texIdx * 0x14;
         var texture = new Texture();
         texture.id = key.texIdx;
-        texture.name = util_19.readString(view.buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
+        texture.name = util_20.readString(view.buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
         var texDataOffs = view.getUint32(texOffs + 0x04, true);
         var texDataSize = view.getUint32(texOffs + 0x08, true);
         var texData = view.buffer.slice(texDataOffs);
@@ -8209,7 +8236,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var palData = null;
         if (key.palIdx !== 0xFFFFFFFF) {
             var palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
-            texture.paletteName = util_19.readString(view.buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
+            texture.paletteName = util_20.readString(view.buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
             var palDataOffs = view.getUint32(palOffs + 0x04, true);
             var palDataSize = view.getUint32(palOffs + 0x08, true);
             palData = view.buffer.slice(palDataOffs, palDataOffs + palDataSize);
@@ -8242,8 +8269,8 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             bmd.models.push(parseModel(bmd, view, i));
         return bmd;
     }
-    exports_38("parse", parse);
-    var gl_matrix_6, NITRO_GX, NITRO_Tex, util_19, Material, Model, TextureKey, Texture, BMD;
+    exports_39("parse", parse);
+    var gl_matrix_6, NITRO_GX, NITRO_Tex, util_20, Material, Model, TextureKey, Texture, BMD;
     return {
         setters: [
             function (gl_matrix_6_1) {
@@ -8255,8 +8282,8 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             function (NITRO_Tex_1) {
                 NITRO_Tex = NITRO_Tex_1;
             },
-            function (util_19_1) {
-                util_19 = util_19_1;
+            function (util_20_1) {
+                util_20 = util_20_1;
             }
         ],
         execute: function () {
@@ -8265,13 +8292,13 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 }
                 return Material;
             }());
-            exports_38("Material", Material);
+            exports_39("Material", Material);
             Model = /** @class */ (function () {
                 function Model() {
                 }
                 return Model;
             }());
-            exports_38("Model", Model);
+            exports_39("Model", Model);
             TextureKey = /** @class */ (function () {
                 function TextureKey(texIdx, palIdx) {
                     this.texIdx = texIdx;
@@ -8287,19 +8314,19 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 }
                 return Texture;
             }());
-            exports_38("Texture", Texture);
+            exports_39("Texture", Texture);
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
                 return BMD;
             }());
-            exports_38("BMD", BMD);
+            exports_39("BMD", BMD);
         }
     };
 });
-System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm64ds/nitro_bmd", "viewer", "render", "util"], function (exports_39, context_39) {
+System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm64ds/nitro_bmd", "viewer", "render", "util"], function (exports_40, context_40) {
     "use strict";
-    var __moduleName = context_39 && context_39.id;
+    var __moduleName = context_40 && context_40.id;
     function textureToCanvas(bmdTex) {
         var canvas = document.createElement("canvas");
         canvas.width = bmdTex.width;
@@ -8312,7 +8339,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
         var surfaces = [canvas];
         return { name: bmdTex.name, surfaces: surfaces };
     }
-    var gl_matrix_7, CRG0, LZ77, NITRO_BMD, Viewer, render_13, util_20, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, Scene, MultiScene, SceneDesc;
+    var gl_matrix_7, CRG0, LZ77, NITRO_BMD, Viewer, render_13, util_21, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (gl_matrix_7_1) {
@@ -8333,8 +8360,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
             function (render_13_1) {
                 render_13 = render_13_1;
             },
-            function (util_20_1) {
-                util_20 = util_20_1;
+            function (util_21_1) {
+                util_21 = util_21_1;
             }
         ],
         execute: function () {
@@ -8362,7 +8389,6 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, localScale, crg0Level) {
                     var _this = this;
-                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.program = new NITRO_Program();
                     this.bmd = bmd;
                     this.localScale = localScale;
@@ -8556,8 +8582,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                         gl.clear(gl.COLOR_BUFFER_BIT);
                     }
                     this.scenes.forEach(function (scene) {
-                        if (scene.renderPasses.includes(renderState.currentPass))
-                            scene.render(renderState);
+                        scene.render(renderState);
                     });
                 };
                 MultiScene.prototype.destroy = function (gl) {
@@ -8573,13 +8598,13 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 }
                 SceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return util_20.fetch('data/sm64ds/sm64ds.crg0').then(function (result) {
+                    return util_21.fetch('data/sm64ds/sm64ds.crg0').then(function (result) {
                         var crg0 = CRG0.parse(result);
                         return _this._createSceneFromCRG0(gl, crg0);
                     });
                 };
                 SceneDesc.prototype._createBmdScene = function (gl, filename, localScale, level, isSkybox) {
-                    return util_20.fetch("data/sm64ds/" + filename).then(function (result) {
+                    return util_21.fetch("data/sm64ds/" + filename).then(function (result) {
                         result = LZ77.maybeDecompress(result);
                         var bmd = NITRO_BMD.parse(result);
                         var scene = new Scene(gl, bmd, localScale, level);
@@ -8598,13 +8623,13 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 };
                 return SceneDesc;
             }());
-            exports_39("SceneDesc", SceneDesc);
+            exports_40("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_40, context_40) {
+System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_41, context_41) {
     "use strict";
-    var __moduleName = context_40 && context_40.id;
+    var __moduleName = context_41 && context_41.id;
     var render_14, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -8671,13 +8696,13 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_40, contex
             ].map(function (entry) {
                 return new render_14.SceneDesc(entry.name, entry.id);
             });
-            exports_40("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_41("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (exports_41, context_41) {
+System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (exports_42, context_42) {
     "use strict";
-    var __moduleName = context_41 && context_41.id;
+    var __moduleName = context_42 && context_42.id;
     // Loads the ZELVIEW0 format.
     function read0String(buffer, offs, length) {
         var buf = new Uint8Array(buffer, offs, length);
@@ -8720,7 +8745,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
         zelview0.view = view;
         return zelview0;
     }
-    exports_41("readZELVIEW0", readZELVIEW0);
+    exports_42("readZELVIEW0", readZELVIEW0);
     function readHeaders(gl, rom, offs, banks) {
         var headers = new Headers();
         function loadAddress(addr) {
@@ -9027,7 +9052,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
                 };
                 return ZELVIEW0;
             }());
-            exports_41("ZELVIEW0", ZELVIEW0);
+            exports_42("ZELVIEW0", ZELVIEW0);
             Mesh = /** @class */ (function () {
                 function Mesh() {
                     this.opaque = [];
@@ -9035,14 +9060,14 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
                 }
                 return Mesh;
             }());
-            exports_41("Mesh", Mesh);
+            exports_42("Mesh", Mesh);
             Headers = /** @class */ (function () {
                 function Headers() {
                     this.rooms = [];
                 }
                 return Headers;
             }());
-            exports_41("Headers", Headers);
+            exports_42("Headers", Headers);
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Spawns"] = 0] = "Spawns";
                 HeaderCommands[HeaderCommands["Actors"] = 1] = "Actors";
@@ -9067,9 +9092,9 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2"], function (e
         }
     };
 });
-System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_42, context_42) {
+System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_43, context_43) {
     "use strict";
-    var __moduleName = context_42 && context_42.id;
+    var __moduleName = context_43 && context_43.id;
     function readVertex(state, which, addr) {
         var rom = state.rom;
         var offs = state.lookupAddress(addr);
@@ -9741,7 +9766,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         gl.bindVertexArray(null);
         return new DL(vao, state.cmds, state.textures);
     }
-    exports_42("readDL", readDL);
+    exports_43("readDL", readDL);
     var gl_matrix_9, Render, render_15, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
@@ -9836,14 +9861,14 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
                 };
                 return DL;
             }());
-            exports_42("DL", DL);
+            exports_43("DL", DL);
         }
     };
 });
-System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer"], function (exports_43, context_43) {
+System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer"], function (exports_44, context_44) {
     "use strict";
-    var __moduleName = context_43 && context_43.id;
-    var ZELVIEW0, render_16, util_21, Viewer, BillboardBGProgram, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
+    var __moduleName = context_44 && context_44.id;
+    var ZELVIEW0, render_16, util_22, Viewer, BillboardBGProgram, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
     return {
         setters: [
             function (ZELVIEW0_1) {
@@ -9852,8 +9877,8 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
             function (render_16_1) {
                 render_16 = render_16_1;
             },
-            function (util_21_1) {
-                util_21 = util_21_1;
+            function (util_22_1) {
+                util_22 = util_22_1;
             },
             function (Viewer_6) {
                 Viewer = Viewer_6;
@@ -9894,7 +9919,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                 F3DEX2Program.a_Color = 2;
                 return F3DEX2Program;
             }(render_16.Program));
-            exports_43("F3DEX2Program", F3DEX2Program);
+            exports_44("F3DEX2Program", F3DEX2Program);
             CollisionProgram = /** @class */ (function (_super) {
                 __extends(CollisionProgram, _super);
                 function CollisionProgram() {
@@ -10052,20 +10077,20 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util", "viewer
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    return util_21.fetch(this.path).then(function (result) {
+                    return util_22.fetch(this.path).then(function (result) {
                         var zelview0 = ZELVIEW0.readZELVIEW0(result);
                         return new Scene(gl, zelview0);
                     });
                 };
                 return SceneDesc;
             }());
-            exports_43("SceneDesc", SceneDesc);
+            exports_44("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("zelview/scenes", ["zelview/render"], function (exports_44, context_44) {
+System.register("zelview/scenes", ["zelview/render"], function (exports_45, context_45) {
     "use strict";
-    var __moduleName = context_44 && context_44.id;
+    var __moduleName = context_45 && context_45.id;
     var render_17, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -10521,30 +10546,30 @@ System.register("zelview/scenes", ["zelview/render"], function (exports_44, cont
                 var path = "data/zelview/" + entry.filename + ".zelview0";
                 return new render_17.SceneDesc(entry.label, path);
             });
-            exports_44("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_45("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_material", "j3d/scenes", "j3d/render", "progress", "util", "gl-matrix"], function (exports_45, context_45) {
+System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_material", "j3d/scenes", "j3d/render", "progress", "util", "gl-matrix"], function (exports_46, context_46) {
     "use strict";
-    var __moduleName = context_45 && context_45.id;
-    var j3d_3, RARC, Yaz0, GX_Material, scenes_1, render_18, progress_6, util_22, gl_matrix_10, CameraPos, WindWakerScene, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
+    var __moduleName = context_46 && context_46.id;
+    var j3d_3, RARC, Yaz0, GX_Material, scenes_2, render_18, progress_6, util_23, gl_matrix_10, CameraPos, WindWakerScene, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
         setters: [
             function (j3d_3_1) {
                 j3d_3 = j3d_3_1;
             },
-            function (RARC_2) {
-                RARC = RARC_2;
+            function (RARC_3) {
+                RARC = RARC_3;
             },
-            function (Yaz0_3) {
-                Yaz0 = Yaz0_3;
+            function (Yaz0_4) {
+                Yaz0 = Yaz0_4;
             },
             function (GX_Material_3) {
                 GX_Material = GX_Material_3;
             },
-            function (scenes_1_1) {
-                scenes_1 = scenes_1_1;
+            function (scenes_2_1) {
+                scenes_2 = scenes_2_1;
             },
             function (render_18_1) {
                 render_18 = render_18_1;
@@ -10552,8 +10577,8 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
             function (progress_6_1) {
                 progress_6 = progress_6_1;
             },
-            function (util_22_1) {
-                util_22 = util_22_1;
+            function (util_23_1) {
+                util_23 = util_23_1;
             },
             function (gl_matrix_10_1) {
                 gl_matrix_10 = gl_matrix_10_1;
@@ -10582,36 +10607,24 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     _this.roomIdx = roomIdx;
                     _this.stageRarc = stageRarc;
                     _this.roomRarc = roomRarc;
-                    function createScene(rarc, name, isSkybox) {
-                        var bdlFile = rarc.findFile("bdl/" + name + ".bdl");
-                        if (!bdlFile)
-                            return null;
-                        var btkFile = rarc.findFile("btk/" + name + ".btk");
-                        var bdl = j3d_3.BMD.parse(bdlFile.buffer);
-                        var btk = btkFile ? j3d_3.BTK.parse(btkFile.buffer) : null;
-                        var scene = new render_18.Scene(gl, bdl, btk, null);
-                        scene.setIsSkybox(isSkybox);
-                        scene.setUseMaterialTexMtx(false);
-                        return scene;
-                    }
                     var scenes = [];
                     // Skybox.
-                    _this.vr_sky = createScene(stageRarc, "vr_sky", true);
+                    _this.vr_sky = _this.createScene(gl, stageRarc, "vr_sky", true);
                     scenes.push(_this.vr_sky);
-                    _this.vr_kasumi_mae = createScene(stageRarc, "vr_kasumi_mae", true);
+                    _this.vr_kasumi_mae = _this.createScene(gl, stageRarc, "vr_kasumi_mae", true);
                     scenes.push(_this.vr_kasumi_mae);
-                    _this.vr_uso_umi = createScene(stageRarc, "vr_uso_umi", true);
+                    _this.vr_uso_umi = _this.createScene(gl, stageRarc, "vr_uso_umi", true);
                     scenes.push(_this.vr_uso_umi);
-                    _this.vr_back_cloud = createScene(stageRarc, "vr_back_cloud", true);
+                    _this.vr_back_cloud = _this.createScene(gl, stageRarc, "vr_back_cloud", true);
                     scenes.push(_this.vr_back_cloud);
-                    _this.model = createScene(roomRarc, "model", false);
+                    _this.model = _this.createScene(gl, roomRarc, "model", false);
                     scenes.push(_this.model);
                     // Ocean.
-                    _this.model1 = createScene(roomRarc, "model1", false);
+                    _this.model1 = _this.createScene(gl, roomRarc, "model1", false);
                     if (_this.model1)
                         scenes.push(_this.model1);
                     // Windows / doors.
-                    _this.model3 = createScene(roomRarc, "model3", false);
+                    _this.model3 = _this.createScene(gl, roomRarc, "model3", false);
                     if (_this.model3)
                         scenes.push(_this.model3);
                     // Noon.
@@ -10625,7 +10638,7 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     var chunkOffsets = new Map();
                     var chunkTableIdx = 0x04;
                     for (var i = 0; i < chunkCount; i++) {
-                        var type = util_22.readString(buffer, chunkTableIdx + 0x00, 0x04);
+                        var type = util_23.readString(buffer, chunkTableIdx + 0x00, 0x04);
                         var offs = view.getUint32(chunkTableIdx + 0x08);
                         chunkOffsets.set(type, offs);
                         chunkTableIdx += 0x0C;
@@ -10684,6 +10697,18 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     var vr_kasumi_mae = new GX_Material.Color(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
                     return { amb: amb, light: light, wave: wave, ocean: ocean, splash: splash, splash2: splash2, doors: doors, vr_back_cloud: vr_back_cloud, vr_sky: vr_sky, vr_uso_umi: vr_uso_umi, vr_kasumi_mae: vr_kasumi_mae };
                 };
+                WindWakerScene.prototype.createScene = function (gl, rarc, name, isSkybox) {
+                    var bdlFile = rarc.findFile("bdl/" + name + ".bdl");
+                    if (!bdlFile)
+                        return null;
+                    var btkFile = rarc.findFile("btk/" + name + ".btk");
+                    var bdl = j3d_3.BMD.parse(bdlFile.buffer);
+                    var btk = btkFile ? j3d_3.BTK.parse(btkFile.buffer) : null;
+                    var scene = new render_18.Scene(gl, bdl, btk, null);
+                    scene.setIsSkybox(isSkybox);
+                    scene.setUseMaterialTexMtx(false);
+                    return scene;
+                };
                 WindWakerScene.prototype.setTimeOfDay = function (timeOfDay) {
                     var dzsFile = this.stageRarc.findFile("dzs/stage.dzs");
                     var colors = WindWakerScene.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay);
@@ -10724,7 +10749,7 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     this.cameraPos.set(m);
                 };
                 return WindWakerScene;
-            }(scenes_1.MultiScene));
+            }(scenes_2.MultiScene));
             WindWakerSceneDesc = /** @class */ (function (_super) {
                 __extends(WindWakerSceneDesc, _super);
                 function WindWakerSceneDesc(path, name, cameraPos) {
@@ -10736,8 +10761,8 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     var _this = this;
                     var roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
                     return progress_6.Progressable.all([
-                        util_22.fetch("data/j3d/ww/sea/Stage.arc"),
-                        util_22.fetch(this.path),
+                        util_23.fetch("data/j3d/ww/sea/Stage.arc"),
+                        util_23.fetch(this.path),
                     ]).then(function (_a) {
                         var _b = __read(_a, 2), stage = _b[0], room = _b[1];
                         var stageRarc = RARC.parse(Yaz0.decompress(stage));
@@ -10746,7 +10771,7 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
                     });
                 };
                 return WindWakerSceneDesc;
-            }(scenes_1.RARCSceneDesc));
+            }(scenes_2.RARCSceneDesc));
             sceneDescs = [
                 new WindWakerSceneDesc("data/j3d/ww/sea/Room11.arc", "Windfall Island", new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
                 new WindWakerSceneDesc("data/j3d/ww/sea/Room13.arc", "Dragon Roost Island", new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
@@ -10755,27 +10780,27 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_materi
             ];
             id = "zww";
             name = "The Legend of Zelda: The Wind Waker";
-            exports_45("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_46("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
 // Implements Retro's PAK format as seen in Metroid Prime 1.
-System.register("metroid_prime/pak", ["util"], function (exports_46, context_46) {
+System.register("metroid_prime/pak", ["util"], function (exports_47, context_47) {
     "use strict";
-    var __moduleName = context_46 && context_46.id;
+    var __moduleName = context_47 && context_47.id;
     function parse(buffer) {
         var view = new DataView(buffer);
-        util_23.assert(view.getUint32(0x00) === 0x00030005);
+        util_24.assert(view.getUint32(0x00) === 0x00030005);
         // Named resource table.
         var offs = 0x08;
         var namedResourceTableEntries = [];
         var namedResourceTableCount = view.getUint32(offs);
         offs += 0x04;
         for (var i = 0; i < namedResourceTableCount; i++) {
-            var fourCC = util_23.readString(buffer, offs + 0x00, 4, false);
-            var fileID = util_23.readString(buffer, offs + 0x04, 4, false);
+            var fourCC = util_24.readString(buffer, offs + 0x00, 4, false);
+            var fileID = util_24.readString(buffer, offs + 0x04, 4, false);
             var fileNameLength = view.getUint32(offs + 0x08);
-            var fileName = util_23.readString(buffer, offs + 0x0C, fileNameLength, false);
+            var fileName = util_24.readString(buffer, offs + 0x0C, fileNameLength, false);
             namedResourceTableEntries.push({ fourCC: fourCC, fileID: fileID, fileName: fileName });
             offs += 0x0C + fileNameLength;
         }
@@ -10786,8 +10811,8 @@ System.register("metroid_prime/pak", ["util"], function (exports_46, context_46)
         offs += 0x04;
         var _loop_4 = function (i) {
             var isCompressed = !!view.getUint32(offs + 0x00);
-            var fourCC = util_23.readString(buffer, offs + 0x04, 4, false);
-            var fileID = util_23.readString(buffer, offs + 0x08, 4, false);
+            var fourCC = util_24.readString(buffer, offs + 0x04, 4, false);
+            var fileID = util_24.readString(buffer, offs + 0x08, 4, false);
             var fileSize = view.getUint32(offs + 0x0C);
             var fileOffset = view.getUint32(offs + 0x10);
             offs += 0x14;
@@ -10800,8 +10825,8 @@ System.register("metroid_prime/pak", ["util"], function (exports_46, context_46)
             if (resourceTable.has(fileID)) {
                 var existingResource = resourceTable.get(fileID);
                 // Skip files that are apparently the same.
-                util_23.assert(fourCC === existingResource.fourCC);
-                util_23.assert(fileSize === existingResource.fileSize);
+                util_24.assert(fourCC === existingResource.fourCC);
+                util_24.assert(fileSize === existingResource.fileSize);
                 return "continue";
             }
             // Check for a named resource.
@@ -10809,7 +10834,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_46, context_46)
             var namedResourceTableEntry = namedResourceTableEntries.find(function (nr) { return nr.fileID === fileID; });
             if (namedResourceTableEntry) {
                 name_13 = namedResourceTableEntry.fileName;
-                util_23.assert(namedResourceTableEntry.fourCC === fourCC);
+                util_24.assert(namedResourceTableEntry.fourCC === fourCC);
             }
             var fileBuffer = buffer.slice(fileOffset, fileOffset + fileSize);
             var fileResource = { name: name_13, fourCC: fourCC, fileID: fileID, fileSize: fileSize, fileOffset: fileOffset, isCompressed: isCompressed, decompressedSize: decompressedSize, buffer: fileBuffer };
@@ -10822,12 +10847,12 @@ System.register("metroid_prime/pak", ["util"], function (exports_46, context_46)
         }
         return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
     }
-    exports_46("parse", parse);
-    var util_23;
+    exports_47("parse", parse);
+    var util_24;
     return {
         setters: [
-            function (util_23_1) {
-                util_23 = util_23_1;
+            function (util_24_1) {
+                util_24 = util_24_1;
             }
         ],
         execute: function () {
@@ -10835,9 +10860,9 @@ System.register("metroid_prime/pak", ["util"], function (exports_46, context_46)
     };
 });
 // Implements Retro's TXTR (texture) format as seen in Metroid Prime 1.
-System.register("metroid_prime/txtr", ["j3d/gx_enum", "j3d/gx_texture"], function (exports_47, context_47) {
+System.register("metroid_prime/txtr", ["j3d/gx_enum", "j3d/gx_texture"], function (exports_48, context_48) {
     "use strict";
-    var __moduleName = context_47 && context_47.id;
+    var __moduleName = context_48 && context_48.id;
     function parse(resourceSystem, buffer) {
         var view = new DataView(buffer);
         var txtrFormat = view.getUint32(0x00);
@@ -10864,7 +10889,7 @@ System.register("metroid_prime/txtr", ["j3d/gx_enum", "j3d/gx_texture"], functio
         var data = buffer.slice(offs, offs + GX_Texture.calcFullTextureSize(format, width, height, mipCount));
         return { format: format, width: width, height: height, mipCount: mipCount, data: data, paletteFormat: paletteFormat, paletteData: paletteData };
     }
-    exports_47("parse", parse);
+    exports_48("parse", parse);
     var GX, GX_Texture, txtrFormatRemap;
     return {
         setters: [
@@ -10893,9 +10918,9 @@ System.register("metroid_prime/txtr", ["j3d/gx_enum", "j3d/gx_texture"], functio
     };
 });
 // Implements Retro's MREA format as seen in Metroid Prime 1.
-System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util", "endian"], function (exports_48, context_48) {
+System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util", "endian"], function (exports_49, context_49) {
     "use strict";
-    var __moduleName = context_48 && context_48.id;
+    var __moduleName = context_49 && context_49.id;
     function align(n, multiple) {
         var mask = (multiple - 1);
         return (n + mask) & ~mask;
@@ -10907,7 +10932,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
         var textures = [];
         var textureRemapTable = [];
         for (var i = 0; i < textureCount; i++) {
-            var materialTXTRID = util_24.readString(buffer, offs, 0x04, false);
+            var materialTXTRID = util_25.readString(buffer, offs, 0x04, false);
             var txtr = resourceSystem.loadAssetByID(materialTXTRID, 'TXTR');
             var txtrIndex = textures.indexOf(txtr);
             if (txtrIndex >= 0) {
@@ -10935,7 +10960,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
             var textureIndexCount = view.getUint32(offs + 0x04);
             offs += 0x08;
             var textureIndexes = [];
-            util_24.assert(textureIndexCount < 8);
+            util_25.assert(textureIndexCount < 8);
             for (var j = 0; j < textureIndexCount; j++) {
                 var textureIndex = view.getUint32(offs);
                 textureIndexes.push(textureIndex);
@@ -10970,7 +10995,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                 offs += 0x04;
             }
             var colorChannelFlagsTableCount = view.getUint32(offs);
-            util_24.assert(colorChannelFlagsTableCount <= 4);
+            util_25.assert(colorChannelFlagsTableCount <= 4);
             offs += 0x04;
             var colorChannels = [];
             // Only color channel 1 is stored in the format.
@@ -10984,7 +11009,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
             offs += 0x04 * colorChannelFlagsTableCount;
             colorChannels.push({ lightingEnabled: false, ambColorSource: 0 /* REG */, matColorSource: 0 /* REG */ });
             var tevStageCount = view.getUint32(offs);
-            util_24.assert(tevStageCount <= 8);
+            util_25.assert(tevStageCount <= 8);
             offs += 0x04;
             var tevOrderTableOffs = offs + tevStageCount * 0x14;
             var tevStages = [];
@@ -11031,7 +11056,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
             // Skip past TEV order table.
             offs = tevOrderTableOffs;
             var texGenCount = view.getUint32(offs);
-            util_24.assert(texGenCount <= 8);
+            util_25.assert(texGenCount <= 8);
             offs += 0x04;
             var texGens = [];
             for (var j = 0; j < texGenCount; j++) {
@@ -11135,7 +11160,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                 ropInfo: ropInfo,
             };
             materials.push({ flags: flags, groupIndex: groupIndex, textureIndexes: textureIndexes, vtxAttrFormat: vtxAttrFormat, gxMaterial: gxMaterial, uvAnimations: uvAnimations });
-            util_24.assert((offs - materialsStart) === materialEndTable[i]);
+            util_25.assert((offs - materialsStart) === materialEndTable[i]);
         }
         return { textures: textures, textureRemapTable: textureRemapTable, materials: materials };
     }
@@ -11234,7 +11259,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                 drawCallIdx += vertexIndexSize * vertexCount;
             }
             // Make sure the whole thing fits in 16 bits.
-            util_24.assert(totalVertexCount <= 0xFFFF);
+            util_25.assert(totalVertexCount <= 0xFFFF);
             // Now make the data.
             var indexDataIdx = 0;
             var indexData = new Uint16Array(totalTriangleCount * 3);
@@ -11272,7 +11297,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                             }
                             break;
                     }
-                    util_24.assert((vertexId - firstVertex) === drawCall.vertexCount);
+                    util_25.assert((vertexId - firstVertex) === drawCall.vertexCount);
                     var drawCallIdx_1 = drawCall.srcOffs;
                     for (var j = 0; j < drawCall.vertexCount; j++) {
                         // Copy attribute data.
@@ -11344,7 +11369,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                                         packedDataView[packedDataOffs++] = view.getFloat32(uvfSectionOffs + ((index * 2) + 1) * 0x04);
                                         break;
                                 }
-                                util_24.assert((packedDataOffs - packedDataOffs__) === format.compCount);
+                                util_25.assert((packedDataOffs - packedDataOffs__) === format.compCount);
                             }
                         }
                         catch (e_36_1) { e_36 = { error: e_36_1 }; }
@@ -11354,7 +11379,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                             }
                             finally { if (e_36) throw e_36.error; }
                         }
-                        util_24.assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
+                        util_25.assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
                     }
                 }
             }
@@ -11382,9 +11407,9 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
     }
     function parse(resourceSystem, buffer) {
         var view = new DataView(buffer);
-        util_24.assert(view.getUint32(0x00) === 0xDEADBEEF);
+        util_25.assert(view.getUint32(0x00) === 0xDEADBEEF);
         var version = view.getUint32(0x04);
-        util_24.assert(version === 0x0F);
+        util_25.assert(version === 0x0F);
         // 0x10 - 0x34: Transform matrix
         var worldModelCount = view.getUint32(0x38);
         var dataSectionCount = view.getUint32(0x3C);
@@ -11404,7 +11429,7 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
             dataSectionOffsTable.push(align(prevOffs + prevSize, 32));
         }
         // In practice.
-        util_24.assert(worldGeometrySectionIndex === 0);
+        util_25.assert(worldGeometrySectionIndex === 0);
         // The materials section is always the first index in the world geometry section indexes...
         var materialSectionOffs = dataSectionOffsTable[worldGeometrySectionIndex + 0];
         // Parse out materials.
@@ -11427,8 +11452,8 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
         return { materialSet: materialSet, worldModels: worldModels };
         var _a;
     }
-    exports_48("parse", parse);
-    var GX_Material, GX, util_24, endian_3, vtxAttrFormats;
+    exports_49("parse", parse);
+    var GX_Material, GX, util_25, endian_3, vtxAttrFormats;
     return {
         setters: [
             function (GX_Material_4) {
@@ -11437,15 +11462,15 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
             function (GX_6) {
                 GX = GX_6;
             },
-            function (util_24_1) {
-                util_24 = util_24_1;
+            function (util_25_1) {
+                util_25 = util_25_1;
             },
             function (endian_3_1) {
                 endian_3 = endian_3_1;
             }
         ],
         execute: function () {
-            exports_48("vtxAttrFormats", vtxAttrFormats = [
+            exports_49("vtxAttrFormats", vtxAttrFormats = [
                 { vtxAttrib: 9 /* POS */, mask: 0x00000003, compCount: 3 },
                 { vtxAttrib: 10 /* NRM */, mask: 0x0000000C, compCount: 3 },
                 { vtxAttrib: 11 /* CLR0 */, mask: 0x00000030, compCount: 4 },
@@ -11462,9 +11487,9 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
     };
 });
 // Implements Retro's STRG (string table resource group) format as seen in Metroid Prime 1.
-System.register("metroid_prime/strg", ["util"], function (exports_49, context_49) {
+System.register("metroid_prime/strg", ["util"], function (exports_50, context_50) {
     "use strict";
-    var __moduleName = context_49 && context_49.id;
+    var __moduleName = context_50 && context_50.id;
     function readUTF16String(buffer, offs) {
         var arr = new Uint8Array(buffer, offs, 0xFF);
         var raw = utf16Decoder.decode(arr);
@@ -11478,9 +11503,9 @@ System.register("metroid_prime/strg", ["util"], function (exports_49, context_49
     }
     function parse(resourceSystem, buffer) {
         var view = new DataView(buffer);
-        util_25.assert(view.getUint32(0x00) === 0x87654321);
+        util_26.assert(view.getUint32(0x00) === 0x87654321);
         var version = view.getUint32(0x04);
-        util_25.assert(version === 0x00); // Metroid Prime 1
+        util_26.assert(version === 0x00); // Metroid Prime 1
         var languageCount = view.getUint32(0x08);
         var stringCount = view.getUint32(0x0C);
         var languageTableOffs = 0x10;
@@ -11488,7 +11513,7 @@ System.register("metroid_prime/strg", ["util"], function (exports_49, context_49
         var languageTableIdx = languageTableOffs;
         var strings = [];
         for (var i = 0; i < languageCount; i++) {
-            var languageID = util_25.readString(buffer, languageTableIdx + 0x00, 4, false);
+            var languageID = util_26.readString(buffer, languageTableIdx + 0x00, 4, false);
             var languageStringsOffs = view.getUint32(languageTableIdx + 0x04);
             languageTableIdx += 0x08;
             // Load English for now because I am a dirty American.
@@ -11507,12 +11532,12 @@ System.register("metroid_prime/strg", ["util"], function (exports_49, context_49
         }
         return { strings: strings };
     }
-    exports_49("parse", parse);
-    var util_25, utf16Decoder;
+    exports_50("parse", parse);
+    var util_26, utf16Decoder;
     return {
         setters: [
-            function (util_25_1) {
-                util_25 = util_25_1;
+            function (util_26_1) {
+                util_26 = util_26_1;
             }
         ],
         execute: function () {
@@ -11521,10 +11546,10 @@ System.register("metroid_prime/strg", ["util"], function (exports_49, context_49
     };
 });
 // Resource System
-System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util"], function (exports_50, context_50) {
+System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util"], function (exports_51, context_51) {
     "use strict";
-    var __moduleName = context_50 && context_50.id;
-    var pako_1, MLVL, MREA, STRG, TXTR, util_26, FourCCLoaders, ResourceSystem;
+    var __moduleName = context_51 && context_51.id;
+    var pako_1, MLVL, MREA, STRG, TXTR, util_27, FourCCLoaders, ResourceSystem;
     return {
         setters: [
             function (pako_1_1) {
@@ -11542,8 +11567,8 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
             function (TXTR_1) {
                 TXTR = TXTR_1;
             },
-            function (util_26_1) {
-                util_26 = util_26_1;
+            function (util_27_1) {
+                util_27 = util_27_1;
             }
         ],
         execute: function () {
@@ -11569,7 +11594,7 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                     }
                 };
                 ResourceSystem.prototype.findResourceByID = function (assetID) {
-                    util_26.assert(assetID.length === 4);
+                    util_27.assert(assetID.length === 4);
                     try {
                         for (var _a = __values(this.paks), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var pak = _b.value;
@@ -11596,7 +11621,7 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                     if (!loaderFunc)
                         return null;
                     var resource = this.findResourceByID(assetID);
-                    util_26.assert(resource.fourCC === fourCC);
+                    util_27.assert(resource.fourCC === fourCC);
                     var buffer = this.loadResourceBuffer(resource);
                     var inst = loaderFunc(this, buffer);
                     this._cache.set(assetID, inst);
@@ -11604,22 +11629,22 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                 };
                 return ResourceSystem;
             }());
-            exports_50("ResourceSystem", ResourceSystem);
+            exports_51("ResourceSystem", ResourceSystem);
         }
     };
 });
 // Implements Retro's MLVL format as seen in Metroid Prime 1.
-System.register("metroid_prime/mlvl", ["util"], function (exports_51, context_51) {
+System.register("metroid_prime/mlvl", ["util"], function (exports_52, context_52) {
     "use strict";
-    var __moduleName = context_51 && context_51.id;
+    var __moduleName = context_52 && context_52.id;
     function parse(resourceSystem, buffer) {
         var view = new DataView(buffer);
-        util_27.assert(view.getUint32(0x00) == 0xDEAFBABE);
+        util_28.assert(view.getUint32(0x00) == 0xDEAFBABE);
         var version = view.getUint32(0x04);
         // Version that appears in Metroid Prime 1.
-        util_27.assert(version === 0x11);
+        util_28.assert(version === 0x11);
         // STRG file ID?
-        var worldNameSTRGID = util_27.readString(buffer, 0x08, 4, false);
+        var worldNameSTRGID = util_28.readString(buffer, 0x08, 4, false);
         var worldNameSTRG = resourceSystem.findResourceByID(worldNameSTRGID);
         resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
         var worldSaveID = view.getUint32(0x0C);
@@ -11637,19 +11662,19 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_51, context_51
         }
         var areaTableOffs = memoryRelayTableIdx;
         var areaTableCount = view.getUint32(areaTableOffs + 0x00);
-        util_27.assert(view.getUint32(areaTableOffs + 0x04) === 0x01);
+        util_28.assert(view.getUint32(areaTableOffs + 0x04) === 0x01);
         var areaTableIdx = areaTableOffs + 0x08;
         var areaTable = [];
         for (var i = 0; i < areaTableCount; i++) {
-            var areaSTRGID = util_27.readString(buffer, areaTableIdx, 4, false);
+            var areaSTRGID = util_28.readString(buffer, areaTableIdx, 4, false);
             var areaSTRG = resourceSystem.findResourceByID(areaSTRGID);
-            util_27.assert(areaSTRG !== null);
+            util_28.assert(areaSTRG !== null);
             areaTableIdx += 0x04;
             areaTableIdx += 0x04 * 12; // Transform matrix
             areaTableIdx += 0x04 * 6; // AABB
-            var areaMREAID = util_27.readString(buffer, areaTableIdx + 0x00, 4, false);
+            var areaMREAID = util_28.readString(buffer, areaTableIdx + 0x00, 4, false);
             var areaMREA = resourceSystem.findResourceByID(areaMREAID);
-            util_27.assert(areaMREA !== null);
+            util_28.assert(areaMREA !== null);
             var areaInternalID = view.getUint32(areaTableIdx + 0x04);
             areaTableIdx += 0x08;
             var attachedAreaCount = view.getUint32(areaTableIdx + 0x00);
@@ -11692,12 +11717,12 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_51, context_51
         }
         return { areaTable: areaTable };
     }
-    exports_51("parse", parse);
-    var util_27;
+    exports_52("parse", parse);
+    var util_28;
     return {
         setters: [
-            function (util_27_1) {
-                util_27 = util_27_1;
+            function (util_28_1) {
+                util_28 = util_28_1;
             }
         ],
         execute: function () {
@@ -11705,10 +11730,10 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_51, context_51
     };
 });
 //
-System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d/gx_texture", "j3d/gx_material", "viewer", "render", "util"], function (exports_52, context_52) {
+System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d/gx_texture", "j3d/gx_material", "viewer", "render", "util"], function (exports_53, context_53) {
     "use strict";
-    var __moduleName = context_52 && context_52.id;
-    var gl_matrix_11, mrea_1, GX_Texture, GX_Material, Viewer, render_19, util_28, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
+    var __moduleName = context_53 && context_53.id;
+    var gl_matrix_11, mrea_1, GX_Texture, GX_Material, Viewer, render_19, util_29, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
     return {
         setters: [
             function (gl_matrix_11_1) {
@@ -11729,8 +11754,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
             function (render_19_1) {
                 render_19 = render_19_1;
             },
-            function (util_28_1) {
-                util_28 = util_28_1;
+            function (util_29_1) {
+                util_29 = util_29_1;
             }
         ],
         execute: function () {
@@ -11905,7 +11930,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                 };
                 return Scene;
             }());
-            exports_52("Scene", Scene);
+            exports_53("Scene", Scene);
             Command_Surface = /** @class */ (function () {
                 function Command_Surface(gl, surface, coalescedBuffers) {
                     this.surface = surface;
@@ -11950,7 +11975,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
             }());
             fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_11.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
             materialParamsSize = 4 * 2 + 4 * 8 + 4 * 3 * 10;
-            packetParamsOffs = util_28.align(materialParamsSize, 64);
+            packetParamsOffs = util_29.align(materialParamsSize, 64);
             packetParamsSize = 16 * 10;
             paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
             Command_Material = /** @class */ (function () {
@@ -12013,9 +12038,9 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
         }
     };
 });
-System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "viewer", "util", "progress"], function (exports_53, context_53) {
+System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "viewer", "util", "progress"], function (exports_54, context_54) {
     "use strict";
-    var __moduleName = context_53 && context_53.id;
+    var __moduleName = context_54 && context_54.id;
     // Files are too big for GitHub.
     function findPakBase() {
         if (document.location.protocol === 'file:') {
@@ -12025,7 +12050,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
             return "https://funny.computer/cloud/MetroidPrime1/";
         }
     }
-    var PAK, resource_1, render_20, Viewer, util_29, progress_7, pakBase, MultiScene, MP1SceneDesc, id, name, sceneDescs, sceneGroup;
+    var PAK, resource_1, render_20, Viewer, util_30, progress_7, pakBase, MultiScene, MP1SceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (PAK_1) {
@@ -12040,8 +12065,8 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
             function (Viewer_8) {
                 Viewer = Viewer_8;
             },
-            function (util_29_1) {
-                util_29 = util_29_1;
+            function (util_30_1) {
+                util_30 = util_30_1;
             },
             function (progress_7_1) {
                 progress_7 = progress_7_1;
@@ -12074,8 +12099,6 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
-                        if (!scene.renderPasses.includes(renderState.currentPass))
-                            return;
                         scene.render(renderState);
                     });
                 };
@@ -12084,7 +12107,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 };
                 return MultiScene;
             }());
-            exports_53("MultiScene", MultiScene);
+            exports_54("MultiScene", MultiScene);
             MP1SceneDesc = /** @class */ (function () {
                 function MP1SceneDesc(filename, name) {
                     this.filename = filename;
@@ -12092,7 +12115,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                     this.id = filename;
                 }
                 MP1SceneDesc.prototype.fetchPak = function (path) {
-                    return util_29.fetch(path).then(function (buffer) {
+                    return util_30.fetch(path).then(function (buffer) {
                         return PAK.parse(buffer);
                     });
                 };
@@ -12105,7 +12128,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                         try {
                             for (var _a = __values(levelPak.namedResourceTable.values()), _b = _a.next(); !_b.done; _b = _a.next()) {
                                 var mlvlEntry = _b.value;
-                                util_29.assert(mlvlEntry.fourCC === 'MLVL');
+                                util_30.assert(mlvlEntry.fourCC === 'MLVL');
                                 var mlvl = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
                                 // Crash my browser please.
                                 var areas = mlvl.areaTable;
@@ -12135,13 +12158,13 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 new MP1SceneDesc("Metroid1.pak", "Space Pirate Frigate"),
                 new MP1SceneDesc("Metroid4.pak", "Tallon Overworld"),
             ];
-            exports_53("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_54("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes", "zelview/scenes", "j3d/zww_scenes", "progress"], function (exports_54, context_54) {
+System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", "mdl0/scenes", "oot3d/scenes", "sm64ds/scenes", "zelview/scenes", "j3d/zww_scenes", "progress"], function (exports_55, context_55) {
     "use strict";
-    var __moduleName = context_54 && context_54.id;
+    var __moduleName = context_55 && context_55.id;
     var viewer_2, DKSIV, FRES, J3D, MDL0, OOT3D, SM64DS, ZELVIEW, ZWW, progress_8, ProgressBar, DroppedFileSceneDesc, Main;
     return {
         setters: [
@@ -12658,9 +12681,9 @@ System.register("main", ["viewer", "dksiv/scenes", "fres/scenes", "j3d/scenes", 
         }
     };
 });
-System.register("embeds/main", ["viewer"], function (exports_55, context_55) {
+System.register("embeds/main", ["viewer"], function (exports_56, context_56) {
     "use strict";
-    var __moduleName = context_55 && context_55.id;
+    var __moduleName = context_56 && context_56.id;
     var Viewer, FsButton, Main;
     return {
         setters: [
@@ -12748,38 +12771,38 @@ System.register("embeds/main", ["viewer"], function (exports_55, context_55) {
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/j3d", "j3d/gx_enum", "j3d/gx_material", "viewer", "util", "j3d/render", "j3d/scenes"], function (exports_56, context_56) {
+System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/j3d", "j3d/gx_enum", "j3d/gx_material", "viewer", "util", "j3d/render", "j3d/sms_scenes"], function (exports_57, context_57) {
     "use strict";
-    var __moduleName = context_56 && context_56.id;
+    var __moduleName = context_57 && context_57.id;
     function createScene(gl, name) {
-        return util_30.fetch("data/j3d/dolpic0.szs").then(function (buffer) {
+        return util_31.fetch("data/j3d/dolpic0.szs").then(function (buffer) {
             buffer = Yaz0.decompress(buffer);
             var rarc = RARC.parse(buffer);
-            var skyScene = scenes_2.SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
+            var skyScene = sms_scenes_2.SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
             var bmdFile = rarc.findFile('map/map/sea.bmd');
             var btkFile = rarc.findFile('map/map/sea.btk');
             var bmd = j3d_4.BMD.parse(bmdFile.buffer);
             var btk = j3d_4.BTK.parse(btkFile.buffer);
             var seaScene = new SeaPlaneScene(gl, bmd, btk, name);
             return new MultiScene([
-                new scenes_2.SunshineClearScene(),
+                new sms_scenes_2.SunshineClearScene(),
                 skyScene,
                 seaScene,
             ]);
         });
     }
-    exports_56("createScene", createScene);
-    var gl_matrix_12, RARC, Yaz0, j3d_4, GX, GX_Material, viewer_3, util_30, render_21, scenes_2, scale, posMtx, packetParamsData, MultiScene, sceneParamsData, SeaPlaneScene, PlaneShape;
+    exports_57("createScene", createScene);
+    var gl_matrix_12, RARC, Yaz0, j3d_4, GX, GX_Material, viewer_3, util_31, render_21, sms_scenes_2, scale, posMtx, packetParamsData, MultiScene, sceneParamsData, SeaPlaneScene, PlaneShape;
     return {
         setters: [
             function (gl_matrix_12_1) {
                 gl_matrix_12 = gl_matrix_12_1;
             },
-            function (RARC_3) {
-                RARC = RARC_3;
+            function (RARC_4) {
+                RARC = RARC_4;
             },
-            function (Yaz0_4) {
-                Yaz0 = Yaz0_4;
+            function (Yaz0_5) {
+                Yaz0 = Yaz0_5;
             },
             function (j3d_4_1) {
                 j3d_4 = j3d_4_1;
@@ -12793,14 +12816,14 @@ System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/
             function (viewer_3_1) {
                 viewer_3 = viewer_3_1;
             },
-            function (util_30_1) {
-                util_30 = util_30_1;
+            function (util_31_1) {
+                util_31 = util_31_1;
             },
             function (render_21_1) {
                 render_21 = render_21_1;
             },
-            function (scenes_2_1) {
-                scenes_2 = scenes_2_1;
+            function (sms_scenes_2_1) {
+                sms_scenes_2 = sms_scenes_2_1;
             }
         ],
         execute: function () {

@@ -115,6 +115,19 @@ class WindWakerScene extends MultiScene {
         return { amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
     }
 
+    private createScene(gl: WebGL2RenderingContext, rarc: RARC.RARC, name: string, isSkybox: boolean): Scene {
+        const bdlFile = rarc.findFile(`bdl/${name}.bdl`);
+        if (!bdlFile)
+            return null;
+        const btkFile = rarc.findFile(`btk/${name}.btk`);
+        const bdl = BMD.parse(bdlFile.buffer);
+        const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
+        const scene = new Scene(gl, bdl, btk, null);
+        scene.setIsSkybox(isSkybox);
+        scene.setUseMaterialTexMtx(false);
+        return scene;
+    }
+
     constructor(gl: WebGL2RenderingContext, roomIdx: number, stageRarc: RARC.RARC, roomRarc: RARC.RARC, public cameraPos: CameraPos) {
         super([]);
 
@@ -122,41 +135,28 @@ class WindWakerScene extends MultiScene {
         this.stageRarc = stageRarc;
         this.roomRarc = roomRarc;
 
-        function createScene(rarc: RARC.RARC, name: string, isSkybox: boolean): Scene {
-            const bdlFile = rarc.findFile(`bdl/${name}.bdl`);
-            if (!bdlFile)
-                return null;
-            const btkFile = rarc.findFile(`btk/${name}.btk`);
-            const bdl = BMD.parse(bdlFile.buffer);
-            const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
-            const scene = new Scene(gl, bdl, btk, null);
-            scene.setIsSkybox(isSkybox);
-            scene.setUseMaterialTexMtx(false);
-            return scene;
-        }
-
         const scenes = [];
 
         // Skybox.
-        this.vr_sky = createScene(stageRarc, `vr_sky`, true);
+        this.vr_sky = this.createScene(gl, stageRarc, `vr_sky`, true);
         scenes.push(this.vr_sky);
-        this.vr_kasumi_mae = createScene(stageRarc, `vr_kasumi_mae`, true);
+        this.vr_kasumi_mae = this.createScene(gl, stageRarc, `vr_kasumi_mae`, true);
         scenes.push(this.vr_kasumi_mae);
-        this.vr_uso_umi = createScene(stageRarc, `vr_uso_umi`, true);
+        this.vr_uso_umi = this.createScene(gl, stageRarc, `vr_uso_umi`, true);
         scenes.push(this.vr_uso_umi);
-        this.vr_back_cloud = createScene(stageRarc, `vr_back_cloud`, true);
+        this.vr_back_cloud = this.createScene(gl, stageRarc, `vr_back_cloud`, true);
         scenes.push(this.vr_back_cloud);
 
-        this.model = createScene(roomRarc, `model`, false);
+        this.model = this.createScene(gl, roomRarc, `model`, false);
         scenes.push(this.model);
 
         // Ocean.
-        this.model1 = createScene(roomRarc, `model1`, false);
+        this.model1 = this.createScene(gl, roomRarc, `model1`, false);
         if (this.model1)
             scenes.push(this.model1);
 
         // Windows / doors.
-        this.model3 = createScene(roomRarc, `model3`, false);
+        this.model3 = this.createScene(gl, roomRarc, `model3`, false);
         if (this.model3)
             scenes.push(this.model3);
 

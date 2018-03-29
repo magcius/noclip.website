@@ -243,13 +243,15 @@ export class RenderState {
     }
 }
 
+const DEBUG = false;
+
 function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     const shader: WebGLShader = gl.createShader(type);
 
     gl.shaderSource(shader, str);
     gl.compileShader(shader);
 
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    if (DEBUG && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
         console.error(str);
         if (gl.getExtension('WEBGL_debug_shaders'))
             console.error(gl.getExtension('WEBGL_debug_shaders').getTranslatedShaderSource(shader));
@@ -281,7 +283,7 @@ export class Program {
         gl.attachShader(prog, vertShader);
         gl.attachShader(prog, fragShader);
         gl.linkProgram(prog);
-        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        if (DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
             console.error(vert);
             console.error(frag);
             console.error(gl.getProgramInfoLog(prog));

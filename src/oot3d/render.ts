@@ -81,7 +81,6 @@ function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
 type RenderFunc = (renderState: RenderState) => void;
 
 class Scene implements Viewer.Scene {
-    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public textures: Viewer.Texture[];
     public program: OoT3D_Program;
     public zsi: ZSI.ZSI;
@@ -310,8 +309,7 @@ class MultiScene implements Viewer.MainScene {
 
     public render(renderState: RenderState) {
         this.scenes.forEach((scene) => {
-            if (scene.renderPasses.includes(renderState.currentPass))
-                scene.render(renderState);
+            scene.render(renderState);
         });
     }
 
