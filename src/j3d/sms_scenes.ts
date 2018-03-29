@@ -76,3 +76,17 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         });
     }
 }
+
+const id = "sms";
+const name = "Super Mario Sunshine";
+
+const sceneDescs: Viewer.SceneDesc[] = [
+    new SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
+    new SunshineSceneDesc("data/j3d/mare0.szs", "Noki Bay"),
+    new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach",),
+    new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor",),
+    new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
+    new SunshineSceneDesc("data/j3d/monte3.szs", "Pianta Village"),
+];
+
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
