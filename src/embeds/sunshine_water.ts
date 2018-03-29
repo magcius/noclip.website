@@ -13,7 +13,7 @@ import { BlendMode, RenderFlags, RenderState, RenderPass } from 'render';
 import { Progressable } from 'progress';
 import { fetch } from 'util';
 import { Command_Material } from '../j3d/render';
-import { SunshineClearScene, SunshineSceneDesc } from '../j3d/scenes';
+import { SunshineClearScene, SunshineSceneDesc } from '../j3d/sms_scenes';
 
 const scale = 200;
 const posMtx = mat4.create();

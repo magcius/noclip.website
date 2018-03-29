@@ -81,7 +81,6 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
 type RenderFunc = (state: RenderState) => void;
 
 class Scene implements Viewer.Scene {
-    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public textures: Viewer.Texture[];
     public modelFuncs: RenderFunc[];
     public program: NITRO_Program;
@@ -296,8 +295,7 @@ class MultiScene implements Viewer.MainScene {
         }
 
         this.scenes.forEach((scene) => {
-            if (scene.renderPasses.includes(renderState.currentPass))
-                scene.render(renderState);
+            scene.render(renderState);
         });
     }
 

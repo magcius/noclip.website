@@ -38,8 +38,6 @@ export class MultiScene implements Viewer.MainScene {
 
     public render(renderState: RenderState) {
         this.scenes.forEach((scene) => {
-            if (!scene.renderPasses.includes(renderState.currentPass))
-                return;
             scene.render(renderState);
         });
     }
