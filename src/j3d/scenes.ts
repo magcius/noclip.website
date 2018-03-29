@@ -75,7 +75,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         this.id = this.name;
     }
 
-    private createSunshineSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, basename: string, isSkybox: boolean): Scene {
+    public static createSunshineSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, basename: string, isSkybox: boolean): Scene {
         const bmdFile = rarc.findFile(`map/map/${basename}.bmd`);
         const btkFile = rarc.findFile(`map/map/${basename}.btk`);
         const bmtFile = rarc.findFile(`map/map/${basename}.bmt`);
@@ -107,11 +107,11 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
                 // Sky always gets sorted first.
                 if (basename === 'sky')
                     continue;
-                const scene = this.createSunshineSceneForBasename(gl, rarc, basename, false);
+                const scene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, basename, false);
                 scenes.push(scene);
             }
 
-            scenes.unshift(this.createSunshineSceneForBasename(gl, rarc, `sky`, true));
+            scenes.unshift(SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, `sky`, true));
             scenes.unshift(new SunshineClearScene());
 
             return new MultiScene(scenes);

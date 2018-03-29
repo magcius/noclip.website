@@ -13,7 +13,7 @@ import { BlendMode, RenderFlags, RenderState, RenderPass } from 'render';
 import { Progressable } from 'progress';
 import { fetch } from 'util';
 import { Command_Material } from '../j3d/render';
-import { createSunshineSceneForBasename, SunshineClearScene } from '../j3d/scenes';
+import { SunshineClearScene, SunshineSceneDesc } from '../j3d/scenes';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -252,7 +252,7 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
         buffer = Yaz0.decompress(buffer);
         const rarc = RARC.parse(buffer);
 
-        const skyScene = createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
+        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
 
         const bmdFile = rarc.findFile('map/map/sea.bmd');
         const btkFile = rarc.findFile('map/map/sea.btk');
