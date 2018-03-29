@@ -250,7 +250,7 @@ export class RenderState {
     }
 }
 
-const DEBUG = false;
+const DEBUG = true;
 
 function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     const shader: WebGLShader = gl.createShader(type);

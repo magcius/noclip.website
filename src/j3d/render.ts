@@ -116,7 +116,7 @@ class Command_Shape {
     }
 }
 
-const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10);
+const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20);
 export class Command_Material {
     static matrixScratch = mat3.create();
     static textureScratch = new Int32Array(8);
@@ -230,15 +230,17 @@ export class Command_Material {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
+        let offs = 0;
         for (let i = 0; i < 2; i++) {
             const color = this.material.colorMatRegs[i];
             if (color !== null) {
-                materialParamsData[i*4+0] = color.r;
-                materialParamsData[i*4+1] = color.g;
-                materialParamsData[i*4+2] = color.b;
-                materialParamsData[i*4+3] = color.a;
+                materialParamsData[offs+i*4+0] = color.r;
+                materialParamsData[offs+i*4+1] = color.g;
+                materialParamsData[offs+i*4+2] = color.b;
+                materialParamsData[offs+i*4+3] = color.a;
             }
         }
+        offs += 4*2;
 
         for (let i = 0; i < 8; i++) {
             let fallbackColor: GX_Material.Color;
@@ -261,12 +263,12 @@ export class Command_Material {
                 alpha = fallbackColor.a;
             }
 
-            const offs = 4*2 + 4*i;
-            materialParamsData[offs+0] = color.r;
-            materialParamsData[offs+1] = color.g;
-            materialParamsData[offs+2] = color.b;
-            materialParamsData[offs+3] = alpha;
+            materialParamsData[offs + i*4 + 0] = color.r;
+            materialParamsData[offs + i*4 + 1] = color.g;
+            materialParamsData[offs + i*4 + 2] = color.b;
+            materialParamsData[offs + i*4 + 3] = alpha;
         }
+        offs += 4*8;
 
         // Bind our texture matrices.
         const matrixScratch = Command_Material.matrixScratch;
@@ -286,18 +288,37 @@ export class Command_Material {
                 finalMatrix = texMtx.matrix;
             }
 
-            const offs = 4*2 + 4*8 + 12*i;
             // XXX(jstpierre): mat3's are effectively a mat4x3.
-            materialParamsData[offs +  0] = finalMatrix[0];
-            materialParamsData[offs +  1] = finalMatrix[1];
-            materialParamsData[offs +  2] = finalMatrix[2];
-            materialParamsData[offs +  4] = finalMatrix[3];
-            materialParamsData[offs +  5] = finalMatrix[4];
-            materialParamsData[offs +  6] = finalMatrix[5];
-            materialParamsData[offs +  8] = finalMatrix[6];
-            materialParamsData[offs +  9] = finalMatrix[7];
-            materialParamsData[offs + 10] = finalMatrix[8];
+            materialParamsData[offs + i*12 +  0] = finalMatrix[0];
+            materialParamsData[offs + i*12 +  1] = finalMatrix[1];
+            materialParamsData[offs + i*12 +  2] = finalMatrix[2];
+            materialParamsData[offs + i*12 +  4] = finalMatrix[3];
+            materialParamsData[offs + i*12 +  5] = finalMatrix[4];
+            materialParamsData[offs + i*12 +  6] = finalMatrix[5];
+            materialParamsData[offs + i*12 +  8] = finalMatrix[6];
+            materialParamsData[offs + i*12 +  9] = finalMatrix[7];
+            materialParamsData[offs + i*12 + 10] = finalMatrix[8];
         }
+        offs += 4*3*12;
+
+        for (let i = 0; i < this.material.postTexMatrices.length; i++) {
+            const postTexMtx = this.material.postTexMatrices[i];
+            if (postTexMtx === null)
+                continue;
+
+            let finalMatrix = postTexMtx.matrix;
+
+            materialParamsData[offs + i*12 +  0] = finalMatrix[0];
+            materialParamsData[offs + i*12 +  1] = finalMatrix[1];
+            materialParamsData[offs + i*12 +  2] = finalMatrix[2];
+            materialParamsData[offs + i*12 +  4] = finalMatrix[3];
+            materialParamsData[offs + i*12 +  5] = finalMatrix[4];
+            materialParamsData[offs + i*12 +  6] = finalMatrix[5];
+            materialParamsData[offs + i*12 +  8] = finalMatrix[6];
+            materialParamsData[offs + i*12 +  9] = finalMatrix[7];
+            materialParamsData[offs + i*12 + 10] = finalMatrix[8];
+        }
+        offs += 4*3*12;
 
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);
 

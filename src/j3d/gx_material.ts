@@ -26,6 +26,8 @@ export interface TexGen {
     type: GX.TexGenType;
     source: GX.TexGenSrc;
     matrix: GX.TexGenMatrix;
+    normalize: boolean;
+    postMatrix: GX.PostTexGenMatrix;
 }
 
 export interface TevStage {
@@ -194,12 +196,12 @@ export class GX_Program extends Program {
     }
 
     private generateTexGenMatrix(src: string, matrix: GX.TexGenMatrix) {
-        if (matrix === GX.TexGenMatrix.IDENTITY)
+        if (matrix === GX.TexGenMatrix.IDENTITY) {
             return `${src}`;
-
-        const matrixIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
-        const matrixSrc = `u_TexMtx[${matrixIdx}]`;
-        return `(${matrixSrc} * ${src})`;
+        } else {
+            const matrixIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
+            return `(u_TexMtx[${matrixIdx}] * ${src})`;
+        }
     }
 
     private generateTexGenType(texCoordGen: TexGen) {
@@ -214,11 +216,29 @@ export class GX_Program extends Program {
         }
     }
 
+    private generateTexGenNrm(texCoordGen: TexGen) {
+        const type = this.generateTexGenType(texCoordGen);
+        if (texCoordGen.normalize)
+            return `clamp(${type}, vec3(0.0), vec3(1.0))`;
+        else
+            return type;
+    }
+
+    private generateTexGenPost(texCoordGen: TexGen) {
+        const nrm = this.generateTexGenNrm(texCoordGen);
+        if (texCoordGen.postMatrix === GX.PostTexGenMatrix.PTIDENTITY) {
+            return nrm;
+        } else {
+            const matrixIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
+            return `${nrm} * u_PostTexMtx[${matrixIdx}]`;
+        }
+    }
+
     private generateTexGen(texCoordGen: TexGen) {
         const i = texCoordGen.index;
         return `
     // TexGen ${i}  Type: ${texCoordGen.type} Source: ${texCoordGen.source} Matrix: ${texCoordGen.matrix}
-    v_TexCoord${i} = ${this.generateTexGenType(texCoordGen)};`;
+    v_TexCoord${i} = ${this.generateTexGenPost(texCoordGen)};`;
     }
 
     private generateTexGens(texGens: TexGen[]) {
@@ -490,6 +510,7 @@ layout(std140) uniform ub_MaterialParams {
     vec4 u_ColorMatReg[2];
     vec4 u_KonstColor[8];
     mat3 u_TexMtx[10];
+    mat3 u_PostTexMtx[20];
 };
 
 // Expected to change with each shape packet.

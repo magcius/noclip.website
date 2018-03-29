@@ -648,7 +648,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_5, context_5)
                 return RenderState;
             }());
             exports_5("RenderState", RenderState);
-            DEBUG = false;
+            DEBUG = true;
             Program = /** @class */ (function () {
                 function Program() {
                 }
@@ -1381,11 +1381,13 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render", "util"], function (
                     }
                 };
                 GX_Program.prototype.generateTexGenMatrix = function (src, matrix) {
-                    if (matrix === 60 /* IDENTITY */)
+                    if (matrix === 60 /* IDENTITY */) {
                         return "" + src;
-                    var matrixIdx = (matrix - 30 /* TEXMTX0 */) / 3;
-                    var matrixSrc = "u_TexMtx[" + matrixIdx + "]";
-                    return "(" + matrixSrc + " * " + src + ")";
+                    }
+                    else {
+                        var matrixIdx = (matrix - 30 /* TEXMTX0 */) / 3;
+                        return "(u_TexMtx[" + matrixIdx + "] * " + src + ")";
+                    }
                 };
                 GX_Program.prototype.generateTexGenType = function (texCoordGen) {
                     var src = this.generateTexGenSource(texCoordGen.source);
@@ -1398,9 +1400,26 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render", "util"], function (
                             throw new Error("whoops");
                     }
                 };
+                GX_Program.prototype.generateTexGenNrm = function (texCoordGen) {
+                    var type = this.generateTexGenType(texCoordGen);
+                    if (texCoordGen.normalize)
+                        return "clamp(" + type + ", vec3(0.0), vec3(1.0))";
+                    else
+                        return type;
+                };
+                GX_Program.prototype.generateTexGenPost = function (texCoordGen) {
+                    var nrm = this.generateTexGenNrm(texCoordGen);
+                    if (texCoordGen.postMatrix === 125 /* PTIDENTITY */) {
+                        return nrm;
+                    }
+                    else {
+                        var matrixIdx = (texCoordGen.postMatrix - 64 /* PTTEXMTX0 */) / 3;
+                        return nrm + " * u_PostTexMtx[" + matrixIdx + "]";
+                    }
+                };
                 GX_Program.prototype.generateTexGen = function (texCoordGen) {
                     var i = texCoordGen.index;
-                    return "\n    // TexGen " + i + "  Type: " + texCoordGen.type + " Source: " + texCoordGen.source + " Matrix: " + texCoordGen.matrix + "\n    v_TexCoord" + i + " = " + this.generateTexGenType(texCoordGen) + ";";
+                    return "\n    // TexGen " + i + "  Type: " + texCoordGen.type + " Source: " + texCoordGen.source + " Matrix: " + texCoordGen.matrix + "\n    v_TexCoord" + i + " = " + this.generateTexGenPost(texCoordGen) + ";";
                 };
                 GX_Program.prototype.generateTexGens = function (texGens) {
                     var _this = this;
@@ -1613,7 +1632,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render", "util"], function (
                 };
                 GX_Program.prototype.generateUBO = function () {
                     var scaledVecCount = scaledVtxAttributes.length >> 2;
-                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    mat4 u_ModelView;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_TextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_KonstColor[8];\n    mat3 u_TexMtx[10];\n};\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_PosMtx[10];\n};\n";
+                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    mat4 u_ModelView;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_TextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_KonstColor[8];\n    mat3 u_TexMtx[10];\n    mat3 u_PostTexMtx[20];\n};\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_PosMtx[10];\n};\n";
                 };
                 GX_Program.prototype.generateShaders = function () {
                     var ubo = this.generateUBO();
@@ -2183,8 +2202,10 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "j3d/gx_displaylis
         var materialColorTableOffs = view.getUint32(0x20);
         var colorChanTableOffs = view.getUint32(0x28);
         var texGenTableOffs = view.getUint32(0x38);
+        var postTexGenTableOffs = view.getUint32(0x3C);
         var textureTableOffs = view.getUint32(0x48);
         var texMtxTableOffs = view.getUint32(0x40);
+        var postTexMtxTableOffs = view.getUint32(0x44);
         var tevOrderTableOffs = view.getUint32(0x4C);
         var colorRegisterTableOffs = view.getUint32(0x50);
         var colorConstantTableOffs = view.getUint32(0x54);
@@ -2235,7 +2256,14 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "j3d/gx_displaylis
                 var source = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
                 var matrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
                 util_4.assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
-                var texGen = { index: index_1, type: type, source: source, matrix: matrix };
+                var postMatrix = 125 /* PTIDENTITY */;
+                var postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
+                if (postTexGenTableOffs > 0 && postTexGenIndex >= 0) {
+                    postMatrix = view.getUint8(postTexGenTableOffs + texGenIndex * 0x04 + 0x02);
+                    util_4.assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
+                }
+                var normalize = false;
+                var texGen = { index: index_1, type: type, source: source, matrix: matrix, normalize: normalize, postMatrix: postMatrix };
                 texGens.push(texGen);
             }
             var texMatrices = [];
@@ -2244,40 +2272,15 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "j3d/gx_displaylis
                 var texMtxIndex = view.getInt16(materialEntryIdx + 0x48 + j * 0x02);
                 if (texMtxIndex < 0)
                     continue;
-                var texMtxOffs = texMtxTableOffs + texMtxIndex * 0x64;
-                var projection = view.getUint8(texMtxOffs + 0x00);
-                var type = view.getUint8(texMtxOffs + 0x01);
-                util_4.assert(view.getUint16(texMtxOffs + 0x02) == 0xFFFF);
-                var centerS = view.getFloat32(texMtxOffs + 0x04);
-                var centerT = view.getFloat32(texMtxOffs + 0x08);
-                var centerQ = view.getFloat32(texMtxOffs + 0x0C);
-                var scaleS = view.getFloat32(texMtxOffs + 0x10);
-                var scaleT = view.getFloat32(texMtxOffs + 0x14);
-                var rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
-                util_4.assert(view.getUint16(texMtxOffs + 0x1A) == 0xFFFF);
-                var translationS = view.getFloat32(texMtxOffs + 0x1C);
-                var translationT = view.getFloat32(texMtxOffs + 0x20);
-                // A second matrix?
-                var p00 = view.getFloat32(texMtxOffs + 0x24);
-                var p01 = view.getFloat32(texMtxOffs + 0x28);
-                var p02 = view.getFloat32(texMtxOffs + 0x2C);
-                var p03 = view.getFloat32(texMtxOffs + 0x30);
-                var p10 = view.getFloat32(texMtxOffs + 0x34);
-                var p11 = view.getFloat32(texMtxOffs + 0x38);
-                var p12 = view.getFloat32(texMtxOffs + 0x3C);
-                var p13 = view.getFloat32(texMtxOffs + 0x40);
-                var p20 = view.getFloat32(texMtxOffs + 0x44);
-                var p21 = view.getFloat32(texMtxOffs + 0x48);
-                var p22 = view.getFloat32(texMtxOffs + 0x4C);
-                var p23 = view.getFloat32(texMtxOffs + 0x50);
-                var p30 = view.getFloat32(texMtxOffs + 0x54);
-                var p31 = view.getFloat32(texMtxOffs + 0x58);
-                var p32 = view.getFloat32(texMtxOffs + 0x5C);
-                var p33 = view.getFloat32(texMtxOffs + 0x60);
-                var p = gl_matrix_3.mat4.fromValues(p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33);
-                var matrix = gl_matrix_3.mat3.create();
-                createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-                texMatrices[j] = { type: type, projection: projection, matrix: matrix };
+                texMatrices[j] = readTexMatrix(texMtxTableOffs, j, texMtxIndex);
+            }
+            var postTexMatrices = [];
+            for (var j = 0; j < 20; j++) {
+                postTexMatrices[j] = null;
+                var postTexMtxIndex = view.getInt16(materialEntryIdx + 0x5C + j * 0x02);
+                if (postTexMtxIndex < 0)
+                    continue;
+                postTexMatrices[j] = readTexMatrix(postTexMtxTableOffs, j, postTexMtxIndex);
             }
             var colorConstants = [];
             for (var j = 0; j < 4; j++) {
@@ -2391,12 +2394,52 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "j3d/gx_displaylis
                 translucent: translucent,
                 textureIndexes: textureIndexes,
                 texMatrices: texMatrices,
+                postTexMatrices: postTexMatrices,
                 gxMaterial: gxMaterial,
                 colorMatRegs: colorMatRegs,
             });
             materialEntryIdx += 0x014C;
         }
         bmd.mat3 = { remapTable: remapTable, materialEntries: materialEntries };
+        function readTexMatrix(tableOffs, j, texMtxIndex) {
+            if (tableOffs === 0)
+                return null;
+            var texMtxOffs = tableOffs + texMtxIndex * 0x64;
+            var projection = view.getUint8(texMtxOffs + 0x00);
+            var type = view.getUint8(texMtxOffs + 0x01);
+            util_4.assert(view.getUint16(texMtxOffs + 0x02) == 0xFFFF);
+            var centerS = view.getFloat32(texMtxOffs + 0x04);
+            var centerT = view.getFloat32(texMtxOffs + 0x08);
+            var centerQ = view.getFloat32(texMtxOffs + 0x0C);
+            var scaleS = view.getFloat32(texMtxOffs + 0x10);
+            var scaleT = view.getFloat32(texMtxOffs + 0x14);
+            var rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
+            util_4.assert(view.getUint16(texMtxOffs + 0x1A) == 0xFFFF);
+            var translationS = view.getFloat32(texMtxOffs + 0x1C);
+            var translationT = view.getFloat32(texMtxOffs + 0x20);
+            // A second matrix?
+            var p00 = view.getFloat32(texMtxOffs + 0x24);
+            var p01 = view.getFloat32(texMtxOffs + 0x28);
+            var p02 = view.getFloat32(texMtxOffs + 0x2C);
+            var p03 = view.getFloat32(texMtxOffs + 0x30);
+            var p10 = view.getFloat32(texMtxOffs + 0x34);
+            var p11 = view.getFloat32(texMtxOffs + 0x38);
+            var p12 = view.getFloat32(texMtxOffs + 0x3C);
+            var p13 = view.getFloat32(texMtxOffs + 0x40);
+            var p20 = view.getFloat32(texMtxOffs + 0x44);
+            var p21 = view.getFloat32(texMtxOffs + 0x48);
+            var p22 = view.getFloat32(texMtxOffs + 0x4C);
+            var p23 = view.getFloat32(texMtxOffs + 0x50);
+            var p30 = view.getFloat32(texMtxOffs + 0x54);
+            var p31 = view.getFloat32(texMtxOffs + 0x58);
+            var p32 = view.getFloat32(texMtxOffs + 0x5C);
+            var p33 = view.getFloat32(texMtxOffs + 0x60);
+            var p = gl_matrix_3.mat4.fromValues(p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33);
+            var matrix = gl_matrix_3.mat3.create();
+            createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+            var texMtx = { type: type, projection: projection, matrix: matrix };
+            return texMtx;
+        }
     }
     function readTEX1Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = new DataView(buffer, chunkStart, chunkSize);
@@ -3343,7 +3386,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                 };
                 return Command_Shape;
             }());
-            materialParamsData = new Float32Array(4 * 2 + 4 * 8 + 4 * 3 * 10);
+            materialParamsData = new Float32Array(4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20);
             Command_Material = /** @class */ (function () {
                 function Command_Material(gl, scene, material) {
                     this.textures = [];
@@ -3428,15 +3471,17 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                     var gl = state.gl;
                     state.useProgram(this.program);
                     state.useFlags(this.renderFlags);
+                    var offs = 0;
                     for (var i = 0; i < 2; i++) {
                         var color = this.material.colorMatRegs[i];
                         if (color !== null) {
-                            materialParamsData[i * 4 + 0] = color.r;
-                            materialParamsData[i * 4 + 1] = color.g;
-                            materialParamsData[i * 4 + 2] = color.b;
-                            materialParamsData[i * 4 + 3] = color.a;
+                            materialParamsData[offs + i * 4 + 0] = color.r;
+                            materialParamsData[offs + i * 4 + 1] = color.g;
+                            materialParamsData[offs + i * 4 + 2] = color.b;
+                            materialParamsData[offs + i * 4 + 3] = color.a;
                         }
                     }
+                    offs += 4 * 2;
                     for (var i = 0; i < 8; i++) {
                         var fallbackColor = void 0;
                         if (i >= 4)
@@ -3457,12 +3502,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         else {
                             alpha = fallbackColor.a;
                         }
-                        var offs = 4 * 2 + 4 * i;
-                        materialParamsData[offs + 0] = color.r;
-                        materialParamsData[offs + 1] = color.g;
-                        materialParamsData[offs + 2] = color.b;
-                        materialParamsData[offs + 3] = alpha;
+                        materialParamsData[offs + i * 4 + 0] = color.r;
+                        materialParamsData[offs + i * 4 + 1] = color.g;
+                        materialParamsData[offs + i * 4 + 2] = color.b;
+                        materialParamsData[offs + i * 4 + 3] = alpha;
                     }
+                    offs += 4 * 8;
                     // Bind our texture matrices.
                     var matrixScratch = Command_Material.matrixScratch;
                     for (var i = 0; i < this.material.texMatrices.length; i++) {
@@ -3479,18 +3524,34 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_ma
                         else {
                             finalMatrix = texMtx.matrix;
                         }
-                        var offs = 4 * 2 + 4 * 8 + 12 * i;
                         // XXX(jstpierre): mat3's are effectively a mat4x3.
-                        materialParamsData[offs + 0] = finalMatrix[0];
-                        materialParamsData[offs + 1] = finalMatrix[1];
-                        materialParamsData[offs + 2] = finalMatrix[2];
-                        materialParamsData[offs + 4] = finalMatrix[3];
-                        materialParamsData[offs + 5] = finalMatrix[4];
-                        materialParamsData[offs + 6] = finalMatrix[5];
-                        materialParamsData[offs + 8] = finalMatrix[6];
-                        materialParamsData[offs + 9] = finalMatrix[7];
-                        materialParamsData[offs + 10] = finalMatrix[8];
+                        materialParamsData[offs + i * 12 + 0] = finalMatrix[0];
+                        materialParamsData[offs + i * 12 + 1] = finalMatrix[1];
+                        materialParamsData[offs + i * 12 + 2] = finalMatrix[2];
+                        materialParamsData[offs + i * 12 + 4] = finalMatrix[3];
+                        materialParamsData[offs + i * 12 + 5] = finalMatrix[4];
+                        materialParamsData[offs + i * 12 + 6] = finalMatrix[5];
+                        materialParamsData[offs + i * 12 + 8] = finalMatrix[6];
+                        materialParamsData[offs + i * 12 + 9] = finalMatrix[7];
+                        materialParamsData[offs + i * 12 + 10] = finalMatrix[8];
                     }
+                    offs += 4 * 3 * 12;
+                    for (var i = 0; i < this.material.postTexMatrices.length; i++) {
+                        var postTexMtx = this.material.postTexMatrices[i];
+                        if (postTexMtx === null)
+                            continue;
+                        var finalMatrix = postTexMtx.matrix;
+                        materialParamsData[offs + i * 12 + 0] = finalMatrix[0];
+                        materialParamsData[offs + i * 12 + 1] = finalMatrix[1];
+                        materialParamsData[offs + i * 12 + 2] = finalMatrix[2];
+                        materialParamsData[offs + i * 12 + 4] = finalMatrix[3];
+                        materialParamsData[offs + i * 12 + 5] = finalMatrix[4];
+                        materialParamsData[offs + i * 12 + 6] = finalMatrix[5];
+                        materialParamsData[offs + i * 12 + 8] = finalMatrix[6];
+                        materialParamsData[offs + i * 12 + 9] = finalMatrix[7];
+                        materialParamsData[offs + i * 12 + 10] = finalMatrix[8];
+                    }
+                    offs += 4 * 3 * 12;
                     gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);
                     gl.bindBuffer(gl.UNIFORM_BUFFER, this.materialParamsBuffer);
                     gl.bufferData(gl.UNIFORM_BUFFER, materialParamsData, gl.DYNAMIC_DRAW);
@@ -11191,9 +11252,8 @@ System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util",
                 var source = (flags_1 >>> 4) & 0x0F;
                 var matrix = ((flags_1 >>> 9) & 0x1F) + 30;
                 var normalize = !!(flags_1 & 14);
-                var postMatrix = (flags_1 >>> 15) & 0x1F;
-                // TODO(jstpierre): normalize / postmtx flags.
-                texGens.push({ index: index_4, type: type, source: source, matrix: matrix });
+                var postMatrix = ((flags_1 >>> 15) & 0x3F) + 64;
+                texGens.push({ index: index_4, type: type, source: source, matrix: matrix, normalize: normalize, postMatrix: postMatrix });
                 offs += 0x04;
             }
             var uvAnimations = [];
@@ -12085,7 +12145,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                 return Command_Surface;
             }());
             fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_11.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-            materialParamsSize = 4 * 2 + 4 * 8 + 4 * 3 * 10;
+            materialParamsSize = 4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20;
             packetParamsOffs = util_30.align(materialParamsSize, 64);
             packetParamsSize = 16 * 10;
             paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
@@ -12101,6 +12161,9 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                     var gl = state.gl;
                     state.useProgram(this.program);
                     state.useFlags(this.renderFlags);
+                    var offs = 0;
+                    // color mat regs not used.
+                    offs += 4 * 2;
                     for (var i = 0; i < 8; i++) {
                         var fallbackColor = void 0;
                         if (i >= 4)
@@ -12108,27 +12171,40 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d
                         else
                             fallbackColor = this.material.gxMaterial.colorConstants[i];
                         var color = fallbackColor;
-                        var offs = 4 * 2 + 4 * i;
-                        paramsData[offs + 0] = color.r;
-                        paramsData[offs + 1] = color.g;
-                        paramsData[offs + 2] = color.b;
-                        paramsData[offs + 3] = color.a;
+                        paramsData[offs + 4 * i + 0] = color.r;
+                        paramsData[offs + 4 * i + 1] = color.g;
+                        paramsData[offs + 4 * i + 2] = color.b;
+                        paramsData[offs + 4 * i + 3] = color.a;
                     }
+                    offs += 4 * 8;
                     // XXX(jstpierre): UV animations.
                     var matrixScratch = Command_Material.matrixScratch;
                     for (var i = 0; i < 10; i++) {
-                        var offs = 4 * 2 + 4 * 8 + 12 * i;
                         var finalMatrix = matrixScratch;
-                        paramsData[offs + 0] = finalMatrix[0];
-                        paramsData[offs + 1] = finalMatrix[1];
-                        paramsData[offs + 2] = finalMatrix[2];
-                        paramsData[offs + 4] = finalMatrix[3];
-                        paramsData[offs + 5] = finalMatrix[4];
-                        paramsData[offs + 6] = finalMatrix[5];
-                        paramsData[offs + 8] = finalMatrix[6];
-                        paramsData[offs + 9] = finalMatrix[7];
-                        paramsData[offs + 10] = finalMatrix[8];
+                        paramsData[offs + 12 * i + 0] = finalMatrix[0];
+                        paramsData[offs + 12 * i + 1] = finalMatrix[1];
+                        paramsData[offs + 12 * i + 2] = finalMatrix[2];
+                        paramsData[offs + 12 * i + 4] = finalMatrix[3];
+                        paramsData[offs + 12 * i + 5] = finalMatrix[4];
+                        paramsData[offs + 12 * i + 6] = finalMatrix[5];
+                        paramsData[offs + 12 * i + 8] = finalMatrix[6];
+                        paramsData[offs + 12 * i + 9] = finalMatrix[7];
+                        paramsData[offs + 12 * i + 10] = finalMatrix[8];
                     }
+                    offs += 4 * 3 * 10;
+                    for (var i = 0; i < 20; i++) {
+                        var finalMatrix = matrixScratch;
+                        paramsData[offs + 12 * i + 0] = finalMatrix[0];
+                        paramsData[offs + 12 * i + 1] = finalMatrix[1];
+                        paramsData[offs + 12 * i + 2] = finalMatrix[2];
+                        paramsData[offs + 12 * i + 4] = finalMatrix[3];
+                        paramsData[offs + 12 * i + 5] = finalMatrix[4];
+                        paramsData[offs + 12 * i + 6] = finalMatrix[5];
+                        paramsData[offs + 12 * i + 8] = finalMatrix[6];
+                        paramsData[offs + 12 * i + 9] = finalMatrix[7];
+                        paramsData[offs + 12 * i + 10] = finalMatrix[8];
+                    }
+                    offs += 4 * 3 * 20;
                     // Position matrix.
                     paramsData.set(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, packetParamsOffs);
                     gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);

@@ -274,7 +274,7 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
     0, 0, 0, 1,
 );
 
-const materialParamsSize = 4*2 + 4*8 + 4*3*10;
+const materialParamsSize = 4*2 + 4*8 + 4*3*10 + 4*3*20;
 const packetParamsOffs = align(materialParamsSize, 64);
 const packetParamsSize = 16*10;
 const paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
@@ -299,6 +299,11 @@ class Command_Material {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
+        let offs = 0;
+
+        // color mat regs not used.
+        offs += 4*2;
+
         for (let i = 0; i < 8; i++) {
             let fallbackColor: GX_Material.Color;
             if (i >= 4)
@@ -308,28 +313,42 @@ class Command_Material {
 
             const color = fallbackColor;
 
-            const offs = 4*2 + 4*i;
-            paramsData[offs+0] = color.r;
-            paramsData[offs+1] = color.g;
-            paramsData[offs+2] = color.b;
-            paramsData[offs+3] = color.a;
+            paramsData[offs + 4*i + 0] = color.r;
+            paramsData[offs + 4*i + 1] = color.g;
+            paramsData[offs + 4*i + 2] = color.b;
+            paramsData[offs + 4*i + 3] = color.a;
         }
+        offs += 4*8;
 
         // XXX(jstpierre): UV animations.
         const matrixScratch = Command_Material.matrixScratch;
         for (let i = 0; i < 10; i++) {
-            const offs = 4*2 + 4*8 + 12*i;
             const finalMatrix = matrixScratch;
-            paramsData[offs +  0] = finalMatrix[0];
-            paramsData[offs +  1] = finalMatrix[1];
-            paramsData[offs +  2] = finalMatrix[2];
-            paramsData[offs +  4] = finalMatrix[3];
-            paramsData[offs +  5] = finalMatrix[4];
-            paramsData[offs +  6] = finalMatrix[5];
-            paramsData[offs +  8] = finalMatrix[6];
-            paramsData[offs +  9] = finalMatrix[7];
-            paramsData[offs + 10] = finalMatrix[8];
+            paramsData[offs + 12*i +  0] = finalMatrix[0];
+            paramsData[offs + 12*i +  1] = finalMatrix[1];
+            paramsData[offs + 12*i +  2] = finalMatrix[2];
+            paramsData[offs + 12*i +  4] = finalMatrix[3];
+            paramsData[offs + 12*i +  5] = finalMatrix[4];
+            paramsData[offs + 12*i +  6] = finalMatrix[5];
+            paramsData[offs + 12*i +  8] = finalMatrix[6];
+            paramsData[offs + 12*i +  9] = finalMatrix[7];
+            paramsData[offs + 12*i + 10] = finalMatrix[8];
         }
+        offs += 4*3*10;
+
+        for (let i = 0; i < 20; i++) {
+            const finalMatrix = matrixScratch;
+            paramsData[offs + 12*i +  0] = finalMatrix[0];
+            paramsData[offs + 12*i +  1] = finalMatrix[1];
+            paramsData[offs + 12*i +  2] = finalMatrix[2];
+            paramsData[offs + 12*i +  4] = finalMatrix[3];
+            paramsData[offs + 12*i +  5] = finalMatrix[4];
+            paramsData[offs + 12*i +  6] = finalMatrix[5];
+            paramsData[offs + 12*i +  8] = finalMatrix[6];
+            paramsData[offs + 12*i +  9] = finalMatrix[7];
+            paramsData[offs + 12*i + 10] = finalMatrix[8];
+        }
+        offs += 4*3*20;
 
         // Position matrix.
         paramsData.set(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, packetParamsOffs);

@@ -259,11 +259,10 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBuffer, o
             const source: GX.TexGenSrc = (flags >>> 4) & 0x0F;
             const matrix: GX.TexGenMatrix = ((flags >>> 9) & 0x1F) + 30;
 
-            const normalize = !!(flags & 14);
-            const postMatrix = (flags >>> 15) & 0x1F;
-            // TODO(jstpierre): normalize / postmtx flags.
+            const normalize: boolean = !!(flags & 14);
+            const postMatrix: GX.PostTexGenMatrix = ((flags >>> 15) & 0x3F) + 64;
 
-            texGens.push({ index, type, source, matrix });
+            texGens.push({ index, type, source, matrix, normalize, postMatrix });
             offs += 0x04;
         }
 
