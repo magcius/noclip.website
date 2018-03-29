@@ -359,3 +359,10 @@ export const enum VtxFmt {
     VTXFMT6 = 6,
     VTXFMT7 = 7,
 }
+
+export const enum AttrType {
+    NONE = 0,
+    DIRECT = 1,
+    INDEX8 = 2,
+    INDEX16 = 3,
+}

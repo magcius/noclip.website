@@ -3,6 +3,7 @@
 
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
+import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, VtxArrayData, LoadedVertexData, coalesceLoadedDatas, getComponentSize, getNumComponents } from './gx_displaylist';
 
 import { betoh } from 'endian';
 import { assert, readString } from 'util';
@@ -107,59 +108,11 @@ function readINF1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     bmd.inf1 = { sceneGraph: parentStack.pop() };
 }
 
-type CompSize = 1 | 2 | 4;
-
-function getComponentSize(dataType: GX.CompType): CompSize {
-    switch (dataType) {
-    case GX.CompType.U8:
-    case GX.CompType.S8:
-    case GX.CompType.RGBA8:
-        return 1;
-    case GX.CompType.U16:
-    case GX.CompType.S16:
-        return 2;
-    case GX.CompType.F32:
-        return 4;
-    }
-}
-
-function getNumComponents(vtxAttrib: GX.VertexAttribute, componentCount: GX.CompCnt) {
-    switch (vtxAttrib) {
-    case GX.VertexAttribute.POS:
-        if (componentCount === GX.CompCnt.POS_XY)
-            return 2;
-        else if (componentCount === GX.CompCnt.POS_XYZ)
-            return 3;
-    case GX.VertexAttribute.NRM:
-        return 3;
-    case GX.VertexAttribute.CLR0:
-    case GX.VertexAttribute.CLR1:
-        if (componentCount === GX.CompCnt.CLR_RGB)
-            return 3;
-        else if (componentCount === GX.CompCnt.CLR_RGBA)
-            return 4;
-    case GX.VertexAttribute.TEX0:
-    case GX.VertexAttribute.TEX1:
-    case GX.VertexAttribute.TEX2:
-    case GX.VertexAttribute.TEX3:
-    case GX.VertexAttribute.TEX4:
-    case GX.VertexAttribute.TEX5:
-    case GX.VertexAttribute.TEX6:
-    case GX.VertexAttribute.TEX7:
-        if (componentCount === GX.CompCnt.TEX_S)
-            return 1;
-        else if (componentCount === GX.CompCnt.TEX_ST)
-            return 2;
-    default:
-        throw new Error(`Unknown vertex attribute ${vtxAttrib}`);
-    }
-}
-
 export interface VertexArray {
     vtxAttrib: GX.VertexAttribute;
     compType: GX.CompType;
+    compCnt: GX.CompCnt;
     compCount: number;
-    compSize: CompSize;
     scale: number;
     buffer: ArrayBuffer;
     dataOffs: number;
@@ -221,10 +174,10 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const dataEnd: number = getDataEnd(dataOffsLookupTableEntry);
         const dataOffs: number = chunkStart + dataStart;
         const dataSize: number = dataEnd - dataStart;
-        const compCount = getNumComponents(vtxAttrib, compCnt);
         const compSize = getComponentSize(compType);
+        const compCount = getNumComponents(vtxAttrib, compCnt);
         const vtxDataBuffer = betoh(buffer, compSize, dataOffs, dataSize);
-        const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compSize, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
+        const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compCnt, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }
 
@@ -325,7 +278,7 @@ function readJNT1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 // Describes an individual vertex attribute in the packed data.
 export interface PackedVertexAttribute {
     vtxAttrib: GX.VertexAttribute;
-    indexDataType: GX.CompType;
+    indexDataType: GX.AttrType;
     offset: number;
 }
 
@@ -350,13 +303,11 @@ export interface SHP1 {
     shapes: Shape[];
 }
 
-function readIndex(view: DataView, offs: number, type: GX.CompType) {
+function readIndex(view: DataView, offs: number, type: GX.AttrType) {
     switch (type) {
-    case GX.CompType.U8:
-    case GX.CompType.S8:
+    case GX.AttrType.INDEX8:
         return view.getUint8(offs);
-    case GX.CompType.U16:
-    case GX.CompType.S16:
+    case GX.AttrType.INDEX16:
         return view.getUint16(offs);
     default:
         throw new Error(`Unknown index data type ${type}!`);
@@ -390,6 +341,14 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     // What we end up doing is similar to what Dolphin does with its vertex loader
     // JIT. We construct buffers for each of the components that are shape-specific.
 
+    // Build vattrs for VTX1.
+    const vattrs: GX_VtxAttrFmt[] = [];
+    const vtxArrays: VtxArrayData[] = [];
+    for (const [attr, vertexArray] of bmd.vtx1.vertexArrays.entries()) {
+        vattrs[attr] = { compCnt: vertexArray.compCnt, compType: vertexArray.compType };
+        vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0 };
+    }
+
     const shapes: Shape[] = [];
     let shapeIdx = shapeTableOffs;
     for (let i = 0; i < shapeCount; i++) {
@@ -399,44 +358,37 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const firstMatrix = view.getUint16(shapeIdx + 0x06);
         const firstPacket = view.getUint16(shapeIdx + 0x08);
 
-        // Go parse out what attributes are required for this shape.
-        const packedVertexAttributes: PackedVertexAttribute[] = [];
+        const vtxDescs: GX_VtxDesc[] = [];
+
         let attribIdx = attribTableOffs + attribOffs;
-        let vertexIndexSize = 0;
-        let packedVertexSize = 0;
         while (true) {
             const vtxAttrib: GX.VertexAttribute = view.getUint32(attribIdx + 0x00);
             if (vtxAttrib === GX.VertexAttribute.NULL)
                 break;
-            const vertexArray: VertexArray = bmd.vtx1.vertexArrays.get(vtxAttrib);
-            packedVertexSize = align(packedVertexSize, vertexArray.compSize);
-
-            const indexDataType: GX.CompType = view.getUint32(attribIdx + 0x04);
-            const indexDataSize = getComponentSize(indexDataType);
-            const offset = packedVertexSize;
-            packedVertexAttributes.push({ vtxAttrib, indexDataType, offset });
+            const indexDataType: GX.AttrType = view.getUint32(attribIdx + 0x04);
+            vtxDescs[vtxAttrib] = { type: indexDataType };
             attribIdx += 0x08;
-
-            vertexIndexSize += indexDataSize;
-            packedVertexSize += vertexArray.compSize * vertexArray.compCount;
         }
-        // Align to the first item.
-        const firstAlign = bmd.vtx1.vertexArrays.get(packedVertexAttributes[0].vtxAttrib).compSize;
-        packedVertexSize = align(packedVertexSize, firstAlign);
+
+        const vtxLoader = compileVtxLoader(vattrs, vtxDescs);
+
+        const packedVertexAttributes: PackedVertexAttribute[] = [];
+        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vtxLoader.vattrLayout.dstAttrOffsets.length; vtxAttrib++) {
+            if (!vtxDescs[vtxAttrib])
+                continue;
+            const indexDataType = vtxDescs[vtxAttrib].type;
+            const offset = vtxLoader.vattrLayout.dstAttrOffsets[vtxAttrib];
+            packedVertexAttributes.push({ vtxAttrib, indexDataType, offset });
+        }
+        const packedVertexSize = vtxLoader.vattrLayout.dstVertexSize;
 
         // Now parse out the packets.
         let packetIdx = packetTableOffs + (firstPacket * 0x08);
         const packets: Packet[] = [];
 
-        interface DrawCall {
-            primType: number;
-            srcOffs: number;
-            vertexCount: number;
-        }
+        const loadedDatas: LoadedVertexData[] = [];
 
         let totalTriangleCount = 0;
-        let totalVertexCount = 0;
-        const drawCalls: DrawCall[] = [];
         for (let j = 0; j < packetCount; j++) {
             const packetSize = view.getUint32(packetIdx + 0x00);
             const packetStart = primDataOffs + view.getUint32(packetIdx + 0x04);
@@ -449,103 +401,21 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const packetMatrixTableSize = matrixCount * 0x02;
             const weightedJointTable = new Uint16Array(betoh(buffer, 2, packetMatrixTableOffs, packetMatrixTableSize));
 
-            const drawCallEnd = packetStart + packetSize;
-            let drawCallIdx = packetStart;
+            const srcOffs = chunkStart + packetStart;
+            const loadedData = vtxLoader.runVertices(vtxArrays, buffer, srcOffs);
+            loadedDatas.push(loadedData);
 
             const firstTriangle = totalTriangleCount;
+            const numTriangles = loadedData.totalTriangleCount;
+            totalTriangleCount += numTriangles;
 
-            while (true) {
-                if (drawCallIdx > drawCallEnd)
-                    break;
-                const primType: GX.PrimitiveType = view.getUint8(drawCallIdx);
-                if (primType === 0)
-                    break;
-                const vertexCount = view.getUint16(drawCallIdx + 0x01);
-                drawCallIdx += 0x03;
-                const srcOffs = drawCallIdx;
-                const first = totalVertexCount;
-                totalVertexCount += vertexCount;
-
-                switch (primType) {
-                case GX.PrimitiveType.TRIANGLEFAN:
-                case GX.PrimitiveType.TRIANGLESTRIP:
-                    totalTriangleCount += (vertexCount - 2);
-                    break;
-                default:
-                    throw "whoops";
-                }
-
-                drawCalls.push({ primType, srcOffs, vertexCount });
-
-                // Skip over the index data.
-                drawCallIdx += vertexIndexSize * vertexCount;
-            }
-
-            const numTriangles = totalTriangleCount - firstTriangle;
             packets.push({ weightedJointTable, firstTriangle, numTriangles });
-
-            packetIdx += 0x08;
         }
 
-        // Make sure the whole thing fits in 16 bits.
-        assert(totalVertexCount <= 0xFFFF);
-
-        // Now make the data.
-        let indexDataIdx = 0;
-        const indexData = new Uint16Array(totalTriangleCount * 3);
-        let vertexId = 0;
-
-        const packedDataSize = packedVertexSize * totalVertexCount;
-        const packedDataView = new Uint8Array(packedDataSize);
-        let packedDataOffs = 0;
-        for (const drawCall of drawCalls) {
-            // Convert topology to triangles.
-            const firstVertex = vertexId;
-
-            // First triangle is the same for all topo.
-            for (let i = 0; i < 3; i++)
-                indexData[indexDataIdx++] = vertexId++;
-
-            switch (drawCall.primType) {
-            case GX.PrimitiveType.TRIANGLESTRIP:
-                for (let i = 3; i < drawCall.vertexCount; i++) {
-                    indexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);
-                    indexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);
-                    indexData[indexDataIdx++] = vertexId++;
-                }
-                break;
-            case GX.PrimitiveType.TRIANGLEFAN:
-                for (let i = 3; i < drawCall.vertexCount; i++) {
-                    indexData[indexDataIdx++] = firstVertex;
-                    indexData[indexDataIdx++] = vertexId - 1;
-                    indexData[indexDataIdx++] = vertexId++;
-                }
-                break;
-            }
-            assert((vertexId - firstVertex) === drawCall.vertexCount);
-
-            let drawCallIdx = drawCall.srcOffs;
-            for (let j = 0; j < drawCall.vertexCount; j++) {
-                // Copy attribute data.
-                const packedDataOffs_ = packedDataOffs;
-                for (const attrib of packedVertexAttributes) {
-                    const index = readIndex(view, drawCallIdx, attrib.indexDataType);
-                    const indexDataSize = getComponentSize(attrib.indexDataType);
-                    drawCallIdx += indexDataSize;
-                    const vertexArray: VertexArray = bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
-                    packedDataOffs = align(packedDataOffs, vertexArray.compSize);
-                    const attribDataSize = vertexArray.compSize * vertexArray.compCount;
-                    const vertexData = new Uint8Array(vertexArray.buffer, attribDataSize * index, attribDataSize);
-                    packedDataView.set(vertexData, packedDataOffs);
-                    packedDataOffs += attribDataSize;
-                }
-                packedDataOffs = align(packedDataOffs, firstAlign);
-                assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
-            }
-        }
-        assert(indexDataIdx === totalTriangleCount * 3);
-        assert((packedVertexSize * totalVertexCount) === packedDataOffs);
-        const packedData = packedDataView.buffer;
+        // Coalesce shape data.
+        const loadedData = coalesceLoadedDatas(loadedDatas);
+        const indexData = loadedData.indexData;
+        const packedData = loadedData.packedVertexData.buffer;
 
         // Now we should have a complete shape. Onto the next!
         shapes.push({ indexData, packedData, packedVertexSize, packedVertexAttributes, packets });

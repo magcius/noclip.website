@@ -150,6 +150,7 @@ export interface Viewport {
 export class RenderState {
     public gl: WebGL2RenderingContext;
     public viewport: Viewport;
+    private programCache: ProgramCache;
 
     // State.
     public currentProgram: Program = null;
@@ -174,6 +175,8 @@ export class RenderState {
     constructor(viewport: Viewport) {
         this.viewport = viewport;
         this.gl = this.viewport.gl;
+        this.programCache = new ProgramCache(this.gl);
+
         this.time = 0;
         this.fov = Math.PI / 4;
 
@@ -206,10 +209,14 @@ export class RenderState {
         this.farClipPlane = far;
     }
 
+    public compileProgram(prog: Program) {
+        return prog.compile(this.gl, this.programCache);
+    }
+
     public useProgram(prog: Program) {
         const gl = this.gl;
         this.currentProgram = prog;
-        gl.useProgram(prog.compile(gl));
+        gl.useProgram(this.compileProgram(prog));
     }
 
     public updateModelView(isSkybox: boolean = false, model: mat4 = null): mat4 {
@@ -271,34 +278,28 @@ export class Program {
 
     private glProg: WebGLProgram;
 
-    public compile(gl: WebGL2RenderingContext) {
+    public compile(gl: WebGL2RenderingContext, programCache: ProgramCache) {
         if (this.glProg)
             return this.glProg;
 
         const vert = this.preprocessShader(gl, this.vert, "vert");
         const frag = this.preprocessShader(gl, this.frag, "frag");
-        const vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
-        const fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
-        const prog = gl.createProgram();
-        gl.attachShader(prog, vertShader);
-        gl.attachShader(prog, fragShader);
-        gl.linkProgram(prog);
-        if (DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error(vert);
-            console.error(frag);
-            console.error(gl.getProgramInfoLog(prog));
-            throw new Error();
-        }
-        gl.deleteShader(vertShader);
-        gl.deleteShader(fragShader);
-        this.glProg = prog;
-        this.bind(gl, prog);
+        this.glProg = programCache.compileProgram(vert, frag);
+        this.bind(gl, this.glProg);
         return this.glProg;
     }
 
     protected preprocessShader(gl: WebGL2RenderingContext, source: string, type: "vert" | "frag") {
-        // Garbage WebGL2 compatibility until I get something better down the line...
-        const lines = source.split('\n');
+        // Garbage WebGL2 shader compiler until I get something better down the line...
+        const lines = source.split('\n').map((n) => {
+            // Remove comments.
+            return n.replace(/[/][/].*$/, '');
+        }).filter((n) => {
+            // Filter whitespace.
+            const isEmpty = !n || /^\s+%/.test(n);
+            return !isEmpty;
+        });
+
         const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
         const extensionLines = lines.filter((line) => line.startsWith('#extension'));
         const extensions = extensionLines.filter((line) =>
@@ -331,11 +332,42 @@ ${rest}
     }
 
     public track(arena: RenderArena) {
-        arena.programs.push(this.glProg);
+        arena.programs.push(this);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        gl.deleteProgram(this.glProg);
+        // TODO(jstpierre): Refcounting in the program cache?
+    }
+}
+
+class ProgramCache {
+    constructor(private gl: WebGL2RenderingContext) {}
+    private _cache = new Map<string, WebGLProgram>();
+
+    private _compileProgram(vert: string, frag: string): WebGLProgram {
+        const gl = this.gl;
+        const vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
+        const fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
+        const prog = gl.createProgram();
+        gl.attachShader(prog, vertShader);
+        gl.attachShader(prog, fragShader);
+        gl.linkProgram(prog);
+        if (DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            console.error(vert);
+            console.error(frag);
+            console.error(gl.getProgramInfoLog(prog));
+            throw new Error();
+        }
+        gl.deleteShader(vertShader);
+        gl.deleteShader(fragShader);
+        return prog;
+    }
+
+    public compileProgram(vert: string, frag: string) {
+        const key = vert + '$' + frag;
+        if (!this._cache.has(key))
+            this._cache.set(key, this._compileProgram(vert, frag));
+        return this._cache.get(key);
     }
 }
 
@@ -350,7 +382,7 @@ export class RenderArena {
     public samplers: WebGLSampler[] = [];
     public buffers: WebGLBuffer[] = [];
     public vaos: WebGLVertexArrayObject[] = [];
-    public programs: WebGLProgram[] = [];
+    public programs: Program[] = [];
 
     public createTexture(gl: WebGL2RenderingContext) {
         return pushAndReturn(this.textures, gl.createTexture());
@@ -382,7 +414,7 @@ export class RenderArena {
             gl.deleteVertexArray(vao);
         this.vaos = [];
         for (const program of this.programs)
-            gl.deleteProgram(program);
+            program.destroy(gl);
         this.programs = [];
     }
 }
