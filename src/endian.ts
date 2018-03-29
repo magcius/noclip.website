@@ -7,8 +7,8 @@ export function isLittleEndian(): boolean {
     return _isLittle;
 }
 
-export function bswap16(m: ArrayBuffer): ArrayBuffer {
-    const a = new Uint8Array(m);
+function bswap16(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
+    const a = new Uint8Array(m, byteOffset, byteLength);
     const o = new Uint8Array(a.byteLength);
     for (let i = 0; i < a.byteLength; i += 2) {
         o[i+0] = a[i+1];
@@ -17,8 +17,8 @@ export function bswap16(m: ArrayBuffer): ArrayBuffer {
     return o.buffer;
 }
 
-export function bswap32(m: ArrayBuffer): ArrayBuffer {
-    const a = new Uint8Array(m);
+function bswap32(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
+    const a = new Uint8Array(m, byteOffset, byteLength);
     const o = new Uint8Array(a.byteLength);
     for (let i = 0; i < a.byteLength; i += 4) {
         o[i+0] = a[i+3];
@@ -29,43 +29,44 @@ export function bswap32(m: ArrayBuffer): ArrayBuffer {
     return o.buffer;
 }
 
-export function be16toh(m: ArrayBuffer): ArrayBuffer {
+function be16toh(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
     if (isLittleEndian())
-        return bswap16(m);
+        return bswap16(m, byteOffset, byteLength);
     else
-        return m;
+        return m.slice(byteOffset, byteLength);
 }
 
-export function le16toh(m: ArrayBuffer): ArrayBuffer {
+function le16toh(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
     if (!isLittleEndian())
-        return bswap16(m);
+        return bswap16(m, byteOffset, byteLength);
     else
-        return m;
+        return m.slice(byteOffset, byteLength);
 }
 
-export function be32toh(m: ArrayBuffer): ArrayBuffer {
+function be32toh(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
     if (isLittleEndian())
-        return bswap32(m);
+        return bswap32(m, byteOffset, byteLength);
     else
-        return m;
+        return m.slice(byteOffset, byteLength);
 }
 
-export function le32toh(m: ArrayBuffer): ArrayBuffer {
+function le32toh(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
     if (!isLittleEndian())
-        return bswap32(m);
+        return bswap32(m, byteOffset, byteLength);
     else
-        return m;
+        return m.slice(byteOffset, byteLength);
 }
 
 type CompSize = 1 | 2 | 4;
 
-export function betoh(m: ArrayBuffer, componentSize: CompSize): ArrayBuffer {
+export function betoh(m: ArrayBuffer, componentSize: CompSize, byteOffset: number = 0, byteLength: number = m.byteLength): ArrayBuffer {
     switch (componentSize) {
     case 1:
-        return m;
+        // XXX(jstpierre): Zero-copy.
+        return m.slice(byteOffset, byteOffset + byteLength);
     case 2:
-        return be16toh(m);
+        return be16toh(m, byteOffset, byteLength);
     case 4:
-        return be32toh(m);
+        return be32toh(m, byteOffset, byteLength);
     }
 }
