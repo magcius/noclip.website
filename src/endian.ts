@@ -29,32 +29,33 @@ function bswap32(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayB
     return o.buffer;
 }
 
+// XXX(jstpierre): Zero-copy.
 function be16toh(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
     if (isLittleEndian())
         return bswap16(m, byteOffset, byteLength);
     else
-        return m.slice(byteOffset, byteLength);
+        return m.slice(byteOffset, byteOffset + byteLength);
 }
 
 function le16toh(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
     if (!isLittleEndian())
         return bswap16(m, byteOffset, byteLength);
     else
-        return m.slice(byteOffset, byteLength);
+        return m.slice(byteOffset, byteOffset + byteLength);
 }
 
 function be32toh(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
     if (isLittleEndian())
         return bswap32(m, byteOffset, byteLength);
     else
-        return m.slice(byteOffset, byteLength);
+        return m.slice(byteOffset, byteOffset + byteLength);
 }
 
 function le32toh(m: ArrayBuffer, byteOffset: number, byteLength: number): ArrayBuffer {
     if (!isLittleEndian())
         return bswap32(m, byteOffset, byteLength);
     else
-        return m.slice(byteOffset, byteLength);
+        return m.slice(byteOffset, byteOffset + byteLength);
 }
 
 type CompSize = 1 | 2 | 4;
@@ -62,7 +63,6 @@ type CompSize = 1 | 2 | 4;
 export function betoh(m: ArrayBuffer, componentSize: CompSize, byteOffset: number = 0, byteLength: number = m.byteLength): ArrayBuffer {
     switch (componentSize) {
     case 1:
-        // XXX(jstpierre): Zero-copy.
         return m.slice(byteOffset, byteOffset + byteLength);
     case 2:
         return be16toh(m, byteOffset, byteLength);
