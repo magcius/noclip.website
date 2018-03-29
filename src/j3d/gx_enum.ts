@@ -319,6 +319,30 @@ export const enum TexGenMatrix {
     TEXMTX9 = 57,
 }
 
+export const enum PostTexGenMatrix {
+    PTTEXMTX0  = 64,
+    PTTEXMTX1  = 67,
+    PTTEXMTX2  = 70,
+    PTTEXMTX3  = 73,
+    PTTEXMTX4  = 76,
+    PTTEXMTX5  = 79,
+    PTTEXMTX6  = 82,
+    PTTEXMTX7  = 85,
+    PTTEXMTX8  = 88,
+    PTTEXMTX9  = 91,
+    PTTEXMTX10 = 94,
+    PTTEXMTX11 = 97,
+    PTTEXMTX12 = 100,
+    PTTEXMTX13 = 103,
+    PTTEXMTX14 = 106,
+    PTTEXMTX15 = 109,
+    PTTEXMTX16 = 112,
+    PTTEXMTX17 = 115,
+    PTTEXMTX18 = 118,
+    PTTEXMTX19 = 121,
+    PTIDENTITY = 125,
+}
+
 export const enum Register {
     PREV = 0,
     REG0 = 1,

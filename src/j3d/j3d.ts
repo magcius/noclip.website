@@ -445,6 +445,7 @@ export interface MaterialEntry {
     textureIndexes: number[];
     gxMaterial: GX_Material.GXMaterial;
     texMatrices: TexMtx[];
+    postTexMatrices: TexMtx[];
     colorMatRegs: GX_Material.Color[];
 }
 
@@ -505,8 +506,10 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     const materialColorTableOffs = view.getUint32(0x20);
     const colorChanTableOffs = view.getUint32(0x28);
     const texGenTableOffs = view.getUint32(0x38);
+    const postTexGenTableOffs = view.getUint32(0x3C);
     const textureTableOffs = view.getUint32(0x48);
     const texMtxTableOffs = view.getUint32(0x40);
+    const postTexMtxTableOffs = view.getUint32(0x44);
     const tevOrderTableOffs = view.getUint32(0x4C);
     const colorRegisterTableOffs = view.getUint32(0x50);
     const colorConstantTableOffs = view.getUint32(0x54);
@@ -561,60 +564,33 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             const source: GX.TexGenSrc = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
             const matrix: GX.TexGenMatrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
             assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
-            const texGen: GX_Material.TexGen = { index, type, source, matrix };
+            let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
+            const postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
+            if (postTexGenTableOffs > 0 && postTexGenIndex >= 0) {
+                postMatrix = view.getUint8(postTexGenTableOffs + texGenIndex * 0x04 + 0x02);
+                assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
+            }
+            const normalize = false;
+            const texGen: GX_Material.TexGen = { index, type, source, matrix, normalize, postMatrix };
             texGens.push(texGen);
         }
 
         const texMatrices: TexMtx[] = [];
         for (let j = 0; j < 10; j++) {
             texMatrices[j] = null;
-
             const texMtxIndex = view.getInt16(materialEntryIdx + 0x48 + j * 0x02);
             if (texMtxIndex < 0)
                 continue;
+            texMatrices[j] = readTexMatrix(texMtxTableOffs, j, texMtxIndex);
+        }
 
-            const texMtxOffs = texMtxTableOffs + texMtxIndex * 0x64;
-            const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
-            const type = view.getUint8(texMtxOffs + 0x01);
-            assert(view.getUint16(texMtxOffs + 0x02) == 0xFFFF);
-            const centerS = view.getFloat32(texMtxOffs + 0x04);
-            const centerT = view.getFloat32(texMtxOffs + 0x08);
-            const centerQ = view.getFloat32(texMtxOffs + 0x0C);
-            const scaleS = view.getFloat32(texMtxOffs + 0x10);
-            const scaleT = view.getFloat32(texMtxOffs + 0x14);
-            const rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
-            assert(view.getUint16(texMtxOffs + 0x1A) == 0xFFFF);
-            const translationS = view.getFloat32(texMtxOffs + 0x1C);
-            const translationT = view.getFloat32(texMtxOffs + 0x20);
-
-            // A second matrix?
-            const p00 = view.getFloat32(texMtxOffs + 0x24);
-            const p01 = view.getFloat32(texMtxOffs + 0x28);
-            const p02 = view.getFloat32(texMtxOffs + 0x2C);
-            const p03 = view.getFloat32(texMtxOffs + 0x30);
-            const p10 = view.getFloat32(texMtxOffs + 0x34);
-            const p11 = view.getFloat32(texMtxOffs + 0x38);
-            const p12 = view.getFloat32(texMtxOffs + 0x3C);
-            const p13 = view.getFloat32(texMtxOffs + 0x40);
-            const p20 = view.getFloat32(texMtxOffs + 0x44);
-            const p21 = view.getFloat32(texMtxOffs + 0x48);
-            const p22 = view.getFloat32(texMtxOffs + 0x4C);
-            const p23 = view.getFloat32(texMtxOffs + 0x50);
-            const p30 = view.getFloat32(texMtxOffs + 0x54);
-            const p31 = view.getFloat32(texMtxOffs + 0x58);
-            const p32 = view.getFloat32(texMtxOffs + 0x5C);
-            const p33 = view.getFloat32(texMtxOffs + 0x60);
-
-            const p = mat4.fromValues(
-                p00, p01, p02, p03,
-                p10, p11, p12, p13,
-                p20, p21, p22, p23,
-                p30, p31, p32, p33,
-            );
-
-            const matrix = matrix3.create();
-            createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-            texMatrices[j] = { type, projection, matrix };
+        const postTexMatrices: TexMtx[] = [];
+        for (let j = 0; j < 20; j++) {
+            postTexMatrices[j] = null;
+            const postTexMtxIndex = view.getInt16(materialEntryIdx + 0x5C + j * 0x02);
+            if (postTexMtxIndex < 0)
+                continue;
+            postTexMatrices[j] = readTexMatrix(postTexMtxTableOffs, j, postTexMtxIndex);
         }
 
         const colorConstants: GX_Material.Color[] = [];
@@ -743,6 +719,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
             translucent,
             textureIndexes,
             texMatrices,
+            postTexMatrices,
             gxMaterial,
             colorMatRegs,
         });
@@ -750,6 +727,54 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
     }
 
     bmd.mat3 = { remapTable, materialEntries };
+
+    function readTexMatrix(tableOffs: number, j: number, texMtxIndex: number): TexMtx {
+        if (tableOffs === 0)
+            return null;
+        const texMtxOffs = tableOffs + texMtxIndex * 0x64;
+        const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
+        const type = view.getUint8(texMtxOffs + 0x01);
+        assert(view.getUint16(texMtxOffs + 0x02) == 0xFFFF);
+        const centerS = view.getFloat32(texMtxOffs + 0x04);
+        const centerT = view.getFloat32(texMtxOffs + 0x08);
+        const centerQ = view.getFloat32(texMtxOffs + 0x0C);
+        const scaleS = view.getFloat32(texMtxOffs + 0x10);
+        const scaleT = view.getFloat32(texMtxOffs + 0x14);
+        const rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
+        assert(view.getUint16(texMtxOffs + 0x1A) == 0xFFFF);
+        const translationS = view.getFloat32(texMtxOffs + 0x1C);
+        const translationT = view.getFloat32(texMtxOffs + 0x20);
+
+        // A second matrix?
+        const p00 = view.getFloat32(texMtxOffs + 0x24);
+        const p01 = view.getFloat32(texMtxOffs + 0x28);
+        const p02 = view.getFloat32(texMtxOffs + 0x2C);
+        const p03 = view.getFloat32(texMtxOffs + 0x30);
+        const p10 = view.getFloat32(texMtxOffs + 0x34);
+        const p11 = view.getFloat32(texMtxOffs + 0x38);
+        const p12 = view.getFloat32(texMtxOffs + 0x3C);
+        const p13 = view.getFloat32(texMtxOffs + 0x40);
+        const p20 = view.getFloat32(texMtxOffs + 0x44);
+        const p21 = view.getFloat32(texMtxOffs + 0x48);
+        const p22 = view.getFloat32(texMtxOffs + 0x4C);
+        const p23 = view.getFloat32(texMtxOffs + 0x50);
+        const p30 = view.getFloat32(texMtxOffs + 0x54);
+        const p31 = view.getFloat32(texMtxOffs + 0x58);
+        const p32 = view.getFloat32(texMtxOffs + 0x5C);
+        const p33 = view.getFloat32(texMtxOffs + 0x60);
+
+        const p = mat4.fromValues(
+            p00, p01, p02, p03,
+            p10, p11, p12, p13,
+            p20, p21, p22, p23,
+            p30, p31, p32, p33,
+        );
+
+        const matrix = matrix3.create();
+        createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+        const texMtx: TexMtx = { type, projection, matrix };
+        return texMtx;
+    }
 }
 
 export interface TEX1_Texture {
