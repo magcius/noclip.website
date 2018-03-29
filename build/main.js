@@ -41,8 +41,8 @@ System.register("endian", [], function (exports_1, context_1) {
         return _isLittle;
     }
     exports_1("isLittleEndian", isLittleEndian);
-    function bswap16(m) {
-        var a = new Uint8Array(m);
+    function bswap16(m, byteOffset, byteLength) {
+        var a = new Uint8Array(m, byteOffset, byteLength);
         var o = new Uint8Array(a.byteLength);
         for (var i = 0; i < a.byteLength; i += 2) {
             o[i + 0] = a[i + 1];
@@ -50,9 +50,8 @@ System.register("endian", [], function (exports_1, context_1) {
         }
         return o.buffer;
     }
-    exports_1("bswap16", bswap16);
-    function bswap32(m) {
-        var a = new Uint8Array(m);
+    function bswap32(m, byteOffset, byteLength) {
+        var a = new Uint8Array(m, byteOffset, byteLength);
         var o = new Uint8Array(a.byteLength);
         for (var i = 0; i < a.byteLength; i += 4) {
             o[i + 0] = a[i + 3];
@@ -62,43 +61,41 @@ System.register("endian", [], function (exports_1, context_1) {
         }
         return o.buffer;
     }
-    exports_1("bswap32", bswap32);
-    function be16toh(m) {
+    function be16toh(m, byteOffset, byteLength) {
         if (isLittleEndian())
-            return bswap16(m);
+            return bswap16(m, byteOffset, byteLength);
         else
-            return m;
+            return m.slice(byteOffset, byteLength);
     }
-    exports_1("be16toh", be16toh);
-    function le16toh(m) {
+    function le16toh(m, byteOffset, byteLength) {
         if (!isLittleEndian())
-            return bswap16(m);
+            return bswap16(m, byteOffset, byteLength);
         else
-            return m;
+            return m.slice(byteOffset, byteLength);
     }
-    exports_1("le16toh", le16toh);
-    function be32toh(m) {
+    function be32toh(m, byteOffset, byteLength) {
         if (isLittleEndian())
-            return bswap32(m);
+            return bswap32(m, byteOffset, byteLength);
         else
-            return m;
+            return m.slice(byteOffset, byteLength);
     }
-    exports_1("be32toh", be32toh);
-    function le32toh(m) {
+    function le32toh(m, byteOffset, byteLength) {
         if (!isLittleEndian())
-            return bswap32(m);
+            return bswap32(m, byteOffset, byteLength);
         else
-            return m;
+            return m.slice(byteOffset, byteLength);
     }
-    exports_1("le32toh", le32toh);
-    function betoh(m, componentSize) {
+    function betoh(m, componentSize, byteOffset, byteLength) {
+        if (byteOffset === void 0) { byteOffset = 0; }
+        if (byteLength === void 0) { byteLength = m.byteLength; }
         switch (componentSize) {
             case 1:
-                return m;
+                // XXX(jstpierre): Zero-copy.
+                return m.slice(byteOffset, byteOffset + byteLength);
             case 2:
-                return be16toh(m);
+                return be16toh(m, byteOffset, byteLength);
             case 4:
-                return be32toh(m);
+                return be32toh(m, byteOffset, byteLength);
         }
     }
     exports_1("betoh", betoh);
@@ -1762,8 +1759,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
             var dataSize = dataEnd - dataStart;
             var compCount = getNumComponents(vtxAttrib, compCnt);
             var compSize = getComponentSize(compType);
-            var vtxDataBufferRaw = buffer.slice(dataOffs, dataOffs + dataSize);
-            var vtxDataBuffer = endian_1.betoh(vtxDataBufferRaw, compSize);
+            var vtxDataBuffer = endian_1.betoh(buffer, compSize, dataOffs, dataOffs + dataSize);
             var vertexArray = { vtxAttrib: vtxAttrib, compType: compType, compCount: compCount, compSize: compSize, scale: scale, dataOffs: dataOffs, dataSize: dataSize, buffer: vtxDataBuffer };
             vertexArrays.set(vtxAttrib, vertexArray);
         }
@@ -1907,7 +1903,7 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
                 var matrixFirstIndex = view.getUint32(packetMatrixDataOffs + 0x04);
                 var packetMatrixTableOffs = chunkStart + matrixTableOffs + matrixFirstIndex * 0x02;
                 var packetMatrixTableEnd = packetMatrixTableOffs + matrixCount * 0x02;
-                var weightedJointTable = new Uint16Array(endian_1.be16toh(buffer.slice(packetMatrixTableOffs, packetMatrixTableEnd)));
+                var weightedJointTable = new Uint16Array(endian_1.betoh(buffer, 2, packetMatrixTableOffs, packetMatrixTableEnd));
                 var drawCallEnd = packetStart + packetSize;
                 var drawCallIdx = packetStart;
                 var firstTriangle = totalTriangleCount;
@@ -2335,9 +2331,9 @@ System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "endian", "util", 
         var sTableOffs = chunkStart + view.getUint32(0x28);
         var rTableOffs = chunkStart + view.getUint32(0x2C);
         var tTableOffs = chunkStart + view.getUint32(0x30);
-        var sTable = new Float32Array(endian_1.betoh(buffer.slice(sTableOffs, sTableOffs + sCount * 4), 4));
-        var rTable = new Int16Array(endian_1.betoh(buffer.slice(rTableOffs, rTableOffs + rCount * 2), 2));
-        var tTable = new Float32Array(endian_1.betoh(buffer.slice(tTableOffs, tTableOffs + tCount * 4), 4));
+        var sTable = new Float32Array(endian_1.betoh(buffer, 4, sTableOffs, sTableOffs + sCount * 4));
+        var rTable = new Int16Array(endian_1.betoh(buffer, 2, rTableOffs, rTableOffs + rCount * 2));
+        var tTable = new Float32Array(endian_1.betoh(buffer, 4, tTableOffs, tTableOffs + tCount * 4));
         var rotationScale = Math.pow(2, rotationDecimal);
         var materialNameTable = readStringTable(buffer, chunkStart + materialNameTableOffs);
         var animationTableIdx = animationTableOffs;
@@ -10080,9 +10076,9 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         case 1 /* U32_LE */:
                             return indexBufferData;
                         case 4 /* U16 */:
-                            return endian_2.be16toh(indexBufferData);
+                            return endian_2.betoh(indexBufferData, 2);
                         case 9 /* U32 */:
-                            return endian_2.be32toh(indexBufferData);
+                            return endian_2.betoh(indexBufferData, 4);
                     }
                 };
                 Scene.prototype.translateFSHPBuffers = function (fshp, indexDatas) {

@@ -4,7 +4,7 @@
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
 
-import { betoh, be16toh } from 'endian';
+import { betoh } from 'endian';
 import { assert, readString } from 'util';
 import { mat2d, mat4, mat3 as matrix3, quat } from 'gl-matrix';
 
@@ -223,8 +223,7 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const dataSize: number = dataEnd - dataStart;
         const compCount = getNumComponents(vtxAttrib, compCnt);
         const compSize = getComponentSize(compType);
-        const vtxDataBufferRaw = buffer.slice(dataOffs, dataOffs + dataSize);
-        const vtxDataBuffer = betoh(vtxDataBufferRaw, compSize);
+        const vtxDataBuffer = betoh(buffer, compSize, dataOffs, dataOffs + dataSize);
         const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compSize, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }
@@ -448,7 +447,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
             const packetMatrixTableOffs = chunkStart + matrixTableOffs + matrixFirstIndex * 0x02;
             const packetMatrixTableEnd = packetMatrixTableOffs + matrixCount * 0x02;
-            const weightedJointTable = new Uint16Array(be16toh(buffer.slice(packetMatrixTableOffs, packetMatrixTableEnd)));
+            const weightedJointTable = new Uint16Array(betoh(buffer, 2, packetMatrixTableOffs, packetMatrixTableEnd));
 
             const drawCallEnd = packetStart + packetSize;
             let drawCallIdx = packetStart;
@@ -1063,9 +1062,9 @@ function readTTK1Chunk(btk: BTK, buffer: ArrayBuffer, chunkStart: number, chunkS
     const rTableOffs = chunkStart + view.getUint32(0x2C);
     const tTableOffs = chunkStart + view.getUint32(0x30);
 
-    const sTable = new Float32Array(betoh(buffer.slice(sTableOffs, sTableOffs + sCount * 4), 4));
-    const rTable = new Int16Array(betoh(buffer.slice(rTableOffs, rTableOffs + rCount * 2), 2));
-    const tTable = new Float32Array(betoh(buffer.slice(tTableOffs, tTableOffs + tCount * 4), 4));
+    const sTable = new Float32Array(betoh(buffer, 4, sTableOffs, sTableOffs + sCount * 4));
+    const rTable = new Int16Array(betoh(buffer, 2, rTableOffs, rTableOffs + rCount * 2));
+    const tTable = new Float32Array(betoh(buffer, 4, tTableOffs, tTableOffs + tCount * 4));
 
     const rotationScale = Math.pow(2, rotationDecimal);
     const materialNameTable = readStringTable(buffer, chunkStart + materialNameTableOffs);

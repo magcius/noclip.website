@@ -12,7 +12,7 @@ import * as Yaz0 from '../yaz0';
 
 import { Progressable } from '../progress';
 import { RenderState, Program, RenderArena, RenderFlags, FrontFaceMode, CompareMode, CullMode, BufferCoalescer, coalesceBuffer, CoalescedBuffer } from '../render';
-import { be16toh, be32toh, betoh } from '../endian';
+import { betoh } from '../endian';
 import { assert, fetch } from '../util';
 
 type RenderFunc = (renderState: RenderState) => void;
@@ -335,9 +335,9 @@ export class Scene implements Viewer.Scene {
         case GX2IndexFormat.U32_LE:
             return indexBufferData;
         case GX2IndexFormat.U16:
-            return be16toh(indexBufferData);
+            return betoh(indexBufferData, 2);
         case GX2IndexFormat.U32:
-            return be32toh(indexBufferData);
+            return betoh(indexBufferData, 4);
         }
     }
 
