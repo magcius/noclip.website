@@ -11,9 +11,6 @@ import { RenderPass, RenderState } from '../render';
 import { assert, fetch, readString } from '../util';
 import { SunshineSceneDesc } from './sms_scenes';
 
-const id = "j3d";
-const name = "GameCube Models";
-
 export class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
@@ -129,14 +126,10 @@ class SMGSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-const sceneDescs: Viewer.SceneDesc[] = [
-    new SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
-    new SunshineSceneDesc("data/j3d/mare0.szs", "Noki Bay"),
-    new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach",),
-    new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor",),
-    new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
-    new SunshineSceneDesc("data/j3d/monte3.szs", "Pianta Village"),
+const id = "j3d";
+const name = "GameCube Models";
 
+const sceneDescs: Viewer.SceneDesc[] = [
     new SMGSceneDesc(["data/j3d/MarioFaceShipPlanet.arc"], "Faceship"),
     new SMGSceneDesc(["data/j3d/PeachCastleGardenPlanet.arc", "data/j3d/GalaxySky.arc"], "Peach's Castle Garden"),
 ];

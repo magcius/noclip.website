@@ -1,17 +1,30 @@
 
-import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController, Texture } from 'viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController, Texture } from './viewer';
+import { Progressable } from './progress';
 
-import * as DKSIV from 'dksiv/scenes';
-import * as FRES from 'fres/scenes';
-import * as J3D from 'j3d/scenes';
-import * as MDL0 from 'mdl0/scenes';
-import * as OOT3D from 'oot3d/scenes';
-import * as SM64DS from 'sm64ds/scenes';
-import * as ZELVIEW from 'zelview/scenes';
-import * as ZWW from 'j3d/zww_scenes';
+import * as ZWW from './j3d/zww_scenes';
+import * as SMS from './j3d/sms_scenes';
+import * as J3D from './j3d/scenes';
+import * as SM64DS from './sm64ds/scenes';
+import * as MDL0 from './mdl0/scenes';
+import * as ZELVIEW from './zelview/scenes';
+import * as OOT3D from './oot3d/scenes';
+import * as FRES from './fres/scenes';
+import * as DKSIV from './dksiv/scenes';
 import * as MP1 from './metroid_prime/scenes';
 
-import { Progressable } from './progress';
+const sceneGroups = [
+    ZWW.sceneGroup,
+    SMS.sceneGroup,
+    J3D.sceneGroup,
+    SM64DS.sceneGroup,
+    MDL0.sceneGroup,
+    ZELVIEW.sceneGroup,
+    OOT3D.sceneGroup,
+    FRES.sceneGroup,
+    DKSIV.sceneGroup,
+    // MP1.sceneGroup,
+];
 
 class ProgressBar {
     public elem: HTMLElement;
@@ -157,18 +170,7 @@ class Main {
 
         this._makeUI();
 
-        this.groups = [];
-
-        // The "plugin" part of this.
-        this.groups.push(ZWW.sceneGroup);
-        this.groups.push(J3D.sceneGroup);
-        this.groups.push(SM64DS.sceneGroup);
-        this.groups.push(MDL0.sceneGroup);
-        this.groups.push(ZELVIEW.sceneGroup);
-        this.groups.push(OOT3D.sceneGroup);
-        this.groups.push(FRES.sceneGroup);
-        this.groups.push(DKSIV.sceneGroup);
-        // this.groups.push(MP1.sceneGroup);
+        this.groups = sceneGroups;
 
         this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
         this.groups.push(this.droppedFileGroup);
