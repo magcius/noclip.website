@@ -1,5 +1,5 @@
 
-// Moderately optimized GX Display List parser.
+// GX display list parsing.
 
 // A Display List contains a number of primitive draw calls. However, instead of having
 // one global index into an index buffer pointing to vertex data, the GX instead can allow
@@ -12,18 +12,22 @@
 import * as GX from './gx_enum';
 import { align, assert } from '../util';
 
+// GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
     compType: GX.CompType;
     compCnt: GX.CompCnt;
 }
 
+// GX_SetVtxDesc
 export interface GX_VtxDesc {
     type: GX.AttrType;
 }
 
-export interface VtxArrayData {
+// GX_SetArray
+export interface GX_Array {
     buffer: ArrayBuffer;
     offs: number;
+    // TODO(jstpierre): stride
 }
 
 type CompSize = 1 | 2 | 4;
@@ -132,7 +136,7 @@ export interface LoadedVertexData {
     totalVertexCount: number;
 }
 
-type VtxLoaderFunc = (vtxArrays: VtxArrayData[], srcBuffer: ArrayBuffer, srcOffs: number) => LoadedVertexData;
+type VtxLoaderFunc = (vtxArrays: GX_Array[], srcBuffer: ArrayBuffer, srcOffs: number) => LoadedVertexData;
 
 export interface VtxLoader {
     vattrLayout: VattrLayout;
@@ -161,7 +165,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
     }
 
     function compileVattr(vtxAttrib: GX.VertexAttribute): string {
-        if (!vtxDescs[vtxAttrib] || vtxDescs[vtxAttrib].type === GX.AttrType.NONE)
+        if (!vtxDescs[vtxAttrib])
             return '';
 
         const srcAttrSize = vattrLayout.srcAttrSizes[vtxAttrib];
@@ -187,6 +191,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
         switch (vtxDescs[vtxAttrib].type) {
         case GX.AttrType.INDEX8:
         case GX.AttrType.INDEX16:
+            // TODO(jstpierre): Stride.
             readVertex = `${readVertex}
         attrOffs = vertexArray.offs + (${srcAttrSize} * index);`;
             break;
