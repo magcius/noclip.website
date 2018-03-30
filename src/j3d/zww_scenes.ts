@@ -11,6 +11,7 @@ import { Scene, ColorOverride } from './render';
 import { Progressable } from '../progress';
 import { fetch, readString } from '../util';
 import { mat4 } from 'gl-matrix';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
@@ -35,8 +36,8 @@ class WindWakerScene extends MultiScene {
 
     private timeOfDaySelect: HTMLSelectElement;
 
-    static getColorsFromDZS(buffer: ArrayBuffer, roomIdx: number, timeOfDay: number) {
-        const view = new DataView(buffer);
+    static getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number) {
+        const view = buffer.createDataView();
         const chunkCount = view.getUint32(0x00);
 
         const chunkOffsets = new Map<string, number>();

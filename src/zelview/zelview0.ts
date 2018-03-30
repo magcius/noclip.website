@@ -4,20 +4,11 @@ import { mat4 } from 'gl-matrix';
 import * as F3DEX2 from './f3dex2';
 import * as Render from './render';
 import * as Viewer from '../viewer';
+import ArrayBufferSlice from 'ArrayBufferSlice';
+import { readString } from '../util';
+import { RenderState } from '../render';
 
 // Loads the ZELVIEW0 format.
-
-function read0String(buffer, offs, length) {
-    const buf = new Uint8Array(buffer, offs, length);
-    const L = new Array(length);
-    for (let i = 0; i < length; i++) {
-        const elem = buf[i];
-        if (elem === 0)
-            break;
-        L.push(String.fromCharCode(elem));
-    }
-    return L.join('');
-}
 
 class VFSEntry {
     public filename: string;
@@ -27,9 +18,14 @@ class VFSEntry {
     public vEnd: number;
 }
 
+export interface RomBanks {
+    scene: VFSEntry;
+    room?: VFSEntry;
+}
+
 export class ZELVIEW0 {
     public entries: VFSEntry[];
-    public sceneFile: string;
+    public sceneFile: VFSEntry;
     public view: DataView;
 
     public lookupFile(pStart): VFSEntry {
@@ -38,7 +34,7 @@ export class ZELVIEW0 {
                 return entry;
         return null;
     }
-    public lookupAddress(banks, addr): number {
+    public lookupAddress(banks: RomBanks, addr: number): number {
         const bankIdx = addr >>> 24;
         const offs = addr & 0x00FFFFFF;
         function findBank() {
@@ -56,11 +52,11 @@ export class ZELVIEW0 {
             return null;
         return absOffs;
     }
-    public loadAddress(banks, addr) {
+    public loadAddress(banks: RomBanks, addr: number): number {
         const offs = this.lookupAddress(banks, addr);
         return this.view.getUint32(offs);
     }
-    public loadScene(gl, scene): Headers {
+    public loadScene(gl: WebGL2RenderingContext, scene: VFSEntry): Headers {
         return readScene(gl, this, scene);
     }
     public loadMainScene(gl) {
@@ -82,11 +78,11 @@ export class Headers {
     public rooms: Headers[] = [];
 }
 
-export function readZELVIEW0(buffer: ArrayBuffer): ZELVIEW0 {
-    const view = new DataView(buffer);
+export function readZELVIEW0(buffer: ArrayBufferSlice): ZELVIEW0 {
+    const view = buffer.createDataView();
 
     const MAGIC = "ZELVIEW0";
-    if (read0String(buffer, 0, MAGIC.length) !== MAGIC)
+    if (readString(buffer, 0, MAGIC.length, false) !== MAGIC)
         throw new Error("Invalid ZELVIEW0 file");
 
     let offs = 0x08;
@@ -97,7 +93,7 @@ export function readZELVIEW0(buffer: ArrayBuffer): ZELVIEW0 {
 
     function readVFSEntry(): VFSEntry {
         const entry: VFSEntry = new VFSEntry();
-        entry.filename = read0String(buffer, offs, 0x30);
+        entry.filename = readString(buffer, offs, 0x30);
         offs += 0x30;
         entry.pStart = view.getUint32(offs, true);
         entry.pEnd = view.getUint32(offs + 0x04, true);
@@ -107,7 +103,7 @@ export function readZELVIEW0(buffer: ArrayBuffer): ZELVIEW0 {
         return entry;
     }
 
-    const entries = [];
+    const entries: VFSEntry[] = [];
     for (let i = 0; i < count; i++)
         entries.push(readVFSEntry());
 
@@ -141,14 +137,14 @@ enum HeaderCommands {
     End = 0x14,
 }
 
-function readHeaders(gl, rom, offs, banks) {
+function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
     const headers = new Headers();
 
-    function loadAddress(addr) {
+    function loadAddress(addr: number): number {
         return rom.loadAddress(banks, addr);
     }
 
-    function readCollision(collisionAddr) {
+    function readCollision(collisionAddr: number) {
         const offs = rom.lookupAddress(banks, collisionAddr);
 
         function readVerts(N, addr) {
@@ -240,13 +236,12 @@ function readHeaders(gl, rom, offs, banks) {
         return { verts, polys, waters, camera };
     }
 
-    function readRoom(file) {
-        const banks2 = Object.create(banks);
-        banks2.room = file;
+    function readRoom(file: VFSEntry): Headers {
+        const banks2: RomBanks = { scene: banks.scene, room: file };
         return readHeaders(gl, rom, file.vStart, banks2);
     }
 
-    function readRooms(nRooms, roomTableAddr) {
+    function readRooms(nRooms: number, roomTableAddr: number): Headers[] {
         const rooms = [];
         for (let i = 0; i < nRooms; i++) {
             const pStart = loadAddress(roomTableAddr);
@@ -259,7 +254,7 @@ function readHeaders(gl, rom, offs, banks) {
         return rooms;
     }
 
-    function loadImage(gl, src) {
+    function loadImage(gl: WebGL2RenderingContext, src) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
@@ -292,9 +287,9 @@ function readHeaders(gl, rom, offs, banks) {
         const imgHeight = 240;
 
         const imgAspect = imgWidth / imgHeight;
-        const viewportAspect = gl.viewportWidth / gl.viewportHeight;
+        // const viewportAspect = gl.viewportWidth / gl.viewportHeight;
 
-        const x = imgAspect / viewportAspect;
+        const x = imgAspect;
 
         const vertData = new Float32Array([
             /* x   y   z   u  v */
@@ -320,9 +315,9 @@ function readHeaders(gl, rom, offs, banks) {
         const VERTEX_SIZE = 5;
         const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-        return (renderState) => {
+        return (renderState: RenderState) => {
             const gl = renderState.gl;
-            const prog = renderState.currentProgram;
+            const prog = (<Render.BillboardBGProgram> renderState.currentProgram);
             gl.disable(gl.BLEND);
             gl.disable(gl.DEPTH_TEST);
             gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
@@ -333,12 +328,10 @@ function readHeaders(gl, rom, offs, banks) {
             gl.enableVertexAttribArray(prog.uvLocation);
             gl.bindTexture(gl.TEXTURE_2D, texId);
             gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_BYTE, 0);
-            gl.disableVertexAttribArray(prog.positionLocation);
-            gl.disableVertexAttribArray(prog.uvLocation);
         };
     }
 
-    function readMesh(meshAddr) {
+    function readMesh(meshAddr: number): Mesh {
         const hdr = loadAddress(meshAddr);
         const type = (hdr >> 24);
         const nEntries = (hdr >> 16) & 0xFF;
@@ -346,7 +339,7 @@ function readHeaders(gl, rom, offs, banks) {
 
         const mesh = new Mesh();
 
-        function readDL(addr) {
+        function readDL(addr): F3DEX2.DL {
             const dlStart = loadAddress(addr);
             if (dlStart === 0)
                 return null;
@@ -419,7 +412,7 @@ function readHeaders(gl, rom, offs, banks) {
     return headers;
 }
 
-function readScene(gl, zelview0, file): Headers {
-    const banks = { scene: file };
+function readScene(gl: WebGL2RenderingContext, zelview0: ZELVIEW0, file: VFSEntry): Headers {
+    const banks: RomBanks = { scene: file };
     return readHeaders(gl, zelview0, file.vStart, banks);
 }

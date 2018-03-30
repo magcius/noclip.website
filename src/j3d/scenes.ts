@@ -10,6 +10,7 @@ import { Progressable } from '../progress';
 import { RenderPass, RenderState } from '../render';
 import { assert, fetch, readString } from '../util';
 import { SunshineSceneDesc } from './sms_scenes';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
@@ -48,7 +49,7 @@ export function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, 
     return new Scene(gl, bmd, btk, bmt);
 }
 
-export function createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer): MultiScene {
+export function createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): MultiScene {
     if (readString(buffer, 0, 4) === 'Yaz0')
         buffer = Yaz0.decompress(buffer);
 
@@ -91,7 +92,7 @@ export class RARCSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch(this.path).then((result: ArrayBuffer) => {
+        return fetch(this.path).then((result: ArrayBufferSlice) => {
             return createSceneFromBuffer(gl, result);
         });
     }
@@ -109,14 +110,14 @@ class SMGSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return Progressable.all(this.paths.map((path) => fetch(path).then((buffer: ArrayBuffer) => {
+        return Progressable.all(this.paths.map((path) => fetch(path).then((buffer: ArrayBufferSlice) => {
             return this.createSceneFromBuffer(gl, buffer);
         }))).then((scenes: Scene[]) => {
             return new MultiScene(scenes);
         });
     }
 
-    protected createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer): Viewer.MainScene {
+    protected createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Viewer.MainScene {
         const multiScene: MultiScene = createSceneFromBuffer(gl, buffer);
         assert(multiScene.scenes.length === 1);
         const scene: Scene = (<Scene> multiScene.scenes[0]);

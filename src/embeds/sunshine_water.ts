@@ -14,6 +14,7 @@ import { Progressable } from 'progress';
 import { fetch } from 'util';
 import { Command_Material } from '../j3d/render';
 import { SunshineClearScene, SunshineSceneDesc } from '../j3d/sms_scenes';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -248,9 +249,9 @@ class PlaneShape {
 }
 
 export function createScene(gl: WebGL2RenderingContext, name: string): Progressable<MainScene> {
-    return fetch("data/j3d/dolpic0.szs").then((buffer: ArrayBuffer) => {
-        buffer = Yaz0.decompress(buffer);
-        const rarc = RARC.parse(buffer);
+    return fetch("data/j3d/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
+        const bufferSlice: ArrayBufferSlice = Yaz0.decompress(buffer);
+        const rarc = RARC.parse(bufferSlice);
 
         const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
 

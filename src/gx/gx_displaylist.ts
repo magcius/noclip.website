@@ -11,6 +11,7 @@
 
 import * as GX from './gx_enum';
 import { align, assert } from '../util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -25,7 +26,7 @@ export interface GX_VtxDesc {
 
 // GX_SetArray
 export interface GX_Array {
-    buffer: ArrayBuffer;
+    buffer: ArrayBufferSlice;
     offs: number;
     // TODO(jstpierre): stride
 }
@@ -136,7 +137,7 @@ export interface LoadedVertexData {
     totalVertexCount: number;
 }
 
-type VtxLoaderFunc = (vtxArrays: GX_Array[], srcBuffer: ArrayBuffer, srcOffs: number) => LoadedVertexData;
+type VtxLoaderFunc = (vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice) => LoadedVertexData;
 
 export interface VtxLoader {
     vattrLayout: VattrLayout;
@@ -200,7 +201,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
         return `// ${getAttrName(vtxAttrib)}
         vertexArray = vtxArrays[${vtxAttrib}];
         ${readVertex}
-        dstVertexData.set(new Uint8Array(vertexArray.buffer, attrOffs, ${srcAttrSize}), dstVertexDataOffs + ${vattrLayout.dstAttrOffsets[vtxAttrib]});`;
+        dstVertexData.set(vertexArray.buffer.createTypedArray(Uint8Array, attrOffs, ${srcAttrSize}), dstVertexDataOffs + ${vattrLayout.dstAttrOffsets[vtxAttrib]});`;
     }
 
     function compileVattrs(): string {
@@ -215,7 +216,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
 "use strict";
 
 // Parse display list.
-const view = new DataView(srcBuffer, srcOffs);
+const view = srcBuffer.createDataView();
 const drawCalls = [];
 let totalVertexCount = 0;
 let totalTriangleCount = 0;
@@ -294,7 +295,7 @@ ${compileVattrs()}
 }
 return { indexData: dstIndexData, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };
 `;
-    const runVertices: VtxLoaderFunc = (<VtxLoaderFunc> new Function('vtxArrays', 'srcBuffer', 'srcOffs', source));
+    const runVertices: VtxLoaderFunc = (<VtxLoaderFunc> new Function('vtxArrays', 'srcBuffer', source));
     return { vattrLayout, runVertices };
 }
 
@@ -333,13 +334,13 @@ class VtxLoaderCache {
         return JSON.stringify({ vat, vtxDescs });
     }
 
-    public compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]) {
+    compileVtxLoader = (vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoader => {
         const key = this.makeKey(vat, vtxDescs);
         if (!this.cache.has(key))
             this.cache.set(key, _compileVtxLoader(vat, vtxDescs));
         return this.cache.get(key);
-    }
+    };
 }
 
 const cache = new VtxLoaderCache();
-export const compileVtxLoader = cache.compileVtxLoader.bind(cache);
+export const compileVtxLoader = cache.compileVtxLoader;

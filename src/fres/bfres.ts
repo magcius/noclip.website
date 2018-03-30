@@ -4,6 +4,7 @@ import { GX2Surface } from './gx2_surface';
 import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode } from './gx2_enum';
 
 import { assert, readString } from 'util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 function readBinPtrT(view: DataView, offs: number, littleEndian: boolean) {
     const offs2 = view.getInt32(offs, littleEndian);
@@ -18,10 +19,11 @@ interface ResDicEntry {
     offs: number;
 }
 
-function parseResDic(view: DataView, tableOffs: number, littleEndian: boolean): ResDicEntry[] {
+function parseResDic(buffer: ArrayBufferSlice, tableOffs: number, littleEndian: boolean): ResDicEntry[] {
     if (tableOffs === 0)
         return [];
 
+    const view = buffer.createDataView();
     const tableSize = view.getUint32(tableOffs + 0x00, littleEndian);
     const tableCount = view.getUint32(tableOffs + 0x04, littleEndian);
     assert(tableCount === tableCount);
@@ -33,7 +35,7 @@ function parseResDic(view: DataView, tableOffs: number, littleEndian: boolean): 
     tableIdx += 0x10;
     for (let i = 0; i < tableCount; i++) {
         // There's a fancy search tree in here which I don't care about at all...
-        const name = readString(view.buffer, readBinPtrT(view, tableIdx + 0x08, littleEndian));
+        const name = readString(buffer, readBinPtrT(view, tableIdx + 0x08, littleEndian));
         const offs = readBinPtrT(view, tableIdx + 0x0C, littleEndian);
         entries.push({ name, offs });
         tableIdx += 0x10;
@@ -44,13 +46,13 @@ function parseResDic(view: DataView, tableOffs: number, littleEndian: boolean): 
 
 export interface DecodableTexture {
     surface: GX2Surface;
-    mipData: ArrayBuffer;
-    texData: ArrayBuffer;
+    mipData: ArrayBufferSlice;
+    texData: ArrayBufferSlice;
 }
 
-function parseFTEX(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolean): DecodableTexture {
+function parseFTEX(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: boolean): DecodableTexture {
     const offs = entry.offs;
-    const view = new DataView(buffer);
+    const view = buffer.createDataView();
 
     assert(readString(buffer, offs + 0x00, 0x04) === 'FTEX');
     // GX2 is Wii U which is a little-endian system.
@@ -61,8 +63,8 @@ function parseFTEX(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
     const mipDataOffs = readBinPtrT(view, offs + 0xB4, littleEndian);
 
     const surface = GX2Texture.parseGX2Surface(buffer, gx2SurfaceOffs);
-    const texData = buffer.slice(texDataOffs, texDataOffs + surface.texDataSize);
-    const mipData = buffer.slice(mipDataOffs, mipDataOffs + surface.texDataSize);
+    const texData = buffer.subarray(texDataOffs, surface.texDataSize);
+    const mipData = buffer.subarray(mipDataOffs, surface.mipDataSize);
     return { surface, texData, mipData };
 }
 
@@ -73,7 +75,7 @@ interface SubMesh {
 
 export interface BufferData {
     stride: number;
-    data: ArrayBuffer;
+    data: ArrayBufferSlice;
 }
 
 interface Mesh {
@@ -204,7 +206,7 @@ export interface FMAT {
     name: string;
     renderInfoParameters: RenderInfoParameter[];
     textureAssigns: TextureAssign[];
-    materialParameterDataBuffer: ArrayBuffer;
+    materialParameterDataBuffer: ArrayBufferSlice;
     materialParameters: UBOParameter[];
     shaderAssign: ShaderAssign;
     renderState: RenderState;
@@ -216,9 +218,9 @@ export interface FMDL {
     fmat: FMAT[];
 }
 
-function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolean): FMDL {
+function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: boolean): FMDL {
     const offs = entry.offs;
-    const view = new DataView(buffer);
+    const view = buffer.createDataView();
 
     assert(readString(buffer, offs + 0x00, 0x04) === 'FMDL');
     const fileName = readBinPtrT(view, offs + 0x04, littleEndian);
@@ -226,8 +228,8 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
     const fsklOffs = readBinPtrT(view, offs + 0x0C, littleEndian);
     const fvtxOffs = readBinPtrT(view, offs + 0x10, littleEndian);
 
-    const fshpResDic = parseResDic(view, readBinPtrT(view, offs + 0x14, littleEndian), littleEndian);
-    const fmatResDic = parseResDic(view, readBinPtrT(view, offs + 0x18, littleEndian), littleEndian);
+    const fshpResDic = parseResDic(buffer, readBinPtrT(view, offs + 0x14, littleEndian), littleEndian);
+    const fmatResDic = parseResDic(buffer, readBinPtrT(view, offs + 0x18, littleEndian), littleEndian);
 
     const fvtxCount = view.getUint16(offs + 0x20, littleEndian);
     const fshpCount = view.getUint16(offs + 0x22, littleEndian);
@@ -240,12 +242,12 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
         const size = view.getUint32(offs + 0x04, littleEndian);
         const stride = view.getUint16(offs + 0x02, littleEndian);
         const dataOffs = readBinPtrT(view, offs + 0x14, littleEndian);
-        const data = buffer.slice(dataOffs, dataOffs + size);
+        const data = buffer.subarray(dataOffs, size);
         return { data, stride };
     }
 
     function parseShaderAssignDict(offs: number): ShaderAssignDictEntry[] {
-        const resDic = parseResDic(view, offs, littleEndian);
+        const resDic = parseResDic(buffer, offs, littleEndian);
         const entries = [];
         for (const entry of resDic) {
             const key = entry.name;
@@ -342,7 +344,7 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
         const textureSamplerCount = view.getUint8(offs + 0x11);
         const materialParameterCount = view.getUint16(offs + 0x12);
         const materialParameterDataLength = view.getUint16(offs + 0x16);
-        const renderInfoParameterResDic = parseResDic(view, readBinPtrT(view, offs + 0x1C, littleEndian), littleEndian);
+        const renderInfoParameterResDic = parseResDic(buffer, readBinPtrT(view, offs + 0x1C, littleEndian), littleEndian);
         const renderStateOffs = readBinPtrT(view, offs + 0x20, littleEndian);
         const shaderAssignOffs = readBinPtrT(view, offs + 0x24, littleEndian);
         const textureReferenceArrayOffs = readBinPtrT(view, offs + 0x28, littleEndian);
@@ -350,7 +352,7 @@ function parseFMDL(buffer: ArrayBuffer, entry: ResDicEntry, littleEndian: boolea
         const materialParameterArrayOffs = readBinPtrT(view, offs + 0x34, littleEndian);
         const materialParameterDataOffs = readBinPtrT(view, offs + 0x3C, littleEndian);
 
-        const materialParameterDataBuffer = buffer.slice(materialParameterDataOffs, materialParameterDataOffs + materialParameterDataLength);
+        const materialParameterDataBuffer = buffer.subarray(materialParameterDataOffs, materialParameterDataLength);
 
         const renderInfoParameters: RenderInfoParameter[] = [];
         for (const renderInfoParameterEntry of renderInfoParameterResDic) {
@@ -490,8 +492,8 @@ export interface FRES {
     models: ModelEntry[];
 }
 
-export function parse(buffer: ArrayBuffer): FRES {
-    const view = new DataView(buffer);
+export function parse(buffer: ArrayBufferSlice): FRES {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'FRES');
 
@@ -523,7 +525,7 @@ export function parse(buffer: ArrayBuffer): FRES {
     function parseResDicIdx(idx: number) {
         const tableOffs = readBinPtrT(view, 0x20 + idx * 0x04, littleEndian);
         const tableCount = view.getUint16(0x50 + idx * 0x02, littleEndian);
-        const resDic = parseResDic(view, tableOffs, littleEndian);
+        const resDic = parseResDic(buffer, tableOffs, littleEndian);
         assert(tableCount === resDic.length);
         return resDic;
     }

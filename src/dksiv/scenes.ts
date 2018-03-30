@@ -7,6 +7,7 @@ import { RenderState } from '../render';
 
 import { Progressable } from '../progress';
 import { fetch, generateFormID } from '../util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 const name = "Dark Souls Collision Data";
 const id = "dksiv";
@@ -131,7 +132,7 @@ class SceneDesc implements SceneDesc {
     }
 
     private createSceneForPath(gl: WebGL2RenderingContext, path: string): Progressable<Scene> {
-        return fetch(path).then((result: ArrayBuffer) => {
+        return fetch(path).then((result: ArrayBufferSlice) => {
             const iv = parseIV(result);
             const basename = path.split('/').pop();
             return new Scene(gl, basename, iv);

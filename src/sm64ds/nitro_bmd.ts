@@ -5,6 +5,7 @@ import * as NITRO_GX from './nitro_gx';
 import * as NITRO_Tex from './nitro_tex';
 
 import { readString } from 'util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 // Super Mario 64 DS .bmd format
 
@@ -36,12 +37,13 @@ export class Model {
     public batches: Batch[];
 }
 
-function parseModel(bmd: BMD, view: DataView, idx: number) {
+function parseModel(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
     const offs = bmd.modelOffsBase + idx * 0x40;
+    const view = buffer.createDataView();
 
     const model = new Model();
     model.id = view.getUint32(offs + 0x00, true);
-    model.name = readString(view.buffer, view.getUint32(offs + 0x04, true), 0xFF);
+    model.name = readString(buffer, view.getUint32(offs + 0x04, true), 0xFF);
     model.parentID = view.getUint16(offs + 0x08, true);
 
     // Local transform.
@@ -64,11 +66,11 @@ function parseModel(bmd: BMD, view: DataView, idx: number) {
 
     for (let i = 0; i < batchCount; i++) {
         const materialIdx = view.getUint8(batchMaterialOffs + i);
-        const material = parseMaterial(bmd, view, materialIdx);
+        const material = parseMaterial(bmd, buffer, materialIdx);
         const baseCtx = { color: material.diffuse, alpha: material.alpha };
 
         const polyIdx = view.getUint8(batchPolyOffs + i);
-        const poly = parsePoly(bmd, view, polyIdx, baseCtx);
+        const poly = parsePoly(bmd, buffer, polyIdx, baseCtx);
 
         model.batches.push({ material, poly });
     }
@@ -76,30 +78,32 @@ function parseModel(bmd: BMD, view: DataView, idx: number) {
     return model;
 }
 
-function parsePoly(bmd: BMD, view: DataView, idx: number, baseCtx: NITRO_GX.Context): Poly {
+function parsePoly(bmd: BMD, buffer: ArrayBufferSlice, idx: number, baseCtx: NITRO_GX.Context): Poly {
+    const view = buffer.createDataView();
     const offs = view.getUint32((bmd.polyOffsBase + idx * 0x08) + 0x04, true);
 
     const gxCmdSize = view.getUint32(offs + 0x08, true);
     const gxCmdOffs = view.getUint32(offs + 0x0C, true);
 
-    const gxCmdBuf = view.buffer.slice(gxCmdOffs, gxCmdOffs + gxCmdSize);
+    const gxCmdBuf = buffer.slice(gxCmdOffs, gxCmdOffs + gxCmdSize);
 
     const packets = NITRO_GX.readCmds(gxCmdBuf, baseCtx);
     return { packets };
 }
 
-function parseMaterial(bmd: BMD, view: DataView, idx: number): Material {
+function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Material {
+    const view = buffer.createDataView();
     const offs = bmd.materialOffsBase + idx * 0x30;
 
     const material = new Material();
-    material.name = readString(view.buffer, view.getUint32(offs + 0x00, true), 0xFF);
+    material.name = readString(buffer, view.getUint32(offs + 0x00, true), 0xFF);
     material.texCoordMat = mat2d.create();
 
     const textureIdx = view.getUint32(offs + 0x04, true);
     if (textureIdx !== 0xFFFFFFFF) {
         const paletteIdx = view.getUint32(offs + 0x08, true);
         const textureKey = new TextureKey(textureIdx, paletteIdx);
-        material.texture = parseTexture(bmd, view, textureKey);
+        material.texture = parseTexture(bmd, buffer, textureKey);
         material.texParams = material.texture.params | view.getUint32(offs + 0x20, true);
 
         if (material.texParams >> 30) {
@@ -177,19 +181,20 @@ export class Texture {
     public isTranslucent: boolean;
 }
 
-function parseTexture(bmd: BMD, view: DataView, key: TextureKey): Texture {
+function parseTexture(bmd: BMD, buffer: ArrayBufferSlice, key: TextureKey): Texture {
     if (bmd.textureCache.has(key.toString()))
         return bmd.textureCache.get(key.toString());
 
+    const view = buffer.createDataView();
     const texOffs = bmd.textureOffsBase + key.texIdx * 0x14;
 
     const texture = new Texture();
     texture.id = key.texIdx;
-    texture.name = readString(view.buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
+    texture.name = readString(buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
 
     const texDataOffs = view.getUint32(texOffs + 0x04, true);
     const texDataSize = view.getUint32(texOffs + 0x08, true);
-    const texData = view.buffer.slice(texDataOffs);
+    const texData = buffer.slice(texDataOffs);
 
     texture.params = view.getUint32(texOffs + 0x10, true);
     texture.format = (texture.params >> 26) & 0x07;
@@ -200,10 +205,10 @@ function parseTexture(bmd: BMD, view: DataView, key: TextureKey): Texture {
     let palData = null;
     if (key.palIdx !== 0xFFFFFFFF) {
         const palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
-        texture.paletteName = readString(view.buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
+        texture.paletteName = readString(buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
         const palDataOffs = view.getUint32(palOffs + 0x04, true);
         const palDataSize = view.getUint32(palOffs + 0x08, true);
-        palData = view.buffer.slice(palDataOffs, palDataOffs + palDataSize);
+        palData = buffer.slice(palDataOffs, palDataOffs + palDataSize);
     }
 
     texture.pixels = NITRO_Tex.readTexture(texture.format, texture.width, texture.height, texData, palData, color0);
@@ -235,8 +240,8 @@ export class BMD {
     public materialOffsBase: number;
 }
 
-export function parse(buffer: ArrayBuffer) {
-    const view = new DataView(buffer);
+export function parse(buffer: ArrayBufferSlice): BMD {
+    const view = buffer.createDataView();
 
     const bmd = new BMD();
 
@@ -257,7 +262,7 @@ export function parse(buffer: ArrayBuffer) {
     bmd.textures = [];
     bmd.models = [];
     for (let i = 0; i < bmd.modelCount; i++)
-        bmd.models.push(parseModel(bmd, view, i));
+        bmd.models.push(parseModel(bmd, buffer, i));
 
     return bmd;
 }

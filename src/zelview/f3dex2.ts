@@ -798,7 +798,7 @@ function loadTextureBlock(state: State, cmds: number[][]) {
 }
 
 function runDL(state: State, addr: number) {
-    function collectNextCmds() {
+    function collectNextCmds(): number[][] {
         const L = [];
         let voffs = offs;
         for (let i = 0; i < 8; i++) {
@@ -809,7 +809,7 @@ function runDL(state: State, addr: number) {
         }
         return L;
     }
-    function matchesCmdStream(cmds, needle) {
+    function matchesCmdStream(cmds: number[][], needle: number[]): boolean {
         for (let i = 0; i < needle.length; i++)
             if (cmds[i][0] >>> 24 !== needle[i])
                 return false;
@@ -862,7 +862,7 @@ export class DL {
     }
 }
 
-export function readDL(gl: WebGL2RenderingContext, rom, banks, startAddr): DL {
+export function readDL(gl: WebGL2RenderingContext, rom: ZELVIEW0.ZELVIEW0, banks: ZELVIEW0.RomBanks, startAddr: number): DL {
     const state = new State();
 
     state.gl = gl;

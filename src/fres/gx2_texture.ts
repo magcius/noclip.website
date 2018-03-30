@@ -2,6 +2,7 @@
 import { GX2SurfaceFormat, GX2TileMode, GX2AAMode } from './gx2_enum';
 import { GX2Surface } from './gx2_surface';
 import { deswizzler } from './gx2_swizzle';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 interface DecodedTextureR {
     type: 'R';
@@ -49,8 +50,8 @@ interface DecodedTextureBC45 {
 export type DecodedTextureBC = DecodedTextureBC13 | DecodedTextureBC45;
 export type DecodedTexture = DecodedTextureR | DecodedTextureRG | DecodedTextureRGBA | DecodedTextureBC;
 
-export function parseGX2Surface(buffer: ArrayBuffer, gx2SurfaceOffs: number): GX2Surface {
-    const view = new DataView(buffer.slice(gx2SurfaceOffs, gx2SurfaceOffs + 0x9C));
+export function parseGX2Surface(buffer: ArrayBufferSlice, gx2SurfaceOffs: number): GX2Surface {
+    const view = buffer.slice(gx2SurfaceOffs, gx2SurfaceOffs + 0x9C).createDataView();
 
     const dimension = view.getUint32(0x00, false);
     const width = view.getUint32(0x04, false);
@@ -376,11 +377,11 @@ export function decompressBC(texture: DecodedTextureBC): DecodedTexture {
     }
 }
 
-export function decodeSurface(surface: GX2Surface, texData: ArrayBuffer, mipData: ArrayBuffer): Promise<DecodedTexture> {
+export function decodeSurface(surface: GX2Surface, texData: ArrayBufferSlice, mipData: ArrayBufferSlice): Promise<DecodedTexture> {
     const width = surface.width;
     const height = surface.height;
 
-    return deswizzler.deswizzle(surface, texData).then((pixels): DecodedTexture => {
+    return deswizzler.deswizzle(surface, texData.castToBuffer()).then((pixels): DecodedTexture => {
         switch (surface.format) {
         case GX2SurfaceFormat.BC1_UNORM:
             return { type: 'BC1', flag: 'UNORM', width, height, pixels };

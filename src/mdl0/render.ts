@@ -6,6 +6,7 @@ import * as Viewer from '../viewer';
 import { RenderFlags, RenderState, Program, BlendMode } from '../render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 class FancyGrid_Program extends Program {
     public positionLocation: number;
@@ -251,7 +252,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
-        return fetch(this.path).then((result: ArrayBuffer) => {
+        return fetch(this.path).then((result: ArrayBufferSlice) => {
             const mdl0 = MDL0.parse(result);
             return new Scene(gl, mdl0);
         });

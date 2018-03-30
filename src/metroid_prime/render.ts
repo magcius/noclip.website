@@ -11,6 +11,7 @@ import * as GX_Material from 'gx/gx_material';
 import * as Viewer from '../viewer';
 import { RenderPass, RenderState, RenderFlags, CoalescedBuffers, BufferCoalescer } from '../render';
 import { align } from '../util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
 const attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
@@ -99,14 +100,14 @@ export class Scene implements Viewer.MainScene {
             return new Command_Material(gl, this, material);
         });
 
-        const vertexDatas: ArrayBuffer[] = [];
-        const indexDatas: ArrayBuffer[] = [];
+        const vertexDatas: ArrayBufferSlice[] = [];
+        const indexDatas: ArrayBufferSlice[] = [];
 
         const surfaces = this.coalesceSurfaces();
 
         surfaces.forEach((surface) => {
-            vertexDatas.push(surface.packedData.buffer);
-            indexDatas.push(surface.indexData.buffer);
+            vertexDatas.push(new ArrayBufferSlice(surface.packedData.buffer));
+            indexDatas.push(new ArrayBufferSlice(surface.indexData.buffer));
         });
 
         this.bufferCoalescer = new BufferCoalescer(gl, vertexDatas, indexDatas);

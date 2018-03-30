@@ -1,3 +1,5 @@
+import ArrayBufferSlice from "ArrayBufferSlice";
+
 // Read DS texture formats.
 
 export enum Format {
@@ -30,10 +32,10 @@ export function bgr5(pixels: Uint8Array, dstOffs: number, p: number) {
     pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
 }
 
-function readTexture_A3I5(width: number, height: number, texData: ArrayBuffer, palData: ArrayBuffer): Uint8Array {
+function readTexture_A3I5(width: number, height: number, texData: ArrayBufferSlice, palData: ArrayBufferSlice): Uint8Array {
     const pixels = new Uint8Array(width * height * 4);
-    const texView = new DataView(texData);
-    const palView = new DataView(palData);
+    const texView = texData.createDataView();
+    const palView = palData.createDataView();
     let srcOffs = 0;
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -49,11 +51,11 @@ function readTexture_A3I5(width: number, height: number, texData: ArrayBuffer, p
     return pixels;
 }
 
-function readTexture_Palette16(width: number, height: number, texData: ArrayBuffer,
-                               palData: ArrayBuffer, color0: boolean) {
+function readTexture_Palette16(width: number, height: number, texData: ArrayBufferSlice,
+                               palData: ArrayBufferSlice, color0: boolean) {
     const pixels = new Uint8Array(width * height * 4);
-    const texView = new DataView(texData);
-    const palView = new DataView(palData);
+    const texView = texData.createDataView();
+    const palView = palData.createDataView();
     let srcOffs = 0;
     for (let y = 0; y < height; y++) {
         for (let xx = 0; xx < width; xx += 4) {
@@ -72,11 +74,11 @@ function readTexture_Palette16(width: number, height: number, texData: ArrayBuff
     return pixels;
 }
 
-function readTexture_Palette256(width: number, height: number, texData: ArrayBuffer,
-                                palData: ArrayBuffer, color0: boolean) {
+function readTexture_Palette256(width: number, height: number, texData: ArrayBufferSlice,
+                                palData: ArrayBufferSlice, color0: boolean) {
     const pixels = new Uint8Array(width * height * 4);
-    const texView = new DataView(texData);
-    const palView = new DataView(palData);
+    const texView = texData.createDataView();
+    const palView = palData.createDataView();
     let srcOffs = 0;
     for (let y = 0; y < height; y++) {
         for (let xx = 0; xx < width; xx++) {
@@ -90,7 +92,7 @@ function readTexture_Palette256(width: number, height: number, texData: ArrayBuf
     return pixels;
 }
 
-function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBuffer, palData: ArrayBuffer) {
+function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBufferSlice, palData: ArrayBufferSlice) {
     function getPal16(offs: number) {
         return offs < palView.byteLength ? palView.getUint16(offs, true) : 0;
     }
@@ -148,8 +150,8 @@ function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBuffe
     }
 
     const pixels = new Uint8Array(width * height * 4);
-    const texView = new DataView(texData);
-    const palView = new DataView(palData);
+    const texView = texData.createDataView();
+    const palView = palData.createDataView();
 
     const palIdxStart = (width * height) / 4;
 
@@ -178,10 +180,10 @@ function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBuffe
     return pixels;
 }
 
-function readTexture_A5I3(width: number, height: number, texData: ArrayBuffer, palData: ArrayBuffer) {
+function readTexture_A5I3(width: number, height: number, texData: ArrayBufferSlice, palData: ArrayBufferSlice) {
     const pixels = new Uint8Array(width * height * 4);
-    const texView = new DataView(texData);
-    const palView = new DataView(palData);
+    const texView = texData.createDataView();
+    const palView = palData.createDataView();
     let srcOffs = 0;
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -197,9 +199,9 @@ function readTexture_A5I3(width: number, height: number, texData: ArrayBuffer, p
     return pixels;
 }
 
-function readTexture_Direct(width: number, height: number, texData: ArrayBuffer) {
+function readTexture_Direct(width: number, height: number, texData: ArrayBufferSlice) {
     const pixels = new Uint8Array(width * height * 4);
-    const texView = new DataView(texData);
+    const texView = texData.createDataView();
     let srcOffs = 0;
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -213,8 +215,8 @@ function readTexture_Direct(width: number, height: number, texData: ArrayBuffer)
     return pixels;
 }
 
-export function readTexture(format: Format, width: number, height: number, texData: ArrayBuffer,
-                            palData: ArrayBuffer, color0: boolean) {
+export function readTexture(format: Format, width: number, height: number, texData: ArrayBufferSlice,
+                            palData: ArrayBufferSlice, color0: boolean) {
     switch (format) {
     case Format.Tex_A3I5:
         return readTexture_A3I5(width, height, texData, palData);

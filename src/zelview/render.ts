@@ -7,10 +7,11 @@ import { CullMode, RenderFlags, RenderState, Program, BlendMode } from '../rende
 import { fetch } from '../util';
 
 import * as Viewer from '../viewer';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export type RenderFunc = (renderState: RenderState) => void;
 
-class BillboardBGProgram extends Program {
+export class BillboardBGProgram extends Program {
     public positionLocation: number;
     public uvLocation: number;
 
@@ -304,7 +305,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
-        return fetch(this.path).then((result: ArrayBuffer) => {
+        return fetch(this.path).then((result: ArrayBufferSlice) => {
             const zelview0 = ZELVIEW0.readZELVIEW0(result);
             return new Scene(gl, zelview0);
         });

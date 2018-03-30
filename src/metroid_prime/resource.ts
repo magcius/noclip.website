@@ -11,15 +11,17 @@ import * as STRG from './strg';
 import * as TXTR from './txtr';
 
 import { assert } from "../util";
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
-const FourCCLoaders = {
+type ParseFunc<T> = (resourceSystem: ResourceSystem, buffer: ArrayBufferSlice) => T;
+type Resource = any;
+
+const FourCCLoaders: { [n: string]: ParseFunc<Resource> } = {
     'MLVL': MLVL.parse,
     'MREA': MREA.parse,
     'STRG': STRG.parse,
     'TXTR': TXTR.parse,
 };
-
-type Resource = any;
 
 export class ResourceSystem {
     private _cache: Map<string, Resource>;
@@ -28,11 +30,11 @@ export class ResourceSystem {
         this._cache = new Map<string, Resource>();
     }
 
-    private loadResourceBuffer(resource: FileResource): ArrayBuffer {
+    private loadResourceBuffer(resource: FileResource): ArrayBufferSlice {
         if (resource.isCompressed) {
-            const deflated = new Uint8Array(resource.buffer);
+            const deflated = resource.buffer.createTypedArray(Uint8Array);
             const inflated = pako.inflate(deflated);
-            return inflated.buffer;
+            return new ArrayBufferSlice(inflated.buffer);
         } else {
             return resource.buffer;
         }

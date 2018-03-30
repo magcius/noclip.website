@@ -1,10 +1,11 @@
 
-import { assert } from 'util';
+import { assert, readString } from 'util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export interface MDL0 {
     clrData: Uint8Array;
     idxData: Uint16Array;
-    vtxData: Uint16Array;
+    vtxData: Float32Array;
 
     animCount: number;
     animSize: number;
@@ -12,24 +13,15 @@ export interface MDL0 {
     vertSize: number;
 }
 
-function readString(buffer: ArrayBuffer, offs: number, length: number): string {
-    const buf = new Uint8Array(buffer, offs, length);
-    let S = '';
-    for (let i = 0; i < length; i++) {
-        S += String.fromCharCode(buf[i]);
-    }
-    return S;
-}
-
-export function parse(buffer: ArrayBuffer): MDL0 {
-    const Flag = {
-        HAS_NORMAL: 0x01,
-        HAS_UV: 0x02,
-        HAS_COLOR: 0x04,
+export function parse(buffer: ArrayBufferSlice): MDL0 {
+    const enum Flag {
+        HAS_NORMAL = 0x01,
+        HAS_UV = 0x02,
+        HAS_COLOR = 0x04,
     };
 
-    const view = new DataView(buffer);
-    assert(readString(buffer, 0, 4) === 'MDL\0');
+    const view = buffer.createDataView();
+    assert(readString(buffer, 0, 4, false) === 'MDL\0');
     const flags = view.getUint8(0x04);
     const primType = view.getUint8(0x05);
     const vertCount = view.getUint16(0x06, true);
@@ -44,23 +36,20 @@ export function parse(buffer: ArrayBuffer): MDL0 {
         offs = end;
     }
 
-    let clrData;
+    let clrData: Uint8Array;
     if (flags & Flag.HAS_COLOR) {
-        const start = offs;
-        const end = start + vertCount * 4;
-        clrData = new Uint8Array(buffer.slice(start, end));
-        offs = end;
+        clrData = buffer.createTypedArray(Uint8Array, offs, vertCount * 4);
+        offs += clrData.byteLength;
     } else {
         clrData = new Uint8Array(vertCount * 4);
     }
 
     // Read in index buffer.
     let idxCount = view.getUint16(offs, true);
+    offs += 0x02;
     let idxData;
     {
-        const start = offs + 0x02;
-        const end = start + (idxCount * 0x02);
-        const idxArr = new Uint16Array(buffer.slice(start, end));
+        const idxArr = buffer.createTypedArray(Uint16Array, offs, idxCount);
         if (primType === 3) {
             idxData = idxArr;
         } else if (primType === 4) {
@@ -76,17 +65,15 @@ export function parse(buffer: ArrayBuffer): MDL0 {
                 j += 4;
             }
         }
-        offs = end;
+        offs += idxArr.byteLength;
     }
 
-    let vtxData;
+    let vtxData: Float32Array;
     const vertSize = 4 * (3 + ((flags & Flag.HAS_NORMAL) ? 3 : 0));
     const animSize = vertCount * vertSize;
     {
-        const start = offs;
-        const end = start + animCount * animSize;
-        vtxData = new Uint16Array(buffer.slice(start, end));
-        offs = end;
+        vtxData = buffer.createTypedArray(Float32Array, offs, (animCount * animSize) / 4);
+        offs += vtxData.byteLength;
     }
     assert(offs === buffer.byteLength);
 

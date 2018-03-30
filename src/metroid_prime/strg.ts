@@ -3,6 +3,7 @@
 
 import { ResourceSystem } from "./resource";
 import { assert, readString } from "../util";
+import ArrayBufferSlice from "ArrayBufferSlice";
 
 interface STRG {
     strings: string[];
@@ -10,11 +11,11 @@ interface STRG {
 
 const utf16Decoder = new TextDecoder('utf-16be');
 
-function readUTF16String(buffer: ArrayBuffer, offs: number) {
-    const arr = new Uint8Array(buffer, offs, 0xFF);
+function readUTF16String(buffer: ArrayBufferSlice, offs: number): string {
+    const arr = buffer.createTypedArray(Uint8Array, offs, 0xFF);
     const raw = utf16Decoder.decode(arr);
     const nul = raw.indexOf('\u0000');
-    let str;
+    let str: string;
     if (nul >= 0)
         str = raw.slice(0, nul);
     else
@@ -22,8 +23,8 @@ function readUTF16String(buffer: ArrayBuffer, offs: number) {
     return str;
 }
 
-export function parse(resourceSystem: ResourceSystem, buffer: ArrayBuffer): STRG {
-    const view = new DataView(buffer);
+export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice): STRG {
+    const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) === 0x87654321);
     const version = view.getUint32(0x04);

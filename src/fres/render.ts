@@ -11,9 +11,10 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import { Progressable } from '../progress';
-import { RenderState, Program, RenderArena, RenderFlags, FrontFaceMode, CompareMode, CullMode, BufferCoalescer, coalesceBuffer, CoalescedBuffer } from '../render';
+import { RenderState, Program, RenderArena, RenderFlags, FrontFaceMode, CompareMode, CullMode, coalesceBuffer, CoalescedBuffer } from '../render';
 import { betoh } from '../endian';
 import { assert, fetch } from '../util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 type RenderFunc = (renderState: RenderState) => void;
 
@@ -145,7 +146,7 @@ export class Scene implements Viewer.Scene {
         });
     }
 
-    private translateFVTXBuffers(fvtx: BFRES.FVTX, vertexDatas: ArrayBuffer[]) {
+    private translateFVTXBuffers(fvtx: BFRES.FVTX, vertexDatas: ArrayBufferSlice[]) {
         for (let i = 0; i < fvtx.attribs.length; i++) {
             const attrib = fvtx.attribs[i];
             const location = ProgramGambit_UBER.attribLocations[attrib.name];
@@ -329,7 +330,7 @@ export class Scene implements Viewer.Scene {
         };
     }
 
-    private translateIndexBuffer( indexFormat: GX2IndexFormat, indexBufferData: ArrayBuffer): ArrayBuffer {
+    private translateIndexBuffer( indexFormat: GX2IndexFormat, indexBufferData: ArrayBufferSlice): ArrayBufferSlice {
         switch (indexFormat) {
         case GX2IndexFormat.U16_LE:
         case GX2IndexFormat.U32_LE:
@@ -341,7 +342,7 @@ export class Scene implements Viewer.Scene {
         }
     }
 
-    private translateFSHPBuffers(fshp: BFRES.FSHP, indexDatas: ArrayBuffer[]) {
+    private translateFSHPBuffers(fshp: BFRES.FSHP, indexDatas: ArrayBufferSlice[]) {
         for (const mesh of fshp.meshes) {
             assert(mesh.indexBufferData.stride === 0);
             const indexData = this.translateIndexBuffer(mesh.indexFormat, mesh.indexBufferData.data);
@@ -519,7 +520,7 @@ export class Scene implements Viewer.Scene {
         return glTexture;
     }
 
-    private translateModelBuffers(modelEntry: BFRES.ModelEntry, vertexDatas: ArrayBuffer[], indexDatas: ArrayBuffer[]) {
+    private translateModelBuffers(modelEntry: BFRES.ModelEntry, vertexDatas: ArrayBufferSlice[], indexDatas: ArrayBufferSlice[]) {
         // Translate vertex data.
         modelEntry.fmdl.fvtx.forEach((fvtx) => this.translateFVTXBuffers(fvtx, vertexDatas));
         modelEntry.fmdl.fshp.forEach((fshp) => this.translateFSHPBuffers(fshp, indexDatas));
@@ -529,8 +530,8 @@ export class Scene implements Viewer.Scene {
         this.glTextures = fres.textures.map((ftex) => this.translateTexture(gl, ftex));
 
         // Gather buffers.
-        const vertexDatas: ArrayBuffer[] = [];
-        const indexDatas: ArrayBuffer[] = [];
+        const vertexDatas: ArrayBufferSlice[] = [];
+        const indexDatas: ArrayBufferSlice[] = [];
         fres.models.forEach((modelEntry) => {
             this.translateModelBuffers(modelEntry, vertexDatas, indexDatas);
         });

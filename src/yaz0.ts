@@ -16,9 +16,10 @@
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
 import { assert, readString } from './util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
-export function decompress(srcBuffer: ArrayBuffer) {
-    const srcView = new DataView(srcBuffer);
+export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
+    const srcView = srcBuffer.createDataView();
     assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
 
     let uncompressedSize = srcView.getUint32(0x04, false);
@@ -55,7 +56,7 @@ export function decompress(srcBuffer: ArrayBuffer) {
             }
 
             if (uncompressedSize <= 0)
-                return dstBuffer.buffer;
+                return new ArrayBufferSlice(dstBuffer.buffer);
         }
     }
 }
