@@ -9,6 +9,7 @@ import { TXTR } from './txtr';
 import { ResourceSystem } from "./resource";
 import { assert, readString } from "../util";
 import { isLittleEndian } from '../endian';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 function align(n: number, multiple: number): number {
     const mask = (multiple - 1);
@@ -92,8 +93,8 @@ export const enum MaterialFlags {
     HAS_INDTX_REFL = 0x4000,
 }
 
-function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBuffer, offs: number): MaterialSet {
-    const view = new DataView(buffer);
+function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice, offs: number): MaterialSet {
+    const view = buffer.createDataView();
 
     const textureCount = view.getUint32(offs + 0x00);
     offs += 0x04;
@@ -415,11 +416,11 @@ interface SectionTables {
     dataSectionSizeTable: number[];
 }
 
-function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBuffer, materialSet: MaterialSet, sectionTables: SectionTables, sectionIndex: number): [Geometry, number] {
+function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice, materialSet: MaterialSet, sectionTables: SectionTables, sectionIndex: number): [Geometry, number] {
     const sectionOffsTable = sectionTables.dataSectionOffsTable;
     const sectionSizeTable = sectionTables.dataSectionSizeTable;
 
-    const view = new DataView(buffer);
+    const view = buffer.createDataView();
 
     const posSectionOffs = sectionOffsTable[sectionIndex++];
     const nrmSectionOffs = sectionOffsTable[sectionIndex++];
@@ -655,8 +656,8 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBuffer, mate
     return [geometry, sectionIndex];
 }
 
-export function parse(resourceSystem: ResourceSystem, buffer: ArrayBuffer): MREA {
-    const view = new DataView(buffer);
+export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice): MREA {
+    const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) === 0xDEADBEEF);
     const version = view.getUint32(0x04);

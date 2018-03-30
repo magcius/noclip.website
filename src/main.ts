@@ -12,6 +12,7 @@ import * as OOT3D from './oot3d/scenes';
 import * as FRES from './fres/scenes';
 import * as DKSIV from './dksiv/scenes';
 import * as MP1 from './metroid_prime/scenes';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 const sceneGroups = [
     ZWW.sceneGroup,
@@ -81,13 +82,15 @@ class DroppedFileSceneDesc implements SceneDesc {
         this.name = file.name;
     }
 
-    private _loadFileAsPromise(file: File): Progressable<ArrayBuffer> {
+    private _loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {
         const request = new FileReader();
         request.readAsArrayBuffer(file);
 
-        const p = new Promise<ArrayBuffer>((resolve, reject) => {
+        const p = new Promise<ArrayBufferSlice>((resolve, reject) => {
             request.onload = () => {
-                resolve(request.result);
+                const buffer: ArrayBuffer = request.result;
+                const slice = new ArrayBufferSlice(buffer);
+                resolve(slice);
             };
             request.onerror = () => {
                 reject();
@@ -97,11 +100,11 @@ class DroppedFileSceneDesc implements SceneDesc {
                     pr.setProgress(e.loaded / e.total);
             };
         });
-        const pr = new Progressable<ArrayBuffer>(p);
+        const pr = new Progressable<ArrayBufferSlice>(p);
         return pr;
     }
 
-    private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBuffer): MainScene {
+    private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBufferSlice): MainScene {
         let scene;
         if (file.name.endsWith('.bfres'))
             return FRES.createSceneFromFRESBuffer(gl, buffer);
@@ -114,7 +117,7 @@ class DroppedFileSceneDesc implements SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<MainScene> {
-        return this._loadFileAsPromise(this.file).then((result: ArrayBuffer) => {
+        return this._loadFileAsPromise(this.file).then((result: ArrayBufferSlice) => {
             return this.createSceneFromFile(gl, this.file, result);
         });
     }

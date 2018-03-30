@@ -1,11 +1,12 @@
 
 import { assert, readString } from 'util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 class VertexBufferSlices {
-    public posBuffer: ArrayBuffer;
-    public nrmBuffer: ArrayBuffer;
-    public colBuffer: ArrayBuffer;
-    public txcBuffer: ArrayBuffer;
+    public posBuffer: ArrayBufferSlice;
+    public nrmBuffer: ArrayBufferSlice;
+    public colBuffer: ArrayBufferSlice;
+    public txcBuffer: ArrayBufferSlice;
 }
 
 export class CMB {
@@ -16,7 +17,7 @@ export class CMB {
     public materials: Material[] = [];
     public sepds: Sepd[] = [];
     public meshs: Mesh[] = [];
-    public indexBuffer: ArrayBuffer;
+    public indexBuffer: ArrayBufferSlice;
 }
 
 export enum TextureFilter {
@@ -46,8 +47,8 @@ export class Material {
     public alphaTestEnable: boolean;
 }
 
-function readMatsChunk(cmb: CMB, buffer: ArrayBuffer) {
-    const view = new DataView(buffer);
+function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'mats');
     const count = view.getUint32(0x08, true);
@@ -243,11 +244,11 @@ function decodeTexture_ETC1_4x4_Alpha(dst: Uint8Array, a1: number, a2: number, d
     }
 }
 
-function decodeTexture_ETC1(texture: Texture, texData: ArrayBuffer, alpha: boolean) {
+function decodeTexture_ETC1(texture: Texture, texData: ArrayBufferSlice, alpha: boolean) {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     const stride = texture.width;
 
-    const src = new DataView(texData);
+    const src = texData.createDataView();
     let offs = 0;
     for (let yy = 0; yy < texture.height; yy += 8) {
         for (let xx = 0; xx < texture.width; xx += 8) {
@@ -283,7 +284,7 @@ function decodeTexture_ETC1(texture: Texture, texData: ArrayBuffer, alpha: boole
 
 type PixelDecode = (pixels: Uint8Array, dstOffs: number) => void;
 
-function decodeTexture_Tiled(texture: Texture, texData: ArrayBuffer, decoder: PixelDecode) {
+function decodeTexture_Tiled(texture: Texture, texData: ArrayBufferSlice, decoder: PixelDecode) {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     const stride = texture.width;
 
@@ -307,8 +308,8 @@ function decodeTexture_Tiled(texture: Texture, texData: ArrayBuffer, decoder: Pi
     return pixels;
 }
 
-function decodeTexture_RGBA5551(texture: Texture, texData: ArrayBuffer) {
-    const src = new DataView(texData);
+function decodeTexture_RGBA5551(texture: Texture, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
@@ -320,8 +321,8 @@ function decodeTexture_RGBA5551(texture: Texture, texData: ArrayBuffer) {
     });
 }
 
-function decodeTexture_RGB565(texture: Texture, texData: ArrayBuffer) {
-    const src = new DataView(texData);
+function decodeTexture_RGB565(texture: Texture, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
@@ -333,8 +334,8 @@ function decodeTexture_RGB565(texture: Texture, texData: ArrayBuffer) {
     });
 }
 
-function decodeTexture_A8(texture: Texture, texData: ArrayBuffer) {
-    const src = new DataView(texData);
+function decodeTexture_A8(texture: Texture, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const A = src.getUint8(srcOffs++);
@@ -345,8 +346,8 @@ function decodeTexture_A8(texture: Texture, texData: ArrayBuffer) {
     });
 }
 
-function decodeTexture_L8(texture: Texture, texData: ArrayBuffer) {
-    const src = new DataView(texData);
+function decodeTexture_L8(texture: Texture, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const L = src.getUint8(srcOffs++);
@@ -357,8 +358,8 @@ function decodeTexture_L8(texture: Texture, texData: ArrayBuffer) {
     });
 }
 
-function decodeTexture_LA8(texture: Texture, texData: ArrayBuffer) {
-    const src = new DataView(texData);
+function decodeTexture_LA8(texture: Texture, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
     let srcOffs = 0;
     return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
         const L = src.getUint8(srcOffs++);
@@ -370,7 +371,7 @@ function decodeTexture_LA8(texture: Texture, texData: ArrayBuffer) {
     });
 }
 
-function decodeTexture(texture: Texture, texData: ArrayBuffer) {
+function decodeTexture(texture: Texture, texData: ArrayBufferSlice) {
     switch (texture.format) {
     case TextureFormat.ETC1:
         return decodeTexture_ETC1(texture, texData, false);
@@ -391,8 +392,8 @@ function decodeTexture(texture: Texture, texData: ArrayBuffer) {
     }
 }
 
-function readTexChunk(cmb: CMB, buffer: ArrayBuffer, texData: ArrayBuffer): void {
-    const view = new DataView(buffer);
+function readTexChunk(cmb: CMB, buffer: ArrayBufferSlice, texData: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'tex ');
     const count = view.getUint32(0x08, true);
@@ -414,8 +415,8 @@ function readTexChunk(cmb: CMB, buffer: ArrayBuffer, texData: ArrayBuffer): void
     }
 }
 
-function readVatrChunk(cmb: CMB, buffer: ArrayBuffer): void {
-    const view = new DataView(buffer);
+function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'vatr');
 
@@ -443,8 +444,8 @@ export class Mesh {
     public matsIdx: number;
 }
 
-function readMshsChunk(cmb: CMB, buffer: ArrayBuffer): void {
-    const view = new DataView(buffer);
+function readMshsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'mshs');
     const count = view.getUint32(0x08, true);
@@ -474,8 +475,8 @@ export class Prm {
     public offset: number;
 }
 
-function readPrmChunk(cmb: CMB, buffer: ArrayBuffer): Prm {
-    const view = new DataView(buffer);
+function readPrmChunk(cmb: CMB, buffer: ArrayBufferSlice): Prm {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'prm ');
 
@@ -487,8 +488,8 @@ function readPrmChunk(cmb: CMB, buffer: ArrayBuffer): Prm {
     return prm;
 }
 
-function readPrmsChunk(cmb: CMB, buffer: ArrayBuffer): Prm {
-    const view = new DataView(buffer);
+function readPrmsChunk(cmb: CMB, buffer: ArrayBufferSlice): Prm {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'prms');
 
@@ -516,8 +517,8 @@ export class Sepd {
     public txcType: DataType;
 }
 
-function readSepdChunk(cmb: CMB, buffer: ArrayBuffer): Sepd {
-    const view = new DataView(buffer);
+function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'sepd');
     const count = view.getUint16(0x08, true);
@@ -550,8 +551,8 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBuffer): Sepd {
     return sepd;
 }
 
-function readShpChunk(cmb: CMB, buffer: ArrayBuffer): void {
-    const view = new DataView(buffer);
+function readShpChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'shp ');
     const count = view.getUint32(0x08, true);
@@ -565,8 +566,8 @@ function readShpChunk(cmb: CMB, buffer: ArrayBuffer): void {
     }
 }
 
-function readSklmChunk(cmb: CMB, buffer: ArrayBuffer): void {
-    const view = new DataView(buffer);
+function readSklmChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'sklm');
     const mshsChunkOffs = view.getUint32(0x08, true);
@@ -576,8 +577,8 @@ function readSklmChunk(cmb: CMB, buffer: ArrayBuffer): void {
     readShpChunk(cmb, buffer.slice(shpChunkOffs));
 }
 
-export function parse(buffer: ArrayBuffer): CMB {
-    const view = new DataView(buffer);
+export function parse(buffer: ArrayBufferSlice): CMB {
+    const view = buffer.createDataView();
     const cmb = new CMB();
 
     assert(readString(buffer, 0x00, 0x04) === 'cmb ');

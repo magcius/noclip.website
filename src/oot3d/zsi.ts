@@ -2,6 +2,7 @@
 import * as CMB from 'cmb';
 
 import { assert, readString } from 'util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export class ZSI {
     mesh: Mesh;
@@ -23,17 +24,18 @@ export class Mesh {
     textures: CMB.Texture[];
 }
 
-function readRooms(view: DataView, nRooms: number, offs: number): string[] {
+function readRooms(buffer: ArrayBufferSlice, nRooms: number, offs: number): string[] {
     const rooms = [];
     for (let i = 0; i < nRooms; i++) {
-        rooms.push(readString(view.buffer, offs, 0x44));
+        rooms.push(readString(buffer, offs, 0x44));
         offs += 0x44;
     }
     return rooms;
 }
 
-function readMesh(view: DataView, offs: number): Mesh {
+function readMesh(buffer: ArrayBufferSlice, offs: number): Mesh {
     const mesh = new Mesh();
+    const view = buffer.createDataView();
 
     const hdr = view.getUint32(offs);
     const type = (hdr >> 24);
@@ -47,9 +49,9 @@ function readMesh(view: DataView, offs: number): Mesh {
     const transparentAddr = view.getUint32(entriesAddr + 0x0C, true);
 
     if (opaqueAddr !== 0)
-        mesh.opaque = CMB.parse(view.buffer.slice(opaqueAddr));
+        mesh.opaque = CMB.parse(buffer.slice(opaqueAddr));
     if (transparentAddr !== 0)
-        mesh.transparent = CMB.parse(view.buffer.slice(transparentAddr));
+        mesh.transparent = CMB.parse(buffer.slice(transparentAddr));
 
     mesh.textures = [];
     if (mesh.opaque)
@@ -64,7 +66,8 @@ interface Collision {
     waterboxes: Uint16Array;
 }
 
-function readCollision(view: DataView, offs: number): Collision {
+function readCollision(buffer: ArrayBufferSlice, offs: number): Collision {
+    const view = buffer.createDataView();
     const waterboxTableCount = view.getUint16(offs + 0x14, true);
     const waterboxTableOffs = view.getUint32(offs + 0x28, true);
     const waterboxes = new Uint16Array(waterboxTableCount * 3 * 4);
@@ -94,8 +97,8 @@ function readCollision(view: DataView, offs: number): Collision {
 }
 
 // ZSI headers are a slight modification of the original Z64 headers.
-function readHeaders(buffer: ArrayBuffer): ZSI {
-    const view = new DataView(buffer);
+function readHeaders(buffer: ArrayBufferSlice): ZSI {
+    const view = buffer.createDataView();
 
     let offs = 0;
     const zsi = new ZSI();
@@ -113,13 +116,13 @@ function readHeaders(buffer: ArrayBuffer): ZSI {
         switch (cmdType) {
         case HeaderCommands.Rooms:
             const nRooms = (cmd1 >> 16) & 0xFF;
-            zsi.rooms = readRooms(view, nRooms, cmd2);
+            zsi.rooms = readRooms(buffer, nRooms, cmd2);
             break;
         case HeaderCommands.Mesh:
-            zsi.mesh = readMesh(view, cmd2);
+            zsi.mesh = readMesh(buffer, cmd2);
             break;
         case HeaderCommands.Collision:
-            zsi.collision = readCollision(view, cmd2);
+            zsi.collision = readCollision(buffer, cmd2);
             break;
         }
     }
@@ -127,7 +130,7 @@ function readHeaders(buffer: ArrayBuffer): ZSI {
     return zsi;
 }
 
-export function parse(buffer:ArrayBuffer): ZSI {
+export function parse(buffer:ArrayBufferSlice): ZSI {
     assert(readString(buffer, 0x00, 0x04) === 'ZSI\x01');
     const name = readString(buffer, 0x04, 0x0C);
 

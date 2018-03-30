@@ -2,6 +2,7 @@
 // Implements Retro's PAK format as seen in Metroid Prime 1.
 
 import { assert, readString } from "../util";
+import ArrayBufferSlice from "ArrayBufferSlice";
 
 export interface FileResource {
     name: string;
@@ -11,7 +12,7 @@ export interface FileResource {
     fileOffset: number;
     isCompressed: boolean;
     decompressedSize: number;
-    buffer: ArrayBuffer;
+    buffer: ArrayBufferSlice;
 }
 
 export interface PAK {
@@ -19,8 +20,8 @@ export interface PAK {
     resourceTable: Map<string, FileResource>;
 }
 
-export function parse(buffer: ArrayBuffer): PAK {
-    const view = new DataView(buffer);
+export function parse(buffer: ArrayBufferSlice): PAK {
+    const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) === 0x00030005);
 

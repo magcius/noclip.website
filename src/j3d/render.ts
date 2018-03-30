@@ -534,7 +534,7 @@ export class Scene implements Viewer.Scene {
 
         this.bufferCoalescer = new BufferCoalescer(gl,
             bmd.shp1.shapes.map((shape) => shape.packedData),
-            bmd.shp1.shapes.map((shape) => shape.indexData.buffer)
+            bmd.shp1.shapes.map((shape) => shape.indexData)
         );
 
         this.shapeCommands = bmd.shp1.shapes.map((shape, i) => {

@@ -5,6 +5,7 @@ import { ResourceSystem } from './resource';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Texture from 'gx/gx_texture';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 const txtrFormatRemap = [
     GX.TexFormat.I4,     // 0x00
@@ -25,14 +26,14 @@ export interface TXTR {
     width: number;
     height: number;
     mipCount: number;
-    data: ArrayBuffer;
+    data: ArrayBufferSlice;
     dataStart: number;
     paletteFormat: GX.TexPalette;
-    paletteData: ArrayBuffer;
+    paletteData: ArrayBufferSlice;
 }
 
-export function parse(resourceSystem: ResourceSystem, buffer: ArrayBuffer): TXTR {
-    const view = new DataView(buffer);
+export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice): TXTR {
+    const view = buffer.createDataView();
 
     const txtrFormat = view.getUint32(0x00);
     const format: GX.TexFormat = txtrFormatRemap[txtrFormat];
@@ -43,7 +44,7 @@ export function parse(resourceSystem: ResourceSystem, buffer: ArrayBuffer): TXTR
     let offs = 0x0C;
 
     let paletteFormat: GX.TexPalette = 0;
-    let paletteData: ArrayBuffer = null;
+    let paletteData: ArrayBufferSlice = null;
 
     switch (format) {
     case GX.TexFormat.C4:

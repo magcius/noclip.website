@@ -8,9 +8,10 @@ import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData
 import { betoh } from 'endian';
 import { assert, readString } from 'util';
 import { mat2d, mat4, mat3 as matrix3, quat } from 'gl-matrix';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
-function readStringTable(buffer: ArrayBuffer, offs: number): string[] {
-    const view = new DataView(buffer, offs);
+function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
+    const view = buffer.createDataView(offs);
     const stringCount = view.getUint16(0x00);
 
     let tableIdx = 0x06;
@@ -63,8 +64,8 @@ export interface INF1 {
     sceneGraph: HierarchyNode;
 }
 
-function readINF1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
-    const view = new DataView(buffer, chunkStart, chunkSize);
+function readINF1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
+    const view = buffer.createDataView(chunkStart, chunkSize);
     // unk
     const packetCount = view.getUint32(0x0C);
     const vertexCount = view.getUint32(0x10);
@@ -114,7 +115,7 @@ export interface VertexArray {
     compCnt: GX.CompCnt;
     compCount: number;
     scale: number;
-    buffer: ArrayBuffer;
+    buffer: ArrayBufferSlice;
     dataOffs: number;
     dataSize: number;
 }
@@ -123,8 +124,8 @@ export interface VTX1 {
     vertexArrays: Map<GX.VertexAttribute, VertexArray>;
 }
 
-function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
-    const view = new DataView(buffer, chunkStart, chunkSize);
+function readVTX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
+    const view = buffer.createDataView(chunkStart, chunkSize);
     const formatOffs = view.getUint32(0x08);
     const dataOffsLookupTable = 0x0C;
 
@@ -176,7 +177,7 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
         const dataSize: number = dataEnd - dataStart;
         const compSize = getComponentSize(compType);
         const compCount = getNumComponents(vtxAttrib, compCnt);
-        const vtxDataBuffer = betoh(buffer, compSize, dataOffs, dataSize);
+        const vtxDataBuffer = betoh(buffer.subarray(dataOffs, dataSize), compSize);
         const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compCnt, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }
@@ -205,8 +206,8 @@ export interface DRW1 {
     weightedJoints: WeightedJoint[];
 }
 
-function readDRW1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
-    const view = new DataView(buffer, chunkStart, chunkSize);
+function readDRW1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
+    const view = buffer.createDataView(chunkStart, chunkSize);
     const weightedJointCount = view.getUint16(0x08);
     const isWeightedTableOffs = view.getUint32(0x0C);
     const jointIndexTableOffs = view.getUint32(0x10);
@@ -231,8 +232,8 @@ export interface JNT1 {
     bones: Bone[];
 }
 
-function readJNT1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
-    const view = new DataView(buffer, chunkStart, chunkSize);
+function readJNT1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
+    const view = buffer.createDataView(chunkStart, chunkSize);
 
     const boneDataCount = view.getUint16(0x08);
     assert(view.getUint16(0x0A) === 0xFFFF);
@@ -290,9 +291,9 @@ interface Packet {
 }
 
 export interface Shape {
-    indexData: Uint16Array;
+    indexData: ArrayBufferSlice;
     // The vertex data. Converted to a modern-esque buffer per-shape.
-    packedData: ArrayBuffer;
+    packedData: ArrayBufferSlice;
     // The size of an individual vertex.
     packedVertexSize: number;
     packedVertexAttributes: PackedVertexAttribute[];
@@ -319,8 +320,8 @@ function align(n: number, multiple: number): number {
     return (n + mask) & ~mask;
 }
 
-function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
-    const view = new DataView(buffer, chunkStart, chunkSize);
+function readSHP1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
+    const view = buffer.createDataView(chunkStart, chunkSize);
     const shapeCount = view.getUint16(0x08);
     const shapeTableOffs = view.getUint32(0x0C);
     const attribTableOffs = view.getUint32(0x18);
@@ -399,10 +400,11 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
             const packetMatrixTableOffs = chunkStart + matrixTableOffs + matrixFirstIndex * 0x02;
             const packetMatrixTableSize = matrixCount * 0x02;
-            const weightedJointTable = new Uint16Array(betoh(buffer, 2, packetMatrixTableOffs, packetMatrixTableSize));
+            const weightedJointTable = betoh(buffer.subarray(packetMatrixTableOffs, packetMatrixTableSize), 2).createTypedArray(Uint16Array);
 
             const srcOffs = chunkStart + packetStart;
-            const loadedData = vtxLoader.runVertices(vtxArrays, buffer, srcOffs);
+            const subBuffer = buffer.slice(srcOffs);
+            const loadedData = vtxLoader.runVertices(vtxArrays, subBuffer);
             loadedDatas.push(loadedData);
 
             const firstTriangle = totalTriangleCount;
@@ -414,8 +416,8 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
         // Coalesce shape data.
         const loadedData = coalesceLoadedDatas(loadedDatas);
-        const indexData = loadedData.indexData;
-        const packedData = loadedData.packedVertexData.buffer;
+        const indexData = new ArrayBufferSlice(loadedData.indexData.buffer);
+        const packedData = new ArrayBufferSlice(loadedData.packedVertexData.buffer);
 
         // Now we should have a complete shape. Onto the next!
         shapes.push({ indexData, packedData, packedVertexSize, packedVertexAttributes, packets });
@@ -488,8 +490,8 @@ function readColorShort(view: DataView, srcOffs: number): GX_Material.Color {
     return new GX_Material.Color(r, g, b, a);
 }
 
-function readMAT3Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
-    const view = new DataView(buffer, chunkStart, chunkSize);
+function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
+    const view = buffer.createDataView(chunkStart, chunkSize);
     const materialCount = view.getUint16(0x08);
 
     const remapTableOffs = view.getUint32(0x10);
@@ -787,7 +789,7 @@ export interface TEX1_Texture {
     minFilter: GX.TexFilter;
     magFilter: GX.TexFilter;
     mipCount: number;
-    data: ArrayBuffer;
+    data: ArrayBufferSlice;
     dataStart: number;
 }
 
@@ -796,8 +798,8 @@ export interface TEX1 {
     textures: TEX1_Texture[];
 }
 
-function readTEX1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
-    const view = new DataView(buffer, chunkStart, chunkSize);
+function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
+    const view = buffer.createDataView(chunkStart, chunkSize);
     const textureCount = view.getUint16(0x08);
     const textureHeaderOffs = view.getUint32(0x0C);
     const nameTableOffs = view.getUint32(0x10);
@@ -848,10 +850,10 @@ export class BMD {
     public mat3: MAT3;
     public tex1: TEX1;
 
-    static parse(buffer: ArrayBuffer) {
+    static parse(buffer: ArrayBufferSlice) {
         const bmd = new BMD();
     
-        const view = new DataView(buffer);
+        const view = buffer.createDataView();
         const magic = readString(buffer, 0, 8);
         assert(magic === 'J3D2bmd3' || magic === 'J3D2bdl4');
     
@@ -859,7 +861,7 @@ export class BMD {
         const numChunks = view.getUint32(0x0C);
         let offs = 0x20;
 
-        type ParseFunc = (bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) => void;
+        type ParseFunc = (bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) => void;
         const parseFuncs: { [name: string]: ParseFunc } = {
             INF1: readINF1Chunk,
             VTX1: readVTX1Chunk,
@@ -939,8 +941,8 @@ export interface TTK1 {
     materialAnimationEntries: MaterialAnimationEntry[];
 }
 
-function readTTK1Chunk(btk: BTK, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) {
-    const view = new DataView(buffer, chunkStart, chunkSize);
+function readTTK1Chunk(btk: BTK, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
+    const view = buffer.createDataView(chunkStart, chunkSize);
     const loopMode: LoopMode = view.getUint8(0x08);
     const rotationDecimal = view.getUint8(0x09);
     const duration = view.getUint16(0x0A);
@@ -957,9 +959,9 @@ function readTTK1Chunk(btk: BTK, buffer: ArrayBuffer, chunkStart: number, chunkS
     const rTableOffs = chunkStart + view.getUint32(0x2C);
     const tTableOffs = chunkStart + view.getUint32(0x30);
 
-    const sTable = new Float32Array(betoh(buffer, 4, sTableOffs, sCount * 4));
-    const rTable = new Int16Array(betoh(buffer, 2, rTableOffs, rCount * 2));
-    const tTable = new Float32Array(betoh(buffer, 4, tTableOffs, tCount * 4));
+    const sTable = betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
+    const rTable = betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array);
+    const tTable = betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
 
     const rotationScale = Math.pow(2, rotationDecimal);
     const materialNameTable = readStringTable(buffer, chunkStart + materialNameTableOffs);
@@ -1099,10 +1101,10 @@ export class BTK {
         return true;
     }
 
-    static parse(buffer: ArrayBuffer) {
+    static parse(buffer: ArrayBufferSlice) {
         const btk = new BTK();
 
-        const view = new DataView(buffer);
+        const view = buffer.createDataView();
         const magic = readString(buffer, 0, 8);
         assert(magic === 'J3D1btk1');
 
@@ -1110,7 +1112,7 @@ export class BTK {
         const numChunks = view.getUint32(0x0C);
         let offs = 0x20;
 
-        type ParseFunc = (btk: BTK, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) => void;
+        type ParseFunc = (btk: BTK, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) => void;
         const parseFuncs: { [name: string]: ParseFunc } = {
             TTK1: readTTK1Chunk,
         };
@@ -1138,10 +1140,10 @@ export class BMT {
     public mat3: MAT3;
     public tex1: TEX1;
 
-    static parse(buffer: ArrayBuffer) {
+    static parse(buffer: ArrayBufferSlice) {
         const bmt = new BMT();
 
-        const view = new DataView(buffer);
+        const view = buffer.createDataView();
         const magic = readString(buffer, 0, 8);
         assert(magic === 'J3D2bmt3');
     
@@ -1150,7 +1152,7 @@ export class BMT {
         let offs = 0x20;
     
         // XXX(jstpierre): Type system abuse.
-        type ParseFunc = (bmt: any, buffer: ArrayBuffer, chunkStart: number, chunkSize: number) => void;
+        type ParseFunc = (bmt: any, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) => void;
         const parseFuncs: { [name: string]: ParseFunc } = {
             MAT3: readMAT3Chunk,
             TEX1: readTEX1Chunk,

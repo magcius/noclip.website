@@ -2,20 +2,21 @@
 // Nintendo SARC archive format.
 
 import { assert, readString } from 'util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export interface SARCFile {
     name: string;
     offset: number;
-    buffer: ArrayBuffer;
+    buffer: ArrayBufferSlice;
 }
 
 export interface SARC {
-    buffer: ArrayBuffer;
+    buffer: ArrayBufferSlice;
     files: SARCFile[];
 }
 
-export function parse(buffer: ArrayBuffer) {
-    const view = new DataView(buffer);
+export function parse(buffer: ArrayBufferSlice) {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'SARC');
 

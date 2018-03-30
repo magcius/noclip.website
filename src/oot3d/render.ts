@@ -7,6 +7,7 @@ import * as Viewer from '../viewer';
 import { Progressable } from '../progress';
 import { BlendMode, CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass } from '../render';
 import { fetch } from '../util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 class OoT3D_Program extends Program {
     public posScaleLocation: WebGLUniformLocation;
@@ -228,19 +229,19 @@ class Scene implements Viewer.Scene {
 
         const posBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.posBuffer, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.posBuffer.castToBuffer(), gl.STATIC_DRAW);
 
         const colBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.colBuffer, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.colBuffer.castToBuffer(), gl.STATIC_DRAW);
 
         const nrmBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, nrmBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.nrmBuffer, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.nrmBuffer.castToBuffer(), gl.STATIC_DRAW);
 
         const txcBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, txcBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.txcBuffer, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.txcBuffer.castToBuffer(), gl.STATIC_DRAW);
 
         const textures: WebGLTexture[] = cmb.textures.map((texture) => {
             return this.translateTexture(gl, texture);
@@ -248,7 +249,7 @@ class Scene implements Viewer.Scene {
 
         const idxBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer, gl.STATIC_DRAW);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer.castToBuffer(), gl.STATIC_DRAW);
 
         const cmbContext: any = {
             posBuffer,
@@ -336,12 +337,12 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch(this.path).then((result: ArrayBuffer) => {
+        return fetch(this.path).then((result: ArrayBufferSlice) => {
             return this._createSceneFromData(gl, result);
         });
     }
 
-    private _createSceneFromData(gl: WebGL2RenderingContext, result: ArrayBuffer): Progressable<Viewer.Scene> {
+    private _createSceneFromData(gl: WebGL2RenderingContext, result: ArrayBufferSlice): Progressable<Viewer.Scene> {
         const zsi = ZSI.parse(result);
         if (zsi.mesh) {
             return new Progressable(Promise.resolve(new Scene(gl, zsi)));

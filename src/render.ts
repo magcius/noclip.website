@@ -1,6 +1,7 @@
 
 import { mat4 } from 'gl-matrix';
 import { assert, align } from './util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export const enum RenderPass {
     CLEAR,
@@ -429,7 +430,7 @@ export interface CoalescedBuffers {
     indexBuffer: CoalescedBuffer;
 }
 
-export function coalesceBuffer(gl: WebGL2RenderingContext, target: number, datas: ArrayBuffer[]): CoalescedBuffer[] {
+export function coalesceBuffer(gl: WebGL2RenderingContext, target: number, datas: ArrayBufferSlice[]): CoalescedBuffer[] {
     let dataLength = 0;
     for (const data of datas) {
         dataLength += data.byteLength;
@@ -446,7 +447,7 @@ export function coalesceBuffer(gl: WebGL2RenderingContext, target: number, datas
     for (const data of datas) {
         const size = data.byteLength;
         coalescedBuffers.push({ buffer, offset });
-        gl.bufferSubData(target, offset, data);
+        gl.bufferSubData(target, offset, data.createTypedArray(Uint8Array));
         offset += size;
         offset = align(offset, 4);
     }
@@ -459,7 +460,7 @@ export class BufferCoalescer {
     private vertexBuffer: WebGLBuffer;
     private indexBuffer: WebGLBuffer;
 
-    constructor(gl: WebGL2RenderingContext, vertexDatas: ArrayBuffer[], indexDatas: ArrayBuffer[]) {
+    constructor(gl: WebGL2RenderingContext, vertexDatas: ArrayBufferSlice[], indexDatas: ArrayBufferSlice[]) {
         assert(vertexDatas.length === indexDatas.length);
         const vertexCoalescedBuffers = coalesceBuffer(gl, gl.ARRAY_BUFFER, vertexDatas);
         const indexCoalescedBuffers = coalesceBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, indexDatas);

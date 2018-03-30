@@ -1,5 +1,6 @@
 
 import { assert, readString } from 'util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 interface MaterialAnimation {
     property: 'scale' | 'rotation' | 'x' | 'y';
@@ -21,8 +22,8 @@ export interface CRG0 {
     levels: Level[];
 }
 
-export function parse(buffer: ArrayBuffer): CRG0 {
-    const view = new DataView(buffer);
+export function parse(buffer: ArrayBufferSlice): CRG0 {
+    const view = buffer.createDataView();
 
     assert(readString(buffer, 0, 0x04) === 'CRG0');
 
@@ -55,19 +56,19 @@ export function parse(buffer: ArrayBuffer): CRG0 {
             levelTableIdx += 0x04;
             const scaleOffs = view.getUint32(levelTableIdx + 0x00, false);
             const scaleCount = view.getUint32(levelTableIdx + 0x04, false);
-            const scaleValues = new Float32Array(buffer, scaleOffs, scaleCount);
+            const scaleValues = buffer.createTypedArray(Float32Array, scaleOffs, scaleCount);
             levelTableIdx += 0x08;
             const rotationOffs = view.getUint32(levelTableIdx + 0x00, false);
             const rotationCount = view.getUint32(levelTableIdx + 0x04, false);
-            const rotationValues = new Float32Array(buffer, rotationOffs, rotationCount);
+            const rotationValues = buffer.createTypedArray(Float32Array, rotationOffs, rotationCount);
             levelTableIdx += 0x08;
             const translationXOffs = view.getUint32(levelTableIdx + 0x00, false);
             const translationXCount = view.getUint32(levelTableIdx + 0x04, false);
-            const translationXValues = new Float32Array(buffer, translationXOffs, translationXCount);
+            const translationXValues = buffer.createTypedArray(Float32Array, translationXOffs, translationXCount);
             levelTableIdx += 0x08;
             const translationYOffs = view.getUint32(levelTableIdx + 0x00, false);
             const translationYCount = view.getUint32(levelTableIdx + 0x04, false);
-            const translationYValues = new Float32Array(buffer, translationYOffs, translationYCount);
+            const translationYValues = buffer.createTypedArray(Float32Array, translationYOffs, translationYCount);
             levelTableIdx += 0x08;
 
             const animations: MaterialAnimation[] = [

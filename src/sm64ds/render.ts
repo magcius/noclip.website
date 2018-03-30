@@ -11,6 +11,7 @@ import * as Viewer from '../viewer';
 import { CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass, BlendMode } from '../render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 class NITRO_Program extends Program {
     public localMatrixLocation: WebGLUniformLocation;
@@ -316,14 +317,14 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch('data/sm64ds/sm64ds.crg0').then((result: ArrayBuffer) => {
+        return fetch('data/sm64ds/sm64ds.crg0').then((result: ArrayBufferSlice) => {
             const crg0 = CRG0.parse(result);
             return this._createSceneFromCRG0(gl, crg0);
         });
     }
 
     private _createBmdScene(gl: WebGL2RenderingContext, filename: string, localScale: number, level: CRG0.Level, isSkybox: boolean): PromiseLike<Scene> {
-        return fetch(`data/sm64ds/${filename}`).then((result: ArrayBuffer) => {
+        return fetch(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
             const scene = new Scene(gl, bmd, localScale, level);

@@ -8,6 +8,7 @@ import * as Viewer from '../viewer';
 import { fetch, assert } from '../util';
 import { Progressable } from '../progress';
 import { RenderState } from '../render';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 // Files are too big for GitHub.
 function findPakBase() {
@@ -54,7 +55,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchPak(path: string): Progressable<PAK.PAK> {
-        return fetch(path).then((buffer: ArrayBuffer) => {
+        return fetch(path).then((buffer: ArrayBufferSlice) => {
             return PAK.parse(buffer);
         });
     }

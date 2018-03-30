@@ -2,6 +2,7 @@
 // Read DS Geometry Engine commands.
 
 import { bgr5 as _bgr5 } from './nitro_tex';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 // tslint:disable:variable-name
 
@@ -334,10 +335,10 @@ class ContextInternal {
     public vtxs: Vertex[];
     public packets: Packet[];
 
-    constructor(buffer: ArrayBuffer, baseCtx: Context) {
+    constructor(buffer: ArrayBufferSlice, baseCtx: Context) {
         this.alpha = baseCtx.alpha;
         this.s_color = baseCtx.color;
-        this.view = new DataView(buffer);
+        this.view = buffer.createDataView();
         this.s_texCoord = { s: 0, t: 0 };
         this.packets = [];
     }
@@ -351,7 +352,7 @@ class ContextInternal {
     }
 }
 
-export function readCmds(buffer: ArrayBuffer, baseCtx: Context) {
+export function readCmds(buffer: ArrayBufferSlice, baseCtx: Context) {
     const ctx = new ContextInternal(buffer, baseCtx);
 
     while (ctx.offs < buffer.byteLength) {

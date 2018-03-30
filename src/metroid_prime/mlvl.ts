@@ -3,6 +3,7 @@
 
 import { ResourceSystem } from "./resource";
 import { assert, readString } from "../util";
+import ArrayBufferSlice from "ArrayBufferSlice";
 
 interface Area {
     areaSTRGID: string;
@@ -13,8 +14,8 @@ export interface MLVL {
     areaTable: Area[];
 }
 
-export function parse(resourceSystem: ResourceSystem, buffer: ArrayBuffer): MLVL {
-    const view = new DataView(buffer);
+export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice): MLVL {
+    const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) == 0xDEAFBABE);
     const version = view.getUint32(0x04);

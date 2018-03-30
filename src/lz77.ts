@@ -1,4 +1,6 @@
 
+import ArrayBufferSlice from "ArrayBufferSlice";
+
 // Nintendo DS LZ77 format.
 
 // LZ10:
@@ -46,7 +48,7 @@ export function decompressLZ10(srcView: DataView) {
             }
 
             if (uncompressedSize <= 0)
-                return dstBuffer.buffer;
+                return new ArrayBufferSlice(dstBuffer.buffer);
         }
     }
 }
@@ -114,13 +116,13 @@ export function decompressLZ11(srcView: DataView) {
             }
 
             if (uncompressedSize <= 0)
-                return dstBuffer.buffer;
+                return new ArrayBufferSlice(dstBuffer.buffer);
         }
     }
 }
 
-export function decompress(srcBuffer: ArrayBuffer) {
-    const srcView = new DataView(srcBuffer);
+export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
+    const srcView = srcBuffer.createDataView();
 
     const magic = srcView.getUint8(0x00);
     if (magic === 0x10)

@@ -1,15 +1,18 @@
 
 import { Progressable } from './progress';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
-export function fetch(path: string): Progressable<ArrayBuffer> {
+export function fetch(path: string): Progressable<ArrayBufferSlice> {
     const request = new XMLHttpRequest();
     request.open("GET", path, true);
     request.responseType = "arraybuffer";
     request.send();
 
-    const p = new Promise<ArrayBuffer>((resolve, reject) => {
+    const p = new Promise<ArrayBufferSlice>((resolve, reject) => {
         request.onload = () => {
-            resolve(request.response);
+            const buffer: ArrayBuffer = request.response;
+            const slice = new ArrayBufferSlice(buffer);
+            resolve(slice);
         };
         request.onerror = () => {
             reject();
@@ -19,7 +22,7 @@ export function fetch(path: string): Progressable<ArrayBuffer> {
                 pr.setProgress(e.loaded / e.total);
         };
     });
-    const pr = new Progressable<ArrayBuffer>(p);
+    const pr = new Progressable<ArrayBufferSlice>(p);
     return pr;
 }
 
@@ -27,8 +30,8 @@ export function assert(b: boolean) {
     if (!b) throw new Error("Assert fail");
 }
 
-export function readString(buffer: ArrayBuffer, offs: number, length: number = -1, nulTerminated: boolean = true): string {
-    const buf = new Uint8Array(buffer, offs);
+export function readString(buffer: ArrayBufferSlice, offs: number, length: number = -1, nulTerminated: boolean = true): string {
+    const buf = buffer.createTypedArray(Uint8Array, offs);
     let S = '';
     let i = 0;
     while (true) {

@@ -9,6 +9,7 @@ import * as Viewer from '../viewer';
 import { RenderState } from '../render';
 import { Progressable } from '../progress';
 import { fetch, readString } from '../util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
@@ -32,12 +33,12 @@ class MultiScene implements Viewer.MainScene {
     }
 }
 
-export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer, isSkybox: boolean = false) {
+export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false) {
     const fres = BFRES.parse(buffer);
     return new MultiScene([new Scene(gl, fres, isSkybox)]);
 }
 
-export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBuffer, isSkybox: boolean = false) {
+export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false) {
     if (readString(buffer, 0, 4) === 'Yaz0')
         buffer = Yaz0.decompress(buffer);
 
@@ -67,7 +68,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     private _createSceneFromPath(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): Progressable<Scene> {
-        return fetch(path).then((result: ArrayBuffer) => {
+        return fetch(path).then((result: ArrayBufferSlice) => {
             return createSceneFromSARCBuffer(gl, result, isSkybox);
         });
     }

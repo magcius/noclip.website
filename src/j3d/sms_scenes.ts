@@ -7,6 +7,7 @@ import { MultiScene, createScene } from './scenes';
 import { Scene, ColorOverride } from './render';
 import { Progressable } from '../progress';
 import { fetch } from '../util';
+import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export class SunshineClearScene implements Viewer.Scene {
     public textures = [];
@@ -45,7 +46,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch(this.path).then((result: ArrayBuffer) => {
+        return fetch(this.path).then((result: ArrayBufferSlice) => {
             const rarc = RARC.parse(Yaz0.decompress(result));
 
             // For those curious, the "actual" way the engine loads files is done through
