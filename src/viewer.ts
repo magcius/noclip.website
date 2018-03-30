@@ -3,7 +3,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { RenderState, RenderFlags, Viewport, RenderPass } from './render';
+import { RenderState, RenderFlags, RenderPass, RenderTarget } from './render';
 
 import Progressable from 'Progressable';
 
@@ -286,18 +286,19 @@ export class Viewer {
     public cameraController: CameraController;
 
     public renderState: RenderState;
+    public onscreenRenderTarget: RenderTarget;
     public scene: MainScene;
 
-    constructor(canvas: HTMLCanvasElement) {
+    constructor(public canvas: HTMLCanvasElement) {
         const gl = canvas.getContext("webgl2", { alpha: false });
-        const viewport = { canvas, gl };
+        this.renderState = new RenderState(gl);
 
-        this.renderState = new RenderState(viewport);
-
-        this.inputManager = new InputManager(this.renderState.viewport.canvas);
+        this.inputManager = new InputManager(this.canvas);
 
         this.camera = mat4.create();
         this.cameraController = null;
+
+        this.onscreenRenderTarget = { width: 0, height: 0, framebuffer: null };
     }
 
     public reset() {
@@ -331,10 +332,6 @@ export class Viewer {
         // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
     }
 
-    public checkResize() {
-        this.renderState.checkResize();
-    }
-
     public setScene(scene: MainScene) {
         const gl = this.renderState.gl;
 
@@ -361,14 +358,18 @@ export class Viewer {
 
     public start() {
         const camera = this.camera;
-        const canvas = this.renderState.viewport.canvas;
+        const canvas = this.canvas;
 
         let t = 0;
         const update = (nt: number) => {
             const dt = nt - t;
             t = nt;
 
-            this.checkResize();
+            this.renderState.reset();
+
+            this.onscreenRenderTarget.width = this.canvas.width;
+            this.onscreenRenderTarget.height = this.canvas.height;
+            this.renderState.setRenderTarget(this.onscreenRenderTarget);
 
             if (this.cameraController) {
                 this.cameraController.update(camera, this.inputManager, dt);

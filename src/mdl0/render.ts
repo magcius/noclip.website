@@ -93,7 +93,7 @@ class FancyGrid {
     }
 
     public render(state: RenderState) {
-        const gl = state.viewport.gl;
+        const gl = state.gl;
 
         state.useProgram(this.program);
         state.bindModelView();
@@ -195,7 +195,7 @@ class Scene implements Viewer.MainScene {
     }
 
     public render(state: RenderState) {
-        const gl = state.viewport.gl;
+        const gl = state.gl;
 
         state.useProgram(this.program);
         state.bindModelView();

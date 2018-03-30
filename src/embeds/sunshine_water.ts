@@ -233,7 +233,7 @@ class PlaneShape {
     }
 
     public render(state: RenderState) {
-        const gl = state.viewport.gl;
+        const gl = state.gl;
 
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
 

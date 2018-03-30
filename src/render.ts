@@ -143,19 +143,19 @@ RenderFlags.default.depthWrite = true;
 RenderFlags.default.depthFunc = CompareMode.LEQUAL;
 RenderFlags.default.frontFace = FrontFaceMode.CCW;
 
-export interface Viewport {
-    canvas: HTMLCanvasElement;
-    gl: WebGL2RenderingContext;
+export interface RenderTarget {
+    width: number;
+    height: number;
+    framebuffer: WebGLFramebuffer;
 }
 
 export class RenderState {
-    public gl: WebGL2RenderingContext;
-    public viewport: Viewport;
     private programCache: ProgramCache;
 
     // State.
     public currentProgram: Program = null;
     public currentFlags: RenderFlags = new RenderFlags();
+    public currentRenderTarget: RenderTarget = null;
     public currentPass: RenderPass;
 
     // Parameters.
@@ -173,9 +173,7 @@ export class RenderState {
     public drawCallCount: number;
     public frameStartTime: number;
 
-    constructor(viewport: Viewport) {
-        this.viewport = viewport;
-        this.gl = this.viewport.gl;
+    constructor(public gl: WebGL2RenderingContext) {
         this.programCache = new ProgramCache(this.gl);
 
         this.time = 0;
@@ -190,24 +188,29 @@ export class RenderState {
         mat4.copy(this.view, m);
     }
 
-    public checkResize() {
-        // TODO(jstpierre): Make viewport explicit
-        const canvas = this.viewport.canvas;
-        const gl = this.gl;
-
-        const width = canvas.width, height = canvas.height;
-        mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
-
-        gl.viewport(0, 0, canvas.width, canvas.height);
-
-        // XXX(jstpierre): move into reset
+    public reset() {
         this.drawCallCount = 0;
         this.frameStartTime = window.performance.now();
+    }
+
+    public setRenderTarget(renderTarget: RenderTarget) {
+        this.currentRenderTarget = renderTarget;
+        this.bindViewport();
+        // TODO(jstpierre): Bind framebuffers.
+    }
+
+    public bindViewport(): void {
+        const gl = this.gl;
+        const width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+        mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+        gl.viewport(0, 0, width, height);
     }
 
     public setClipPlanes(near: number, far: number) {
         this.nearClipPlane = near;
         this.farClipPlane = far;
+        const width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+        mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
     }
 
     public compileProgram(prog: Program) {
