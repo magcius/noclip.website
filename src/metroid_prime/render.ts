@@ -5,8 +5,8 @@ import { mat3, mat4 } from 'gl-matrix';
 
 import { MREA, Material, Geometry, Surface, vtxAttrFormats, MaterialFlags } from './mrea';
 import { TXTR } from './txtr';
-import * as GX_Texture from '../j3d/gx_texture';
-import * as GX_Material from '../j3d/gx_material';
+import * as GX_Texture from 'gx/gx_texture';
+import * as GX_Material from 'gx/gx_material';
 
 import * as Viewer from '../viewer';
 import { RenderPass, RenderState, RenderFlags, CoalescedBuffers, BufferCoalescer } from '../render';

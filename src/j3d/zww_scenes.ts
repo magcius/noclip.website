@@ -3,7 +3,7 @@ import { BMD, BTK } from './j3d';
 
 import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
-import * as GX_Material from './gx_material';
+import * as GX_Material from 'gx/gx_material';
 import * as Viewer from '../viewer';
 import { MultiScene, RARCSceneDesc } from './scenes';
 import { Scene, ColorOverride } from './render';

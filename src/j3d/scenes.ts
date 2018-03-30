@@ -1,7 +1,7 @@
 
 import { BMD, BTK, BMT } from './j3d';
 import { Scene } from './render';
-import * as GX_Material from './gx_material';
+import * as GX_Material from 'gx/gx_material';
 import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';

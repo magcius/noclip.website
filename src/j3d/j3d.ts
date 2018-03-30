@@ -1,9 +1,9 @@
 
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
 
-import * as GX from './gx_enum';
-import * as GX_Material from './gx_material';
-import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, VtxArrayData, LoadedVertexData, coalesceLoadedDatas, getComponentSize, getNumComponents } from './gx_displaylist';
+import * as GX from 'gx/gx_enum';
+import * as GX_Material from 'gx/gx_material';
+import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, VtxArrayData, LoadedVertexData, coalesceLoadedDatas, getComponentSize, getNumComponents } from 'gx/gx_displaylist';
 
 import { betoh } from 'endian';
 import { assert, readString } from 'util';

@@ -3,9 +3,9 @@ import { mat3, mat4 } from 'gl-matrix';
 
 import { BMD, BTK, BMT, TEX1_Texture, Shape, HierarchyNode, HierarchyType, MaterialEntry } from './j3d';
 
-import * as GX from './gx_enum';
-import * as GX_Material from './gx_material';
-import * as GX_Texture from './gx_texture';
+import * as GX from 'gx/gx_enum';
+import * as GX_Material from 'gx/gx_material';
+import * as GX_Texture from 'gx/gx_texture';
 import * as Viewer from 'viewer';
 
 import { RenderFlags, RenderState, RenderPass, CompareMode, CoalescedBuffers, BufferCoalescer } from '../render';
