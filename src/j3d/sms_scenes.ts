@@ -3,7 +3,7 @@ import { RenderPass, RenderState } from '../render';
 import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';
-import { MultiScene, createScene } from './scenes';
+import { MultiScene, createScene, J3DScene } from './scenes';
 import { Scene, ColorOverride } from './render';
 import Progressable from 'Progressable';
 import { fetch } from '../util';
@@ -54,7 +54,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             // the binary, and for a lot of objects, too. My heuristics below are a cheap
             // approximation of the actual scene data...
 
-            const scenes: Viewer.Scene[] = [];
+            const scenes: J3DScene[] = [];
             for (const file of rarc.findDir('map/map').files) {
                 const [basename, extension] = file.name.split('.');
                 if (extension !== 'bmd')
