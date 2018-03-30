@@ -8666,27 +8666,25 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "Progressab
                         return _this._createSceneFromData(gl, result);
                     });
                 };
+                SceneDesc.prototype._createRoomSceneFromData = function (gl, result) {
+                    var zsi = ZSI.parse(result);
+                    util_21.assert(zsi.mesh !== null);
+                    return new Progressable_4.default(Promise.resolve(new Scene(gl, zsi)));
+                };
                 SceneDesc.prototype._createSceneFromData = function (gl, result) {
                     var _this = this;
                     var zsi = ZSI.parse(result);
-                    if (zsi.mesh) {
-                        return new Progressable_4.default(Promise.resolve(new Scene(gl, zsi)));
-                    }
-                    else if (zsi.rooms) {
-                        var basePath_1 = dirname(this.path);
-                        var roomFilenames = zsi.rooms.map(function (romPath) {
-                            var filename = romPath.split('/').pop();
-                            return basePath_1 + '/' + filename;
-                        });
-                        return Progressable_4.default.all(roomFilenames.map(function (filename) {
-                            return util_21.fetch(filename).then(function (roomResult) { return _this._createSceneFromData(gl, roomResult); });
-                        })).then(function (scenes) {
-                            return new MultiScene(scenes);
-                        });
-                    }
-                    else {
-                        throw new Error("wtf");
-                    }
+                    util_21.assert(zsi.rooms !== null);
+                    var basePath = dirname(this.path);
+                    var roomFilenames = zsi.rooms.map(function (romPath) {
+                        var filename = romPath.split('/').pop();
+                        return basePath + '/' + filename;
+                    });
+                    return Progressable_4.default.all(roomFilenames.map(function (filename) {
+                        return util_21.fetch(filename).then(function (roomResult) { return _this._createRoomSceneFromData(gl, roomResult); });
+                    })).then(function (scenes) {
+                        return new MultiScene(scenes);
+                    });
                 };
                 return SceneDesc;
             }());

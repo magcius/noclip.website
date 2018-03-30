@@ -16,7 +16,7 @@ export default class Progressable<T> {
             this.onProgress();
     }
 
-    public then<TResult>(onfulfilled?: ((value: T) => TResult | Progressable<TResult>)) {
+    public then<TResult>(onfulfilled?: ((value: T) => TResult | PromiseLike<TResult>)): Progressable<TResult> {
         // The rough idea is that any then-able is implicitly at the same progress as this one.
         const pr = new Progressable(this.promise.then(onfulfilled), this.progress);
         this.onProgress = () => {
