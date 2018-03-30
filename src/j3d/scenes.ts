@@ -12,17 +12,21 @@ import { assert, fetch, readString } from '../util';
 import { SunshineSceneDesc } from './sms_scenes';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
+export interface J3DScene extends Viewer.Scene {
+    renderPasses: RenderPass[];
+}
+
 export class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
-    public scenes: Viewer.Scene[];
+    public scenes: J3DScene[];
     public textures: Viewer.Texture[];
 
-    constructor(scenes: Viewer.Scene[]) {
+    constructor(scenes: J3DScene[]) {
         this.setScenes(scenes);
     }
 
-    protected setScenes(scenes: Viewer.Scene[]) {
+    protected setScenes(scenes: J3DScene[]) {
         this.scenes = scenes;
         this.textures = [];
         for (const scene of this.scenes)
@@ -112,12 +116,12 @@ class SMGSceneDesc implements Viewer.SceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return Progressable.all(this.paths.map((path) => fetch(path).then((buffer: ArrayBufferSlice) => {
             return this.createSceneFromBuffer(gl, buffer);
-        }))).then((scenes: Viewer.MainScene[]) => {
+        }))).then((scenes: MultiScene[]) => {
             return new MultiScene(scenes);
         });
     }
 
-    protected createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Viewer.MainScene {
+    protected createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): MultiScene {
         const multiScene: MultiScene = createSceneFromBuffer(gl, buffer);
         assert(multiScene.scenes.length === 1);
         const scene: Scene = (<Scene> multiScene.scenes[0]);

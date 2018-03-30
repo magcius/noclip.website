@@ -16,6 +16,7 @@ import * as RARC from 'j3d/rarc';
 import { BMD, BTK, BMT, TEX1, MaterialEntry } from 'j3d/j3d';
 import { Command_Material } from 'j3d/render';
 import { SunshineClearScene, SunshineSceneDesc } from 'j3d/sms_scenes';
+import { J3DScene } from 'j3d/scenes';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -28,14 +29,14 @@ for (let i = 0; i < 10; i++) {
 class MultiScene implements MainScene {
     public cameraController = OrbitCameraController;
     public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
-    public scenes: Scene[];
+    public scenes: J3DScene[];
     public textures: Texture[];
 
-    constructor(scenes: Scene[]) {
+    constructor(scenes: J3DScene[]) {
         this.setScenes(scenes);
     }
 
-    protected setScenes(scenes: Scene[]) {
+    protected setScenes(scenes: J3DScene[]) {
         this.scenes = scenes;
         this.textures = [];
         for (const scene of this.scenes)

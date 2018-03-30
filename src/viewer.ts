@@ -21,7 +21,6 @@ export interface Texture {
 }
 
 export interface Scene {
-    renderPasses?: RenderPass[];
     textures: Texture[];
     render(state: RenderState): void;
     destroy(gl: WebGL2RenderingContext): void;
@@ -390,6 +389,7 @@ export interface MainScene extends Scene {
     cameraController: CameraControllerClass;
     resetCamera?(m: mat4): void;
     createUI?(): HTMLElement;
+    renderPasses?: RenderPass[];
 }
 
 export interface SceneDesc {
