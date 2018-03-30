@@ -691,12 +691,12 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
             RenderFlags.default.depthFunc = CompareMode.LEQUAL;
             RenderFlags.default.frontFace = FrontFaceMode.CCW;
             RenderState = /** @class */ (function () {
-                function RenderState(viewport) {
+                function RenderState(gl) {
+                    this.gl = gl;
                     // State.
                     this.currentProgram = null;
                     this.currentFlags = new RenderFlags();
-                    this.viewport = viewport;
-                    this.gl = this.viewport.gl;
+                    this.currentRenderTarget = null;
                     this.programCache = new ProgramCache(this.gl);
                     this.time = 0;
                     this.fov = Math.PI / 4;
@@ -707,20 +707,26 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 RenderState.prototype.setView = function (m) {
                     gl_matrix_1.mat4.copy(this.view, m);
                 };
-                RenderState.prototype.checkResize = function () {
-                    // TODO(jstpierre): Make viewport explicit
-                    var canvas = this.viewport.canvas;
-                    var gl = this.gl;
-                    var width = canvas.width, height = canvas.height;
-                    gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
-                    gl.viewport(0, 0, canvas.width, canvas.height);
-                    // XXX(jstpierre): move into reset
+                RenderState.prototype.reset = function () {
                     this.drawCallCount = 0;
                     this.frameStartTime = window.performance.now();
+                };
+                RenderState.prototype.setRenderTarget = function (renderTarget) {
+                    this.currentRenderTarget = renderTarget;
+                    this.bindViewport();
+                    // TODO(jstpierre): Bind framebuffers.
+                };
+                RenderState.prototype.bindViewport = function () {
+                    var gl = this.gl;
+                    var width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+                    gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+                    gl.viewport(0, 0, width, height);
                 };
                 RenderState.prototype.setClipPlanes = function (near, far) {
                     this.nearClipPlane = near;
                     this.farClipPlane = far;
+                    var width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+                    gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
                 };
                 RenderState.prototype.compileProgram = function (prog) {
                     return prog.compile(this.gl, this.programCache);
@@ -1194,12 +1200,13 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_
             exports_7("OrbitCameraController", OrbitCameraController);
             Viewer = /** @class */ (function () {
                 function Viewer(canvas) {
+                    this.canvas = canvas;
                     var gl = canvas.getContext("webgl2", { alpha: false });
-                    var viewport = { canvas: canvas, gl: gl };
-                    this.renderState = new render_1.RenderState(viewport);
-                    this.inputManager = new InputManager(this.renderState.viewport.canvas);
+                    this.renderState = new render_1.RenderState(gl);
+                    this.inputManager = new InputManager(this.canvas);
                     this.camera = gl_matrix_2.mat4.create();
                     this.cameraController = null;
+                    this.onscreenRenderTarget = { width: 0, height: 0, framebuffer: null };
                 }
                 Viewer.prototype.reset = function () {
                     var gl = this.renderState.gl;
@@ -1239,9 +1246,6 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_
                     var e_8, _c;
                     // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
                 };
-                Viewer.prototype.checkResize = function () {
-                    this.renderState.checkResize();
-                };
                 Viewer.prototype.setScene = function (scene) {
                     var gl = this.renderState.gl;
                     this.reset();
@@ -1266,12 +1270,15 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_
                 Viewer.prototype.start = function () {
                     var _this = this;
                     var camera = this.camera;
-                    var canvas = this.renderState.viewport.canvas;
+                    var canvas = this.canvas;
                     var t = 0;
                     var update = function (nt) {
                         var dt = nt - t;
                         t = nt;
-                        _this.checkResize();
+                        _this.renderState.reset();
+                        _this.onscreenRenderTarget.width = _this.canvas.width;
+                        _this.onscreenRenderTarget.height = _this.canvas.height;
+                        _this.renderState.setRenderTarget(_this.onscreenRenderTarget);
                         if (_this.cameraController) {
                             _this.cameraController.update(camera, _this.inputManager, dt);
                         }
@@ -1395,8 +1402,8 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
     function getTextureLODBias(state) {
         var efbWidth = 640;
         var efbHeight = 528;
-        var viewportWidth = state.viewport.canvas.width;
-        var viewportHeight = state.viewport.canvas.height;
+        var viewportWidth = state.currentRenderTarget.width;
+        var viewportHeight = state.currentRenderTarget.height;
         var textureLODBias = Math.log2(Math.min(viewportWidth / efbWidth, viewportHeight / efbHeight));
         return textureLODBias;
     }
@@ -5426,7 +5433,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     });
                 };
                 Scene.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
+                    var gl = state.gl;
                     state.useProgram(this.program);
                     state.bindModelView(this.isSkybox);
                     this.renderModels(state);
@@ -5697,7 +5704,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
                     this.renderFlags.blendMode = render_8.BlendMode.ADD;
                 }
                 FancyGrid.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
+                    var gl = state.gl;
                     state.useProgram(this.program);
                     state.bindModelView();
                     state.useFlags(this.renderFlags);
@@ -5757,7 +5764,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
                     this.renderFlags.depthTest = true;
                 }
                 Scene.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
+                    var gl = state.gl;
                     state.useProgram(this.program);
                     state.bindModelView();
                     state.useFlags(this.renderFlags);
@@ -8438,7 +8445,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "Progressab
                     this.model = this.translateModel(gl, zsi.mesh);
                 }
                 Scene.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
+                    var gl = state.gl;
                     state.useProgram(this.program);
                     state.bindModelView();
                     this.model(state);
@@ -10663,7 +10670,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                     var e_34, _c;
                 }
                 MultiScene.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
+                    var gl = state.gl;
                     this.scenes.forEach(function (scene) { return scene.render(state); });
                 };
                 MultiScene.prototype.destroy = function (gl) {
@@ -10883,7 +10890,7 @@ System.register("dksiv/render", ["gl-matrix", "render"], function (exports_47, c
                 Scene.prototype.render = function (state) {
                     if (!this.visible)
                         return;
-                    var gl = state.viewport.gl;
+                    var gl = state.gl;
                     state.setClipPlanes(10, 500000);
                     state.useProgram(this.program);
                     state.bindModelView();
@@ -12727,7 +12734,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                         if (sceneOption.sceneDesc === sceneDesc)
                             this.sceneSelect.selectedIndex = i;
                     }
-                    var gl = this.viewer.renderState.viewport.gl;
+                    var gl = this.viewer.renderState.gl;
                     var progressable = sceneDesc.createScene(gl);
                     this.viewer.setScene(null);
                     this.progressBar.set(progressable);
@@ -13316,7 +13323,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "viewer", "util", "gx/gx_
                     gl.bindVertexArray(null);
                 };
                 PlaneShape.prototype.render = function (state) {
-                    var gl = state.viewport.gl;
+                    var gl = state.gl;
                     gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
                     gl.bindVertexArray(this.vao);
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

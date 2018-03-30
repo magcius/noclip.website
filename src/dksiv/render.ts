@@ -167,7 +167,7 @@ export class Scene implements Viewer.Scene {
         if (!this.visible)
             return;
 
-        const gl = state.viewport.gl;
+        const gl = state.gl;
 
         state.setClipPlanes(10, 500000);
 

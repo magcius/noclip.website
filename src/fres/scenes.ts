@@ -24,7 +24,7 @@ class MultiScene implements Viewer.MainScene {
     }
 
     public render(state: RenderState) {
-        const gl = state.viewport.gl;
+        const gl = state.gl;
         this.scenes.forEach((scene) => scene.render(state));
     }
 

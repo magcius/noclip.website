@@ -296,7 +296,7 @@ class Main {
                 this.sceneSelect.selectedIndex = i;
         }
 
-        const gl = this.viewer.renderState.viewport.gl;
+        const gl = this.viewer.renderState.gl;
 
         const progressable = sceneDesc.createScene(gl);
         this.viewer.setScene(null);

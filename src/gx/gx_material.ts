@@ -711,8 +711,8 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
 export function getTextureLODBias(state: RenderState): number {
     const efbWidth = 640;
     const efbHeight = 528;
-    const viewportWidth = state.viewport.canvas.width;
-    const viewportHeight = state.viewport.canvas.height;
+    const viewportWidth = state.currentRenderTarget.width;
+    const viewportHeight = state.currentRenderTarget.height;
     const textureLODBias = Math.log2(Math.min(viewportWidth / efbWidth, viewportHeight / efbHeight));
     return textureLODBias;
 }
