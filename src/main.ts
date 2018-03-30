@@ -1,6 +1,8 @@
 
 import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController, Texture } from './viewer';
-import { Progressable } from './progress';
+
+import ArrayBufferSlice from 'ArrayBufferSlice';
+import Progressable from 'Progressable';
 
 import * as ZWW from './j3d/zww_scenes';
 import * as SMS from './j3d/sms_scenes';
@@ -12,7 +14,6 @@ import * as OOT3D from './oot3d/scenes';
 import * as FRES from './fres/scenes';
 import * as DKSIV from './dksiv/scenes';
 import * as MP1 from './metroid_prime/scenes';
-import ArrayBufferSlice from 'ArrayBufferSlice';
 
 const sceneGroups = [
     ZWW.sceneGroup,

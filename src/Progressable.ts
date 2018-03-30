@@ -1,5 +1,5 @@
 
-export class Progressable<T> {
+export default class Progressable<T> {
     public promise: PromiseLike<T>;
     public onProgress: () => void;
     public progress: number; // Between 0 and 1.

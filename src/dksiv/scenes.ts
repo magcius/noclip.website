@@ -5,7 +5,7 @@ import { Scene } from './render';
 import { MainScene, SceneGroup, FPSCameraController, Texture } from '../viewer';
 import { RenderState } from '../render';
 
-import { Progressable } from '../progress';
+import Progressable from 'Progressable';
 import { fetch, generateFormID } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 

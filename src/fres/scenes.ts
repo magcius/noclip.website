@@ -7,7 +7,7 @@ import { Scene } from './render';
 import * as Viewer from '../viewer';
 
 import { RenderState } from '../render';
-import { Progressable } from '../progress';
+import Progressable from 'Progressable';
 import { fetch, readString } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 

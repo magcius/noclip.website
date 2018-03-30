@@ -10,7 +10,7 @@ import * as SARC from './sarc';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
-import { Progressable } from '../progress';
+import Progressable from 'Progressable';
 import { RenderState, Program, RenderArena, RenderFlags, FrontFaceMode, CompareMode, CullMode, coalesceBuffer, CoalescedBuffer } from '../render';
 import { betoh } from '../endian';
 import { assert, fetch } from '../util';

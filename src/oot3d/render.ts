@@ -4,7 +4,7 @@ import * as ZSI from './zsi';
 
 import * as Viewer from '../viewer';
 
-import { Progressable } from '../progress';
+import Progressable from 'Progressable';
 import { BlendMode, CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass } from '../render';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';

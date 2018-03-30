@@ -1,20 +1,21 @@
 
 import { mat3, mat4 } from 'gl-matrix';
 
-import * as RARC from 'j3d/rarc';
-import * as Yaz0 from 'yaz0';
-
-import { BMD, BTK, BMT, TEX1, MaterialEntry } from 'j3d/j3d';
-import * as GX from 'gx/gx_enum';
-import * as GX_Material from 'gx/gx_material';
+import ArrayBufferSlice from 'ArrayBufferSlice';
+import Progressable from 'Progressable';
 
 import { MainScene, OrbitCameraController, Texture, Scene } from 'viewer';
 import { BlendMode, RenderFlags, RenderState, RenderPass } from 'render';
-import { Progressable } from 'progress';
 import { fetch } from 'util';
-import { Command_Material } from '../j3d/render';
-import { SunshineClearScene, SunshineSceneDesc } from '../j3d/sms_scenes';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+
+import * as GX from 'gx/gx_enum';
+import * as GX_Material from 'gx/gx_material';
+
+import * as Yaz0 from 'yaz0';
+import * as RARC from 'j3d/rarc';
+import { BMD, BTK, BMT, TEX1, MaterialEntry } from 'j3d/j3d';
+import { Command_Material } from 'j3d/render';
+import { SunshineClearScene, SunshineSceneDesc } from 'j3d/sms_scenes';
 
 const scale = 200;
 const posMtx = mat4.create();

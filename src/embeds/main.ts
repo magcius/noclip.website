@@ -2,7 +2,7 @@
 import { System } from 'systemjs';
 
 import * as Viewer from 'viewer';
-import { Progressable } from 'progress';
+import Progressable from 'Progressable';
 
 interface EmbedModule {
     createScene(gl: WebGL2RenderingContext, name: string): Progressable<Viewer.MainScene>;
