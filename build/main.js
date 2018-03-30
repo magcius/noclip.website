@@ -34,7 +34,7 @@ var __read = (this && this.__read) || function (o, n) {
     }
     return ar;
 };
-System.register("progress", [], function (exports_1, context_1) {
+System.register("Progressable", [], function (exports_1, context_1) {
     "use strict";
     var __moduleName = context_1 && context_1.id;
     function avg(L) {
@@ -102,11 +102,11 @@ System.register("progress", [], function (exports_1, context_1) {
                 };
                 return Progressable;
             }());
-            exports_1("Progressable", Progressable);
+            exports_1("default", Progressable);
         }
     };
 });
-System.register("util", ["progress", "ArrayBufferSlice"], function (exports_2, context_2) {
+System.register("util", ["ArrayBufferSlice", "Progressable"], function (exports_2, context_2) {
     "use strict";
     var __moduleName = context_2 && context_2.id;
     function fetch(path) {
@@ -128,7 +128,7 @@ System.register("util", ["progress", "ArrayBufferSlice"], function (exports_2, c
                     pr.setProgress(e.loaded / e.total);
             };
         });
-        var pr = new progress_1.Progressable(p);
+        var pr = new Progressable_1.default(p);
         return pr;
     }
     exports_2("fetch", fetch);
@@ -163,14 +163,14 @@ System.register("util", ["progress", "ArrayBufferSlice"], function (exports_2, c
         return "FormGeneratedID_" + counter++;
     }
     exports_2("generateFormID", generateFormID);
-    var progress_1, ArrayBufferSlice_1, counter;
+    var ArrayBufferSlice_1, Progressable_1, counter;
     return {
         setters: [
-            function (progress_1_1) {
-                progress_1 = progress_1_1;
-            },
             function (ArrayBufferSlice_1_1) {
                 ArrayBufferSlice_1 = ArrayBufferSlice_1_1;
+            },
+            function (Progressable_1_1) {
+                Progressable_1 = Progressable_1_1;
             }
         ],
         execute: function () {
@@ -968,7 +968,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
     };
 });
 // tslint:disable:no-console
-System.register("viewer", ["render", "gl-matrix"], function (exports_7, context_7) {
+System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_7) {
     "use strict";
     var __moduleName = context_7 && context_7.id;
     function clamp(v, min, max) {
@@ -977,14 +977,14 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_7, context_
     function clampRange(v, lim) {
         return clamp(v, -lim, lim);
     }
-    var render_1, gl_matrix_2, InputManager, FPSCameraController, OrbitCameraController, Viewer;
+    var gl_matrix_2, render_1, InputManager, FPSCameraController, OrbitCameraController, Viewer;
     return {
         setters: [
-            function (render_1_1) {
-                render_1 = render_1_1;
-            },
             function (gl_matrix_2_1) {
                 gl_matrix_2 = gl_matrix_2_1;
+            },
+            function (render_1_1) {
+                render_1 = render_1_1;
             }
         ],
         execute: function () {
@@ -4011,7 +4011,7 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
         }
     };
 });
-System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "viewer", "progress", "util"], function (exports_17, context_17) {
+System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "viewer", "Progressable", "util"], function (exports_17, context_17) {
     "use strict";
     var __moduleName = context_17 && context_17.id;
     function createScene(gl, bmdFile, btkFile, bmtFile) {
@@ -4049,7 +4049,7 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
         return null;
     }
     exports_17("createSceneFromBuffer", createSceneFromBuffer);
-    var j3d_2, render_4, RARC, Yaz0, Viewer, progress_2, util_9, MultiScene, RARCSceneDesc, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
+    var j3d_2, render_4, RARC, Yaz0, Viewer, Progressable_2, util_9, MultiScene, RARCSceneDesc, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (j3d_2_1) {
@@ -4067,8 +4067,8 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
             function (Viewer_1) {
                 Viewer = Viewer_1;
             },
-            function (progress_2_1) {
-                progress_2 = progress_2_1;
+            function (Progressable_2_1) {
+                Progressable_2 = Progressable_2_1;
             },
             function (util_9_1) {
                 util_9 = util_9_1;
@@ -4134,7 +4134,7 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
                 }
                 SMGSceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return progress_2.Progressable.all(this.paths.map(function (path) { return util_9.fetch(path).then(function (buffer) {
+                    return Progressable_2.default.all(this.paths.map(function (path) { return util_9.fetch(path).then(function (buffer) {
                         return _this.createSceneFromBuffer(gl, buffer);
                     }); })).then(function (scenes) {
                         return new MultiScene(scenes);
@@ -4160,10 +4160,10 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
         }
     };
 });
-System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_material", "j3d/scenes", "j3d/render", "progress", "util", "gl-matrix"], function (exports_18, context_18) {
+System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_material", "j3d/scenes", "j3d/render", "Progressable", "util", "gl-matrix"], function (exports_18, context_18) {
     "use strict";
     var __moduleName = context_18 && context_18.id;
-    var j3d_3, RARC, Yaz0, GX_Material, scenes_2, render_5, progress_3, util_10, gl_matrix_5, CameraPos, WindWakerScene, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
+    var j3d_3, RARC, Yaz0, GX_Material, scenes_2, render_5, Progressable_3, util_10, gl_matrix_5, CameraPos, WindWakerScene, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
         setters: [
             function (j3d_3_1) {
@@ -4184,8 +4184,8 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
             function (render_5_1) {
                 render_5 = render_5_1;
             },
-            function (progress_3_1) {
-                progress_3 = progress_3_1;
+            function (Progressable_3_1) {
+                Progressable_3 = Progressable_3_1;
             },
             function (util_10_1) {
                 util_10 = util_10_1;
@@ -4370,7 +4370,7 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                 WindWakerSceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
                     var roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
-                    return progress_3.Progressable.all([
+                    return Progressable_3.default.all([
                         util_10.fetch("data/j3d/ww/sea/Stage.arc"),
                         util_10.fetch(this.path),
                     ]).then(function (_a) {
@@ -8364,7 +8364,7 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_34, contex
         }
     };
 });
-System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress", "render", "util"], function (exports_35, context_35) {
+System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "Progressable", "render", "util"], function (exports_35, context_35) {
     "use strict";
     var __moduleName = context_35 && context_35.id;
     function textureToCanvas(texture) {
@@ -8385,7 +8385,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
         parts.pop();
         return parts.join('/');
     }
-    var CMB, ZSI, Viewer, progress_4, render_13, util_21, OoT3D_Program, Scene, MultiScene, SceneDesc;
+    var CMB, ZSI, Viewer, Progressable_4, render_13, util_21, OoT3D_Program, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (CMB_2) {
@@ -8397,8 +8397,8 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
             function (Viewer_5) {
                 Viewer = Viewer_5;
             },
-            function (progress_4_1) {
-                progress_4 = progress_4_1;
+            function (Progressable_4_1) {
+                Progressable_4 = Progressable_4_1;
             },
             function (render_13_1) {
                 render_13 = render_13_1;
@@ -8670,7 +8670,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                     var _this = this;
                     var zsi = ZSI.parse(result);
                     if (zsi.mesh) {
-                        return new progress_4.Progressable(Promise.resolve(new Scene(gl, zsi)));
+                        return new Progressable_4.default(Promise.resolve(new Scene(gl, zsi)));
                     }
                     else if (zsi.rooms) {
                         var basePath_1 = dirname(this.path);
@@ -8678,7 +8678,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "progress",
                             var filename = romPath.split('/').pop();
                             return basePath_1 + '/' + filename;
                         });
-                        return progress_4.Progressable.all(roomFilenames.map(function (filename) {
+                        return Progressable_4.default.all(roomFilenames.map(function (filename) {
                             return util_21.fetch(filename).then(function (roomResult) { return _this._createSceneFromData(gl, roomResult); });
                         })).then(function (scenes) {
                             return new MultiScene(scenes);
@@ -10600,7 +10600,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
         }
     };
 });
-System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "viewer", "progress", "util"], function (exports_45, context_45) {
+System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "viewer", "Progressable", "util"], function (exports_45, context_45) {
     "use strict";
     var __moduleName = context_45 && context_45.id;
     function createSceneFromFRESBuffer(gl, buffer, isSkybox) {
@@ -10618,7 +10618,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
         return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
     }
     exports_45("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
-    var BFRES, SARC, Yaz0, render_16, Viewer, progress_5, util_25, MultiScene, SceneDesc, name, id, sceneDescs, sceneGroup;
+    var BFRES, SARC, Yaz0, render_16, Viewer, Progressable_5, util_25, MultiScene, SceneDesc, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
             function (BFRES_1) {
@@ -10636,8 +10636,8 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
             function (Viewer_6) {
                 Viewer = Viewer_6;
             },
-            function (progress_5_1) {
-                progress_5 = progress_5_1;
+            function (Progressable_5_1) {
+                Progressable_5 = Progressable_5_1;
             },
             function (util_25_1) {
                 util_25 = util_25_1;
@@ -10680,7 +10680,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    return progress_5.Progressable.all([
+                    return Progressable_5.default.all([
                         this._createSceneFromPath(gl, this.path, false),
                         this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
                     ]).then(function (scenes) {
@@ -10907,10 +10907,10 @@ System.register("dksiv/render", ["gl-matrix", "render"], function (exports_47, c
         }
     };
 });
-System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "viewer", "progress", "util"], function (exports_48, context_48) {
+System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "viewer", "Progressable", "util"], function (exports_48, context_48) {
     "use strict";
     var __moduleName = context_48 && context_48.id;
-    var iv_1, render_18, viewer_1, progress_6, util_26, name, id, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, sceneGroup;
+    var iv_1, render_18, viewer_1, Progressable_6, util_26, name, id, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, sceneGroup;
     return {
         setters: [
             function (iv_1_1) {
@@ -10922,8 +10922,8 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "viewer", "progress
             function (viewer_1_1) {
                 viewer_1 = viewer_1_1;
             },
-            function (progress_6_1) {
-                progress_6 = progress_6_1;
+            function (Progressable_6_1) {
+                Progressable_6 = Progressable_6_1;
             },
             function (util_26_1) {
                 util_26 = util_26_1;
@@ -11058,7 +11058,7 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "viewer", "progress
                 };
                 SceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return progress_6.Progressable.all(this.paths.map(function (path) {
+                    return Progressable_6.default.all(this.paths.map(function (path) {
                         return _this.createSceneForPath(gl, path);
                     })).then(function (scenes) {
                         return new MultiScene(scenes);
@@ -12335,7 +12335,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
         }
     };
 });
-System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "viewer", "util", "progress"], function (exports_56, context_56) {
+System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "viewer", "util", "Progressable"], function (exports_56, context_56) {
     "use strict";
     var __moduleName = context_56 && context_56.id;
     // Files are too big for GitHub.
@@ -12347,7 +12347,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
             return "https://funny.computer/cloud/MetroidPrime1/";
         }
     }
-    var PAK, resource_1, render_20, Viewer, util_33, progress_7, pakBase, MultiScene, MP1SceneDesc, id, name, sceneDescs, sceneGroup;
+    var PAK, resource_1, render_20, Viewer, util_33, Progressable_7, pakBase, MultiScene, MP1SceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (PAK_1) {
@@ -12365,8 +12365,8 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
             function (util_33_1) {
                 util_33 = util_33_1;
             },
-            function (progress_7_1) {
-                progress_7 = progress_7_1;
+            function (Progressable_7_1) {
+                Progressable_7 = Progressable_7_1;
             }
         ],
         execute: function () {
@@ -12419,7 +12419,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 MP1SceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
                     var paks = [pakBase + "/" + this.filename, pakBase + "/Strings.pak"];
-                    return progress_7.Progressable.all(paks.map(function (pakPath) { return _this.fetchPak(pakPath); })).then(function (paks) {
+                    return Progressable_7.default.all(paks.map(function (pakPath) { return _this.fetchPak(pakPath); })).then(function (paks) {
                         var resourceSystem = new resource_1.ResourceSystem(paks);
                         var levelPak = paks[0];
                         try {
@@ -12459,17 +12459,20 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
         }
     };
 });
-System.register("main", ["viewer", "progress", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "dksiv/scenes", "metroid_prime/scenes", "ArrayBufferSlice"], function (exports_57, context_57) {
+System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "dksiv/scenes", "metroid_prime/scenes"], function (exports_57, context_57) {
     "use strict";
     var __moduleName = context_57 && context_57.id;
-    var viewer_2, progress_8, ZWW, SMS, J3D, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, DKSIV, MP1, ArrayBufferSlice_8, sceneGroups, ProgressBar, DroppedFileSceneDesc, Main;
+    var viewer_2, ArrayBufferSlice_8, Progressable_8, ZWW, SMS, J3D, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, DKSIV, MP1, sceneGroups, ProgressBar, DroppedFileSceneDesc, Main;
     return {
         setters: [
             function (viewer_2_1) {
                 viewer_2 = viewer_2_1;
             },
-            function (progress_8_1) {
-                progress_8 = progress_8_1;
+            function (ArrayBufferSlice_8_1) {
+                ArrayBufferSlice_8 = ArrayBufferSlice_8_1;
+            },
+            function (Progressable_8_1) {
+                Progressable_8 = Progressable_8_1;
             },
             function (ZWW_1) {
                 ZWW = ZWW_1;
@@ -12500,9 +12503,6 @@ System.register("main", ["viewer", "progress", "j3d/zww_scenes", "j3d/sms_scenes
             },
             function (MP1_1) {
                 MP1 = MP1_1;
-            },
-            function (ArrayBufferSlice_8_1) {
-                ArrayBufferSlice_8 = ArrayBufferSlice_8_1;
             }
         ],
         execute: function () {
@@ -12572,7 +12572,7 @@ System.register("main", ["viewer", "progress", "j3d/zww_scenes", "j3d/sms_scenes
                                 pr.setProgress(e.loaded / e.total);
                         };
                     });
-                    var pr = new progress_8.Progressable(p);
+                    var pr = new Progressable_8.default(p);
                     return pr;
                 };
                 DroppedFileSceneDesc.prototype.createSceneFromFile = function (gl, file, buffer) {
@@ -13081,7 +13081,7 @@ System.register("embeds/main", ["viewer"], function (exports_58, context_58) {
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/j3d", "gx/gx_enum", "gx/gx_material", "viewer", "util", "j3d/render", "j3d/sms_scenes"], function (exports_59, context_59) {
+System.register("embeds/sunshine_water", ["gl-matrix", "viewer", "util", "gx/gx_enum", "gx/gx_material", "yaz0", "j3d/rarc", "j3d/j3d", "j3d/render", "j3d/sms_scenes"], function (exports_59, context_59) {
     "use strict";
     var __moduleName = context_59 && context_59.id;
     function createScene(gl, name) {
@@ -13102,20 +13102,17 @@ System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/
         });
     }
     exports_59("createScene", createScene);
-    var gl_matrix_12, RARC, Yaz0, j3d_4, GX, GX_Material, viewer_3, util_34, render_21, sms_scenes_1, scale, posMtx, packetParamsData, MultiScene, sceneParamsData, SeaPlaneScene, PlaneShape;
+    var gl_matrix_12, viewer_3, util_34, GX, GX_Material, Yaz0, RARC, j3d_4, render_21, sms_scenes_1, scale, posMtx, packetParamsData, MultiScene, sceneParamsData, SeaPlaneScene, PlaneShape;
     return {
         setters: [
             function (gl_matrix_12_1) {
                 gl_matrix_12 = gl_matrix_12_1;
             },
-            function (RARC_4) {
-                RARC = RARC_4;
+            function (viewer_3_1) {
+                viewer_3 = viewer_3_1;
             },
-            function (Yaz0_5) {
-                Yaz0 = Yaz0_5;
-            },
-            function (j3d_4_1) {
-                j3d_4 = j3d_4_1;
+            function (util_34_1) {
+                util_34 = util_34_1;
             },
             function (GX_8) {
                 GX = GX_8;
@@ -13123,11 +13120,14 @@ System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/
             function (GX_Material_6) {
                 GX_Material = GX_Material_6;
             },
-            function (viewer_3_1) {
-                viewer_3 = viewer_3_1;
+            function (Yaz0_5) {
+                Yaz0 = Yaz0_5;
             },
-            function (util_34_1) {
-                util_34 = util_34_1;
+            function (RARC_4) {
+                RARC = RARC_4;
+            },
+            function (j3d_4_1) {
+                j3d_4 = j3d_4_1;
             },
             function (render_21_1) {
                 render_21 = render_21_1;

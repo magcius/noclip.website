@@ -6,7 +6,7 @@ import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';
 
-import { Progressable } from '../progress';
+import Progressable from 'Progressable';
 import { RenderPass, RenderState } from '../render';
 import { assert, fetch, readString } from '../util';
 import { SunshineSceneDesc } from './sms_scenes';

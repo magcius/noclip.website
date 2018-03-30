@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import { MultiScene, RARCSceneDesc } from './scenes';
 import { Scene, ColorOverride } from './render';
 
-import { Progressable } from '../progress';
+import Progressable from 'Progressable';
 import { fetch, readString } from '../util';
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from 'ArrayBufferSlice';
@@ -225,7 +225,7 @@ class WindWakerSceneDesc extends RARCSceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
 
-        return Progressable.all([
+        return Progressable.all<ArrayBufferSlice>([
             fetch(`data/j3d/ww/sea/Stage.arc`),
             fetch(this.path),
         ]).then(([stage, room]) => {

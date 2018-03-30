@@ -5,7 +5,7 @@ import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';
 import { MultiScene, createScene } from './scenes';
 import { Scene, ColorOverride } from './render';
-import { Progressable } from '../progress';
+import Progressable from 'Progressable';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 

@@ -4,7 +4,7 @@ import * as MDL0 from 'mdl0';
 import * as Viewer from '../viewer';
 
 import { RenderFlags, RenderState, Program, BlendMode } from '../render';
-import { Progressable } from '../progress';
+import Progressable from 'Progressable';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 

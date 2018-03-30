@@ -1,10 +1,11 @@
 
 // tslint:disable:no-console
 
-import { Progressable } from './progress';
+import { mat4, vec3 } from 'gl-matrix';
+
 import { RenderState, RenderFlags, Viewport, RenderPass } from './render';
 
-import { mat4, vec3 } from 'gl-matrix';
+import Progressable from 'Progressable';
 
 interface CameraController {
     setInitialCamera(camera: mat4): void;

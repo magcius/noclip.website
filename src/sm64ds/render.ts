@@ -9,7 +9,7 @@ import * as NITRO_GX from './nitro_gx';
 import * as Viewer from '../viewer';
 
 import { CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass, BlendMode } from '../render';
-import { Progressable } from '../progress';
+import Progressable from 'Progressable';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 

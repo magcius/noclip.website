@@ -1,6 +1,6 @@
 
-import { Progressable } from './progress';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import Progressable from 'Progressable';
 
 export function fetch(path: string): Progressable<ArrayBufferSlice> {
     const request = new XMLHttpRequest();
