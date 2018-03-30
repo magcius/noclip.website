@@ -33,12 +33,12 @@ class MultiScene implements Viewer.MainScene {
     }
 }
 
-export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false) {
+export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false): Viewer.MainScene {
     const fres = BFRES.parse(buffer);
     return new MultiScene([new Scene(gl, fres, isSkybox)]);
 }
 
-export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false) {
+export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false): Viewer.Scene {
     if (readString(buffer, 0, 4) === 'Yaz0')
         buffer = Yaz0.decompress(buffer);
 
@@ -62,13 +62,13 @@ export class SceneDesc implements Viewer.SceneDesc {
         return Progressable.all([
             this._createSceneFromPath(gl, this.path, false),
             this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
-        ]).then((scenes): Viewer.Scene => {
+        ]).then((scenes: Viewer.Scene[]): Viewer.MainScene => {
             return new MultiScene(scenes);
         });
     }
 
-    private _createSceneFromPath(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): Progressable<Scene> {
-        return fetch(path).then((result: ArrayBufferSlice) => {
+    private _createSceneFromPath(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): Progressable<Viewer.Scene> {
+        return fetch(path).then((result: ArrayBufferSlice): Viewer.Scene => {
             return createSceneFromSARCBuffer(gl, result, isSkybox);
         });
     }

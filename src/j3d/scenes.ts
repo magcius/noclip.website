@@ -112,7 +112,7 @@ class SMGSceneDesc implements Viewer.SceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return Progressable.all(this.paths.map((path) => fetch(path).then((buffer: ArrayBufferSlice) => {
             return this.createSceneFromBuffer(gl, buffer);
-        }))).then((scenes: Scene[]) => {
+        }))).then((scenes: Viewer.MainScene[]) => {
             return new MultiScene(scenes);
         });
     }

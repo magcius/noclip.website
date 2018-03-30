@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 
 import Progressable from 'Progressable';
 import { BlendMode, CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass } from '../render';
-import { fetch } from '../util';
+import { fetch, assert } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 class OoT3D_Program extends Program {
@@ -342,24 +342,25 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createSceneFromData(gl: WebGL2RenderingContext, result: ArrayBufferSlice): Progressable<Viewer.Scene> {
+    private _createRoomSceneFromData(gl: WebGL2RenderingContext, result: ArrayBufferSlice): Progressable<Scene> {
         const zsi = ZSI.parse(result);
-        if (zsi.mesh) {
-            return new Progressable(Promise.resolve(new Scene(gl, zsi)));
-        } else if (zsi.rooms) {
-            const basePath = dirname(this.path);
-            const roomFilenames = zsi.rooms.map((romPath) => {
-                const filename = romPath.split('/').pop();
-                return basePath + '/' + filename;
-            });
+        assert(zsi.mesh !== null);
+        return new Progressable(Promise.resolve(new Scene(gl, zsi)));
+    }
 
-            return Progressable.all(roomFilenames.map((filename) => {
-                return fetch(filename).then((roomResult) => this._createSceneFromData(gl, roomResult));
-            })).then((scenes: Viewer.Scene[]) => {
-                return new MultiScene(scenes);
-            });
-        } else {
-            throw new Error(`wtf`);
-        }
+    private _createSceneFromData(gl: WebGL2RenderingContext, result: ArrayBufferSlice): Progressable<Viewer.MainScene> {
+        const zsi = ZSI.parse(result);
+        assert(zsi.rooms !== null);
+        const basePath = dirname(this.path);
+        const roomFilenames = zsi.rooms.map((romPath) => {
+            const filename = romPath.split('/').pop();
+            return basePath + '/' + filename;
+        });
+
+        return Progressable.all(roomFilenames.map((filename) => {
+            return fetch(filename).then((roomResult) => this._createRoomSceneFromData(gl, roomResult));
+        })).then((scenes: Viewer.Scene[]) => {
+            return new MultiScene(scenes);
+        });
     }
 }
