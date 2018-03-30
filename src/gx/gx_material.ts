@@ -1,4 +1,6 @@
 
+// GX materials.
+
 import { mat3 } from 'gl-matrix';
 
 import * as GX from './gx_enum';
@@ -9,6 +11,28 @@ import { BlendFactor, CompareMode, BlendMode as RenderBlendMode, CullMode, Front
 import { align } from '../util';
 
 // #region Material definition.
+export interface GXMaterial {
+    // Debugging & ID
+    index: number;
+    name: string;
+
+    // Polygon state
+    cullMode: GX.CullMode;
+
+    // Vertex state
+    colorChannels: ColorChannelControl[];
+    texGens: TexGen[];
+
+    // TEV state
+    colorRegisters: Color[];
+    colorConstants: Color[];
+    tevStages: TevStage[];
+
+    // Raster / blend state.
+    alphaTest: AlphaTest;
+    ropInfo: RopInfo;
+}
+
 export class Color {
     constructor(public r: number, public g: number, public b: number, public a: number) {
     }
@@ -83,19 +107,6 @@ export interface RopInfo {
     depthFunc: GX.CompareType;
     depthWrite: boolean;
 }
-
-export interface GXMaterial {
-    index: number;
-    name: string;
-    cullMode: GX.CullMode;
-    colorRegisters: Color[];
-    colorConstants: Color[];
-    colorChannels: ColorChannelControl[];
-    texGens: TexGen[];
-    tevStages: TevStage[];
-    alphaTest: AlphaTest;
-    ropInfo: RopInfo;
-}
 // #endregion
 
 // #region Material shader generation.
@@ -106,7 +117,7 @@ interface VertexAttributeGenDef {
     scale: boolean;
 };
 
-export const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
+const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
     { attrib: GX.VertexAttribute.PTMTXIDX, name: "PosMtxIdx", storage: "float", scale: false },
     { attrib: GX.VertexAttribute.POS,      name: "Position",  storage: "vec3",  scale: true },
     { attrib: GX.VertexAttribute.NRM,      name: "Normal",    storage: "vec3",  scale: true },
@@ -598,7 +609,7 @@ ${this.generateTevStages(tevStages)}
 ${this.generateAlphaTest(alphaTest)}
     gl_FragColor = t_ColorPrev;
 }
-`
+`;
     }
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
@@ -694,12 +705,14 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
 // #endregion
 
 // XXX(jstpierre): Put this somewhere better.
+// Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
+// which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
+// make sure textures are sampled correctly...
 export function getTextureLODBias(state: RenderState): number {
-    // LOD Bias.
-    const width = state.viewport.canvas.width;
-    const height = state.viewport.canvas.height;
-    // GC's internal EFB is sized at 640x528. Bias our mips so that it's like the user
-    // is rendering things in that resolution.
-    const textureLODBias = Math.log2(Math.min(width / 640, height / 528));
+    const efbWidth = 640;
+    const efbHeight = 528;
+    const viewportWidth = state.viewport.canvas.width;
+    const viewportHeight = state.viewport.canvas.height;
+    const textureLODBias = Math.log2(Math.min(viewportWidth / efbWidth, viewportHeight / efbHeight));
     return textureLODBias;
 }

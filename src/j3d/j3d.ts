@@ -3,7 +3,7 @@
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
-import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, VtxArrayData, LoadedVertexData, coalesceLoadedDatas, getComponentSize, getNumComponents } from 'gx/gx_displaylist';
+import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, coalesceLoadedDatas, getComponentSize, getNumComponents } from 'gx/gx_displaylist';
 
 import { betoh } from 'endian';
 import { assert, readString } from 'util';
@@ -343,7 +343,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBuffer, chunkStart: number, chunkS
 
     // Build vattrs for VTX1.
     const vattrs: GX_VtxAttrFmt[] = [];
-    const vtxArrays: VtxArrayData[] = [];
+    const vtxArrays: GX_Array[] = [];
     for (const [attr, vertexArray] of bmd.vtx1.vertexArrays.entries()) {
         vattrs[attr] = { compCnt: vertexArray.compCnt, compType: vertexArray.compType };
         vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0 };

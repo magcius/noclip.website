@@ -1,7 +1,7 @@
 
-import * as GX from 'gx_enum';
+// GX texture decoding
 
-// Decode GX textures
+import * as GX from 'gx_enum';
 
 export interface Texture {
     format: GX.TexFormat;

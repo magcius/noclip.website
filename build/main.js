@@ -1184,6 +1184,7 @@ System.register("gx/gx_enum", [], function (exports_7, context_7) {
         }
     };
 });
+// GX materials.
 System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (exports_8, context_8) {
     "use strict";
     var __moduleName = context_8 && context_8.id;
@@ -1273,13 +1274,15 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
     exports_8("translateRenderFlags", translateRenderFlags);
     // #endregion
     // XXX(jstpierre): Put this somewhere better.
+    // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
+    // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
+    // make sure textures are sampled correctly...
     function getTextureLODBias(state) {
-        // LOD Bias.
-        var width = state.viewport.canvas.width;
-        var height = state.viewport.canvas.height;
-        // GC's internal EFB is sized at 640x528. Bias our mips so that it's like the user
-        // is rendering things in that resolution.
-        var textureLODBias = Math.log2(Math.min(width / 640, height / 528));
+        var efbWidth = 640;
+        var efbHeight = 528;
+        var viewportWidth = state.viewport.canvas.width;
+        var viewportHeight = state.viewport.canvas.height;
+        var textureLODBias = Math.log2(Math.min(viewportWidth / efbWidth, viewportHeight / efbHeight));
         return textureLODBias;
     }
     exports_8("getTextureLODBias", getTextureLODBias);
@@ -1297,7 +1300,6 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
             }
         ],
         execute: function () {
-            // #region Material definition.
             Color = /** @class */ (function () {
                 function Color(r, g, b, a) {
                     this.r = r;
@@ -1309,7 +1311,7 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
             }());
             exports_8("Color", Color);
             ;
-            exports_8("vtxAttributeGenDefs", vtxAttributeGenDefs = [
+            vtxAttributeGenDefs = [
                 { attrib: 0 /* PTMTXIDX */, name: "PosMtxIdx", storage: "float", scale: false },
                 { attrib: 9 /* POS */, name: "Position", storage: "vec3", scale: true },
                 { attrib: 10 /* NRM */, name: "Normal", storage: "vec3", scale: true },
@@ -1323,7 +1325,7 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
                 { attrib: 18 /* TEX5 */, name: "Tex5", storage: "vec2", scale: true },
                 { attrib: 19 /* TEX6 */, name: "Tex6", storage: "vec2", scale: true },
                 { attrib: 20 /* TEX7 */, name: "Tex7", storage: "vec2", scale: true },
-            ]);
+            ];
             exports_8("scaledVtxAttributes", scaledVtxAttributes = vtxAttributeGenDefs.filter(function (a) { return a.scale; }).map(function (a) { return a.attrib; }));
             while (scaledVtxAttributes.length < util_2.align(scaledVtxAttributes.length, 4))
                 scaledVtxAttributes.push(-1);
@@ -1659,7 +1661,7 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
         }
     };
 });
-// Moderately optimized GX Display List parser.
+// GX display list parsing.
 System.register("gx/gx_displaylist", ["gx/gx_enum", "util"], function (exports_9, context_9) {
     "use strict";
     var __moduleName = context_9 && context_9.id;
@@ -1767,7 +1769,7 @@ System.register("gx/gx_displaylist", ["gx/gx_enum", "util"], function (exports_9
             }
         }
         function compileVattr(vtxAttrib) {
-            if (!vtxDescs[vtxAttrib] || vtxDescs[vtxAttrib].type === 0 /* NONE */)
+            if (!vtxDescs[vtxAttrib])
                 return '';
             var srcAttrSize = vattrLayout.srcAttrSizes[vtxAttrib];
             var readVertex;
@@ -1787,6 +1789,7 @@ System.register("gx/gx_displaylist", ["gx/gx_enum", "util"], function (exports_9
             switch (vtxDescs[vtxAttrib].type) {
                 case 2 /* INDEX8 */:
                 case 3 /* INDEX16 */:
+                    // TODO(jstpierre): Stride.
                     readVertex = readVertex + "\n        attrOffs = vertexArray.offs + (" + srcAttrSize + " * index);";
                     break;
             }
@@ -2932,6 +2935,7 @@ System.register("yaz0", ["util"], function (exports_12, context_12) {
         }
     };
 });
+// GX texture decoding
 System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_13, context_13) {
     "use strict";
     var __moduleName = context_13 && context_13.id;
