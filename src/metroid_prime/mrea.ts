@@ -1,8 +1,8 @@
 
 // Implements Retro's MREA format as seen in Metroid Prime 1.
 
-import * as GX_Material from '../j3d/gx_material';
-import * as GX from '../j3d/gx_enum';
+import * as GX_Material from 'gx/gx_material';
+import * as GX from 'gx/gx_enum';
 
 import { TXTR } from './txtr';
 

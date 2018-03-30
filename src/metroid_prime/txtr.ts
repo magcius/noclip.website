@@ -3,8 +3,8 @@
 
 import { ResourceSystem } from './resource';
 
-import * as GX from '../j3d/gx_enum';
-import * as GX_Texture from '../j3d/gx_texture';
+import * as GX from 'gx/gx_enum';
+import * as GX_Texture from 'gx/gx_texture';
 
 const txtrFormatRemap = [
     GX.TexFormat.I4,     // 0x00

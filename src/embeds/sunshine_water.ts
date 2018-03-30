@@ -5,8 +5,8 @@ import * as RARC from 'j3d/rarc';
 import * as Yaz0 from 'yaz0';
 
 import { BMD, BTK, BMT, TEX1, MaterialEntry } from 'j3d/j3d';
-import * as GX from 'j3d/gx_enum';
-import * as GX_Material from 'j3d/gx_material';
+import * as GX from 'gx/gx_enum';
+import * as GX_Material from 'gx/gx_material';
 
 import { MainScene, OrbitCameraController, Texture, Scene } from 'viewer';
 import { BlendMode, RenderFlags, RenderState, RenderPass } from 'render';

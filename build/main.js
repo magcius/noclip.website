@@ -1175,7 +1175,7 @@ System.register("viewer", ["render", "gl-matrix"], function (exports_6, context_
     };
 });
 // GX constants. Mostly taken from libogc.
-System.register("j3d/gx_enum", [], function (exports_7, context_7) {
+System.register("gx/gx_enum", [], function (exports_7, context_7) {
     "use strict";
     var __moduleName = context_7 && context_7.id;
     return {
@@ -1184,7 +1184,7 @@ System.register("j3d/gx_enum", [], function (exports_7, context_7) {
         }
     };
 });
-System.register("j3d/gx_material", ["j3d/gx_enum", "render", "util"], function (exports_8, context_8) {
+System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (exports_8, context_8) {
     "use strict";
     var __moduleName = context_8 && context_8.id;
     function getVertexAttribLocation(vtxAttrib) {
@@ -1660,7 +1660,7 @@ System.register("j3d/gx_material", ["j3d/gx_enum", "render", "util"], function (
     };
 });
 // Moderately optimized GX Display List parser.
-System.register("j3d/gx_displaylist", ["j3d/gx_enum", "util"], function (exports_9, context_9) {
+System.register("gx/gx_displaylist", ["gx/gx_enum", "util"], function (exports_9, context_9) {
     "use strict";
     var __moduleName = context_9 && context_9.id;
     function getComponentSize(dataType) {
@@ -1880,7 +1880,7 @@ System.register("j3d/gx_displaylist", ["j3d/gx_enum", "util"], function (exports
     };
 });
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
-System.register("j3d/j3d", ["j3d/gx_enum", "j3d/gx_material", "j3d/gx_displaylist", "endian", "util", "gl-matrix"], function (exports_10, context_10) {
+System.register("j3d/j3d", ["gx/gx_enum", "gx/gx_material", "gx/gx_displaylist", "endian", "util", "gl-matrix"], function (exports_10, context_10) {
     "use strict";
     var __moduleName = context_10 && context_10.id;
     function readStringTable(buffer, offs) {
@@ -2932,7 +2932,7 @@ System.register("yaz0", ["util"], function (exports_12, context_12) {
         }
     };
 });
-System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_13, context_13) {
+System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_13, context_13) {
     "use strict";
     var __moduleName = context_13 && context_13.id;
     function expand3to8(n) {
@@ -3274,7 +3274,7 @@ System.register("j3d/gx_texture", ["j3d/gx_enum"], function (exports_13, context
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "j3d/gx_enum", "j3d/gx_material", "j3d/gx_texture", "render"], function (exports_14, context_14) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_material", "gx/gx_texture", "render"], function (exports_14, context_14) {
     "use strict";
     var __moduleName = context_14 && context_14.id;
     function translateCompType(gl, compType) {
@@ -4033,7 +4033,7 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "vie
         }
     };
 });
-System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "j3d/gx_material", "j3d/scenes", "j3d/render", "progress", "util", "gl-matrix"], function (exports_17, context_17) {
+System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_material", "j3d/scenes", "j3d/render", "progress", "util", "gl-matrix"], function (exports_17, context_17) {
     "use strict";
     var __moduleName = context_17 && context_17.id;
     var j3d_3, RARC, Yaz0, GX_Material, scenes_2, render_5, progress_3, util_9, gl_matrix_5, CameraPos, WindWakerScene, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
@@ -11046,7 +11046,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_48, context_48)
     };
 });
 // Implements Retro's TXTR (texture) format as seen in Metroid Prime 1.
-System.register("metroid_prime/txtr", ["j3d/gx_enum", "j3d/gx_texture"], function (exports_49, context_49) {
+System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function (exports_49, context_49) {
     "use strict";
     var __moduleName = context_49 && context_49.id;
     function parse(resourceSystem, buffer) {
@@ -11105,7 +11105,7 @@ System.register("metroid_prime/txtr", ["j3d/gx_enum", "j3d/gx_texture"], functio
     };
 });
 // Implements Retro's MREA format as seen in Metroid Prime 1.
-System.register("metroid_prime/mrea", ["j3d/gx_material", "j3d/gx_enum", "util", "endian"], function (exports_50, context_50) {
+System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "endian"], function (exports_50, context_50) {
     "use strict";
     var __moduleName = context_50 && context_50.id;
     function align(n, multiple) {
@@ -11899,7 +11899,7 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_53, context_53
     };
 });
 //
-System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "j3d/gx_texture", "j3d/gx_material", "viewer", "render", "util"], function (exports_54, context_54) {
+System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/gx_texture", "gx/gx_material", "viewer", "render", "util"], function (exports_54, context_54) {
     "use strict";
     var __moduleName = context_54 && context_54.id;
     var gl_matrix_11, mrea_1, GX_Texture, GX_Material, Viewer, render_19, util_30, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
@@ -12966,7 +12966,7 @@ System.register("embeds/main", ["viewer"], function (exports_57, context_57) {
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/j3d", "j3d/gx_enum", "j3d/gx_material", "viewer", "util", "j3d/render", "j3d/sms_scenes"], function (exports_58, context_58) {
+System.register("embeds/sunshine_water", ["gl-matrix", "j3d/rarc", "yaz0", "j3d/j3d", "gx/gx_enum", "gx/gx_material", "viewer", "util", "j3d/render", "j3d/sms_scenes"], function (exports_58, context_58) {
     "use strict";
     var __moduleName = context_58 && context_58.id;
     function createScene(gl, name) {
