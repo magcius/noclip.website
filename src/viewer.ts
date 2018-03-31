@@ -3,7 +3,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { RenderState, RenderFlags, RenderPass, RenderTarget } from './render';
+import { RenderState, RenderFlags, RenderPass, RenderTarget, Program } from './render';
 
 import Progressable from 'Progressable';
 
@@ -280,6 +280,28 @@ export class OrbitCameraController implements CameraController {
     }
 }
 
+class FullscreenCopyProgram extends Program {
+    public vert: string = `
+out vec2 v_TexCoord;
+
+void main() {
+    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
+    gl_Position.zw = vec2(1);
+}
+`;
+    public frag: string = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 color = texture(u_Texture, v_TexCoord);
+    gl_FragColor = vec4(color.rgb, 1.0);
+}
+`;
+}
+
 export class Viewer {
     public camera: mat4;
     public inputManager: InputManager;
@@ -288,6 +310,7 @@ export class Viewer {
     public renderState: RenderState;
     public onscreenRenderTarget: RenderTarget;
     public scene: MainScene;
+    public fullscreenCopyProgram: Program;
 
     constructor(public canvas: HTMLCanvasElement) {
         const gl = canvas.getContext("webgl2", { alpha: false });
@@ -298,24 +321,32 @@ export class Viewer {
         this.camera = mat4.create();
         this.cameraController = null;
 
-        this.onscreenRenderTarget = { width: 0, height: 0, framebuffer: null };
+        this.onscreenRenderTarget = new RenderTarget();
+        this.fullscreenCopyProgram = new FullscreenCopyProgram();
     }
 
     public reset() {
         const gl = this.renderState.gl;
         gl.activeTexture(gl.TEXTURE0);
         gl.clearColor(0.88, 0.88, 0.88, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         this.renderState.setClipPlanes(0.2, 50000);
     }
 
     public render() {
         const gl = this.renderState.gl;
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        this.renderState.useFlags(RenderFlags.default);
 
         if (!this.scene)
             return;
 
+        this.onscreenRenderTarget.setParameters(gl, this.canvas.width, this.canvas.height);
+        this.renderState.setOnscreenRenderTarget(this.onscreenRenderTarget);
+
+        this.renderState.reset();
+
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        // Main scene. This renders to the onscreen target.
         const scene = this.scene;
         if (scene.renderPasses) {
             for (const pass of scene.renderPasses) {
@@ -326,6 +357,18 @@ export class Viewer {
             this.renderState.currentPass = RenderPass.OPAQUE;
             scene.render(this.renderState);
         }
+
+        // Draw onscreen to canvas. First, resolve MSAA buffer to a standard buffer.
+        this.onscreenRenderTarget.resolve(gl);
+        // Now, copy the onscreen RT to the screen.
+        this.renderState.useProgram(this.fullscreenCopyProgram);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.onscreenRenderTarget.resolvedColorTexture);
+        gl.disable(gl.DEPTH_TEST);
+        gl.disable(gl.CULL_FACE);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
 
         const frameEndTime = window.performance.now();
         const diff = frameEndTime - this.renderState.frameStartTime;
@@ -365,12 +408,6 @@ export class Viewer {
             const dt = nt - t;
             t = nt;
 
-            this.renderState.reset();
-
-            this.onscreenRenderTarget.width = this.canvas.width;
-            this.onscreenRenderTarget.height = this.canvas.height;
-            this.renderState.setRenderTarget(this.onscreenRenderTarget);
-
             if (this.cameraController) {
                 this.cameraController.update(camera, this.inputManager, dt);
             }
@@ -380,6 +417,7 @@ export class Viewer {
             this.renderState.setView(camera);
             this.renderState.time += dt;
             this.render();
+
             window.requestAnimationFrame(update);
         };
         update(0);

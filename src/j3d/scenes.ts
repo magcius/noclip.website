@@ -9,7 +9,6 @@ import * as Viewer from '../viewer';
 import Progressable from 'Progressable';
 import { RenderPass, RenderState } from '../render';
 import { assert, fetch, readString } from '../util';
-import { SunshineSceneDesc } from './sms_scenes';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export interface J3DScene extends Viewer.Scene {
@@ -101,42 +100,3 @@ export class RARCSceneDesc implements Viewer.SceneDesc {
         });
     }
 }
-
-class SMGSceneDesc implements Viewer.SceneDesc {
-    id: string;
-    paths: string[];
-    name: string;
-
-    constructor(paths: string[], name: string) {
-        this.id = paths[0];
-        this.paths = paths;
-        this.name = name;
-    }
-
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return Progressable.all(this.paths.map((path) => fetch(path).then((buffer: ArrayBufferSlice) => {
-            return this.createSceneFromBuffer(gl, buffer);
-        }))).then((scenes: MultiScene[]) => {
-            return new MultiScene(scenes);
-        });
-    }
-
-    protected createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): MultiScene {
-        const multiScene: MultiScene = createSceneFromBuffer(gl, buffer);
-        assert(multiScene.scenes.length === 1);
-        const scene: Scene = (<Scene> multiScene.scenes[0]);
-        scene.setFPS(60);
-        scene.setUseMaterialTexMtx(true);
-        return multiScene;
-    }
-}
-
-const id = "j3d";
-const name = "GameCube Models";
-
-const sceneDescs: Viewer.SceneDesc[] = [
-    new SMGSceneDesc(["data/j3d/MarioFaceShipPlanet.arc"], "Faceship"),
-    new SMGSceneDesc(["data/j3d/PeachCastleGardenPlanet.arc", "data/j3d/GalaxySky.arc"], "Peach's Castle Garden"),
-];
-
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

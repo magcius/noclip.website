@@ -143,10 +143,77 @@ RenderFlags.default.depthWrite = true;
 RenderFlags.default.depthFunc = CompareMode.LEQUAL;
 RenderFlags.default.frontFace = FrontFaceMode.CCW;
 
-export interface RenderTarget {
-    width: number;
-    height: number;
-    framebuffer: WebGLFramebuffer;
+export class RenderTarget {
+    public width: number;
+    public height: number;
+
+    public msaaFramebuffer: WebGLFramebuffer;
+    public msaaColorRenderbuffer: WebGLRenderbuffer;
+    public msaaDepthRenderbuffer: WebGLRenderbuffer;
+
+    // Used for the actual resolve.
+    public resolvedFramebuffer: WebGLFramebuffer;
+    public resolvedColorTexture: WebGLTexture;
+
+    public destroy(gl: WebGL2RenderingContext) {
+        if (this.msaaFramebuffer)
+            gl.deleteFramebuffer(this.msaaFramebuffer);
+        if (this.msaaColorRenderbuffer)
+            gl.deleteRenderbuffer(this.msaaColorRenderbuffer);
+        if (this.msaaDepthRenderbuffer)
+            gl.deleteRenderbuffer(this.msaaDepthRenderbuffer);
+        if (this.resolvedFramebuffer)
+            gl.deleteFramebuffer(this.resolvedFramebuffer);
+        if (this.resolvedColorTexture)
+            gl.deleteTexture(this.resolvedColorTexture);
+    }
+
+    public setParameters(gl: WebGL2RenderingContext, width: number, height: number) {
+        if (this.width === width && this.height === height)
+            return;
+
+        this.destroy(gl);
+
+        this.width = width;
+        this.height = height;
+
+        gl.getExtension('EXT_color_buffer_float');
+
+        // XXX(jstpierre): Configurable?
+        const samples = gl.getParameter(gl.SAMPLES);
+
+        // MSAA FB.
+        this.msaaColorRenderbuffer = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaColorRenderbuffer);
+        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, this.width, this.height);
+        this.msaaDepthRenderbuffer = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaDepthRenderbuffer);
+        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT16, this.width, this.height);
+        this.msaaFramebuffer = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.msaaFramebuffer);
+        gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, this.msaaColorRenderbuffer);
+        gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.msaaDepthRenderbuffer);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+
+        // Resolved.
+        this.resolvedColorTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, this.resolvedColorTexture);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, this.width, this.height);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        this.resolvedFramebuffer = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.resolvedFramebuffer);
+        gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.resolvedColorTexture, 0);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    }
+
+    public resolve(gl: WebGL2RenderingContext) {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.msaaFramebuffer);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.resolvedFramebuffer);
+        gl.blitFramebuffer(0, 0, this.width, this.height, 0, 0, this.width, this.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    }
 }
 
 export class RenderState {
@@ -173,6 +240,8 @@ export class RenderState {
     public drawCallCount: number;
     public frameStartTime: number;
 
+    private onscreenRenderTarget: RenderTarget;
+
     constructor(public gl: WebGL2RenderingContext) {
         this.programCache = new ProgramCache(this.gl);
 
@@ -184,19 +253,22 @@ export class RenderState {
         this.scratchMatrix = mat4.create();
     }
 
+    public reset() {
+        this.drawCallCount = 0;
+        this.frameStartTime = window.performance.now();
+        this.useRenderTarget(this.onscreenRenderTarget);
+        this.useFlags(RenderFlags.default);
+    }
+
     public setView(m: mat4) {
         mat4.copy(this.view, m);
     }
 
-    public reset() {
-        this.drawCallCount = 0;
-        this.frameStartTime = window.performance.now();
-    }
-
-    public setRenderTarget(renderTarget: RenderTarget) {
-        this.currentRenderTarget = renderTarget;
+    public useRenderTarget(renderTarget: RenderTarget) {
+        const gl = this.gl;
+        this.currentRenderTarget = renderTarget !== null ? renderTarget : this.onscreenRenderTarget;
         this.bindViewport();
-        // TODO(jstpierre): Bind framebuffers.
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
     }
 
     public bindViewport(): void {
@@ -209,8 +281,14 @@ export class RenderState {
     public setClipPlanes(near: number, far: number) {
         this.nearClipPlane = near;
         this.farClipPlane = far;
-        const width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
-        mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+        if (this.currentRenderTarget) {
+            const width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+            mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+        }
+    }
+
+    public setOnscreenRenderTarget(renderTarget: RenderTarget) {
+        this.onscreenRenderTarget = renderTarget;
     }
 
     public compileProgram(prog: Program) {

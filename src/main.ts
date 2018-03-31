@@ -6,6 +6,7 @@ import Progressable from 'Progressable';
 
 import * as ZWW from './j3d/zww_scenes';
 import * as SMS from './j3d/sms_scenes';
+import * as SMG from './j3d/smg_scenes';
 import * as J3D from './j3d/scenes';
 import * as SM64DS from './sm64ds/scenes';
 import * as MDL0 from './mdl0/scenes';
@@ -18,7 +19,7 @@ import * as MP1 from './metroid_prime/scenes';
 const sceneGroups = [
     ZWW.sceneGroup,
     SMS.sceneGroup,
-    J3D.sceneGroup,
+    SMG.sceneGroup,
     SM64DS.sceneGroup,
     MDL0.sceneGroup,
     ZELVIEW.sceneGroup,
