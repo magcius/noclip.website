@@ -222,6 +222,8 @@ let totalVertexCount = 0;
 let totalTriangleCount = 0;
 let drawCallIdx = 0;
 while (true) {
+    if (drawCallIdx >= srcBuffer.byteLength)
+        break;
     const cmd = view.getUint8(drawCallIdx);
     if (cmd === 0)
         break;

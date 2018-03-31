@@ -403,7 +403,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             const weightedJointTable = betoh(buffer.subarray(packetMatrixTableOffs, packetMatrixTableSize), 2).createTypedArray(Uint16Array);
 
             const srcOffs = chunkStart + packetStart;
-            const subBuffer = buffer.slice(srcOffs);
+            const subBuffer = buffer.subarray(srcOffs, packetSize);
             const loadedData = vtxLoader.runVertices(vtxArrays, subBuffer);
             loadedDatas.push(loadedData);
 
