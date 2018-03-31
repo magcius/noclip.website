@@ -215,7 +215,7 @@ class Scene implements Viewer.MainScene {
     private translateCollision(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: RenderState) => void {
         const coll = scene.collision;
 
-        function stitchLines(ibd) {
+        function stitchLines(ibd: Uint16Array): Uint16Array {
             const lines = new Uint16Array(ibd.length * 2);
             let o = 0;
             for (let i = 0; i < ibd.length; i += 3) {

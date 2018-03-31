@@ -10,7 +10,7 @@ import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export class SunshineClearScene implements Viewer.Scene {
-    public textures = [];
+    public textures: Viewer.Texture[] = [];
     public renderPasses = [ RenderPass.CLEAR ];
 
     public render(renderState: RenderState) {

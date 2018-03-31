@@ -5,6 +5,7 @@
         "downlevelIteration": true,
         "noImplicitReturns": true,
         "noImplicitThis": true,
+        "noImplicitAny": true,
         "lib": [
             "es2015",
             "es2015.promise",

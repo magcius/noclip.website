@@ -241,7 +241,7 @@ class Main {
         tex.style.textAlign = 'center';
         tex.style.verticalAlign = 'bottom';
 
-        const canvases = [];
+        const canvases: HTMLCanvasElement[] = [];
 
         for (const canvas of texture.surfaces) {
             canvas.style.margin = '2px';

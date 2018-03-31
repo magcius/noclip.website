@@ -1035,7 +1035,7 @@ function applyLoopMode(t: number, loopMode: LoopMode) {
     }
 }
 
-function cubicEval(cf0, cf1, cf2, cf3, t) {
+function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number): number {
     return (((cf0 * t + cf1) * t + cf2) * t + cf3);
 }
 

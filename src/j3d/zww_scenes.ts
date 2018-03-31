@@ -218,7 +218,7 @@ class WindWakerScene extends MultiScene {
 }
 
 class WindWakerSceneDesc extends RARCSceneDesc {
-    public constructor(path, name, public cameraPos: CameraPos) {
+    public constructor(path: string, name: string, public cameraPos: CameraPos) {
         super(path, name);
     }
 

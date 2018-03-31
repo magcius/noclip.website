@@ -9593,7 +9593,8 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_42, 
     }
     // Software decompresses from standard BC4/BC5 to R/RG.
     function decompressBC45(texture) {
-        var bytesPerPixel, type;
+        var bytesPerPixel;
+        var type;
         switch (texture.type) {
             case 'BC4':
                 type = 'R';
@@ -9603,6 +9604,8 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_42, 
                 type = 'RG';
                 bytesPerPixel = 2;
                 break;
+            default:
+                throw "whoops";
         }
         var signed = texture.flag === 'SNORM';
         var flag = texture.flag;
@@ -9669,7 +9672,12 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_42, 
             }
         }
         var pixels = dst.buffer;
-        return { type: type, flag: flag, bytesPerPixel: bytesPerPixel, width: width, height: height, pixels: pixels };
+        switch (type) {
+            case 'R':
+                return { type: type, flag: flag, bytesPerPixel: 1, width: width, height: height, pixels: pixels };
+            case 'RG':
+                return { type: type, flag: flag, bytesPerPixel: 2, width: width, height: height, pixels: pixels };
+        }
     }
     function decompressBC(texture) {
         switch (texture.type) {
