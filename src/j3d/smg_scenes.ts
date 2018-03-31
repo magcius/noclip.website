@@ -10,7 +10,7 @@ import { RenderState, RenderPass, Program, RenderTarget } from '../render';
 import { createSceneFromBuffer, MultiScene } from './scenes';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
-    const textures = [];
+    const textures: Viewer.Texture[] = [];
     for (const scene of scenes)
         textures.push.apply(textures, scene.textures);
     return textures;

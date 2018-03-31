@@ -282,7 +282,8 @@ function decompressBC3(texture: DecodedTextureBC13): DecodedTextureRGBA {
 
 // Software decompresses from standard BC4/BC5 to R/RG.
 function decompressBC45(texture: DecodedTextureBC45): DecodedTexture {
-    let bytesPerPixel, type;
+    let bytesPerPixel: 1 | 2;
+    let type: 'R' | 'RG';
     switch (texture.type) {
     case 'BC4':
         type = 'R';
@@ -292,6 +293,8 @@ function decompressBC45(texture: DecodedTextureBC45): DecodedTexture {
         type = 'RG';
         bytesPerPixel = 2;
         break;
+    default:
+        throw "whoops";
     }
 
     const signed = texture.flag === 'SNORM';
@@ -362,7 +365,12 @@ function decompressBC45(texture: DecodedTextureBC45): DecodedTexture {
     }
 
     const pixels = dst.buffer;
-    return { type, flag, bytesPerPixel, width, height, pixels };
+    switch (type) {
+    case 'R':
+        return { type, flag, bytesPerPixel: 1, width, height, pixels };
+    case 'RG':
+        return { type, flag, bytesPerPixel: 2, width, height, pixels };
+    }
 }
 
 export function decompressBC(texture: DecodedTextureBC): DecodedTexture {

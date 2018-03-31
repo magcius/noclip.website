@@ -78,7 +78,7 @@ export class Scene implements Viewer.MainScene {
     private coalesceSurfaces(): Surface[] {
         // XXX(jstpierre): TODO: Coalesce surfaces with the same material ID
         // into the same draw call. Seems to happen quite a lot, actually.
-        const surfaces = [];
+        const surfaces: Surface[] = [];
         this.mrea.worldModels.forEach((worldModel) => {
             worldModel.surfaces.forEach((surface) => {
                 surfaces.push(surface);

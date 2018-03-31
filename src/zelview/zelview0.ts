@@ -28,7 +28,7 @@ export class ZELVIEW0 {
     public sceneFile: VFSEntry;
     public view: DataView;
 
-    public lookupFile(pStart): VFSEntry {
+    public lookupFile(pStart: number): VFSEntry {
         for (const entry of this.entries)
             if (entry.pStart === pStart)
                 return entry;
@@ -59,7 +59,7 @@ export class ZELVIEW0 {
     public loadScene(gl: WebGL2RenderingContext, scene: VFSEntry): Headers {
         return readScene(gl, this, scene);
     }
-    public loadMainScene(gl) {
+    public loadMainScene(gl: WebGL2RenderingContext) {
         return this.loadScene(gl, this.sceneFile);
     }
 }
@@ -147,7 +147,7 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
     function readCollision(collisionAddr: number) {
         const offs = rom.lookupAddress(banks, collisionAddr);
 
-        function readVerts(N, addr) {
+        function readVerts(N: number, addr: number): Uint16Array {
             let offs = rom.lookupAddress(banks, addr);
             const verts = new Uint16Array(N * 3);
             for (let i = 0; i < N; i++) {
@@ -162,7 +162,7 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
         const vertsAddr = rom.view.getUint32(offs + 0x10, false);
         const verts = readVerts(vertsN, vertsAddr);
 
-        function readPolys(N, addr) {
+        function readPolys(N: number, addr: number): Uint16Array {
             let offs = rom.lookupAddress(banks, addr);
             const polys = new Uint16Array(N * 3);
             for (let i = 0; i < N; i++) {
@@ -177,7 +177,7 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
         const polysAddr = rom.view.getUint32(offs + 0x18, false);
         const polys = readPolys(polysN, polysAddr);
 
-        function readWaters(N, addr) {
+        function readWaters(N: number, addr: number): Uint16Array {
             // XXX: While we should probably keep the actual stuff about
             // water boxes, I'm just drawing them, so let's just record
             // a quad.
@@ -211,7 +211,7 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
         const watersAddr = rom.view.getUint32(offs + 0x28, false);
         const waters = readWaters(watersN, watersAddr);
 
-        function readCamera(addr) {
+        function readCamera(addr: number): mat4 {
             const skyboxCamera = loadAddress(addr + 0x04);
             const offs = rom.lookupAddress(banks, skyboxCamera);
             const x = rom.view.getInt16(offs + 0x00, false);
@@ -254,7 +254,7 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
         return rooms;
     }
 
-    function loadImage(gl: WebGL2RenderingContext, src) {
+    function loadImage(gl: WebGL2RenderingContext, src: string) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
@@ -339,7 +339,7 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
 
         const mesh = new Mesh();
 
-        function readDL(addr): F3DEX2.DL {
+        function readDL(addr: number): F3DEX2.DL {
             const dlStart = loadAddress(addr);
             if (dlStart === 0)
                 return null;

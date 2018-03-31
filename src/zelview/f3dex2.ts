@@ -234,7 +234,7 @@ function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
         renderFlags.depthTest = !!(newMode & OtherModeL.Z_CMP);
         renderFlags.depthWrite = !!(newMode & OtherModeL.Z_UPD);
 
-        let alphaTestMode;
+        let alphaTestMode: number;
         if (newMode & OtherModeL.FORCE_BL) {
             alphaTestMode = 0;
             renderFlags.blendMode = BlendMode.ADD;
@@ -663,7 +663,7 @@ function translateTexture(state: State, texture: TextureTile) {
             texture.pixels = new Uint8Array(texture.width * texture.height * 4);
     }
 
-    function translateWrap(cm) {
+    function translateWrap(cm: number) {
         switch (cm) {
             case 1: return gl.MIRRORED_REPEAT;
             case 2: return gl.CLAMP_TO_EDGE;
