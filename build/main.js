@@ -5626,7 +5626,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
             MultiScene = /** @class */ (function () {
                 function MultiScene(scenes) {
                     this.cameraController = Viewer.FPSCameraController;
-                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
+                    this.renderPasses = [0 /* CLEAR */, 2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.scenes = scenes;
                     this.textures = [];
                     try {
