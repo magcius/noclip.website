@@ -3,13 +3,13 @@ import { RenderPass, RenderState } from '../render';
 import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';
-import { createScene, J3DScene } from './scenes';
+import { createScene } from './scenes';
 import { Scene, ColorOverride } from './render';
 import Progressable from 'Progressable';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
-function collectTextures(scenes: J3DScene[]): Viewer.Texture[] {
+function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
     for (const scene of scenes)
         if (scene)
@@ -20,7 +20,7 @@ function collectTextures(scenes: J3DScene[]): Viewer.Texture[] {
 export class SunshineRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
 
-    constructor(public skyScene: J3DScene, public mapScene: J3DScene, public seaScene: J3DScene, public extraScenes: J3DScene[]) {
+    constructor(public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public extraScenes: Viewer.Scene[]) {
         this.textures = collectTextures([skyScene, mapScene, seaScene].concat(extraScenes));
     }
 
@@ -91,7 +91,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map', false);
             const seaScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sea', false);
 
-            const extraScenes: J3DScene[] = [];
+            const extraScenes: Scene[] = [];
             for (const file of rarc.findDir('map/map').files) {
                 const [basename, extension] = file.name.split('.');
                 if (extension !== 'bmd')
