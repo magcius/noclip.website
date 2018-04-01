@@ -2,15 +2,12 @@
 import { parseIV } from './iv';
 import { Scene } from './render';
 
-import { MainScene, SceneGroup, Texture } from '../viewer';
 import { RenderState } from '../render';
+import { MainScene, SceneGroup, Texture } from '../viewer';
 
+import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 import { fetch, generateFormID } from '../util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
-
-const name = "Dark Souls Collision Data";
-const id = "dksiv";
 
 const dks1Paths = [
     "data/dksiv/dks1/15-0 Sens Fortress.iv",
@@ -130,19 +127,19 @@ class SceneDesc implements SceneDesc {
     constructor(public id: string, public name: string, public paths: string[]) {
     }
 
-    private createSceneForPath(gl: WebGL2RenderingContext, path: string): Progressable<Scene> {
-        return fetch(path).then((result: ArrayBufferSlice) => {
-            const iv = parseIV(result);
-            const basename = path.split('/').pop();
-            return new Scene(gl, basename, iv);
-        });
-    }
-
     public createScene(gl: WebGL2RenderingContext): Progressable<MainScene> {
         return Progressable.all(this.paths.map((path) => {
             return this.createSceneForPath(gl, path);
         })).then((scenes) => {
             return new MultiScene(scenes);
+        });
+    }
+
+    private createSceneForPath(gl: WebGL2RenderingContext, path: string): Progressable<Scene> {
+        return fetch(path).then((result: ArrayBufferSlice) => {
+            const iv = parseIV(result);
+            const basename = path.split('/').pop();
+            return new Scene(gl, basename, iv);
         });
     }
 }
@@ -151,5 +148,8 @@ const sceneDescs: SceneDesc[] = [
     new SceneDesc('dks1', 'Dark Souls 1', dks1Paths),
     new SceneDesc('dks2', 'Dark Souls 2', dks2Paths),
 ];
+
+const name = "Dark Souls Collision Data";
+const id = "dksiv";
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

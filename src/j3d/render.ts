@@ -1,15 +1,15 @@
 
 import { mat3, mat4 } from 'gl-matrix';
 
-import { BMD, BTK, BMT, TEX1_Texture, Shape, HierarchyNode, HierarchyType, MaterialEntry } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, TEX1_Texture } from './j3d';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 import * as GX_Texture from 'gx/gx_texture';
 import * as Viewer from 'viewer';
 
-import { RenderFlags, RenderState, CompareMode, CoalescedBuffers, BufferCoalescer } from '../render';
-import { assert, align } from '../util';
+import { BufferCoalescer, CoalescedBuffers, CompareMode, RenderFlags, RenderState } from '../render';
+import { align, assert } from '../util';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
@@ -95,7 +95,7 @@ class Command_Shape {
                     continue;
                 const weightedJoint = this.bmd.drw1.weightedJoints[weightedJointIndex];
                 if (weightedJoint.isWeighted)
-                    throw "whoops";
+                    throw new Error("whoops");
 
                 const posMtx = this.jointMatrices[weightedJoint.jointIndex];
                 packetParamsData.set(posMtx, i * 16);
@@ -118,48 +118,8 @@ class Command_Shape {
 
 const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20);
 export class Command_Material {
-    static matrixScratch = mat3.create();
-    static textureScratch = new Int32Array(8);
-
-    private scene: Scene;
-
-    public bmd: BMD;
-    public btk: BTK;
-    public bmt: BMT;
-    public material: MaterialEntry;
-
-    public textures: WebGLTexture[] = [];
-    private renderFlags: RenderFlags;
-    private program: GX_Material.GX_Program;
-
-    private materialParamsBuffer: WebGLBuffer;
-
-    constructor(gl: WebGL2RenderingContext, scene: Scene, material: MaterialEntry) {
-        this.scene = scene;
-        this.bmd = scene.bmd;
-        this.btk = scene.btk;
-        this.bmt = scene.bmt;
-        this.material = material;
-        this.program = new GX_Material.GX_Program(material.gxMaterial);
-        this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
-
-        this.textures = this.translateTextures(gl);
-
-        this.materialParamsBuffer = gl.createBuffer();
-    }
-
-    private translateTextures(gl: WebGL2RenderingContext): WebGLTexture[] {
-        const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
-        const textures = [];
-        for (let i = 0; i < this.material.textureIndexes.length; i++) {
-            const texIndex = this.material.textureIndexes[i];
-            if (texIndex >= 0)
-                textures[i] = Command_Material.translateTexture(gl, tex1.textures[tex1.remapTable[texIndex]]);
-            else
-                textures[i] = null;
-        }
-        return textures;
-    }
+    private static matrixScratch = mat3.create();
+    private static textureScratch = new Int32Array(8);
 
     private static translateTexFilter(gl: WebGL2RenderingContext, texFilter: GX.TexFilter) {
         switch (texFilter) {
@@ -222,6 +182,46 @@ export class Command_Material {
         }
 
         return texId;
+    }
+
+    public bmd: BMD;
+    public btk: BTK;
+    public bmt: BMT;
+    public material: MaterialEntry;
+
+    public textures: WebGLTexture[] = [];
+
+    private scene: Scene;
+    private renderFlags: RenderFlags;
+    private program: GX_Material.GX_Program;
+
+    private materialParamsBuffer: WebGLBuffer;
+
+    constructor(gl: WebGL2RenderingContext, scene: Scene, material: MaterialEntry) {
+        this.scene = scene;
+        this.bmd = scene.bmd;
+        this.btk = scene.btk;
+        this.bmt = scene.bmt;
+        this.material = material;
+        this.program = new GX_Material.GX_Program(material.gxMaterial);
+        this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
+
+        this.textures = this.translateTextures(gl);
+
+        this.materialParamsBuffer = gl.createBuffer();
+    }
+
+    private translateTextures(gl: WebGL2RenderingContext): WebGLTexture[] {
+        const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
+        const textures = [];
+        for (let i = 0; i < this.material.textureIndexes.length; i++) {
+            const texIndex = this.material.textureIndexes[i];
+            if (texIndex >= 0)
+                textures[i] = Command_Material.translateTexture(gl, tex1.textures[tex1.remapTable[texIndex]]);
+            else
+                textures[i] = null;
+        }
+        return textures;
     }
 
     public exec(state: RenderState) {
@@ -403,6 +403,13 @@ export class Scene implements Viewer.Scene {
         this.textures = tex1.textures.map((tex) => this.translateTextureToViewer(tex));
     }
 
+    public destroy(gl: WebGL2RenderingContext) {
+        this.bufferCoalescer.destroy(gl);
+        this.materialCommands.forEach((command) => command.destroy(gl));
+        this.shapeCommands.forEach((command) => command.destroy(gl));
+        gl.deleteBuffer(this.sceneParamsBuffer);
+    }
+
     public setColorOverride(i: ColorOverride, color: GX_Material.Color) {
         this.colorOverrides[i] = color;
     }
@@ -428,45 +435,6 @@ export class Scene implements Viewer.Scene {
 
     public getTimeInFrames(milliseconds: number) {
         return (milliseconds / 1000) * this.fps;
-    }
-
-    private translateTextureToViewer(texture: TEX1_Texture): Viewer.Texture {
-        const surfaces = [];
-
-        let width = texture.width, height = texture.height, offs = 0;
-        const format = texture.format;
-        for (let i = 0; i < texture.mipCount; i++) {
-            const data = texture.data;
-            const dataStart = texture.dataStart + offs;
-            const surface = { format, width, height, data, dataStart };
-            const rgbaTexture = GX_Texture.decodeTexture(surface, false);
-            // Should never happen.
-            if (rgbaTexture.type === 'S3TC')
-                throw "whoops";
-
-            const canvas = document.createElement('canvas');
-            canvas.width = rgbaTexture.width;
-            canvas.height = rgbaTexture.height;
-            canvas.title = `${texture.name} ${texture.format}`;
-            const ctx = canvas.getContext('2d');
-            const imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
-            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-            ctx.putImageData(imgData, 0, 0);
-            surfaces.push(canvas);
-        
-            const size = GX_Texture.calcTextureSize(format, width, height);
-            offs += size;
-            width /= 2;
-            height /= 2;
-        }
-
-        return { name: texture.name, surfaces };
-    }
-
-    private execCommands(state: RenderState, commands: Command[]) {
-        commands.forEach((command) => {
-            command.exec(state);
-        });
     }
 
     public bindState(state: RenderState): boolean {
@@ -495,6 +463,7 @@ export class Scene implements Viewer.Scene {
     public renderOpaque(state: RenderState) {
         this.execCommands(state, this.opaqueCommands);
     }
+
     public renderTransparent(state: RenderState) {
         this.execCommands(state, this.transparentCommands);
     }
@@ -505,6 +474,45 @@ export class Scene implements Viewer.Scene {
 
         this.renderOpaque(state);
         this.renderTransparent(state);
+    }
+
+    private execCommands(state: RenderState, commands: Command[]) {
+        commands.forEach((command) => {
+            command.exec(state);
+        });
+    }
+
+    private translateTextureToViewer(texture: TEX1_Texture): Viewer.Texture {
+        const surfaces = [];
+
+        let width = texture.width, height = texture.height, offs = 0;
+        const format = texture.format;
+        for (let i = 0; i < texture.mipCount; i++) {
+            const data = texture.data;
+            const dataStart = texture.dataStart + offs;
+            const surface = { format, width, height, data, dataStart };
+            const rgbaTexture = GX_Texture.decodeTexture(surface, false);
+            // Should never happen.
+            if (rgbaTexture.type === 'S3TC')
+                throw new Error("whoops");
+
+            const canvas = document.createElement('canvas');
+            canvas.width = rgbaTexture.width;
+            canvas.height = rgbaTexture.height;
+            canvas.title = `${texture.name} ${texture.format}`;
+            const ctx = canvas.getContext('2d');
+            const imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
+            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
+            ctx.putImageData(imgData, 0, 0);
+            surfaces.push(canvas);
+
+            const size = GX_Texture.calcTextureSize(format, width, height);
+            offs += size;
+            width /= 2;
+            height /= 2;
+        }
+
+        return { name: texture.name, surfaces };
     }
 
     private translateModel(gl: WebGL2RenderingContext, bmd: BMD) {
@@ -529,7 +537,7 @@ export class Scene implements Viewer.Scene {
 
         this.bufferCoalescer = new BufferCoalescer(gl,
             bmd.shp1.shapes.map((shape) => shape.packedData),
-            bmd.shp1.shapes.map((shape) => shape.indexData)
+            bmd.shp1.shapes.map((shape) => shape.indexData),
         );
 
         this.shapeCommands = bmd.shp1.shapes.map((shape, i) => {
@@ -573,12 +581,5 @@ export class Scene implements Viewer.Scene {
 
         for (const child of node.children)
             this.translateSceneGraph(child, childContext);
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        this.bufferCoalescer.destroy(gl);
-        this.materialCommands.forEach((command) => command.destroy(gl));
-        this.shapeCommands.forEach((command) => command.destroy(gl));
-        gl.deleteBuffer(this.sceneParamsBuffer);
     }
 }

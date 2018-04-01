@@ -9,9 +9,10 @@
 //
 // TODO(jtpierre): Actually support multiple VATs, which Metroid Prime uses.
 
-import * as GX from './gx_enum';
-import { align, assert } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import { align, assert } from '../util';
+
+import * as GX from './gx_enum';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -83,7 +84,7 @@ interface VattrLayout {
     // Packed vertex size.
     dstVertexSize: number;
     dstAttrOffsets: number[];
-    srcAttrSizes: number[]
+    srcAttrSizes: number[];
     srcVertexSize: number;
 }
 
@@ -161,7 +162,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
         case GX.VertexAttribute.TEX5: return `TEX5`;
         case GX.VertexAttribute.TEX6: return `TEX6`;
         case GX.VertexAttribute.TEX7: return `TEX7`;
-        default: throw "whoops";
+        default: throw new Error("whoops");
         }
     }
 
@@ -186,7 +187,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
             break;
         case GX.AttrType.DIRECT:
         default:
-            throw "whoops";
+            throw new Error("whoops");
         }
 
         switch (vtxDescs[vtxAttrib].type) {
@@ -332,16 +333,16 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
 class VtxLoaderCache {
     private cache = new Map<string, VtxLoader>();
 
-    private makeKey(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): string {
-        return JSON.stringify({ vat, vtxDescs });
-    }
-
-    compileVtxLoader = (vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoader => {
+    public compileVtxLoader = (vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoader => {
         const key = this.makeKey(vat, vtxDescs);
         if (!this.cache.has(key))
             this.cache.set(key, _compileVtxLoader(vat, vtxDescs));
         return this.cache.get(key);
-    };
+    }
+
+    private makeKey(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): string {
+        return JSON.stringify({ vat, vtxDescs });
+    }
 }
 
 const cache = new VtxLoaderCache();

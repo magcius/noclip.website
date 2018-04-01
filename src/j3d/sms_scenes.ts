@@ -1,13 +1,15 @@
 
-import { RenderState } from '../render';
-import * as RARC from './rarc';
-import * as Yaz0 from '../yaz0';
-import * as Viewer from '../viewer';
-import { createScene } from './scenes';
-import { Scene, ColorOverride } from './render';
-import Progressable from 'Progressable';
-import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import Progressable from 'Progressable';
+import { fetch } from 'util';
+
+import { RenderState } from '../render';
+import * as Viewer from '../viewer';
+import * as Yaz0 from '../yaz0';
+
+import * as RARC from './rarc';
+import { ColorOverride, Scene } from './render';
+import { createScene } from './scenes';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
@@ -55,16 +57,6 @@ export class SunshineRenderer implements Viewer.MainScene {
 }
 
 export class SunshineSceneDesc implements Viewer.SceneDesc {
-    public name: string;
-    public path: string;
-    public id: string;
-
-    constructor(path: string, name: string) {
-        this.name = name;
-        this.path = path;
-        this.id = this.name;
-    }
-
     public static createSunshineSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, basename: string, isSkybox: boolean): Scene {
         const bmdFile = rarc.findFile(`map/map/${basename}.bmd`);
         if (!bmdFile)
@@ -76,6 +68,14 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         scene.setIsSkybox(isSkybox);
         scene.setUseMaterialTexMtx(false);
         return scene;
+    }
+
+    public id: string;
+
+    constructor(public path: string, public name: string) {
+        this.name = name;
+        this.path = path;
+        this.id = this.name;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
@@ -116,8 +116,8 @@ const name = "Super Mario Sunshine";
 const sceneDescs: Viewer.SceneDesc[] = [
     new SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
     new SunshineSceneDesc("data/j3d/mare0.szs", "Noki Bay"),
-    new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach",),
-    new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor",),
+    new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach"),
+    new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor"),
     new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
     new SunshineSceneDesc("data/j3d/monte3.szs", "Pianta Village"),
 ];

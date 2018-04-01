@@ -1,8 +1,8 @@
 
 // Nintendo RARC file format.
 
-import { assert, readString } from "../util";
-import ArrayBufferSlice from "ArrayBufferSlice";
+import ArrayBufferSlice from 'ArrayBufferSlice';
+import { assert, readString } from 'util';
 
 export interface RARCFile {
     name: string;
@@ -18,9 +18,9 @@ export interface RARCDir {
 
 export class RARC {
     // All the files in a flat list.
-    files: RARCFile[];
+    public files: RARCFile[];
     // Root directory.
-    root: RARCDir;
+    public root: RARCDir;
 
     public findDirParts(parts: string[]): RARCDir {
         let dir = this.root;
@@ -57,7 +57,7 @@ interface DirEntry {
 export function parse(buffer: ArrayBufferSlice): RARC {
     const view = buffer.createDataView();
 
-    assert(readString(buffer, 0x00, 0x04) == 'RARC');
+    assert(readString(buffer, 0x00, 0x04) === 'RARC');
     const size = view.getUint32(0x04);
     const dataOffs = view.getUint32(0x0C) + 0x20;
     const dirCount = view.getUint32(0x20);

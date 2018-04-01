@@ -1,8 +1,9 @@
 
 // GX texture decoding
 
-import * as GX from 'gx_enum';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+
+import * as GX from './gx_enum';
 
 export interface Texture {
     format: GX.TexFormat;
@@ -62,7 +63,7 @@ export function calcPaletteSize(format: GX.TexFormat, palette: GX.TexPalette) {
         break;
     case GX.TexFormat.C14X2:
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 
     // All palette-formats are 16-bit.
@@ -93,7 +94,7 @@ export function calcTextureSize(format: GX.TexFormat, width: number, height: num
     case GX.TexFormat.CMPR:
         return numPixels / 2;
     default:
-        throw "whoops";
+        throw new Error("whoops");
     }
 }
 
@@ -145,7 +146,7 @@ function decode_CMPR_to_S3TC(texture: Texture): DecodedTextureS3TC {
             }
         }
     }
-    return { type: "S3TC", pixels: pixels, width: texture.width, height: texture.height };
+    return { type: "S3TC", pixels, width: texture.width, height: texture.height };
 }
 
 // Software decodes from standard S3TC (not CMPR!) to RGBA.
@@ -270,7 +271,8 @@ function decode_RGBA8(texture: Texture): DecodedTexture {
     const view = texture.data.createDataView(texture.dataStart);
     let srcOffs = 0;
     // RGBA8 is a bit special, so we hand-code this one.
-    const bw = 4, bh = 4;
+    const bw = 4;
+    const bh = 4;
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     for (let yy = 0; yy < texture.height; yy += bh) {
         for (let xx = 0; xx < texture.width; xx += bw) {

@@ -7,7 +7,7 @@ import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';
 
-import { BlendFactor, CompareMode, BlendMode as RenderBlendMode, CullMode, FrontFaceMode, RenderFlags, Program, RenderState } from '../render';
+import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontFaceMode, Program, RenderFlags, RenderState } from '../render';
 import { align } from '../util';
 
 // #region Material definition.
@@ -115,7 +115,7 @@ interface VertexAttributeGenDef {
     storage: string;
     name: string;
     scale: boolean;
-};
+}
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
     { attrib: GX.VertexAttribute.PTMTXIDX, name: "PosMtxIdx", storage: "float", scale: false },
@@ -143,9 +143,9 @@ export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
 }
 
 export class GX_Program extends Program {
-    static ub_SceneParams = 0;
-    static ub_MaterialParams = 1;
-    static ub_PacketParams = 2;
+    public static ub_SceneParams = 0;
+    public static ub_MaterialParams = 1;
+    public static ub_PacketParams = 2;
 
     public u_Texture: WebGLUniformLocation;
 
@@ -155,6 +155,16 @@ export class GX_Program extends Program {
         super();
         this.material = material;
         this.generateShaders();
+    }
+
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
+        super.bind(gl, prog);
+
+        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_SceneParams`), GX_Program.ub_SceneParams);
+        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_MaterialParams`), GX_Program.ub_MaterialParams);
+        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_PacketParams`), GX_Program.ub_PacketParams);
+
+        this.u_Texture = gl.getUniformLocation(prog, `u_Texture`);
     }
 
     private generateFloat(v: number): string {
@@ -611,16 +621,6 @@ ${this.generateAlphaTest(alphaTest)}
 }
 `;
     }
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-
-        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_SceneParams`), GX_Program.ub_SceneParams);
-        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_MaterialParams`), GX_Program.ub_MaterialParams);
-        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_PacketParams`), GX_Program.ub_PacketParams);
-
-        this.u_Texture = gl.getUniformLocation(prog, `u_Texture`);
-    }
 }
 // #endregion
 
@@ -698,7 +698,7 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
         renderFlags.blendSrc = BlendFactor.ONE;
         renderFlags.blendDst = BlendFactor.ONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
-        throw "whoops";
+        throw new Error("whoops");
     }
     return renderFlags;
 }

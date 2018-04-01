@@ -1,14 +1,15 @@
 
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
 
-import * as GX from 'gx/gx_enum';
-import * as GX_Material from 'gx/gx_material';
-import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, coalesceLoadedDatas, getComponentSize, getNumComponents } from 'gx/gx_displaylist';
+import { mat2d, mat3 as matrix3, mat4, quat } from 'gl-matrix';
 
+import ArrayBufferSlice from 'ArrayBufferSlice';
 import { betoh } from 'endian';
 import { assert, readString } from 'util';
-import { mat2d, mat4, mat3 as matrix3, quat } from 'gl-matrix';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+
+import { coalesceLoadedDatas, compileVtxLoader, getComponentSize, getNumComponents, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData } from 'gx/gx_displaylist';
+import * as GX from 'gx/gx_enum';
+import * as GX_Material from 'gx/gx_material';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
@@ -399,14 +400,15 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
 
             const srcOffs = chunkStart + packetStart;
             const subBuffer = buffer.subarray(srcOffs, packetSize);
-            const loadedData = vtxLoader.runVertices(vtxArrays, subBuffer);
-            loadedDatas.push(loadedData);
+            const loadedSubData = vtxLoader.runVertices(vtxArrays, subBuffer);
+            loadedDatas.push(loadedSubData);
 
             const firstTriangle = totalTriangleCount;
-            const numTriangles = loadedData.totalTriangleCount;
+            const numTriangles = loadedSubData.totalTriangleCount;
             totalTriangleCount += numTriangles;
 
             packets.push({ weightedJointTable, firstTriangle, numTriangles });
+            packetIdx += 0x08;
         }
 
         // Coalesce shape data.
@@ -655,7 +657,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             const texCoordId: GX.TexCoordSlot = view.getUint8(tevOrderOffs + 0x00);
             const texMap: number = view.getUint8(tevOrderOffs + 0x01);
             const channelId: GX.ColorChannelId = view.getUint8(tevOrderOffs + 0x02);
-            assert(view.getUint8(tevOrderOffs + 0x03) == 0xFF);
+            assert(view.getUint8(tevOrderOffs + 0x03) === 0xFF);
 
             // KonstSel
             const konstColorSel: GX.KonstColorSel = view.getUint8(materialEntryIdx + 0x9C + j);
@@ -731,14 +733,14 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         const texMtxOffs = tableOffs + texMtxIndex * 0x64;
         const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
         const type = view.getUint8(texMtxOffs + 0x01);
-        assert(view.getUint16(texMtxOffs + 0x02) == 0xFFFF);
+        assert(view.getUint16(texMtxOffs + 0x02) === 0xFFFF);
         const centerS = view.getFloat32(texMtxOffs + 0x04);
         const centerT = view.getFloat32(texMtxOffs + 0x08);
         const centerQ = view.getFloat32(texMtxOffs + 0x0C);
         const scaleS = view.getFloat32(texMtxOffs + 0x10);
         const scaleT = view.getFloat32(texMtxOffs + 0x14);
         const rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
-        assert(view.getUint16(texMtxOffs + 0x1A) == 0xFFFF);
+        assert(view.getUint16(texMtxOffs + 0x1A) === 0xFFFF);
         const translationS = view.getFloat32(texMtxOffs + 0x1C);
         const translationT = view.getFloat32(texMtxOffs + 0x20);
 
@@ -837,21 +839,13 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
 }
 
 export class BMD {
-    public inf1: INF1;
-    public vtx1: VTX1;
-    public drw1: DRW1;
-    public jnt1: JNT1;
-    public shp1: SHP1;
-    public mat3: MAT3;
-    public tex1: TEX1;
-
-    static parse(buffer: ArrayBufferSlice) {
+    public static parse(buffer: ArrayBufferSlice): BMD {
         const bmd = new BMD();
-    
+
         const view = buffer.createDataView();
         const magic = readString(buffer, 0, 8);
         assert(magic === 'J3D2bmd3' || magic === 'J3D2bdl4');
-    
+
         const size = view.getUint32(0x08);
         const numChunks = view.getUint32(0x0C);
         let offs = 0x20;
@@ -868,24 +862,32 @@ export class BMD {
             TEX1: readTEX1Chunk,
             MDL3: null,
         };
-    
+
         for (let i = 0; i < numChunks; i++) {
             const chunkStart = offs;
             const chunkId = readString(buffer, chunkStart + 0x00, 4);
             const chunkSize = view.getUint32(chunkStart + 0x04);
-    
+
             const parseFunc = parseFuncs[chunkId];
             if (parseFunc === undefined)
                 throw new Error(`Unknown chunk ${chunkId}!`);
-    
+
             if (parseFunc !== null)
                 parseFunc(bmd, buffer, chunkStart, chunkSize);
-    
+
             offs += chunkSize;
         }
-    
+
         return bmd;
     }
+
+    public inf1: INF1;
+    public vtx1: VTX1;
+    public drw1: DRW1;
+    public jnt1: JNT1;
+    public shp1: SHP1;
+    public mat3: MAT3;
+    public tex1: TEX1;
 }
 
 export const enum LoopMode {
@@ -975,7 +977,7 @@ function readTTK1Chunk(btk: BTK, buffer: ArrayBufferSlice, chunkStart: number, c
             const frames = [ { time: 0, value: value, tangentIn: 0, tangentOut: 0 } ];
             return { frames };
         } else {
-            let frames: AnimationKeyframe[] = [];
+            const frames: AnimationKeyframe[] = [];
 
             if (tangent === TangentType.IN) {
                 for (let i = index; i < index + 3 * count; i += 3) {
@@ -1071,32 +1073,7 @@ function sampleAnimationData(track: AnimationTrack, frame: number) {
 }
 
 export class BTK {
-    ttk1: TTK1;
-
-    public findAnimationEntry(materialName: string, texMtxIndex: number) {
-        return this.ttk1.materialAnimationEntries.find((e) => e.materialName === materialName && e.texMtxIndex === texMtxIndex);
-    }
-
-    public calcAnimatedTexMtx(dst: matrix3, materialName: string, texMtxIndex: number, frame: number): boolean {
-        const animationEntry = this.findAnimationEntry(materialName, texMtxIndex);
-        if (!animationEntry)
-            return false;
-
-        const durationInFrames = this.ttk1.duration;
-        const normTime = frame / durationInFrames;
-        const animFrame = applyLoopMode(normTime, this.ttk1.loopMode) * durationInFrames;
-
-        const centerS = animationEntry.centerS, centerT = animationEntry.centerT, centerQ = animationEntry.centerQ;
-        const scaleS = sampleAnimationData(animationEntry.s.scale, animFrame);
-        const scaleT = sampleAnimationData(animationEntry.t.scale, animFrame);
-        const rotation = sampleAnimationData(animationEntry.s.rotation, animFrame) * this.ttk1.rotationScale;
-        const translationS = sampleAnimationData(animationEntry.s.translation, animFrame);
-        const translationT = sampleAnimationData(animationEntry.t.translation, animFrame);
-        createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-        return true;
-    }
-
-    static parse(buffer: ArrayBufferSlice) {
+    public static parse(buffer: ArrayBufferSlice): BTK {
         const btk = new BTK();
 
         const view = buffer.createDataView();
@@ -1129,23 +1106,45 @@ export class BTK {
 
         return btk;
     }
+
+    public ttk1: TTK1;
+
+    public findAnimationEntry(materialName: string, texMtxIndex: number) {
+        return this.ttk1.materialAnimationEntries.find((e) => e.materialName === materialName && e.texMtxIndex === texMtxIndex);
+    }
+
+    public calcAnimatedTexMtx(dst: matrix3, materialName: string, texMtxIndex: number, frame: number): boolean {
+        const animationEntry = this.findAnimationEntry(materialName, texMtxIndex);
+        if (!animationEntry)
+            return false;
+
+        const durationInFrames = this.ttk1.duration;
+        const normTime = frame / durationInFrames;
+        const animFrame = applyLoopMode(normTime, this.ttk1.loopMode) * durationInFrames;
+
+        const centerS = animationEntry.centerS, centerT = animationEntry.centerT, centerQ = animationEntry.centerQ;
+        const scaleS = sampleAnimationData(animationEntry.s.scale, animFrame);
+        const scaleT = sampleAnimationData(animationEntry.t.scale, animFrame);
+        const rotation = sampleAnimationData(animationEntry.s.rotation, animFrame) * this.ttk1.rotationScale;
+        const translationS = sampleAnimationData(animationEntry.s.translation, animFrame);
+        const translationT = sampleAnimationData(animationEntry.t.translation, animFrame);
+        createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+        return true;
+    }
 }
 
 export class BMT {
-    public mat3: MAT3;
-    public tex1: TEX1;
-
-    static parse(buffer: ArrayBufferSlice) {
+    public static parse(buffer: ArrayBufferSlice): BMT {
         const bmt = new BMT();
 
         const view = buffer.createDataView();
         const magic = readString(buffer, 0, 8);
         assert(magic === 'J3D2bmt3');
-    
+
         const size = view.getUint32(0x08);
         const numChunks = view.getUint32(0x0C);
         let offs = 0x20;
-    
+
         // XXX(jstpierre): Type system abuse.
         type ParseFunc = (bmt: any, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) => void;
         const parseFuncs: { [name: string]: ParseFunc } = {
@@ -1153,22 +1152,25 @@ export class BMT {
             TEX1: readTEX1Chunk,
             MDL3: null,
         };
-    
+
         for (let i = 0; i < numChunks; i++) {
             const chunkStart = offs;
             const chunkId = readString(buffer, chunkStart + 0x00, 4);
             const chunkSize = view.getUint32(chunkStart + 0x04);
-    
+
             const parseFunc = parseFuncs[chunkId];
             if (parseFunc === undefined)
                 throw new Error(`Unknown chunk ${chunkId}!`);
-    
+
             if (parseFunc !== null)
                 parseFunc(bmt, buffer, chunkStart, chunkSize);
-    
+
             offs += chunkSize;
         }
-    
+
         return bmt;
     }
+
+    public mat3: MAT3;
+    public tex1: TEX1;
 }

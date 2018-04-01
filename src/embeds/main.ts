@@ -1,8 +1,8 @@
 
 import { System } from 'systemjs';
 
-import * as Viewer from 'viewer';
 import Progressable from 'Progressable';
+import * as Viewer from 'viewer';
 
 interface EmbedModule {
     createScene(gl: WebGL2RenderingContext, name: string): Progressable<Viewer.MainScene>;
@@ -47,7 +47,7 @@ class FsButton {
         this.elem.textContent = this.isFS() ? '🡼' : '🡾';
     }
 
-    onClick() {
+    private onClick() {
         if (this.isFS())
             document.exitFullscreen();
         else
@@ -93,9 +93,6 @@ class Main {
     private onResize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
-    }
-
-    private onFsButtonClick() {
     }
 }
 
