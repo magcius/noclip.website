@@ -30,35 +30,20 @@ export class SunshineRenderer implements Viewer.MainScene {
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         // First up, render skyboxen.
+        renderState.currentPass = null;
+
         if (this.skyScene) {
-            renderState.currentPass = RenderPass.OPAQUE;
-            this.skyScene.render(renderState);
-            renderState.currentPass = RenderPass.TRANSPARENT;
             this.skyScene.render(renderState);
             gl.clear(gl.DEPTH_BUFFER_BIT);
         }
 
-        // Render main scene.
-        if (this.mapScene) {
-            renderState.currentPass = RenderPass.OPAQUE;
+        if (this.mapScene)
             this.mapScene.render(renderState);
-            renderState.currentPass = RenderPass.TRANSPARENT;
-            this.mapScene.render(renderState);
-        }
-
-        // Render sea.
-        if (this.seaScene) {
-            renderState.currentPass = RenderPass.TRANSPARENT;
+        if (this.seaScene)
             this.seaScene.render(renderState);
-        }
 
-        // Render extra junk.
-        for (const scene of this.extraScenes) {
-            renderState.currentPass = RenderPass.OPAQUE;
+        for (const scene of this.extraScenes)
             scene.render(renderState);
-            renderState.currentPass = RenderPass.TRANSPARENT;
-            scene.render(renderState);
-        }
     }
 
     public destroy(gl: WebGL2RenderingContext): void {

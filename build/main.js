@@ -4422,32 +4422,18 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
                     gl.clearColor(0, 0, 0.125, 1);
                     gl.clear(gl.COLOR_BUFFER_BIT);
                     // First up, render skyboxen.
+                    renderState.currentPass = null;
                     if (this.skyScene) {
-                        renderState.currentPass = 2 /* OPAQUE */;
-                        this.skyScene.render(renderState);
-                        renderState.currentPass = 3 /* TRANSPARENT */;
                         this.skyScene.render(renderState);
                         gl.clear(gl.DEPTH_BUFFER_BIT);
                     }
-                    // Render main scene.
-                    if (this.mapScene) {
-                        renderState.currentPass = 2 /* OPAQUE */;
+                    if (this.mapScene)
                         this.mapScene.render(renderState);
-                        renderState.currentPass = 3 /* TRANSPARENT */;
-                        this.mapScene.render(renderState);
-                    }
-                    // Render sea.
-                    if (this.seaScene) {
-                        renderState.currentPass = 3 /* TRANSPARENT */;
+                    if (this.seaScene)
                         this.seaScene.render(renderState);
-                    }
                     try {
-                        // Render extra junk.
                         for (var _a = __values(this.extraScenes), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var scene = _b.value;
-                            renderState.currentPass = 2 /* OPAQUE */;
-                            scene.render(renderState);
-                            renderState.currentPass = 3 /* TRANSPARENT */;
                             scene.render(renderState);
                         }
                     }
