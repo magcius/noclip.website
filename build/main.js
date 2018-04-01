@@ -2250,10 +2250,6 @@ System.register("j3d/j3d", ["gx/gx_enum", "gx/gx_material", "gx/gx_displaylist",
                 throw new Error("Unknown index data type " + type + "!");
         }
     }
-    function align(n, multiple) {
-        var mask = (multiple - 1);
-        return (n + mask) & ~mask;
-    }
     function readSHP1Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = buffer.createDataView(chunkStart, chunkSize);
         var shapeCount = view.getUint16(0x08);
@@ -11433,10 +11429,6 @@ System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function 
 System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "endian"], function (exports_52, context_52) {
     "use strict";
     var __moduleName = context_52 && context_52.id;
-    function align(n, multiple) {
-        var mask = (multiple - 1);
-        return (n + mask) & ~mask;
-    }
     function parseMaterialSet(resourceSystem, buffer, offs) {
         var view = buffer.createDataView();
         var textureCount = view.getUint32(offs + 0x00);
@@ -11714,7 +11706,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
             var normalZ = view.getFloat32(surfaceOffs + 0x28);
             // XXX(jstpierre): 0x30 or 0x2C?
             var surfaceHeaderEnd = surfaceOffs + 0x2C + extraDataSize;
-            var primitiveDataOffs = align(surfaceHeaderEnd, 32);
+            var primitiveDataOffs = util_29.align(surfaceHeaderEnd, 32);
             // Build our vertex format.
             var material = materialSet.materials[materialIndex];
             var vtxAttrFormat = material.vtxAttrFormat;
@@ -11915,12 +11907,12 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
             dataSectionSizeTable.push(size);
             dataSectionSizeTableIdx += 0x04;
         }
-        var firstDataSectionOffs = align(dataSectionSizeTableIdx, 32);
+        var firstDataSectionOffs = util_29.align(dataSectionSizeTableIdx, 32);
         var dataSectionOffsTable = [firstDataSectionOffs];
         for (var i = 1; i < dataSectionCount; i++) {
             var prevOffs = dataSectionOffsTable[i - 1];
             var prevSize = dataSectionSizeTable[i - 1];
-            dataSectionOffsTable.push(align(prevOffs + prevSize, 32));
+            dataSectionOffsTable.push(util_29.align(prevOffs + prevSize, 32));
         }
         // In practice.
         util_29.assert(worldGeometrySectionIndex === 0);

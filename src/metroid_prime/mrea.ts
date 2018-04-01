@@ -7,14 +7,9 @@ import * as GX from 'gx/gx_enum';
 import { TXTR } from './txtr';
 
 import { ResourceSystem } from "./resource";
-import { assert, readString } from "../util";
+import { assert, readString, align } from "../util";
 import { isLittleEndian } from '../endian';
 import ArrayBufferSlice from 'ArrayBufferSlice';
-
-function align(n: number, multiple: number): number {
-    const mask = (multiple - 1);
-    return (n + mask) & ~mask;
-}
 
 export interface MREA {
     materialSet: MaterialSet;
