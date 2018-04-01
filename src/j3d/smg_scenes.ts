@@ -17,7 +17,6 @@ function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
 }
 
 class SMGRenderer implements Viewer.MainScene {
-    public cameraController = Viewer.FPSCameraController;
     public textures: Viewer.Texture[] = [];
 
     private bloomRenderTarget: RenderTarget;

@@ -148,8 +148,6 @@ void main() {
 }
 
 class Scene implements Viewer.MainScene {
-    public cameraController = Viewer.FPSCameraController;
-
     public textures: Viewer.Texture[];
     public zelview0: ZELVIEW0.ZELVIEW0;
     public program_BG: BillboardBGProgram;

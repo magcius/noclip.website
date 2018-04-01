@@ -21,8 +21,6 @@ attrScaleData[0] = 10.0;
 const textureScratch = new Int32Array(8);
 
 export class Scene implements Viewer.MainScene {
-    public cameraController = Viewer.FPSCameraController;
-
     public textures: Viewer.Texture[] = [];
 
     public glTextures: WebGLTexture[] = [];

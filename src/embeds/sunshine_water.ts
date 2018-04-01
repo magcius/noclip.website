@@ -4,7 +4,7 @@ import { mat3, mat4 } from 'gl-matrix';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 
-import { MainScene, OrbitCameraController, Texture, Scene, CameraController, CameraControllerClass } from 'viewer';
+import { MainScene, Texture, Scene } from 'viewer';
 import { BlendMode, RenderFlags, RenderState, RenderPass } from 'render';
 import { fetch } from 'util';
 
@@ -24,10 +24,6 @@ mat4.fromScaling(posMtx, [scale, scale, scale]);
 const packetParamsData = new Float32Array(16 * 10);
 for (let i = 0; i < 10; i++) {
     packetParamsData.set(posMtx, i * 16);
-}
-
-class WaterRenderer extends SunshineRenderer {
-    public cameraController: CameraControllerClass = OrbitCameraController;
 }
 
 const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
@@ -237,7 +233,7 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
         const btk = BTK.parse(btkFile.buffer);
 
         const seaScene = new SeaPlaneScene(gl, bmd, btk, name);
-        return new WaterRenderer(
+        return new SunshineRenderer(
             skyScene,
             null,
             seaScene,

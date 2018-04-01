@@ -263,7 +263,6 @@ function collectTextures(scenes: BMDRenderer[]): Viewer.Texture[] {
 }
 
 class SM64DSRenderer implements Viewer.MainScene {
-    public cameraController = Viewer.FPSCameraController;
     public textures: Viewer.Texture[];
     private program: NITRO_Program;
 

@@ -173,7 +173,6 @@ void main() {
 }
 
 class Scene implements Viewer.MainScene {
-    public cameraController = Viewer.OrbitCameraController;
     public textures: Viewer.Texture[] = [];
     public program: MDL0_Program;
     public mdl0: MDL0.MDL0;
@@ -241,6 +240,7 @@ class Scene implements Viewer.MainScene {
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
+    public defaultCameraController = Viewer.OrbitCameraController;
     public id: string;
     public name: string;
     public path: string;
