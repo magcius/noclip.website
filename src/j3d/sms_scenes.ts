@@ -18,7 +18,6 @@ function collectTextures(scenes: J3DScene[]): Viewer.Texture[] {
 }
 
 export class SunshineRenderer implements Viewer.MainScene {
-    public cameraController: Viewer.CameraControllerClass = Viewer.FPSCameraController;
     public textures: Viewer.Texture[] = [];
 
     constructor(public skyScene: J3DScene, public mapScene: J3DScene, public seaScene: J3DScene, public extraScenes: J3DScene[]) {

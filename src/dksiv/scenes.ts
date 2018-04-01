@@ -2,7 +2,7 @@
 import { parseIV } from './iv';
 import { Scene } from './render';
 
-import { MainScene, SceneGroup, FPSCameraController, Texture } from '../viewer';
+import { MainScene, SceneGroup, Texture } from '../viewer';
 import { RenderState } from '../render';
 
 import Progressable from 'Progressable';
@@ -60,7 +60,6 @@ const dks2Paths = [
 ];
 
 class MultiScene implements MainScene {
-    public cameraController = FPSCameraController;
     public scenes: Scene[];
     public textures: Texture[];
 

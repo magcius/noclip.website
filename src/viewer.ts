@@ -375,6 +375,10 @@ export class Viewer {
         // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
     }
 
+    public setCameraControllerClass(cameraController: CameraControllerClass) {
+        this.cameraController = new cameraController();
+    }
+
     public setScene(scene: MainScene) {
         const gl = this.renderState.gl;
 
@@ -392,7 +396,6 @@ export class Viewer {
                 mat4.identity(this.camera);
             }
 
-            this.cameraController = new scene.cameraController();
             this.cameraController.setInitialCamera(this.camera);
         } else {
             this.scene = null;
@@ -425,7 +428,6 @@ export class Viewer {
 }
 
 export interface MainScene extends Scene {
-    cameraController: CameraControllerClass;
     resetCamera?(m: mat4): void;
     createUI?(): HTMLElement;
     renderPasses?: RenderPass[];
@@ -435,6 +437,7 @@ export interface SceneDesc {
     id: string;
     name: string;
     createScene(gl: WebGL2RenderingContext): Progressable<MainScene>;
+    defaultCameraController?: CameraControllerClass;
 }
 
 export interface SceneGroup {

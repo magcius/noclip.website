@@ -12,7 +12,6 @@ import { fetch, readString } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 class MultiScene implements Viewer.MainScene {
-    public cameraController = Viewer.FPSCameraController;
     public scenes: Viewer.Scene[];
     public textures: Viewer.Texture[];
 

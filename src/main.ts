@@ -307,6 +307,11 @@ class Main {
 
         progressable.promise.then((result: MainScene) => {
             this.progressBar.set(null);
+            if (sceneDesc.defaultCameraController)
+                this.viewer.setCameraControllerClass(sceneDesc.defaultCameraController);
+            else
+                this.viewer.setCameraControllerClass(FPSCameraController);
+
             this.viewer.setScene(result);
 
             this.texturesView.innerHTML = '';
@@ -317,7 +322,7 @@ class Main {
             if (result.createUI)
                 this.sceneUIContainer.appendChild(result.createUI());
 
-            if (result.cameraController === FPSCameraController) {
+            if (this.viewer.cameraController.constructor === FPSCameraController) {
                 this.cameraControllerSelect.selectedIndex = 0;
             } else {
                 this.cameraControllerSelect.selectedIndex = 1;

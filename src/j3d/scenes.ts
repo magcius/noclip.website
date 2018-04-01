@@ -16,7 +16,6 @@ export interface J3DScene extends Viewer.Scene {
 }
 
 export class MultiScene implements Viewer.MainScene {
-    public cameraController = Viewer.FPSCameraController;
     public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: J3DScene[];
     public textures: Viewer.Texture[];

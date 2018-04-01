@@ -22,7 +22,6 @@ function findPakBase() {
 const pakBase = findPakBase();
 
 export class MultiScene implements Viewer.MainScene {
-    public cameraController = Viewer.FPSCameraController;
     public scenes: Viewer.Scene[];
     public textures: Viewer.Texture[];
 

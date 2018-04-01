@@ -84,6 +84,7 @@ class Main {
         System.import(`embeds/${file}`).then((embedModule: EmbedModule) => {
             const gl = this.viewer.renderState.gl;
             embedModule.createScene(gl, name).then((scene: Viewer.MainScene) => {
+                this.viewer.setCameraControllerClass(Viewer.OrbitCameraController);
                 this.viewer.setScene(scene);
             });
         });
