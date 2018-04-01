@@ -4,18 +4,18 @@ import { mat3, mat4 } from 'gl-matrix';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 
-import { MainScene, Texture, Scene } from 'viewer';
 import { BlendMode, RenderFlags, RenderState } from 'render';
 import { fetch } from 'util';
+import { MainScene, Scene, Texture } from 'viewer';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 
-import * as Yaz0 from 'yaz0';
+import { BMD, BMT, BTK, MaterialEntry, TEX1 } from 'j3d/j3d';
 import * as RARC from 'j3d/rarc';
-import { BMD, BTK, BMT, TEX1, MaterialEntry } from 'j3d/j3d';
 import { Command_Material } from 'j3d/render';
-import { SunshineSceneDesc, SunshineRenderer } from 'j3d/sms_scenes';
+import { SunshineRenderer, SunshineSceneDesc } from 'j3d/sms_scenes';
+import * as Yaz0 from 'yaz0';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -68,7 +68,7 @@ class SeaPlaneScene implements Scene {
             gxMaterial.alphaTest.compareA = GX.CompareType.ALWAYS;
             gxMaterial.alphaTest.op = GX.AlphaOp.OR;
         }
-        
+
         if (configName.includes('noblend')) {
             // Disable blending.
             gxMaterial.tevStages[0].alphaInD = GX.CombineAlphaInput.KONST;
@@ -113,7 +113,7 @@ class SeaPlaneScene implements Scene {
 
     public render(state: RenderState) {
         const gl = state.gl;
-        
+
         // Update our SceneParams UBO.
         let offs = 0;
         sceneParamsData.set(state.projection, offs);
@@ -153,6 +153,23 @@ class PlaneShape {
         this.packetParamsBuffer = gl.createBuffer();
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, packetParamsData, gl.STATIC_DRAW);
+    }
+
+    public render(state: RenderState) {
+        const gl = state.gl;
+
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
+
+        gl.bindVertexArray(this.vao);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.bindVertexArray(null);
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        gl.deleteVertexArray(this.vao);
+        gl.deleteBuffer(this.posBuffer);
+        gl.deleteBuffer(this.txcBuffer);
+        gl.deleteBuffer(this.packetParamsBuffer);
     }
 
     private createBuffers(gl: WebGL2RenderingContext) {
@@ -198,23 +215,6 @@ class PlaneShape {
         gl.enableVertexAttribArray(tex0AttribLocation);
 
         gl.bindVertexArray(null);
-    }
-
-    public render(state: RenderState) {
-        const gl = state.gl;
-
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
-
-        gl.bindVertexArray(this.vao);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        gl.bindVertexArray(null);
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        gl.deleteVertexArray(this.vao);
-        gl.deleteBuffer(this.posBuffer);
-        gl.deleteBuffer(this.txcBuffer);
-        gl.deleteBuffer(this.packetParamsBuffer);
     }
 }
 

@@ -1,17 +1,19 @@
 
-import { BMD, BTK } from './j3d';
-
-import * as RARC from './rarc';
-import * as Yaz0 from '../yaz0';
-import * as GX_Material from 'gx/gx_material';
-import * as Viewer from '../viewer';
-import { Scene, ColorOverride } from './render';
-
-import Progressable from 'Progressable';
-import { fetch, readString } from '../util';
 import { mat4 } from 'gl-matrix';
+
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import Progressable from 'Progressable';
+import { fetch, readString } from 'util';
+
 import { RenderState } from '../render';
+import * as Viewer from '../viewer';
+import * as Yaz0 from '../yaz0';
+
+import * as GX_Material from 'gx/gx_material';
+
+import { BMD, BTK } from './j3d';
+import * as RARC from './rarc';
+import { ColorOverride, Scene } from './render';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
@@ -29,24 +31,7 @@ function collectTextures(scenes: Scene[]): Viewer.Texture[] {
 }
 
 class WindWakerRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
-
-    public roomIdx: number;
-    public stageRarc: RARC.RARC;
-    public roomRarc: RARC.RARC;
-
-    public model: Scene;
-    public model1: Scene;
-    public model3: Scene;
-
-    public vr_sky: Scene;
-    public vr_uso_umi: Scene;
-    public vr_kasumi_mae: Scene;
-    public vr_back_cloud: Scene;
-
-    private timeOfDaySelect: HTMLSelectElement;
-
-    static getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number) {
+    public static getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number) {
         const view = buffer.createDataView();
         const chunkCount = view.getUint32(0x00);
 
@@ -126,18 +111,22 @@ class WindWakerRenderer implements Viewer.MainScene {
         return { amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
     }
 
-    private createScene(gl: WebGL2RenderingContext, rarc: RARC.RARC, name: string, isSkybox: boolean): Scene {
-        const bdlFile = rarc.findFile(`bdl/${name}.bdl`);
-        if (!bdlFile)
-            return null;
-        const btkFile = rarc.findFile(`btk/${name}.btk`);
-        const bdl = BMD.parse(bdlFile.buffer);
-        const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
-        const scene = new Scene(gl, bdl, btk, null);
-        scene.setIsSkybox(isSkybox);
-        scene.setUseMaterialTexMtx(false);
-        return scene;
-    }
+    public textures: Viewer.Texture[];
+
+    public roomIdx: number;
+    public stageRarc: RARC.RARC;
+    public roomRarc: RARC.RARC;
+
+    public model: Scene;
+    public model1: Scene;
+    public model3: Scene;
+
+    public vr_sky: Scene;
+    public vr_uso_umi: Scene;
+    public vr_kasumi_mae: Scene;
+    public vr_back_cloud: Scene;
+
+    private timeOfDaySelect: HTMLSelectElement;
 
     constructor(gl: WebGL2RenderingContext, roomIdx: number, stageRarc: RARC.RARC, roomRarc: RARC.RARC, public cameraPos: CameraPos) {
         this.roomIdx = roomIdx;
@@ -187,10 +176,6 @@ class WindWakerRenderer implements Viewer.MainScene {
         this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, colors.vr_back_cloud.a);
     }
 
-    private _onTimeOfDayChange(e: UIEvent) {
-        this.setTimeOfDay(this.timeOfDaySelect.selectedIndex);
-    }
-
     public createUI(): HTMLElement {
         const elem = document.createElement('div');
 
@@ -232,6 +217,23 @@ class WindWakerRenderer implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+    }
+
+    private createScene(gl: WebGL2RenderingContext, rarc: RARC.RARC, name: string, isSkybox: boolean): Scene {
+        const bdlFile = rarc.findFile(`bdl/${name}.bdl`);
+        if (!bdlFile)
+            return null;
+        const btkFile = rarc.findFile(`btk/${name}.btk`);
+        const bdl = BMD.parse(bdlFile.buffer);
+        const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
+        const scene = new Scene(gl, bdl, btk, null);
+        scene.setIsSkybox(isSkybox);
+        scene.setUseMaterialTexMtx(false);
+        return scene;
+    }
+
+    private _onTimeOfDayChange(e: UIEvent) {
+        this.setTimeOfDay(this.timeOfDaySelect.selectedIndex);
     }
 }
 

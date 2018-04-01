@@ -1,12 +1,13 @@
 
-import { BMD, BTK, BMT } from './j3d';
-import { Scene } from './render';
+import ArrayBufferSlice from 'ArrayBufferSlice';
+import Progressable from 'Progressable';
+import { assert, fetch } from 'util';
+
+import { Program, RenderState, RenderTarget } from '../render';
 import * as Viewer from '../viewer';
 
-import { fetch, assert } from '../util';
-import Progressable from 'Progressable';
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import { RenderState, Program, RenderTarget } from '../render';
+import { BMD, BMT, BTK } from './j3d';
+import { Scene } from './render';
 import { createScenesFromBuffer } from './scenes';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
@@ -25,7 +26,7 @@ class SMGRenderer implements Viewer.MainScene {
         gl: WebGL2RenderingContext,
         private mainScene: Scene,
         private skyboxScene: Scene,
-        private bloomScene: Scene
+        private bloomScene: Scene,
     ) {
         this.textures = collectTextures([mainScene, skyboxScene, bloomScene]);
 

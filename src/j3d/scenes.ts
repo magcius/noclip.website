@@ -1,15 +1,16 @@
 
-import { BMD, BTK, BMT } from './j3d';
-import { Scene } from './render';
-import * as GX_Material from 'gx/gx_material';
-import * as RARC from './rarc';
-import * as Yaz0 from '../yaz0';
-import * as Viewer from '../viewer';
-
+import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 import { RenderState } from '../render';
 import { assert, fetch, readString } from '../util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+
+import * as GX_Material from 'gx/gx_material';
+import * as Viewer from '../viewer';
+import * as Yaz0 from '../yaz0';
+
+import { BMD, BMT, BTK } from './j3d';
+import * as RARC from './rarc';
+import { Scene } from './render';
 
 export class MultiScene implements Viewer.MainScene {
     public scenes: Scene[];
@@ -17,13 +18,6 @@ export class MultiScene implements Viewer.MainScene {
 
     constructor(scenes: Scene[]) {
         this.setScenes(scenes);
-    }
-
-    protected setScenes(scenes: Scene[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
     }
 
     public render(renderState: RenderState) {
@@ -34,6 +28,13 @@ export class MultiScene implements Viewer.MainScene {
 
     public destroy(gl: WebGL2RenderingContext) {
         this.scenes.forEach((scene) => scene.destroy(gl));
+    }
+
+    protected setScenes(scenes: Scene[]) {
+        this.scenes = scenes;
+        this.textures = [];
+        for (const scene of this.scenes)
+            this.textures = this.textures.concat(scene.textures);
     }
 }
 

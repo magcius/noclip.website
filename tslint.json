@@ -11,7 +11,11 @@
         "interface-name": false,
         "no-bitwise": false,
         "no-console": false,
-        "quotemark": false
+        "quotemark": false,
+        "whitespace": false,
+        "variable-name": false,
+        "class-name": false,
+        "max-line-length": false
     },
     "rulesDirectory": []
 }

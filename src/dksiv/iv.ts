@@ -9,7 +9,7 @@ export interface Chunk {
     positionData: Float32Array;
 }
 
-export class IV {
+export interface IV {
     color: Float32Array;
     chunks: Chunk[];
 }

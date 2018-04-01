@@ -1,13 +1,14 @@
 
 import { vec3 } from 'gl-matrix';
 
-import * as IV from './iv';
-import { RenderFlags, RenderState, Program, CullMode } from '../render';
+import { CullMode, Program, RenderFlags, RenderState } from '../render';
 import * as Viewer from '../viewer';
 
+import * as IV from './iv';
+
 class IVProgram extends Program {
-    static a_Position = 0;
-    static a_Normal = 1;
+    public static a_Position = 0;
+    public static a_Normal = 1;
 
     public u_Color: WebGLUniformLocation;
 
