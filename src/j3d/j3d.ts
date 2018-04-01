@@ -315,11 +315,6 @@ function readIndex(view: DataView, offs: number, type: GX.AttrType) {
     }
 }
 
-function align(n: number, multiple: number): number {
-    const mask = (multiple - 1);
-    return (n + mask) & ~mask;
-}
-
 function readSHP1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
     const view = buffer.createDataView(chunkStart, chunkSize);
     const shapeCount = view.getUint16(0x08);
