@@ -5,13 +5,14 @@ import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as GX_Material from 'gx/gx_material';
 import * as Viewer from '../viewer';
-import { MultiScene, RARCSceneDesc } from './scenes';
+import { MultiScene, RARCSceneDesc, J3DScene } from './scenes';
 import { Scene, ColorOverride } from './render';
 
 import Progressable from 'Progressable';
 import { fetch, readString } from '../util';
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import { RenderState, RenderPass } from '../render';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
@@ -20,7 +21,17 @@ class CameraPos {
     }
 }
 
-class WindWakerScene extends MultiScene {
+function collectTextures(scenes: J3DScene[]): Viewer.Texture[] {
+    const textures: Viewer.Texture[] = [];
+    for (const scene of scenes)
+        if (scene)
+            textures.push.apply(textures, scene.textures);
+    return textures;
+}
+
+class WindWakerRenderer implements Viewer.MainScene {
+    public textures: Viewer.Texture[];
+
     public roomIdx: number;
     public stageRarc: RARC.RARC;
     public roomRarc: RARC.RARC;
@@ -130,46 +141,33 @@ class WindWakerScene extends MultiScene {
     }
 
     constructor(gl: WebGL2RenderingContext, roomIdx: number, stageRarc: RARC.RARC, roomRarc: RARC.RARC, public cameraPos: CameraPos) {
-        super([]);
-
         this.roomIdx = roomIdx;
         this.stageRarc = stageRarc;
         this.roomRarc = roomRarc;
 
-        const scenes = [];
-
         // Skybox.
         this.vr_sky = this.createScene(gl, stageRarc, `vr_sky`, true);
-        scenes.push(this.vr_sky);
         this.vr_kasumi_mae = this.createScene(gl, stageRarc, `vr_kasumi_mae`, true);
-        scenes.push(this.vr_kasumi_mae);
         this.vr_uso_umi = this.createScene(gl, stageRarc, `vr_uso_umi`, true);
-        scenes.push(this.vr_uso_umi);
         this.vr_back_cloud = this.createScene(gl, stageRarc, `vr_back_cloud`, true);
-        scenes.push(this.vr_back_cloud);
 
         this.model = this.createScene(gl, roomRarc, `model`, false);
-        scenes.push(this.model);
 
         // Ocean.
         this.model1 = this.createScene(gl, roomRarc, `model1`, false);
-        if (this.model1)
-            scenes.push(this.model1);
 
         // Windows / doors.
         this.model3 = this.createScene(gl, roomRarc, `model3`, false);
-        if (this.model3)
-            scenes.push(this.model3);
 
         // Noon.
         this.setTimeOfDay(0x02);
 
-        super(scenes);
+        this.textures = collectTextures([this.vr_sky, this.vr_kasumi_mae, this.vr_uso_umi, this.vr_back_cloud, this.model, this.model1, this.model3]);
     }
 
     public setTimeOfDay(timeOfDay: number) {
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`);
-        const colors = WindWakerScene.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay);
+        const colors = WindWakerRenderer.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay);
 
         this.model.setColorOverride(ColorOverride.K0, colors.light);
         this.model.setColorOverride(ColorOverride.C0, colors.amb);
@@ -215,6 +213,29 @@ class WindWakerScene extends MultiScene {
     public resetCamera(m: mat4) {
         this.cameraPos.set(m);
     }
+
+    public render(state: RenderState) {
+        const gl = state.gl;
+
+        state.currentPass = null;
+
+        // Render skybox.
+        this.vr_sky.render(state);
+        this.vr_kasumi_mae.render(state);
+        this.vr_uso_umi.render(state);
+        this.vr_back_cloud.render(state);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+
+        this.model.render(state);
+
+        if (this.model1)
+            this.model1.render(state);
+        if (this.model3)
+            this.model3.render(state);
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+    }
 }
 
 class WindWakerSceneDesc extends RARCSceneDesc {
@@ -231,7 +252,7 @@ class WindWakerSceneDesc extends RARCSceneDesc {
         ]).then(([stage, room]) => {
             const stageRarc = RARC.parse(Yaz0.decompress(stage));
             const roomRarc = RARC.parse(room);
-            return new WindWakerScene(gl, roomIdx, stageRarc, roomRarc, this.cameraPos);
+            return new WindWakerRenderer(gl, roomIdx, stageRarc, roomRarc, this.cameraPos);
         });
     }
 }
