@@ -470,9 +470,9 @@ export class Scene implements Viewer.Scene {
         });
     }
 
-    public render(state: RenderState) {
+    public bindState(state: RenderState): boolean {
         if (!this.visible)
-            return;
+            return false;
 
         const gl = state.gl;
 
@@ -490,11 +490,25 @@ export class Scene implements Viewer.Scene {
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, sceneParamsData, gl.DYNAMIC_DRAW);
+        return true;
+    }
 
-        if (state.currentPass === RenderPass.OPAQUE) {
-            this.execCommands(state, this.opaqueCommands);
-        } else if (state.currentPass === RenderPass.TRANSPARENT) {
-            this.execCommands(state, this.transparentCommands);
+    public renderOpaque(state: RenderState) {
+        this.execCommands(state, this.opaqueCommands);
+    }
+    public renderTransparent(state: RenderState) {
+        this.execCommands(state, this.transparentCommands);
+    }
+
+    public render(state: RenderState) {
+        if (!this.bindState(state))
+            return;
+
+        if (state.currentPass === null || state.currentPass === RenderPass.OPAQUE) {
+            this.renderOpaque(state);
+        }
+        if (state.currentPass === null || state.currentPass === RenderPass.TRANSPARENT) {
+            this.renderTransparent(state);
         }
     }
 
