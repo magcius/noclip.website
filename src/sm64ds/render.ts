@@ -275,7 +275,7 @@ class Scene implements Viewer.Scene {
 
 class MultiScene implements Viewer.MainScene {
     public cameraController = Viewer.FPSCameraController;
-    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
+    public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
     public textures: Viewer.Texture[];
 
