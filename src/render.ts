@@ -311,7 +311,7 @@ export class RenderState {
         }
 
         if (model)
-            mat4.mul(scratch, model, scratch);
+            mat4.mul(scratch, scratch, model);
         return scratch;
     }
 

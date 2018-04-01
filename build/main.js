@@ -812,7 +812,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                         scratch[14] = 0;
                     }
                     if (model)
-                        gl_matrix_1.mat4.mul(scratch, model, scratch);
+                        gl_matrix_1.mat4.mul(scratch, scratch, model);
                     return scratch;
                 };
                 RenderState.prototype.bindModelView = function (isSkybox, model) {
@@ -5439,13 +5439,12 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 __extends(NITRO_Program, _super);
                 function NITRO_Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nprecision mediump float;\nuniform mat4 u_modelView;\nuniform mat4 u_localMatrix;\nuniform mat4 u_projection;\nuniform mat3 u_texCoordMat;\nlayout(location = " + NITRO_Program.a_position + ") in vec3 a_position;\nlayout(location = " + NITRO_Program.a_uv + ") in vec2 a_uv;\nlayout(location = " + NITRO_Program.a_color + ") in vec4 a_color;\nout vec4 v_color;\nout vec2 v_uv;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);\n    v_color = a_color;\n    v_uv = (u_texCoordMat * vec3(a_uv, 1.0)).st;\n}\n";
+                    _this.vert = "\nprecision mediump float;\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nuniform mat3 u_texCoordMat;\nlayout(location = " + NITRO_Program.a_position + ") in vec3 a_position;\nlayout(location = " + NITRO_Program.a_uv + ") in vec2 a_uv;\nlayout(location = " + NITRO_Program.a_color + ") in vec4 a_color;\nout vec4 v_color;\nout vec2 v_uv;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);\n    v_color = a_color;\n    v_uv = (u_texCoordMat * vec3(a_uv, 1.0)).st;\n}\n";
                     _this.frag = "\nprecision mediump float;\nin vec2 v_uv;\nin vec4 v_color;\nuniform sampler2D u_texture;\n\nvoid main() {\n    gl_FragColor = texture2D(u_texture, v_uv);\n    gl_FragColor *= v_color;\n    if (gl_FragColor.a == 0.0)\n        discard;\n}\n";
                     return _this;
                 }
                 NITRO_Program.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
-                    this.localMatrixLocation = gl.getUniformLocation(prog, "u_localMatrix");
                     this.texCoordMatLocation = gl.getUniformLocation(prog, "u_texCoordMat");
                 };
                 NITRO_Program.a_position = 0;
@@ -5469,6 +5468,9 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                         return textureToCanvas(texture);
                     });
                     this.modelFuncs = bmd.models.map(function (bmdm) { return _this.translateModel(gl, bmdm); });
+                    var scaleFactor = this.bmd.scaleFactor * this.localScale;
+                    this.localMatrix = gl_matrix_7.mat4.create();
+                    gl_matrix_7.mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
                 }
                 Scene.prototype.translatePacket = function (gl, packet) {
                     var vertBuffer = this.arena.createBuffer(gl);
@@ -5597,13 +5599,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 };
                 Scene.prototype.translateModel = function (gl, bmdm) {
                     var _this = this;
-                    var localMatrix = gl_matrix_7.mat4.create();
-                    var bmd = this.bmd;
-                    var scaleFactor = bmd.scaleFactor * this.localScale;
-                    gl_matrix_7.mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
                     var batches = bmdm.batches.map(function (batch) { return _this.translateBatch(gl, batch); });
                     return function (state) {
-                        gl.uniformMatrix4fv(_this.program.localMatrixLocation, false, localMatrix);
                         batches.forEach(function (f) { f(state); });
                     };
                 };
@@ -5615,7 +5612,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 Scene.prototype.render = function (state) {
                     var gl = state.gl;
                     state.useProgram(this.program);
-                    state.bindModelView(this.isSkybox);
+                    state.bindModelView(this.isSkybox, this.localMatrix);
                     this.renderModels(state);
                 };
                 Scene.prototype.destroy = function (gl) {
