@@ -5,7 +5,7 @@ import * as ZSI from './zsi';
 import * as Viewer from '../viewer';
 
 import Progressable from 'Progressable';
-import { BlendMode, CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass } from '../render';
+import { BlendMode, CullMode, RenderFlags, RenderState, Program, RenderArena } from '../render';
 import { fetch, assert } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
@@ -283,10 +283,8 @@ class Scene implements Viewer.Scene {
 
         return (state: RenderState) => {
             state.useFlags(renderFlags);
-            if (state.currentPass === RenderPass.OPAQUE)
-                opaque();
-            if (state.currentPass === RenderPass.TRANSPARENT)
-                transparent();
+            opaque();
+            transparent();
         };
     }
 
@@ -296,7 +294,6 @@ class Scene implements Viewer.Scene {
 }
 
 class MultiScene implements Viewer.MainScene {
-    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: Viewer.Scene[];
     public textures: Viewer.Texture[];
 

@@ -5,7 +5,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 
 import { MainScene, Texture, Scene } from 'viewer';
-import { BlendMode, RenderFlags, RenderState, RenderPass } from 'render';
+import { BlendMode, RenderFlags, RenderState } from 'render';
 import { fetch } from 'util';
 
 import * as GX from 'gx/gx_enum';

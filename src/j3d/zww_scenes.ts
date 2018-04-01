@@ -11,7 +11,7 @@ import Progressable from 'Progressable';
 import { fetch, readString } from '../util';
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from 'ArrayBufferSlice';
-import { RenderState, RenderPass } from '../render';
+import { RenderState } from '../render';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}

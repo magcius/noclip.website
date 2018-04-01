@@ -9,7 +9,7 @@ import * as GX_Texture from 'gx/gx_texture';
 import * as GX_Material from 'gx/gx_material';
 
 import * as Viewer from '../viewer';
-import { RenderPass, RenderState, RenderFlags, CoalescedBuffers, BufferCoalescer } from '../render';
+import { RenderState, RenderFlags, CoalescedBuffers, BufferCoalescer } from '../render';
 import { align } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 

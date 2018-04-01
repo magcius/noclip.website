@@ -1300,27 +1300,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_
                     this.renderState.reset();
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                     // Main scene. This renders to the onscreen target.
-                    var scene = this.scene;
-                    if (scene.renderPasses) {
-                        try {
-                            for (var _a = __values(scene.renderPasses), _b = _a.next(); !_b.done; _b = _a.next()) {
-                                var pass = _b.value;
-                                this.renderState.currentPass = pass;
-                                scene.render(this.renderState);
-                            }
-                        }
-                        catch (e_8_1) { e_8 = { error: e_8_1 }; }
-                        finally {
-                            try {
-                                if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                            }
-                            finally { if (e_8) throw e_8.error; }
-                        }
-                    }
-                    else {
-                        this.renderState.currentPass = 2 /* OPAQUE */;
-                        scene.render(this.renderState);
-                    }
+                    this.scene.render(this.renderState);
                     // Draw onscreen to canvas. First, resolve MSAA buffer to a standard buffer.
                     this.onscreenRenderTarget.resolve(gl);
                     // Now, copy the onscreen RT to the screen.
@@ -1334,7 +1314,6 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_
                     gl.drawArrays(gl.TRIANGLES, 0, 3);
                     var frameEndTime = window.performance.now();
                     var diff = frameEndTime - this.renderState.frameStartTime;
-                    var e_8, _c;
                     // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
                 };
                 Viewer.prototype.setCameraControllerClass = function (cameraController) {
@@ -2031,12 +2010,12 @@ System.register("gx/gx_displaylist", ["gx/gx_enum", "util"], function (exports_1
                 packedVertexDataSize += loadedData.packedVertexData.byteLength;
             }
         }
-        catch (e_9_1) { e_9 = { error: e_9_1 }; }
+        catch (e_8_1) { e_8 = { error: e_8_1 }; }
         finally {
             try {
                 if (loadedDatas_1_1 && !loadedDatas_1_1.done && (_a = loadedDatas_1.return)) _a.call(loadedDatas_1);
             }
-            finally { if (e_9) throw e_9.error; }
+            finally { if (e_8) throw e_8.error; }
         }
         var indexData = new Uint16Array(indexDataSize);
         var packedVertexData = new Uint8Array(packedVertexDataSize);
@@ -2051,15 +2030,15 @@ System.register("gx/gx_displaylist", ["gx/gx_enum", "util"], function (exports_1
                 packedVertexDataOffs += loadedData.packedVertexData.byteLength;
             }
         }
-        catch (e_10_1) { e_10 = { error: e_10_1 }; }
+        catch (e_9_1) { e_9 = { error: e_9_1 }; }
         finally {
             try {
                 if (loadedDatas_2_1 && !loadedDatas_2_1.done && (_b = loadedDatas_2.return)) _b.call(loadedDatas_2);
             }
-            finally { if (e_10) throw e_10.error; }
+            finally { if (e_9) throw e_9.error; }
         }
         return { indexData: indexData, packedVertexData: packedVertexData, totalTriangleCount: totalTriangleCount, totalVertexCount: totalVertexCount };
-        var e_9, _a, e_10, _b;
+        var e_8, _a, e_9, _b;
     }
     exports_10("coalesceLoadedDatas", coalesceLoadedDatas);
     var GX, util_4, VtxLoaderCache, cache, compileVtxLoader;
@@ -2305,12 +2284,12 @@ System.register("j3d/j3d", ["gx/gx_enum", "gx/gx_material", "gx/gx_displaylist",
                 vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0 };
             }
         }
-        catch (e_11_1) { e_11 = { error: e_11_1 }; }
+        catch (e_10_1) { e_10 = { error: e_10_1 }; }
         finally {
             try {
                 if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
             }
-            finally { if (e_11) throw e_11.error; }
+            finally { if (e_10) throw e_10.error; }
         }
         var shapes = [];
         var shapeIdx = shapeTableOffs;
@@ -2373,7 +2352,7 @@ System.register("j3d/j3d", ["gx/gx_enum", "gx/gx_material", "gx/gx_displaylist",
         }
         var shp1 = { shapes: shapes };
         bmd.shp1 = shp1;
-        var e_11, _d;
+        var e_10, _d;
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
         // TODO(jstpierre): Remove these.
@@ -3073,15 +3052,15 @@ System.register("j3d/rarc", ["util"], function (exports_12, context_12) {
                                 return state_1.value;
                         }
                     }
-                    catch (e_12_1) { e_12 = { error: e_12_1 }; }
+                    catch (e_11_1) { e_11 = { error: e_11_1 }; }
                     finally {
                         try {
                             if (parts_1_1 && !parts_1_1.done && (_a = parts_1.return)) _a.call(parts_1);
                         }
-                        finally { if (e_12) throw e_12.error; }
+                        finally { if (e_11) throw e_11.error; }
                     }
                     return dir;
-                    var e_12, _a;
+                    var e_11, _a;
                 };
                 RARC.prototype.findDir = function (path) {
                     return this.findDirParts(path.split('/'));
@@ -3565,15 +3544,15 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                             gl.vertexAttribPointer(attribLocation, vertexArray.compCount, type, normalized, this.shape.packedVertexSize, coalescedBuffers.vertexBuffer.offset + attrib.offset);
                         }
                     }
-                    catch (e_13_1) { e_13 = { error: e_13_1 }; }
+                    catch (e_12_1) { e_12 = { error: e_12_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                         }
-                        finally { if (e_13) throw e_13.error; }
+                        finally { if (e_12) throw e_12.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_13, _d;
+                    var e_12, _d;
                 }
                 Command_Shape.prototype.exec = function (state) {
                     var _this = this;
@@ -3975,14 +3954,14 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                             this.translateSceneGraph(child, childContext);
                         }
                     }
-                    catch (e_14_1) { e_14 = { error: e_14_1 }; }
+                    catch (e_13_1) { e_13 = { error: e_13_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_14) throw e_14.error; }
+                        finally { if (e_13) throw e_13.error; }
                     }
-                    var e_14, _c;
+                    var e_13, _c;
                 };
                 Scene.prototype.destroy = function (gl) {
                     this.bufferCoalescer.destroy(gl);
@@ -4008,15 +3987,15 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_15_1) { e_15 = { error: e_15_1 }; }
+        catch (e_14_1) { e_14 = { error: e_14_1 }; }
         finally {
             try {
                 if (scenes_1_1 && !scenes_1_1.done && (_a = scenes_1.return)) _a.call(scenes_1);
             }
-            finally { if (e_15) throw e_15.error; }
+            finally { if (e_14) throw e_14.error; }
         }
         return textures;
-        var e_15, _a;
+        var e_14, _a;
     }
     var j3d_2, RARC, Yaz0, GX_Material, render_4, Progressable_2, util_8, gl_matrix_5, CameraPos, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
@@ -4324,14 +4303,14 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "uti
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_16_1) { e_16 = { error: e_16_1 }; }
+                    catch (e_15_1) { e_15 = { error: e_15_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_16) throw e_16.error; }
+                        finally { if (e_15) throw e_15.error; }
                     }
-                    var e_16, _c;
+                    var e_15, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -4359,15 +4338,15 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_17_1) { e_17 = { error: e_17_1 }; }
+        catch (e_16_1) { e_16 = { error: e_16_1 }; }
         finally {
             try {
                 if (scenes_2_1 && !scenes_2_1.done && (_a = scenes_2.return)) _a.call(scenes_2);
             }
-            finally { if (e_17) throw e_17.error; }
+            finally { if (e_16) throw e_16.error; }
         }
         return textures;
-        var e_17, _a;
+        var e_16, _a;
     }
     var RARC, Yaz0, scenes_3, util_10, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
@@ -4413,14 +4392,14 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
                             scene.render(renderState);
                         }
                     }
-                    catch (e_18_1) { e_18 = { error: e_18_1 }; }
+                    catch (e_17_1) { e_17 = { error: e_17_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_18) throw e_18.error; }
+                        finally { if (e_17) throw e_17.error; }
                     }
-                    var e_18, _c;
+                    var e_17, _c;
                 };
                 SunshineRenderer.prototype.destroy = function (gl) {
                     if (this.skyScene)
@@ -4478,15 +4457,15 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
                                 extraScenes.push(scene);
                             }
                         }
-                        catch (e_19_1) { e_19 = { error: e_19_1 }; }
+                        catch (e_18_1) { e_18 = { error: e_18_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                             }
-                            finally { if (e_19) throw e_19.error; }
+                            finally { if (e_18) throw e_18.error; }
                         }
                         return new SunshineRenderer(skyScene, mapScene, seaScene, extraScenes);
-                        var e_19, _d;
+                        var e_18, _d;
                     });
                 };
                 return SunshineSceneDesc;
@@ -4517,15 +4496,15 @@ System.register("j3d/smg_scenes", ["util", "Progressable", "render", "j3d/scenes
                 textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_20_1) { e_20 = { error: e_20_1 }; }
+        catch (e_19_1) { e_19 = { error: e_19_1 }; }
         finally {
             try {
                 if (scenes_4_1 && !scenes_4_1.done && (_a = scenes_4.return)) _a.call(scenes_4);
             }
-            finally { if (e_20) throw e_20.error; }
+            finally { if (e_19) throw e_19.error; }
         }
         return textures;
-        var e_20, _a;
+        var e_19, _a;
     }
     var util_11, Progressable_3, render_6, scenes_5, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
@@ -5463,15 +5442,15 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_21_1) { e_21 = { error: e_21_1 }; }
+        catch (e_20_1) { e_20 = { error: e_20_1 }; }
         finally {
             try {
                 if (scenes_6_1 && !scenes_6_1.done && (_a = scenes_6.return)) _a.call(scenes_6);
             }
-            finally { if (e_21) throw e_21.error; }
+            finally { if (e_20) throw e_20.error; }
         }
         return textures;
-        var e_21, _a;
+        var e_20, _a;
     }
     var gl_matrix_7, CRG0, LZ77, NITRO_BMD, render_7, util_15, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, BMDRenderer, SM64DSRenderer, SceneDesc;
     return {
@@ -5628,12 +5607,12 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                         gl_matrix_7.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
-                            catch (e_22_1) { e_22 = { error: e_22_1 }; }
+                            catch (e_21_1) { e_21 = { error: e_21_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_22) throw e_22.error; }
+                                finally { if (e_21) throw e_21.error; }
                             }
                             gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                             gl_matrix_7.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
@@ -5644,7 +5623,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                             gl.bindTexture(gl.TEXTURE_2D, texId);
                         }
                         state.useFlags(renderFlags);
-                        var e_22, _c;
+                        var e_21, _c;
                     };
                 };
                 BMDRenderer.prototype.translateBatch = function (gl, batch) {
@@ -5669,23 +5648,23 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                     this.translateBatch(gl, batch);
                                 }
                             }
-                            catch (e_23_1) { e_23 = { error: e_23_1 }; }
+                            catch (e_22_1) { e_22 = { error: e_22_1 }; }
                             finally {
                                 try {
                                     if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
                                 }
-                                finally { if (e_23) throw e_23.error; }
+                                finally { if (e_22) throw e_22.error; }
                             }
                         }
                     }
-                    catch (e_24_1) { e_24 = { error: e_24_1 }; }
+                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
                         }
-                        finally { if (e_24) throw e_24.error; }
+                        finally { if (e_23) throw e_23.error; }
                     }
-                    var e_24, _f, e_23, _e;
+                    var e_23, _f, e_22, _e;
                 };
                 BMDRenderer.prototype.destroy = function (gl) {
                     this.arena.destroy(gl);
@@ -6438,15 +6417,15 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                                 return entry;
                         }
                     }
-                    catch (e_25_1) { e_25 = { error: e_25_1 }; }
+                    catch (e_24_1) { e_24 = { error: e_24_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_25) throw e_25.error; }
+                        finally { if (e_24) throw e_24.error; }
                     }
                     return null;
-                    var e_25, _c;
+                    var e_24, _c;
                 };
                 ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
                     var bankIdx = addr >>> 24;
@@ -8740,15 +8719,15 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 gl.drawElements(gl.TRIANGLES, prm.count, _this.translateDataType(gl, prm.indexType), prm.offset * _this.dataTypeSize(prm.indexType));
                             }
                         }
-                        catch (e_26_1) { e_26 = { error: e_26_1 }; }
+                        catch (e_25_1) { e_25 = { error: e_25_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_26) throw e_26.error; }
+                            finally { if (e_25) throw e_25.error; }
                         }
                         gl.bindVertexArray(null);
-                        var e_26, _c;
+                        var e_25, _c;
                     };
                 };
                 Scene.prototype.translateTexture = function (gl, texture) {
@@ -8841,14 +8820,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 func();
                             }
                         }
-                        catch (e_27_1) { e_27 = { error: e_27_1 }; }
+                        catch (e_26_1) { e_26 = { error: e_26_1 }; }
                         finally {
                             try {
                                 if (meshFuncs_1_1 && !meshFuncs_1_1.done && (_a = meshFuncs_1.return)) _a.call(meshFuncs_1);
                             }
-                            finally { if (e_27) throw e_27.error; }
+                            finally { if (e_26) throw e_26.error; }
                         }
-                        var e_27, _a;
+                        var e_26, _a;
                     };
                 };
                 Scene.prototype.translateModel = function (gl, mesh) {
@@ -8860,10 +8839,8 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                     renderFlags.cullMode = render_14.CullMode.BACK;
                     return function (state) {
                         state.useFlags(renderFlags);
-                        if (state.currentPass === 2 /* OPAQUE */)
-                            opaque();
-                        if (state.currentPass === 3 /* TRANSPARENT */)
-                            transparent();
+                        opaque();
+                        transparent();
                     };
                 };
                 Scene.prototype.destroy = function (gl) {
@@ -8873,7 +8850,6 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
             }());
             MultiScene = /** @class */ (function () {
                 function MultiScene(scenes) {
-                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.scenes = scenes;
                     this.textures = [];
                     try {
@@ -8882,14 +8858,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_28_1) { e_28 = { error: e_28_1 }; }
+                    catch (e_27_1) { e_27 = { error: e_27_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_28) throw e_28.error; }
+                        finally { if (e_27) throw e_27.error; }
                     }
-                    var e_28, _c;
+                    var e_27, _c;
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -9133,14 +9109,14 @@ System.register("worker_util", [], function (exports_40, context_40) {
                             worker.terminate();
                         }
                     }
-                    catch (e_29_1) { e_29 = { error: e_29_1 }; }
+                    catch (e_28_1) { e_28 = { error: e_28_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_29) throw e_29.error; }
+                        finally { if (e_28) throw e_28.error; }
                     }
-                    var e_29, _c;
+                    var e_28, _c;
                 };
                 MultiWorkerManager.prototype.execute = function (req) {
                     var p = this.workers[this.nextWorker].execute(req);
@@ -9934,15 +9910,15 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                     entries.push({ key: key, value: value });
                 }
             }
-            catch (e_30_1) { e_30 = { error: e_30_1 }; }
+            catch (e_29_1) { e_29 = { error: e_29_1 }; }
             finally {
                 try {
                     if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
                 }
-                finally { if (e_30) throw e_30.error; }
+                finally { if (e_29) throw e_29.error; }
             }
             return entries;
-            var e_30, _a;
+            var e_29, _a;
         }
         // Vertex buffers.
         var fvtxIdx = fvtxOffs;
@@ -10014,12 +9990,12 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                 fshp.push({ name: name_8, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
             }
         }
-        catch (e_31_1) { e_31 = { error: e_31_1 }; }
+        catch (e_30_1) { e_30 = { error: e_30_1 }; }
         finally {
             try {
                 if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
             }
-            finally { if (e_31) throw e_31.error; }
+            finally { if (e_30) throw e_30.error; }
         }
         // Materials.
         var fmat = [];
@@ -10082,12 +10058,12 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                         }
                     }
                 }
-                catch (e_32_1) { e_32 = { error: e_32_1 }; }
+                catch (e_31_1) { e_31 = { error: e_31_1 }; }
                 finally {
                     try {
                         if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
                     }
-                    finally { if (e_32) throw e_32.error; }
+                    finally { if (e_31) throw e_31.error; }
                 }
                 util_23.assert(textureSamplerCount === textureReferenceCount);
                 var textureSamplerArrayIdx = textureSamplerArrayOffs;
@@ -10156,15 +10132,15 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                 fmat.push({ name: name_9, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
             }
         }
-        catch (e_33_1) { e_33 = { error: e_33_1 }; }
+        catch (e_32_1) { e_32 = { error: e_32_1 }; }
         finally {
             try {
                 if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
             }
-            finally { if (e_33) throw e_33.error; }
+            finally { if (e_32) throw e_32.error; }
         }
         return { fvtx: fvtx, fshp: fshp, fmat: fmat };
-        var e_31, _a, e_33, _c, e_32, _b;
+        var e_30, _a, e_32, _c, e_31, _b;
     }
     function parse(buffer) {
         var view = buffer.createDataView();
@@ -10205,12 +10181,12 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                 textures.push({ entry: entry, texture: texture });
             }
         }
-        catch (e_34_1) { e_34 = { error: e_34_1 }; }
+        catch (e_33_1) { e_33 = { error: e_33_1 }; }
         finally {
             try {
                 if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
             }
-            finally { if (e_34) throw e_34.error; }
+            finally { if (e_33) throw e_33.error; }
         }
         var models = [];
         try {
@@ -10220,15 +10196,15 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                 models.push({ entry: entry, fmdl: fmdl });
             }
         }
-        catch (e_35_1) { e_35 = { error: e_35_1 }; }
+        catch (e_34_1) { e_34 = { error: e_34_1 }; }
         finally {
             try {
                 if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
             }
-            finally { if (e_35) throw e_35.error; }
+            finally { if (e_34) throw e_34.error; }
         }
         return { textures: textures, models: models };
-        var e_34, _a, e_35, _b;
+        var e_33, _a, e_34, _b;
     }
     exports_43("parse", parse);
     var GX2Texture, util_23, UBOParameterType, RenderInfoParameterType;
@@ -10569,12 +10545,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             samplers.push(sampler);
                         }
                     }
-                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
+                    catch (e_35_1) { e_35 = { error: e_35_1 }; }
                     finally {
                         try {
                             if (textureAssigns_1_1 && !textureAssigns_1_1.done && (_a = textureAssigns_1.return)) _a.call(textureAssigns_1);
                         }
-                        finally { if (e_36) throw e_36.error; }
+                        finally { if (e_35) throw e_35.error; }
                     }
                     var prog = new ProgramGambit_UBER();
                     this.arena.trackProgram(prog);
@@ -10615,7 +10591,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             _loop_3(i);
                         }
                     };
-                    var e_36, _a;
+                    var e_35, _a;
                 };
                 Scene.prototype.translateIndexBuffer = function (indexFormat, indexBufferData) {
                     switch (indexFormat) {
@@ -10637,14 +10613,14 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             indexDatas.push(indexData);
                         }
                     }
-                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
+                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_37) throw e_37.error; }
+                        finally { if (e_36) throw e_36.error; }
                     }
-                    var e_37, _c;
+                    var e_36, _c;
                 };
                 Scene.prototype.translateIndexFormat = function (gl, indexFormat) {
                     // Little-endian translation was done above.
@@ -10676,12 +10652,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             glIndexBuffers.push(coalescedIndex.shift());
                         }
                     }
-                    catch (e_38_1) { e_38 = { error: e_38_1 }; }
+                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_38) throw e_38.error; }
+                        finally { if (e_37) throw e_37.error; }
                     }
                     return function (state) {
                         var lod = 0;
@@ -10694,16 +10670,16 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 gl.drawElements(_this.translatePrimType(gl, mesh.primType), submesh.indexBufferCount, _this.translateIndexFormat(gl, mesh.indexFormat), glIndexBuffer.offset + submesh.indexBufferOffset);
                             }
                         }
-                        catch (e_39_1) { e_39 = { error: e_39_1 }; }
+                        catch (e_38_1) { e_38 = { error: e_38_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_39) throw e_39.error; }
+                            finally { if (e_38) throw e_38.error; }
                         }
-                        var e_39, _c;
+                        var e_38, _c;
                     };
-                    var e_38, _c;
+                    var e_37, _c;
                 };
                 Scene.prototype.translateModel = function (gl, model, coalescedVertex, coalescedIndex) {
                     var _this = this;
@@ -10904,14 +10880,14 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
+                    catch (e_39_1) { e_39 = { error: e_39_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_40) throw e_40.error; }
+                        finally { if (e_39) throw e_39.error; }
                     }
-                    var e_40, _c;
+                    var e_39, _c;
                 }
                 MultiScene.prototype.render = function (state) {
                     var gl = state.gl;
@@ -11233,14 +11209,14 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "ut
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
+                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_41) throw e_41.error; }
+                        finally { if (e_40) throw e_40.error; }
                     }
-                    var e_41, _c;
+                    var e_40, _c;
                 }
                 MultiScene.prototype.createUI = function () {
                     var elem = document.createElement('div');
@@ -11753,12 +11729,12 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
                     vertexIndexSize += 0x02;
                 }
             }
-            catch (e_42_1) { e_42 = { error: e_42_1 }; }
+            catch (e_41_1) { e_41 = { error: e_41_1 }; }
             finally {
                 try {
                     if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
                 }
-                finally { if (e_42) throw e_42.error; }
+                finally { if (e_41) throw e_41.error; }
             }
             var totalVertexCount = 0;
             var totalTriangleCount = 0;
@@ -11915,7 +11891,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
             };
             surfaces.push(surface);
             sectionIndex++;
-            var e_42, _a;
+            var e_41, _a;
         };
         for (var i = 0; i < surfaceCount; i++) {
             _loop_5(i);
@@ -12124,15 +12100,15 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                                 return resource;
                         }
                     }
-                    catch (e_43_1) { e_43 = { error: e_43_1 }; }
+                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_43) throw e_43.error; }
+                        finally { if (e_42) throw e_42.error; }
                     }
                     return null;
-                    var e_43, _c;
+                    var e_42, _c;
                 };
                 ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
                     var cached = this._cache.get(assetID);
@@ -12473,15 +12449,15 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                             offset += 4 * attrib.compCount;
                         }
                     }
-                    catch (e_44_1) { e_44 = { error: e_44_1 }; }
+                    catch (e_43_1) { e_43 = { error: e_43_1 }; }
                     finally {
                         try {
                             if (vtxAttrFormats_2_1 && !vtxAttrFormats_2_1.done && (_a = vtxAttrFormats_2.return)) _a.call(vtxAttrFormats_2);
                         }
-                        finally { if (e_44) throw e_44.error; }
+                        finally { if (e_43) throw e_43.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_44, _a;
+                    var e_43, _a;
                 }
                 Command_Surface.prototype.exec = function (state) {
                     var gl = state.gl;
@@ -12622,14 +12598,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_45_1) { e_45 = { error: e_45_1 }; }
+                    catch (e_44_1) { e_44 = { error: e_44_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_45) throw e_45.error; }
+                        finally { if (e_44) throw e_44.error; }
                     }
-                    var e_45, _c;
+                    var e_44, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -12673,15 +12649,15 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                                 return new MultiScene(scenes);
                             }
                         }
-                        catch (e_46_1) { e_46 = { error: e_46_1 }; }
+                        catch (e_45_1) { e_45 = { error: e_45_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_46) throw e_46.error; }
+                            finally { if (e_45) throw e_45.error; }
                         }
                         return null;
-                        var e_46, _c;
+                        var e_45, _c;
                     });
                 };
                 return MP1SceneDesc;
@@ -12922,12 +12898,12 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                             tex.appendChild(canvas);
                         }
                     }
-                    catch (e_47_1) { e_47 = { error: e_47_1 }; }
+                    catch (e_46_1) { e_46 = { error: e_46_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_47) throw e_47.error; }
+                        finally { if (e_46) throw e_46.error; }
                     }
                     tex.onmouseover = function () {
                         canvases.forEach(function (canvas) {
@@ -12947,7 +12923,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                     tex.appendChild(label);
                     tex.style.cssFloat = 'left';
                     return tex;
-                    var e_47, _c;
+                    var e_46, _c;
                 };
                 Main.prototype._makeTextureSection = function (textures) {
                     var _this = this;
@@ -13010,14 +12986,14 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                             this.groupSelect.appendChild(groupOption);
                         }
                     }
-                    catch (e_48_1) { e_48 = { error: e_48_1 }; }
+                    catch (e_47_1) { e_47 = { error: e_47_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_48) throw e_48.error; }
+                        finally { if (e_47) throw e_47.error; }
                     }
-                    var e_48, _c;
+                    var e_47, _c;
                 };
                 Main.prototype._loadSceneGroup = function (group, loadDefaultSceneInGroup) {
                     if (loadDefaultSceneInGroup === void 0) { loadDefaultSceneInGroup = true; }
@@ -13039,16 +13015,16 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                             this.sceneSelect.appendChild(sceneOption);
                         }
                     }
-                    catch (e_49_1) { e_49 = { error: e_49_1 }; }
+                    catch (e_48_1) { e_48 = { error: e_48_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_49) throw e_49.error; }
+                        finally { if (e_48) throw e_48.error; }
                     }
                     if (loadDefaultSceneInGroup)
                         this._loadSceneDesc(group.sceneDescs[0]);
-                    var e_49, _c;
+                    var e_48, _c;
                 };
                 Main.prototype._onSceneSelectChange = function () {
                     var option = this.sceneSelect.selectedOptions.item(0);

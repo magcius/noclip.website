@@ -3,14 +3,6 @@ import { mat4 } from 'gl-matrix';
 import { assert, align } from './util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
-export const enum RenderPass {
-    CLEAR,
-    DEPTH_PREPASS,
-    OPAQUE,
-    TRANSPARENT,
-    COUNT,
-}
-
 export enum CompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
     LESS    = WebGLRenderingContext.LESS,
@@ -223,7 +215,6 @@ export class RenderState {
     public currentProgram: Program = null;
     public currentFlags: RenderFlags = new RenderFlags();
     public currentRenderTarget: RenderTarget = null;
-    public currentPass: RenderPass;
 
     // Parameters.
     public fov: number;

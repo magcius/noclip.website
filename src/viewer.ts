@@ -3,7 +3,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { RenderState, RenderFlags, RenderPass, RenderTarget, Program } from './render';
+import { RenderState, RenderFlags, RenderTarget, Program } from './render';
 
 import Progressable from 'Progressable';
 
@@ -347,16 +347,7 @@ export class Viewer {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         // Main scene. This renders to the onscreen target.
-        const scene = this.scene;
-        if (scene.renderPasses) {
-            for (const pass of scene.renderPasses) {
-                this.renderState.currentPass = pass;
-                scene.render(this.renderState);
-            }
-        } else {
-            this.renderState.currentPass = RenderPass.OPAQUE;
-            scene.render(this.renderState);
-        }
+        this.scene.render(this.renderState);
 
         // Draw onscreen to canvas. First, resolve MSAA buffer to a standard buffer.
         this.onscreenRenderTarget.resolve(gl);
@@ -430,7 +421,6 @@ export class Viewer {
 export interface MainScene extends Scene {
     resetCamera?(m: mat4): void;
     createUI?(): HTMLElement;
-    renderPasses?: RenderPass[];
 }
 
 export interface SceneDesc {
