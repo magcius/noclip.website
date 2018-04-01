@@ -3996,107 +3996,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
         }
     };
 });
-System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "util"], function (exports_16, context_16) {
+System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_material", "j3d/render", "Progressable", "util", "gl-matrix"], function (exports_16, context_16) {
     "use strict";
     var __moduleName = context_16 && context_16.id;
-    function createScene(gl, bmdFile, btkFile, bmtFile) {
-        var bmd = j3d_2.BMD.parse(bmdFile.buffer);
-        var btk = btkFile ? j3d_2.BTK.parse(btkFile.buffer) : null;
-        var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
-        return new render_4.Scene(gl, bmd, btk, bmt);
-    }
-    exports_16("createScene", createScene);
-    function createScenesFromBuffer(gl, buffer) {
-        if (util_8.readString(buffer, 0, 4) === 'Yaz0')
-            buffer = Yaz0.decompress(buffer);
-        if (util_8.readString(buffer, 0, 4) === 'RARC') {
-            var rarc_1 = RARC.parse(buffer);
-            var bmdFiles = rarc_1.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
-            var scenes = bmdFiles.map(function (bmdFile) {
-                // Find the corresponding btk.
-                var basename = bmdFile.name.split('.')[0];
-                var btkFile = rarc_1.files.find(function (f) { return f.name === basename + ".btk"; });
-                var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
-                try {
-                    return createScene(gl, bmdFile, btkFile, bmtFile);
-                }
-                catch (e) {
-                    console.log("Error parsing", bmdFile.name);
-                    return null;
-                }
-            });
-            return scenes.filter(function (s) { return !!s; });
-        }
-        if (['J3D2bmd3', 'J3D2bdl4'].includes(util_8.readString(buffer, 0, 8))) {
-            var bmd = j3d_2.BMD.parse(buffer);
-            return [new render_4.Scene(gl, bmd, null, null)];
-        }
-        return null;
-    }
-    exports_16("createScenesFromBuffer", createScenesFromBuffer);
-    function createMultiSceneFromBuffer(gl, buffer) {
-        return new MultiScene(createScenesFromBuffer(gl, buffer));
-    }
-    exports_16("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
-    var j3d_2, render_4, RARC, Yaz0, util_8, MultiScene;
-    return {
-        setters: [
-            function (j3d_2_1) {
-                j3d_2 = j3d_2_1;
-            },
-            function (render_4_1) {
-                render_4 = render_4_1;
-            },
-            function (RARC_1) {
-                RARC = RARC_1;
-            },
-            function (Yaz0_1) {
-                Yaz0 = Yaz0_1;
-            },
-            function (util_8_1) {
-                util_8 = util_8_1;
-            }
-        ],
-        execute: function () {
-            MultiScene = /** @class */ (function () {
-                function MultiScene(scenes) {
-                    this.setScenes(scenes);
-                }
-                MultiScene.prototype.setScenes = function (scenes) {
-                    this.scenes = scenes;
-                    this.textures = [];
-                    try {
-                        for (var _a = __values(this.scenes), _b = _a.next(); !_b.done; _b = _a.next()) {
-                            var scene = _b.value;
-                            this.textures = this.textures.concat(scene.textures);
-                        }
-                    }
-                    catch (e_15_1) { e_15 = { error: e_15_1 }; }
-                    finally {
-                        try {
-                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                        }
-                        finally { if (e_15) throw e_15.error; }
-                    }
-                    var e_15, _c;
-                };
-                MultiScene.prototype.render = function (renderState) {
-                    this.scenes.forEach(function (scene) {
-                        scene.render(renderState);
-                    });
-                };
-                MultiScene.prototype.destroy = function (gl) {
-                    this.scenes.forEach(function (scene) { return scene.destroy(gl); });
-                };
-                return MultiScene;
-            }());
-            exports_16("MultiScene", MultiScene);
-        }
-    };
-});
-System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_material", "j3d/render", "Progressable", "util", "gl-matrix"], function (exports_17, context_17) {
-    "use strict";
-    var __moduleName = context_17 && context_17.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -4106,39 +4008,39 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_16_1) { e_16 = { error: e_16_1 }; }
+        catch (e_15_1) { e_15 = { error: e_15_1 }; }
         finally {
             try {
                 if (scenes_1_1 && !scenes_1_1.done && (_a = scenes_1.return)) _a.call(scenes_1);
             }
-            finally { if (e_16) throw e_16.error; }
+            finally { if (e_15) throw e_15.error; }
         }
         return textures;
-        var e_16, _a;
+        var e_15, _a;
     }
-    var j3d_3, RARC, Yaz0, GX_Material, render_5, Progressable_2, util_9, gl_matrix_5, CameraPos, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
+    var j3d_2, RARC, Yaz0, GX_Material, render_4, Progressable_2, util_8, gl_matrix_5, CameraPos, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
         setters: [
-            function (j3d_3_1) {
-                j3d_3 = j3d_3_1;
+            function (j3d_2_1) {
+                j3d_2 = j3d_2_1;
             },
-            function (RARC_2) {
-                RARC = RARC_2;
+            function (RARC_1) {
+                RARC = RARC_1;
             },
-            function (Yaz0_2) {
-                Yaz0 = Yaz0_2;
+            function (Yaz0_1) {
+                Yaz0 = Yaz0_1;
             },
             function (GX_Material_3) {
                 GX_Material = GX_Material_3;
             },
-            function (render_5_1) {
-                render_5 = render_5_1;
+            function (render_4_1) {
+                render_4 = render_4_1;
             },
             function (Progressable_2_1) {
                 Progressable_2 = Progressable_2_1;
             },
-            function (util_9_1) {
-                util_9 = util_9_1;
+            function (util_8_1) {
+                util_8 = util_8_1;
             },
             function (gl_matrix_5_1) {
                 gl_matrix_5 = gl_matrix_5_1;
@@ -4185,7 +4087,7 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                     var chunkOffsets = new Map();
                     var chunkTableIdx = 0x04;
                     for (var i = 0; i < chunkCount; i++) {
-                        var type = util_9.readString(buffer, chunkTableIdx + 0x00, 0x04);
+                        var type = util_8.readString(buffer, chunkTableIdx + 0x00, 0x04);
                         var offs = view.getUint32(chunkTableIdx + 0x08);
                         chunkOffsets.set(type, offs);
                         chunkTableIdx += 0x0C;
@@ -4249,9 +4151,9 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                     if (!bdlFile)
                         return null;
                     var btkFile = rarc.findFile("btk/" + name + ".btk");
-                    var bdl = j3d_3.BMD.parse(bdlFile.buffer);
-                    var btk = btkFile ? j3d_3.BTK.parse(btkFile.buffer) : null;
-                    var scene = new render_5.Scene(gl, bdl, btk, null);
+                    var bdl = j3d_2.BMD.parse(bdlFile.buffer);
+                    var btk = btkFile ? j3d_2.BTK.parse(btkFile.buffer) : null;
+                    var scene = new render_4.Scene(gl, bdl, btk, null);
                     scene.setIsSkybox(isSkybox);
                     scene.setUseMaterialTexMtx(false);
                     return scene;
@@ -4259,21 +4161,21 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                 WindWakerRenderer.prototype.setTimeOfDay = function (timeOfDay) {
                     var dzsFile = this.stageRarc.findFile("dzs/stage.dzs");
                     var colors = WindWakerRenderer.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay);
-                    this.model.setColorOverride(render_5.ColorOverride.K0, colors.light);
-                    this.model.setColorOverride(render_5.ColorOverride.C0, colors.amb);
+                    this.model.setColorOverride(render_4.ColorOverride.K0, colors.light);
+                    this.model.setColorOverride(render_4.ColorOverride.C0, colors.amb);
                     if (this.model1) {
-                        this.model1.setColorOverride(render_5.ColorOverride.K0, colors.ocean);
-                        this.model1.setColorOverride(render_5.ColorOverride.C0, colors.wave);
-                        this.model1.setColorOverride(render_5.ColorOverride.C1, colors.splash);
-                        this.model1.setColorOverride(render_5.ColorOverride.K1, colors.splash2);
+                        this.model1.setColorOverride(render_4.ColorOverride.K0, colors.ocean);
+                        this.model1.setColorOverride(render_4.ColorOverride.C0, colors.wave);
+                        this.model1.setColorOverride(render_4.ColorOverride.C1, colors.splash);
+                        this.model1.setColorOverride(render_4.ColorOverride.K1, colors.splash2);
                     }
                     if (this.model3)
-                        this.model3.setColorOverride(render_5.ColorOverride.C0, colors.doors);
-                    this.vr_sky.setColorOverride(render_5.ColorOverride.K0, colors.vr_sky);
-                    this.vr_uso_umi.setColorOverride(render_5.ColorOverride.K0, colors.vr_uso_umi);
-                    this.vr_kasumi_mae.setColorOverride(render_5.ColorOverride.C0, colors.vr_kasumi_mae);
-                    this.vr_back_cloud.setColorOverride(render_5.ColorOverride.K0, colors.vr_back_cloud);
-                    this.vr_back_cloud.setAlphaOverride(render_5.ColorOverride.K0, colors.vr_back_cloud.a);
+                        this.model3.setColorOverride(render_4.ColorOverride.C0, colors.doors);
+                    this.vr_sky.setColorOverride(render_4.ColorOverride.K0, colors.vr_sky);
+                    this.vr_uso_umi.setColorOverride(render_4.ColorOverride.K0, colors.vr_uso_umi);
+                    this.vr_kasumi_mae.setColorOverride(render_4.ColorOverride.C0, colors.vr_kasumi_mae);
+                    this.vr_back_cloud.setColorOverride(render_4.ColorOverride.K0, colors.vr_back_cloud);
+                    this.vr_back_cloud.setAlphaOverride(render_4.ColorOverride.K0, colors.vr_back_cloud.a);
                 };
                 WindWakerRenderer.prototype._onTimeOfDayChange = function (e) {
                     this.setTimeOfDay(this.timeOfDaySelect.selectedIndex);
@@ -4324,8 +4226,8 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                     var _this = this;
                     var roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
                     return Progressable_2.default.all([
-                        util_9.fetch("data/j3d/ww/sea/Stage.arc"),
-                        util_9.fetch(this.path),
+                        util_8.fetch("data/j3d/ww/sea/Stage.arc"),
+                        util_8.fetch(this.path),
                     ]).then(function (_a) {
                         var _b = __read(_a, 2), stage = _b[0], room = _b[1];
                         var stageRarc = RARC.parse(Yaz0.decompress(stage));
@@ -4343,7 +4245,105 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
             ];
             id = "zww";
             name = "The Legend of Zelda: The Wind Waker";
-            exports_17("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_16("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+        }
+    };
+});
+System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "util"], function (exports_17, context_17) {
+    "use strict";
+    var __moduleName = context_17 && context_17.id;
+    function createScene(gl, bmdFile, btkFile, bmtFile) {
+        var bmd = j3d_3.BMD.parse(bmdFile.buffer);
+        var btk = btkFile ? j3d_3.BTK.parse(btkFile.buffer) : null;
+        var bmt = bmtFile ? j3d_3.BMT.parse(bmtFile.buffer) : null;
+        return new render_5.Scene(gl, bmd, btk, bmt);
+    }
+    exports_17("createScene", createScene);
+    function createScenesFromBuffer(gl, buffer) {
+        if (util_9.readString(buffer, 0, 4) === 'Yaz0')
+            buffer = Yaz0.decompress(buffer);
+        if (util_9.readString(buffer, 0, 4) === 'RARC') {
+            var rarc_1 = RARC.parse(buffer);
+            var bmdFiles = rarc_1.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
+            var scenes = bmdFiles.map(function (bmdFile) {
+                // Find the corresponding btk.
+                var basename = bmdFile.name.split('.')[0];
+                var btkFile = rarc_1.files.find(function (f) { return f.name === basename + ".btk"; });
+                var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
+                try {
+                    return createScene(gl, bmdFile, btkFile, bmtFile);
+                }
+                catch (e) {
+                    console.log("Error parsing", bmdFile.name);
+                    return null;
+                }
+            });
+            return scenes.filter(function (s) { return !!s; });
+        }
+        if (['J3D2bmd3', 'J3D2bdl4'].includes(util_9.readString(buffer, 0, 8))) {
+            var bmd = j3d_3.BMD.parse(buffer);
+            return [new render_5.Scene(gl, bmd, null, null)];
+        }
+        return null;
+    }
+    exports_17("createScenesFromBuffer", createScenesFromBuffer);
+    function createMultiSceneFromBuffer(gl, buffer) {
+        return new MultiScene(createScenesFromBuffer(gl, buffer));
+    }
+    exports_17("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
+    var j3d_3, render_5, RARC, Yaz0, util_9, MultiScene;
+    return {
+        setters: [
+            function (j3d_3_1) {
+                j3d_3 = j3d_3_1;
+            },
+            function (render_5_1) {
+                render_5 = render_5_1;
+            },
+            function (RARC_2) {
+                RARC = RARC_2;
+            },
+            function (Yaz0_2) {
+                Yaz0 = Yaz0_2;
+            },
+            function (util_9_1) {
+                util_9 = util_9_1;
+            }
+        ],
+        execute: function () {
+            MultiScene = /** @class */ (function () {
+                function MultiScene(scenes) {
+                    this.setScenes(scenes);
+                }
+                MultiScene.prototype.setScenes = function (scenes) {
+                    this.scenes = scenes;
+                    this.textures = [];
+                    try {
+                        for (var _a = __values(this.scenes), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var scene = _b.value;
+                            this.textures = this.textures.concat(scene.textures);
+                        }
+                    }
+                    catch (e_16_1) { e_16 = { error: e_16_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_16) throw e_16.error; }
+                    }
+                    var e_16, _c;
+                };
+                MultiScene.prototype.render = function (renderState) {
+                    this.scenes.forEach(function (scene) {
+                        scene.render(renderState);
+                    });
+                };
+                MultiScene.prototype.destroy = function (gl) {
+                    this.scenes.forEach(function (scene) { return scene.destroy(gl); });
+                };
+                return MultiScene;
+            }());
+            exports_17("MultiScene", MultiScene);
         }
     };
 });

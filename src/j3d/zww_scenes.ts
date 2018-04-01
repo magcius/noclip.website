@@ -5,7 +5,6 @@ import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as GX_Material from 'gx/gx_material';
 import * as Viewer from '../viewer';
-import { J3DScene } from './scenes';
 import { Scene, ColorOverride } from './render';
 
 import Progressable from 'Progressable';
@@ -21,7 +20,7 @@ class CameraPos {
     }
 }
 
-function collectTextures(scenes: J3DScene[]): Viewer.Texture[] {
+function collectTextures(scenes: Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
     for (const scene of scenes)
         if (scene)

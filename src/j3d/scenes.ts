@@ -11,18 +11,15 @@ import { RenderPass, RenderState } from '../render';
 import { assert, fetch, readString } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
-export interface J3DScene extends Viewer.Scene {
-}
-
 export class MultiScene implements Viewer.MainScene {
-    public scenes: J3DScene[];
+    public scenes: Scene[];
     public textures: Viewer.Texture[];
 
-    constructor(scenes: J3DScene[]) {
+    constructor(scenes: Scene[]) {
         this.setScenes(scenes);
     }
 
-    protected setScenes(scenes: J3DScene[]) {
+    protected setScenes(scenes: Scene[]) {
         this.scenes = scenes;
         this.textures = [];
         for (const scene of this.scenes)

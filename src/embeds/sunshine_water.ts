@@ -16,7 +16,6 @@ import * as RARC from 'j3d/rarc';
 import { BMD, BTK, BMT, TEX1, MaterialEntry } from 'j3d/j3d';
 import { Command_Material } from 'j3d/render';
 import { SunshineSceneDesc, SunshineRenderer } from 'j3d/sms_scenes';
-import { J3DScene } from 'j3d/scenes';
 
 const scale = 200;
 const posMtx = mat4.create();
