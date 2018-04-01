@@ -111,7 +111,8 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.bfres'))
             return FRES.createSceneFromFRESBuffer(gl, buffer);
 
-        scene = J3D.createSceneFromBuffer(gl, buffer);
+        let scenes
+        scene = J3D.createMultiSceneFromBuffer(gl, buffer);
         if (scene)
             return scene;
 

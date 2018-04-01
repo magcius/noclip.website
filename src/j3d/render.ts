@@ -360,7 +360,6 @@ export enum ColorOverride {
 
 const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
 export class Scene implements Viewer.Scene {
-    public renderPasses = [ RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public textures: Viewer.Texture[];
 
     public name: string = '';
@@ -504,12 +503,8 @@ export class Scene implements Viewer.Scene {
         if (!this.bindState(state))
             return;
 
-        if (state.currentPass === null || state.currentPass === RenderPass.OPAQUE) {
-            this.renderOpaque(state);
-        }
-        if (state.currentPass === null || state.currentPass === RenderPass.TRANSPARENT) {
-            this.renderTransparent(state);
-        }
+        this.renderOpaque(state);
+        this.renderTransparent(state);
     }
 
     private translateModel(gl: WebGL2RenderingContext, bmd: BMD) {

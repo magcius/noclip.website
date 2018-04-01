@@ -3,7 +3,7 @@ import { RenderPass, RenderState } from '../render';
 import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';
-import { MultiScene, createScene, J3DScene } from './scenes';
+import { createScene, J3DScene } from './scenes';
 import { Scene, ColorOverride } from './render';
 import Progressable from 'Progressable';
 import { fetch } from '../util';
@@ -28,9 +28,6 @@ export class SunshineRenderer implements Viewer.MainScene {
         const gl = renderState.gl;
         gl.clearColor(0, 0, 0.125, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
-
-        // First up, render skyboxen.
-        renderState.currentPass = null;
 
         if (this.skyScene) {
             this.skyScene.render(renderState);
