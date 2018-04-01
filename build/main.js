@@ -5409,7 +5409,26 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
         var surfaces = [canvas];
         return { name: bmdTex.name, surfaces: surfaces };
     }
-    var gl_matrix_7, CRG0, LZ77, NITRO_BMD, Viewer, render_7, util_15, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, Scene, MultiScene, SceneDesc;
+    function collectTextures(scenes) {
+        var textures = [];
+        try {
+            for (var scenes_5 = __values(scenes), scenes_5_1 = scenes_5.next(); !scenes_5_1.done; scenes_5_1 = scenes_5.next()) {
+                var scene = scenes_5_1.value;
+                if (scene)
+                    textures.push.apply(textures, scene.textures);
+            }
+        }
+        catch (e_18_1) { e_18 = { error: e_18_1 }; }
+        finally {
+            try {
+                if (scenes_5_1 && !scenes_5_1.done && (_a = scenes_5.return)) _a.call(scenes_5);
+            }
+            finally { if (e_18) throw e_18.error; }
+        }
+        return textures;
+        var e_18, _a;
+    }
+    var gl_matrix_7, CRG0, LZ77, NITRO_BMD, Viewer, render_7, util_15, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, BMDRenderer, SM64DSRenderer, SceneDesc;
     return {
         setters: [
             function (gl_matrix_7_1) {
@@ -5455,10 +5474,10 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
             // 3 pos + 4 color + 2 uv
             VERTEX_SIZE = 9;
             VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
-            Scene = /** @class */ (function () {
-                function Scene(gl, bmd, localScale, crg0Level) {
-                    var _this = this;
-                    this.program = new NITRO_Program();
+            BMDRenderer = /** @class */ (function () {
+                function BMDRenderer(gl, bmd, localScale, crg0Level) {
+                    this.opaqueCommands = [];
+                    this.transparentCommands = [];
                     this.bmd = bmd;
                     this.localScale = localScale;
                     this.crg0Level = crg0Level;
@@ -5467,12 +5486,12 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     this.textures = bmd.textures.map(function (texture) {
                         return textureToCanvas(texture);
                     });
-                    this.modelFuncs = bmd.models.map(function (bmdm) { return _this.translateModel(gl, bmdm); });
+                    this.translateBMD(gl, this.bmd);
                     var scaleFactor = this.bmd.scaleFactor * this.localScale;
                     this.localMatrix = gl_matrix_7.mat4.create();
                     gl_matrix_7.mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
                 }
-                Scene.prototype.translatePacket = function (gl, packet) {
+                BMDRenderer.prototype.translatePacket = function (gl, packet) {
                     var vertBuffer = this.arena.createBuffer(gl);
                     gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
                     gl.bufferData(gl.ARRAY_BUFFER, packet.vertData, gl.STATIC_DRAW);
@@ -5496,14 +5515,14 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                         gl.bindVertexArray(null);
                     };
                 };
-                Scene.prototype.translatePoly = function (gl, poly) {
+                BMDRenderer.prototype.translatePoly = function (gl, poly) {
                     var _this = this;
                     var funcs = poly.packets.map(function (packet) { return _this.translatePacket(gl, packet); });
                     return function (state) {
                         funcs.forEach(function (f) { f(state); });
                     };
                 };
-                Scene.prototype.translateCullMode = function (renderWhichFaces) {
+                BMDRenderer.prototype.translateCullMode = function (renderWhichFaces) {
                     switch (renderWhichFaces) {
                         case 0x00:// Render Nothing
                             return render_7.CullMode.FRONT_AND_BACK;
@@ -5517,8 +5536,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                             throw new Error("Unknown renderWhichFaces");
                     }
                 };
-                Scene.prototype.translateMaterial = function (gl, material) {
-                    var _this = this;
+                BMDRenderer.prototype.translateMaterial = function (gl, material) {
                     var texture = material.texture;
                     var texId;
                     function wrapMode(repeat, flip) {
@@ -5568,94 +5586,105 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                         gl_matrix_7.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
-                            catch (e_18_1) { e_18 = { error: e_18_1 }; }
+                            catch (e_19_1) { e_19 = { error: e_19_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_18) throw e_18.error; }
+                                finally { if (e_19) throw e_19.error; }
                             }
                             gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                             gl_matrix_7.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
                         }
                         if (texture !== null) {
-                            gl.uniformMatrix3fv(_this.program.texCoordMatLocation, false, texCoordMat);
+                            var prog = state.currentProgram;
+                            gl.uniformMatrix3fv(prog.texCoordMatLocation, false, texCoordMat);
                             gl.bindTexture(gl.TEXTURE_2D, texId);
                         }
                         state.useFlags(renderFlags);
-                        var e_18, _c;
+                        var e_19, _c;
                     };
                 };
-                Scene.prototype.translateBatch = function (gl, batch) {
-                    var batchPass = batch.material.isTranslucent ? 3 /* TRANSPARENT */ : 2 /* OPAQUE */;
+                BMDRenderer.prototype.translateBatch = function (gl, batch) {
                     var applyMaterial = this.translateMaterial(gl, batch.material);
                     var renderPoly = this.translatePoly(gl, batch.poly);
-                    return function (state) {
-                        if (state.currentPass !== batchPass)
-                            return;
+                    var func = function (state) {
                         applyMaterial(state);
                         renderPoly(state);
                     };
+                    if (batch.material.isTranslucent)
+                        this.transparentCommands.push(func);
+                    else
+                        this.opaqueCommands.push(func);
                 };
-                Scene.prototype.translateModel = function (gl, bmdm) {
-                    var _this = this;
-                    var batches = bmdm.batches.map(function (batch) { return _this.translateBatch(gl, batch); });
-                    return function (state) {
-                        batches.forEach(function (f) { f(state); });
-                    };
+                BMDRenderer.prototype.translateBMD = function (gl, bmd) {
+                    try {
+                        for (var _a = __values(bmd.models), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var model = _b.value;
+                            try {
+                                for (var _c = __values(model.batches), _d = _c.next(); !_d.done; _d = _c.next()) {
+                                    var batch = _d.value;
+                                    this.translateBatch(gl, batch);
+                                }
+                            }
+                            catch (e_20_1) { e_20 = { error: e_20_1 }; }
+                            finally {
+                                try {
+                                    if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
+                                }
+                                finally { if (e_20) throw e_20.error; }
+                            }
+                        }
+                    }
+                    catch (e_21_1) { e_21 = { error: e_21_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
+                        }
+                        finally { if (e_21) throw e_21.error; }
+                    }
+                    var e_21, _f, e_20, _e;
                 };
-                Scene.prototype.renderModels = function (state) {
-                    return this.modelFuncs.forEach(function (func) {
+                BMDRenderer.prototype.destroy = function (gl) {
+                    this.arena.destroy(gl);
+                };
+                return BMDRenderer;
+            }());
+            SM64DSRenderer = /** @class */ (function () {
+                function SM64DSRenderer(mainBMD, skyboxBMD) {
+                    this.mainBMD = mainBMD;
+                    this.skyboxBMD = skyboxBMD;
+                    this.cameraController = Viewer.FPSCameraController;
+                    this.textures = collectTextures([this.mainBMD, this.skyboxBMD]);
+                    this.program = new NITRO_Program();
+                }
+                SM64DSRenderer.prototype.runCommands = function (state, funcs) {
+                    funcs.forEach(function (func) {
                         func(state);
                     });
                 };
-                Scene.prototype.render = function (state) {
-                    var gl = state.gl;
-                    state.useProgram(this.program);
-                    state.bindModelView(this.isSkybox, this.localMatrix);
-                    this.renderModels(state);
-                };
-                Scene.prototype.destroy = function (gl) {
-                    this.arena.destroy(gl);
-                };
-                return Scene;
-            }());
-            MultiScene = /** @class */ (function () {
-                function MultiScene(scenes) {
-                    this.cameraController = Viewer.FPSCameraController;
-                    this.renderPasses = [0 /* CLEAR */, 2 /* OPAQUE */, 3 /* TRANSPARENT */];
-                    this.scenes = scenes;
-                    this.textures = [];
-                    try {
-                        for (var _a = __values(this.scenes), _b = _a.next(); !_b.done; _b = _a.next()) {
-                            var scene = _b.value;
-                            this.textures = this.textures.concat(scene.textures);
-                        }
-                    }
-                    catch (e_19_1) { e_19 = { error: e_19_1 }; }
-                    finally {
-                        try {
-                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                        }
-                        finally { if (e_19) throw e_19.error; }
-                    }
-                    var e_19, _c;
-                }
-                MultiScene.prototype.render = function (renderState) {
+                SM64DSRenderer.prototype.render = function (renderState) {
                     var gl = renderState.gl;
-                    // Clear to black.
-                    if (renderState.currentPass === 0 /* CLEAR */) {
+                    renderState.useProgram(this.program);
+                    if (this.skyboxBMD) {
+                        renderState.bindModelView(true, this.skyboxBMD.localMatrix);
+                        this.runCommands(renderState, this.skyboxBMD.opaqueCommands);
+                        gl.clear(gl.DEPTH_BUFFER_BIT);
+                    }
+                    else {
+                        // No skybox? Black.
                         gl.clearColor(0, 0, 0, 1.0);
                         gl.clear(gl.COLOR_BUFFER_BIT);
                     }
-                    this.scenes.forEach(function (scene) {
-                        scene.render(renderState);
-                    });
+                    renderState.bindModelView(false, this.mainBMD.localMatrix);
+                    this.runCommands(renderState, this.mainBMD.opaqueCommands);
+                    this.runCommands(renderState, this.mainBMD.transparentCommands);
                 };
-                MultiScene.prototype.destroy = function (gl) {
-                    this.scenes.forEach(function (scene) { return scene.destroy(gl); });
+                SM64DSRenderer.prototype.destroy = function (gl) {
+                    this.mainBMD.destroy(gl);
+                    this.skyboxBMD.destroy(gl);
                 };
-                return MultiScene;
+                return SM64DSRenderer;
             }());
             SceneDesc = /** @class */ (function () {
                 function SceneDesc(name, levelId) {
@@ -5670,22 +5699,23 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                         return _this._createSceneFromCRG0(gl, crg0);
                     });
                 };
-                SceneDesc.prototype._createBmdScene = function (gl, filename, localScale, level, isSkybox) {
+                SceneDesc.prototype._createBMDRenderer = function (gl, filename, localScale, level, isSkybox) {
                     return util_15.fetch("data/sm64ds/" + filename).then(function (result) {
                         result = LZ77.maybeDecompress(result);
                         var bmd = NITRO_BMD.parse(result);
-                        var scene = new Scene(gl, bmd, localScale, level);
-                        scene.isSkybox = isSkybox;
-                        return scene;
+                        var renderer = new BMDRenderer(gl, bmd, localScale, level);
+                        renderer.isSkybox = isSkybox;
+                        return renderer;
                     });
                 };
                 SceneDesc.prototype._createSceneFromCRG0 = function (gl, crg0) {
                     var level = crg0.levels[this.levelId];
-                    var scenes = [this._createBmdScene(gl, level.attributes.get('bmd'), 100, level, false)];
+                    var renderers = [this._createBMDRenderer(gl, level.attributes.get('bmd'), 100, level, false)];
                     if (level.attributes.get('vrbox'))
-                        scenes.unshift(this._createBmdScene(gl, level.attributes.get('vrbox'), 0.8, level, true));
-                    return Promise.all(scenes).then(function (results) {
-                        return new MultiScene(results);
+                        renderers.push(this._createBMDRenderer(gl, level.attributes.get('vrbox'), 0.8, level, true));
+                    return Promise.all(renderers).then(function (_a) {
+                        var _b = __read(_a, 2), mainBMD = _b[0], skyboxBMD = _b[1];
+                        return new SM64DSRenderer(mainBMD, skyboxBMD);
                     });
                 };
                 return SceneDesc;
@@ -6367,15 +6397,15 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                                 return entry;
                         }
                     }
-                    catch (e_20_1) { e_20 = { error: e_20_1 }; }
+                    catch (e_22_1) { e_22 = { error: e_22_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_20) throw e_20.error; }
+                        finally { if (e_22) throw e_22.error; }
                     }
                     return null;
-                    var e_20, _c;
+                    var e_22, _c;
                 };
                 ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
                     var bankIdx = addr >>> 24;
@@ -8676,15 +8706,15 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "Progressab
                                 gl.drawElements(gl.TRIANGLES, prm.count, _this.translateDataType(gl, prm.indexType), prm.offset * _this.dataTypeSize(prm.indexType));
                             }
                         }
-                        catch (e_21_1) { e_21 = { error: e_21_1 }; }
+                        catch (e_23_1) { e_23 = { error: e_23_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_21) throw e_21.error; }
+                            finally { if (e_23) throw e_23.error; }
                         }
                         gl.bindVertexArray(null);
-                        var e_21, _c;
+                        var e_23, _c;
                     };
                 };
                 Scene.prototype.translateTexture = function (gl, texture) {
@@ -8777,14 +8807,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "Progressab
                                 func();
                             }
                         }
-                        catch (e_22_1) { e_22 = { error: e_22_1 }; }
+                        catch (e_24_1) { e_24 = { error: e_24_1 }; }
                         finally {
                             try {
                                 if (meshFuncs_1_1 && !meshFuncs_1_1.done && (_a = meshFuncs_1.return)) _a.call(meshFuncs_1);
                             }
-                            finally { if (e_22) throw e_22.error; }
+                            finally { if (e_24) throw e_24.error; }
                         }
-                        var e_22, _a;
+                        var e_24, _a;
                     };
                 };
                 Scene.prototype.translateModel = function (gl, mesh) {
@@ -8819,14 +8849,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "viewer", "Progressab
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
+                    catch (e_25_1) { e_25 = { error: e_25_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_23) throw e_23.error; }
+                        finally { if (e_25) throw e_25.error; }
                     }
-                    var e_23, _c;
+                    var e_25, _c;
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -9070,14 +9100,14 @@ System.register("worker_util", [], function (exports_40, context_40) {
                             worker.terminate();
                         }
                     }
-                    catch (e_24_1) { e_24 = { error: e_24_1 }; }
+                    catch (e_26_1) { e_26 = { error: e_26_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_24) throw e_24.error; }
+                        finally { if (e_26) throw e_26.error; }
                     }
-                    var e_24, _c;
+                    var e_26, _c;
                 };
                 MultiWorkerManager.prototype.execute = function (req) {
                     var p = this.workers[this.nextWorker].execute(req);
@@ -9871,15 +9901,15 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                     entries.push({ key: key, value: value });
                 }
             }
-            catch (e_25_1) { e_25 = { error: e_25_1 }; }
+            catch (e_27_1) { e_27 = { error: e_27_1 }; }
             finally {
                 try {
                     if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
                 }
-                finally { if (e_25) throw e_25.error; }
+                finally { if (e_27) throw e_27.error; }
             }
             return entries;
-            var e_25, _a;
+            var e_27, _a;
         }
         // Vertex buffers.
         var fvtxIdx = fvtxOffs;
@@ -9951,12 +9981,12 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                 fshp.push({ name: name_8, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
             }
         }
-        catch (e_26_1) { e_26 = { error: e_26_1 }; }
+        catch (e_28_1) { e_28 = { error: e_28_1 }; }
         finally {
             try {
                 if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
             }
-            finally { if (e_26) throw e_26.error; }
+            finally { if (e_28) throw e_28.error; }
         }
         // Materials.
         var fmat = [];
@@ -10019,12 +10049,12 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                         }
                     }
                 }
-                catch (e_27_1) { e_27 = { error: e_27_1 }; }
+                catch (e_29_1) { e_29 = { error: e_29_1 }; }
                 finally {
                     try {
                         if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
                     }
-                    finally { if (e_27) throw e_27.error; }
+                    finally { if (e_29) throw e_29.error; }
                 }
                 util_23.assert(textureSamplerCount === textureReferenceCount);
                 var textureSamplerArrayIdx = textureSamplerArrayOffs;
@@ -10093,15 +10123,15 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                 fmat.push({ name: name_9, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
             }
         }
-        catch (e_28_1) { e_28 = { error: e_28_1 }; }
+        catch (e_30_1) { e_30 = { error: e_30_1 }; }
         finally {
             try {
                 if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
             }
-            finally { if (e_28) throw e_28.error; }
+            finally { if (e_30) throw e_30.error; }
         }
         return { fvtx: fvtx, fshp: fshp, fmat: fmat };
-        var e_26, _a, e_28, _c, e_27, _b;
+        var e_28, _a, e_30, _c, e_29, _b;
     }
     function parse(buffer) {
         var view = buffer.createDataView();
@@ -10142,12 +10172,12 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                 textures.push({ entry: entry, texture: texture });
             }
         }
-        catch (e_29_1) { e_29 = { error: e_29_1 }; }
+        catch (e_31_1) { e_31 = { error: e_31_1 }; }
         finally {
             try {
                 if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
             }
-            finally { if (e_29) throw e_29.error; }
+            finally { if (e_31) throw e_31.error; }
         }
         var models = [];
         try {
@@ -10157,15 +10187,15 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_43
                 models.push({ entry: entry, fmdl: fmdl });
             }
         }
-        catch (e_30_1) { e_30 = { error: e_30_1 }; }
+        catch (e_32_1) { e_32 = { error: e_32_1 }; }
         finally {
             try {
                 if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
             }
-            finally { if (e_30) throw e_30.error; }
+            finally { if (e_32) throw e_32.error; }
         }
         return { textures: textures, models: models };
-        var e_29, _a, e_30, _b;
+        var e_31, _a, e_32, _b;
     }
     exports_43("parse", parse);
     var GX2Texture, util_23, UBOParameterType, RenderInfoParameterType;
@@ -10506,12 +10536,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             samplers.push(sampler);
                         }
                     }
-                    catch (e_31_1) { e_31 = { error: e_31_1 }; }
+                    catch (e_33_1) { e_33 = { error: e_33_1 }; }
                     finally {
                         try {
                             if (textureAssigns_1_1 && !textureAssigns_1_1.done && (_a = textureAssigns_1.return)) _a.call(textureAssigns_1);
                         }
-                        finally { if (e_31) throw e_31.error; }
+                        finally { if (e_33) throw e_33.error; }
                     }
                     var prog = new ProgramGambit_UBER();
                     this.arena.trackProgram(prog);
@@ -10552,7 +10582,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             _loop_3(i);
                         }
                     };
-                    var e_31, _a;
+                    var e_33, _a;
                 };
                 Scene.prototype.translateIndexBuffer = function (indexFormat, indexBufferData) {
                     switch (indexFormat) {
@@ -10574,14 +10604,14 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             indexDatas.push(indexData);
                         }
                     }
-                    catch (e_32_1) { e_32 = { error: e_32_1 }; }
+                    catch (e_34_1) { e_34 = { error: e_34_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_32) throw e_32.error; }
+                        finally { if (e_34) throw e_34.error; }
                     }
-                    var e_32, _c;
+                    var e_34, _c;
                 };
                 Scene.prototype.translateIndexFormat = function (gl, indexFormat) {
                     // Little-endian translation was done above.
@@ -10613,12 +10643,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             glIndexBuffers.push(coalescedIndex.shift());
                         }
                     }
-                    catch (e_33_1) { e_33 = { error: e_33_1 }; }
+                    catch (e_35_1) { e_35 = { error: e_35_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_33) throw e_33.error; }
+                        finally { if (e_35) throw e_35.error; }
                     }
                     return function (state) {
                         var lod = 0;
@@ -10631,16 +10661,16 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 gl.drawElements(_this.translatePrimType(gl, mesh.primType), submesh.indexBufferCount, _this.translateIndexFormat(gl, mesh.indexFormat), glIndexBuffer.offset + submesh.indexBufferOffset);
                             }
                         }
-                        catch (e_34_1) { e_34 = { error: e_34_1 }; }
+                        catch (e_36_1) { e_36 = { error: e_36_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_34) throw e_34.error; }
+                            finally { if (e_36) throw e_36.error; }
                         }
-                        var e_34, _c;
+                        var e_36, _c;
                     };
-                    var e_33, _c;
+                    var e_35, _c;
                 };
                 Scene.prototype.translateModel = function (gl, model, coalescedVertex, coalescedIndex) {
                     var _this = this;
@@ -10845,14 +10875,14 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_35_1) { e_35 = { error: e_35_1 }; }
+                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_35) throw e_35.error; }
+                        finally { if (e_37) throw e_37.error; }
                     }
-                    var e_35, _c;
+                    var e_37, _c;
                 }
                 MultiScene.prototype.render = function (state) {
                     var gl = state.gl;
@@ -11178,14 +11208,14 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "viewer", "Progress
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
+                    catch (e_38_1) { e_38 = { error: e_38_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_36) throw e_36.error; }
+                        finally { if (e_38) throw e_38.error; }
                     }
-                    var e_36, _c;
+                    var e_38, _c;
                 }
                 MultiScene.prototype.createUI = function () {
                     var elem = document.createElement('div');
@@ -11698,12 +11728,12 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
                     vertexIndexSize += 0x02;
                 }
             }
-            catch (e_37_1) { e_37 = { error: e_37_1 }; }
+            catch (e_39_1) { e_39 = { error: e_39_1 }; }
             finally {
                 try {
                     if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
                 }
-                finally { if (e_37) throw e_37.error; }
+                finally { if (e_39) throw e_39.error; }
             }
             var totalVertexCount = 0;
             var totalTriangleCount = 0;
@@ -11860,7 +11890,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
             };
             surfaces.push(surface);
             sectionIndex++;
-            var e_37, _a;
+            var e_39, _a;
         };
         for (var i = 0; i < surfaceCount; i++) {
             _loop_5(i);
@@ -12069,15 +12099,15 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                                 return resource;
                         }
                     }
-                    catch (e_38_1) { e_38 = { error: e_38_1 }; }
+                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_38) throw e_38.error; }
+                        finally { if (e_40) throw e_40.error; }
                     }
                     return null;
-                    var e_38, _c;
+                    var e_40, _c;
                 };
                 ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
                     var cached = this._cache.get(assetID);
@@ -12422,15 +12452,15 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                             offset += 4 * attrib.compCount;
                         }
                     }
-                    catch (e_39_1) { e_39 = { error: e_39_1 }; }
+                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
                     finally {
                         try {
                             if (vtxAttrFormats_2_1 && !vtxAttrFormats_2_1.done && (_a = vtxAttrFormats_2.return)) _a.call(vtxAttrFormats_2);
                         }
-                        finally { if (e_39) throw e_39.error; }
+                        finally { if (e_41) throw e_41.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_39, _a;
+                    var e_41, _a;
                 }
                 Command_Surface.prototype.exec = function (state) {
                     var gl = state.gl;
@@ -12575,14 +12605,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
+                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_40) throw e_40.error; }
+                        finally { if (e_42) throw e_42.error; }
                     }
-                    var e_40, _c;
+                    var e_42, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -12626,15 +12656,15 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                                 return new MultiScene(scenes);
                             }
                         }
-                        catch (e_41_1) { e_41 = { error: e_41_1 }; }
+                        catch (e_43_1) { e_43 = { error: e_43_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_41) throw e_41.error; }
+                            finally { if (e_43) throw e_43.error; }
                         }
                         return null;
-                        var e_41, _c;
+                        var e_43, _c;
                     });
                 };
                 return MP1SceneDesc;
@@ -12874,12 +12904,12 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                             tex.appendChild(canvas);
                         }
                     }
-                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
+                    catch (e_44_1) { e_44 = { error: e_44_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_42) throw e_42.error; }
+                        finally { if (e_44) throw e_44.error; }
                     }
                     tex.onmouseover = function () {
                         canvases.forEach(function (canvas) {
@@ -12899,7 +12929,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                     tex.appendChild(label);
                     tex.style.cssFloat = 'left';
                     return tex;
-                    var e_42, _c;
+                    var e_44, _c;
                 };
                 Main.prototype._makeTextureSection = function (textures) {
                     var _this = this;
@@ -12958,14 +12988,14 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                             this.groupSelect.appendChild(groupOption);
                         }
                     }
-                    catch (e_43_1) { e_43 = { error: e_43_1 }; }
+                    catch (e_45_1) { e_45 = { error: e_45_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_43) throw e_43.error; }
+                        finally { if (e_45) throw e_45.error; }
                     }
-                    var e_43, _c;
+                    var e_45, _c;
                 };
                 Main.prototype._loadSceneGroup = function (group, loadDefaultSceneInGroup) {
                     if (loadDefaultSceneInGroup === void 0) { loadDefaultSceneInGroup = true; }
@@ -12987,16 +13017,16 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                             this.sceneSelect.appendChild(sceneOption);
                         }
                     }
-                    catch (e_44_1) { e_44 = { error: e_44_1 }; }
+                    catch (e_46_1) { e_46 = { error: e_46_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_44) throw e_44.error; }
+                        finally { if (e_46) throw e_46.error; }
                     }
                     if (loadDefaultSceneInGroup)
                         this._loadSceneDesc(group.sceneDescs[0]);
-                    var e_44, _c;
+                    var e_46, _c;
                 };
                 Main.prototype._onSceneSelectChange = function () {
                     var option = this.sceneSelect.selectedOptions.item(0);
@@ -13352,14 +13382,14 @@ System.register("embeds/sunshine_water", ["gl-matrix", "viewer", "util", "gx/gx_
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_45_1) { e_45 = { error: e_45_1 }; }
+                    catch (e_47_1) { e_47 = { error: e_47_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_45) throw e_45.error; }
+                        finally { if (e_47) throw e_47.error; }
                     }
-                    var e_45, _c;
+                    var e_47, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {

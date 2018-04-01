@@ -8,7 +8,7 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, RenderFlags, RenderState, Program, RenderArena, RenderPass, BlendMode } from '../render';
+import { CullMode, RenderFlags, RenderState, Program, RenderArena, BlendMode } from '../render';
 import Progressable from 'Progressable';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
@@ -77,20 +77,20 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
 
 type RenderFunc = (state: RenderState) => void;
 
-class Scene implements Viewer.Scene {
+class BMDRenderer {
     public textures: Viewer.Texture[];
-    public modelFuncs: RenderFunc[];
-    public program: NITRO_Program;
     public bmd: NITRO_BMD.BMD;
     public localScale: number;
     public crg0Level: CRG0.Level;
     public isSkybox: boolean;
     public localMatrix: mat4;
 
+    public opaqueCommands: RenderFunc[] = [];
+    public transparentCommands: RenderFunc[] = [];
+
     private arena: RenderArena;
 
     constructor(gl: WebGL2RenderingContext, bmd: NITRO_BMD.BMD, localScale: number, crg0Level: CRG0.Level) {
-        this.program = new NITRO_Program();
         this.bmd = bmd;
         this.localScale = localScale;
         this.crg0Level = crg0Level;
@@ -100,7 +100,7 @@ class Scene implements Viewer.Scene {
         this.textures = bmd.textures.map((texture) => {
             return textureToCanvas(texture);
         });
-        this.modelFuncs = bmd.models.map((bmdm) => this.translateModel(gl, bmdm));
+        this.translateBMD(gl, this.bmd);
 
         const scaleFactor = this.bmd.scaleFactor * this.localScale;
         this.localMatrix = mat4.create();
@@ -220,7 +220,8 @@ class Scene implements Viewer.Scene {
             }
 
             if (texture !== null) {
-                gl.uniformMatrix3fv(this.program.texCoordMatLocation, false, texCoordMat);
+                const prog = (<NITRO_Program> state.currentProgram);
+                gl.uniformMatrix3fv(prog.texCoordMatLocation, false, texCoordMat);
                 gl.bindTexture(gl.TEXTURE_2D, texId);
             }
 
@@ -228,37 +229,24 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateBatch(gl: WebGL2RenderingContext, batch: NITRO_BMD.Batch): RenderFunc {
-        const batchPass = batch.material.isTranslucent ? RenderPass.TRANSPARENT : RenderPass.OPAQUE;
-
+    private translateBatch(gl: WebGL2RenderingContext, batch: NITRO_BMD.Batch): void {
         const applyMaterial = this.translateMaterial(gl, batch.material);
         const renderPoly = this.translatePoly(gl, batch.poly);
-        return (state: RenderState) => {
-            if (state.currentPass !== batchPass)
-                return;
+        const func = (state: RenderState): void => {
             applyMaterial(state);
             renderPoly(state);
         };
+
+        if (batch.material.isTranslucent)
+            this.transparentCommands.push(func);
+        else
+            this.opaqueCommands.push(func);
     }
 
-    private translateModel(gl: WebGL2RenderingContext, bmdm: NITRO_BMD.Model): RenderFunc {
-        const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
-        return (state: RenderState) => {
-            batches.forEach((f) => { f(state); });
-        };
-    }
-
-    private renderModels(state: RenderState) {
-        return this.modelFuncs.forEach((func) => {
-            func(state);
-        });
-    }
-
-    public render(state: RenderState) {
-        const gl = state.gl;
-        state.useProgram(this.program);
-        state.bindModelView(this.isSkybox, this.localMatrix);
-        this.renderModels(state);
+    private translateBMD(gl: WebGL2RenderingContext, bmd: NITRO_BMD.BMD) {
+        for (const model of bmd.models)
+            for (const batch of model.batches)
+                this.translateBatch(gl, batch);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -266,35 +254,53 @@ class Scene implements Viewer.Scene {
     }
 }
 
-class MultiScene implements Viewer.MainScene {
-    public cameraController = Viewer.FPSCameraController;
-    public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
-    public scenes: Viewer.Scene[];
-    public textures: Viewer.Texture[];
+function collectTextures(scenes: BMDRenderer[]): Viewer.Texture[] {
+    const textures: Viewer.Texture[] = [];
+    for (const scene of scenes)
+        if (scene)
+            textures.push.apply(textures, scene.textures);
+    return textures;
+}
 
-    constructor(scenes: Viewer.Scene[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
+class SM64DSRenderer implements Viewer.MainScene {
+    public cameraController = Viewer.FPSCameraController;
+    public textures: Viewer.Texture[];
+    private program: NITRO_Program;
+
+    constructor(public mainBMD: BMDRenderer, public skyboxBMD: BMDRenderer) {
+        this.textures = collectTextures([this.mainBMD, this.skyboxBMD]);
+        this.program = new NITRO_Program();
+    }
+
+    private runCommands(state: RenderState, funcs: RenderFunc[]) {
+        funcs.forEach((func) => {
+            func(state);
+        });
     }
 
     public render(renderState: RenderState) {
         const gl = renderState.gl;
 
-        // Clear to black.
-        if (renderState.currentPass === RenderPass.CLEAR) {
+        renderState.useProgram(this.program);
+
+        if (this.skyboxBMD) {
+            renderState.bindModelView(true, this.skyboxBMD.localMatrix);
+            this.runCommands(renderState, this.skyboxBMD.opaqueCommands);
+            gl.clear(gl.DEPTH_BUFFER_BIT);
+        } else {
+            // No skybox? Black.
             gl.clearColor(0, 0, 0, 1.0);
             gl.clear(gl.COLOR_BUFFER_BIT);
         }
 
-        this.scenes.forEach((scene) => {
-            scene.render(renderState);
-        });
+        renderState.bindModelView(false, this.mainBMD.localMatrix);
+        this.runCommands(renderState, this.mainBMD.opaqueCommands);
+        this.runCommands(renderState, this.mainBMD.transparentCommands);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
+        this.mainBMD.destroy(gl);
+        this.skyboxBMD.destroy(gl);
     }
 }
 
@@ -316,23 +322,23 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBmdScene(gl: WebGL2RenderingContext, filename: string, localScale: number, level: CRG0.Level, isSkybox: boolean): PromiseLike<Scene> {
+    private _createBMDRenderer(gl: WebGL2RenderingContext, filename: string, localScale: number, level: CRG0.Level, isSkybox: boolean): PromiseLike<BMDRenderer> {
         return fetch(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
-            const scene = new Scene(gl, bmd, localScale, level);
-            scene.isSkybox = isSkybox;
-            return scene;
+            const renderer = new BMDRenderer(gl, bmd, localScale, level);
+            renderer.isSkybox = isSkybox;
+            return renderer;
         });
     }
 
     private _createSceneFromCRG0(gl: WebGL2RenderingContext, crg0: CRG0.CRG0): PromiseLike<Viewer.MainScene> {
         const level = crg0.levels[this.levelId];
-        const scenes = [this._createBmdScene(gl, level.attributes.get('bmd'), 100, level, false)];
+        const renderers = [this._createBMDRenderer(gl, level.attributes.get('bmd'), 100, level, false)];
         if (level.attributes.get('vrbox'))
-            scenes.unshift(this._createBmdScene(gl, level.attributes.get('vrbox'), 0.8, level, true));
-        return Promise.all(scenes).then((results: Viewer.Scene[]) => {
-            return new MultiScene(results);
+            renderers.push(this._createBMDRenderer(gl, level.attributes.get('vrbox'), 0.8, level, true));
+        return Promise.all(renderers).then(([mainBMD, skyboxBMD]) => {
+            return new SM64DSRenderer(mainBMD, skyboxBMD);
         });
     }
 }
