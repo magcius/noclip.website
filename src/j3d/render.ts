@@ -8,7 +8,7 @@ import * as GX_Material from 'gx/gx_material';
 import * as GX_Texture from 'gx/gx_texture';
 import * as Viewer from 'viewer';
 
-import { RenderFlags, RenderState, RenderPass, CompareMode, CoalescedBuffers, BufferCoalescer } from '../render';
+import { RenderFlags, RenderState, CompareMode, CoalescedBuffers, BufferCoalescer } from '../render';
 import { assert, align } from '../util';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {

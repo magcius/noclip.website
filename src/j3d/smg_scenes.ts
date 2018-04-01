@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import { fetch, assert } from '../util';
 import Progressable from 'Progressable';
 import ArrayBufferSlice from 'ArrayBufferSlice';
-import { RenderState, RenderPass, Program, RenderTarget } from '../render';
+import { RenderState, Program, RenderTarget } from '../render';
 import { createScenesFromBuffer } from './scenes';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {

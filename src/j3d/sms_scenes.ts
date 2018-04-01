@@ -1,5 +1,5 @@
 
-import { RenderPass, RenderState } from '../render';
+import { RenderState } from '../render';
 import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as Viewer from '../viewer';
