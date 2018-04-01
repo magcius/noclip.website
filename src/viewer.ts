@@ -7,13 +7,13 @@ import { RenderState, RenderFlags, RenderPass, RenderTarget, Program } from './r
 
 import Progressable from 'Progressable';
 
-interface CameraController {
+export interface CameraController {
     setInitialCamera(camera: mat4): void;
     update(camera: mat4, inputManager: InputManager, dt: number): void;
 }
 
 // XXX: Is there any way to do this properly and reference the interface?
-type CameraControllerClass = typeof FPSCameraController | typeof OrbitCameraController;
+export type CameraControllerClass = typeof FPSCameraController | typeof OrbitCameraController;
 
 export interface Texture {
     name: string;

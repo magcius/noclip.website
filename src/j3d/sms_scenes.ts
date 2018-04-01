@@ -9,17 +9,67 @@ import Progressable from 'Progressable';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
-export class SunshineClearScene implements Viewer.Scene {
-    public textures: Viewer.Texture[] = [];
-    public renderPasses = [ RenderPass.CLEAR ];
+function collectTextures(scenes: J3DScene[]): Viewer.Texture[] {
+    const textures: Viewer.Texture[] = [];
+    for (const scene of scenes)
+        if (scene)
+            textures.push.apply(textures, scene.textures);
+    return textures;
+}
 
-    public render(renderState: RenderState) {
+export class SunshineRenderer implements Viewer.MainScene {
+    public cameraController: Viewer.CameraControllerClass = Viewer.FPSCameraController;
+    public textures: Viewer.Texture[] = [];
+
+    constructor(public skyScene: J3DScene, public mapScene: J3DScene, public seaScene: J3DScene, public extraScenes: J3DScene[]) {
+        this.textures = collectTextures([skyScene, mapScene, seaScene].concat(extraScenes));
+    }
+
+    public render(renderState: RenderState): void {
         const gl = renderState.gl;
         gl.clearColor(0, 0, 0.125, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // First up, render skyboxen.
+        if (this.skyScene) {
+            renderState.currentPass = RenderPass.OPAQUE;
+            this.skyScene.render(renderState);
+            renderState.currentPass = RenderPass.TRANSPARENT;
+            this.skyScene.render(renderState);
+            gl.clear(gl.DEPTH_BUFFER_BIT);
+        }
+
+        // Render main scene.
+        if (this.mapScene) {
+            renderState.currentPass = RenderPass.OPAQUE;
+            this.mapScene.render(renderState);
+            renderState.currentPass = RenderPass.TRANSPARENT;
+            this.mapScene.render(renderState);
+        }
+
+        // Render sea.
+        if (this.seaScene) {
+            renderState.currentPass = RenderPass.TRANSPARENT;
+            this.seaScene.render(renderState);
+        }
+
+        // Render extra junk.
+        for (const scene of this.extraScenes) {
+            renderState.currentPass = RenderPass.OPAQUE;
+            scene.render(renderState);
+            renderState.currentPass = RenderPass.TRANSPARENT;
+            scene.render(renderState);
+        }
     }
 
-    public destroy() {
+    public destroy(gl: WebGL2RenderingContext): void {
+        if (this.skyScene)
+            this.skyScene.destroy(gl);
+        if (this.mapScene)
+            this.mapScene.destroy(gl);
+        if (this.seaScene)
+            this.seaScene.destroy(gl);
+        this.extraScenes.forEach((scene) => scene.destroy(gl));
     }
 }
 
@@ -36,6 +86,8 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
     public static createSunshineSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, basename: string, isSkybox: boolean): Scene {
         const bmdFile = rarc.findFile(`map/map/${basename}.bmd`);
+        if (!bmdFile)
+            return null;
         const btkFile = rarc.findFile(`map/map/${basename}.btk`);
         const bmtFile = rarc.findFile(`map/map/${basename}.bmt`);
         const scene = createScene(gl, bmdFile, btkFile, bmtFile);
@@ -54,26 +106,25 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             // the binary, and for a lot of objects, too. My heuristics below are a cheap
             // approximation of the actual scene data...
 
-            const scenes: J3DScene[] = [];
+            const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
+            const mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map', false);
+            const seaScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sea', false);
+
+            const extraScenes: J3DScene[] = [];
             for (const file of rarc.findDir('map/map').files) {
                 const [basename, extension] = file.name.split('.');
                 if (extension !== 'bmd')
                     continue;
+                if (['sky', 'map', 'sea'].includes(basename))
+                    continue;
                 // Indirect stuff would require engine support.
                 if (basename.includes('indirect'))
                     continue;
-
-                // Sky always gets sorted first.
-                if (basename === 'sky')
-                    continue;
                 const scene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, basename, false);
-                scenes.push(scene);
+                extraScenes.push(scene);
             }
 
-            scenes.unshift(SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, `sky`, true));
-            scenes.unshift(new SunshineClearScene());
-
-            return new MultiScene(scenes);
+            return new SunshineRenderer(skyScene, mapScene, seaScene, extraScenes);
         });
     }
 }
