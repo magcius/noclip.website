@@ -491,20 +491,6 @@ export class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, sceneParamsData, gl.DYNAMIC_DRAW);
 
-        if (this.isSkybox) {
-            // The Super Mario Sunshine skyboxes are authored in this strange way where they are transparent,
-            // and expect to be drawn directly on top of the clear color with blending on. I don't know why
-            // Nintendo chose to do things this way -- there might be a flag for sorting in the BMD I'm not
-            // correctly pulling out right now, or this might be explicitly done in the engine.
-            // Draw them in the opaque pass, first thing.
-
-            if (state.currentPass === RenderPass.OPAQUE) {
-                this.execCommands(state, this.opaqueCommands);
-                this.execCommands(state, this.transparentCommands);
-            }
-            return;
-        }
-
         if (state.currentPass === RenderPass.OPAQUE) {
             this.execCommands(state, this.opaqueCommands);
         } else if (state.currentPass === RenderPass.TRANSPARENT) {

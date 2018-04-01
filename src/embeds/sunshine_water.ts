@@ -4,7 +4,7 @@ import { mat3, mat4 } from 'gl-matrix';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 
-import { MainScene, OrbitCameraController, Texture, Scene } from 'viewer';
+import { MainScene, OrbitCameraController, Texture, Scene, CameraController, CameraControllerClass } from 'viewer';
 import { BlendMode, RenderFlags, RenderState, RenderPass } from 'render';
 import { fetch } from 'util';
 
@@ -15,7 +15,7 @@ import * as Yaz0 from 'yaz0';
 import * as RARC from 'j3d/rarc';
 import { BMD, BTK, BMT, TEX1, MaterialEntry } from 'j3d/j3d';
 import { Command_Material } from 'j3d/render';
-import { SunshineClearScene, SunshineSceneDesc } from 'j3d/sms_scenes';
+import { SunshineSceneDesc, SunshineRenderer } from 'j3d/sms_scenes';
 import { J3DScene } from 'j3d/scenes';
 
 const scale = 200;
@@ -26,39 +26,12 @@ for (let i = 0; i < 10; i++) {
     packetParamsData.set(posMtx, i * 16);
 }
 
-class MultiScene implements MainScene {
-    public cameraController = OrbitCameraController;
-    public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
-    public scenes: J3DScene[];
-    public textures: Texture[];
-
-    constructor(scenes: J3DScene[]) {
-        this.setScenes(scenes);
-    }
-
-    protected setScenes(scenes: J3DScene[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
-    }
-
-    public render(renderState: RenderState) {
-        this.scenes.forEach((scene) => {
-            if (!scene.renderPasses.includes(renderState.currentPass))
-                return;
-            scene.render(renderState);
-        });
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
-    }
+class WaterRenderer extends SunshineRenderer {
+    public cameraController: CameraControllerClass = OrbitCameraController;
 }
 
 const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
 class SeaPlaneScene implements Scene {
-    public renderPasses = [ RenderPass.TRANSPARENT ];
     public textures: Texture[] = [];
 
     public bmd: BMD;
@@ -67,6 +40,7 @@ class SeaPlaneScene implements Scene {
     public animationScale: number = 5;
 
     // Play make-believe for Command_Material.
+    public renderPasses = [ RenderPass.TRANSPARENT ];
     public bmt: BMT = null;
     public isSkybox: boolean = false;
     public useMaterialTexMtx: boolean = false;
@@ -263,10 +237,11 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
         const btk = BTK.parse(btkFile.buffer);
 
         const seaScene = new SeaPlaneScene(gl, bmd, btk, name);
-        return new MultiScene([
-            new SunshineClearScene(),
+        return new WaterRenderer(
             skyScene,
+            null,
             seaScene,
-        ]);
+            [],
+        );
     });
 }
