@@ -14,7 +14,6 @@ import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 class NITRO_Program extends Program {
-    public localMatrixLocation: WebGLUniformLocation;
     public texCoordMatLocation: WebGLUniformLocation;
 
     public static a_position = 0;
@@ -24,7 +23,6 @@ class NITRO_Program extends Program {
     public vert = `
 precision mediump float;
 uniform mat4 u_modelView;
-uniform mat4 u_localMatrix;
 uniform mat4 u_projection;
 uniform mat3 u_texCoordMat;
 layout(location = ${NITRO_Program.a_position}) in vec3 a_position;
@@ -34,7 +32,7 @@ out vec4 v_color;
 out vec2 v_uv;
 
 void main() {
-    gl_Position = u_projection * u_modelView * u_localMatrix * vec4(a_position, 1.0);
+    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);
     v_color = a_color;
     v_uv = (u_texCoordMat * vec3(a_uv, 1.0)).st;
 }
@@ -55,8 +53,6 @@ void main() {
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
-
-        this.localMatrixLocation = gl.getUniformLocation(prog, "u_localMatrix");
         this.texCoordMatLocation = gl.getUniformLocation(prog, "u_texCoordMat");
     }
 }
@@ -89,6 +85,7 @@ class Scene implements Viewer.Scene {
     public localScale: number;
     public crg0Level: CRG0.Level;
     public isSkybox: boolean;
+    public localMatrix: mat4;
 
     private arena: RenderArena;
 
@@ -104,6 +101,10 @@ class Scene implements Viewer.Scene {
             return textureToCanvas(texture);
         });
         this.modelFuncs = bmd.models.map((bmdm) => this.translateModel(gl, bmdm));
+
+        const scaleFactor = this.bmd.scaleFactor * this.localScale;
+        this.localMatrix = mat4.create();
+        mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
     }
 
     private translatePacket(gl: WebGL2RenderingContext, packet: NITRO_GX.Packet): RenderFunc {
@@ -241,16 +242,8 @@ class Scene implements Viewer.Scene {
     }
 
     private translateModel(gl: WebGL2RenderingContext, bmdm: NITRO_BMD.Model): RenderFunc {
-        const localMatrix = mat4.create();
-        const bmd = this.bmd;
-
-        const scaleFactor = bmd.scaleFactor * this.localScale;
-
-        mat4.scale(localMatrix, localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
-
         const batches = bmdm.batches.map((batch) => this.translateBatch(gl, batch));
         return (state: RenderState) => {
-            gl.uniformMatrix4fv(this.program.localMatrixLocation, false, localMatrix);
             batches.forEach((f) => { f(state); });
         };
     }
@@ -264,7 +257,7 @@ class Scene implements Viewer.Scene {
     public render(state: RenderState) {
         const gl = state.gl;
         state.useProgram(this.program);
-        state.bindModelView(this.isSkybox);
+        state.bindModelView(this.isSkybox, this.localMatrix);
         this.renderModels(state);
     }
 
