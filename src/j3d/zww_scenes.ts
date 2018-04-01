@@ -217,6 +217,15 @@ class WindWakerRenderer implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        this.vr_sky.destroy(gl);
+        this.vr_kasumi_mae.destroy(gl);
+        this.vr_uso_umi.destroy(gl);
+        this.vr_back_cloud.destroy(gl);
+        this.model.destroy(gl);
+        if (this.model1)
+            this.model1.destroy(gl);
+        if (this.model3)
+            this.model3.destroy(gl);
     }
 
     private createScene(gl: WebGL2RenderingContext, rarc: RARC.RARC, name: string, isSkybox: boolean): Scene {
