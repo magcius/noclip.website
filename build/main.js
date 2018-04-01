@@ -3816,7 +3816,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, btk, bmt) {
                     var _this = this;
-                    this.renderPasses = [2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.name = '';
                     this.visible = true;
                     this.isSkybox = false;
@@ -3914,12 +3913,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                 Scene.prototype.render = function (state) {
                     if (!this.bindState(state))
                         return;
-                    if (state.currentPass === null || state.currentPass === 2 /* OPAQUE */) {
-                        this.renderOpaque(state);
-                    }
-                    if (state.currentPass === null || state.currentPass === 3 /* TRANSPARENT */) {
-                        this.renderTransparent(state);
-                    }
+                    this.renderOpaque(state);
+                    this.renderTransparent(state);
                 };
                 Scene.prototype.translateModel = function (gl, bmd) {
                     var _this = this;
@@ -4011,7 +4006,7 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "uti
         return new render_4.Scene(gl, bmd, btk, bmt);
     }
     exports_16("createScene", createScene);
-    function createSceneFromBuffer(gl, buffer) {
+    function createScenesFromBuffer(gl, buffer) {
         if (util_8.readString(buffer, 0, 4) === 'Yaz0')
             buffer = Yaz0.decompress(buffer);
         if (util_8.readString(buffer, 0, 4) === 'RARC') {
@@ -4030,16 +4025,20 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "uti
                     return null;
                 }
             });
-            return new MultiScene(scenes.filter(function (s) { return !!s; }));
+            return scenes.filter(function (s) { return !!s; });
         }
         if (['J3D2bmd3', 'J3D2bdl4'].includes(util_8.readString(buffer, 0, 8))) {
             var bmd = j3d_2.BMD.parse(buffer);
-            return new MultiScene([new render_4.Scene(gl, bmd, null, null)]);
+            return [new render_4.Scene(gl, bmd, null, null)];
         }
         return null;
     }
-    exports_16("createSceneFromBuffer", createSceneFromBuffer);
-    var j3d_2, render_4, RARC, Yaz0, util_8, MultiScene, RARCSceneDesc;
+    exports_16("createScenesFromBuffer", createScenesFromBuffer);
+    function createMultiSceneFromBuffer(gl, buffer) {
+        return new MultiScene(createScenesFromBuffer(gl, buffer));
+    }
+    exports_16("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
+    var j3d_2, render_4, RARC, Yaz0, util_8, MultiScene;
     return {
         setters: [
             function (j3d_2_1) {
@@ -4061,7 +4060,6 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "uti
         execute: function () {
             MultiScene = /** @class */ (function () {
                 function MultiScene(scenes) {
-                    this.renderPasses = [0 /* CLEAR */, 2 /* OPAQUE */, 3 /* TRANSPARENT */];
                     this.setScenes(scenes);
                 }
                 MultiScene.prototype.setScenes = function (scenes) {
@@ -4084,8 +4082,6 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "uti
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
-                        if (!scene.renderPasses.includes(renderState.currentPass))
-                            return;
                         scene.render(renderState);
                     });
                 };
@@ -4095,24 +4091,10 @@ System.register("j3d/scenes", ["j3d/j3d", "j3d/render", "j3d/rarc", "yaz0", "uti
                 return MultiScene;
             }());
             exports_16("MultiScene", MultiScene);
-            RARCSceneDesc = /** @class */ (function () {
-                function RARCSceneDesc(path, name) {
-                    this.name = name || path;
-                    this.path = path;
-                    this.id = this.path;
-                }
-                RARCSceneDesc.prototype.createScene = function (gl) {
-                    return util_8.fetch(this.path).then(function (result) {
-                        return createSceneFromBuffer(gl, result);
-                    });
-                };
-                return RARCSceneDesc;
-            }());
-            exports_16("RARCSceneDesc", RARCSceneDesc);
         }
     };
 });
-System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_material", "j3d/scenes", "j3d/render", "Progressable", "util", "gl-matrix"], function (exports_17, context_17) {
+System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_material", "j3d/render", "Progressable", "util", "gl-matrix"], function (exports_17, context_17) {
     "use strict";
     var __moduleName = context_17 && context_17.id;
     function collectTextures(scenes) {
@@ -4134,7 +4116,7 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
         return textures;
         var e_16, _a;
     }
-    var j3d_3, RARC, Yaz0, GX_Material, scenes_2, render_5, Progressable_2, util_9, gl_matrix_5, CameraPos, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
+    var j3d_3, RARC, Yaz0, GX_Material, render_5, Progressable_2, util_9, gl_matrix_5, CameraPos, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
         setters: [
             function (j3d_3_1) {
@@ -4148,9 +4130,6 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
             },
             function (GX_Material_3) {
                 GX_Material = GX_Material_3;
-            },
-            function (scenes_2_1) {
-                scenes_2 = scenes_2_1;
             },
             function (render_5_1) {
                 render_5 = render_5_1;
@@ -4318,7 +4297,6 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                 };
                 WindWakerRenderer.prototype.render = function (state) {
                     var gl = state.gl;
-                    state.currentPass = null;
                     // Render skybox.
                     this.vr_sky.render(state);
                     this.vr_kasumi_mae.render(state);
@@ -4335,12 +4313,12 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                 };
                 return WindWakerRenderer;
             }());
-            WindWakerSceneDesc = /** @class */ (function (_super) {
-                __extends(WindWakerSceneDesc, _super);
+            WindWakerSceneDesc = /** @class */ (function () {
                 function WindWakerSceneDesc(path, name, cameraPos) {
-                    var _this = _super.call(this, path, name) || this;
-                    _this.cameraPos = cameraPos;
-                    return _this;
+                    this.path = path;
+                    this.name = name;
+                    this.cameraPos = cameraPos;
+                    this.id = path;
                 }
                 WindWakerSceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
@@ -4356,7 +4334,7 @@ System.register("j3d/zww_scenes", ["j3d/j3d", "j3d/rarc", "yaz0", "gx/gx_materia
                     });
                 };
                 return WindWakerSceneDesc;
-            }(scenes_2.RARCSceneDesc));
+            }());
             sceneDescs = [
                 new WindWakerSceneDesc("data/j3d/ww/sea/Room11.arc", "Windfall Island", new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
                 new WindWakerSceneDesc("data/j3d/ww/sea/Room13.arc", "Dragon Roost Island", new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
@@ -4375,8 +4353,8 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
     function collectTextures(scenes) {
         var textures = [];
         try {
-            for (var scenes_3 = __values(scenes), scenes_3_1 = scenes_3.next(); !scenes_3_1.done; scenes_3_1 = scenes_3.next()) {
-                var scene = scenes_3_1.value;
+            for (var scenes_2 = __values(scenes), scenes_2_1 = scenes_2.next(); !scenes_2_1.done; scenes_2_1 = scenes_2.next()) {
+                var scene = scenes_2_1.value;
                 if (scene)
                     textures.push.apply(textures, scene.textures);
             }
@@ -4384,14 +4362,14 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
         catch (e_17_1) { e_17 = { error: e_17_1 }; }
         finally {
             try {
-                if (scenes_3_1 && !scenes_3_1.done && (_a = scenes_3.return)) _a.call(scenes_3);
+                if (scenes_2_1 && !scenes_2_1.done && (_a = scenes_2.return)) _a.call(scenes_2);
             }
             finally { if (e_17) throw e_17.error; }
         }
         return textures;
         var e_17, _a;
     }
-    var RARC, Yaz0, scenes_4, util_10, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
+    var RARC, Yaz0, scenes_3, util_10, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (RARC_3) {
@@ -4400,8 +4378,8 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
             function (Yaz0_3) {
                 Yaz0 = Yaz0_3;
             },
-            function (scenes_4_1) {
-                scenes_4 = scenes_4_1;
+            function (scenes_3_1) {
+                scenes_3 = scenes_3_1;
             },
             function (util_10_1) {
                 util_10 = util_10_1;
@@ -4421,8 +4399,6 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
                     var gl = renderState.gl;
                     gl.clearColor(0, 0, 0.125, 1);
                     gl.clear(gl.COLOR_BUFFER_BIT);
-                    // First up, render skyboxen.
-                    renderState.currentPass = null;
                     if (this.skyScene) {
                         this.skyScene.render(renderState);
                         gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -4470,7 +4446,7 @@ System.register("j3d/sms_scenes", ["j3d/rarc", "yaz0", "j3d/scenes", "util"], fu
                         return null;
                     var btkFile = rarc.findFile("map/map/" + basename + ".btk");
                     var bmtFile = rarc.findFile("map/map/" + basename + ".bmt");
-                    var scene = scenes_4.createScene(gl, bmdFile, btkFile, bmtFile);
+                    var scene = scenes_3.createScene(gl, bmdFile, btkFile, bmtFile);
                     scene.name = basename;
                     scene.setIsSkybox(isSkybox);
                     scene.setUseMaterialTexMtx(false);
@@ -4536,22 +4512,22 @@ System.register("j3d/smg_scenes", ["util", "Progressable", "render", "j3d/scenes
     function collectTextures(scenes) {
         var textures = [];
         try {
-            for (var scenes_5 = __values(scenes), scenes_5_1 = scenes_5.next(); !scenes_5_1.done; scenes_5_1 = scenes_5.next()) {
-                var scene = scenes_5_1.value;
+            for (var scenes_4 = __values(scenes), scenes_4_1 = scenes_4.next(); !scenes_4_1.done; scenes_4_1 = scenes_4.next()) {
+                var scene = scenes_4_1.value;
                 textures.push.apply(textures, scene.textures);
             }
         }
         catch (e_20_1) { e_20 = { error: e_20_1 }; }
         finally {
             try {
-                if (scenes_5_1 && !scenes_5_1.done && (_a = scenes_5.return)) _a.call(scenes_5);
+                if (scenes_4_1 && !scenes_4_1.done && (_a = scenes_4.return)) _a.call(scenes_4);
             }
             finally { if (e_20) throw e_20.error; }
         }
         return textures;
         var e_20, _a;
     }
-    var util_11, Progressable_3, render_6, scenes_6, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
+    var util_11, Progressable_3, render_6, scenes_5, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (util_11_1) {
@@ -4563,8 +4539,8 @@ System.register("j3d/smg_scenes", ["util", "Progressable", "render", "j3d/scenes
             function (render_6_1) {
                 render_6 = render_6_1;
             },
-            function (scenes_6_1) {
-                scenes_6 = scenes_6_1;
+            function (scenes_5_1) {
+                scenes_5 = scenes_5_1;
             }
         ],
         execute: function () {
@@ -4579,15 +4555,12 @@ System.register("j3d/smg_scenes", ["util", "Progressable", "render", "j3d/scenes
                 }
                 SMGRenderer.prototype.render = function (state) {
                     var gl = state.gl;
-                    // Render all of the skybox in OPAQUE mode.
-                    state.currentPass = 2 /* OPAQUE */;
-                    this.skyboxScene.render(state);
+                    this.skyboxScene.bindState(state);
+                    this.skyboxScene.renderOpaque(state);
                     gl.clear(gl.DEPTH_BUFFER_BIT);
-                    // Render the main scene in OPAQUE / TRANSPARENT mode.
-                    state.currentPass = 2 /* OPAQUE */;
-                    this.mainScene.render(state);
-                    state.currentPass = 3 /* TRANSPARENT */;
-                    this.mainScene.render(state);
+                    this.mainScene.bindState(state);
+                    this.mainScene.renderOpaque(state);
+                    this.mainScene.renderTransparent(state);
                     /*
                     if (this.bloomScene) {
                         const gl = state.gl;
@@ -4634,9 +4607,9 @@ System.register("j3d/smg_scenes", ["util", "Progressable", "render", "j3d/scenes
                     return util_11.fetch(path).then(function (buffer) { return _this.createSceneFromBuffer(gl, buffer, isSkybox); });
                 };
                 SMGSceneDesc.prototype.createSceneFromBuffer = function (gl, buffer, isSkybox) {
-                    var multiScene = scenes_6.createSceneFromBuffer(gl, buffer);
-                    util_11.assert(multiScene.scenes.length === 1);
-                    var scene = multiScene.scenes[0];
+                    var scenes = scenes_5.createScenesFromBuffer(gl, buffer);
+                    util_11.assert(scenes.length === 1);
+                    var scene = scenes[0];
                     scene.setFPS(60);
                     scene.setUseMaterialTexMtx(true);
                     scene.setIsSkybox(isSkybox);
@@ -5484,8 +5457,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
     function collectTextures(scenes) {
         var textures = [];
         try {
-            for (var scenes_7 = __values(scenes), scenes_7_1 = scenes_7.next(); !scenes_7_1.done; scenes_7_1 = scenes_7.next()) {
-                var scene = scenes_7_1.value;
+            for (var scenes_6 = __values(scenes), scenes_6_1 = scenes_6.next(); !scenes_6_1.done; scenes_6_1 = scenes_6.next()) {
+                var scene = scenes_6_1.value;
                 if (scene)
                     textures.push.apply(textures, scene.textures);
             }
@@ -5493,7 +5466,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
         catch (e_21_1) { e_21 = { error: e_21_1 }; }
         finally {
             try {
-                if (scenes_7_1 && !scenes_7_1.done && (_a = scenes_7.return)) _a.call(scenes_7);
+                if (scenes_6_1 && !scenes_6_1.done && (_a = scenes_6.return)) _a.call(scenes_6);
             }
             finally { if (e_21) throw e_21.error; }
         }
@@ -12846,7 +12819,8 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/zww_
                     var scene;
                     if (file.name.endsWith('.bfres'))
                         return FRES.createSceneFromFRESBuffer(gl, buffer);
-                    scene = J3D.createSceneFromBuffer(gl, buffer);
+                    var scenes;
+                    scene = J3D.createMultiSceneFromBuffer(gl, buffer);
                     if (scene)
                         return scene;
                     return null;
@@ -13415,7 +13389,6 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
                     this.textures = [];
                     this.animationScale = 5;
                     // Play make-believe for Command_Material.
-                    this.renderPasses = [3 /* TRANSPARENT */];
                     this.bmt = null;
                     this.isSkybox = false;
                     this.useMaterialTexMtx = false;

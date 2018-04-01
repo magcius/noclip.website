@@ -12,11 +12,9 @@ import { assert, fetch, readString } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export interface J3DScene extends Viewer.Scene {
-    renderPasses: RenderPass[];
 }
 
 export class MultiScene implements Viewer.MainScene {
-    public renderPasses = [ RenderPass.CLEAR, RenderPass.OPAQUE, RenderPass.TRANSPARENT ];
     public scenes: J3DScene[];
     public textures: Viewer.Texture[];
 
@@ -33,8 +31,6 @@ export class MultiScene implements Viewer.MainScene {
 
     public render(renderState: RenderState) {
         this.scenes.forEach((scene) => {
-            if (!scene.renderPasses.includes(renderState.currentPass))
-                return;
             scene.render(renderState);
         });
     }
@@ -51,7 +47,7 @@ export function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, 
     return new Scene(gl, bmd, btk, bmt);
 }
 
-export function createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): MultiScene {
+export function createScenesFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Scene[] {
     if (readString(buffer, 0, 4) === 'Yaz0')
         buffer = Yaz0.decompress(buffer);
 
@@ -71,31 +67,17 @@ export function createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayB
             }
         });
 
-        return new MultiScene(scenes.filter((s) => !!s));
+        return scenes.filter((s) => !!s);
     }
 
     if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
         const bmd = BMD.parse(buffer);
-        return new MultiScene([new Scene(gl, bmd, null, null)]);
+        return [new Scene(gl, bmd, null, null)];
     }
 
     return null;
 }
 
-export class RARCSceneDesc implements Viewer.SceneDesc {
-    public name: string;
-    public path: string;
-    public id: string;
-
-    constructor(path: string, name?: string) {
-        this.name = name || path;
-        this.path = path;
-        this.id = this.path;
-    }
-
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch(this.path).then((result: ArrayBufferSlice) => {
-            return createSceneFromBuffer(gl, result);
-        });
-    }
+export function createMultiSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): MultiScene {
+    return new MultiScene(createScenesFromBuffer(gl, buffer));
 }

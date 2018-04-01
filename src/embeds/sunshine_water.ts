@@ -36,7 +36,6 @@ class SeaPlaneScene implements Scene {
     public animationScale: number = 5;
 
     // Play make-believe for Command_Material.
-    public renderPasses = [ RenderPass.TRANSPARENT ];
     public bmt: BMT = null;
     public isSkybox: boolean = false;
     public useMaterialTexMtx: boolean = false;

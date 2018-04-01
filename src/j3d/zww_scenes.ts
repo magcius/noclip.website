@@ -5,7 +5,7 @@ import * as RARC from './rarc';
 import * as Yaz0 from '../yaz0';
 import * as GX_Material from 'gx/gx_material';
 import * as Viewer from '../viewer';
-import { MultiScene, RARCSceneDesc, J3DScene } from './scenes';
+import { J3DScene } from './scenes';
 import { Scene, ColorOverride } from './render';
 
 import Progressable from 'Progressable';
@@ -217,8 +217,6 @@ class WindWakerRenderer implements Viewer.MainScene {
     public render(state: RenderState) {
         const gl = state.gl;
 
-        state.currentPass = null;
-
         // Render skybox.
         this.vr_sky.render(state);
         this.vr_kasumi_mae.render(state);
@@ -238,9 +236,10 @@ class WindWakerRenderer implements Viewer.MainScene {
     }
 }
 
-class WindWakerSceneDesc extends RARCSceneDesc {
-    public constructor(path: string, name: string, public cameraPos: CameraPos) {
-        super(path, name);
+class WindWakerSceneDesc {
+    public id: string;
+    public constructor(public path: string, public name: string, public cameraPos: CameraPos) {
+        this.id = path;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {

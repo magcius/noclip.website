@@ -7,7 +7,7 @@ import { fetch, assert } from '../util';
 import Progressable from 'Progressable';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import { RenderState, RenderPass, Program, RenderTarget } from '../render';
-import { createSceneFromBuffer, MultiScene } from './scenes';
+import { createScenesFromBuffer } from './scenes';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
@@ -23,9 +23,9 @@ class SMGRenderer implements Viewer.MainScene {
 
     constructor(
         gl: WebGL2RenderingContext,
-        private mainScene: Viewer.Scene,
-        private skyboxScene: Viewer.Scene,
-        private bloomScene: Viewer.Scene
+        private mainScene: Scene,
+        private skyboxScene: Scene,
+        private bloomScene: Scene
     ) {
         this.textures = collectTextures([mainScene, skyboxScene, bloomScene]);
 
@@ -35,17 +35,14 @@ class SMGRenderer implements Viewer.MainScene {
     public render(state: RenderState): void {
         const gl = state.gl;
 
-        // Render all of the skybox in OPAQUE mode.
-        state.currentPass = RenderPass.OPAQUE;
-        this.skyboxScene.render(state);
+        this.skyboxScene.bindState(state);
+        this.skyboxScene.renderOpaque(state);
 
         gl.clear(gl.DEPTH_BUFFER_BIT);
 
-        // Render the main scene in OPAQUE / TRANSPARENT mode.
-        state.currentPass = RenderPass.OPAQUE;
-        this.mainScene.render(state);
-        state.currentPass = RenderPass.TRANSPARENT;
-        this.mainScene.render(state);
+        this.mainScene.bindState(state);
+        this.mainScene.renderOpaque(state);
+        this.mainScene.renderTransparent(state);
 
         /*
         if (this.bloomScene) {
@@ -92,9 +89,9 @@ class SMGSceneDesc implements Viewer.SceneDesc {
     }
 
     private createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean): Scene {
-        const multiScene: MultiScene = createSceneFromBuffer(gl, buffer);
-        assert(multiScene.scenes.length === 1);
-        const scene: Scene = (<Scene> multiScene.scenes[0]);
+        const scenes: Scene[] = createScenesFromBuffer(gl, buffer);
+        assert(scenes.length === 1);
+        const scene: Scene = scenes[0];
         scene.setFPS(60);
         scene.setUseMaterialTexMtx(true);
         scene.setIsSkybox(isSkybox);
