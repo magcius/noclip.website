@@ -3646,7 +3646,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                     for (var i = 0; i < this.material.textureIndexes.length; i++) {
                         var texIndex = this.material.textureIndexes[i];
                         if (texIndex >= 0)
-                            textures[i] = this.scene.glTextures[texIndex];
+                            textures[i] = this.scene.materialTextures[texIndex];
                         else
                             textures[i] = null;
                     }
@@ -3960,15 +3960,19 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                 };
                 Scene.prototype.translateTextures = function (gl) {
                     this.glTextures = [];
+                    this.materialTextures = [];
                     this.textures = [];
                     var tex1 = this.bmt !== null ? this.bmt.tex1 : this.bmd.tex1;
                     for (var i = 0; i < tex1.textures.length; i++) {
-                        var btiTexture = tex1.textures[tex1.remapTable[i]];
+                        var btiTexture = tex1.textures[i];
                         if (btiTexture.data === null) {
                             btiTexture = this.loadExtraTexture(btiTexture);
                         }
                         this.glTextures.push(Scene.translateTexture(gl, btiTexture));
                         this.textures.push(Scene.translateTextureToViewer(btiTexture));
+                    }
+                    for (var i = 0; i < tex1.remapTable.length; i++) {
+                        this.materialTextures.push(this.glTextures[tex1.remapTable[i]]);
                     }
                 };
                 Scene.prototype.translateModel = function (gl) {
@@ -13572,7 +13576,6 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
             sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4 * 4 + 4);
             SeaPlaneScene = /** @class */ (function () {
                 function SeaPlaneScene(gl, bmd, btk, configName) {
-                    this.textures = [];
                     this.animationScale = 5;
                     // Play make-believe for Command_Material.
                     this.bmt = null;
@@ -13584,6 +13587,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
                     this.bmd = bmd;
                     this.btk = btk;
                     this.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(function () { return 1; }));
+                    render_23.Scene.prototype.translateTextures.call(this, gl);
                     var seaMaterial = bmd.mat3.materialEntries.find(function (m) { return m.name === '_umi'; });
                     this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
                     this.plane = new PlaneShape(gl);

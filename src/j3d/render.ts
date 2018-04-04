@@ -153,7 +153,7 @@ export class Command_Material {
         for (let i = 0; i < this.material.textureIndexes.length; i++) {
             const texIndex = this.material.textureIndexes[i];
             if (texIndex >= 0)
-                textures[i] = this.scene.glTextures[texIndex];
+                textures[i] = this.scene.materialTextures[texIndex];
             else
                 textures[i] = null;
         }
@@ -310,7 +310,7 @@ export class Scene implements Viewer.Scene {
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: number[] = [];
     public sceneParamsBuffer: WebGLBuffer;
-    public glTextures: WebGLTexture[];
+    public materialTextures: WebGLTexture[];
 
     private bufferCoalescer: BufferCoalescer;
 
@@ -320,6 +320,7 @@ export class Scene implements Viewer.Scene {
     private materialCommands: Command_Material[];
     private shapeCommands: Command_Shape[];
     private jointMatrices: mat4[];
+    private glTextures: WebGLTexture[];
 
     constructor(
         gl: WebGL2RenderingContext,
@@ -520,19 +521,24 @@ export class Scene implements Viewer.Scene {
         return { name: texture.name, surfaces };
     }
 
-    private translateTextures(gl: WebGL2RenderingContext) {
+    public translateTextures(gl: WebGL2RenderingContext) {
         this.glTextures = [];
+        this.materialTextures = [];
         this.textures = [];
         const tex1 = this.bmt !== null ? this.bmt.tex1 : this.bmd.tex1;
 
         for (let i = 0; i < tex1.textures.length; i++) {
-            let btiTexture: BTI_Texture = tex1.textures[tex1.remapTable[i]];
+            let btiTexture: BTI_Texture = tex1.textures[i];
             if (btiTexture.data === null) {
                 btiTexture = this.loadExtraTexture(btiTexture);
             }
 
             this.glTextures.push(Scene.translateTexture(gl, btiTexture));
             this.textures.push(Scene.translateTextureToViewer(btiTexture));
+        }
+
+        for (let i = 0; i < tex1.remapTable.length; i++) {
+            this.materialTextures.push(this.glTextures[tex1.remapTable[i]]);
         }
     }
 
