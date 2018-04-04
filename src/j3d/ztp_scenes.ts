@@ -6,21 +6,42 @@ import { assert, fetch, readString, generateFormID } from 'util';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
+import * as GX from '../gx/gx_enum';
+
 import { BMD, BMT, BTK, BTI_Texture, BTI } from './j3d';
 import * as RARC from './rarc';
 import { Scene } from './render';
 import { RenderState } from '../render';
 
-function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: BTI_Texture[]) {
-    const bmd = BMD.parse(bmdFile.buffer);
-    const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
-    const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    return new Scene(gl, bmd, btk, bmt, extraTextures);
+// XXX(jstpierre): Figure out WTF is up with Twilight Princess materials.
+function hackMaterials1(bmd: BMD): void {
+    for (const material of bmd.mat3.materialEntries) {
+        for (const stage of material.gxMaterial.tevStages)
+            if (stage.colorScale === GX.TevScale.SCALE_4)
+                stage.colorScale = GX.TevScale.SCALE_1;
+    }
 }
 
-function createScenesFromBuffer(gl: WebGL2RenderingContext, rarcName: string, buffer: ArrayBufferSlice, extraTextures: BTI_Texture[]): Scene[] {
-    buffer = Yaz0.decompress(buffer);
-    const rarc = RARC.parse(buffer);
+function hackMaterials2(scene: Scene): void {
+    for (const materialCommand of scene.materialCommands) {
+        // Kill any indtex materials...
+        for (const texIndex of materialCommand.material.textureIndexes)
+            if (texIndex >= 0 && scene.btiTextures[scene.textureRemapTable[texIndex]].name === 'fbtex_dummy')
+                materialCommand.visible = false;
+    }
+}
+
+function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: BTI_Texture[]) {
+    const bmd = BMD.parse(bmdFile.buffer);
+    hackMaterials1(bmd);
+    const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
+    const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
+    const scene = new Scene(gl, bmd, btk, bmt, extraTextures);
+    hackMaterials2(scene);
+    return scene;
+}
+
+function createScenesFromRARC(gl: WebGL2RenderingContext, rarcName: string, rarc: RARC.RARC, extraTextures: BTI_Texture[]): Scene[] {
     const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
     const scenes = bmdFiles.map((bmdFile) => {
         const basename = bmdFile.name.split('.')[0];
@@ -34,13 +55,11 @@ function createScenesFromBuffer(gl: WebGL2RenderingContext, rarcName: string, bu
     return scenes.filter((s) => !!s);
 }
 
+
 class TwilightPrincessScene implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
 
-    constructor(public skyboxScenes: Scene[], public roomScenes: Scene[]) {
-        this.skyboxScenes = skyboxScenes;
-        this.roomScenes = roomScenes;
-
+    constructor(public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: Scene[], public roomScenes: Scene[]) {
         for (const scene of [...this.skyboxScenes, ...this.roomScenes])
             this.textures = this.textures.concat(scene.textures);
     }
@@ -52,6 +71,7 @@ class TwilightPrincessScene implements Viewer.MainScene {
         elem.style.font = '100% sans-serif';
         elem.style.boxSizing = 'border-box';
         elem.style.padding = '1em';
+        elem.style.overflow = 'hidden';
 
         elem.onmouseover = () => {
             elem.style.width = 'auto';
@@ -63,6 +83,31 @@ class TwilightPrincessScene implements Viewer.MainScene {
         };
         elem.onmouseout(null);
 
+        const selectAll = document.createElement('button');
+        selectAll.textContent = 'All';
+        selectAll.onclick = () => {
+            for (const checkbox of checkboxes) {
+                checkbox.checked = true;
+                checkbox.onchange(null);
+            }
+        };
+        selectAll.style.display = 'block';
+        selectAll.style.width = '100%';
+        elem.appendChild(selectAll);
+
+        const selectNone = document.createElement('button');
+        selectNone.textContent = 'None';
+        selectNone.onclick = () => {
+            for (const checkbox of checkboxes) {
+                checkbox.checked = false;
+                checkbox.onchange(null);
+            }
+        };
+        selectNone.style.display = 'block';
+        selectNone.style.width = '100%';
+        elem.appendChild(selectNone);
+
+        const checkboxes: HTMLInputElement[] = [];
         this.roomScenes.forEach((scene) => {
             const line = document.createElement('div');
             line.style.textAlign = 'right';
@@ -76,10 +121,13 @@ class TwilightPrincessScene implements Viewer.MainScene {
             checkbox.onchange = () => {
                 scene.visible = checkbox.checked;
             };
+            checkboxes.push(checkbox);
 
             const label = document.createElement('label');
             label.textContent = scene.name;
             label.htmlFor = checkbox.id;
+            label.style.webkitUserSelect = 'none';
+            label.style.userSelect = 'none';
 
             line.appendChild(label);
             line.appendChild(checkbox);
@@ -138,14 +186,18 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             }).filter((s) => !!s);
 
             const roomBuffers = buffers;
-            const roomScenes_: Scene[][] = roomBuffers.map((buffer: ArrayBufferSlice, i: number) => {
+            const roomRarcs: RARC.RARC[] = roomBuffers.map((buffer: ArrayBufferSlice) => {
+                buffer = Yaz0.decompress(buffer);
+                return RARC.parse(buffer);
+            });
+            const roomScenes_: Scene[][] = roomRarcs.map((rarc: RARC.RARC, i: number) => {
                 const rarcBasename = this.roomPaths[i].split('.')[0];
-                return createScenesFromBuffer(gl, rarcBasename, buffer, extraTextures);
+                return createScenesFromRARC(gl, rarcBasename, rarc, extraTextures);
             });
             const roomScenes: Scene[] = [];
             roomScenes_.forEach((scenes: Scene[]) => roomScenes.push.apply(roomScenes, scenes));
 
-            return new TwilightPrincessScene(skyboxScenes, roomScenes);
+            return new TwilightPrincessScene(stageRarc, roomRarcs, skyboxScenes, roomScenes);
         });
     }
 }
