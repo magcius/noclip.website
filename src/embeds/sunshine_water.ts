@@ -13,7 +13,7 @@ import * as GX_Material from 'gx/gx_material';
 
 import { BMD, BMT, BTK, MaterialEntry, TEX1 } from 'j3d/j3d';
 import * as RARC from 'j3d/rarc';
-import { Command_Material } from 'j3d/render';
+import { Command_Material, Scene as J3DScene } from 'j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from 'j3d/sms_scenes';
 import * as Yaz0 from 'yaz0';
 
@@ -27,7 +27,9 @@ for (let i = 0; i < 10; i++) {
 
 const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
 class SeaPlaneScene implements Scene {
-    public textures: Texture[] = [];
+    public textures: Texture[];
+    public glTextures: WebGLTexture[];
+    public materialTextures: WebGLTexture[];
 
     public bmd: BMD;
     public btk: BTK;
@@ -52,6 +54,8 @@ class SeaPlaneScene implements Scene {
         this.btk = btk;
 
         this.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
+
+        J3DScene.prototype.translateTextures.call(this, gl);
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
