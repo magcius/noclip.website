@@ -291,7 +291,15 @@ interface Packet {
     numTriangles: number;
 }
 
+export const enum ShapeDisplayFlags {
+    NORMAL = 0,
+    BILLBOARD = 1,
+    Y_BILLBOARD = 2,
+    UNKNOWN = 3,
+}
+
 export interface Shape {
+    displayFlags: ShapeDisplayFlags;
     indexData: ArrayBufferSlice;
     // The vertex data. Converted to a modern-esque buffer per-shape.
     packedData: ArrayBufferSlice;
@@ -349,7 +357,8 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
     const shapes: Shape[] = [];
     let shapeIdx = shapeTableOffs;
     for (let i = 0; i < shapeCount; i++) {
-        const matrixType = view.getUint8(shapeIdx + 0x00);
+        const displayFlags = view.getUint8(shapeIdx + 0x00);
+        assert(view.getUint8(shapeIdx + 0x01) == 0xFF);
         const packetCount = view.getUint16(shapeIdx + 0x02);
         const attribOffs = view.getUint16(shapeIdx + 0x04);
         const firstMatrix = view.getUint16(shapeIdx + 0x06);
@@ -417,7 +426,7 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         const packedData = new ArrayBufferSlice(loadedData.packedVertexData.buffer);
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ indexData, packedData, packedVertexSize, packedVertexAttributes, packets });
+        shapes.push({ displayFlags, indexData, packedData, packedVertexSize, packedVertexAttributes, packets });
 
         shapeIdx += 0x28;
     }

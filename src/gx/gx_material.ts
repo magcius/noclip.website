@@ -522,7 +522,6 @@ ${a.storage} ReadAttrib_${a.name}() {
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     mat4 u_Projection;
-    mat4 u_ModelView;
     vec4 u_AttrScale[${scaledVecCount}];
     vec4 u_Misc0;
 };
@@ -539,6 +538,7 @@ layout(std140) uniform ub_MaterialParams {
 
 // Expected to change with each shape packet.
 layout(std140) uniform ub_PacketParams {
+    mat4 u_ModelView;
     mat4 u_PosMtx[10];
 };
 `;

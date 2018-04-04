@@ -208,6 +208,7 @@ export class RenderTarget {
     }
 }
 
+
 export class RenderState {
     private programCache: ProgramCache;
 

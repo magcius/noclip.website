@@ -2112,7 +2112,7 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
                 };
                 GX_Program.prototype.generateUBO = function () {
                     var scaledVecCount = scaledVtxAttributes.length >> 2;
-                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    mat4 u_ModelView;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_TextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_KonstColor[8];\n    mat3 u_TexMtx[10];\n    mat3 u_PostTexMtx[20];\n};\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_PosMtx[10];\n};\n";
+                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_TextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_KonstColor[8];\n    mat3 u_TexMtx[10];\n    mat3 u_PostTexMtx[20];\n};\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_ModelView;\n    mat4 u_PosMtx[10];\n};\n";
                 };
                 GX_Program.prototype.generateShaders = function () {
                     var ubo = this.generateUBO();
@@ -2349,7 +2349,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var shapes = [];
         var shapeIdx = shapeTableOffs;
         for (var i = 0; i < shapeCount; i++) {
-            var matrixType = view.getUint8(shapeIdx + 0x00);
+            var displayFlags = view.getUint8(shapeIdx + 0x00);
+            util_6.assert(view.getUint8(shapeIdx + 0x01) == 0xFF);
             var packetCount = view.getUint16(shapeIdx + 0x02);
             var attribOffs = view.getUint16(shapeIdx + 0x04);
             var firstMatrix = view.getUint16(shapeIdx + 0x06);
@@ -2403,7 +2404,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var indexData = new ArrayBufferSlice_5.default(loadedData.indexData.buffer);
             var packedData = new ArrayBufferSlice_5.default(loadedData.packedVertexData.buffer);
             // Now we should have a complete shape. Onto the next!
-            shapes.push({ indexData: indexData, packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, packets: packets });
+            shapes.push({ displayFlags: displayFlags, indexData: indexData, packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, packets: packets });
             shapeIdx += 0x28;
         }
         var shp1 = { shapes: shapes };
@@ -3536,7 +3537,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                 throw new Error("Unknown CompType " + compType);
         }
     }
-    var gl_matrix_4, j3d_1, GX, GX_Material, GX_Texture, render_3, packetParamsData, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, Scene;
+    var gl_matrix_4, j3d_1, GX, GX_Material, GX_Texture, render_3, packetParamsData, modelViewScratch, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, Scene;
     return {
         setters: [
             function (gl_matrix_4_1) {
@@ -3559,10 +3560,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
             }
         ],
         execute: function () {
-            packetParamsData = new Float32Array(10 * 16);
+            packetParamsData = new Float32Array(11 * 16);
+            modelViewScratch = gl_matrix_4.mat4.create();
             Command_Shape = /** @class */ (function () {
-                function Command_Shape(gl, bmd, shape, coalescedBuffers, jointMatrices) {
-                    this.bmd = bmd;
+                function Command_Shape(gl, scene, shape, coalescedBuffers, jointMatrices) {
+                    this.scene = scene;
+                    this.bmd = this.scene.bmd;
                     this.shape = shape;
                     this.coalescedBuffers = coalescedBuffers;
                     this.jointMatrices = jointMatrices;
@@ -3593,6 +3596,29 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                     gl.bindVertexArray(null);
                     var e_12, _d;
                 }
+                Command_Shape.prototype.computeModelView = function (modelView, state) {
+                    gl_matrix_4.mat4.copy(modelView, state.view);
+                    if (this.scene.isSkybox) {
+                        modelView[12] = 0;
+                        modelView[13] = 0;
+                        modelView[14] = 0;
+                    }
+                    switch (this.shape.displayFlags) {
+                        case 0 /* NORMAL */:
+                            break;
+                        case 1 /* BILLBOARD */:
+                            var tx = modelView[12];
+                            var ty = modelView[13];
+                            var tz = modelView[14];
+                            gl_matrix_4.mat4.fromTranslation(modelView, [tx, ty, tz]);
+                            break;
+                        case 2 /* Y_BILLBOARD */:
+                        case 3 /* UNKNOWN */:
+                        default:
+                            throw new Error("whoops");
+                    }
+                    gl_matrix_4.mat4.mul(modelView, modelView, this.scene.modelMatrix);
+                };
                 Command_Shape.prototype.exec = function (state) {
                     var _this = this;
                     var gl = state.gl;
@@ -3600,6 +3626,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                     var indexOffset = this.coalescedBuffers.indexBuffer.offset;
                     gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
                     gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
+                    var offs = 0;
+                    this.computeModelView(modelViewScratch, state);
+                    packetParamsData.set(modelViewScratch, 0);
+                    offs += 4 * 4;
+                    gl.bufferSubData(gl.UNIFORM_BUFFER, 0, packetParamsData, 0, offs);
                     this.shape.packets.forEach(function (packet, packetIndex) {
                         // Update our matrix table.
                         var updated = false;
@@ -3612,11 +3643,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                             if (weightedJoint.isWeighted)
                                 throw new Error("whoops");
                             var posMtx = _this.jointMatrices[weightedJoint.jointIndex];
-                            packetParamsData.set(posMtx, i * 16);
+                            packetParamsData.set(posMtx, offs + i * 16);
                             updated = true;
                         }
                         if (updated)
-                            gl.bufferData(gl.UNIFORM_BUFFER, packetParamsData, gl.DYNAMIC_DRAW);
+                            gl.bufferSubData(gl.UNIFORM_BUFFER, offs * Float32Array.BYTES_PER_ELEMENT, packetParamsData, offs, 10 * 16);
                         gl.drawElements(gl.TRIANGLES, packet.numTriangles * 3, gl.UNSIGNED_SHORT, indexOffset + packet.firstTriangle * 3 * 2);
                     });
                     gl.bindVertexArray(null);
@@ -3773,7 +3804,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                 ColorOverride[ColorOverride["C3"] = 7] = "C3";
             })(ColorOverride || (ColorOverride = {}));
             exports_15("ColorOverride", ColorOverride);
-            sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4 * 4 + 4);
+            sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4);
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, btk, bmt, extraTextures) {
                     if (extraTextures === void 0) { extraTextures = []; }
@@ -3829,8 +3860,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                     var offs = 0;
                     sceneParamsData.set(state.projection, offs);
                     offs += 4 * 4;
-                    sceneParamsData.set(state.updateModelView(this.isSkybox, this.modelMatrix), offs);
-                    offs += 4 * 4;
                     sceneParamsData.set(this.attrScaleData, offs);
                     offs += 4 * 4;
                     sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
@@ -3851,7 +3880,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                     this.renderTransparent(state);
                 };
                 Scene.prototype.execCommands = function (state, commands) {
-                    commands.forEach(function (command) {
+                    commands.forEach(function (command, i) {
                         command.exec(state);
                     });
                 };
@@ -3903,6 +3932,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                 };
                 Scene.translateTexture = function (gl, texture) {
                     var texId = gl.createTexture();
+                    texId.name = texture.name;
                     gl.bindTexture(gl.TEXTURE_2D, texId);
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, this.translateTexFilter(gl, texture.minFilter));
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, this.translateTexFilter(gl, texture.magFilter));
@@ -3996,7 +4026,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                     });
                     this.bufferCoalescer = new render_3.BufferCoalescer(gl, this.bmd.shp1.shapes.map(function (shape) { return shape.packedData; }), this.bmd.shp1.shapes.map(function (shape) { return shape.indexData; }));
                     this.shapeCommands = this.bmd.shp1.shapes.map(function (shape, i) {
-                        return new Command_Shape(gl, _this.bmd, shape, _this.bufferCoalescer.coalescedBuffers[i], _this.jointMatrices);
+                        return new Command_Shape(gl, _this, shape, _this.bufferCoalescer.coalescedBuffers[i], _this.jointMatrices);
                     });
                     // Iterate through scene graph.
                     var context = {
@@ -4202,7 +4232,6 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
                         var roomBuffers = buffers;
                         var roomScenes_ = roomBuffers.map(function (buffer, i) {
                             var rarcBasename = _this.roomPaths[i].split('.')[0];
-                            console.log(rarcBasename);
                             return createScenesFromBuffer(gl, rarcBasename, buffer, extraTextures);
                         });
                         var roomScenes = [];
@@ -11651,9 +11680,8 @@ System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function 
             case 10 /* C14X2 */:
                 throw "whoops";
         }
-        var dataStart = offs;
-        var data = buffer;
-        return { format: format, width: width, height: height, mipCount: mipCount, data: data, dataStart: dataStart, paletteFormat: paletteFormat, paletteData: paletteData };
+        var data = buffer.slice(offs);
+        return { format: format, width: width, height: height, mipCount: mipCount, data: data, paletteFormat: paletteFormat, paletteData: paletteData };
     }
     exports_52("parse", parse);
     var GX, GX_Texture, txtrFormatRemap;
@@ -12506,7 +12534,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
             }
         ],
         execute: function () {
-            sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4 * 4 + 4);
+            sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4);
             attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(function () { return 1; }));
             // Cheap bad way to do a scale up.
             attrScaleData[0] = 10.0;
@@ -12538,9 +12566,9 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     var offs = 0, width = texture.width, height = texture.height;
                     for (var i = 0; i < texture.mipCount; i++) {
                         var name_17 = "";
-                        var data = texture.data;
-                        var dataStart = texture.dataStart + offs;
-                        var surface = { name: name_17, format: format, width: width, height: height, data: data, dataStart: dataStart };
+                        var size = GX_Texture.calcTextureSize(format, width, height);
+                        var data = texture.data.subarray(offs, size);
+                        var surface = { name: name_17, format: format, width: width, height: height, data: data };
                         var decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
                         if (decodedTexture.type === 'RGBA') {
                             gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
@@ -12548,7 +12576,6 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                         else if (decodedTexture.type === 'S3TC') {
                             gl.compressedTexImage2D(gl.TEXTURE_2D, i, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
                         }
-                        var size = GX_Texture.calcTextureSize(format, width, height);
                         offs += size;
                         width /= 2;
                         height /= 2;
@@ -12598,9 +12625,9 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     var format = texture.format;
                     for (var i = 0; i < texture.mipCount; i++) {
                         var name_18 = "";
-                        var data = texture.data;
-                        var dataStart = texture.dataStart + offs;
-                        var surface = { name: name_18, format: format, width: width, height: height, data: data, dataStart: dataStart };
+                        var size = GX_Texture.calcTextureSize(format, width, height);
+                        var data = texture.data.subarray(offs, size);
+                        var surface = { name: name_18, format: format, width: width, height: height, data: data };
                         var rgbaTexture = GX_Texture.decodeTexture(surface, false);
                         // Should never happen.
                         if (rgbaTexture.type === 'S3TC')
@@ -12613,12 +12640,11 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                         imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
                         ctx.putImageData(imgData, 0, 0);
                         surfaces.push(canvas);
-                        var size = GX_Texture.calcTextureSize(format, width, height);
                         offs += size;
                         width /= 2;
                         height /= 2;
                     }
-                    return { name: name + " (0x" + texture.dataStart.toString(16) + ")", surfaces: surfaces };
+                    return { name: "" + name, surfaces: surfaces };
                 };
                 Scene.prototype.bindTextures = function (state, material) {
                     var gl = state.gl;
@@ -12641,8 +12667,6 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     // Update our SceneParams UBO.
                     var offs = 0;
                     sceneParamsData.set(state.projection, offs);
-                    offs += 4 * 4;
-                    sceneParamsData.set(state.updateModelView(), offs);
                     offs += 4 * 4;
                     sceneParamsData.set(attrScaleData, offs);
                     offs += 4 * 4;
@@ -12726,7 +12750,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
             fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_11.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
             materialParamsSize = 4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20;
             packetParamsOffs = util_34.align(materialParamsSize, 64);
-            packetParamsSize = 16 * 10;
+            packetParamsSize = 11 * 16;
             paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
             Command_Material = /** @class */ (function () {
                 function Command_Material(gl, scene, material) {
@@ -12784,8 +12808,13 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                         paramsData[offs + 12 * i + 10] = finalMatrix[8];
                     }
                     offs += 4 * 3 * 20;
+                    // MV matrix.
+                    offs = packetParamsOffs;
+                    paramsData.set(state.updateModelView(), offs);
+                    offs += 4 * 4;
                     // Position matrix.
-                    paramsData.set(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, packetParamsOffs);
+                    paramsData.set(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, offs);
+                    offs += 4 * 4;
                     gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);
                     gl.bindBuffer(gl.UNIFORM_BUFFER, this.paramsBuffer);
                     gl.bufferData(gl.UNIFORM_BUFFER, paramsData, gl.DYNAMIC_DRAW);
@@ -13608,11 +13637,11 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
             scale = 200;
             posMtx = gl_matrix_12.mat4.create();
             gl_matrix_12.mat4.fromScaling(posMtx, [scale, scale, scale]);
-            packetParamsData = new Float32Array(16 * 10);
-            for (var i = 0; i < 10; i++) {
+            packetParamsData = new Float32Array(11 * 16);
+            for (var i = 0; i < 11; i++) {
                 packetParamsData.set(posMtx, i * 16);
             }
-            sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4 * 4 + 4);
+            sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4);
             SeaPlaneScene = /** @class */ (function () {
                 function SeaPlaneScene(gl, bmd, btk, configName) {
                     this.animationScale = 5;
@@ -13682,8 +13711,6 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
                     var offs = 0;
                     sceneParamsData.set(state.projection, offs);
                     offs += 4 * 4;
-                    sceneParamsData.set(state.updateModelView(this.isSkybox), offs);
-                    offs += 4 * 4;
                     sceneParamsData.set(this.attrScaleData, offs);
                     offs += 4 * 4;
                     sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
@@ -13711,6 +13738,9 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
                 }
                 PlaneShape.prototype.render = function (state) {
                     var gl = state.gl;
+                    packetParamsData.set(state.updateModelView(), 0);
+                    gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
+                    gl.bufferSubData(gl.UNIFORM_BUFFER, 0, packetParamsData, 0, 16);
                     gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
                     gl.bindVertexArray(this.vao);
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

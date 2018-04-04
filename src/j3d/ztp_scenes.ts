@@ -140,7 +140,6 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             const roomBuffers = buffers;
             const roomScenes_: Scene[][] = roomBuffers.map((buffer: ArrayBufferSlice, i: number) => {
                 const rarcBasename = this.roomPaths[i].split('.')[0];
-                console.log(rarcBasename);
                 return createScenesFromBuffer(gl, rarcBasename, buffer, extraTextures);
             });
             const roomScenes: Scene[] = [];
