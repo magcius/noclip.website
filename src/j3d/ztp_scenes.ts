@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
-import { assert, fetch, readString } from 'util';
+import { assert, fetch, readString, generateFormID } from 'util';
 
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
@@ -18,7 +18,7 @@ function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile
     return new Scene(gl, bmd, btk, bmt, extraTextures);
 }
 
-function createScenesFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, extraTextures: BTI_Texture[]): Scene[] {
+function createScenesFromBuffer(gl: WebGL2RenderingContext, rarcName: string, buffer: ArrayBufferSlice, extraTextures: BTI_Texture[]): Scene[] {
     buffer = Yaz0.decompress(buffer);
     const rarc = RARC.parse(buffer);
     const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
@@ -27,7 +27,7 @@ function createScenesFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferS
         const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
         const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
         const scene = createScene(gl, bmdFile, btkFile, bmtFile, extraTextures);
-        scene.name = basename;
+        scene.name = `${rarcName}/${basename}`;
         return scene;
     });
 
@@ -43,6 +43,51 @@ class TwilightPrincessScene implements Viewer.MainScene {
 
         for (const scene of [...this.skyboxScenes, ...this.roomScenes])
             this.textures = this.textures.concat(scene.textures);
+    }
+
+    public createUI(): HTMLElement {
+        const elem = document.createElement('div');
+        elem.style.backgroundColor = 'white';
+        elem.style.border = '1px solid #999';
+        elem.style.font = '100% sans-serif';
+        elem.style.boxSizing = 'border-box';
+        elem.style.padding = '1em';
+
+        elem.onmouseover = () => {
+            elem.style.width = 'auto';
+            elem.style.height = 'auto';
+        };
+        elem.onmouseout = () => {
+            elem.style.width = '0';
+            elem.style.height = '0';
+        };
+        elem.onmouseout(null);
+
+        this.roomScenes.forEach((scene) => {
+            const line = document.createElement('div');
+            line.style.textAlign = 'right';
+            line.style.overflow = 'hidden';
+
+            const checkbox = document.createElement('input');
+            checkbox.id = generateFormID();
+
+            checkbox.type = 'checkbox';
+            checkbox.checked = true;
+            checkbox.onchange = () => {
+                scene.visible = checkbox.checked;
+            };
+
+            const label = document.createElement('label');
+            label.textContent = scene.name;
+            label.htmlFor = checkbox.id;
+
+            line.appendChild(label);
+            line.appendChild(checkbox);
+
+            elem.appendChild(line);
+        });
+
+        return elem;
     }
 
     public render(state: RenderState) {
@@ -65,13 +110,13 @@ class TwilightPrincessScene implements Viewer.MainScene {
 class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
-    constructor(public name: string, public folder: string, public roomsPath: string[]) {
+    constructor(public name: string, public folder: string, public roomPaths: string[]) {
         this.id = this.folder;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const basePath = `data/j3d/ztp/${this.folder}`;
-        const paths = [`STG_00.arc`, ...this.roomsPath].map((path) => `${basePath}/${path}`);
+        const paths = [`STG_00.arc`, ...this.roomPaths].map((path) => `${basePath}/${path}`);
         return Progressable.all(paths.map((path) => fetch(path))).then((buffers: ArrayBufferSlice[]): Viewer.MainScene => {
             const stageBuffer = Yaz0.decompress(buffers.shift());
             const stageRarc = RARC.parse(stageBuffer);
@@ -93,8 +138,10 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             }).filter((s) => !!s);
 
             const roomBuffers = buffers;
-            const roomScenes_: Scene[][] = roomBuffers.map((buffer) => {
-                return createScenesFromBuffer(gl, buffer, extraTextures);
+            const roomScenes_: Scene[][] = roomBuffers.map((buffer: ArrayBufferSlice, i: number) => {
+                const rarcBasename = this.roomPaths[i].split('.')[0];
+                console.log(rarcBasename);
+                return createScenesFromBuffer(gl, rarcBasename, buffer, extraTextures);
             });
             const roomScenes: Scene[] = [];
             roomScenes_.forEach((scenes: Scene[]) => roomScenes.push.apply(roomScenes, scenes));
