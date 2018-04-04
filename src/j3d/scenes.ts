@@ -57,12 +57,9 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, buffer: Array
             const basename = bmdFile.name.split('.')[0];
             const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
             const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
-            try {
-                return createScene(gl, bmdFile, btkFile, bmtFile);
-            } catch(e) {
-                console.log("Error parsing", bmdFile.name);
-                return null;
-            }
+            const scene = createScene(gl, bmdFile, btkFile, bmtFile);
+            scene.name = basename;
+            return scene;
         });
 
         return scenes.filter((s) => !!s);

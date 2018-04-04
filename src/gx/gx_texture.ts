@@ -6,11 +6,11 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import * as GX from './gx_enum';
 
 export interface Texture {
+    name: string;
     format: GX.TexFormat;
     width: number;
     height: number;
     data: ArrayBufferSlice;
-    dataStart: number;
 }
 
 export interface DecodedTextureS3TC {
@@ -118,7 +118,7 @@ function decode_CMPR_to_S3TC(texture: Texture): DecodedTextureS3TC {
     }
 
     const pixels = new Uint8Array(texture.width * texture.height / 2);
-    const view = texture.data.createDataView(texture.dataStart);
+    const view = texture.data.createDataView();
 
     // "Macroblocks"
     const w4 = texture.width >>> 2;
@@ -233,7 +233,7 @@ function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels
 }
 
 function decode_RGB565(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView(texture.dataStart);
+    const view = texture.data.createDataView();
     let srcOffs = 0;
     return decode_Tiled(texture, 4, 4, (pixels: Uint8Array, dstOffs: number): void => {
         const p = view.getUint16(srcOffs);
@@ -246,7 +246,7 @@ function decode_RGB565(texture: Texture): DecodedTexture {
 }
 
 function decode_RGB5A3(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView(texture.dataStart);
+    const view = texture.data.createDataView();
     let srcOffs = 0;
     return decode_Tiled(texture, 4, 4, (pixels: Uint8Array, dstOffs: number): void => {
         const p = view.getUint16(srcOffs);
@@ -268,7 +268,7 @@ function decode_RGB5A3(texture: Texture): DecodedTexture {
 }
 
 function decode_RGBA8(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView(texture.dataStart);
+    const view = texture.data.createDataView();
     let srcOffs = 0;
     // RGBA8 is a bit special, so we hand-code this one.
     const bw = 4;
@@ -300,7 +300,7 @@ function decode_RGBA8(texture: Texture): DecodedTexture {
 }
 
 function decode_I4(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView(texture.dataStart);
+    const view = texture.data.createDataView();
     let srcOffs = 0;
     return decode_Tiled(texture, 8, 8, (pixels: Uint8Array, dstOffs: number): void => {
         const ii = view.getUint8(srcOffs >> 1);
@@ -315,7 +315,7 @@ function decode_I4(texture: Texture): DecodedTexture {
 }
 
 function decode_I8(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView(texture.dataStart);
+    const view = texture.data.createDataView();
     let srcOffs = 0;
     return decode_Tiled(texture, 8, 4, (pixels: Uint8Array, dstOffs: number): void => {
         const i = view.getUint8(srcOffs);
@@ -328,7 +328,7 @@ function decode_I8(texture: Texture): DecodedTexture {
 }
 
 function decode_IA4(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView(texture.dataStart);
+    const view = texture.data.createDataView();
     let srcOffs = 0;
 
     return decode_Tiled(texture, 8, 4, (pixels: Uint8Array, dstOffs: number): void => {
@@ -344,7 +344,7 @@ function decode_IA4(texture: Texture): DecodedTexture {
 }
 
 function decode_IA8(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView(texture.dataStart);
+    const view = texture.data.createDataView();
     let srcOffs = 0;
     return decode_Tiled(texture, 4, 4, (pixels: Uint8Array, dstOffs: number): void => {
         const i = view.getUint8(srcOffs + 0);
@@ -357,7 +357,16 @@ function decode_IA8(texture: Texture): DecodedTexture {
     });
 }
 
+function decode_Dummy(texture: Texture): DecodedTexture {
+    const pixels = new Uint8Array(texture.width * texture.height * 4);
+    pixels.fill(0xFF);
+    return { type: "RGBA", width: texture.width, height: texture.height, pixels };
+}
+
 export function decodeTexture(texture: Texture, supportsS3TC: boolean): DecodedTexture {
+    if (texture.data === null)
+        return decode_Dummy(texture);
+
     switch (texture.format) {
     case GX.TexFormat.CMPR:
         const s3tc = decode_CMPR_to_S3TC(texture);
@@ -383,6 +392,7 @@ export function decodeTexture(texture: Texture, supportsS3TC: boolean): DecodedT
     case GX.TexFormat.C8:
     case GX.TexFormat.C14X2:
     default:
-        throw new Error(`Unsupported texture format ${texture.format}`);
+        console.error(`Unsupported texture format ${texture.format} on texture ${texture.name}`);
+        return decode_Dummy(texture);
     }
 }

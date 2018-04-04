@@ -53,9 +53,10 @@ export class Scene implements Viewer.MainScene {
 
         let offs = 0, width = texture.width, height = texture.height;
         for (let i = 0; i < texture.mipCount; i++) {
+            const name = "";
             const data = texture.data;
             const dataStart = texture.dataStart + offs;
-            const surface = { format, width, height, data, dataStart };
+            const surface = { name, format, width, height, data, dataStart };
             const decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
 
             if (decodedTexture.type === 'RGBA') {
@@ -123,9 +124,10 @@ export class Scene implements Viewer.MainScene {
         let width = texture.width, height = texture.height, offs = 0;
         const format = texture.format;
         for (let i = 0; i < texture.mipCount; i++) {
+            const name = "";
             const data = texture.data;
             const dataStart = texture.dataStart + offs;
-            const surface = { format, width, height, data, dataStart };
+            const surface = { name, format, width, height, data, dataStart };
             const rgbaTexture = GX_Texture.decodeTexture(surface, false);
             // Should never happen.
             if (rgbaTexture.type === 'S3TC')

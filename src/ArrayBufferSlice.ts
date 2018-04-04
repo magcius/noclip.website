@@ -49,7 +49,7 @@ export default class ArrayBufferSlice {
         const absBegin = this.byteOffset + begin;
         if (byteLength === undefined)
             byteLength = this.byteLength - begin;
-        assert(byteLength >= 0 && byteLength < this.byteLength);
+        assert(byteLength >= 0 && byteLength <= this.byteLength);
         return new ArrayBufferSlice(this.arrayBuffer, absBegin, byteLength);
     }
 

@@ -4,10 +4,10 @@ import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCam
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 
+import * as ZTP from './j3d/ztp_scenes';
 import * as ZWW from './j3d/zww_scenes';
 import * as SMS from './j3d/sms_scenes';
 import * as SMG from './j3d/smg_scenes';
-import * as J3D from './j3d/scenes';
 import * as SM64DS from './sm64ds/scenes';
 import * as MDL0 from './mdl0/scenes';
 import * as ZELVIEW from './zelview/scenes';
@@ -16,7 +16,10 @@ import * as FRES from './fres/scenes';
 import * as DKSIV from './dksiv/scenes';
 import * as MP1 from './metroid_prime/scenes';
 
+import * as J3D from './j3d/scenes';
+
 const sceneGroups = [
+    ZTP.sceneGroup,
     ZWW.sceneGroup,
     SMS.sceneGroup,
     SMG.sceneGroup,
@@ -111,7 +114,6 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.bfres'))
             return FRES.createSceneFromFRESBuffer(gl, buffer);
 
-        let scenes
         scene = J3D.createMultiSceneFromBuffer(gl, buffer);
         if (scene)
             return scene;
