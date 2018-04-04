@@ -1,7 +1,7 @@
 
-import { mat3, mat4 } from 'gl-matrix';
+import { mat3, mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags } from './j3d';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
@@ -30,8 +30,10 @@ function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): {
     }
 }
 
-const packetParamsData = new Float32Array(10 * 16);
+const packetParamsData = new Float32Array(11 * 16);
+const modelViewScratch = mat4.create();
 class Command_Shape {
+    private scene: Scene;
     private bmd: BMD;
     private shape: Shape;
     private vao: WebGLVertexArrayObject;
@@ -39,8 +41,9 @@ class Command_Shape {
     private coalescedBuffers: CoalescedBuffers;
     private packetParamsBuffer: WebGLBuffer;
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, shape: Shape, coalescedBuffers: CoalescedBuffers, jointMatrices: mat4[]) {
-        this.bmd = bmd;
+    constructor(gl: WebGL2RenderingContext, scene: Scene, shape: Shape, coalescedBuffers: CoalescedBuffers, jointMatrices: mat4[]) {
+        this.scene = scene;
+        this.bmd = this.scene.bmd;
         this.shape = shape;
         this.coalescedBuffers = coalescedBuffers;
         this.jointMatrices = jointMatrices;
@@ -75,6 +78,32 @@ class Command_Shape {
         gl.bindVertexArray(null);
     }
 
+    private computeModelView(modelView: mat4, state: RenderState) {
+        mat4.copy(modelView, state.view);
+        if (this.scene.isSkybox) {
+            modelView[12] = 0;
+            modelView[13] = 0;
+            modelView[14] = 0;
+        }
+
+        switch (this.shape.displayFlags) {
+        case ShapeDisplayFlags.NORMAL:
+            break;
+        case ShapeDisplayFlags.BILLBOARD:
+            const tx = modelView[12];
+            const ty = modelView[13];
+            const tz = modelView[14];
+            mat4.fromTranslation(modelView, [tx, ty, tz]);
+            break;
+        case ShapeDisplayFlags.Y_BILLBOARD:
+        case ShapeDisplayFlags.UNKNOWN:
+        default:
+            throw new Error("whoops");
+        }
+
+        mat4.mul(modelView, modelView, this.scene.modelMatrix);
+    }
+
     public exec(state: RenderState) {
         const gl = state.gl;
 
@@ -84,6 +113,13 @@ class Command_Shape {
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
+
+        let offs = 0;
+        this.computeModelView(modelViewScratch, state);
+        packetParamsData.set(modelViewScratch, 0);
+        offs += 4*4;
+
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, packetParamsData, 0, offs);
 
         this.shape.packets.forEach((packet, packetIndex) => {
             // Update our matrix table.
@@ -98,12 +134,12 @@ class Command_Shape {
                     throw new Error("whoops");
 
                 const posMtx = this.jointMatrices[weightedJoint.jointIndex];
-                packetParamsData.set(posMtx, i * 16);
+                packetParamsData.set(posMtx, offs + i * 16);
                 updated = true;
             }
-            if (updated)
-                gl.bufferData(gl.UNIFORM_BUFFER, packetParamsData, gl.DYNAMIC_DRAW);
 
+            if (updated)
+                gl.bufferSubData(gl.UNIFORM_BUFFER, offs*Float32Array.BYTES_PER_ELEMENT, packetParamsData, offs, 10*16);
             gl.drawElements(gl.TRIANGLES, packet.numTriangles * 3, gl.UNSIGNED_SHORT, indexOffset + packet.firstTriangle * 3 * 2);
         });
 
@@ -293,7 +329,7 @@ export enum ColorOverride {
     C0, C1, C2, C3,
 }
 
-const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
+const sceneParamsData = new Float32Array(4*4 + 4*4 + 4);
 export class Scene implements Viewer.Scene {
     public textures: Viewer.Texture[];
 
@@ -382,8 +418,6 @@ export class Scene implements Viewer.Scene {
         let offs = 0;
         sceneParamsData.set(state.projection, offs);
         offs += 4*4;
-        sceneParamsData.set(state.updateModelView(this.isSkybox, this.modelMatrix), offs);
-        offs += 4*4;
         sceneParamsData.set(this.attrScaleData, offs);
         offs += 4*4;
         sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
@@ -410,7 +444,7 @@ export class Scene implements Viewer.Scene {
     }
 
     private execCommands(state: RenderState, commands: Command[]) {
-        commands.forEach((command) => {
+        commands.forEach((command, i) => {
             command.exec(state);
         });
     }
@@ -455,6 +489,7 @@ export class Scene implements Viewer.Scene {
 
     public static translateTexture(gl: WebGL2RenderingContext, texture: BTI_Texture): WebGLTexture {
         const texId = gl.createTexture();
+        (<any> texId).name = texture.name;
         gl.bindTexture(gl.TEXTURE_2D, texId);
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, this.translateTexFilter(gl, texture.minFilter));
@@ -570,7 +605,7 @@ export class Scene implements Viewer.Scene {
         );
 
         this.shapeCommands = this.bmd.shp1.shapes.map((shape, i) => {
-            return new Command_Shape(gl, this.bmd, shape, this.bufferCoalescer.coalescedBuffers[i], this.jointMatrices);
+            return new Command_Shape(gl, this, shape, this.bufferCoalescer.coalescedBuffers[i], this.jointMatrices);
         });
 
         // Iterate through scene graph.

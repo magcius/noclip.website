@@ -13,7 +13,7 @@ import { RenderState, RenderFlags, CoalescedBuffers, BufferCoalescer } from '../
 import { align } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
-const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
+const sceneParamsData = new Float32Array(4*4 + 4*4 + 4);
 const attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
 // Cheap bad way to do a scale up.
 attrScaleData[0] = 10.0;
@@ -54,9 +54,9 @@ export class Scene implements Viewer.MainScene {
         let offs = 0, width = texture.width, height = texture.height;
         for (let i = 0; i < texture.mipCount; i++) {
             const name = "";
-            const data = texture.data;
-            const dataStart = texture.dataStart + offs;
-            const surface = { name, format, width, height, data, dataStart };
+            const size = GX_Texture.calcTextureSize(format, width, height);
+            const data = texture.data.subarray(offs, size);
+            const surface = { name, format, width, height, data };
             const decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
 
             if (decodedTexture.type === 'RGBA') {
@@ -65,7 +65,6 @@ export class Scene implements Viewer.MainScene {
                 gl.compressedTexImage2D(gl.TEXTURE_2D, i, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
             }
 
-            const size = GX_Texture.calcTextureSize(format, width, height);
             offs += size;
             width /= 2;
             height /= 2;
@@ -125,9 +124,9 @@ export class Scene implements Viewer.MainScene {
         const format = texture.format;
         for (let i = 0; i < texture.mipCount; i++) {
             const name = "";
-            const data = texture.data;
-            const dataStart = texture.dataStart + offs;
-            const surface = { name, format, width, height, data, dataStart };
+            const size = GX_Texture.calcTextureSize(format, width, height);
+            const data = texture.data.subarray(offs, size);
+            const surface = { name, format, width, height, data };
             const rgbaTexture = GX_Texture.decodeTexture(surface, false);
             // Should never happen.
             if (rgbaTexture.type === 'S3TC')
@@ -142,13 +141,12 @@ export class Scene implements Viewer.MainScene {
             ctx.putImageData(imgData, 0, 0);
             surfaces.push(canvas);
 
-            const size = GX_Texture.calcTextureSize(format, width, height);
             offs += size;
             width /= 2;
             height /= 2;
         }
 
-        return { name: `${name} (0x${texture.dataStart.toString(16)})`, surfaces };
+        return { name: `${name}`, surfaces };
     }
 
     private bindTextures(state: RenderState, material: Material) {
@@ -174,8 +172,6 @@ export class Scene implements Viewer.MainScene {
         // Update our SceneParams UBO.
         let offs = 0;
         sceneParamsData.set(state.projection, offs);
-        offs += 4*4;
-        sceneParamsData.set(state.updateModelView(), offs);
         offs += 4*4;
         sceneParamsData.set(attrScaleData, offs);
         offs += 4*4;
@@ -277,7 +273,7 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
 
 const materialParamsSize = 4*2 + 4*8 + 4*3*10 + 4*3*20;
 const packetParamsOffs = align(materialParamsSize, 64);
-const packetParamsSize = 16*10;
+const packetParamsSize = 11*16;
 const paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
 class Command_Material {
     static attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
@@ -351,8 +347,14 @@ class Command_Material {
         }
         offs += 4*3*20;
 
+        // MV matrix.
+        offs = packetParamsOffs;
+        paramsData.set(state.updateModelView(), offs);
+        offs += 4*4;
+
         // Position matrix.
-        paramsData.set(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, packetParamsOffs);
+        paramsData.set(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, offs);
+        offs += 4*4;
 
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);
 

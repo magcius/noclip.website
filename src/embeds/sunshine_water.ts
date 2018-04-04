@@ -20,12 +20,12 @@ import * as Yaz0 from 'yaz0';
 const scale = 200;
 const posMtx = mat4.create();
 mat4.fromScaling(posMtx, [scale, scale, scale]);
-const packetParamsData = new Float32Array(16 * 10);
-for (let i = 0; i < 10; i++) {
+const packetParamsData = new Float32Array(11 * 16);
+for (let i = 0; i < 11; i++) {
     packetParamsData.set(posMtx, i * 16);
 }
 
-const sceneParamsData = new Float32Array(4*4 + 4*4 + 4*4 + 4);
+const sceneParamsData = new Float32Array(4*4 + 4*4 + 4);
 class SeaPlaneScene implements Scene {
     public textures: Texture[];
     public glTextures: WebGLTexture[];
@@ -122,8 +122,6 @@ class SeaPlaneScene implements Scene {
         let offs = 0;
         sceneParamsData.set(state.projection, offs);
         offs += 4*4;
-        sceneParamsData.set(state.updateModelView(this.isSkybox), offs);
-        offs += 4*4;
         sceneParamsData.set(this.attrScaleData, offs);
         offs += 4*4;
         sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
@@ -161,6 +159,10 @@ class PlaneShape {
 
     public render(state: RenderState) {
         const gl = state.gl;
+
+        packetParamsData.set(state.updateModelView(), 0);
+        gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, packetParamsData, 0, 16);
 
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
 

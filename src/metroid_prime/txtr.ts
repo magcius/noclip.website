@@ -27,7 +27,6 @@ export interface TXTR {
     height: number;
     mipCount: number;
     data: ArrayBufferSlice;
-    dataStart: number;
     paletteFormat: GX.TexPalette;
     paletteData: ArrayBufferSlice;
 }
@@ -60,7 +59,6 @@ export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice):
         throw "whoops";
     }
 
-    const dataStart = offs;
-    const data = buffer;
-    return { format, width, height, mipCount, data, dataStart, paletteFormat, paletteData };
+    const data = buffer.slice(offs);
+    return { format, width, height, mipCount, data, paletteFormat, paletteData };
 }
