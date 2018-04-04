@@ -776,7 +776,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
     }
 }
 
-export interface TEX1_Texture {
+export interface BTI_Texture {
     name: string;
     format: GX.TexFormat;
     width: number;
@@ -787,12 +787,34 @@ export interface TEX1_Texture {
     magFilter: GX.TexFilter;
     mipCount: number;
     data: ArrayBufferSlice;
-    dataStart: number;
+}
+
+function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
+    const view = buffer.createDataView();
+
+    const format: GX.TexFormat = view.getUint8(0x00);
+    const width = view.getUint16(0x02);
+    const height = view.getUint16(0x04);
+    const wrapS = view.getUint8(0x06);
+    const wrapT = view.getUint8(0x07);
+    const paletteFormat = view.getUint8(0x09);
+    const paletteNumEntries = view.getUint16(0x0A);
+    const paletteOffs = view.getUint16(0x0C);
+    const minFilter = view.getUint8(0x14);
+    const magFilter = view.getUint8(0x15);
+    const mipCount = view.getUint8(0x18);
+    const dataOffs = view.getUint32(0x1C);
+
+    let data = null;
+    if (dataOffs !== 0)
+        data = buffer.slice(dataOffs);
+
+    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, mipCount, data };
 }
 
 export interface TEX1 {
     remapTable: number[];
-    textures: TEX1_Texture[];
+    textures: BTI_Texture[];
 }
 
 function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
@@ -806,32 +828,21 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
     // It's very wasteful, so dedupe ourselves based on dataStart.
     const remapTable = [];
 
-    const textures: TEX1_Texture[] = [];
+    const textures: BTI_Texture[] = [];
     for (let i = 0; i < textureCount; i++) {
         const textureIdx = textureHeaderOffs + i * 0x20;
-        const dataOffs = view.getUint32(textureIdx + 0x1C);
-        const dataStart = chunkStart + textureIdx + dataOffs;
-        const existingIndex = textures.findIndex((tex) => tex.dataStart === dataStart);
-        if (existingIndex >= 0) {
-            remapTable.push(existingIndex);
-            continue;
+        const name = nameTable[i];
+        const btiTexture: BTI_Texture = readBTI_Texture(buffer.slice(chunkStart + textureIdx), name);
+
+        if (btiTexture.data !== null) {
+            const existingIndex = textures.findIndex((tex) => tex.data && tex.data.byteOffset === btiTexture.data.byteOffset);
+            if (existingIndex >= 0) {
+                remapTable.push(existingIndex);
+                continue;
+            }
         }
 
-        const name = nameTable[i];
-        const format: GX.TexFormat = view.getUint8(textureIdx + 0x00);
-        const width = view.getUint16(textureIdx + 0x02);
-        const height = view.getUint16(textureIdx + 0x04);
-        const wrapS = view.getUint8(textureIdx + 0x06);
-        const wrapT = view.getUint8(textureIdx + 0x07);
-        const paletteFormat = view.getUint8(textureIdx + 0x09);
-        const paletteNumEntries = view.getUint16(textureIdx + 0x0A);
-        const paletteOffs = view.getUint16(textureIdx + 0x0C);
-        const minFilter = view.getUint8(textureIdx + 0x14);
-        const magFilter = view.getUint8(textureIdx + 0x15);
-        const mipCount = view.getUint8(textureIdx + 0x18);
-        const data = buffer;
-
-        textures.push({ name, format, width, height, wrapS, wrapT, minFilter, magFilter, mipCount, data, dataStart });
+        textures.push(btiTexture);
         remapTable.push(textures.length - 1);
     }
 
@@ -934,7 +945,6 @@ export interface MaterialAnimationEntry {
 export interface TTK1 {
     duration: number;
     loopMode: LoopMode;
-    rotationScale: number;
     materialAnimationEntries: MaterialAnimationEntry[];
 }
 
@@ -956,16 +966,24 @@ function readTTK1Chunk(btk: BTK, buffer: ArrayBufferSlice, chunkStart: number, c
     const rTableOffs = chunkStart + view.getUint32(0x2C);
     const tTableOffs = chunkStart + view.getUint32(0x30);
 
+    const rotationScale = Math.pow(2, rotationDecimal);
+
+    function convertRotationTable(table: Int16Array): Float32Array {
+        const v = new Float32Array(table.length);
+        for (let i = 0; i < table.length; i++)
+            v[i] = table[i] * rotationScale;
+        return v;
+    }
+
     const sTable = betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
-    const rTable = betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array);
+    const rTable = convertRotationTable(betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array));
     const tTable = betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
 
-    const rotationScale = Math.pow(2, rotationDecimal);
     const materialNameTable = readStringTable(buffer, chunkStart + materialNameTableOffs);
 
     let animationTableIdx = animationTableOffs;
 
-    function readAnimationTrack(data: Float32Array | Int16Array): AnimationTrack {
+    function readAnimationTrack(data: Float32Array): AnimationTrack {
         const count = view.getUint16(animationTableIdx + 0x00);
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
@@ -1016,7 +1034,7 @@ function readTTK1Chunk(btk: BTK, buffer: ArrayBufferSlice, chunkStart: number, c
         materialAnimationEntries.push({ materialName, remapIndex, texMtxIndex, centerS, centerT, centerQ, s, t, q });
     }
 
-    btk.ttk1 = { duration, loopMode, rotationScale, materialAnimationEntries };
+    btk.ttk1 = { duration, loopMode, materialAnimationEntries };
 }
 
 function applyLoopMode(t: number, loopMode: LoopMode) {
@@ -1061,9 +1079,9 @@ function sampleAnimationData(track: AnimationTrack, frame: number) {
 
     // Find the first frame.
     const idx1 = frames.findIndex((key) => (frame < key.time));
+    if (idx1 < 0)
+        return frames[frames.length - 1].value;
     const idx0 = idx1 - 1;
-    if (idx1 >= frames.length)
-        return frames[idx0].value;
 
     const k0 = frames[idx0];
     const k1 = frames[idx1];
@@ -1118,14 +1136,16 @@ export class BTK {
         if (!animationEntry)
             return false;
 
-        const durationInFrames = this.ttk1.duration;
-        const normTime = frame / durationInFrames;
-        const animFrame = applyLoopMode(normTime, this.ttk1.loopMode) * durationInFrames;
+        const lastFrame = this.ttk1.duration - 1;
+        const normTime = frame / lastFrame;
+        const animFrame = applyLoopMode(normTime, this.ttk1.loopMode) * lastFrame;
 
-        const centerS = animationEntry.centerS, centerT = animationEntry.centerT, centerQ = animationEntry.centerQ;
+        const centerS = animationEntry.centerS;
+        const centerT = animationEntry.centerT;
+        const centerQ = animationEntry.centerQ;
         const scaleS = sampleAnimationData(animationEntry.s.scale, animFrame);
         const scaleT = sampleAnimationData(animationEntry.t.scale, animFrame);
-        const rotation = sampleAnimationData(animationEntry.s.rotation, animFrame) * this.ttk1.rotationScale;
+        const rotation = sampleAnimationData(animationEntry.s.rotation, animFrame);
         const translationS = sampleAnimationData(animationEntry.s.translation, animFrame);
         const translationT = sampleAnimationData(animationEntry.t.translation, animFrame);
         createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
@@ -1173,4 +1193,14 @@ export class BMT {
 
     public mat3: MAT3;
     public tex1: TEX1;
+}
+
+export class BTI {
+    texture: BTI_Texture;
+
+    public static parse(buffer: ArrayBufferSlice, name: string = null): BTI {
+        const bti = new BTI();
+        bti.texture = readBTI_Texture(buffer, name);
+        return bti;
+    }
 }

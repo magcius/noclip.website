@@ -1,7 +1,7 @@
 
 import { mat3, mat4 } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, TEX1_Texture } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture } from './j3d';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
@@ -121,69 +121,6 @@ export class Command_Material {
     private static matrixScratch = mat3.create();
     private static textureScratch = new Int32Array(8);
 
-    private static translateTexFilter(gl: WebGL2RenderingContext, texFilter: GX.TexFilter) {
-        switch (texFilter) {
-        case GX.TexFilter.LIN_MIP_NEAR:
-            return gl.LINEAR_MIPMAP_NEAREST;
-        case GX.TexFilter.LIN_MIP_LIN:
-            return gl.LINEAR_MIPMAP_LINEAR;
-        case GX.TexFilter.LINEAR:
-            return gl.LINEAR;
-        case GX.TexFilter.NEAR_MIP_NEAR:
-            return gl.NEAREST_MIPMAP_NEAREST;
-        case GX.TexFilter.NEAR_MIP_LIN:
-            return gl.NEAREST_MIPMAP_LINEAR;
-        case GX.TexFilter.NEAR:
-            return gl.NEAREST;
-        }
-    }
-
-    private static translateWrapMode(gl: WebGL2RenderingContext, wrapMode: GX.WrapMode) {
-        switch (wrapMode) {
-        case GX.WrapMode.CLAMP:
-            return gl.CLAMP_TO_EDGE;
-        case GX.WrapMode.MIRROR:
-            return gl.MIRRORED_REPEAT;
-        case GX.WrapMode.REPEAT:
-            return gl.REPEAT;
-        }
-    }
-
-    private static translateTexture(gl: WebGL2RenderingContext, texture: TEX1_Texture) {
-        const texId = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texId);
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, this.translateTexFilter(gl, texture.minFilter));
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, this.translateTexFilter(gl, texture.magFilter));
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, texture.wrapS));
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, texture.wrapT));
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
-
-        const ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
-        const format = texture.format;
-
-        let offs = 0, width = texture.width, height = texture.height;
-        for (let i = 0; i < texture.mipCount; i++) {
-            const size = GX_Texture.calcTextureSize(format, width, height);
-            const data = texture.data;
-            const dataStart = texture.dataStart + offs;
-            const surface = { format, width, height, data, dataStart };
-            const decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
-
-            if (decodedTexture.type === 'RGBA') {
-                gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
-            } else if (decodedTexture.type === 'S3TC') {
-                gl.compressedTexImage2D(gl.TEXTURE_2D, i, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
-            }
-
-            offs += size;
-            width /= 2;
-            height /= 2;
-        }
-
-        return texId;
-    }
-
     public bmd: BMD;
     public btk: BTK;
     public bmt: BMT;
@@ -206,18 +143,17 @@ export class Command_Material {
         this.program = new GX_Material.GX_Program(material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
-        this.textures = this.translateTextures(gl);
+        this.textures = this.translateTextures();
 
         this.materialParamsBuffer = gl.createBuffer();
     }
 
-    private translateTextures(gl: WebGL2RenderingContext): WebGLTexture[] {
-        const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
+    private translateTextures(): WebGLTexture[] {
         const textures = [];
         for (let i = 0; i < this.material.textureIndexes.length; i++) {
             const texIndex = this.material.textureIndexes[i];
             if (texIndex >= 0)
-                textures[i] = Command_Material.translateTexture(gl, tex1.textures[tex1.remapTable[texIndex]]);
+                textures[i] = this.scene.glTextures[texIndex];
             else
                 textures[i] = null;
         }
@@ -340,7 +276,6 @@ export class Command_Material {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.textures.forEach((texture) => gl.deleteTexture(texture));
         this.program.destroy(gl);
         gl.deleteBuffer(this.materialParamsBuffer);
     }
@@ -364,9 +299,6 @@ export class Scene implements Viewer.Scene {
 
     public name: string = '';
     public visible: boolean = true;
-    public bmd: BMD;
-    public btk: BTK;
-    public bmt: BMT;
     public isSkybox: boolean = false;
     public useMaterialTexMtx: boolean = true;
     public fps: number = 30;
@@ -377,6 +309,8 @@ export class Scene implements Viewer.Scene {
 
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: number[] = [];
+    public sceneParamsBuffer: WebGLBuffer;
+    public glTextures: WebGLTexture[];
 
     private bufferCoalescer: BufferCoalescer;
 
@@ -387,26 +321,24 @@ export class Scene implements Viewer.Scene {
     private shapeCommands: Command_Shape[];
     private jointMatrices: mat4[];
 
-    public sceneParamsBuffer: WebGLBuffer;
-
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, bmt: BMT) {
-        this.bmd = bmd;
-        this.btk = btk;
-        this.bmt = bmt;
-
-        this.translateModel(gl, this.bmd);
+    constructor(
+        gl: WebGL2RenderingContext,
+        public bmd: BMD,
+        public btk: BTK,
+        public bmt: BMT,
+        public extraTextures: BTI_Texture[] = [],
+    ) {
+        this.translateModel(gl);
 
         this.sceneParamsBuffer = gl.createBuffer();
         this.modelMatrix = mat4.create();
-
-        const tex1 = this.bmt ? this.bmt.tex1 : this.bmd.tex1;
-        this.textures = tex1.textures.map((tex) => this.translateTextureToViewer(tex));
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.bufferCoalescer.destroy(gl);
         this.materialCommands.forEach((command) => command.destroy(gl));
         this.shapeCommands.forEach((command) => command.destroy(gl));
+        this.glTextures.forEach((texture) => gl.deleteTexture(texture));
         gl.deleteBuffer(this.sceneParamsBuffer);
     }
 
@@ -482,15 +414,89 @@ export class Scene implements Viewer.Scene {
         });
     }
 
-    private translateTextureToViewer(texture: TEX1_Texture): Viewer.Texture {
+    private loadExtraTexture(texture: BTI_Texture): BTI_Texture {
+        // XXX(jstpierre): Better texture replacement API, this one is ZTP specific...
+        const textureName = texture.name.toLowerCase().replace('.tga', '');
+        for (const extraTexture of this.extraTextures) {
+            if (extraTexture.name.toLowerCase() === textureName)
+                return extraTexture;
+        }
+        return texture;
+    }
+
+    private static translateTexFilter(gl: WebGL2RenderingContext, texFilter: GX.TexFilter) {
+        switch (texFilter) {
+        case GX.TexFilter.LIN_MIP_NEAR:
+            return gl.LINEAR_MIPMAP_NEAREST;
+        case GX.TexFilter.LIN_MIP_LIN:
+            return gl.LINEAR_MIPMAP_LINEAR;
+        case GX.TexFilter.LINEAR:
+            return gl.LINEAR;
+        case GX.TexFilter.NEAR_MIP_NEAR:
+            return gl.NEAREST_MIPMAP_NEAREST;
+        case GX.TexFilter.NEAR_MIP_LIN:
+            return gl.NEAREST_MIPMAP_LINEAR;
+        case GX.TexFilter.NEAR:
+            return gl.NEAREST;
+        }
+    }
+
+    private static translateWrapMode(gl: WebGL2RenderingContext, wrapMode: GX.WrapMode) {
+        switch (wrapMode) {
+        case GX.WrapMode.CLAMP:
+            return gl.CLAMP_TO_EDGE;
+        case GX.WrapMode.MIRROR:
+            return gl.MIRRORED_REPEAT;
+        case GX.WrapMode.REPEAT:
+            return gl.REPEAT;
+        }
+    }
+
+    public static translateTexture(gl: WebGL2RenderingContext, texture: BTI_Texture): WebGLTexture {
+        const texId = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texId);
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, this.translateTexFilter(gl, texture.minFilter));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, this.translateTexFilter(gl, texture.magFilter));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, texture.wrapS));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, texture.wrapT));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
+
+        const ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
+        const format = texture.format;
+
+        let offs = 0, width = texture.width, height = texture.height;
+        for (let i = 0; i < texture.mipCount; i++) {
+            const name = texture.name;
+            const size = GX_Texture.calcTextureSize(format, width, height);
+            const data = texture.data !== null ? texture.data.subarray(offs, size) : null;
+            const surface = { name, format, width, height, data };
+            const decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
+
+            if (decodedTexture.type === 'RGBA') {
+                gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
+            } else if (decodedTexture.type === 'S3TC') {
+                gl.compressedTexImage2D(gl.TEXTURE_2D, i, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
+            }
+
+            offs += size;
+            width /= 2;
+            height /= 2;
+        }
+
+        return texId;
+    }
+
+    private static translateTextureToViewer(texture: BTI_Texture): Viewer.Texture {
         const surfaces = [];
 
         let width = texture.width, height = texture.height, offs = 0;
         const format = texture.format;
         for (let i = 0; i < texture.mipCount; i++) {
-            const data = texture.data;
-            const dataStart = texture.dataStart + offs;
-            const surface = { format, width, height, data, dataStart };
+            const name = texture.name;
+            const size = GX_Texture.calcTextureSize(format, width, height);
+            const data = texture.data !== null ? texture.data.subarray(offs, size) : null;
+            const surface = { name, format, width, height, data };
             const rgbaTexture = GX_Texture.decodeTexture(surface, false);
             // Should never happen.
             if (rgbaTexture.type === 'S3TC')
@@ -506,7 +512,6 @@ export class Scene implements Viewer.Scene {
             ctx.putImageData(imgData, 0, 0);
             surfaces.push(canvas);
 
-            const size = GX_Texture.calcTextureSize(format, width, height);
             offs += size;
             width /= 2;
             height /= 2;
@@ -515,7 +520,23 @@ export class Scene implements Viewer.Scene {
         return { name: texture.name, surfaces };
     }
 
-    private translateModel(gl: WebGL2RenderingContext, bmd: BMD) {
+    private translateTextures(gl: WebGL2RenderingContext) {
+        this.glTextures = [];
+        this.textures = [];
+        const tex1 = this.bmt !== null ? this.bmt.tex1 : this.bmd.tex1;
+
+        for (let i = 0; i < tex1.textures.length; i++) {
+            let btiTexture: BTI_Texture = tex1.textures[tex1.remapTable[i]];
+            if (btiTexture.data === null) {
+                btiTexture = this.loadExtraTexture(btiTexture);
+            }
+
+            this.glTextures.push(Scene.translateTexture(gl, btiTexture));
+            this.textures.push(Scene.translateTextureToViewer(btiTexture));
+        }
+    }
+
+    private translateModel(gl: WebGL2RenderingContext) {
         const attrScaleCount = GX_Material.scaledVtxAttributes.length;
         const attrScaleData = new Float32Array(attrScaleCount);
         for (let i = 0; i < GX_Material.scaledVtxAttributes.length; i++) {
@@ -530,17 +551,19 @@ export class Scene implements Viewer.Scene {
         this.transparentCommands = [];
         this.jointMatrices = [];
 
-        const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
+        this.translateTextures(gl);
+
+        const mat3 = this.bmt !== null ? this.bmt.mat3 : this.bmd.mat3;
         this.materialCommands = mat3.materialEntries.map((material) => {
             return new Command_Material(gl, this, material);
         });
 
         this.bufferCoalescer = new BufferCoalescer(gl,
-            bmd.shp1.shapes.map((shape) => shape.packedData),
-            bmd.shp1.shapes.map((shape) => shape.indexData),
+            this.bmd.shp1.shapes.map((shape) => shape.packedData),
+            this.bmd.shp1.shapes.map((shape) => shape.indexData),
         );
 
-        this.shapeCommands = bmd.shp1.shapes.map((shape, i) => {
+        this.shapeCommands = this.bmd.shp1.shapes.map((shape, i) => {
             return new Command_Shape(gl, this.bmd, shape, this.bufferCoalescer.coalescedBuffers[i], this.jointMatrices);
         });
 
@@ -549,7 +572,7 @@ export class Scene implements Viewer.Scene {
             commandList: null,
             parentJointMatrix: mat4.create(),
         };
-        this.translateSceneGraph(bmd.inf1.sceneGraph, context);
+        this.translateSceneGraph(this.bmd.inf1.sceneGraph, context);
     }
 
     private translateSceneGraph(node: HierarchyNode, context: HierarchyTraverseContext) {

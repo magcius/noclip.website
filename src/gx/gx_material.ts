@@ -400,9 +400,12 @@ export class GX_Program extends Program {
         else if (bias === GX.TevBias.SUBHALF)
             v = `TevBias(${v}, -0.5)`;
 
+        // XXX(jstpierre): Figure out WTF is up with ZTP.
+        const ENABLE_SCALE_4_HACK = false;
+
         if (scale === GX.TevScale.SCALE_2)
             v = `(${v}) * 2.0`;
-        else if (scale === GX.TevScale.SCALE_4)
+        else if (scale === GX.TevScale.SCALE_4 && ENABLE_SCALE_4_HACK)
             v = `(${v}) * 4.0`;
         else if (scale === GX.TevScale.DIVIDE_2)
             v = `(${v}) * 0.5`;
