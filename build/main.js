@@ -4059,7 +4059,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
         var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
         return new render_4.Scene(gl, bmd, btk, bmt, extraTextures);
     }
-    function createScenesFromBuffer(gl, buffer, extraTextures) {
+    function createScenesFromBuffer(gl, rarcName, buffer, extraTextures) {
         buffer = Yaz0.decompress(buffer);
         var rarc = RARC.parse(buffer);
         var bmdFiles = rarc.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
@@ -4068,7 +4068,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
             var btkFile = rarc.files.find(function (f) { return f.name === basename + ".btk"; });
             var bmtFile = rarc.files.find(function (f) { return f.name === basename + ".bmt"; });
             var scene = createScene(gl, bmdFile, btkFile, bmtFile, extraTextures);
-            scene.name = basename;
+            scene.name = rarcName + "/" + basename;
             return scene;
         });
         return scenes.filter(function (s) { return !!s; });
@@ -4118,6 +4118,42 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
                     }
                     var e_15, _c;
                 }
+                TwilightPrincessScene.prototype.createUI = function () {
+                    var elem = document.createElement('div');
+                    elem.style.backgroundColor = 'white';
+                    elem.style.border = '1px solid #999';
+                    elem.style.font = '100% sans-serif';
+                    elem.style.boxSizing = 'border-box';
+                    elem.style.padding = '1em';
+                    elem.onmouseover = function () {
+                        elem.style.width = 'auto';
+                        elem.style.height = 'auto';
+                    };
+                    elem.onmouseout = function () {
+                        elem.style.width = '0';
+                        elem.style.height = '0';
+                    };
+                    elem.onmouseout(null);
+                    this.roomScenes.forEach(function (scene) {
+                        var line = document.createElement('div');
+                        line.style.textAlign = 'right';
+                        line.style.overflow = 'hidden';
+                        var checkbox = document.createElement('input');
+                        checkbox.id = util_8.generateFormID();
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = true;
+                        checkbox.onchange = function () {
+                            scene.visible = checkbox.checked;
+                        };
+                        var label = document.createElement('label');
+                        label.textContent = scene.name;
+                        label.htmlFor = checkbox.id;
+                        line.appendChild(label);
+                        line.appendChild(checkbox);
+                        elem.appendChild(line);
+                    });
+                    return elem;
+                };
                 TwilightPrincessScene.prototype.render = function (state) {
                     var gl = state.gl;
                     this.skyboxScenes.forEach(function (scene) {
@@ -4135,15 +4171,16 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
                 return TwilightPrincessScene;
             }());
             TwilightPrincessSceneDesc = /** @class */ (function () {
-                function TwilightPrincessSceneDesc(name, folder, roomsPath) {
+                function TwilightPrincessSceneDesc(name, folder, roomPaths) {
                     this.name = name;
                     this.folder = folder;
-                    this.roomsPath = roomsPath;
+                    this.roomPaths = roomPaths;
                     this.id = this.folder;
                 }
                 TwilightPrincessSceneDesc.prototype.createScene = function (gl) {
+                    var _this = this;
                     var basePath = "data/j3d/ztp/" + this.folder;
-                    var paths = __spread(["STG_00.arc"], this.roomsPath).map(function (path) { return basePath + "/" + path; });
+                    var paths = __spread(["STG_00.arc"], this.roomPaths).map(function (path) { return basePath + "/" + path; });
                     return Progressable_2.default.all(paths.map(function (path) { return util_8.fetch(path); })).then(function (buffers) {
                         var stageBuffer = Yaz0.decompress(buffers.shift());
                         var stageRarc = RARC.parse(stageBuffer);
@@ -4163,8 +4200,10 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
                             return scene;
                         }).filter(function (s) { return !!s; });
                         var roomBuffers = buffers;
-                        var roomScenes_ = roomBuffers.map(function (buffer) {
-                            return createScenesFromBuffer(gl, buffer, extraTextures);
+                        var roomScenes_ = roomBuffers.map(function (buffer, i) {
+                            var rarcBasename = _this.roomPaths[i].split('.')[0];
+                            console.log(rarcBasename);
+                            return createScenesFromBuffer(gl, rarcBasename, buffer, extraTextures);
                         });
                         var roomScenes = [];
                         roomScenes_.forEach(function (scenes) { return roomScenes.push.apply(roomScenes, scenes); });
