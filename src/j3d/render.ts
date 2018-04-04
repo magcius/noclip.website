@@ -105,6 +105,9 @@ class Command_Shape {
     }
 
     public exec(state: RenderState) {
+        if (!this.scene.currentMaterialCommand.visible)
+            return;
+
         const gl = state.gl;
 
         gl.bindVertexArray(this.vao);
@@ -163,6 +166,7 @@ export class Command_Material {
     public material: MaterialEntry;
 
     public textures: WebGLTexture[] = [];
+    public visible: boolean = true;
 
     private scene: Scene;
     private renderFlags: RenderFlags;
@@ -189,7 +193,7 @@ export class Command_Material {
         for (let i = 0; i < this.material.textureIndexes.length; i++) {
             const texIndex = this.material.textureIndexes[i];
             if (texIndex >= 0)
-                textures[i] = this.scene.materialTextures[texIndex];
+                textures[i] = this.scene.glTextures[this.scene.textureRemapTable[texIndex]];
             else
                 textures[i] = null;
         }
@@ -197,6 +201,8 @@ export class Command_Material {
     }
 
     public exec(state: RenderState) {
+        this.scene.currentMaterialCommand = this;
+
         const gl = state.gl;
 
         state.useProgram(this.program);
@@ -346,17 +352,21 @@ export class Scene implements Viewer.Scene {
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: number[] = [];
     public sceneParamsBuffer: WebGLBuffer;
-    public materialTextures: WebGLTexture[];
+
+    // Internals used by Command_Material.
+    public textureRemapTable: number[];
+    public glTextures: WebGLTexture[];
+    public currentMaterialCommand: Command_Material;
+
+    public btiTextures: BTI_Texture[];
+    public materialCommands: Command_Material[];
+    private shapeCommands: Command_Shape[];
+    private jointMatrices: mat4[];
 
     private bufferCoalescer: BufferCoalescer;
 
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
-
-    private materialCommands: Command_Material[];
-    private shapeCommands: Command_Shape[];
-    private jointMatrices: mat4[];
-    private glTextures: WebGLTexture[];
 
     constructor(
         gl: WebGL2RenderingContext,
@@ -558,7 +568,7 @@ export class Scene implements Viewer.Scene {
 
     public translateTextures(gl: WebGL2RenderingContext) {
         this.glTextures = [];
-        this.materialTextures = [];
+        this.btiTextures = [];
         this.textures = [];
         const tex1 = this.bmt !== null ? this.bmt.tex1 : this.bmd.tex1;
 
@@ -568,13 +578,12 @@ export class Scene implements Viewer.Scene {
                 btiTexture = this.loadExtraTexture(btiTexture);
             }
 
+            this.btiTextures.push(btiTexture);
             this.glTextures.push(Scene.translateTexture(gl, btiTexture));
             this.textures.push(Scene.translateTextureToViewer(btiTexture));
         }
 
-        for (let i = 0; i < tex1.remapTable.length; i++) {
-            this.materialTextures.push(this.glTextures[tex1.remapTable[i]]);
-        }
+        this.textureRemapTable = tex1.remapTable;
     }
 
     private translateModel(gl: WebGL2RenderingContext) {
