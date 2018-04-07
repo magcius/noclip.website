@@ -171,18 +171,26 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSli
         assert(colorChannelFlagsTableCount <= 4);
         offs += 0x04;
 
-        const colorChannels: GX_Material.ColorChannelControl[] = [];
+        const lightChannels: GX_Material.LightChannelControl[] = [];
         // Only color channel 1 is stored in the format.
         for (let j = 0; j < 1; j++) {
             const colorChannelFlags = view.getUint32(offs);
             const lightingEnabled = !!(colorChannelFlags & 0x01);
             const ambColorSource: GX.ColorSrc = (colorChannelFlags >>> 1) & 0x01;
             const matColorSource: GX.ColorSrc = (colorChannelFlags >>> 2) & 0x01;
-            colorChannels.push({ lightingEnabled, ambColorSource, matColorSource });
+
+            const colorChannel = { lightingEnabled, ambColorSource, matColorSource };
+            // XXX(jstpierre): What's with COLOR0A0?
+            const alphaChannel = { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG }
+            lightChannels.push({ colorChannel, alphaChannel });
         }
         offs += 0x04 * colorChannelFlagsTableCount;
 
-        colorChannels.push({ lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG });
+        // Fake other channel.
+        lightChannels.push({
+            colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG },
+            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG },
+        });
 
         const tevStageCount = view.getUint32(offs);
         assert(tevStageCount <= 8);
@@ -352,7 +360,7 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSli
             cullMode,
             colorRegisters,
             colorConstants,
-            colorChannels,
+            lightChannels,
             texGens,
             tevStages,
             alphaTest,

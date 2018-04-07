@@ -20,7 +20,7 @@ export interface GXMaterial {
     cullMode: GX.CullMode;
 
     // Vertex state
-    colorChannels: ColorChannelControl[];
+    lightChannels: LightChannelControl[];
     texGens: TexGen[];
 
     // TEV state
@@ -42,6 +42,11 @@ export interface ColorChannelControl {
     lightingEnabled: boolean;
     matColorSource: GX.ColorSrc;
     ambColorSource: GX.ColorSrc;
+}
+
+export interface LightChannelControl {
+    alphaChannel: ColorChannelControl;
+    colorChannel: ColorChannelControl;
 }
 
 export interface TexGen {
@@ -179,13 +184,22 @@ export class GX_Program extends Program {
     }
 
     // Color Channels
-    private generateColorChannel(i: number) {
+    private generateColorChannel(chan: ColorChannelControl, i: number) {
         // TODO(jstpierre): amb & lighting
-        const chan = this.material.colorChannels[i];
         switch (chan.matColorSource) {
-        case GX.ColorSrc.VTX: return `ReadAttrib_Color${i}()`;
-        case GX.ColorSrc.REG: return `u_ColorMatReg[${i}]`;
+            case GX.ColorSrc.VTX: return `ReadAttrib_Color${i}()`;
+            case GX.ColorSrc.REG: return `u_ColorMatReg[${i}]`;
         }
+    }
+
+    private generateLightChannel(lightChannel: LightChannelControl, i: number) {
+        return `vec4(${this.generateColorChannel(lightChannel.colorChannel, i)}.rgb, ${this.generateColorChannel(lightChannel.alphaChannel, i)}.a)`;
+    }
+
+    private generateLightChannels(): string {
+        return this.material.lightChannels.map((lightChannel, i) => {
+            return `    v_Color${i} = ${this.generateLightChannel(lightChannel, i)};`;
+        }).join('\n');
     }
 
     // TexGen
@@ -230,7 +244,7 @@ export class GX_Program extends Program {
         const src = this.generateTexGenSource(texCoordGen.source);
         switch (texCoordGen.type) {
         case GX.TexGenType.SRTG:
-        // Expected to be used with colors, I suspect...
+            // Expected to be used with colors, I suspect...
             return `vec3(${src}.rg, 1.0)`;
         case GX.TexGenType.MTX2x4:
             return `vec3(${this.generateTexGenMatrix(`vec3(${src}.xy, 1.0)`, texCoordGen)}.xy, 1.0)`;
@@ -244,7 +258,7 @@ export class GX_Program extends Program {
     private generateTexGenNrm(texCoordGen: TexGen) {
         const type = this.generateTexGenType(texCoordGen);
         if (texCoordGen.normalize)
-            return `clamp(${type}, vec3(0.0), vec3(1.0))`;
+            return `normalize(${type})`;
         else
             return type;
     }
@@ -255,7 +269,7 @@ export class GX_Program extends Program {
             return nrm;
         } else {
             const matrixIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
-            return `${nrm} * u_PostTexMtx[${matrixIdx}]`;
+            return `u_PostTexMtx[${matrixIdx}] * vec4(${nrm}, 1.0)`;
         }
     }
 
@@ -574,8 +588,7 @@ void main() {
     vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);
     v_Position = t_Position.xyz;
     v_Normal = ReadAttrib_Normal();
-    v_Color0 = ${this.generateColorChannel(0)};
-    v_Color1 = ${this.generateColorChannel(1)};
+${this.generateLightChannels()}
 ${this.generateTexGens(this.material.texGens)}
     gl_Position = u_Projection * u_ModelView * t_Position;
 }
