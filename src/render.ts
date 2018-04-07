@@ -2,7 +2,7 @@
 import { mat4 } from 'gl-matrix';
 import { assert, align } from './util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
-import { Editor } from './editor';
+import CodeEditor from 'CodeEditor';
 
 export enum CompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
