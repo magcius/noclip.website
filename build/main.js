@@ -286,7 +286,7 @@ System.register("ArrayBufferSlice", ["util"], function (exports_3, context_3) {
         }
     };
 });
-System.register("editor", [], function (exports_4, context_4) {
+System.register("CodeEditor", [], function (exports_4, context_4) {
     "use strict";
     var __moduleName = context_4 && context_4.id;
     function visibleRAF(elem, func) {
@@ -361,7 +361,7 @@ System.register("editor", [], function (exports_4, context_4) {
                     return y;
         throw new Error('wtf');
     }
-    var MONOSPACE, CursorOverride, NumberDragger, Editor;
+    var MONOSPACE, CursorOverride, NumberDragger, CodeEditor;
     return {
         setters: [],
         execute: function () {
@@ -525,8 +525,8 @@ System.register("editor", [], function (exports_4, context_4) {
             ;
             ;
             ;
-            Editor = /** @class */ (function () {
-                function Editor(_document) {
+            CodeEditor = /** @class */ (function () {
+                function CodeEditor(_document) {
                     this._document = _document;
                     this.onvaluechanged = null;
                     this._prefix = '';
@@ -571,29 +571,29 @@ System.register("editor", [], function (exports_4, context_4) {
                     this.elem = this._toplevel;
                     visibleRAF(this._canvas, this._redraw.bind(this));
                 }
-                Editor.prototype._setNeedsRecalculate = function () {
+                CodeEditor.prototype._setNeedsRecalculate = function () {
                     this._needsRecalculate = true;
                 };
-                Editor.prototype._setValueChanged = function () {
+                CodeEditor.prototype._setValueChanged = function () {
                     this._valueChanged = true;
                 };
                 // Sets a chunk of text at the beginning and end that the user cannot modify.
-                Editor.prototype.setPrefixSuffix = function (prefix, suffix) {
+                CodeEditor.prototype.setPrefixSuffix = function (prefix, suffix) {
                     this._prefix = prefix;
                     this._suffix = suffix;
                     this._setNeedsRecalculate();
                 };
-                Editor.prototype.setFontSize = function (size) {
+                CodeEditor.prototype.setFontSize = function (size) {
                     this._textarea.style.fontSize = size;
                     this._setNeedsRecalculate();
                 };
-                Editor.prototype.setLineFlairs = function (lineFlairs) {
+                CodeEditor.prototype.setLineFlairs = function (lineFlairs) {
                     this._lineFlairs = lineFlairs;
                 };
                 // Sets the size. The height here is actually a minimum height. Since we don't
                 // yet have scrolling, the Editor always expands to fill however many lines it
                 // takes up...
-                Editor.prototype.setSize = function (w, h) {
+                CodeEditor.prototype.setSize = function (w, h) {
                     if (h !== undefined)
                         this._minHeight = h;
                     if (w !== undefined) {
@@ -607,25 +607,25 @@ System.register("editor", [], function (exports_4, context_4) {
                     if (w !== undefined || h !== undefined)
                         this._setNeedsRecalculate();
                 };
-                Editor.prototype.getValue = function () {
+                CodeEditor.prototype.getValue = function () {
                     return this._textarea.value;
                 };
-                Editor.prototype.setValue = function (t) {
+                CodeEditor.prototype.setValue = function (t) {
                     this._textarea.value = t;
                     this._setValueChanged();
                     this._setNeedsRecalculate();
                 };
-                Editor.prototype.getFullText = function () {
+                CodeEditor.prototype.getFullText = function () {
                     return this._prefix + this._textarea.value + this._suffix;
                 };
-                Editor.prototype._isLineLocked = function (line) {
+                CodeEditor.prototype._isLineLocked = function (line) {
                     if (line.lineno < this._prefixLines)
                         return true;
                     if (line.lineno >= this._suffixLines)
                         return true;
                     return false;
                 };
-                Editor.prototype._recalculate = function () {
+                CodeEditor.prototype._recalculate = function () {
                     if (!this._needsRecalculate)
                         return;
                     // If we aren't attached to a parent node, recalculating is futile...
@@ -718,7 +718,7 @@ System.register("editor", [], function (exports_4, context_4) {
                         this.onvaluechanged();
                     this._valueChanged = false;
                 };
-                Editor.prototype._recalculateMouseIdx = function () {
+                CodeEditor.prototype._recalculateMouseIdx = function () {
                     if (this._mouseX === undefined || this._mouseY === undefined) {
                         this._mouseIdx = undefined;
                     }
@@ -729,18 +729,18 @@ System.register("editor", [], function (exports_4, context_4) {
                         this._mouseIdx = isLineLocked ? undefined : idx;
                     }
                 };
-                Editor.prototype._calculateIndentedLineStart = function (line) {
+                CodeEditor.prototype._calculateIndentedLineStart = function (line) {
                     var chars = this.getFullText();
                     var idx = line.start;
                     while (chars.charAt(idx) === ' ' && idx <= line.end)
                         idx++;
                     return idx;
                 };
-                Editor.prototype._onInput = function () {
+                CodeEditor.prototype._onInput = function () {
                     this._setValueChanged();
                     this._setNeedsRecalculate();
                 };
-                Editor.prototype._onKeyDown = function (e) {
+                CodeEditor.prototype._onKeyDown = function (e) {
                     if (e.key === 'Tab' && !e.shiftKey) {
                         // XXX: If we have a selection, then indent the selection.
                         if (!this._hasSelection()) {
@@ -769,7 +769,7 @@ System.register("editor", [], function (exports_4, context_4) {
                         }
                     }
                 };
-                Editor.prototype._onMouseDown = function (e) {
+                CodeEditor.prototype._onMouseDown = function (e) {
                     e.preventDefault();
                     var _a = this._xyToRowCol(e.offsetX, e.offsetY), row = _a.row, col = _a.col;
                     var line = this._rowColToLineIdx(row, 0, true).line;
@@ -815,12 +815,12 @@ System.register("editor", [], function (exports_4, context_4) {
                         }
                     }
                 };
-                Editor.prototype._onMouseUp = function (e) {
+                CodeEditor.prototype._onMouseUp = function (e) {
                     this._dragging = undefined;
                     this._document.documentElement.removeEventListener('mousemove', this._onMouseMove, { capture: true });
                     this._document.documentElement.removeEventListener('mouseup', this._onMouseUp);
                 };
-                Editor.prototype._onMouseMove = function (e) {
+                CodeEditor.prototype._onMouseMove = function (e) {
                     e.stopPropagation();
                     this._mouseX = e.offsetX;
                     this._mouseY = e.offsetY;
@@ -853,12 +853,12 @@ System.register("editor", [], function (exports_4, context_4) {
                     else
                         this._cursorOverride.setCursor(this, '');
                 };
-                Editor.prototype._onMouseLeave = function (e) {
+                CodeEditor.prototype._onMouseLeave = function (e) {
                     this._mouseX = undefined;
                     this._mouseY = undefined;
                     this._mouseIdx = undefined;
                 };
-                Editor.prototype._onNumberDraggerValue = function (newValue) {
+                CodeEditor.prototype._onNumberDraggerValue = function (newValue) {
                     this._textarea.blur();
                     var _a = this._draggingNumber, start = _a.start, end = _a.end;
                     var newValueString = formatDecimal(newValue);
@@ -866,10 +866,10 @@ System.register("editor", [], function (exports_4, context_4) {
                     this._draggingNumber.end = this._draggingNumber.start + newValueString.length;
                     this._syncNumberDraggerPosition();
                 };
-                Editor.prototype._onNumberDraggerEnd = function () {
+                CodeEditor.prototype._onNumberDraggerEnd = function () {
                     this._draggingNumber = null;
                 };
-                Editor.prototype._syncNumberDraggerPosition = function () {
+                CodeEditor.prototype._syncNumberDraggerPosition = function () {
                     var _a = this._draggingNumber, start = _a.start, end = _a.end;
                     var endPos = this._getCharPos(this._textareaToIdx(end));
                     var _b = this._rowColToXY(endPos.row, endPos.col), x = _b.x, y = _b.y;
@@ -878,24 +878,24 @@ System.register("editor", [], function (exports_4, context_4) {
                     var absY = bbox.top + y + this._rowHeight / 2 + this._document.defaultView.scrollY;
                     this._numberDragger.setPosition(absX, absY);
                 };
-                Editor.prototype._spliceValue = function (start, end, v) {
+                CodeEditor.prototype._spliceValue = function (start, end, v) {
                     var chars = this.getValue();
                     return chars.slice(0, start) + v + chars.slice(end);
                 };
-                Editor.prototype._findDraggableNumber = function (idx) {
+                CodeEditor.prototype._findDraggableNumber = function (idx) {
                     this._recalculate();
                     return this._draggableNumbers.find(function (_a) {
                         var start = _a.start, end = _a.end;
                         return idx >= start && idx <= end;
                     });
                 };
-                Editor.prototype._idxToTextarea = function (idx) {
+                CodeEditor.prototype._idxToTextarea = function (idx) {
                     return idx - this._prefix.length;
                 };
-                Editor.prototype._textareaToIdx = function (idx) {
+                CodeEditor.prototype._textareaToIdx = function (idx) {
                     return idx + this._prefix.length;
                 };
-                Editor.prototype._rowColToLineIdx = function (row, col, clampIdx) {
+                CodeEditor.prototype._rowColToLineIdx = function (row, col, clampIdx) {
                     this._recalculate();
                     var line;
                     try {
@@ -930,7 +930,7 @@ System.register("editor", [], function (exports_4, context_4) {
                     return { line: line, idx: idx };
                     var e_3, _c;
                 };
-                Editor.prototype._xyToRowCol = function (x, y) {
+                CodeEditor.prototype._xyToRowCol = function (x, y) {
                     this._recalculate();
                     y -= this._paddingTop * this._rowHeight;
                     var row = Math.floor(y / this._rowHeight);
@@ -945,12 +945,12 @@ System.register("editor", [], function (exports_4, context_4) {
                         col = Math.round(x / this._charWidth);
                     return { row: row, col: col };
                 };
-                Editor.prototype._rowColToXY = function (row, col) {
+                CodeEditor.prototype._rowColToXY = function (row, col) {
                     var x = this._gutterWidth + this._textMargin + col * this._charWidth;
                     var y = (this._paddingTop + row) * this._rowHeight;
                     return { x: x, y: y };
                 };
-                Editor.prototype._getRowLength = function (row) {
+                CodeEditor.prototype._getRowLength = function (row) {
                     this._recalculate();
                     var line;
                     try {
@@ -976,7 +976,7 @@ System.register("editor", [], function (exports_4, context_4) {
                         return this._cols;
                     var e_4, _c;
                 };
-                Editor.prototype._getCharPos = function (idx) {
+                CodeEditor.prototype._getCharPos = function (idx) {
                     this._recalculate();
                     var line;
                     try {
@@ -1003,10 +1003,10 @@ System.register("editor", [], function (exports_4, context_4) {
                     return { line: line, lineIdx: lineIdx, row: row, col: col };
                     var e_5, _c;
                 };
-                Editor.prototype._hasSelection = function () {
+                CodeEditor.prototype._hasSelection = function () {
                     return this._textarea.selectionStart !== this._textarea.selectionEnd;
                 };
-                Editor.prototype._getSelection = function () {
+                CodeEditor.prototype._getSelection = function () {
                     var selStartIdx = this._textareaToIdx(this._textarea.selectionStart);
                     var selEndIdx = this._textareaToIdx(this._textarea.selectionEnd);
                     // [selectionStart, cursor]
@@ -1015,20 +1015,20 @@ System.register("editor", [], function (exports_4, context_4) {
                     else
                         return [selEndIdx, selStartIdx];
                 };
-                Editor.prototype._getCursorIdx = function () {
+                CodeEditor.prototype._getCursorIdx = function () {
                     var _a = __read(this._getSelection(), 2), selectionPointIdx = _a[0], cursorIdx = _a[1];
                     return cursorIdx;
                 };
-                Editor.prototype._setSelection = function (a, b) {
+                CodeEditor.prototype._setSelection = function (a, b) {
                     // The selection starts at "a" and ends with the cursor position being at "b".
                     var start = Math.min(a, b), end = Math.max(a, b);
                     var direction = a < b ? 'forward' : 'backward';
                     this._textarea.setSelectionRange(start, end, direction);
                 };
-                Editor.prototype._setCursor = function (a) {
+                CodeEditor.prototype._setCursor = function (a) {
                     this._textarea.setSelectionRange(a, a);
                 };
-                Editor.prototype._insertAtCursor = function (s) {
+                CodeEditor.prototype._insertAtCursor = function (s) {
                     this._textarea.focus();
                     if (!this._document.execCommand('insertText', false, s)) {
                         // execCommand failed. Fall back to setting value manually. This happens in Firefox:
@@ -1045,7 +1045,7 @@ System.register("editor", [], function (exports_4, context_4) {
                     this._setValueChanged();
                     this._setNeedsRecalculate();
                 };
-                Editor.prototype._redraw = function (t) {
+                CodeEditor.prototype._redraw = function (t) {
                     var _this = this;
                     var hasFocus = this._textarea.matches(':focus');
                     // Skip redrawing if we're up to date to cut down on costs...
@@ -1244,9 +1244,9 @@ System.register("editor", [], function (exports_4, context_4) {
                     ctx.restore();
                     var e_6, _c;
                 };
-                return Editor;
+                return CodeEditor;
             }());
-            exports_4("Editor", Editor);
+            exports_4("default", CodeEditor);
         }
     };
 });
@@ -1460,7 +1460,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_6, context_6) {
         }
     };
 });
-System.register("render", ["gl-matrix", "util", "editor"], function (exports_7, context_7) {
+System.register("render", ["gl-matrix", "util"], function (exports_7, context_7) {
     "use strict";
     var __moduleName = context_7 && context_7.id;
     function compileShader(gl, str, type) {
@@ -1523,7 +1523,7 @@ System.register("render", ["gl-matrix", "util", "editor"], function (exports_7, 
         var e_7, _a, e_8, _b;
     }
     exports_7("coalesceBuffer", coalesceBuffer);
-    var gl_matrix_1, util_2, editor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RenderState, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer;
+    var gl_matrix_1, util_2, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RenderState, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -1531,9 +1531,6 @@ System.register("render", ["gl-matrix", "util", "editor"], function (exports_7, 
             },
             function (util_2_1) {
                 util_2 = util_2_1;
-            },
-            function (editor_1_1) {
-                editor_1 = editor_1_1;
             }
         ],
         execute: function () {
@@ -1863,7 +1860,7 @@ System.register("render", ["gl-matrix", "util", "editor"], function (exports_7, 
                     var _this = this;
                     var win = window.open('about:blank', undefined, "location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900");
                     win.onload = function () {
-                        var editor = new editor_1.Editor(win.document);
+                        var editor = new Editor(win.document);
                         var document = win.document;
                         var title = n === 'vert' ? _this.name + " - Vertex Shader" : _this.name + " - Fragment Shader";
                         document.title = title;

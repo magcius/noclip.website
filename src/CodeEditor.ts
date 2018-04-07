@@ -288,7 +288,7 @@ interface SyntaxRun {
     style?: string;
 };
 
-export class Editor {
+export default class CodeEditor {
     public onvaluechanged: () => void;
     public elem: HTMLElement;
 
