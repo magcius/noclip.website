@@ -229,10 +229,13 @@ export class GX_Program extends Program {
     private generateTexGenType(texCoordGen: TexGen) {
         const src = this.generateTexGenSource(texCoordGen.source);
         switch (texCoordGen.type) {
+        case GX.TexGenType.SRTG:
         // Expected to be used with colors, I suspect...
-        case GX.TexGenType.SRTG:   return `vec3(${src}.rg, 1.0)`;
-        case GX.TexGenType.MTX2x4: return `vec3(${this.generateTexGenMatrix(src, texCoordGen.matrix)}.xy, 1.0)`;
-        case GX.TexGenType.MTX3x4: return `${this.generateTexGenMatrix(src, texCoordGen.matrix)}`;
+            return `vec3(${src}.rg, 1.0)`;
+        case GX.TexGenType.MTX2x4:
+            return `vec3(${this.generateTexGenMatrix(`vec3(${src}.xy, 1.0)`, texCoordGen)}.xy, 1.0)`;
+        case GX.TexGenType.MTX3x4:
+            return `${this.generateTexGenMatrix(src, texCoordGen)}`;
         default:
             throw new Error("whoops");
         }
