@@ -1460,7 +1460,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_6, context_6) {
         }
     };
 });
-System.register("render", ["gl-matrix", "util"], function (exports_7, context_7) {
+System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports_7, context_7) {
     "use strict";
     var __moduleName = context_7 && context_7.id;
     function compileShader(gl, str, type) {
@@ -1523,7 +1523,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_7, context_7)
         var e_7, _a, e_8, _b;
     }
     exports_7("coalesceBuffer", coalesceBuffer);
-    var gl_matrix_1, util_2, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RenderState, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer;
+    var gl_matrix_1, util_2, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RenderState, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -1531,6 +1531,9 @@ System.register("render", ["gl-matrix", "util"], function (exports_7, context_7)
             },
             function (util_2_1) {
                 util_2 = util_2_1;
+            },
+            function (CodeEditor_1_1) {
+                CodeEditor_1 = CodeEditor_1_1;
             }
         ],
         execute: function () {
@@ -1860,7 +1863,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_7, context_7)
                     var _this = this;
                     var win = window.open('about:blank', undefined, "location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900");
                     win.onload = function () {
-                        var editor = new Editor(win.document);
+                        var editor = new CodeEditor_1.default(win.document);
                         var document = win.document;
                         var title = n === 'vert' ? _this.name + " - Vertex Shader" : _this.name + " - Fragment Shader";
                         document.title = title;
