@@ -184,11 +184,32 @@ export class GX_Program extends Program {
     }
 
     // Color Channels
-    private generateColorChannel(chan: ColorChannelControl, i: number) {
-        // TODO(jstpierre): amb & lighting
+    private generateMaterialSource(chan: ColorChannelControl, i: number) {
         switch (chan.matColorSource) {
             case GX.ColorSrc.VTX: return `ReadAttrib_Color${i}()`;
             case GX.ColorSrc.REG: return `u_ColorMatReg[${i}]`;
+        }
+    }
+
+    private generateAmbientSource(chan: ColorChannelControl, i: number) {
+        switch (chan.ambColorSource) {
+            case GX.ColorSrc.VTX: return `ReadAttrib_Color${i}()`;
+            // TODO(jstpierre): amb regs
+            case GX.ColorSrc.REG: return `vec4(1.0)`; // return `u_ColorMatReg[${i}]`;
+        }
+    }
+
+    private generateColorChannel(chan: ColorChannelControl, i: number) {
+        // TODO(jstpierre): amb & lighting
+        const matSource = this.generateMaterialSource(chan, i);
+
+        if (chan.lightingEnabled) {
+            // XXX(jstpierre): This is awful but seems to work.
+            const ambSource = this.generateAmbientSource(chan, i);
+            return `(0.3 * ${ambSource} * ${matSource})`;
+        } else {
+            // If lighting is off, it's the material color.
+            return matSource;
         }
     }
 
