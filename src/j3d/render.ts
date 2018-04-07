@@ -256,16 +256,19 @@ export class Command_Material {
                 finalMatrix = texMtx.matrix;
             }
 
-            // XXX(jstpierre): mat3's are effectively a mat4x3.
+            // We bind texture matrices as row-major for memory usage purposes.
             materialParamsData[offs + i*12 +  0] = finalMatrix[0];
-            materialParamsData[offs + i*12 +  1] = finalMatrix[1];
-            materialParamsData[offs + i*12 +  2] = finalMatrix[2];
-            materialParamsData[offs + i*12 +  4] = finalMatrix[3];
+            materialParamsData[offs + i*12 +  1] = finalMatrix[3];
+            materialParamsData[offs + i*12 +  2] = finalMatrix[6];
+            materialParamsData[offs + i*12 +  3] = 0;
+            materialParamsData[offs + i*12 +  4] = finalMatrix[1];
             materialParamsData[offs + i*12 +  5] = finalMatrix[4];
-            materialParamsData[offs + i*12 +  6] = finalMatrix[5];
-            materialParamsData[offs + i*12 +  8] = finalMatrix[6];
-            materialParamsData[offs + i*12 +  9] = finalMatrix[7];
-            materialParamsData[offs + i*12 + 10] = finalMatrix[8];
+            materialParamsData[offs + i*12 +  6] = finalMatrix[7];
+            materialParamsData[offs + i*12 +  7] = 0;
+            materialParamsData[offs + i*12 +  8] = finalMatrix[2];
+            materialParamsData[offs + i*12 +  9] = finalMatrix[5];
+            materialParamsData[offs + i*12 + 10] = finalMatrix[9];
+            materialParamsData[offs + i*12 + 11] = 0;
         }
         offs += 4*3*10;
 
@@ -274,17 +277,19 @@ export class Command_Material {
             if (postTexMtx === null)
                 continue;
 
-            let finalMatrix = postTexMtx.matrix;
-
+            const finalMatrix = postTexMtx.matrix;
             materialParamsData[offs + i*12 +  0] = finalMatrix[0];
-            materialParamsData[offs + i*12 +  1] = finalMatrix[1];
-            materialParamsData[offs + i*12 +  2] = finalMatrix[2];
-            materialParamsData[offs + i*12 +  4] = finalMatrix[3];
+            materialParamsData[offs + i*12 +  1] = finalMatrix[3];
+            materialParamsData[offs + i*12 +  2] = finalMatrix[6];
+            materialParamsData[offs + i*12 +  3] = 0;
+            materialParamsData[offs + i*12 +  4] = finalMatrix[1];
             materialParamsData[offs + i*12 +  5] = finalMatrix[4];
-            materialParamsData[offs + i*12 +  6] = finalMatrix[5];
-            materialParamsData[offs + i*12 +  8] = finalMatrix[6];
-            materialParamsData[offs + i*12 +  9] = finalMatrix[7];
-            materialParamsData[offs + i*12 + 10] = finalMatrix[8];
+            materialParamsData[offs + i*12 +  6] = finalMatrix[7];
+            materialParamsData[offs + i*12 +  7] = 0;
+            materialParamsData[offs + i*12 +  8] = finalMatrix[2];
+            materialParamsData[offs + i*12 +  9] = finalMatrix[5];
+            materialParamsData[offs + i*12 + 10] = finalMatrix[9];
+            materialParamsData[offs + i*12 + 11] = 0;
         }
         offs += 4*3*20;
 

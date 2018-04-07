@@ -216,12 +216,13 @@ export class GX_Program extends Program {
         }
     }
 
-    private generateTexGenMatrix(src: string, matrix: GX.TexGenMatrix) {
+    private generateTexGenMatrix(src: string, texCoordGen: TexGen) {
+        const matrix = texCoordGen.matrix;
         if (matrix === GX.TexGenMatrix.IDENTITY) {
             return `${src}`;
         } else {
             const matrixIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
-            return `(u_TexMtx[${matrixIdx}] * ${src})`;
+            return `(u_TexMtx[${matrixIdx}] * vec4(${src}, 1.0))`;
         }
     }
 
@@ -526,11 +527,11 @@ layout(std140) uniform ub_SceneParams {
 #define u_SceneTextureLODBias u_Misc0[0]
 
 // Expected to change with each material.
-layout(std140) uniform ub_MaterialParams {
+layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_ColorMatReg[2];
     vec4 u_KonstColor[8];
-    mat3 u_TexMtx[10];
-    mat3 u_PostTexMtx[20];
+    mat4x3 u_TexMtx[10];
+    mat4x3 u_PostTexMtx[20];
     vec4 u_TextureLODBias[2];
 };
 
