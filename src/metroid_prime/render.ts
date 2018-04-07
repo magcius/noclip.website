@@ -321,29 +321,35 @@ class Command_Material {
         const matrixScratch = Command_Material.matrixScratch;
         for (let i = 0; i < 10; i++) {
             const finalMatrix = matrixScratch;
-            paramsData[offs + 12*i +  0] = finalMatrix[0];
-            paramsData[offs + 12*i +  1] = finalMatrix[1];
-            paramsData[offs + 12*i +  2] = finalMatrix[2];
-            paramsData[offs + 12*i +  4] = finalMatrix[3];
-            paramsData[offs + 12*i +  5] = finalMatrix[4];
-            paramsData[offs + 12*i +  6] = finalMatrix[5];
-            paramsData[offs + 12*i +  8] = finalMatrix[6];
-            paramsData[offs + 12*i +  9] = finalMatrix[7];
-            paramsData[offs + 12*i + 10] = finalMatrix[8];
+            paramsData[offs + i*12 +  0] = finalMatrix[0];
+            paramsData[offs + i*12 +  1] = finalMatrix[3];
+            paramsData[offs + i*12 +  2] = finalMatrix[6];
+            paramsData[offs + i*12 +  3] = 0;
+            paramsData[offs + i*12 +  4] = finalMatrix[1];
+            paramsData[offs + i*12 +  5] = finalMatrix[4];
+            paramsData[offs + i*12 +  6] = finalMatrix[7];
+            paramsData[offs + i*12 +  7] = 0;
+            paramsData[offs + i*12 +  8] = finalMatrix[2];
+            paramsData[offs + i*12 +  9] = finalMatrix[5];
+            paramsData[offs + i*12 + 10] = finalMatrix[9];
+            paramsData[offs + i*12 + 11] = 0;
         }
         offs += 4*3*10;
 
         for (let i = 0; i < 20; i++) {
             const finalMatrix = matrixScratch;
-            paramsData[offs + 12*i +  0] = finalMatrix[0];
-            paramsData[offs + 12*i +  1] = finalMatrix[1];
-            paramsData[offs + 12*i +  2] = finalMatrix[2];
-            paramsData[offs + 12*i +  4] = finalMatrix[3];
-            paramsData[offs + 12*i +  5] = finalMatrix[4];
-            paramsData[offs + 12*i +  6] = finalMatrix[5];
-            paramsData[offs + 12*i +  8] = finalMatrix[6];
-            paramsData[offs + 12*i +  9] = finalMatrix[7];
-            paramsData[offs + 12*i + 10] = finalMatrix[8];
+            paramsData[offs + i*12 +  0] = finalMatrix[0];
+            paramsData[offs + i*12 +  1] = finalMatrix[3];
+            paramsData[offs + i*12 +  2] = finalMatrix[6];
+            paramsData[offs + i*12 +  3] = 0;
+            paramsData[offs + i*12 +  4] = finalMatrix[1];
+            paramsData[offs + i*12 +  5] = finalMatrix[4];
+            paramsData[offs + i*12 +  6] = finalMatrix[7];
+            paramsData[offs + i*12 +  7] = 0;
+            paramsData[offs + i*12 +  8] = finalMatrix[2];
+            paramsData[offs + i*12 +  9] = finalMatrix[5];
+            paramsData[offs + i*12 + 10] = finalMatrix[9];
+            paramsData[offs + i*12 + 11] = 0;
         }
         offs += 4*3*20;
 
