@@ -271,7 +271,7 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
     0, 0, 0, 1,
 );
 
-const materialParamsSize = 4*2 + 4*8 + 4*3*10 + 4*3*20;
+const materialParamsSize = 4*2 + 4*8 + 4*3*10 + 4*3*20 + 8;
 const packetParamsOffs = align(materialParamsSize, 64);
 const packetParamsSize = 11*16;
 const paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
@@ -346,6 +346,12 @@ class Command_Material {
             paramsData[offs + 12*i + 10] = finalMatrix[8];
         }
         offs += 4*3*20;
+
+        // LOD biases. These are all set to 1.
+        for (let i = 0; i < 9; i++) {
+            paramsData[offs + i] = 1;
+        }
+        offs += 8;
 
         // MV matrix.
         offs = packetParamsOffs;

@@ -11,7 +11,7 @@ import { MainScene, Scene, Texture } from 'viewer';
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 
-import { BMD, BMT, BTK, MaterialEntry, TEX1 } from 'j3d/j3d';
+import { BMD, BMT, BTK, MaterialEntry, TEX1, BTI_Texture } from 'j3d/j3d';
 import * as RARC from 'j3d/rarc';
 import { Command_Material, Scene as J3DScene } from 'j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from 'j3d/sms_scenes';
@@ -28,8 +28,6 @@ for (let i = 0; i < 11; i++) {
 const sceneParamsData = new Float32Array(4*4 + 4*4 + 4);
 class SeaPlaneScene implements Scene {
     public textures: Texture[];
-    public glTextures: WebGLTexture[];
-    public materialTextures: WebGLTexture[];
 
     public bmd: BMD;
     public btk: BTK;
@@ -37,6 +35,9 @@ class SeaPlaneScene implements Scene {
     public animationScale: number = 5;
 
     // Play make-believe for Command_Material.
+    public glTextures: WebGLTexture[];
+    public btiTextures: BTI_Texture[];
+    public textureRemapTable: number[];
     public bmt: BMT = null;
     public isSkybox: boolean = false;
     public useMaterialTexMtx: boolean = false;
@@ -104,12 +105,11 @@ class SeaPlaneScene implements Scene {
         const cmd = new Command_Material(gl, scene, material);
 
         if (configName.includes('nomip')) {
-            gl.bindTexture(gl.TEXTURE_2D, cmd.textures[0]);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, 1);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
-            gl.bindTexture(gl.TEXTURE_2D, cmd.textures[1]);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, 1);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
+            for (const texture of this.glTextures) {
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, 1);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
+            }
         }
 
         return cmd;

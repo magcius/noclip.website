@@ -794,6 +794,9 @@ export interface BTI_Texture {
     wrapT: GX.WrapMode;
     minFilter: GX.TexFilter;
     magFilter: GX.TexFilter;
+    minLOD: number;
+    maxLOD: number;
+    lodBias: number;
     mipCount: number;
     data: ArrayBufferSlice;
 }
@@ -811,14 +814,19 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
     const paletteOffs = view.getUint16(0x0C);
     const minFilter = view.getUint8(0x14);
     const magFilter = view.getUint8(0x15);
+    const minLOD = view.getInt8(0x16) * 1/8;
+    const maxLOD = view.getInt8(0x17) * 1/8;
     const mipCount = view.getUint8(0x18);
+    const lodBias = view.getInt16(0x1A) * 1/100;
     const dataOffs = view.getUint32(0x1C);
+
+    assert(minLOD === 0);
 
     let data = null;
     if (dataOffs !== 0)
         data = buffer.slice(dataOffs);
 
-    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, mipCount, data };
+    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data };
 }
 
 export interface TEX1 {
@@ -843,6 +851,10 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         const name = nameTable[i];
         const btiTexture: BTI_Texture = readBTI_Texture(buffer.slice(chunkStart + textureIdx), name);
 
+        // TODO(jstpierre): Dedupe can only happen if all the parameters are the same.
+        // There are quite a lot of textures with different LOD biases, etc.
+        // We should move these parameters to samplers.
+        /*
         if (btiTexture.data !== null) {
             const existingIndex = textures.findIndex((tex) => tex.data && tex.data.byteOffset === btiTexture.data.byteOffset);
             if (existingIndex >= 0) {
@@ -850,6 +862,7 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
                 continue;
             }
         }
+        */
 
         textures.push(btiTexture);
         remapTable.push(textures.length - 1);
