@@ -2,6 +2,7 @@
 import { mat4 } from 'gl-matrix';
 import { assert, align } from './util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import { Editor } from './editor';
 
 export enum CompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
@@ -337,13 +338,15 @@ function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
         if (gl.getExtension('WEBGL_debug_shaders'))
             console.error(gl.getExtension('WEBGL_debug_shaders').getTranslatedShaderSource(shader));
         console.error(gl.getShaderInfoLog(shader));
-        throw new Error();
+        gl.deleteShader(shader);
+        return null;
     }
 
     return shader;
 }
 
 export class Program {
+    public name: string;
     public vert: string;
     public frag: string;
 
@@ -351,15 +354,23 @@ export class Program {
     public modelViewLocation: WebGLUniformLocation;
 
     private glProg: WebGLProgram;
+    private forceRecompile: boolean = false;
 
     public compile(gl: WebGL2RenderingContext, programCache: ProgramCache) {
-        if (this.glProg)
-            return this.glProg;
+        if (!this.glProg || this.forceRecompile) {
+            this.forceRecompile = false;
+            const vert = this.preprocessShader(gl, this.vert, "vert");
+            const frag = this.preprocessShader(gl, this.frag, "frag");
+            const newProg = programCache.compileProgram(vert, frag);
+            if (newProg !== null) {
+                this.glProg = newProg;
+                this.bind(gl, this.glProg);
+            }
+        }
 
-        const vert = this.preprocessShader(gl, this.vert, "vert");
-        const frag = this.preprocessShader(gl, this.frag, "frag");
-        this.glProg = programCache.compileProgram(vert, frag);
-        this.bind(gl, this.glProg);
+        if (!this.glProg) {
+            throw new Error();
+        }
         return this.glProg;
     }
 
@@ -414,34 +425,40 @@ ${rest}
     }
 
     private _editShader(n: 'vert' | 'frag') {
-        const win = window.open('about:blank', undefined, `resizable, alwaysRaised, left=0, top=0, width=600, height=600`);
+        const win = window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`);
         win.onload = () => {
-            const editor = win.document.createElement('textarea');
-            editor.spellcheck = false;
+            const editor = new Editor(win.document);
+            const document = win.document;
+            const title = n === 'vert' ? `${this.name} - Vertex Shader` : `${this.name} - Fragment Shader`;
+            document.title = title;
+            document.body.style.margin = '0';
             const shader: string = this[n];
-            editor.value = shader;
-            editor.style.width = '100%';
-            editor.style.height = '100%';
+            editor.setValue(shader);
             let timeout: number = 0;
-            editor.oninput = function() {
+            editor.onvaluechanged = function() {
                 if (timeout > 0)
                     clearTimeout(timeout);
                 timeout = setTimeout(tryCompile, 500);
             };
+            win.onresize = () => {
+                editor.setSize(document.body.offsetWidth, window.innerHeight);
+            };
+            win.onresize(null);
             const tryCompile = () => {
                 timeout = 0;
-                this[n] = editor.value;
-                this.glProg = null;
+                this[n] = editor.getValue();
+                this.forceRecompile = true;
             };
-            win.document.body.appendChild(editor);
+            (<any> win).editor = editor;
+            win.document.body.appendChild(editor.elem);
         };
     }
 
-    public editv(): void {
+    public editv() {
         this._editShader('vert');
     }
 
-    public editf(): void {
+    public editf() {
         this._editShader('frag');
     }
 }
@@ -454,18 +471,21 @@ class ProgramCache {
         const gl = this.gl;
         const vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
         const fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
+        if (!vertShader || !fragShader)
+            return null;
         const prog = gl.createProgram();
         gl.attachShader(prog, vertShader);
         gl.attachShader(prog, fragShader);
         gl.linkProgram(prog);
+        gl.deleteShader(vertShader);
+        gl.deleteShader(fragShader);
         if (DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
             console.error(vert);
             console.error(frag);
             console.error(gl.getProgramInfoLog(prog));
-            throw new Error();
+            gl.deleteProgram(prog);
+            return null;
         }
-        gl.deleteShader(vertShader);
-        gl.deleteShader(fragShader);
         return prog;
     }
 

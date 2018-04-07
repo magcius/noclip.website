@@ -8,16 +8,6 @@ var __values = (this && this.__values) || function (o) {
         }
     };
 };
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
 var __read = (this && this.__read) || function (o, n) {
     var m = typeof Symbol === "function" && o[Symbol.iterator];
     if (!m) return o;
@@ -34,6 +24,16 @@ var __read = (this && this.__read) || function (o, n) {
     }
     return ar;
 };
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __spread = (this && this.__spread) || function () {
     for (var ar = [], i = 0; i < arguments.length; i++) ar = ar.concat(__read(arguments[i]));
     return ar;
@@ -286,13 +286,977 @@ System.register("ArrayBufferSlice", ["util"], function (exports_3, context_3) {
         }
     };
 });
-System.register("endian", ["ArrayBufferSlice"], function (exports_4, context_4) {
+System.register("editor", [], function (exports_4, context_4) {
     "use strict";
     var __moduleName = context_4 && context_4.id;
+    function visibleRAF(elem, func) {
+        var window = elem.ownerDocument.defaultView;
+        var isRunning = false;
+        function setRunning(running) {
+            if (isRunning == running)
+                return;
+            isRunning = running;
+            if (isRunning)
+                window.requestAnimationFrame(update);
+        }
+        function update(t) {
+            func(t);
+            if (isRunning)
+                window.requestAnimationFrame(update);
+        }
+        function callback(entries) {
+            var intersectionRatio = entries[entries.length - 1].intersectionRatio;
+            var shouldBeRunning = intersectionRatio > 0;
+            setRunning(shouldBeRunning);
+        }
+        var observer = new IntersectionObserver(callback);
+        observer.observe(elem);
+    }
+    // #region Color Utilities
+    function colorLerp(ca, cb, t) {
+        console.assert(ca[0] === '#' && ca.length === 7);
+        var ar = parseInt(ca.slice(1, 3), 16), ag = parseInt(ca.slice(3, 5), 16), ab = parseInt(ca.slice(5, 7), 16);
+        console.assert(cb[0] === '#' && cb.length === 7);
+        var br = parseInt(cb.slice(1, 3), 16), bg = parseInt(cb.slice(3, 5), 16), bb = parseInt(cb.slice(5, 7), 16);
+        var nr = ar + (br - ar) * t, ng = ag + (bg - ag) * t, nb = ab + (bb - ab) * t;
+        var r = (nr | 0).toString(16), g = (ng | 0).toString(16), b = (nb | 0).toString(16);
+        return "#" + r + g + b;
+    }
+    function colorGrayscale(c) {
+        console.assert(c[0] === '#' && c.length === 7);
+        var r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
+        // NTSC primaries.
+        var ny = r * 0.299 + g * 0.587 + b * 0.114;
+        var y = (ny | 0).toString(16);
+        return "#" + y + y + y;
+    }
+    // #endregion
+    // #region NumberDragger
+    // Gross number formatting function used to lop unlucky floating points off...
+    // e.g. 12345.100000007 => '12345.1'
+    function formatDecimal(value, places) {
+        if (places === void 0) { places = 2; }
+        var valueStr = value.toFixed(places);
+        while (valueStr.includes('.') && '.0'.includes(valueStr.slice(-1)))
+            valueStr = valueStr.slice(0, -1);
+        return valueStr;
+    }
+    // #endregion
+    // XXX: Differing browsers have inconsistent ways of drawing text... specifically,
+    // they don't always agree on what 'top' baseline alignment is. This tries to
+    // accurately measure the top margin by drawing a character and scanning where the top is...
+    function expensiveMeasureTextMargin(document, width, height, font) {
+        var canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        var ctx = canvas.getContext('2d');
+        ctx.font = font;
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = 'black';
+        ctx.fillText('l', 0, 0);
+        var image = ctx.getImageData(0, 0, width, height);
+        for (var y = 0; y < image.height; y++)
+            for (var x = 0; x < image.width; x++)
+                if (image.data[4 * (y * image.width + x) + 3])
+                    return y;
+        throw new Error('wtf');
+    }
+    var MONOSPACE, CursorOverride, NumberDragger, Editor;
+    return {
+        setters: [],
+        execute: function () {
+            // The monospace font we use...
+            MONOSPACE = '"Source Code Pro", "Droid Sans Mono", monospace';
+            // #endregion
+            // #region Cursor
+            // Helper class to globally set a cursor.
+            CursorOverride = /** @class */ (function () {
+                function CursorOverride(_document) {
+                    this._document = _document;
+                    this._styleElem = this._document.createElement('style');
+                    this._document.head.appendChild(this._styleElem);
+                    this._style = this._styleElem.sheet;
+                    this._owner = null;
+                }
+                CursorOverride.prototype.setCursor = function (owner, cursor) {
+                    // If we have a current owner, don't let modifications by other owners...
+                    if (this._owner && owner !== this._owner)
+                        return;
+                    if (this._style.cssRules.length)
+                        this._style.deleteRule(0);
+                    if (cursor) {
+                        var rule = "* { cursor: " + cursor + " !important; }";
+                        this._style.insertRule(rule, 0);
+                        this._owner = owner;
+                    }
+                    else {
+                        this._owner = null;
+                    }
+                };
+                return CursorOverride;
+            }());
+            NumberDragger = /** @class */ (function () {
+                function NumberDragger(_document, _cursorOverride) {
+                    this._document = _document;
+                    this._cursorOverride = _cursorOverride;
+                    // User callback.
+                    this.onvalue = null;
+                    this.onend = null;
+                    this._toplevel = this._document.createElement('div');
+                    this._toplevel.style.position = 'absolute';
+                    this._toplevel.style.transform = 'translate(0, -50%)';
+                    this._toplevel.style.fontFamily = MONOSPACE;
+                    this._toplevel.style.backgroundColor = '#232323';
+                    this._toplevel.style.color = '#c93';
+                    this._toplevel.style.border = '2px solid #c93';
+                    this._toplevel.style.lineHeight = '2em';
+                    this._toplevel.style.marginLeft = '1em';
+                    this._toplevel.style.borderRadius = '6px';
+                    this._toplevel.style.boxShadow = 'rgba(0, 0, 0, .4) 0px 4px 16px';
+                    this._toplevel.style.zIndex = '9999';
+                    this._segments = [];
+                    for (var exp = 2; exp >= -2; exp--) {
+                        var incr = Math.pow(10, exp);
+                        var segment = this._document.createElement('div');
+                        segment._incr = incr;
+                        segment.style.padding = '.5em 1em';
+                        segment.textContent = '' + incr;
+                        this._toplevel.appendChild(segment);
+                        this._segments.push(segment);
+                    }
+                    this._anchorMouseX = 0;
+                    this._anchorValue = undefined;
+                    this._value = undefined;
+                    this._onMouseMove = this._onMouseMove.bind(this);
+                    this._onMouseUp = this._onMouseUp.bind(this);
+                }
+                NumberDragger.prototype._onMouseMove = function (e) {
+                    e.stopPropagation();
+                    var accel = 15;
+                    var dx = Math.round((e.clientX - this._anchorMouseX) / accel);
+                    var newValue = this._anchorValue + (dx * this._currentIncr);
+                    if (this._value !== newValue) {
+                        this._value = newValue;
+                        this.onvalue(this._value);
+                    }
+                    var y = e.clientY;
+                    try {
+                        for (var _a = __values(this._segments), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var segment = _b.value;
+                            var bbox = segment.getBoundingClientRect();
+                            if (y < bbox.bottom) {
+                                if (this._selectSegment(segment)) {
+                                    // Set new anchor.
+                                    if (this._anchorValue !== this._value) {
+                                        this._anchorMouseX = e.clientX;
+                                        this._anchorValue = this._value;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_1) throw e_1.error; }
+                    }
+                    var e_1, _c;
+                };
+                NumberDragger.prototype._onMouseUp = function (e) {
+                    this._cursorOverride.setCursor(this, '');
+                    this._document.documentElement.removeEventListener('mouseup', this._onMouseUp);
+                    this.onend();
+                    if (this._showTimeout) {
+                        clearTimeout(this._showTimeout);
+                        this._showTimeout = 0;
+                        return;
+                    }
+                    this._document.documentElement.removeEventListener('mousemove', this._onMouseMove, { capture: true });
+                    this._document.body.removeChild(this._toplevel);
+                };
+                NumberDragger.prototype._selectSegment = function (segment) {
+                    var incr = segment._incr;
+                    if (this._currentIncr === incr)
+                        return false;
+                    this._currentIncr = incr;
+                    try {
+                        for (var _a = __values(this._segments), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var seg = _b.value;
+                            var hilite = seg === segment;
+                            seg.style.backgroundColor = hilite ? '#c93' : '';
+                            seg.style.color = hilite ? '#222' : '';
+                            seg.style.fontWeight = hilite ? 'bold' : '';
+                        }
+                    }
+                    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_2) throw e_2.error; }
+                    }
+                    return true;
+                    var e_2, _c;
+                };
+                NumberDragger.prototype._show = function () {
+                    this._showTimeout = 0;
+                    this._document.body.appendChild(this._toplevel);
+                    this._document.documentElement.addEventListener('mousemove', this._onMouseMove, { capture: true });
+                };
+                NumberDragger.prototype.setPosition = function (x, y) {
+                    this._toplevel.style.left = x + 'px';
+                    this._toplevel.style.top = y + 'px';
+                };
+                NumberDragger.prototype.show = function (value, e) {
+                    this._anchorMouseX = e.clientX;
+                    this._anchorValue = value;
+                    // reset
+                    this._selectSegment(this._segments[2]);
+                    this._document.documentElement.addEventListener('mouseup', this._onMouseUp);
+                    // Delay the show a tiny bit...
+                    this._showTimeout = setTimeout(this._show.bind(this), 100);
+                    this._cursorOverride.setCursor(this, 'e-resize');
+                };
+                return NumberDragger;
+            }());
+            ;
+            ;
+            ;
+            Editor = /** @class */ (function () {
+                function Editor(_document) {
+                    this._document = _document;
+                    this.onvaluechanged = null;
+                    this._prefix = '';
+                    this._suffix = '';
+                    // Padding, in units of line height.
+                    this._paddingTop = .2;
+                    this._paddingBottom = 1.5;
+                    this._toplevel = this._document.createElement('div');
+                    this._toplevel.style.position = 'relative';
+                    // We need to append this to the body to measure / get metrics... :(
+                    // Setup is particularly wacky... maybe clean it up at some point?
+                    this._document.body.appendChild(this._toplevel);
+                    this._textarea = this._document.createElement('textarea');
+                    this._textarea.style.fontFamily = MONOSPACE;
+                    this._textarea.oninput = this._onInput.bind(this);
+                    this._textarea.onkeydown = this._onKeyDown.bind(this);
+                    this._toplevel.appendChild(this._textarea);
+                    this._canvas = this._document.createElement('canvas');
+                    this._toplevel.appendChild(this._canvas);
+                    this._onMouseDown = this._onMouseDown.bind(this);
+                    this._onMouseMove = this._onMouseMove.bind(this);
+                    this._onMouseUp = this._onMouseUp.bind(this);
+                    this._onMouseLeave = this._onMouseLeave.bind(this);
+                    this._canvas.onmousedown = this._onMouseDown;
+                    this._canvas.onmouseleave = this._onMouseLeave;
+                    this._canvas.onmousemove = this._onMouseMove;
+                    this._textarea.style.whiteSpace = 'pre-wrap';
+                    this._textarea.style.wordBreak = 'break-all';
+                    // Hide the textarea the canvas now that we've sized it...
+                    this._textarea.style.position = 'absolute';
+                    this._textarea.style.left = '-99999px';
+                    this._canvas.style.position = 'absolute';
+                    this._needsRecalculate = false;
+                    this._valueChanged = false;
+                    // Redraw-internal state.
+                    this._redraw_cursorPosition = undefined;
+                    this._redraw_cursorBlinkStart = undefined;
+                    this._cursorOverride = new CursorOverride(this._document);
+                    this._numberDragger = new NumberDragger(this._document, this._cursorOverride);
+                    this._numberDragger.onvalue = this._onNumberDraggerValue.bind(this);
+                    this._numberDragger.onend = this._onNumberDraggerEnd.bind(this);
+                    this.elem = this._toplevel;
+                    visibleRAF(this._canvas, this._redraw.bind(this));
+                }
+                Editor.prototype._setNeedsRecalculate = function () {
+                    this._needsRecalculate = true;
+                };
+                Editor.prototype._setValueChanged = function () {
+                    this._valueChanged = true;
+                };
+                // Sets a chunk of text at the beginning and end that the user cannot modify.
+                Editor.prototype.setPrefixSuffix = function (prefix, suffix) {
+                    this._prefix = prefix;
+                    this._suffix = suffix;
+                    this._setNeedsRecalculate();
+                };
+                Editor.prototype.setFontSize = function (size) {
+                    this._textarea.style.fontSize = size;
+                    this._setNeedsRecalculate();
+                };
+                Editor.prototype.setLineFlairs = function (lineFlairs) {
+                    this._lineFlairs = lineFlairs;
+                };
+                // Sets the size. The height here is actually a minimum height. Since we don't
+                // yet have scrolling, the Editor always expands to fill however many lines it
+                // takes up...
+                Editor.prototype.setSize = function (w, h) {
+                    if (h !== undefined)
+                        this._minHeight = h;
+                    if (w !== undefined) {
+                        this._width = w;
+                        this._canvas.style.width = w + "px";
+                        this._toplevel.style.width = w + "px";
+                        // Calculate cols immediately.
+                        this._cols = this._xyToRowCol(w, 0).col;
+                        this._textarea.style.width = this._cols + "ch";
+                    }
+                    if (w !== undefined || h !== undefined)
+                        this._setNeedsRecalculate();
+                };
+                Editor.prototype.getValue = function () {
+                    return this._textarea.value;
+                };
+                Editor.prototype.setValue = function (t) {
+                    this._textarea.value = t;
+                    this._setValueChanged();
+                    this._setNeedsRecalculate();
+                };
+                Editor.prototype.getFullText = function () {
+                    return this._prefix + this._textarea.value + this._suffix;
+                };
+                Editor.prototype._isLineLocked = function (line) {
+                    if (line.lineno < this._prefixLines)
+                        return true;
+                    if (line.lineno >= this._suffixLines)
+                        return true;
+                    return false;
+                };
+                Editor.prototype._recalculate = function () {
+                    if (!this._needsRecalculate)
+                        return;
+                    // If we aren't attached to a parent node, recalculating is futile...
+                    if (!this._toplevel.parentNode)
+                        return;
+                    // Recalculate our line model.
+                    var chars = this.getFullText() + '\n';
+                    var lineModel = [];
+                    var idx = 0, row = 0, lineno = 0;
+                    while (true) {
+                        var newIdx = chars.indexOf('\n', idx);
+                        if (newIdx < 0)
+                            break;
+                        var start = idx, end = newIdx + 1;
+                        var length_1 = end - start - 1;
+                        var startRow = row;
+                        var rows = Math.max(Math.ceil(length_1 / this._cols), 1);
+                        lineModel.push({ start: start, end: end, length: length_1, rows: rows, startRow: startRow, lineno: lineno });
+                        row += rows;
+                        lineno++;
+                        idx = end;
+                    }
+                    this._lineModel = lineModel;
+                    this._prefixLines = this._prefix.split('\n').length - 1;
+                    this._suffixLines = this._lineModel.length - (this._suffix.split('\n').length - 1);
+                    // Compute syntax highlights.
+                    var syntaxRuns = [];
+                    var draggableNumbers = [];
+                    var match;
+                    // Colors taken from the railscasts color scheme.
+                    var keywords = (/\b(function|for|while|if|else|break|continue|in|out|attribute|uniform|varying|return|struct|layout|precision|mediump|lowp|highp|discard)\b/g);
+                    while ((match = keywords.exec(chars)) !== null)
+                        syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#c26230' });
+                    var types = (/\b(void|bool|float|[ui]?vec[234]|mat[234]|mat[234]x[234]|[u]?int|sampler[23]D)\b/g);
+                    while ((match = types.exec(chars)) !== null)
+                        syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#6d9cbe' });
+                    var numbers = (/\W-?\d+(\.\d+)?\b/g); // Don't bother supporting scientific notation on numbers...
+                    while ((match = numbers.exec(chars)) !== null) {
+                        syntaxRuns.push({ start: match.index + 1, end: match.index + match[0].length, color: '#a5c261' });
+                        draggableNumbers.push({ start: match.index + 1, end: match.index + match[0].length });
+                    }
+                    var strings = (/("[^"]*")|('[^']*')/g);
+                    while ((match = strings.exec(chars)) !== null)
+                        syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#6d9cbe' });
+                    var comments = (/\/\/.*$/gm);
+                    while ((match = comments.exec(chars)) !== null)
+                        syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#bc9458', style: 'italic' });
+                    syntaxRuns.sort(function (a, b) { return a.start - b.start; });
+                    this._syntaxRuns = syntaxRuns;
+                    this._draggableNumbers = draggableNumbers;
+                    var textareaStyle = this._document.defaultView.getComputedStyle(this._textarea);
+                    this._textareaStyle = textareaStyle;
+                    var ctx = this._canvas.getContext('2d');
+                    ctx.font = textareaStyle.fontSize + " " + textareaStyle.fontFamily;
+                    // We're using a monospace font. It should have identical metrics for all characters,
+                    // so just measuring one should be fine...
+                    this._charWidth = ctx.measureText(' ').width;
+                    var rowHeight = textareaStyle.lineHeight;
+                    var rowHeightN;
+                    // XXX: This seems to be a Chrome default for the line-height? Not sure how else I can
+                    // calculate this guy... grr...
+                    if (rowHeight === 'normal')
+                        rowHeightN = 1.3 * parseFloat(textareaStyle.fontSize);
+                    else
+                        rowHeightN = parseFloat(rowHeight);
+                    this._rowHeight = Math.ceil(rowHeightN);
+                    if (this._charMarginTop === undefined) {
+                        var stdMargin = 4;
+                        this._charMarginTop = stdMargin - expensiveMeasureTextMargin(this._document, this._charWidth, this._rowHeight, ctx.font);
+                    }
+                    // Recalculate geometry.
+                    var numLines = this._lineModel.length;
+                    var gutterChars = ('' + numLines).length;
+                    this._gutterMargin = 10;
+                    this._gutterWidth = this._charWidth * Math.max(gutterChars, 2) + this._gutterMargin * 2;
+                    this._textMargin = 10;
+                    var lastRow = this._lineModel[this._lineModel.length - 1];
+                    var numRows = lastRow.startRow + lastRow.rows - 1;
+                    var newHeight = Math.ceil(Math.max(this._minHeight, this._rowHeight * (numRows + this._paddingTop + this._paddingBottom)));
+                    if (newHeight !== this._height) {
+                        this._height = newHeight;
+                        this._canvas.style.height = this._height + "px";
+                        this._toplevel.style.height = this._height + "px";
+                        // Resize the textarea so the window doesn't scroll back in when we click on it...
+                        this._textarea.style.height = (this._height - this._rowHeight) + 'px';
+                    }
+                    this._needsRecalculate = false;
+                    this._recalculateMouseIdx();
+                    if (this._valueChanged && this.onvaluechanged)
+                        this.onvaluechanged();
+                    this._valueChanged = false;
+                };
+                Editor.prototype._recalculateMouseIdx = function () {
+                    if (this._mouseX === undefined || this._mouseY === undefined) {
+                        this._mouseIdx = undefined;
+                    }
+                    else {
+                        var _a = this._xyToRowCol(this._mouseX, this._mouseY), row = _a.row, col = _a.col;
+                        var _b = this._rowColToLineIdx(row, col, false), line = _b.line, idx = _b.idx;
+                        var isLineLocked = this._isLineLocked(line);
+                        this._mouseIdx = isLineLocked ? undefined : idx;
+                    }
+                };
+                Editor.prototype._calculateIndentedLineStart = function (line) {
+                    var chars = this.getFullText();
+                    var idx = line.start;
+                    while (chars.charAt(idx) === ' ' && idx <= line.end)
+                        idx++;
+                    return idx;
+                };
+                Editor.prototype._onInput = function () {
+                    this._setValueChanged();
+                    this._setNeedsRecalculate();
+                };
+                Editor.prototype._onKeyDown = function (e) {
+                    if (e.key === 'Tab' && !e.shiftKey) {
+                        // XXX: If we have a selection, then indent the selection.
+                        if (!this._hasSelection()) {
+                            this._insertAtCursor('    ');
+                        }
+                        e.preventDefault();
+                    }
+                    else if (e.key === 'Tab' && e.shiftKey) {
+                        // XXX: If we have a selection, then unindent the selection.
+                        e.preventDefault();
+                    }
+                    else if (e.key === 'Home') {
+                        // Move to the start of indentation.
+                        var cursorIdx = this._getCursorIdx();
+                        var _a = this._getCharPos(cursorIdx), line = _a.line, lineIdx = _a.lineIdx;
+                        var indentedIdx = this._calculateIndentedLineStart(line);
+                        if (cursorIdx !== indentedIdx) {
+                            if (e.shiftKey) {
+                                var _b = __read(this._getSelection(), 1), selectionPoint = _b[0];
+                                this._setSelection(this._idxToTextarea(selectionPoint), this._idxToTextarea(indentedIdx));
+                            }
+                            else {
+                                this._setCursor(this._idxToTextarea(indentedIdx));
+                            }
+                            e.preventDefault();
+                        }
+                    }
+                };
+                Editor.prototype._onMouseDown = function (e) {
+                    e.preventDefault();
+                    var _a = this._xyToRowCol(e.offsetX, e.offsetY), row = _a.row, col = _a.col;
+                    var line = this._rowColToLineIdx(row, 0, true).line;
+                    if (this._isLineLocked(line)) {
+                        this._textarea.blur();
+                    }
+                    else if (col === -1) {
+                        this._setSelection(this._idxToTextarea(line.start), this._idxToTextarea(line.end));
+                        this._textarea.focus();
+                    }
+                    else {
+                        var idx = this._rowColToLineIdx(row, col, true).idx;
+                        this._textarea.focus();
+                        this._dragStartX = e.clientX;
+                        this._dragStartY = e.clientY;
+                        var exactIdx = this._rowColToLineIdx(row, col, false).idx;
+                        var draggableNumber = this._findDraggableNumber(exactIdx);
+                        if (!e.shiftKey && draggableNumber) {
+                            var start = this._idxToTextarea(draggableNumber.start);
+                            var end = this._idxToTextarea(draggableNumber.end);
+                            var value = +this.getValue().slice(start, end);
+                            this._draggingNumber = { start: start, end: end, value: value };
+                            this._syncNumberDraggerPosition();
+                            this._setCursor(this._idxToTextarea(idx));
+                            this._numberDragger.show(value, e);
+                        }
+                        else {
+                            if (e.shiftKey) {
+                                // If we don't have a selection, start a new one where the cursor is...
+                                // If we have an existing selection, just keep the current dragStartIdx,
+                                // since it's still valid.
+                                if (!this._hasSelection())
+                                    this._dragStartIdx = this._textarea.selectionStart;
+                                this._setSelection(this._dragStartIdx, this._idxToTextarea(idx));
+                            }
+                            else {
+                                this._dragStartIdx = this._idxToTextarea(idx);
+                                this._setCursor(this._dragStartIdx);
+                            }
+                            this._dragging = 'selection';
+                            this._document.documentElement.addEventListener('mousemove', this._onMouseMove, { capture: true });
+                            this._document.documentElement.addEventListener('mouseup', this._onMouseUp);
+                        }
+                    }
+                };
+                Editor.prototype._onMouseUp = function (e) {
+                    this._dragging = undefined;
+                    this._document.documentElement.removeEventListener('mousemove', this._onMouseMove, { capture: true });
+                    this._document.documentElement.removeEventListener('mouseup', this._onMouseUp);
+                };
+                Editor.prototype._onMouseMove = function (e) {
+                    e.stopPropagation();
+                    this._mouseX = e.offsetX;
+                    this._mouseY = e.offsetY;
+                    this._recalculateMouseIdx();
+                    var _a = this._xyToRowCol(this._mouseX, this._mouseY), row = _a.row, col = _a.col;
+                    var _b = this._rowColToLineIdx(row, col, true), line = _b.line, idx = _b.idx;
+                    if (this._dragging === 'selection') {
+                        this._setSelection(this._dragStartIdx, this._idxToTextarea(idx));
+                        this._textarea.focus();
+                    }
+                    var _c = this._rowColToLineIdx(row, col, false), exactLine = _c.line, exactIdx = _c.idx;
+                    var isLineLocked = this._isLineLocked(line);
+                    // Dragging takes priority.
+                    var cursor;
+                    if (this._dragging === 'selection') {
+                        cursor = 'text';
+                    }
+                    else if (col === -1 || isLineLocked) {
+                        cursor = 'default';
+                    }
+                    else if (!e.shiftKey && this._findDraggableNumber(exactIdx)) {
+                        cursor = 'e-resize';
+                    }
+                    else {
+                        cursor = 'text';
+                    }
+                    this._canvas.style.cursor = cursor;
+                    if (this._dragging)
+                        this._cursorOverride.setCursor(this, cursor);
+                    else
+                        this._cursorOverride.setCursor(this, '');
+                };
+                Editor.prototype._onMouseLeave = function (e) {
+                    this._mouseX = undefined;
+                    this._mouseY = undefined;
+                    this._mouseIdx = undefined;
+                };
+                Editor.prototype._onNumberDraggerValue = function (newValue) {
+                    this._textarea.blur();
+                    var _a = this._draggingNumber, start = _a.start, end = _a.end;
+                    var newValueString = formatDecimal(newValue);
+                    this.setValue(this._spliceValue(start, end, newValueString));
+                    this._draggingNumber.end = this._draggingNumber.start + newValueString.length;
+                    this._syncNumberDraggerPosition();
+                };
+                Editor.prototype._onNumberDraggerEnd = function () {
+                    this._draggingNumber = null;
+                };
+                Editor.prototype._syncNumberDraggerPosition = function () {
+                    var _a = this._draggingNumber, start = _a.start, end = _a.end;
+                    var endPos = this._getCharPos(this._textareaToIdx(end));
+                    var _b = this._rowColToXY(endPos.row, endPos.col), x = _b.x, y = _b.y;
+                    var bbox = this._toplevel.getBoundingClientRect();
+                    var absX = bbox.left + x;
+                    var absY = bbox.top + y + this._rowHeight / 2 + this._document.defaultView.scrollY;
+                    this._numberDragger.setPosition(absX, absY);
+                };
+                Editor.prototype._spliceValue = function (start, end, v) {
+                    var chars = this.getValue();
+                    return chars.slice(0, start) + v + chars.slice(end);
+                };
+                Editor.prototype._findDraggableNumber = function (idx) {
+                    this._recalculate();
+                    return this._draggableNumbers.find(function (_a) {
+                        var start = _a.start, end = _a.end;
+                        return idx >= start && idx <= end;
+                    });
+                };
+                Editor.prototype._idxToTextarea = function (idx) {
+                    return idx - this._prefix.length;
+                };
+                Editor.prototype._textareaToIdx = function (idx) {
+                    return idx + this._prefix.length;
+                };
+                Editor.prototype._rowColToLineIdx = function (row, col, clampIdx) {
+                    this._recalculate();
+                    var line;
+                    try {
+                        for (var _a = __values(this._lineModel), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            line = _b.value;
+                            if (row >= line.startRow && row < line.startRow + line.rows)
+                                break;
+                        }
+                    }
+                    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_3) throw e_3.error; }
+                    }
+                    var lineIdx;
+                    // Fast path.
+                    if (line.rows === 1) {
+                        lineIdx = col;
+                    }
+                    else {
+                        lineIdx = (row - line.startRow) * this._cols + col;
+                    }
+                    var idx;
+                    if (clampIdx)
+                        idx = line.start + Math.min(Math.max(lineIdx, 0), line.length);
+                    else if (lineIdx > line.length)
+                        idx = -1;
+                    else
+                        idx = line.start + lineIdx;
+                    return { line: line, idx: idx };
+                    var e_3, _c;
+                };
+                Editor.prototype._xyToRowCol = function (x, y) {
+                    this._recalculate();
+                    y -= this._paddingTop * this._rowHeight;
+                    var row = Math.floor(y / this._rowHeight);
+                    var col;
+                    if (x < this._gutterWidth)
+                        col = -1;
+                    x -= this._gutterWidth;
+                    if (col === undefined && x < this._textMargin)
+                        col = 0;
+                    x -= this._textMargin;
+                    if (col === undefined)
+                        col = Math.round(x / this._charWidth);
+                    return { row: row, col: col };
+                };
+                Editor.prototype._rowColToXY = function (row, col) {
+                    var x = this._gutterWidth + this._textMargin + col * this._charWidth;
+                    var y = (this._paddingTop + row) * this._rowHeight;
+                    return { x: x, y: y };
+                };
+                Editor.prototype._getRowLength = function (row) {
+                    this._recalculate();
+                    var line;
+                    try {
+                        for (var _a = __values(this._lineModel), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            line = _b.value;
+                            if (row >= line.startRow && row < line.startRow + line.rows)
+                                break;
+                        }
+                    }
+                    catch (e_4_1) { e_4 = { error: e_4_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_4) throw e_4.error; }
+                    }
+                    // Fast path.
+                    if (line.rows === 1)
+                        return line.length;
+                    if (row === line.startRow + line.rows - 1)
+                        return line.length % this._cols;
+                    else
+                        return this._cols;
+                    var e_4, _c;
+                };
+                Editor.prototype._getCharPos = function (idx) {
+                    this._recalculate();
+                    var line;
+                    try {
+                        for (var _a = __values(this._lineModel), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            line = _b.value;
+                            if (idx >= line.start && idx < line.end)
+                                break;
+                        }
+                    }
+                    catch (e_5_1) { e_5 = { error: e_5_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_5) throw e_5.error; }
+                    }
+                    var lineIdx = idx - line.start;
+                    // Fast path.
+                    if (line.rows === 1)
+                        return { line: line, lineIdx: lineIdx, row: line.startRow, col: lineIdx };
+                    // Slow path.
+                    var col = lineIdx % this._cols;
+                    var row = line.startRow + Math.min((lineIdx / this._cols) | 0, line.rows);
+                    return { line: line, lineIdx: lineIdx, row: row, col: col };
+                    var e_5, _c;
+                };
+                Editor.prototype._hasSelection = function () {
+                    return this._textarea.selectionStart !== this._textarea.selectionEnd;
+                };
+                Editor.prototype._getSelection = function () {
+                    var selStartIdx = this._textareaToIdx(this._textarea.selectionStart);
+                    var selEndIdx = this._textareaToIdx(this._textarea.selectionEnd);
+                    // [selectionStart, cursor]
+                    if (this._textarea.selectionDirection === 'forward')
+                        return [selStartIdx, selEndIdx];
+                    else
+                        return [selEndIdx, selStartIdx];
+                };
+                Editor.prototype._getCursorIdx = function () {
+                    var _a = __read(this._getSelection(), 2), selectionPointIdx = _a[0], cursorIdx = _a[1];
+                    return cursorIdx;
+                };
+                Editor.prototype._setSelection = function (a, b) {
+                    // The selection starts at "a" and ends with the cursor position being at "b".
+                    var start = Math.min(a, b), end = Math.max(a, b);
+                    var direction = a < b ? 'forward' : 'backward';
+                    this._textarea.setSelectionRange(start, end, direction);
+                };
+                Editor.prototype._setCursor = function (a) {
+                    this._textarea.setSelectionRange(a, a);
+                };
+                Editor.prototype._insertAtCursor = function (s) {
+                    this._textarea.focus();
+                    if (!this._document.execCommand('insertText', false, s)) {
+                        // execCommand failed. Fall back to setting value manually. This happens in Firefox:
+                        // https://github.com/w3c/editing/issues/160
+                        // https://bugzilla.mozilla.org/show_bug.cgi?id=1220696
+                        // On modern Firefox versions, it will also wipe the undo buffer unfortunately.
+                        // The """web platform"" is a piece of trash and I don't like it.
+                        var value = this._textarea.value;
+                        var selStart = this._textarea.selectionStart;
+                        var selEnd = this._textarea.selectionEnd;
+                        this._textarea.value = value.slice(0, selStart) + s + value.slice(selEnd);
+                        this._textarea.focus();
+                    }
+                    this._setValueChanged();
+                    this._setNeedsRecalculate();
+                };
+                Editor.prototype._redraw = function (t) {
+                    var _this = this;
+                    var hasFocus = this._textarea.matches(':focus');
+                    // Skip redrawing if we're up to date to cut down on costs...
+                    if (!this._needsRecalculate && !hasFocus)
+                        return;
+                    this._recalculate();
+                    var canvasRect = this._canvas.getBoundingClientRect();
+                    var ratio = this._document.defaultView.devicePixelRatio;
+                    var canvasWidth = this._width * ratio;
+                    var canvasHeight = this._height * ratio;
+                    var sizeChanged = false;
+                    if (this._canvas.width !== canvasWidth || this._canvas.height !== canvasHeight) {
+                        this._canvas.width = canvasWidth;
+                        this._canvas.height = canvasHeight;
+                        sizeChanged = true;
+                    }
+                    // Clip to viewport.
+                    var scissorX1 = Math.max(0, canvasRect.left);
+                    var scissorY1 = Math.max(0, canvasRect.top);
+                    var viewportWidth = this._document.defaultView.innerWidth;
+                    var viewportHeight = this._document.defaultView.innerHeight;
+                    var scissorX2 = Math.min(viewportWidth, canvasRect.right);
+                    var scissorY2 = Math.min(viewportHeight, canvasRect.bottom);
+                    // Put in canvas space.
+                    var clipRectX = scissorX1 - canvasRect.left;
+                    var clipRectY = scissorY1 - canvasRect.top;
+                    var clipRectW = scissorX2 - scissorX1;
+                    var clipRectH = scissorY2 - scissorY1;
+                    var ctx = this._canvas.getContext('2d');
+                    ctx.save();
+                    if (!sizeChanged) {
+                        ctx.rect(clipRectX, clipRectY, clipRectW, clipRectH);
+                        ctx.clip();
+                    }
+                    ctx.scale(ratio, ratio);
+                    var bgcolor = '#232323';
+                    ctx.fillStyle = bgcolor;
+                    ctx.fillRect(0, 0, this._width, this._height);
+                    if (hasFocus) {
+                        // Has a cursor.
+                        var cursorPosition = this._idxToTextarea(this._getCursorIdx());
+                        if (this._redraw_cursorPosition !== cursorPosition) {
+                            this._redraw_cursorPosition = cursorPosition;
+                            // Set it blinking again.
+                            this._redraw_cursorBlinkStart = t;
+                        }
+                    }
+                    else {
+                        this._redraw_cursorPosition = undefined;
+                    }
+                    var textareaStyleFontSize = this._textareaStyle.fontSize;
+                    var textareaStyleFontFamily = this._textareaStyle.fontFamily;
+                    ctx.font = textareaStyleFontSize + " " + textareaStyleFontFamily;
+                    var drawFlair = function (line, flair) {
+                        var y = (_this._paddingTop + line.startRow) * _this._rowHeight;
+                        var height = line.rows * _this._rowHeight;
+                        ctx.fillStyle = flair.color;
+                        ctx.fillRect(0, y, _this._canvas.width, _this._rowHeight);
+                    };
+                    if (this._redraw_cursorPosition) {
+                        var line = this._getCharPos(this._textareaToIdx(this._redraw_cursorPosition)).line;
+                        drawFlair(line, { color: '#2f2a34', lineno: -1 });
+                    }
+                    if (this._lineFlairs) {
+                        try {
+                            for (var _a = __values(this._lineFlairs), _b = _a.next(); !_b.done; _b = _a.next()) {
+                                var flair = _b.value;
+                                var line = this._lineModel[flair.lineno];
+                                if (!line)
+                                    continue;
+                                drawFlair(line, flair);
+                            }
+                        }
+                        catch (e_6_1) { e_6 = { error: e_6_1 }; }
+                        finally {
+                            try {
+                                if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                            }
+                            finally { if (e_6) throw e_6.error; }
+                        }
+                    }
+                    // Gutter
+                    ctx.save();
+                    ctx.fillStyle = '#445';
+                    ctx.fillRect(0, 0, this._gutterWidth, this._canvas.height);
+                    ctx.restore();
+                    // Gutter text.
+                    for (var i = 0; i < this._lineModel.length; i++) {
+                        var line = this._lineModel[i];
+                        var no = line.lineno + 1;
+                        var y = (this._paddingTop + line.startRow) * this._rowHeight;
+                        ctx.fillStyle = this._isLineLocked(line) ? '#888' : '#ccc';
+                        ctx.textBaseline = 'top';
+                        ctx.textAlign = 'right';
+                        var noString = '' + no;
+                        ctx.fillText(noString, this._gutterWidth - this._gutterMargin, this._charMarginTop + y);
+                    }
+                    // Add a newline at the end to make paint logic simpler.
+                    var chars = this.getFullText() + '\n';
+                    ctx.save();
+                    ctx.translate(this._gutterWidth + this._textMargin, 0);
+                    if (this._hasSelection()) {
+                        // Draw selection bounds.
+                        var inSelection = false;
+                        var startPos = this._getCharPos(this._textareaToIdx(this._textarea.selectionStart));
+                        var endPos = this._getCharPos(this._textareaToIdx(this._textarea.selectionEnd));
+                        for (var row = startPos.row; row <= endPos.row; row++) {
+                            var colStart = (row === startPos.row) ? startPos.col : 0;
+                            var colEnd = (row === endPos.row) ? endPos.col : this._getRowLength(row);
+                            var selectionColor = hasFocus ? '#336' : '#333';
+                            var startX = colStart * this._charWidth;
+                            var endX = colEnd * this._charWidth;
+                            var y = (this._paddingTop + row) * this._rowHeight;
+                            ctx.fillStyle = selectionColor;
+                            ctx.fillRect(startX, y, endX - startX, this._rowHeight);
+                        }
+                    }
+                    var syntaxRuns = this._syntaxRuns;
+                    var currentSyntaxRun = 0;
+                    // Anything interesting under the mouse?
+                    var draggableNumber;
+                    if (this._draggingNumber) {
+                        var _d = this._draggingNumber, start = _d.start, end = _d.end;
+                        draggableNumber = { start: this._textareaToIdx(start), end: this._textareaToIdx(end) };
+                    }
+                    else if (!this._dragging && this._mouseIdx > -1) {
+                        draggableNumber = this._findDraggableNumber(this._mouseIdx);
+                    }
+                    // Setting the font on a CanvasRenderingContext2D in Firefox is expensive, so try
+                    // to set it as little as possible by only setting it when it changes.
+                    var currentFont;
+                    // Now for the actual paint.
+                    for (var m = 0; m < this._lineModel.length; m++) {
+                        var line = this._lineModel[m];
+                        var row = line.startRow, col = 0;
+                        for (var i = line.start; i < line.end; i++) {
+                            if (col === this._cols && (row - line.startRow) < line.rows - 1) {
+                                row++;
+                                col = 0;
+                            }
+                            // XXX: Use something else other than charAt for Unicode compliance.
+                            var char = chars.charAt(i);
+                            var x = col * this._charWidth, y = (this._paddingTop + row) * this._rowHeight;
+                            if (i === this._textareaToIdx(this._redraw_cursorPosition)) {
+                                // Draw cursor.
+                                ctx.save();
+                                ctx.fillStyle = '#fff';
+                                var blinkAnimationT = (t - this._redraw_cursorBlinkStart) / 1000;
+                                var blinkAlpha = (Math.sin(blinkAnimationT * 6) + 1);
+                                ctx.globalAlpha = blinkAlpha;
+                                ctx.fillRect(Math.floor(x), y, 2, this._rowHeight);
+                                ctx.restore();
+                            }
+                            if (char === '\n')
+                                break;
+                            if (draggableNumber !== undefined && i >= draggableNumber.start && i < draggableNumber.end) {
+                                ctx.save();
+                                ctx.beginPath();
+                                ctx.moveTo(x | 0, y + this._rowHeight);
+                                ctx.lineTo((x + this._charWidth) | 0, y + this._rowHeight);
+                                ctx.setLineDash([1, 1]);
+                                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                                ctx.lineWidth = 1;
+                                ctx.stroke();
+                                ctx.restore();
+                            }
+                            var color = '#e6e1dc';
+                            var style = '';
+                            while (currentSyntaxRun < syntaxRuns.length && i >= syntaxRuns[currentSyntaxRun].end)
+                                currentSyntaxRun++;
+                            if (currentSyntaxRun < syntaxRuns.length) {
+                                var run = syntaxRuns[currentSyntaxRun];
+                                if (i >= run.start && i < run.end) {
+                                    if (run.color)
+                                        color = run.color;
+                                    if (run.style)
+                                        style = run.style;
+                                }
+                            }
+                            if (this._isLineLocked(line)) {
+                                color = colorLerp(color, colorGrayscale(color), 0.75);
+                            }
+                            ctx.textBaseline = 'top';
+                            ctx.textAlign = 'left';
+                            ctx.fillStyle = color;
+                            var newFont = style + " " + textareaStyleFontSize + " " + textareaStyleFontFamily;
+                            if (currentFont !== newFont) {
+                                ctx.font = newFont;
+                                currentFont = newFont;
+                            }
+                            ctx.fillText(char, x, y + this._charMarginTop);
+                            col++;
+                        }
+                    }
+                    ctx.restore();
+                    ctx.restore();
+                    var e_6, _c;
+                };
+                return Editor;
+            }());
+            exports_4("Editor", Editor);
+        }
+    };
+});
+System.register("endian", ["ArrayBufferSlice"], function (exports_5, context_5) {
+    "use strict";
+    var __moduleName = context_5 && context_5.id;
     function isLittleEndian() {
         return _isLittle;
     }
-    exports_4("isLittleEndian", isLittleEndian);
+    exports_5("isLittleEndian", isLittleEndian);
     function bswap16(m) {
         var a = m.createTypedArray(Uint8Array);
         var o = new Uint8Array(a.byteLength);
@@ -347,7 +1311,7 @@ System.register("endian", ["ArrayBufferSlice"], function (exports_4, context_4) 
                 return be32toh(m);
         }
     }
-    exports_4("betoh", betoh);
+    exports_5("betoh", betoh);
     var ArrayBufferSlice_2, _test, _testView, _isLittle;
     return {
         setters: [
@@ -362,9 +1326,9 @@ System.register("endian", ["ArrayBufferSlice"], function (exports_4, context_4) 
         }
     };
 });
-System.register("lz77", ["ArrayBufferSlice"], function (exports_5, context_5) {
+System.register("lz77", ["ArrayBufferSlice"], function (exports_6, context_6) {
     "use strict";
-    var __moduleName = context_5 && context_5.id;
+    var __moduleName = context_6 && context_6.id;
     // Nintendo DS LZ77 format.
     // LZ10:
     // Header (4 bytes):
@@ -409,7 +1373,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_5, context_5) {
             }
         }
     }
-    exports_5("decompressLZ10", decompressLZ10);
+    exports_6("decompressLZ10", decompressLZ10);
     // LZ11:
     // Header (4 bytes):
     //   Magic: "\x11" (1 byte)
@@ -473,7 +1437,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_5, context_5) {
             }
         }
     }
-    exports_5("decompressLZ11", decompressLZ11);
+    exports_6("decompressLZ11", decompressLZ11);
     function decompress(srcBuffer) {
         var srcView = srcBuffer.createDataView();
         var magic = srcView.getUint8(0x00);
@@ -484,7 +1448,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_5, context_5) {
         else
             throw new Error("Not Nintendo LZ77");
     }
-    exports_5("decompress", decompress);
+    exports_6("decompress", decompress);
     var ArrayBufferSlice_3;
     return {
         setters: [
@@ -496,9 +1460,9 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_5, context_5) {
         }
     };
 });
-System.register("render", ["gl-matrix", "util"], function (exports_6, context_6) {
+System.register("render", ["gl-matrix", "util", "editor"], function (exports_7, context_7) {
     "use strict";
-    var __moduleName = context_6 && context_6.id;
+    var __moduleName = context_7 && context_7.id;
     function compileShader(gl, str, type) {
         var shader = gl.createShader(type);
         gl.shaderSource(shader, str);
@@ -508,7 +1472,8 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
             if (gl.getExtension('WEBGL_debug_shaders'))
                 console.error(gl.getExtension('WEBGL_debug_shaders').getTranslatedShaderSource(shader));
             console.error(gl.getShaderInfoLog(shader));
-            throw new Error();
+            gl.deleteShader(shader);
+            return null;
         }
         return shader;
     }
@@ -525,12 +1490,12 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 dataLength = util_2.align(dataLength, 4);
             }
         }
-        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        catch (e_7_1) { e_7 = { error: e_7_1 }; }
         finally {
             try {
                 if (datas_1_1 && !datas_1_1.done && (_a = datas_1.return)) _a.call(datas_1);
             }
-            finally { if (e_1) throw e_1.error; }
+            finally { if (e_7) throw e_7.error; }
         }
         var buffer = gl.createBuffer();
         gl.bindBuffer(target, buffer);
@@ -547,18 +1512,18 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 offset = util_2.align(offset, 4);
             }
         }
-        catch (e_2_1) { e_2 = { error: e_2_1 }; }
+        catch (e_8_1) { e_8 = { error: e_8_1 }; }
         finally {
             try {
                 if (datas_2_1 && !datas_2_1.done && (_b = datas_2.return)) _b.call(datas_2);
             }
-            finally { if (e_2) throw e_2.error; }
+            finally { if (e_8) throw e_8.error; }
         }
         return coalescedBuffers;
-        var e_1, _a, e_2, _b;
+        var e_7, _a, e_8, _b;
     }
-    exports_6("coalesceBuffer", coalesceBuffer);
-    var gl_matrix_1, util_2, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RenderState, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer;
+    exports_7("coalesceBuffer", coalesceBuffer);
+    var gl_matrix_1, util_2, editor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RenderState, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -566,6 +1531,9 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
             },
             function (util_2_1) {
                 util_2 = util_2_1;
+            },
+            function (editor_1_1) {
+                editor_1 = editor_1_1;
             }
         ],
         execute: function () {
@@ -579,19 +1547,19 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 CompareMode[CompareMode["GEQUAL"] = WebGLRenderingContext.GEQUAL] = "GEQUAL";
                 CompareMode[CompareMode["ALWAYS"] = WebGLRenderingContext.ALWAYS] = "ALWAYS";
             })(CompareMode || (CompareMode = {}));
-            exports_6("CompareMode", CompareMode);
+            exports_7("CompareMode", CompareMode);
             (function (FrontFaceMode) {
                 FrontFaceMode[FrontFaceMode["CCW"] = WebGLRenderingContext.CCW] = "CCW";
                 FrontFaceMode[FrontFaceMode["CW"] = WebGLRenderingContext.CW] = "CW";
             })(FrontFaceMode || (FrontFaceMode = {}));
-            exports_6("FrontFaceMode", FrontFaceMode);
+            exports_7("FrontFaceMode", FrontFaceMode);
             (function (CullMode) {
                 CullMode[CullMode["NONE"] = 0] = "NONE";
                 CullMode[CullMode["FRONT"] = 1] = "FRONT";
                 CullMode[CullMode["BACK"] = 2] = "BACK";
                 CullMode[CullMode["FRONT_AND_BACK"] = 3] = "FRONT_AND_BACK";
             })(CullMode || (CullMode = {}));
-            exports_6("CullMode", CullMode);
+            exports_7("CullMode", CullMode);
             (function (BlendFactor) {
                 BlendFactor[BlendFactor["ZERO"] = WebGLRenderingContext.ZERO] = "ZERO";
                 BlendFactor[BlendFactor["ONE"] = WebGLRenderingContext.ONE] = "ONE";
@@ -604,14 +1572,14 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 BlendFactor[BlendFactor["DST_ALPHA"] = WebGLRenderingContext.DST_ALPHA] = "DST_ALPHA";
                 BlendFactor[BlendFactor["ONE_MINUS_DST_ALPHA"] = WebGLRenderingContext.ONE_MINUS_DST_ALPHA] = "ONE_MINUS_DST_ALPHA";
             })(BlendFactor || (BlendFactor = {}));
-            exports_6("BlendFactor", BlendFactor);
+            exports_7("BlendFactor", BlendFactor);
             (function (BlendMode) {
                 BlendMode[BlendMode["NONE"] = 0] = "NONE";
                 BlendMode[BlendMode["ADD"] = WebGLRenderingContext.FUNC_ADD] = "ADD";
                 BlendMode[BlendMode["SUBTRACT"] = WebGLRenderingContext.FUNC_SUBTRACT] = "SUBTRACT";
                 BlendMode[BlendMode["REVERSE_SUBTRACT"] = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT] = "REVERSE_SUBTRACT";
             })(BlendMode || (BlendMode = {}));
-            exports_6("BlendMode", BlendMode);
+            exports_7("BlendMode", BlendMode);
             RenderFlags = /** @class */ (function () {
                 function RenderFlags() {
                     this.depthWrite = undefined;
@@ -685,7 +1653,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 RenderFlags.default = new RenderFlags();
                 return RenderFlags;
             }());
-            exports_6("RenderFlags", RenderFlags);
+            exports_7("RenderFlags", RenderFlags);
             RenderFlags.default.blendMode = BlendMode.NONE;
             RenderFlags.default.blendSrc = BlendFactor.SRC_ALPHA;
             RenderFlags.default.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
@@ -750,7 +1718,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 };
                 return RenderTarget;
             }());
-            exports_6("RenderTarget", RenderTarget);
+            exports_7("RenderTarget", RenderTarget);
             RenderState = /** @class */ (function () {
                 function RenderState(gl) {
                     this.gl = gl;
@@ -837,18 +1805,26 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 };
                 return RenderState;
             }());
-            exports_6("RenderState", RenderState);
+            exports_7("RenderState", RenderState);
             DEBUG = true;
             Program = /** @class */ (function () {
                 function Program() {
+                    this.forceRecompile = false;
                 }
                 Program.prototype.compile = function (gl, programCache) {
-                    if (this.glProg)
-                        return this.glProg;
-                    var vert = this.preprocessShader(gl, this.vert, "vert");
-                    var frag = this.preprocessShader(gl, this.frag, "frag");
-                    this.glProg = programCache.compileProgram(vert, frag);
-                    this.bind(gl, this.glProg);
+                    if (!this.glProg || this.forceRecompile) {
+                        this.forceRecompile = false;
+                        var vert = this.preprocessShader(gl, this.vert, "vert");
+                        var frag = this.preprocessShader(gl, this.frag, "frag");
+                        var newProg = programCache.compileProgram(vert, frag);
+                        if (newProg !== null) {
+                            this.glProg = newProg;
+                            this.bind(gl, this.glProg);
+                        }
+                    }
+                    if (!this.glProg) {
+                        throw new Error();
+                    }
                     return this.glProg;
                 };
                 Program.prototype.preprocessShader = function (gl, source, type) {
@@ -885,26 +1861,32 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 };
                 Program.prototype._editShader = function (n) {
                     var _this = this;
-                    var win = window.open('about:blank', undefined, "resizable, alwaysRaised, left=0, top=0, width=600, height=600");
+                    var win = window.open('about:blank', undefined, "location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900");
                     win.onload = function () {
-                        var editor = win.document.createElement('textarea');
-                        editor.spellcheck = false;
+                        var editor = new editor_1.Editor(win.document);
+                        var document = win.document;
+                        var title = n === 'vert' ? _this.name + " - Vertex Shader" : _this.name + " - Fragment Shader";
+                        document.title = title;
+                        document.body.style.margin = '0';
                         var shader = _this[n];
-                        editor.value = shader;
-                        editor.style.width = '100%';
-                        editor.style.height = '100%';
+                        editor.setValue(shader);
                         var timeout = 0;
-                        editor.oninput = function () {
+                        editor.onvaluechanged = function () {
                             if (timeout > 0)
                                 clearTimeout(timeout);
                             timeout = setTimeout(tryCompile, 500);
                         };
+                        win.onresize = function () {
+                            editor.setSize(document.body.offsetWidth, window.innerHeight);
+                        };
+                        win.onresize(null);
                         var tryCompile = function () {
                             timeout = 0;
-                            _this[n] = editor.value;
-                            _this.glProg = null;
+                            _this[n] = editor.getValue();
+                            _this.forceRecompile = true;
                         };
-                        win.document.body.appendChild(editor);
+                        win.editor = editor;
+                        win.document.body.appendChild(editor.elem);
                     };
                 };
                 Program.prototype.editv = function () {
@@ -915,7 +1897,7 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 };
                 return Program;
             }());
-            exports_6("Program", Program);
+            exports_7("Program", Program);
             ProgramCache = /** @class */ (function () {
                 function ProgramCache(gl) {
                     this.gl = gl;
@@ -925,18 +1907,21 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                     var gl = this.gl;
                     var vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
                     var fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
+                    if (!vertShader || !fragShader)
+                        return null;
                     var prog = gl.createProgram();
                     gl.attachShader(prog, vertShader);
                     gl.attachShader(prog, fragShader);
                     gl.linkProgram(prog);
+                    gl.deleteShader(vertShader);
+                    gl.deleteShader(fragShader);
                     if (DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
                         console.error(vert);
                         console.error(frag);
                         console.error(gl.getProgramInfoLog(prog));
-                        throw new Error();
+                        gl.deleteProgram(prog);
+                        return null;
                     }
-                    gl.deleteShader(vertShader);
-                    gl.deleteShader(fragShader);
                     return prog;
                 };
                 ProgramCache.prototype.compileProgram = function (vert, frag) {
@@ -978,12 +1963,12 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                             gl.deleteTexture(texture);
                         }
                     }
-                    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+                    catch (e_9_1) { e_9 = { error: e_9_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_3) throw e_3.error; }
+                        finally { if (e_9) throw e_9.error; }
                     }
                     this.textures = [];
                     try {
@@ -992,12 +1977,12 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                             gl.deleteSampler(sampler);
                         }
                     }
-                    catch (e_4_1) { e_4 = { error: e_4_1 }; }
+                    catch (e_10_1) { e_10 = { error: e_10_1 }; }
                     finally {
                         try {
                             if (_e && !_e.done && (_f = _d.return)) _f.call(_d);
                         }
-                        finally { if (e_4) throw e_4.error; }
+                        finally { if (e_10) throw e_10.error; }
                     }
                     this.samplers = [];
                     try {
@@ -1006,12 +1991,12 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                             gl.deleteBuffer(buffer);
                         }
                     }
-                    catch (e_5_1) { e_5 = { error: e_5_1 }; }
+                    catch (e_11_1) { e_11 = { error: e_11_1 }; }
                     finally {
                         try {
                             if (_h && !_h.done && (_j = _g.return)) _j.call(_g);
                         }
-                        finally { if (e_5) throw e_5.error; }
+                        finally { if (e_11) throw e_11.error; }
                     }
                     this.buffers = [];
                     try {
@@ -1020,12 +2005,12 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                             gl.deleteVertexArray(vao);
                         }
                     }
-                    catch (e_6_1) { e_6 = { error: e_6_1 }; }
+                    catch (e_12_1) { e_12 = { error: e_12_1 }; }
                     finally {
                         try {
                             if (_l && !_l.done && (_m = _k.return)) _m.call(_k);
                         }
-                        finally { if (e_6) throw e_6.error; }
+                        finally { if (e_12) throw e_12.error; }
                     }
                     this.vaos = [];
                     try {
@@ -1034,19 +2019,19 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                             program.destroy(gl);
                         }
                     }
-                    catch (e_7_1) { e_7 = { error: e_7_1 }; }
+                    catch (e_13_1) { e_13 = { error: e_13_1 }; }
                     finally {
                         try {
                             if (_p && !_p.done && (_q = _o.return)) _q.call(_o);
                         }
-                        finally { if (e_7) throw e_7.error; }
+                        finally { if (e_13) throw e_13.error; }
                     }
                     this.programs = [];
-                    var e_3, _c, e_4, _f, e_5, _j, e_6, _m, e_7, _q;
+                    var e_9, _c, e_10, _f, e_11, _j, e_12, _m, e_13, _q;
                 };
                 return RenderArena;
             }());
-            exports_6("RenderArena", RenderArena);
+            exports_7("RenderArena", RenderArena);
             BufferCoalescer = /** @class */ (function () {
                 function BufferCoalescer(gl, vertexDatas, indexDatas) {
                     util_2.assert(vertexDatas.length === indexDatas.length);
@@ -1068,14 +2053,14 @@ System.register("render", ["gl-matrix", "util"], function (exports_6, context_6)
                 };
                 return BufferCoalescer;
             }());
-            exports_6("BufferCoalescer", BufferCoalescer);
+            exports_7("BufferCoalescer", BufferCoalescer);
         }
     };
 });
 // tslint:disable:no-console
-System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_7) {
+System.register("viewer", ["gl-matrix", "render"], function (exports_8, context_8) {
     "use strict";
-    var __moduleName = context_7 && context_7.id;
+    var __moduleName = context_8 && context_8.id;
     function clamp(v, min, max) {
         return Math.max(min, Math.min(v, max));
     }
@@ -1221,7 +2206,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_
                 };
                 return FPSCameraController;
             }());
-            exports_7("FPSCameraController", FPSCameraController);
+            exports_8("FPSCameraController", FPSCameraController);
             OrbitCameraController = /** @class */ (function () {
                 function OrbitCameraController() {
                     this.x = 0.15;
@@ -1296,7 +2281,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_
                 };
                 return OrbitCameraController;
             }());
-            exports_7("OrbitCameraController", OrbitCameraController);
+            exports_8("OrbitCameraController", OrbitCameraController);
             FullscreenCopyProgram = /** @class */ (function (_super) {
                 __extends(FullscreenCopyProgram, _super);
                 function FullscreenCopyProgram() {
@@ -1395,14 +2380,14 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_7, context_
                 };
                 return Viewer;
             }());
-            exports_7("Viewer", Viewer);
+            exports_8("Viewer", Viewer);
         }
     };
 });
 // Nintendo Yaz0 format.
-System.register("yaz0", ["util", "ArrayBufferSlice"], function (exports_8, context_8) {
+System.register("yaz0", ["util", "ArrayBufferSlice"], function (exports_9, context_9) {
     "use strict";
-    var __moduleName = context_8 && context_8.id;
+    var __moduleName = context_9 && context_9.id;
     function decompress(srcBuffer) {
         var srcView = srcBuffer.createDataView();
         util_3.assert(util_3.readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
@@ -1438,7 +2423,7 @@ System.register("yaz0", ["util", "ArrayBufferSlice"], function (exports_8, conte
             }
         }
     }
-    exports_8("decompress", decompress);
+    exports_9("decompress", decompress);
     var util_3, ArrayBufferSlice_4;
     return {
         setters: [
@@ -1454,9 +2439,9 @@ System.register("yaz0", ["util", "ArrayBufferSlice"], function (exports_8, conte
     };
 });
 // GX constants. Mostly taken from libogc.
-System.register("gx/gx_enum", [], function (exports_9, context_9) {
+System.register("gx/gx_enum", [], function (exports_10, context_10) {
     "use strict";
-    var __moduleName = context_9 && context_9.id;
+    var __moduleName = context_10 && context_10.id;
     return {
         setters: [],
         execute: function () {
@@ -1464,9 +2449,9 @@ System.register("gx/gx_enum", [], function (exports_9, context_9) {
     };
 });
 // GX display list parsing.
-System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_10, context_10) {
+System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_11, context_11) {
     "use strict";
-    var __moduleName = context_10 && context_10.id;
+    var __moduleName = context_11 && context_11.id;
     function getComponentSize(dataType) {
         switch (dataType) {
             case 0 /* U8 */:
@@ -1480,7 +2465,7 @@ System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_1
                 return 4;
         }
     }
-    exports_10("getComponentSize", getComponentSize);
+    exports_11("getComponentSize", getComponentSize);
     function getNumComponents(vtxAttrib, componentCount) {
         switch (vtxAttrib) {
             case 9 /* POS */:
@@ -1512,7 +2497,7 @@ System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_1
                 throw new Error("Unknown vertex attribute " + vtxAttrib);
         }
     }
-    exports_10("getNumComponents", getNumComponents);
+    exports_11("getNumComponents", getNumComponents);
     function translateVattrLayout(vat, vtxDescs) {
         // First, set up our vertex layout.
         var dstAttrOffsets = [];
@@ -1622,12 +2607,12 @@ System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_1
                 packedVertexDataSize += loadedData.packedVertexData.byteLength;
             }
         }
-        catch (e_8_1) { e_8 = { error: e_8_1 }; }
+        catch (e_14_1) { e_14 = { error: e_14_1 }; }
         finally {
             try {
                 if (loadedDatas_1_1 && !loadedDatas_1_1.done && (_a = loadedDatas_1.return)) _a.call(loadedDatas_1);
             }
-            finally { if (e_8) throw e_8.error; }
+            finally { if (e_14) throw e_14.error; }
         }
         var indexData = new Uint16Array(indexDataSize);
         var packedVertexData = new Uint8Array(packedVertexDataSize);
@@ -1642,17 +2627,17 @@ System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_1
                 packedVertexDataOffs += loadedData.packedVertexData.byteLength;
             }
         }
-        catch (e_9_1) { e_9 = { error: e_9_1 }; }
+        catch (e_15_1) { e_15 = { error: e_15_1 }; }
         finally {
             try {
                 if (loadedDatas_2_1 && !loadedDatas_2_1.done && (_b = loadedDatas_2.return)) _b.call(loadedDatas_2);
             }
-            finally { if (e_9) throw e_9.error; }
+            finally { if (e_15) throw e_15.error; }
         }
         return { indexData: indexData, packedVertexData: packedVertexData, totalTriangleCount: totalTriangleCount, totalVertexCount: totalVertexCount };
-        var e_8, _a, e_9, _b;
+        var e_14, _a, e_15, _b;
     }
-    exports_10("coalesceLoadedDatas", coalesceLoadedDatas);
+    exports_11("coalesceLoadedDatas", coalesceLoadedDatas);
     var util_4, GX, VtxLoaderCache, cache, compileVtxLoader;
     return {
         setters: [
@@ -1681,18 +2666,18 @@ System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_1
                 return VtxLoaderCache;
             }());
             cache = new VtxLoaderCache();
-            exports_10("compileVtxLoader", compileVtxLoader = cache.compileVtxLoader);
+            exports_11("compileVtxLoader", compileVtxLoader = cache.compileVtxLoader);
         }
     };
 });
 // GX materials.
-System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (exports_11, context_11) {
+System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (exports_12, context_12) {
     "use strict";
-    var __moduleName = context_11 && context_11.id;
+    var __moduleName = context_12 && context_12.id;
     function getVertexAttribLocation(vtxAttrib) {
         return vtxAttributeGenDefs.findIndex(function (genDef) { return genDef.attrib === vtxAttrib; });
     }
-    exports_11("getVertexAttribLocation", getVertexAttribLocation);
+    exports_12("getVertexAttribLocation", getVertexAttribLocation);
     // #endregion
     // #region Material flags generation.
     function translateCullMode(cullMode) {
@@ -1790,7 +2775,7 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
         }
         return renderFlags;
     }
-    exports_11("translateRenderFlags", translateRenderFlags);
+    exports_12("translateRenderFlags", translateRenderFlags);
     // #endregion
     // XXX(jstpierre): Put this somewhere better.
     // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
@@ -1804,7 +2789,7 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
         var textureLODBias = Math.log2(Math.min(viewportWidth / efbWidth, viewportHeight / efbHeight));
         return textureLODBias;
     }
-    exports_11("getTextureLODBias", getTextureLODBias);
+    exports_12("getTextureLODBias", getTextureLODBias);
     var GX, render_2, util_5, Color, vtxAttributeGenDefs, scaledVtxAttributes, GX_Program;
     return {
         setters: [
@@ -1828,7 +2813,7 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
                 }
                 return Color;
             }());
-            exports_11("Color", Color);
+            exports_12("Color", Color);
             vtxAttributeGenDefs = [
                 { attrib: 0 /* PTMTXIDX */, name: "PosMtxIdx", storage: "float", scale: false },
                 { attrib: 9 /* POS */, name: "Position", storage: "vec3", scale: true },
@@ -1844,7 +2829,7 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
                 { attrib: 19 /* TEX6 */, name: "Tex6", storage: "vec2", scale: true },
                 { attrib: 20 /* TEX7 */, name: "Tex7", storage: "vec2", scale: true },
             ];
-            exports_11("scaledVtxAttributes", scaledVtxAttributes = vtxAttributeGenDefs.filter(function (a) { return a.scale; }).map(function (a) { return a.attrib; }));
+            exports_12("scaledVtxAttributes", scaledVtxAttributes = vtxAttributeGenDefs.filter(function (a) { return a.scale; }).map(function (a) { return a.attrib; }));
             while (scaledVtxAttributes.length < util_5.align(scaledVtxAttributes.length, 4))
                 scaledVtxAttributes.push(-1);
             GX_Program = /** @class */ (function (_super) {
@@ -2187,14 +3172,14 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
                 GX_Program.ub_PacketParams = 2;
                 return GX_Program;
             }(render_2.Program));
-            exports_11("GX_Program", GX_Program);
+            exports_12("GX_Program", GX_Program);
         }
     };
 });
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
-System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "gx/gx_displaylist", "gx/gx_enum", "gx/gx_material"], function (exports_12, context_12) {
+System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "gx/gx_displaylist", "gx/gx_enum", "gx/gx_material"], function (exports_13, context_13) {
     "use strict";
-    var __moduleName = context_12 && context_12.id;
+    var __moduleName = context_13 && context_13.id;
     function readStringTable(buffer, offs) {
         var view = buffer.createDataView(offs);
         var stringCount = view.getUint16(0x00);
@@ -2398,12 +3383,12 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0 };
             }
         }
-        catch (e_10_1) { e_10 = { error: e_10_1 }; }
+        catch (e_16_1) { e_16 = { error: e_16_1 }; }
         finally {
             try {
                 if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
             }
-            finally { if (e_10) throw e_10.error; }
+            finally { if (e_16) throw e_16.error; }
         }
         var shapes = [];
         var shapeIdx = shapeTableOffs;
@@ -2468,7 +3453,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         }
         var shp1 = { shapes: shapes };
         bmd.shp1 = shp1;
-        var e_10, _d;
+        var e_16, _d;
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
         // TODO(jstpierre): Remove these.
@@ -2972,7 +3957,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 HierarchyType[HierarchyType["Material"] = 17] = "Material";
                 HierarchyType[HierarchyType["Shape"] = 18] = "Shape";
             })(HierarchyType || (HierarchyType = {}));
-            exports_12("HierarchyType", HierarchyType);
+            exports_13("HierarchyType", HierarchyType);
             // temp, center, center inverse
             t = gl_matrix_3.mat3.create(), c = gl_matrix_3.mat3.create(), ci = gl_matrix_3.mat3.create();
             BMD = /** @class */ (function () {
@@ -3012,7 +3997,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BMD;
             }());
-            exports_12("BMD", BMD);
+            exports_13("BMD", BMD);
             BTK = /** @class */ (function () {
                 function BTK() {
                 }
@@ -3063,7 +4048,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BTK;
             }());
-            exports_12("BTK", BTK);
+            exports_13("BTK", BTK);
             BMT = /** @class */ (function () {
                 function BMT() {
                 }
@@ -3095,7 +4080,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BMT;
             }());
-            exports_12("BMT", BMT);
+            exports_13("BMT", BMT);
             BTI = /** @class */ (function () {
                 function BTI() {
                 }
@@ -3107,14 +4092,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BTI;
             }());
-            exports_12("BTI", BTI);
+            exports_13("BTI", BTI);
         }
     };
 });
 // Nintendo RARC file format.
-System.register("j3d/rarc", ["util"], function (exports_13, context_13) {
+System.register("j3d/rarc", ["util"], function (exports_14, context_14) {
     "use strict";
-    var __moduleName = context_13 && context_13.id;
+    var __moduleName = context_14 && context_14.id;
     function parse(buffer) {
         var view = buffer.createDataView();
         util_7.assert(util_7.readString(buffer, 0x00, 0x04) === 'RARC');
@@ -3184,7 +4169,7 @@ System.register("j3d/rarc", ["util"], function (exports_13, context_13) {
         rarc.root = root;
         return rarc;
     }
-    exports_13("parse", parse);
+    exports_14("parse", parse);
     var util_7, RARC;
     return {
         setters: [
@@ -3211,15 +4196,15 @@ System.register("j3d/rarc", ["util"], function (exports_13, context_13) {
                                 return state_1.value;
                         }
                     }
-                    catch (e_11_1) { e_11 = { error: e_11_1 }; }
+                    catch (e_17_1) { e_17 = { error: e_17_1 }; }
                     finally {
                         try {
                             if (parts_1_1 && !parts_1_1.done && (_a = parts_1.return)) _a.call(parts_1);
                         }
-                        finally { if (e_11) throw e_11.error; }
+                        finally { if (e_17) throw e_17.error; }
                     }
                     return dir;
-                    var e_11, _a;
+                    var e_17, _a;
                 };
                 RARC.prototype.findDir = function (path) {
                     return this.findDirParts(path.split('/'));
@@ -3234,14 +4219,14 @@ System.register("j3d/rarc", ["util"], function (exports_13, context_13) {
                 };
                 return RARC;
             }());
-            exports_13("RARC", RARC);
+            exports_14("RARC", RARC);
         }
     };
 });
 // GX texture decoding
-System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_14, context_14) {
+System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_15, context_15) {
     "use strict";
-    var __moduleName = context_14 && context_14.id;
+    var __moduleName = context_15 && context_15.id;
     function expand3to8(n) {
         return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
     }
@@ -3275,7 +4260,7 @@ System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_14, context_1
         // All palette-formats are 16-bit.
         return paletteSize * 2;
     }
-    exports_14("calcPaletteSize", calcPaletteSize);
+    exports_15("calcPaletteSize", calcPaletteSize);
     function calcTextureSize(format, width, height) {
         var numPixels = width * height;
         switch (format) {
@@ -3303,7 +4288,7 @@ System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_14, context_1
                 throw new Error("whoops");
         }
     }
-    exports_14("calcTextureSize", calcTextureSize);
+    exports_15("calcTextureSize", calcTextureSize);
     function calcFullTextureSize(format, width, height, mipCount) {
         var textureSize = 0;
         while (mipCount--) {
@@ -3313,7 +4298,7 @@ System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_14, context_1
         }
         return textureSize;
     }
-    exports_14("calcFullTextureSize", calcFullTextureSize);
+    exports_15("calcFullTextureSize", calcFullTextureSize);
     // GX's CMPR format is S3TC but using GX's tiled addressing.
     function decode_CMPR_to_S3TC(texture) {
         // CMPR goes in 2x2 "macro-blocks" of four S3TC normal blocks.
@@ -3578,7 +4563,7 @@ System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_14, context_1
                 return decode_Dummy(texture);
         }
     }
-    exports_14("decodeTexture", decodeTexture);
+    exports_15("decodeTexture", decodeTexture);
     var GX;
     return {
         setters: [
@@ -3590,9 +4575,9 @@ System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_14, context_1
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_material", "gx/gx_texture", "render"], function (exports_15, context_15) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_material", "gx/gx_texture", "render"], function (exports_16, context_16) {
     "use strict";
-    var __moduleName = context_15 && context_15.id;
+    var __moduleName = context_16 && context_16.id;
     function translateCompType(gl, compType) {
         switch (compType) {
             case 4 /* F32 */:
@@ -3660,15 +4645,15 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                             gl.vertexAttribPointer(attribLocation, vertexArray.compCount, type, normalized, this.shape.packedVertexSize, coalescedBuffers.vertexBuffer.offset + attrib.offset);
                         }
                     }
-                    catch (e_12_1) { e_12 = { error: e_12_1 }; }
+                    catch (e_18_1) { e_18 = { error: e_18_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                         }
-                        finally { if (e_12) throw e_12.error; }
+                        finally { if (e_18) throw e_18.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_12, _d;
+                    var e_18, _d;
                 }
                 Command_Shape.prototype.computeModelView = function (modelView, state) {
                     gl_matrix_4.mat4.copy(modelView, state.view);
@@ -3745,6 +4730,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                     this.bmt = scene.bmt;
                     this.material = material;
                     this.program = new GX_Material.GX_Program(material.gxMaterial);
+                    this.program.name = this.name;
                     this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
                     this.materialParamsBuffer = gl.createBuffer();
                 }
@@ -3871,7 +4857,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                 Command_Material.textureScratch = new Int32Array(8);
                 return Command_Material;
             }());
-            exports_15("Command_Material", Command_Material);
+            exports_16("Command_Material", Command_Material);
             (function (ColorOverride) {
                 ColorOverride[ColorOverride["K0"] = 0] = "K0";
                 ColorOverride[ColorOverride["K1"] = 1] = "K1";
@@ -3882,7 +4868,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                 ColorOverride[ColorOverride["C2"] = 6] = "C2";
                 ColorOverride[ColorOverride["C3"] = 7] = "C3";
             })(ColorOverride || (ColorOverride = {}));
-            exports_15("ColorOverride", ColorOverride);
+            exports_16("ColorOverride", ColorOverride);
             sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4);
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, btk, bmt, extraTextures) {
@@ -3973,15 +4959,15 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                                 return extraTexture;
                         }
                     }
-                    catch (e_13_1) { e_13 = { error: e_13_1 }; }
+                    catch (e_19_1) { e_19 = { error: e_19_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_13) throw e_13.error; }
+                        finally { if (e_19) throw e_19.error; }
                     }
                     return texture;
-                    var e_13, _c;
+                    var e_19, _c;
                 };
                 Scene.translateTexFilter = function (gl, texFilter) {
                     switch (texFilter) {
@@ -4145,24 +5131,24 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                             this.translateSceneGraph(child, childContext);
                         }
                     }
-                    catch (e_14_1) { e_14 = { error: e_14_1 }; }
+                    catch (e_20_1) { e_20 = { error: e_20_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_14) throw e_14.error; }
+                        finally { if (e_20) throw e_20.error; }
                     }
-                    var e_14, _c;
+                    var e_20, _c;
                 };
                 return Scene;
             }());
-            exports_15("Scene", Scene);
+            exports_16("Scene", Scene);
         }
     };
 });
-System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "gx/gx_enum", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_16, context_16) {
+System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "gx/gx_enum", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_17, context_17) {
     "use strict";
-    var __moduleName = context_16 && context_16.id;
+    var __moduleName = context_17 && context_17.id;
     // XXX(jstpierre): Figure out WTF is up with Twilight Princess materials.
     function hackMaterials1(bmd) {
         try {
@@ -4175,23 +5161,23 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "gx/gx_enum",
                             stage.colorScale = 0 /* SCALE_1 */;
                     }
                 }
-                catch (e_15_1) { e_15 = { error: e_15_1 }; }
+                catch (e_21_1) { e_21 = { error: e_21_1 }; }
                 finally {
                     try {
                         if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
                     }
-                    finally { if (e_15) throw e_15.error; }
+                    finally { if (e_21) throw e_21.error; }
                 }
             }
         }
-        catch (e_16_1) { e_16 = { error: e_16_1 }; }
+        catch (e_22_1) { e_22 = { error: e_22_1 }; }
         finally {
             try {
                 if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
             }
-            finally { if (e_16) throw e_16.error; }
+            finally { if (e_22) throw e_22.error; }
         }
-        var e_16, _f, e_15, _e;
+        var e_22, _f, e_21, _e;
     }
     function hackMaterials2(scene) {
         try {
@@ -4205,23 +5191,23 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "gx/gx_enum",
                             materialCommand.visible = false;
                     }
                 }
-                catch (e_17_1) { e_17 = { error: e_17_1 }; }
+                catch (e_23_1) { e_23 = { error: e_23_1 }; }
                 finally {
                     try {
                         if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
                     }
-                    finally { if (e_17) throw e_17.error; }
+                    finally { if (e_23) throw e_23.error; }
                 }
             }
         }
-        catch (e_18_1) { e_18 = { error: e_18_1 }; }
+        catch (e_24_1) { e_24 = { error: e_24_1 }; }
         finally {
             try {
                 if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
             }
-            finally { if (e_18) throw e_18.error; }
+            finally { if (e_24) throw e_24.error; }
         }
-        var e_18, _f, e_17, _e;
+        var e_24, _f, e_23, _e;
     }
     function createScene(gl, bmdFile, btkFile, bmtFile, extraTextures) {
         var bmd = j3d_2.BMD.parse(bmdFile.buffer);
@@ -4283,14 +5269,14 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "gx/gx_enum",
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_19_1) { e_19 = { error: e_19_1 }; }
+                    catch (e_25_1) { e_25 = { error: e_25_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_19) throw e_19.error; }
+                        finally { if (e_25) throw e_25.error; }
                     }
-                    var e_19, _c;
+                    var e_25, _c;
                 }
                 TwilightPrincessScene.prototype.createUI = function () {
                     var elem = document.createElement('div');
@@ -4319,14 +5305,14 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "gx/gx_enum",
                                 checkbox.onchange(null);
                             }
                         }
-                        catch (e_20_1) { e_20 = { error: e_20_1 }; }
+                        catch (e_26_1) { e_26 = { error: e_26_1 }; }
                         finally {
                             try {
                                 if (checkboxes_1_1 && !checkboxes_1_1.done && (_a = checkboxes_1.return)) _a.call(checkboxes_1);
                             }
-                            finally { if (e_20) throw e_20.error; }
+                            finally { if (e_26) throw e_26.error; }
                         }
-                        var e_20, _a;
+                        var e_26, _a;
                     };
                     selectAll.style.display = 'block';
                     selectAll.style.width = '100%';
@@ -4341,14 +5327,14 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "gx/gx_enum",
                                 checkbox.onchange(null);
                             }
                         }
-                        catch (e_21_1) { e_21 = { error: e_21_1 }; }
+                        catch (e_27_1) { e_27 = { error: e_27_1 }; }
                         finally {
                             try {
                                 if (checkboxes_2_1 && !checkboxes_2_1.done && (_a = checkboxes_2.return)) _a.call(checkboxes_2);
                             }
-                            finally { if (e_21) throw e_21.error; }
+                            finally { if (e_27) throw e_27.error; }
                         }
-                        var e_21, _a;
+                        var e_27, _a;
                     };
                     selectNone.style.display = 'block';
                     selectNone.style.width = '100%';
@@ -4451,13 +5437,13 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "gx/gx_enum",
                 new TwilightPrincessSceneDesc("Palace of Twilight", "D_MN08", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R04_00.arc", "R05_00.arc", "R07_00.arc", "R08_00.arc", "R09_00.arc", "R10_00.arc", "R11_00.arc"]),
                 new TwilightPrincessSceneDesc("Hyrule Castle", "D_MN09", ["R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R08_00.arc", "R09_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R15_00.arc", "R01_00.arc", "R02_00.arc"]),
             ];
-            exports_16("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_17("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_17, context_17) {
+System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_18, context_18) {
     "use strict";
-    var __moduleName = context_17 && context_17.id;
+    var __moduleName = context_18 && context_18.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -4467,15 +5453,15 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_22_1) { e_22 = { error: e_22_1 }; }
+        catch (e_28_1) { e_28 = { error: e_28_1 }; }
         finally {
             try {
                 if (scenes_1_1 && !scenes_1_1.done && (_a = scenes_1.return)) _a.call(scenes_1);
             }
-            finally { if (e_22) throw e_22.error; }
+            finally { if (e_28) throw e_28.error; }
         }
         return textures;
-        var e_22, _a;
+        var e_28, _a;
     }
     var gl_matrix_5, Progressable_3, util_9, Yaz0, GX_Material, j3d_3, RARC, render_5, CameraPos, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
@@ -4713,20 +5699,20 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
             ];
             id = "zww";
             name = "The Legend of Zelda: The Wind Waker";
-            exports_17("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_18("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_18, context_18) {
+System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_19, context_19) {
     "use strict";
-    var __moduleName = context_18 && context_18.id;
+    var __moduleName = context_19 && context_19.id;
     function createScene(gl, bmdFile, btkFile, bmtFile) {
         var bmd = j3d_4.BMD.parse(bmdFile.buffer);
         var btk = btkFile ? j3d_4.BTK.parse(btkFile.buffer) : null;
         var bmt = bmtFile ? j3d_4.BMT.parse(bmtFile.buffer) : null;
         return new render_6.Scene(gl, bmd, btk, bmt);
     }
-    exports_18("createScene", createScene);
+    exports_19("createScene", createScene);
     function createScenesFromBuffer(gl, buffer) {
         if (util_10.readString(buffer, 0, 4) === 'Yaz0')
             buffer = Yaz0.decompress(buffer);
@@ -4750,11 +5736,11 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
         }
         return null;
     }
-    exports_18("createScenesFromBuffer", createScenesFromBuffer);
+    exports_19("createScenesFromBuffer", createScenesFromBuffer);
     function createMultiSceneFromBuffer(gl, buffer) {
         return new MultiScene(createScenesFromBuffer(gl, buffer));
     }
-    exports_18("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
+    exports_19("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
     var util_10, Yaz0, j3d_4, RARC, render_6, MultiScene;
     return {
         setters: [
@@ -4796,24 +5782,24 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
+                    catch (e_29_1) { e_29 = { error: e_29_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_23) throw e_23.error; }
+                        finally { if (e_29) throw e_29.error; }
                     }
-                    var e_23, _c;
+                    var e_29, _c;
                 };
                 return MultiScene;
             }());
-            exports_18("MultiScene", MultiScene);
+            exports_19("MultiScene", MultiScene);
         }
     };
 });
-System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], function (exports_19, context_19) {
+System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], function (exports_20, context_20) {
     "use strict";
-    var __moduleName = context_19 && context_19.id;
+    var __moduleName = context_20 && context_20.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -4823,15 +5809,15 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_24_1) { e_24 = { error: e_24_1 }; }
+        catch (e_30_1) { e_30 = { error: e_30_1 }; }
         finally {
             try {
                 if (scenes_2_1 && !scenes_2_1.done && (_a = scenes_2.return)) _a.call(scenes_2);
             }
-            finally { if (e_24) throw e_24.error; }
+            finally { if (e_30) throw e_30.error; }
         }
         return textures;
-        var e_24, _a;
+        var e_30, _a;
     }
     var util_11, Yaz0, RARC, scenes_3, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
@@ -4877,14 +5863,14 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                             scene.render(renderState);
                         }
                     }
-                    catch (e_25_1) { e_25 = { error: e_25_1 }; }
+                    catch (e_31_1) { e_31 = { error: e_31_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_25) throw e_25.error; }
+                        finally { if (e_31) throw e_31.error; }
                     }
-                    var e_25, _c;
+                    var e_31, _c;
                 };
                 SunshineRenderer.prototype.destroy = function (gl) {
                     if (this.skyScene)
@@ -4897,7 +5883,7 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                 };
                 return SunshineRenderer;
             }());
-            exports_19("SunshineRenderer", SunshineRenderer);
+            exports_20("SunshineRenderer", SunshineRenderer);
             SunshineSceneDesc = /** @class */ (function () {
                 function SunshineSceneDesc(path, name) {
                     this.path = path;
@@ -4944,20 +5930,20 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                                 extraScenes.push(scene);
                             }
                         }
-                        catch (e_26_1) { e_26 = { error: e_26_1 }; }
+                        catch (e_32_1) { e_32 = { error: e_32_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                             }
-                            finally { if (e_26) throw e_26.error; }
+                            finally { if (e_32) throw e_32.error; }
                         }
                         return new SunshineRenderer(skyScene, mapScene, seaScene, extraScenes);
-                        var e_26, _d;
+                        var e_32, _d;
                     });
                 };
                 return SunshineSceneDesc;
             }());
-            exports_19("SunshineSceneDesc", SunshineSceneDesc);
+            exports_20("SunshineSceneDesc", SunshineSceneDesc);
             id = "sms";
             name = "Super Mario Sunshine";
             sceneDescs = [
@@ -4968,13 +5954,13 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                 new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
                 new SunshineSceneDesc("data/j3d/monte3.szs", "Pianta Village"),
             ];
-            exports_19("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_20("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes"], function (exports_20, context_20) {
+System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes"], function (exports_21, context_21) {
     "use strict";
-    var __moduleName = context_20 && context_20.id;
+    var __moduleName = context_21 && context_21.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -4983,15 +5969,15 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                 textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_27_1) { e_27 = { error: e_27_1 }; }
+        catch (e_33_1) { e_33 = { error: e_33_1 }; }
         finally {
             try {
                 if (scenes_4_1 && !scenes_4_1.done && (_a = scenes_4.return)) _a.call(scenes_4);
             }
-            finally { if (e_27) throw e_27.error; }
+            finally { if (e_33) throw e_33.error; }
         }
         return textures;
-        var e_27, _a;
+        var e_33, _a;
     }
     var Progressable_4, util_12, render_7, scenes_5, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
@@ -5088,13 +6074,13 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
             sceneDescs = [
                 new SMGSceneDesc("Peach's Castle Garden", "data/j3d/PeachCastleGardenPlanet.arc", "data/j3d/GalaxySky.arc", "data/j3d/PeachCastleGardenPlanetBloom.arc"),
             ];
-            exports_20("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_21("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("sm64ds/crg0", ["util"], function (exports_21, context_21) {
+System.register("sm64ds/crg0", ["util"], function (exports_22, context_22) {
     "use strict";
-    var __moduleName = context_21 && context_21.id;
+    var __moduleName = context_22 && context_22.id;
     function parse(buffer) {
         var view = buffer.createDataView();
         util_13.assert(util_13.readString(buffer, 0, 0x04) === 'CRG0');
@@ -5151,7 +6137,7 @@ System.register("sm64ds/crg0", ["util"], function (exports_21, context_21) {
         }
         return { levels: levels };
     }
-    exports_21("parse", parse);
+    exports_22("parse", parse);
     var util_13;
     return {
         setters: [
@@ -5164,20 +6150,20 @@ System.register("sm64ds/crg0", ["util"], function (exports_21, context_21) {
     };
 });
 // SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
-System.register("sm64ds/lz77", ["lz77", "util"], function (exports_22, context_22) {
+System.register("sm64ds/lz77", ["lz77", "util"], function (exports_23, context_23) {
     "use strict";
-    var __moduleName = context_22 && context_22.id;
+    var __moduleName = context_23 && context_23.id;
     function isLZ77(srcBuffer) {
         return (util_14.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
     }
-    exports_22("isLZ77", isLZ77);
+    exports_23("isLZ77", isLZ77);
     function maybeDecompress(srcBuffer) {
         if (isLZ77(srcBuffer))
             return lz77_1.decompress(srcBuffer.slice(4));
         else
             return srcBuffer;
     }
-    exports_22("maybeDecompress", maybeDecompress);
+    exports_23("maybeDecompress", maybeDecompress);
     var lz77_1, util_14;
     return {
         setters: [
@@ -5192,9 +6178,9 @@ System.register("sm64ds/lz77", ["lz77", "util"], function (exports_22, context_2
         }
     };
 });
-System.register("sm64ds/nitro_tex", [], function (exports_23, context_23) {
+System.register("sm64ds/nitro_tex", [], function (exports_24, context_24) {
     "use strict";
-    var __moduleName = context_23 && context_23.id;
+    var __moduleName = context_24 && context_24.id;
     function expand3to8(n) {
         return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
     }
@@ -5210,7 +6196,7 @@ System.register("sm64ds/nitro_tex", [], function (exports_23, context_23) {
         pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
         pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
     }
-    exports_23("bgr5", bgr5);
+    exports_24("bgr5", bgr5);
     function readTexture_A3I5(width, height, texData, palData) {
         var pixels = new Uint8Array(width * height * 4);
         var texView = texData.createDataView();
@@ -5394,7 +6380,7 @@ System.register("sm64ds/nitro_tex", [], function (exports_23, context_23) {
                 throw new Error("Unsupported texture type! " + format);
         }
     }
-    exports_23("readTexture", readTexture);
+    exports_24("readTexture", readTexture);
     var Format;
     return {
         setters: [],
@@ -5410,20 +6396,20 @@ System.register("sm64ds/nitro_tex", [], function (exports_23, context_23) {
                 Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
                 Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
             })(Format || (Format = {}));
-            exports_23("Format", Format);
+            exports_24("Format", Format);
         }
     };
 });
 // Read DS Geometry Engine commands.
-System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_24, context_24) {
+System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_25, context_25) {
     "use strict";
-    var __moduleName = context_24 && context_24.id;
+    var __moduleName = context_25 && context_25.id;
     function bgr5(pixel) {
         nitro_tex_1.bgr5(tmp, 0, pixel);
         var r = tmp[0], g = tmp[1], b = tmp[2];
         return { r: r, g: g, b: b };
     }
-    exports_24("bgr5", bgr5);
+    exports_25("bgr5", bgr5);
     function cmd_MTX_RESTORE(ctx) {
         // XXX: We don't implement the matrix stack yet.
         ctx.readParam();
@@ -5642,7 +6628,7 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_24, c
         }
         return ctx.packets;
     }
-    exports_24("readCmds", readCmds);
+    exports_25("readCmds", readCmds);
     var nitro_tex_1, CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, tmp, Context, ContextInternal;
     return {
         setters: [
@@ -5682,7 +6668,7 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_24, c
                 }
                 return Context;
             }());
-            exports_24("Context", Context);
+            exports_25("Context", Context);
             ContextInternal = /** @class */ (function () {
                 function ContextInternal(buffer, baseCtx) {
                     this.offs = 0;
@@ -5704,9 +6690,9 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_24, c
         }
     };
 });
-System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_25, context_25) {
+System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_26, context_26) {
     "use strict";
-    var __moduleName = context_25 && context_25.id;
+    var __moduleName = context_26 && context_26.id;
     function parseModel(bmd, buffer, idx) {
         var offs = bmd.modelOffsBase + idx * 0x40;
         var view = buffer.createDataView();
@@ -5850,7 +6836,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             bmd.models.push(parseModel(bmd, buffer, i));
         return bmd;
     }
-    exports_25("parse", parse);
+    exports_26("parse", parse);
     var gl_matrix_6, NITRO_GX, NITRO_Tex, util_15, Material, Model, TextureKey, Texture, BMD;
     return {
         setters: [
@@ -5873,13 +6859,13 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 }
                 return Material;
             }());
-            exports_25("Material", Material);
+            exports_26("Material", Material);
             Model = /** @class */ (function () {
                 function Model() {
                 }
                 return Model;
             }());
-            exports_25("Model", Model);
+            exports_26("Model", Model);
             TextureKey = /** @class */ (function () {
                 function TextureKey(texIdx, palIdx) {
                     this.texIdx = texIdx;
@@ -5895,19 +6881,19 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 }
                 return Texture;
             }());
-            exports_25("Texture", Texture);
+            exports_26("Texture", Texture);
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
                 return BMD;
             }());
-            exports_25("BMD", BMD);
+            exports_26("BMD", BMD);
         }
     };
 });
-System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm64ds/nitro_bmd", "render", "util"], function (exports_26, context_26) {
+System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm64ds/nitro_bmd", "render", "util"], function (exports_27, context_27) {
     "use strict";
-    var __moduleName = context_26 && context_26.id;
+    var __moduleName = context_27 && context_27.id;
     function textureToCanvas(bmdTex) {
         var canvas = document.createElement("canvas");
         canvas.width = bmdTex.width;
@@ -5929,15 +6915,15 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_28_1) { e_28 = { error: e_28_1 }; }
+        catch (e_34_1) { e_34 = { error: e_34_1 }; }
         finally {
             try {
                 if (scenes_6_1 && !scenes_6_1.done && (_a = scenes_6.return)) _a.call(scenes_6);
             }
-            finally { if (e_28) throw e_28.error; }
+            finally { if (e_34) throw e_34.error; }
         }
         return textures;
-        var e_28, _a;
+        var e_34, _a;
     }
     var gl_matrix_7, CRG0, LZ77, NITRO_BMD, render_8, util_16, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, BMDRenderer, SM64DSRenderer, SceneDesc;
     return {
@@ -6094,12 +7080,12 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                         gl_matrix_7.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
-                            catch (e_29_1) { e_29 = { error: e_29_1 }; }
+                            catch (e_35_1) { e_35 = { error: e_35_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_29) throw e_29.error; }
+                                finally { if (e_35) throw e_35.error; }
                             }
                             gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                             gl_matrix_7.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
@@ -6110,7 +7096,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                             gl.bindTexture(gl.TEXTURE_2D, texId);
                         }
                         state.useFlags(renderFlags);
-                        var e_29, _c;
+                        var e_35, _c;
                     };
                 };
                 BMDRenderer.prototype.translateBatch = function (gl, batch) {
@@ -6135,23 +7121,23 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                     this.translateBatch(gl, batch);
                                 }
                             }
-                            catch (e_30_1) { e_30 = { error: e_30_1 }; }
+                            catch (e_36_1) { e_36 = { error: e_36_1 }; }
                             finally {
                                 try {
                                     if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
                                 }
-                                finally { if (e_30) throw e_30.error; }
+                                finally { if (e_36) throw e_36.error; }
                             }
                         }
                     }
-                    catch (e_31_1) { e_31 = { error: e_31_1 }; }
+                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
                         }
-                        finally { if (e_31) throw e_31.error; }
+                        finally { if (e_37) throw e_37.error; }
                     }
-                    var e_31, _f, e_30, _e;
+                    var e_37, _f, e_36, _e;
                 };
                 BMDRenderer.prototype.destroy = function (gl) {
                     this.arena.destroy(gl);
@@ -6227,13 +7213,13 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 };
                 return SceneDesc;
             }());
-            exports_26("SceneDesc", SceneDesc);
+            exports_27("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_27, context_27) {
+System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_28, context_28) {
     "use strict";
-    var __moduleName = context_27 && context_27.id;
+    var __moduleName = context_28 && context_28.id;
     var render_9, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -6300,13 +7286,13 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_27, contex
             ].map(function (entry) {
                 return new render_9.SceneDesc(entry.name, entry.id);
             });
-            exports_27("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_28("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("mdl0/mdl0", ["util"], function (exports_28, context_28) {
+System.register("mdl0/mdl0", ["util"], function (exports_29, context_29) {
     "use strict";
-    var __moduleName = context_28 && context_28.id;
+    var __moduleName = context_29 && context_29.id;
     function parse(buffer) {
         ;
         var view = buffer.createDataView();
@@ -6364,7 +7350,7 @@ System.register("mdl0/mdl0", ["util"], function (exports_28, context_28) {
         util_17.assert(offs === buffer.byteLength);
         return { clrData: clrData, idxData: idxData, vtxData: vtxData, animCount: animCount, animSize: animSize, vertCount: vertCount, vertSize: vertSize };
     }
-    exports_28("parse", parse);
+    exports_29("parse", parse);
     var util_17;
     return {
         setters: [
@@ -6376,9 +7362,9 @@ System.register("mdl0/mdl0", ["util"], function (exports_28, context_28) {
         }
     };
 });
-System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], function (exports_29, context_29) {
+System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], function (exports_30, context_30) {
     "use strict";
-    var __moduleName = context_29 && context_29.id;
+    var __moduleName = context_30 && context_30.id;
     var MDL0, Viewer, render_10, util_18, FancyGrid_Program, FancyGrid, MDL0_Program, Scene, SceneDesc;
     return {
         setters: [
@@ -6527,13 +7513,13 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
                 };
                 return SceneDesc;
             }());
-            exports_29("SceneDesc", SceneDesc);
+            exports_30("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("mdl0/scenes", ["mdl0/render"], function (exports_30, context_30) {
+System.register("mdl0/scenes", ["mdl0/render"], function (exports_31, context_31) {
     "use strict";
-    var __moduleName = context_30 && context_30.id;
+    var __moduleName = context_31 && context_31.id;
     var render_11, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -6599,13 +7585,13 @@ System.register("mdl0/scenes", ["mdl0/render"], function (exports_30, context_30
                 var name = filename;
                 return new render_11.SceneDesc(name, path);
             });
-            exports_30("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_31("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], function (exports_31, context_31) {
+System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], function (exports_32, context_32) {
     "use strict";
-    var __moduleName = context_31 && context_31.id;
+    var __moduleName = context_32 && context_32.id;
     function readZELVIEW0(buffer) {
         var view = buffer.createDataView();
         var MAGIC = "ZELVIEW0";
@@ -6636,7 +7622,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         zelview0.view = view;
         return zelview0;
     }
-    exports_31("readZELVIEW0", readZELVIEW0);
+    exports_32("readZELVIEW0", readZELVIEW0);
     function readHeaders(gl, rom, offs, banks) {
         var headers = new Headers();
         function loadAddress(addr) {
@@ -6904,15 +7890,15 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                                 return entry;
                         }
                     }
-                    catch (e_32_1) { e_32 = { error: e_32_1 }; }
+                    catch (e_38_1) { e_38 = { error: e_38_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_32) throw e_32.error; }
+                        finally { if (e_38) throw e_38.error; }
                     }
                     return null;
-                    var e_32, _c;
+                    var e_38, _c;
                 };
                 ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
                     var bankIdx = addr >>> 24;
@@ -6944,7 +7930,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                 };
                 return ZELVIEW0;
             }());
-            exports_31("ZELVIEW0", ZELVIEW0);
+            exports_32("ZELVIEW0", ZELVIEW0);
             Mesh = /** @class */ (function () {
                 function Mesh() {
                     this.opaque = [];
@@ -6952,14 +7938,14 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                 }
                 return Mesh;
             }());
-            exports_31("Mesh", Mesh);
+            exports_32("Mesh", Mesh);
             Headers = /** @class */ (function () {
                 function Headers() {
                     this.rooms = [];
                 }
                 return Headers;
             }());
-            exports_31("Headers", Headers);
+            exports_32("Headers", Headers);
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Spawns"] = 0] = "Spawns";
                 HeaderCommands[HeaderCommands["Actors"] = 1] = "Actors";
@@ -6984,9 +7970,9 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         }
     };
 });
-System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_32, context_32) {
+System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_33, context_33) {
     "use strict";
-    var __moduleName = context_32 && context_32.id;
+    var __moduleName = context_33 && context_33.id;
     function readVertex(state, which, addr) {
         var rom = state.rom;
         var offs = state.lookupAddress(addr);
@@ -7658,7 +8644,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         gl.bindVertexArray(null);
         return new DL(vao, state.cmds, state.textures);
     }
-    exports_32("readDL", readDL);
+    exports_33("readDL", readDL);
     var gl_matrix_9, Render, render_12, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
@@ -7753,13 +8739,13 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
                 };
                 return DL;
             }());
-            exports_32("DL", DL);
+            exports_33("DL", DL);
         }
     };
 });
-System.register("zelview/render", ["zelview/zelview0", "render", "util"], function (exports_33, context_33) {
+System.register("zelview/render", ["zelview/zelview0", "render", "util"], function (exports_34, context_34) {
     "use strict";
-    var __moduleName = context_33 && context_33.id;
+    var __moduleName = context_34 && context_34.id;
     var ZELVIEW0, render_13, util_20, BillboardBGProgram, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
     return {
         setters: [
@@ -7789,7 +8775,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util"], functi
                 };
                 return BillboardBGProgram;
             }(render_13.Program));
-            exports_33("BillboardBGProgram", BillboardBGProgram);
+            exports_34("BillboardBGProgram", BillboardBGProgram);
             F3DEX2Program = /** @class */ (function (_super) {
                 __extends(F3DEX2Program, _super);
                 function F3DEX2Program() {
@@ -7809,7 +8795,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util"], functi
                 F3DEX2Program.a_Color = 2;
                 return F3DEX2Program;
             }(render_13.Program));
-            exports_33("F3DEX2Program", F3DEX2Program);
+            exports_34("F3DEX2Program", F3DEX2Program);
             CollisionProgram = /** @class */ (function (_super) {
                 __extends(CollisionProgram, _super);
                 function CollisionProgram() {
@@ -7973,13 +8959,13 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util"], functi
                 };
                 return SceneDesc;
             }());
-            exports_33("SceneDesc", SceneDesc);
+            exports_34("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("zelview/scenes", ["zelview/render"], function (exports_34, context_34) {
+System.register("zelview/scenes", ["zelview/render"], function (exports_35, context_35) {
     "use strict";
-    var __moduleName = context_34 && context_34.id;
+    var __moduleName = context_35 && context_35.id;
     var render_14, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -8435,13 +9421,13 @@ System.register("zelview/scenes", ["zelview/render"], function (exports_34, cont
                 var path = "data/zelview/" + entry.filename + ".zelview0";
                 return new render_14.SceneDesc(entry.label, path);
             });
-            exports_34("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_35("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("oot3d/cmb", ["util"], function (exports_35, context_35) {
+System.register("oot3d/cmb", ["util"], function (exports_36, context_36) {
     "use strict";
-    var __moduleName = context_35 && context_35.id;
+    var __moduleName = context_36 && context_36.id;
     function readMatsChunk(cmb, buffer) {
         var view = buffer.createDataView();
         util_21.assert(util_21.readString(buffer, 0x00, 0x04) === 'mats');
@@ -8855,7 +9841,7 @@ System.register("oot3d/cmb", ["util"], function (exports_35, context_35) {
         cmb.indexBuffer = buffer.slice(idxDataOffs, idxDataOffs + idxDataCount * 2);
         return cmb;
     }
-    exports_35("parse", parse);
+    exports_36("parse", parse);
     var util_21, VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
     return {
         setters: [
@@ -8878,7 +9864,7 @@ System.register("oot3d/cmb", ["util"], function (exports_35, context_35) {
                 }
                 return CMB;
             }());
-            exports_35("CMB", CMB);
+            exports_36("CMB", CMB);
             (function (TextureFilter) {
                 TextureFilter[TextureFilter["NEAREST"] = 9728] = "NEAREST";
                 TextureFilter[TextureFilter["LINEAR"] = 9729] = "LINEAR";
@@ -8887,12 +9873,12 @@ System.register("oot3d/cmb", ["util"], function (exports_35, context_35) {
                 TextureFilter[TextureFilter["NEAREST_MIPMIP_LINEAR"] = 9986] = "NEAREST_MIPMIP_LINEAR";
                 TextureFilter[TextureFilter["LINEAR_MIPMAP_LINEAR"] = 9987] = "LINEAR_MIPMAP_LINEAR";
             })(TextureFilter || (TextureFilter = {}));
-            exports_35("TextureFilter", TextureFilter);
+            exports_36("TextureFilter", TextureFilter);
             (function (TextureWrapMode) {
                 TextureWrapMode[TextureWrapMode["CLAMP"] = 10496] = "CLAMP";
                 TextureWrapMode[TextureWrapMode["REPEAT"] = 10497] = "REPEAT";
             })(TextureWrapMode || (TextureWrapMode = {}));
-            exports_35("TextureWrapMode", TextureWrapMode);
+            exports_36("TextureWrapMode", TextureWrapMode);
             TextureBinding = /** @class */ (function () {
                 function TextureBinding() {
                 }
@@ -8904,7 +9890,7 @@ System.register("oot3d/cmb", ["util"], function (exports_35, context_35) {
                 }
                 return Material;
             }());
-            exports_35("Material", Material);
+            exports_36("Material", Material);
             (function (TextureFormat) {
                 TextureFormat[TextureFormat["ETC1"] = 26458] = "ETC1";
                 TextureFormat[TextureFormat["ETC1A4"] = 26459] = "ETC1A4";
@@ -8919,13 +9905,13 @@ System.register("oot3d/cmb", ["util"], function (exports_35, context_35) {
                 }
                 return Texture;
             }());
-            exports_35("Texture", Texture);
+            exports_36("Texture", Texture);
             Mesh = /** @class */ (function () {
                 function Mesh() {
                 }
                 return Mesh;
             }());
-            exports_35("Mesh", Mesh);
+            exports_36("Mesh", Mesh);
             (function (DataType) {
                 DataType[DataType["Byte"] = 5120] = "Byte";
                 DataType[DataType["UByte"] = 5121] = "UByte";
@@ -8935,26 +9921,26 @@ System.register("oot3d/cmb", ["util"], function (exports_35, context_35) {
                 DataType[DataType["UInt"] = 5125] = "UInt";
                 DataType[DataType["Float"] = 5126] = "Float";
             })(DataType || (DataType = {}));
-            exports_35("DataType", DataType);
+            exports_36("DataType", DataType);
             Prm = /** @class */ (function () {
                 function Prm() {
                 }
                 return Prm;
             }());
-            exports_35("Prm", Prm);
+            exports_36("Prm", Prm);
             Sepd = /** @class */ (function () {
                 function Sepd() {
                     this.prms = [];
                 }
                 return Sepd;
             }());
-            exports_35("Sepd", Sepd);
+            exports_36("Sepd", Sepd);
         }
     };
 });
-System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_36, context_36) {
+System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_37, context_37) {
     "use strict";
-    var __moduleName = context_36 && context_36.id;
+    var __moduleName = context_37 && context_37.id;
     function readRooms(buffer, nRooms, offs) {
         var rooms = [];
         for (var i = 0; i < nRooms; i++) {
@@ -9047,7 +10033,7 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_36, contex
         var headersBuf = buffer.slice(0x10);
         return readHeaders(headersBuf);
     }
-    exports_36("parse", parse);
+    exports_37("parse", parse);
     var CMB, util_22, ZSI, HeaderCommands, Mesh;
     return {
         setters: [
@@ -9064,7 +10050,7 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_36, contex
                 }
                 return ZSI;
             }());
-            exports_36("ZSI", ZSI);
+            exports_37("ZSI", ZSI);
             // Subset of Z64 command types.
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Collision"] = 3] = "Collision";
@@ -9077,13 +10063,13 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_36, contex
                 }
                 return Mesh;
             }());
-            exports_36("Mesh", Mesh);
+            exports_37("Mesh", Mesh);
         }
     };
 });
-System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "render", "util"], function (exports_37, context_37) {
+System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "render", "util"], function (exports_38, context_38) {
     "use strict";
-    var __moduleName = context_37 && context_37.id;
+    var __moduleName = context_38 && context_38.id;
     function textureToCanvas(texture) {
         var canvas = document.createElement("canvas");
         canvas.width = texture.width;
@@ -9206,15 +10192,15 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 gl.drawElements(gl.TRIANGLES, prm.count, _this.translateDataType(gl, prm.indexType), prm.offset * _this.dataTypeSize(prm.indexType));
                             }
                         }
-                        catch (e_33_1) { e_33 = { error: e_33_1 }; }
+                        catch (e_39_1) { e_39 = { error: e_39_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_33) throw e_33.error; }
+                            finally { if (e_39) throw e_39.error; }
                         }
                         gl.bindVertexArray(null);
-                        var e_33, _c;
+                        var e_39, _c;
                     };
                 };
                 Scene.prototype.translateTexture = function (gl, texture) {
@@ -9307,14 +10293,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 func();
                             }
                         }
-                        catch (e_34_1) { e_34 = { error: e_34_1 }; }
+                        catch (e_40_1) { e_40 = { error: e_40_1 }; }
                         finally {
                             try {
                                 if (meshFuncs_1_1 && !meshFuncs_1_1.done && (_a = meshFuncs_1.return)) _a.call(meshFuncs_1);
                             }
-                            finally { if (e_34) throw e_34.error; }
+                            finally { if (e_40) throw e_40.error; }
                         }
-                        var e_34, _a;
+                        var e_40, _a;
                     };
                 };
                 Scene.prototype.translateModel = function (gl, mesh) {
@@ -9345,14 +10331,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_35_1) { e_35 = { error: e_35_1 }; }
+                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_35) throw e_35.error; }
+                        finally { if (e_41) throw e_41.error; }
                     }
-                    var e_35, _c;
+                    var e_41, _c;
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -9398,13 +10384,13 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                 };
                 return SceneDesc;
             }());
-            exports_37("SceneDesc", SceneDesc);
+            exports_38("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("oot3d/scenes", ["oot3d/render"], function (exports_38, context_38) {
+System.register("oot3d/scenes", ["oot3d/render"], function (exports_39, context_39) {
     "use strict";
-    var __moduleName = context_38 && context_38.id;
+    var __moduleName = context_39 && context_39.id;
     var render_16, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -9518,20 +10504,11 @@ System.register("oot3d/scenes", ["oot3d/render"], function (exports_38, context_
                 var name = entry.name || entry.filename;
                 return new render_16.SceneDesc(name, path);
             });
-            exports_38("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_39("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("fres/gx2_enum", [], function (exports_39, context_39) {
-    "use strict";
-    var __moduleName = context_39 && context_39.id;
-    return {
-        setters: [],
-        execute: function () {
-        }
-    };
-});
-System.register("fres/gx2_surface", [], function (exports_40, context_40) {
+System.register("fres/gx2_enum", [], function (exports_40, context_40) {
     "use strict";
     var __moduleName = context_40 && context_40.id;
     return {
@@ -9540,9 +10517,18 @@ System.register("fres/gx2_surface", [], function (exports_40, context_40) {
         }
     };
 });
-System.register("worker_util", [], function (exports_41, context_41) {
+System.register("fres/gx2_surface", [], function (exports_41, context_41) {
     "use strict";
     var __moduleName = context_41 && context_41.id;
+    return {
+        setters: [],
+        execute: function () {
+        }
+    };
+});
+System.register("worker_util", [], function (exports_42, context_42) {
+    "use strict";
+    var __moduleName = context_42 && context_42.id;
     function makeWorkerFromSource(sources) {
         var blob = new Blob(sources, { type: 'application/javascript' });
         var url = window.URL.createObjectURL(blob);
@@ -9550,7 +10536,7 @@ System.register("worker_util", [], function (exports_41, context_41) {
         window.URL.revokeObjectURL(url);
         return w;
     }
-    exports_41("makeWorkerFromSource", makeWorkerFromSource);
+    exports_42("makeWorkerFromSource", makeWorkerFromSource);
     var WorkerManager, MultiWorkerManager, WorkerPool;
     return {
         setters: [],
@@ -9581,7 +10567,7 @@ System.register("worker_util", [], function (exports_41, context_41) {
                 };
                 return WorkerManager;
             }());
-            exports_41("WorkerManager", WorkerManager);
+            exports_42("WorkerManager", WorkerManager);
             // TODO(jstpierre): This is a round-robin, which is the best
             // we can do with WebWorkers without SharedArrayBuffer or similar, I think...
             MultiWorkerManager = /** @class */ (function () {
@@ -9596,14 +10582,14 @@ System.register("worker_util", [], function (exports_41, context_41) {
                             worker.terminate();
                         }
                     }
-                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
+                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_36) throw e_36.error; }
+                        finally { if (e_42) throw e_42.error; }
                     }
-                    var e_36, _c;
+                    var e_42, _c;
                 };
                 MultiWorkerManager.prototype.execute = function (req) {
                     var p = this.workers[this.nextWorker].execute(req);
@@ -9639,13 +10625,13 @@ System.register("worker_util", [], function (exports_41, context_41) {
                 };
                 return WorkerPool;
             }());
-            exports_41("WorkerPool", WorkerPool);
+            exports_42("WorkerPool", WorkerPool);
         }
     };
 });
-System.register("fres/gx2_swizzle", ["worker_util"], function (exports_42, context_42) {
+System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, context_43) {
     "use strict";
-    var __moduleName = context_42 && context_42.id;
+    var __moduleName = context_43 && context_43.id;
     // This is all contained in one function in order to make it easier to Worker-ize.
     function _deswizzle(surface, srcBuffer) {
         var numPipes = 2;
@@ -9906,13 +10892,13 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_42, conte
                 };
                 return Deswizzler;
             }());
-            exports_42("deswizzler", deswizzler = new Deswizzler());
+            exports_43("deswizzler", deswizzler = new Deswizzler());
         }
     };
 });
-System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_43, context_43) {
+System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, context_44) {
     "use strict";
-    var __moduleName = context_43 && context_43.id;
+    var __moduleName = context_44 && context_44.id;
     function parseGX2Surface(buffer, gx2SurfaceOffs) {
         var view = buffer.slice(gx2SurfaceOffs, gx2SurfaceOffs + 0x9C).createDataView();
         var dimension = view.getUint32(0x00, false);
@@ -9937,7 +10923,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_43, 
         var surface = { format: format, tileMode: tileMode, swizzle: swizzle, width: width, height: height, depth: depth, pitch: pitch, aaMode: aaMode, texDataSize: texDataSize, mipDataSize: mipDataSize };
         return surface;
     }
-    exports_43("parseGX2Surface", parseGX2Surface);
+    exports_44("parseGX2Surface", parseGX2Surface);
     // #region Texture Decode
     function expand5to8(n) {
         return (n << (8 - 5)) | (n >>> (10 - 8));
@@ -10213,7 +11199,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_43, 
                 return decompressBC45(texture);
         }
     }
-    exports_43("decompressBC", decompressBC);
+    exports_44("decompressBC", decompressBC);
     function decodeSurface(surface, texData, mipData) {
         var width = surface.width;
         var height = surface.height;
@@ -10244,7 +11230,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_43, 
             }
         });
     }
-    exports_43("decodeSurface", decodeSurface);
+    exports_44("decodeSurface", decodeSurface);
     function textureToCanvas(canvas, texture) {
         var ctx = canvas.getContext('2d');
         var imageData = new ImageData(texture.width, texture.height);
@@ -10308,7 +11294,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_43, 
         }
         ctx.putImageData(imageData, 0, 0);
     }
-    exports_43("textureToCanvas", textureToCanvas);
+    exports_44("textureToCanvas", textureToCanvas);
     var gx2_swizzle_1;
     return {
         setters: [
@@ -10320,9 +11306,9 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_43, 
         }
     };
 });
-System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_44, context_44) {
+System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45, context_45) {
     "use strict";
-    var __moduleName = context_44 && context_44.id;
+    var __moduleName = context_45 && context_45.id;
     function readBinPtrT(view, offs, littleEndian) {
         var offs2 = view.getInt32(offs, littleEndian);
         if (offs2 === 0)
@@ -10397,15 +11383,15 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_44
                     entries.push({ key: key, value: value });
                 }
             }
-            catch (e_37_1) { e_37 = { error: e_37_1 }; }
+            catch (e_43_1) { e_43 = { error: e_43_1 }; }
             finally {
                 try {
                     if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
                 }
-                finally { if (e_37) throw e_37.error; }
+                finally { if (e_43) throw e_43.error; }
             }
             return entries;
-            var e_37, _a;
+            var e_43, _a;
         }
         // Vertex buffers.
         var fvtxIdx = fvtxOffs;
@@ -10477,12 +11463,12 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_44
                 fshp.push({ name: name_10, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
             }
         }
-        catch (e_38_1) { e_38 = { error: e_38_1 }; }
+        catch (e_44_1) { e_44 = { error: e_44_1 }; }
         finally {
             try {
                 if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
             }
-            finally { if (e_38) throw e_38.error; }
+            finally { if (e_44) throw e_44.error; }
         }
         // Materials.
         var fmat = [];
@@ -10545,12 +11531,12 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_44
                         }
                     }
                 }
-                catch (e_39_1) { e_39 = { error: e_39_1 }; }
+                catch (e_45_1) { e_45 = { error: e_45_1 }; }
                 finally {
                     try {
                         if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
                     }
-                    finally { if (e_39) throw e_39.error; }
+                    finally { if (e_45) throw e_45.error; }
                 }
                 util_24.assert(textureSamplerCount === textureReferenceCount);
                 var textureSamplerArrayIdx = textureSamplerArrayOffs;
@@ -10619,15 +11605,15 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_44
                 fmat.push({ name: name_11, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
             }
         }
-        catch (e_40_1) { e_40 = { error: e_40_1 }; }
+        catch (e_46_1) { e_46 = { error: e_46_1 }; }
         finally {
             try {
                 if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
             }
-            finally { if (e_40) throw e_40.error; }
+            finally { if (e_46) throw e_46.error; }
         }
         return { fvtx: fvtx, fshp: fshp, fmat: fmat };
-        var e_38, _a, e_40, _c, e_39, _b;
+        var e_44, _a, e_46, _c, e_45, _b;
     }
     function parse(buffer) {
         var view = buffer.createDataView();
@@ -10668,12 +11654,12 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_44
                 textures.push({ entry: entry, texture: texture });
             }
         }
-        catch (e_41_1) { e_41 = { error: e_41_1 }; }
+        catch (e_47_1) { e_47 = { error: e_47_1 }; }
         finally {
             try {
                 if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
             }
-            finally { if (e_41) throw e_41.error; }
+            finally { if (e_47) throw e_47.error; }
         }
         var models = [];
         try {
@@ -10683,17 +11669,17 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_44
                 models.push({ entry: entry, fmdl: fmdl });
             }
         }
-        catch (e_42_1) { e_42 = { error: e_42_1 }; }
+        catch (e_48_1) { e_48 = { error: e_48_1 }; }
         finally {
             try {
                 if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
             }
-            finally { if (e_42) throw e_42.error; }
+            finally { if (e_48) throw e_48.error; }
         }
         return { textures: textures, models: models };
-        var e_41, _a, e_42, _b;
+        var e_47, _a, e_48, _b;
     }
-    exports_44("parse", parse);
+    exports_45("parse", parse);
     var GX2Texture, util_24, UBOParameterType, RenderInfoParameterType;
     return {
         setters: [
@@ -10748,9 +11734,9 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_44
     };
 });
 // Nintendo SARC archive format.
-System.register("fres/sarc", ["util"], function (exports_45, context_45) {
+System.register("fres/sarc", ["util"], function (exports_46, context_46) {
     "use strict";
-    var __moduleName = context_45 && context_45.id;
+    var __moduleName = context_46 && context_46.id;
     function parse(buffer) {
         var view = buffer.createDataView();
         util_25.assert(util_25.readString(buffer, 0x00, 0x04) === 'SARC');
@@ -10798,7 +11784,7 @@ System.register("fres/sarc", ["util"], function (exports_45, context_45) {
         }
         return { buffer: buffer, files: files };
     }
-    exports_45("parse", parse);
+    exports_46("parse", parse);
     var util_25;
     return {
         setters: [
@@ -10810,9 +11796,9 @@ System.register("fres/sarc", ["util"], function (exports_45, context_45) {
         }
     };
 });
-System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render", "endian", "util"], function (exports_46, context_46) {
+System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render", "endian", "util"], function (exports_47, context_47) {
     "use strict";
-    var __moduleName = context_46 && context_46.id;
+    var __moduleName = context_47 && context_47.id;
     function getAttribFormatInfo(format) {
         switch (format) {
             case 768 /* _8_SINT */:
@@ -11032,12 +12018,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             samplers.push(sampler);
                         }
                     }
-                    catch (e_43_1) { e_43 = { error: e_43_1 }; }
+                    catch (e_49_1) { e_49 = { error: e_49_1 }; }
                     finally {
                         try {
                             if (textureAssigns_1_1 && !textureAssigns_1_1.done && (_a = textureAssigns_1.return)) _a.call(textureAssigns_1);
                         }
-                        finally { if (e_43) throw e_43.error; }
+                        finally { if (e_49) throw e_49.error; }
                     }
                     var prog = new ProgramGambit_UBER();
                     this.arena.trackProgram(prog);
@@ -11078,7 +12064,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             _loop_2(i);
                         }
                     };
-                    var e_43, _a;
+                    var e_49, _a;
                 };
                 Scene.prototype.translateIndexBuffer = function (indexFormat, indexBufferData) {
                     switch (indexFormat) {
@@ -11100,14 +12086,14 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             indexDatas.push(indexData);
                         }
                     }
-                    catch (e_44_1) { e_44 = { error: e_44_1 }; }
+                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_44) throw e_44.error; }
+                        finally { if (e_50) throw e_50.error; }
                     }
-                    var e_44, _c;
+                    var e_50, _c;
                 };
                 Scene.prototype.translateIndexFormat = function (gl, indexFormat) {
                     // Little-endian translation was done above.
@@ -11139,12 +12125,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             glIndexBuffers.push(coalescedIndex.shift());
                         }
                     }
-                    catch (e_45_1) { e_45 = { error: e_45_1 }; }
+                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_45) throw e_45.error; }
+                        finally { if (e_51) throw e_51.error; }
                     }
                     return function (state) {
                         var lod = 0;
@@ -11157,16 +12143,16 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 gl.drawElements(_this.translatePrimType(gl, mesh.primType), submesh.indexBufferCount, _this.translateIndexFormat(gl, mesh.indexFormat), glIndexBuffer.offset + submesh.indexBufferOffset);
                             }
                         }
-                        catch (e_46_1) { e_46 = { error: e_46_1 }; }
+                        catch (e_52_1) { e_52 = { error: e_52_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_46) throw e_46.error; }
+                            finally { if (e_52) throw e_52.error; }
                         }
-                        var e_46, _c;
+                        var e_52, _c;
                     };
-                    var e_45, _c;
+                    var e_51, _c;
                 };
                 Scene.prototype.translateModel = function (gl, model, coalescedVertex, coalescedIndex) {
                     var _this = this;
@@ -11312,19 +12298,19 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                 };
                 return Scene;
             }());
-            exports_46("Scene", Scene);
+            exports_47("Scene", Scene);
         }
     };
 });
-System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "Progressable", "util"], function (exports_47, context_47) {
+System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "Progressable", "util"], function (exports_48, context_48) {
     "use strict";
-    var __moduleName = context_47 && context_47.id;
+    var __moduleName = context_48 && context_48.id;
     function createSceneFromFRESBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
         var fres = BFRES.parse(buffer);
         return new MultiScene([new render_18.Scene(gl, fres, isSkybox)]);
     }
-    exports_47("createSceneFromFRESBuffer", createSceneFromFRESBuffer);
+    exports_48("createSceneFromFRESBuffer", createSceneFromFRESBuffer);
     function createSceneFromSARCBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
         if (util_27.readString(buffer, 0, 4) === 'Yaz0')
@@ -11333,7 +12319,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
         var file = sarc.files.find(function (file) { return file.name.endsWith('.bfres'); });
         return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
     }
-    exports_47("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
+    exports_48("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
     var BFRES, SARC, Yaz0, render_18, Progressable_6, util_27, MultiScene, SceneDesc, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -11367,14 +12353,14 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_47_1) { e_47 = { error: e_47_1 }; }
+                    catch (e_53_1) { e_53 = { error: e_53_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_47) throw e_47.error; }
+                        finally { if (e_53) throw e_53.error; }
                     }
-                    var e_47, _c;
+                    var e_53, _c;
                 }
                 MultiScene.prototype.render = function (state) {
                     var gl = state.gl;
@@ -11406,7 +12392,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                 };
                 return SceneDesc;
             }());
-            exports_47("SceneDesc", SceneDesc);
+            exports_48("SceneDesc", SceneDesc);
             // Splatoon Models
             name = "Splatoon";
             id = "fres";
@@ -11437,13 +12423,13 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                 var path = "data/spl/" + entry.path;
                 return new SceneDesc(name, path);
             });
-            exports_47("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_48("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("dksiv/iv", [], function (exports_48, context_48) {
+System.register("dksiv/iv", [], function (exports_49, context_49) {
     "use strict";
-    var __moduleName = context_48 && context_48.id;
+    var __moduleName = context_49 && context_49.id;
     function parseIV(buffer) {
         var view = buffer.createDataView();
         var numChunks = view.getUint32(0x00, true);
@@ -11465,16 +12451,16 @@ System.register("dksiv/iv", [], function (exports_48, context_48) {
         }
         return { color: color, chunks: chunks };
     }
-    exports_48("parseIV", parseIV);
+    exports_49("parseIV", parseIV);
     return {
         setters: [],
         execute: function () {
         }
     };
 });
-System.register("dksiv/render", ["gl-matrix", "render"], function (exports_49, context_49) {
+System.register("dksiv/render", ["gl-matrix", "render"], function (exports_50, context_50) {
     "use strict";
-    var __moduleName = context_49 && context_49.id;
+    var __moduleName = context_50 && context_50.id;
     var gl_matrix_10, render_19, IVProgram, Chunk, Scene;
     return {
         setters: [
@@ -11608,13 +12594,13 @@ System.register("dksiv/render", ["gl-matrix", "render"], function (exports_49, c
                 };
                 return Scene;
             }());
-            exports_49("Scene", Scene);
+            exports_50("Scene", Scene);
         }
     };
 });
-System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "util"], function (exports_50, context_50) {
+System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "util"], function (exports_51, context_51) {
     "use strict";
-    var __moduleName = context_50 && context_50.id;
+    var __moduleName = context_51 && context_51.id;
     var iv_1, render_20, Progressable_7, util_28, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, name, id, sceneGroup;
     return {
         setters: [
@@ -11687,14 +12673,14 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "ut
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_48_1) { e_48 = { error: e_48_1 }; }
+                    catch (e_54_1) { e_54 = { error: e_54_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_48) throw e_48.error; }
+                        finally { if (e_54) throw e_54.error; }
                     }
-                    var e_48, _c;
+                    var e_54, _c;
                 }
                 MultiScene.prototype.createUI = function () {
                     var elem = document.createElement('div');
@@ -11771,14 +12757,14 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "ut
             ];
             name = "Dark Souls Collision Data";
             id = "dksiv";
-            exports_50("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_51("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
 // Implements Retro's PAK format as seen in Metroid Prime 1.
-System.register("metroid_prime/pak", ["util"], function (exports_51, context_51) {
+System.register("metroid_prime/pak", ["util"], function (exports_52, context_52) {
     "use strict";
-    var __moduleName = context_51 && context_51.id;
+    var __moduleName = context_52 && context_52.id;
     function parse(buffer) {
         var view = buffer.createDataView();
         util_29.assert(view.getUint32(0x00) === 0x00030005);
@@ -11838,7 +12824,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_51, context_51)
         }
         return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
     }
-    exports_51("parse", parse);
+    exports_52("parse", parse);
     var util_29;
     return {
         setters: [
@@ -11851,9 +12837,9 @@ System.register("metroid_prime/pak", ["util"], function (exports_51, context_51)
     };
 });
 // Implements Retro's TXTR (texture) format as seen in Metroid Prime 1.
-System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function (exports_52, context_52) {
+System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function (exports_53, context_53) {
     "use strict";
-    var __moduleName = context_52 && context_52.id;
+    var __moduleName = context_53 && context_53.id;
     function parse(resourceSystem, buffer) {
         var view = buffer.createDataView();
         var txtrFormat = view.getUint32(0x00);
@@ -11880,7 +12866,7 @@ System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function 
         var data = buffer.slice(offs);
         return { format: format, width: width, height: height, mipCount: mipCount, data: data, paletteFormat: paletteFormat, paletteData: paletteData };
     }
-    exports_52("parse", parse);
+    exports_53("parse", parse);
     var GX, GX_Texture, txtrFormatRemap;
     return {
         setters: [
@@ -11909,9 +12895,9 @@ System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function 
     };
 });
 // Implements Retro's MREA format as seen in Metroid Prime 1.
-System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "endian"], function (exports_53, context_53) {
+System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "endian"], function (exports_54, context_54) {
     "use strict";
-    var __moduleName = context_53 && context_53.id;
+    var __moduleName = context_54 && context_54.id;
     function parseMaterialSet(resourceSystem, buffer, offs) {
         var view = buffer.createDataView();
         var textureCount = view.getUint32(offs + 0x00);
@@ -12211,12 +13197,12 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
                     vertexIndexSize += 0x02;
                 }
             }
-            catch (e_49_1) { e_49 = { error: e_49_1 }; }
+            catch (e_55_1) { e_55 = { error: e_55_1 }; }
             finally {
                 try {
                     if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
                 }
-                finally { if (e_49) throw e_49.error; }
+                finally { if (e_55) throw e_55.error; }
             }
             var totalVertexCount = 0;
             var totalTriangleCount = 0;
@@ -12373,7 +13359,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
             };
             surfaces.push(surface);
             sectionIndex++;
-            var e_49, _a;
+            var e_55, _a;
         };
         for (var i = 0; i < surfaceCount; i++) {
             _loop_4(i);
@@ -12428,7 +13414,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
         return { materialSet: materialSet, worldModels: worldModels };
         var _a;
     }
-    exports_53("parse", parse);
+    exports_54("parse", parse);
     var GX_Material, GX, util_30, endian_3, vtxAttrFormats;
     return {
         setters: [
@@ -12446,7 +13432,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
             }
         ],
         execute: function () {
-            exports_53("vtxAttrFormats", vtxAttrFormats = [
+            exports_54("vtxAttrFormats", vtxAttrFormats = [
                 { vtxAttrib: 9 /* POS */, mask: 0x00000003, compCount: 3 },
                 { vtxAttrib: 10 /* NRM */, mask: 0x0000000C, compCount: 3 },
                 { vtxAttrib: 11 /* CLR0 */, mask: 0x00000030, compCount: 4 },
@@ -12463,9 +13449,9 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
     };
 });
 // Implements Retro's STRG (string table resource group) format as seen in Metroid Prime 1.
-System.register("metroid_prime/strg", ["util"], function (exports_54, context_54) {
+System.register("metroid_prime/strg", ["util"], function (exports_55, context_55) {
     "use strict";
-    var __moduleName = context_54 && context_54.id;
+    var __moduleName = context_55 && context_55.id;
     function readUTF16String(buffer, offs) {
         var arr = buffer.createTypedArray(Uint8Array, offs, 0xFF);
         var raw = utf16Decoder.decode(arr);
@@ -12508,7 +13494,7 @@ System.register("metroid_prime/strg", ["util"], function (exports_54, context_54
         }
         return { strings: strings };
     }
-    exports_54("parse", parse);
+    exports_55("parse", parse);
     var util_31, utf16Decoder;
     return {
         setters: [
@@ -12522,9 +13508,9 @@ System.register("metroid_prime/strg", ["util"], function (exports_54, context_54
     };
 });
 // Resource System
-System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_55, context_55) {
+System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_56, context_56) {
     "use strict";
-    var __moduleName = context_55 && context_55.id;
+    var __moduleName = context_56 && context_56.id;
     var pako_1, MLVL, MREA, STRG, TXTR, util_32, ArrayBufferSlice_6, FourCCLoaders, ResourceSystem;
     return {
         setters: [
@@ -12582,15 +13568,15 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                                 return resource;
                         }
                     }
-                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
+                    catch (e_56_1) { e_56 = { error: e_56_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_50) throw e_50.error; }
+                        finally { if (e_56) throw e_56.error; }
                     }
                     return null;
-                    var e_50, _c;
+                    var e_56, _c;
                 };
                 ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
                     var cached = this._cache.get(assetID);
@@ -12608,14 +13594,14 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                 };
                 return ResourceSystem;
             }());
-            exports_55("ResourceSystem", ResourceSystem);
+            exports_56("ResourceSystem", ResourceSystem);
         }
     };
 });
 // Implements Retro's MLVL format as seen in Metroid Prime 1.
-System.register("metroid_prime/mlvl", ["util"], function (exports_56, context_56) {
+System.register("metroid_prime/mlvl", ["util"], function (exports_57, context_57) {
     "use strict";
-    var __moduleName = context_56 && context_56.id;
+    var __moduleName = context_57 && context_57.id;
     function parse(resourceSystem, buffer) {
         var view = buffer.createDataView();
         util_33.assert(view.getUint32(0x00) == 0xDEAFBABE);
@@ -12696,7 +13682,7 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_56, context_56
         }
         return { areaTable: areaTable };
     }
-    exports_56("parse", parse);
+    exports_57("parse", parse);
     var util_33;
     return {
         setters: [
@@ -12709,9 +13695,9 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_56, context_56
     };
 });
 //
-System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/gx_texture", "gx/gx_material", "render", "util", "ArrayBufferSlice"], function (exports_57, context_57) {
+System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/gx_texture", "gx/gx_material", "render", "util", "ArrayBufferSlice"], function (exports_58, context_58) {
     "use strict";
-    var __moduleName = context_57 && context_57.id;
+    var __moduleName = context_58 && context_58.id;
     var gl_matrix_11, mrea_1, GX_Texture, GX_Material, render_21, util_34, ArrayBufferSlice_7, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
     return {
         setters: [
@@ -12908,7 +13894,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                 };
                 return Scene;
             }());
-            exports_57("Scene", Scene);
+            exports_58("Scene", Scene);
             Command_Surface = /** @class */ (function () {
                 function Command_Surface(gl, surface, coalescedBuffers) {
                     this.surface = surface;
@@ -12929,15 +13915,15 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                             offset += 4 * attrib.compCount;
                         }
                     }
-                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
+                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
                     finally {
                         try {
                             if (vtxAttrFormats_2_1 && !vtxAttrFormats_2_1.done && (_a = vtxAttrFormats_2.return)) _a.call(vtxAttrFormats_2);
                         }
-                        finally { if (e_51) throw e_51.error; }
+                        finally { if (e_57) throw e_57.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_51, _a;
+                    var e_57, _a;
                 }
                 Command_Surface.prototype.exec = function (state) {
                     var gl = state.gl;
@@ -13048,9 +14034,9 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
         }
     };
 });
-System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "util", "Progressable"], function (exports_58, context_58) {
+System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "util", "Progressable"], function (exports_59, context_59) {
     "use strict";
-    var __moduleName = context_58 && context_58.id;
+    var __moduleName = context_59 && context_59.id;
     // Files are too big for GitHub.
     function findPakBase() {
         if (document.location.protocol === 'file:') {
@@ -13094,14 +14080,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_52_1) { e_52 = { error: e_52_1 }; }
+                    catch (e_58_1) { e_58 = { error: e_58_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_52) throw e_52.error; }
+                        finally { if (e_58) throw e_58.error; }
                     }
-                    var e_52, _c;
+                    var e_58, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -13113,7 +14099,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 };
                 return MultiScene;
             }());
-            exports_58("MultiScene", MultiScene);
+            exports_59("MultiScene", MultiScene);
             MP1SceneDesc = /** @class */ (function () {
                 function MP1SceneDesc(filename, name) {
                     this.filename = filename;
@@ -13145,15 +14131,15 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                                 return new MultiScene(scenes);
                             }
                         }
-                        catch (e_53_1) { e_53 = { error: e_53_1 }; }
+                        catch (e_59_1) { e_59 = { error: e_59_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_53) throw e_53.error; }
+                            finally { if (e_59) throw e_59.error; }
                         }
                         return null;
-                        var e_53, _c;
+                        var e_59, _c;
                     });
                 };
                 return MP1SceneDesc;
@@ -13164,13 +14150,13 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 new MP1SceneDesc("Metroid1.pak", "Space Pirate Frigate"),
                 new MP1SceneDesc("Metroid4.pak", "Tallon Overworld"),
             ];
-            exports_58("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_59("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "dksiv/scenes", "metroid_prime/scenes", "j3d/scenes"], function (exports_59, context_59) {
+System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "dksiv/scenes", "metroid_prime/scenes", "j3d/scenes"], function (exports_60, context_60) {
     "use strict";
-    var __moduleName = context_59 && context_59.id;
+    var __moduleName = context_60 && context_60.id;
     var viewer_1, ArrayBufferSlice_8, Progressable_9, ZTP, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, DKSIV, MP1, J3D, sceneGroups, ProgressBar, DroppedFileSceneDesc, Main;
     return {
         setters: [
@@ -13397,12 +14383,12 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                             tex.appendChild(canvas);
                         }
                     }
-                    catch (e_54_1) { e_54 = { error: e_54_1 }; }
+                    catch (e_60_1) { e_60 = { error: e_60_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_54) throw e_54.error; }
+                        finally { if (e_60) throw e_60.error; }
                     }
                     tex.onmouseover = function () {
                         canvases.forEach(function (canvas) {
@@ -13422,7 +14408,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     tex.appendChild(label);
                     tex.style.cssFloat = 'left';
                     return tex;
-                    var e_54, _c;
+                    var e_60, _c;
                 };
                 Main.prototype._makeTextureSection = function (textures) {
                     var _this = this;
@@ -13485,14 +14471,14 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                             this.groupSelect.appendChild(groupOption);
                         }
                     }
-                    catch (e_55_1) { e_55 = { error: e_55_1 }; }
+                    catch (e_61_1) { e_61 = { error: e_61_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_55) throw e_55.error; }
+                        finally { if (e_61) throw e_61.error; }
                     }
-                    var e_55, _c;
+                    var e_61, _c;
                 };
                 Main.prototype._loadSceneGroup = function (group, loadDefaultSceneInGroup) {
                     if (loadDefaultSceneInGroup === void 0) { loadDefaultSceneInGroup = true; }
@@ -13514,16 +14500,16 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                             this.sceneSelect.appendChild(sceneOption);
                         }
                     }
-                    catch (e_56_1) { e_56 = { error: e_56_1 }; }
+                    catch (e_62_1) { e_62 = { error: e_62_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_56) throw e_56.error; }
+                        finally { if (e_62) throw e_62.error; }
                     }
                     if (loadDefaultSceneInGroup)
                         this._loadSceneDesc(group.sceneDescs[0]);
-                    var e_56, _c;
+                    var e_62, _c;
                 };
                 Main.prototype._onSceneSelectChange = function () {
                     var option = this.sceneSelect.selectedOptions.item(0);
@@ -13711,9 +14697,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
         }
     };
 });
-System.register("embeds/main", ["viewer"], function (exports_60, context_60) {
+System.register("embeds/main", ["viewer"], function (exports_61, context_61) {
     "use strict";
-    var __moduleName = context_60 && context_60.id;
+    var __moduleName = context_61 && context_61.id;
     var Viewer, FsButton, Main;
     return {
         setters: [
@@ -13800,9 +14786,9 @@ System.register("embeds/main", ["viewer"], function (exports_60, context_60) {
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0"], function (exports_61, context_61) {
+System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0"], function (exports_62, context_62) {
     "use strict";
-    var __moduleName = context_61 && context_61.id;
+    var __moduleName = context_62 && context_62.id;
     function createScene(gl, name) {
         return util_36.fetch("data/j3d/dolpic0.szs").then(function (buffer) {
             var bufferSlice = Yaz0.decompress(buffer);
@@ -13816,7 +14802,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
             return new sms_scenes_1.SunshineRenderer(skyScene, null, seaScene, []);
         });
     }
-    exports_61("createScene", createScene);
+    exports_62("createScene", createScene);
     var gl_matrix_12, util_36, GX, GX_Material, j3d_5, RARC, render_23, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
     return {
         setters: [
@@ -13918,16 +14904,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
                                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_57_1) { e_57 = { error: e_57_1 }; }
+                        catch (e_63_1) { e_63 = { error: e_63_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_57) throw e_57.error; }
+                            finally { if (e_63) throw e_63.error; }
                         }
                     }
                     return cmd;
-                    var e_57, _c;
+                    var e_63, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
