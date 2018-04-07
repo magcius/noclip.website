@@ -421,7 +421,7 @@ export class GX_Program extends Program {
             const v = `mix(${a}, ${b}, ${c}) ${o} ${d}`;
             return this.generateTevOpBiasScaleClamp(v, bias, scale, clamp);
         case GX.TevOp.COMP_R8_GT:
-            return `TevCompR8GT(${a}, ${b}, ${c})`;
+            return `TevCompR8GT(${a}, ${b}, ${c}) + ${d}`;
         default:
             throw new Error("whoops");
         }
