@@ -344,7 +344,7 @@ export class GX_Program extends Program {
     }
 
     private generateTexAccess(stage: TevStage) {
-        return `textureProj(u_Texture[${stage.texMap}], v_TexCoord${stage.texCoordId}, u_TextureLODBias)`;
+        return `textureProj(u_Texture[${stage.texMap}], v_TexCoord${stage.texCoordId}, GetTextureLODBias(${stage.texMap}))`;
     }
 
     private generateColorIn(stage: TevStage, colorIn: GX.CombineColorInput) {
@@ -523,7 +523,7 @@ layout(std140) uniform ub_SceneParams {
     vec4 u_Misc0;
 };
 
-#define u_TextureLODBias u_Misc0[0]
+#define u_SceneTextureLODBias u_Misc0[0]
 
 // Expected to change with each material.
 layout(std140) uniform ub_MaterialParams {
@@ -531,7 +531,10 @@ layout(std140) uniform ub_MaterialParams {
     vec4 u_KonstColor[8];
     mat3 u_TexMtx[10];
     mat3 u_PostTexMtx[20];
+    vec4 u_TextureLODBias[2];
 };
+
+float GetTextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureLODBias[index >> 2][index & 3]; }
 
 // Expected to change with each shape packet.
 layout(std140) uniform ub_PacketParams {

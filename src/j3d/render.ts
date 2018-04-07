@@ -155,7 +155,7 @@ class Command_Shape {
     }
 }
 
-const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20);
+const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20 + 8);
 export class Command_Material {
     private static matrixScratch = mat3.create();
     private static textureScratch = new Int32Array(8);
@@ -165,7 +165,7 @@ export class Command_Material {
     public bmt: BMT;
     public material: MaterialEntry;
 
-    public textures: WebGLTexture[] = [];
+    public name: string;
     public visible: boolean = true;
 
     private scene: Scene;
@@ -175,6 +175,7 @@ export class Command_Material {
     private materialParamsBuffer: WebGLBuffer;
 
     constructor(gl: WebGL2RenderingContext, scene: Scene, material: MaterialEntry) {
+        this.name = material.name;
         this.scene = scene;
         this.bmd = scene.bmd;
         this.btk = scene.btk;
@@ -183,25 +184,14 @@ export class Command_Material {
         this.program = new GX_Material.GX_Program(material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
-        this.textures = this.translateTextures();
-
         this.materialParamsBuffer = gl.createBuffer();
-    }
-
-    private translateTextures(): WebGLTexture[] {
-        const textures = [];
-        for (let i = 0; i < this.material.textureIndexes.length; i++) {
-            const texIndex = this.material.textureIndexes[i];
-            if (texIndex >= 0)
-                textures[i] = this.scene.glTextures[this.scene.textureRemapTable[texIndex]];
-            else
-                textures[i] = null;
-        }
-        return textures;
     }
 
     public exec(state: RenderState) {
         this.scene.currentMaterialCommand = this;
+
+        if (!this.scene.currentMaterialCommand.visible)
+            return;
 
         const gl = state.gl;
 
@@ -277,7 +267,7 @@ export class Command_Material {
             materialParamsData[offs + i*12 +  9] = finalMatrix[7];
             materialParamsData[offs + i*12 + 10] = finalMatrix[8];
         }
-        offs += 4*3*12;
+        offs += 4*3*10;
 
         for (let i = 0; i < this.material.postTexMatrices.length; i++) {
             const postTexMtx = this.material.postTexMatrices[i];
@@ -296,25 +286,30 @@ export class Command_Material {
             materialParamsData[offs + i*12 +  9] = finalMatrix[7];
             materialParamsData[offs + i*12 + 10] = finalMatrix[8];
         }
-        offs += 4*3*12;
+        offs += 4*3*20;
+
+        // Bind textures.
+        const textureScratch = Command_Material.textureScratch;
+        for (let i = 0; i < this.material.textureIndexes.length; i++) {
+            const texIndex = this.material.textureIndexes[i];
+            if (texIndex < 0)
+                continue;
+            const remappedIndex = this.scene.textureRemapTable[texIndex];
+            const glTexture = this.scene.glTextures[remappedIndex];
+            const btiTexture = this.scene.btiTextures[remappedIndex];
+            gl.activeTexture(gl.TEXTURE0 + i);
+            gl.bindTexture(gl.TEXTURE_2D, glTexture);
+            textureScratch[i] = i;
+            materialParamsData[offs + i] = btiTexture.lodBias;
+        }
+        gl.uniform1iv(this.program.u_Texture, textureScratch);
+        offs += 8;
 
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.materialParamsBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, materialParamsData, gl.DYNAMIC_DRAW);
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_MaterialParams, this.materialParamsBuffer);
-
-        // Bind textures.
-        const textureScratch = Command_Material.textureScratch;
-        for (let i = 0; i < this.textures.length; i++) {
-            const texture = this.textures[i];
-            if (texture === null)
-                continue;
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            textureScratch[i] = i;
-        }
-        gl.uniform1iv(this.program.u_Texture, textureScratch);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -507,6 +502,8 @@ export class Scene implements Viewer.Scene {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, texture.wrapS));
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, texture.wrapT));
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
+        gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, texture.minLOD);
+        gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, texture.maxLOD);
 
         const ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         const format = texture.format;
