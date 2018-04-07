@@ -638,16 +638,12 @@ function translateCullMode(cullMode: GX.CullMode): CullMode {
     }
 }
 
-function translateBlendFactor(blendFactor: GX.BlendFactor): BlendFactor {
+function translateBlendFactorCommon(blendFactor: GX.BlendFactor): BlendFactor {
     switch (blendFactor) {
     case GX.BlendFactor.ZERO:
         return BlendFactor.ZERO;
     case GX.BlendFactor.ONE:
         return BlendFactor.ONE;
-    case GX.BlendFactor.SRCCLR:
-        return BlendFactor.SRC_COLOR;
-    case GX.BlendFactor.INVSRCCLR:
-        return BlendFactor.ONE_MINUS_SRC_COLOR;
     case GX.BlendFactor.SRCALPHA:
         return BlendFactor.SRC_ALPHA;
     case GX.BlendFactor.INVSRCALPHA:
@@ -656,6 +652,30 @@ function translateBlendFactor(blendFactor: GX.BlendFactor): BlendFactor {
         return BlendFactor.DST_ALPHA;
     case GX.BlendFactor.INVDSTALPHA:
         return BlendFactor.ONE_MINUS_DST_ALPHA;
+    default:
+        throw new Error("whoops");
+    }
+}
+
+function translateBlendSrcFactor(blendFactor: GX.BlendFactor): BlendFactor {
+    switch (blendFactor) {
+    case GX.BlendFactor.SRCCLR:
+        return BlendFactor.DST_COLOR;
+    case GX.BlendFactor.INVSRCCLR:
+        return BlendFactor.ONE_MINUS_DST_COLOR;
+    default:
+        return translateBlendFactorCommon(blendFactor);
+    }
+}
+
+function translateBlendDstFactor(blendFactor: GX.BlendFactor): BlendFactor {
+    switch (blendFactor) {
+    case GX.BlendFactor.SRCCLR:
+        return BlendFactor.SRC_COLOR;
+    case GX.BlendFactor.INVSRCCLR:
+        return BlendFactor.ONE_MINUS_SRC_COLOR;
+    default:
+        return translateBlendFactorCommon(blendFactor);
     }
 }
 
@@ -691,8 +711,8 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
         renderFlags.blendMode = RenderBlendMode.NONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
         renderFlags.blendMode = RenderBlendMode.ADD;
-        renderFlags.blendSrc = translateBlendFactor(material.ropInfo.blendMode.srcFactor);
-        renderFlags.blendDst = translateBlendFactor(material.ropInfo.blendMode.dstFactor);
+        renderFlags.blendSrc = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
+        renderFlags.blendDst = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.SUBTRACT) {
         renderFlags.blendMode = RenderBlendMode.REVERSE_SUBTRACT;
         renderFlags.blendSrc = BlendFactor.ONE;
