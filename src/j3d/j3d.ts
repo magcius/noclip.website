@@ -512,6 +512,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
 
     const cullModeTableOffs = view.getUint32(0x1C);
     const materialColorTableOffs = view.getUint32(0x20);
+    const colorChanCountTableOffs = view.getUint32(0x24);
     const colorChanTableOffs = view.getUint32(0x28);
     const texGenTableOffs = view.getUint32(0x38);
     const postTexGenTableOffs = view.getUint32(0x3C);
@@ -533,33 +534,29 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         const name = nameTable[i];
         const flags = view.getUint8(materialEntryIdx + 0x00);
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
-        const numChansIndex = view.getUint8(materialEntryIdx + 0x02);
+        const colorChanCountIndex = view.getUint8(materialEntryIdx + 0x02);
         const texGenCountIndex = view.getUint8(materialEntryIdx + 0x03);
         const tevCountIndex = view.getUint8(materialEntryIdx + 0x04);
         // unk
         const depthModeIndex = view.getUint8(materialEntryIdx + 0x06);
         // unk
 
-        const colorChannels: GX_Material.ColorChannelControl[] = [];
         const colorMatRegs: GX_Material.Color[] = [null, null];
         for (let j = 0; j < 2; j++) {
-            const colorChanIndex = view.getInt16(materialEntryIdx + 0x0C + j * 0x02);
-            if (colorChanIndex < 0)
-                continue;
-            const colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
-            const lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
-            const matColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x01);
-            const litMask = view.getUint8(colorChanOffs + 0x02);
-            const diffuseFunction = view.getUint8(colorChanOffs + 0x03);
-            const attenuationFunction = view.getUint8(colorChanOffs + 0x04);
-            const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
-
             const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
             const matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
             const matColorReg = readColor32(view, matColorOffs);
             colorMatRegs[j] = matColorReg;
-            const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, ambColorSource };
-            colorChannels.push(colorChan);
+        }
+
+        const lightChannelCount = view.getUint8(colorChanCountTableOffs + colorChanCountIndex);
+        const lightChannels: GX_Material.LightChannelControl[] = [];
+        for (let j = 0; j < lightChannelCount; j++) {
+            const colorChannelIndex = view.getInt16(materialEntryIdx + 0x0C + ((j * 2 + 0) * 0x02));
+            const colorChannel = readColorChannel(colorChanTableOffs, colorChannelIndex);
+            const alphaChannelIndex = view.getInt16(materialEntryIdx + 0x0C + ((j * 2 + 1) * 0x02));
+            const alphaChannel = readColorChannel(colorChanTableOffs, alphaChannelIndex);
+            lightChannels.push({ colorChannel, alphaChannel });
         }
 
         const texGens: GX_Material.TexGen[] = [];
@@ -713,7 +710,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         const gxMaterial: GX_Material.GXMaterial = {
             index, name,
             cullMode,
-            colorChannels,
+            lightChannels,
             texGens,
             colorRegisters,
             colorConstants,
@@ -735,6 +732,20 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
     }
 
     bmd.mat3 = { remapTable, materialEntries };
+
+    function readColorChannel(tableOffs: number, colorChanIndex: number): GX_Material.ColorChannelControl {
+        const colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
+        const lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
+        assert(view.getUint8(colorChanOffs + 0x00) < 2);
+        const matColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x01);
+        const litMask = view.getUint8(colorChanOffs + 0x02);
+        const diffuseFunction = view.getUint8(colorChanOffs + 0x03);
+        const attenuationFunction = view.getUint8(colorChanOffs + 0x04);
+        const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
+
+        const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, ambColorSource };
+        return colorChan;
+    }
 
     function readTexMatrix(tableOffs: number, j: number, texMtxIndex: number): TexMtx {
         if (tableOffs === 0)
