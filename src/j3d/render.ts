@@ -182,6 +182,7 @@ export class Command_Material {
         this.bmt = scene.bmt;
         this.material = material;
         this.program = new GX_Material.GX_Program(material.gxMaterial);
+        this.program.name = this.name;
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
         this.materialParamsBuffer = gl.createBuffer();
