@@ -91,8 +91,9 @@ class Main {
     }
 
     private onResize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        this.canvas.width = Math.ceil(window.innerWidth * devicePixelRatio);
+        this.canvas.height = Math.ceil(window.innerHeight * devicePixelRatio);
     }
 }
 
