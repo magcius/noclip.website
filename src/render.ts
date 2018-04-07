@@ -412,6 +412,38 @@ ${rest}
     public destroy(gl: WebGL2RenderingContext) {
         // TODO(jstpierre): Refcounting in the program cache?
     }
+
+    private _editShader(n: 'vert' | 'frag') {
+        const win = window.open('about:blank', undefined, `resizable, alwaysRaised, left=0, top=0, width=600, height=600`);
+        win.onload = () => {
+            const editor = win.document.createElement('textarea');
+            editor.spellcheck = false;
+            const shader: string = this[n];
+            editor.value = shader;
+            editor.style.width = '100%';
+            editor.style.height = '100%';
+            let timeout: number = 0;
+            editor.oninput = function() {
+                if (timeout > 0)
+                    clearTimeout(timeout);
+                timeout = setTimeout(tryCompile, 500);
+            };
+            const tryCompile = () => {
+                timeout = 0;
+                this[n] = editor.value;
+                this.glProg = null;
+            };
+            win.document.body.appendChild(editor);
+        };
+    }
+
+    public editv(): void {
+        this._editShader('vert');
+    }
+
+    public editf(): void {
+        this._editShader('frag');
+    }
 }
 
 class ProgramCache {
