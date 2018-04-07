@@ -426,7 +426,7 @@ ${rest}
 
     private _editShader(n: 'vert' | 'frag') {
         const win = window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`);
-        win.onload = () => {
+        const init = () => {
             const editor = new CodeEditor(win.document);
             const document = win.document;
             const title = n === 'vert' ? `${this.name} - Vertex Shader` : `${this.name} - Fragment Shader`;
@@ -434,6 +434,7 @@ ${rest}
             document.body.style.margin = '0';
             const shader: string = this[n];
             editor.setValue(shader);
+            editor.setFontSize('16px');
             let timeout: number = 0;
             editor.onvaluechanged = function() {
                 if (timeout > 0)
@@ -452,6 +453,10 @@ ${rest}
             (<any> win).editor = editor;
             win.document.body.appendChild(editor.elem);
         };
+        if (win.document.readyState === 'complete')
+            init();
+        else
+            win.onload = init;
     }
 
     public editv() {
