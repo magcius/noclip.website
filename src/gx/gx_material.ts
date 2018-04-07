@@ -428,18 +428,18 @@ export class GX_Program extends Program {
     }
 
     private generateColorOp(stage: TevStage) {
-        const a = this.generateColorIn(stage, stage.colorInA);
-        const b = this.generateColorIn(stage, stage.colorInB);
-        const c = this.generateColorIn(stage, stage.colorInC);
+        const a = `TevOverflow(${this.generateColorIn(stage, stage.colorInA)})`;
+        const b = `TevOverflow(${this.generateColorIn(stage, stage.colorInB)})`;
+        const c = `TevOverflow(${this.generateColorIn(stage, stage.colorInC)})`;
         const d = this.generateColorIn(stage, stage.colorInD);
         const value = this.generateTevOpValue(stage.colorOp, stage.colorBias, stage.colorScale, stage.colorClamp, a, b, c, d);
         return `${this.generateTevRegister(stage.colorRegId)}.rgb = ${value}`;
     }
 
     private generateAlphaOp(stage: TevStage) {
-        const a = this.generateAlphaIn(stage, stage.alphaInA);
-        const b = this.generateAlphaIn(stage, stage.alphaInB);
-        const c = this.generateAlphaIn(stage, stage.alphaInC);
+        const a = `TevOverflow(${this.generateAlphaIn(stage, stage.alphaInA)})`;
+        const b = `TevOverflow(${this.generateAlphaIn(stage, stage.alphaInB)})`;
+        const c = `TevOverflow(${this.generateAlphaIn(stage, stage.alphaInC)})`;
         const d = this.generateAlphaIn(stage, stage.alphaInD);
         const value = this.generateTevOpValue(stage.alphaOp, stage.alphaBias, stage.alphaScale, stage.alphaClamp, a, b, c, d);
         return `${this.generateTevRegister(stage.alphaRegId)}.a = ${value}`;
@@ -602,6 +602,8 @@ vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
 vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
 float TevSaturate(float a) { return clamp(a, 0.0, 1.0); }
+vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
+float TevOverflow(float a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
 vec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }
 float TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }
 
@@ -617,6 +619,9 @@ void main() {
     vec4 t_ColorPrev = u_KonstColor[7]; // ${this.generateColorConstant(rColors[3])}
 ${this.generateTevStages(tevStages)}
 ${this.generateAlphaTest(alphaTest)}
+    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);
+    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);
+
     gl_FragColor = t_ColorPrev;
 }
 `;
