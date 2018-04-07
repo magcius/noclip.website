@@ -427,7 +427,7 @@ ${rest}
     private _editShader(n: 'vert' | 'frag') {
         const win = window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`);
         win.onload = () => {
-            const editor = new Editor(win.document);
+            const editor = new CodeEditor(win.document);
             const document = win.document;
             const title = n === 'vert' ? `${this.name} - Vertex Shader` : `${this.name} - Fragment Shader`;
             document.title = title;
