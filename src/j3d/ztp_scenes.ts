@@ -13,15 +13,6 @@ import * as RARC from './rarc';
 import { Scene } from './render';
 import { RenderState } from '../render';
 
-// XXX(jstpierre): Figure out WTF is up with Twilight Princess materials.
-function hackMaterials1(bmd: BMD): void {
-    for (const material of bmd.mat3.materialEntries) {
-        for (const stage of material.gxMaterial.tevStages)
-            if (stage.colorScale === GX.TevScale.SCALE_4)
-                stage.colorScale = GX.TevScale.SCALE_1;
-    }
-}
-
 function hackMaterials2(scene: Scene): void {
     for (const materialCommand of scene.materialCommands) {
         // Kill any indtex materials...
@@ -33,7 +24,6 @@ function hackMaterials2(scene: Scene): void {
 
 function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: BTI_Texture[]) {
     const bmd = BMD.parse(bmdFile.buffer);
-    hackMaterials1(bmd);
     const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     const scene = new Scene(gl, bmd, btk, bmt, extraTextures);
