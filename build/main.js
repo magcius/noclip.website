@@ -1862,7 +1862,7 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                 Program.prototype._editShader = function (n) {
                     var _this = this;
                     var win = window.open('about:blank', undefined, "location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900");
-                    win.onload = function () {
+                    var init = function () {
                         var editor = new CodeEditor_1.default(win.document);
                         var document = win.document;
                         var title = n === 'vert' ? _this.name + " - Vertex Shader" : _this.name + " - Fragment Shader";
@@ -1870,6 +1870,7 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                         document.body.style.margin = '0';
                         var shader = _this[n];
                         editor.setValue(shader);
+                        editor.setFontSize('16px');
                         var timeout = 0;
                         editor.onvaluechanged = function () {
                             if (timeout > 0)
@@ -1888,6 +1889,10 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                         win.editor = editor;
                         win.document.body.appendChild(editor.elem);
                     };
+                    if (win.document.readyState === 'complete')
+                        init();
+                    else
+                        win.onload = init;
                 };
                 Program.prototype.editv = function () {
                     this._editShader('vert');
