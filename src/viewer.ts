@@ -359,6 +359,7 @@ export class Viewer {
         gl.bindTexture(gl.TEXTURE_2D, this.onscreenRenderTarget.resolvedColorTexture);
         gl.disable(gl.DEPTH_TEST);
         gl.disable(gl.CULL_FACE);
+        gl.disable(gl.BLEND);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
 
         const frameEndTime = window.performance.now();
