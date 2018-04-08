@@ -143,7 +143,7 @@ class NumberDragger {
         this._segments = [];
         for (let exp = 2; exp >= -2; exp--) {
             const incr = Math.pow(10, exp);
-            const segment: NumberDraggerSeg = (<any> this._document.createElement('div'));
+            const segment: NumberDraggerSeg = (<NumberDraggerSeg> this._document.createElement('div'));
             segment._incr = incr;
             segment.style.padding = '.5em 1em';
             segment.textContent = '' + incr;
