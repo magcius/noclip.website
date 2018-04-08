@@ -504,9 +504,10 @@ export class Scene implements Viewer.Scene {
 
                 switch (tex.type) {
                 case "RGBA": {
-                    const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : tex.flag === 'SNORM' ? gl.RGBA8I : gl.RGBA8;
-                    const data = new Uint8Array(pixels);
-                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+                    const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : tex.flag === 'SNORM' ? gl.RGBA8_SNORM : gl.RGBA8;
+                    const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                    const data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
+                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, type, data);
                     break;
                 }
                 case "BC1":
