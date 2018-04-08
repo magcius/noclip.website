@@ -212,11 +212,11 @@ System.register("ArrayBufferSlice", ["util"], function (exports_3, context_3) {
             };
             ArrayBufferSlice = /** @class */ (function () {
                 function ArrayBufferSlice(
-                    // The name arrayBuffer is chosen so that someone can't easily mistake an ArrayBufferSlice
-                    // for an ArrayBuffer or ArrayBufferView, which is important for native APIs like OpenGL that
-                    // will silently choke on something like this. TypeScript has no way to explicitly mark our
-                    // class as incompatible with the ArrayBuffer interface.
-                    arrayBuffer, byteOffset, byteLength) {
+                // The name arrayBuffer is chosen so that someone can't easily mistake an ArrayBufferSlice
+                // for an ArrayBuffer or ArrayBufferView, which is important for native APIs like OpenGL that
+                // will silently choke on something like this. TypeScript has no way to explicitly mark our
+                // class as incompatible with the ArrayBuffer interface.
+                arrayBuffer, byteOffset, byteLength) {
                     if (byteOffset === void 0) { byteOffset = 0; }
                     if (byteLength === void 0) { byteLength = arrayBuffer.byteLength; }
                     this.arrayBuffer = arrayBuffer;
@@ -2454,7 +2454,7 @@ System.register("gx/gx_enum", [], function (exports_10, context_10) {
     };
 });
 // GX display list parsing.
-System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_11, context_11) {
+System.register("gx/gx_displaylist", ["util"], function (exports_11, context_11) {
     "use strict";
     var __moduleName = context_11 && context_11.id;
     function getComponentSize(dataType) {
@@ -2643,14 +2643,11 @@ System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_1
         var e_14, _a, e_15, _b;
     }
     exports_11("coalesceLoadedDatas", coalesceLoadedDatas);
-    var util_4, GX, VtxLoaderCache, cache, compileVtxLoader;
+    var util_4, VtxLoaderCache, cache, compileVtxLoader;
     return {
         setters: [
             function (util_4_1) {
                 util_4 = util_4_1;
-            },
-            function (GX_1) {
-                GX = GX_1;
             }
         ],
         execute: function () {
@@ -2676,7 +2673,7 @@ System.register("gx/gx_displaylist", ["util", "gx/gx_enum"], function (exports_1
     };
 });
 // GX materials.
-System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (exports_12, context_12) {
+System.register("gx/gx_material", ["render", "util"], function (exports_12, context_12) {
     "use strict";
     var __moduleName = context_12 && context_12.id;
     function getVertexAttribLocation(vtxAttrib) {
@@ -2795,12 +2792,9 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
         return textureLODBias;
     }
     exports_12("getTextureLODBias", getTextureLODBias);
-    var GX, render_2, util_5, Color, vtxAttributeGenDefs, scaledVtxAttributes, GX_Program;
+    var render_2, util_5, Color, vtxAttributeGenDefs, scaledVtxAttributes, GX_Program;
     return {
         setters: [
-            function (GX_2) {
-                GX = GX_2;
-            },
             function (render_2_1) {
                 render_2 = render_2_1;
             },
@@ -3201,7 +3195,7 @@ System.register("gx/gx_material", ["gx/gx_enum", "render", "util"], function (ex
     };
 });
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
-System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "gx/gx_displaylist", "gx/gx_enum", "gx/gx_material"], function (exports_13, context_13) {
+System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "gx/gx_displaylist", "gx/gx_material"], function (exports_13, context_13) {
     "use strict";
     var __moduleName = context_13 && context_13.id;
     function readStringTable(buffer, offs) {
@@ -3947,7 +3941,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         // return this.lerp(k0, k1, t);
         return hermiteInterpolate(k0, k1, t);
     }
-    var gl_matrix_3, ArrayBufferSlice_5, endian_1, util_6, gx_displaylist_1, GX, GX_Material, HierarchyType, t, c, ci, BMD, BTK, BMT, BTI;
+    var gl_matrix_3, ArrayBufferSlice_5, endian_1, util_6, gx_displaylist_1, GX_Material, HierarchyType, t, c, ci, BMD, BTK, BMT, BTI;
     return {
         setters: [
             function (gl_matrix_3_1) {
@@ -3964,9 +3958,6 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             },
             function (gx_displaylist_1_1) {
                 gx_displaylist_1 = gx_displaylist_1_1;
-            },
-            function (GX_3) {
-                GX = GX_3;
             },
             function (GX_Material_1) {
                 GX_Material = GX_Material_1;
@@ -4248,7 +4239,7 @@ System.register("j3d/rarc", ["util"], function (exports_14, context_14) {
     };
 });
 // GX texture decoding
-System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_15, context_15) {
+System.register("gx/gx_texture", [], function (exports_15, context_15) {
     "use strict";
     var __moduleName = context_15 && context_15.id;
     function expand3to8(n) {
@@ -4588,18 +4579,13 @@ System.register("gx/gx_texture", ["gx/gx_enum"], function (exports_15, context_1
         }
     }
     exports_15("decodeTexture", decodeTexture);
-    var GX;
     return {
-        setters: [
-            function (GX_4) {
-                GX = GX_4;
-            }
-        ],
+        setters: [],
         execute: function () {
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_material", "gx/gx_texture", "render"], function (exports_16, context_16) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "render"], function (exports_16, context_16) {
     "use strict";
     var __moduleName = context_16 && context_16.id;
     function translateCompType(gl, compType) {
@@ -4614,13 +4600,13 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
                 return { type: gl.UNSIGNED_SHORT, normalized: false };
             case 0 /* U8 */:
                 return { type: gl.UNSIGNED_BYTE, normalized: false };
-            case 5 /* RGBA8 */:// XXX: Is this right?
+            case 5 /* RGBA8 */: // XXX: Is this right?
                 return { type: gl.UNSIGNED_BYTE, normalized: true };
             default:
                 throw new Error("Unknown CompType " + compType);
         }
     }
-    var gl_matrix_4, j3d_1, GX, GX_Material, GX_Texture, render_3, packetParamsData, modelViewScratch, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, Scene;
+    var gl_matrix_4, j3d_1, GX_Material, GX_Texture, render_3, packetParamsData, modelViewScratch, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, Scene;
     return {
         setters: [
             function (gl_matrix_4_1) {
@@ -4628,9 +4614,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_enum", "gx/gx_mate
             },
             function (j3d_1_1) {
                 j3d_1 = j3d_1_1;
-            },
-            function (GX_5) {
-                GX = GX_5;
             },
             function (GX_Material_2) {
                 GX_Material = GX_Material_2;
@@ -7008,13 +6991,13 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 };
                 BMDRenderer.prototype.translateCullMode = function (renderWhichFaces) {
                     switch (renderWhichFaces) {
-                        case 0x00:// Render Nothing
+                        case 0x00: // Render Nothing
                             return render_8.CullMode.FRONT_AND_BACK;
-                        case 0x01:// Render Back
+                        case 0x01: // Render Back
                             return render_8.CullMode.FRONT;
-                        case 0x02:// Render Front
+                        case 0x02: // Render Front
                             return render_8.CullMode.BACK;
-                        case 0x03:// Render Front and Back
+                        case 0x03: // Render Front and Back
                             return render_8.CullMode.NONE;
                         default:
                             throw new Error("Unknown renderWhichFaces");
@@ -12827,7 +12810,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_52, context_52)
     };
 });
 // Implements Retro's TXTR (texture) format as seen in Metroid Prime 1.
-System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function (exports_53, context_53) {
+System.register("metroid_prime/txtr", ["gx/gx_texture"], function (exports_53, context_53) {
     "use strict";
     var __moduleName = context_53 && context_53.id;
     function parse(resourceSystem, buffer) {
@@ -12857,12 +12840,9 @@ System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function 
         return { format: format, width: width, height: height, mipCount: mipCount, data: data, paletteFormat: paletteFormat, paletteData: paletteData };
     }
     exports_53("parse", parse);
-    var GX, GX_Texture, txtrFormatRemap;
+    var GX_Texture, txtrFormatRemap;
     return {
         setters: [
-            function (GX_6) {
-                GX = GX_6;
-            },
             function (GX_Texture_2) {
                 GX_Texture = GX_Texture_2;
             }
@@ -12885,7 +12865,7 @@ System.register("metroid_prime/txtr", ["gx/gx_enum", "gx/gx_texture"], function 
     };
 });
 // Implements Retro's MREA format as seen in Metroid Prime 1.
-System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "endian"], function (exports_54, context_54) {
+System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], function (exports_54, context_54) {
     "use strict";
     var __moduleName = context_54 && context_54.id;
     function parseMaterialSet(resourceSystem, buffer, offs) {
@@ -13405,14 +13385,11 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "gx/gx_enum", "util", "
         var _a;
     }
     exports_54("parse", parse);
-    var GX_Material, GX, util_30, endian_3, vtxAttrFormats;
+    var GX_Material, util_30, endian_3, vtxAttrFormats;
     return {
         setters: [
             function (GX_Material_4) {
                 GX_Material = GX_Material_4;
-            },
-            function (GX_7) {
-                GX = GX_7;
             },
             function (util_30_1) {
                 util_30 = util_30_1;
@@ -14776,7 +14753,7 @@ System.register("embeds/main", ["viewer"], function (exports_61, context_61) {
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0"], function (exports_62, context_62) {
+System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0"], function (exports_62, context_62) {
     "use strict";
     var __moduleName = context_62 && context_62.id;
     function createScene(gl, name) {
@@ -14793,7 +14770,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
         });
     }
     exports_62("createScene", createScene);
-    var gl_matrix_12, util_36, GX, GX_Material, j3d_5, RARC, render_23, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
+    var gl_matrix_12, util_36, GX_Material, j3d_5, RARC, render_23, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
     return {
         setters: [
             function (gl_matrix_12_1) {
@@ -14801,9 +14778,6 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_enum", "gx
             },
             function (util_36_1) {
                 util_36 = util_36_1;
-            },
-            function (GX_8) {
-                GX = GX_8;
             },
             function (GX_Material_6) {
                 GX_Material = GX_Material_6;

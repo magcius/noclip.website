@@ -6,6 +6,8 @@
         "noImplicitReturns": true,
         "noImplicitThis": true,
         "noImplicitAny": true,
+        "strictFunctionTypes": true,
+        "strictPropertyInitialization": true,
         "lib": [
             "es2015",
             "es2015.promise",
