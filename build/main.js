@@ -11178,23 +11178,20 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
         var pixels = dst.buffer;
         return __assign({}, surface, { pixels: pixels });
     }
-    // Software decompresses from standard BC4/BC5 to R/RG.
+    // Software decompresses from standard BC4/BC5 to RGBA.
     function decompressBC45Surface(surface, inType, flag) {
-        var bytesPerPixel;
+        var bytesPerPixel = 4;
         var width = surface.width;
         var height = surface.height;
-        switch (inType) {
-            case 'BC4':
-                bytesPerPixel = 1;
-                break;
-            case 'BC5':
-                bytesPerPixel = 2;
-                break;
-        }
         var signed = flag === 'SNORM';
         var view = new DataView(surface.pixels);
         var dst;
         var colorTable;
+        var srcBytesPerPixel;
+        if (inType === 'BC4')
+            srcBytesPerPixel = 1;
+        else
+            srcBytesPerPixel = 2;
         if (signed) {
             dst = new Int8Array(width * height * bytesPerPixel);
             colorTable = new Int8Array(8);
@@ -11206,7 +11203,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
         var srcOffs = 0;
         for (var yy = 0; yy < height; yy += 4) {
             for (var xx = 0; xx < width; xx += 4) {
-                for (var ch = 0; ch < bytesPerPixel; ch++) {
+                for (var ch = 0; ch < srcBytesPerPixel; ch++) {
                     var red0 = void 0;
                     var red1 = void 0;
                     if (signed) {
@@ -11245,7 +11242,15 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
                             var colorBits = fullShift < 24 ? colorBits0 : colorBits1;
                             var shift = fullShift % 24;
                             var index = (colorBits >>> shift) & 0x07;
-                            dst[dstOffs] = colorTable[index];
+                            if (ch === 0) {
+                                dst[dstOffs + 0] = colorTable[index];
+                                dst[dstOffs + 1] = colorTable[index];
+                                dst[dstOffs + 2] = colorTable[index];
+                                dst[dstOffs + 3] = colorTable[index];
+                            }
+                            else {
+                                dst[dstOffs + 3] = colorTable[index];
+                            }
                         }
                     }
                     srcOffs += 0x08;
@@ -11273,22 +11278,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
         var surfaces = texture.surfaces.map(function (surface, i) {
             return decompressBCSurface(texture.type, texture.flag, surface);
         });
-        switch (texture.type) {
-            case 'BC1':
-            case 'BC3': {
-                // XXX(jstpierre): TypeScript has a hard time figuring this out even though it should know...
-                var flag = texture.flag;
-                return { type: 'RGBA', bytesPerPixel: 4, flag: flag, width: texture.width, height: texture.height, surfaces: surfaces };
-            }
-            case 'BC4': {
-                var flag = texture.flag;
-                return { type: 'R', bytesPerPixel: 1, flag: flag, width: texture.width, height: texture.height, surfaces: surfaces };
-            }
-            case 'BC5': {
-                var flag = texture.flag;
-                return { type: 'RG', bytesPerPixel: 2, flag: flag, width: texture.width, height: texture.height, surfaces: surfaces };
-            }
-        }
+        return { type: 'RGBA', bytesPerPixel: 4, flag: texture.flag, width: texture.width, height: texture.height, surfaces: surfaces };
     }
     exports_44("decompressBC", decompressBC);
     function decodeSurface(surface, texData, mipLevel) {
@@ -11350,50 +11340,24 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
         var height = surface.height;
         var imageData = new ImageData(width, height);
         switch (texture.type) {
-            case 'R':
-                if (texture.flag === 'UNORM') {
-                    var src_1 = new Uint8Array(surface.pixels);
-                    for (var i = 0; i < surface.width * surface.height; i++) {
-                        imageData.data[i * 4 + 0] = src_1[i];
-                        imageData.data[i * 4 + 1] = src_1[i];
-                        imageData.data[i * 4 + 2] = src_1[i];
-                        imageData.data[i * 4 + 3] = 0xFF;
-                    }
-                }
-                else {
-                    var src_2 = new Int8Array(surface.pixels);
-                    for (var i = 0; i < surface.width * surface.height; i++) {
-                        imageData.data[i * 4 + 0] = src_2[i] + 128;
-                        imageData.data[i * 4 + 1] = src_2[i] + 128;
-                        imageData.data[i * 4 + 2] = src_2[i] + 128;
-                        imageData.data[i * 4 + 3] = 0xFF;
-                    }
-                }
-                break;
-            case 'RG': {
-                if (texture.flag === 'UNORM') {
-                    var src_3 = new Uint8Array(surface.pixels);
-                    for (var i = 0; i < surface.width * surface.height; i++) {
-                        imageData.data[i * 4 + 0] = src_3[i * 2 + 0];
-                        imageData.data[i * 4 + 1] = src_3[i * 2 + 1];
-                        imageData.data[i * 4 + 2] = 0xFF;
-                        imageData.data[i * 4 + 3] = 0xFF;
-                    }
-                }
-                else {
-                    var src_4 = new Int8Array(surface.pixels);
-                    for (var i = 0; i < surface.width * surface.height; i++) {
-                        imageData.data[i * 4 + 0] = src_4[i * 2 + 0] + 128;
-                        imageData.data[i * 4 + 1] = src_4[i * 2 + 1] + 128;
-                        imageData.data[i * 4 + 2] = 0xFF;
-                        imageData.data[i * 4 + 3] = 0xFF;
-                    }
-                }
-                break;
-            }
             case 'RGBA':
-                var src = new Uint8Array(surface.pixels);
-                imageData.data.set(src);
+                if (texture.flag === 'UNORM') {
+                    var src = new Uint8Array(surface.pixels);
+                    imageData.data.set(src);
+                }
+                else if (texture.flag === 'SRGB') {
+                    // XXX(jstpierre): SRGB
+                    var src = new Uint8Array(surface.pixels);
+                    imageData.data.set(src);
+                }
+                else if (texture.flag === 'SNORM') {
+                    var src = new Int8Array(surface.pixels);
+                    var data = new Uint8Array(surface.pixels.byteLength);
+                    for (var i = 0; i < src.length; i++) {
+                        data[i] = src[i] + 128;
+                    }
+                    imageData.data.set(data);
+                }
                 break;
         }
         ctx.putImageData(imageData, 0, 0);
@@ -11401,8 +11365,6 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
     exports_44("surfaceToCanvas", surfaceToCanvas);
     function decompressTexture(texture) {
         switch (texture.type) {
-            case 'R':
-            case 'RG':
             case 'RGBA':
                 return texture;
             case 'BC1':
@@ -12367,23 +12329,8 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             var height = decodedSurface.height;
                             util_27.assert(pixels.byteLength > 0);
                             switch (tex.type) {
-                                case "R": {
-                                    var internalFormat = tex.flag === 'SNORM' ? gl.R8_SNORM : gl.R8;
-                                    ;
-                                    var type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                                    var data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
-                                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RED, type, data);
-                                    break;
-                                }
-                                case "RG": {
-                                    var internalFormat = tex.flag === 'SNORM' ? gl.RG8_SNORM : gl.RG8;
-                                    var type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                                    var data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
-                                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RG, type, data);
-                                    break;
-                                }
                                 case "RGBA": {
-                                    var internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
+                                    var internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : tex.flag === 'SNORM' ? gl.RGBA8I : gl.RGBA8;
                                     var data = new Uint8Array(pixels);
                                     gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
                                     break;
