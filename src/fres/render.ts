@@ -61,7 +61,7 @@ void main() {
     // TODO(jstpierre): Configurable alpha test
     if (o_color.a < 0.5)
         discard;
-    o_color.rgb += texture(_e0, a_u0).rgb;
+    o_color.rgb += textureSRGB(_e0, a_u0).rgb;
     o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));
 }
 `;
@@ -134,15 +134,24 @@ export class Scene implements Viewer.Scene {
         this.textures = this.fres.textures.map((textureEntry) => {
             const tex = textureEntry.texture;
             const surface = tex.surface;
-            const canvas = document.createElement('canvas');
-            canvas.width = surface.width;
-            canvas.height = surface.height;
-            canvas.title = `${textureEntry.entry.name} ${surface.format} (${surface.width}x${surface.height})`;
-            GX2Texture.decodeSurface(tex.surface, tex.texData, tex.mipData).then((decodedTexture) => {
-                GX2Texture.textureToCanvas(canvas, decodedTexture);
+            const canvases: HTMLCanvasElement[] = [];
+            for (let i = 0; i < tex.surface.numMips; i++) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 0;
+                canvas.height = 0;
+                canvases.push(canvas);
+            }
+            GX2Texture.decodeTexture(tex.surface, tex.texData, tex.mipData).then((decodedTexture) => {
+                const decompressedTexture = GX2Texture.decompressTexture(decodedTexture);
+                decompressedTexture.surfaces.forEach((decompressedSurface, i) => {
+                    const canvas = canvases[i];
+                    canvas.width = decompressedSurface.width;
+                    canvas.height = decompressedSurface.height;
+                    canvas.title = `${textureEntry.entry.name} ${surface.format} (${surface.width}x${surface.height})`;
+                    GX2Texture.surfaceToCanvas(canvas, decompressedTexture, decompressedSurface);
+                });
             });
-            const surfaces = [ canvas ];
-            return { name: textureEntry.entry.name, surfaces };
+            return { name: textureEntry.entry.name, surfaces: canvases };
         });
     }
 
@@ -470,8 +479,9 @@ export class Scene implements Viewer.Scene {
         const surface = ftex.texture.surface;
 
         // Kick off a decode...
-        GX2Texture.decodeSurface(surface, ftex.texture.texData, ftex.texture.mipData).then((tex: GX2Texture.DecodedTexture) => {
+        GX2Texture.decodeTexture(surface, ftex.texture.texData, ftex.texture.mipData).then((tex: GX2Texture.DecodedTexture) => {
             gl.bindTexture(gl.TEXTURE_2D, glTexture);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, tex.surfaces.length - 1);
 
             // First check if we have to decompress compressed textures.
             switch (tex.type) {
@@ -485,36 +495,45 @@ export class Scene implements Viewer.Scene {
                 break;
             }
 
-            switch (tex.type) {
-            case "R": {
-                const internalFormat = tex.flag === 'SNORM' ? gl.R8_SNORM : gl.R8;
-                const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                const data = tex.flag === 'SNORM' ? new Int8Array(tex.pixels) : new Uint8Array(tex.pixels);
-                gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RED, type, data);
-                break;
-            }
-            case "RG": {
-                const internalFormat = tex.flag === 'SNORM' ? gl.RG8_SNORM : gl.RG8;
-                const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                const data = tex.flag === 'SNORM' ? new Int8Array(tex.pixels) : new Uint8Array(tex.pixels);
-                gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RG, type, data);
-                break;
-            }
-            case "BC1":
-            case "BC3":
-            case "BC4":
-            case "BC5": {
-                const compressedFormat = this.getCompressedFormat(gl, tex);
-                assert(compressedFormat !== null);
-                gl.compressedTexImage2D(gl.TEXTURE_2D, 0, compressedFormat, tex.width, tex.height, 0, new Uint8Array(tex.pixels));
-                break;
-            }
-            case "RGBA": {
-                const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
-                gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(tex.pixels));
-                break;
-            }
-            }
+            tex.surfaces.forEach((decodedSurface, i) => {
+                const level = i;
+                const pixels = decodedSurface.pixels;
+                const width = decodedSurface.width;
+                const height = decodedSurface.height;
+                assert(pixels.byteLength > 0);
+
+                switch (tex.type) {
+                case "R": {
+                    const internalFormat = tex.flag === 'SNORM' ? gl.R8_SNORM : gl.R8;;
+                    const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                    const data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
+                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RED, type, data);
+                    break;
+                }
+                case "RG": {
+                    const internalFormat = tex.flag === 'SNORM' ? gl.RG8_SNORM : gl.RG8;
+                    const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                    const data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
+                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RG, type, data);
+                    break;
+                }
+                case "RGBA": {
+                    const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
+                    const data = new Uint8Array(pixels);
+                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+                    break;
+                }
+                case "BC1":
+                case "BC3":
+                case "BC4":
+                case "BC5": {
+                    const compressedFormat = this.getCompressedFormat(gl, tex);
+                    assert(compressedFormat !== null);
+                    gl.compressedTexImage2D(gl.TEXTURE_2D, level, compressedFormat, width, height, 0, new Uint8Array(pixels));
+                    break;
+                }
+                }
+            });
         });
 
         return glTexture;

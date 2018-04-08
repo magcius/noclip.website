@@ -24,6 +24,7 @@ class MultiScene implements Viewer.MainScene {
 
     public render(state: RenderState) {
         const gl = state.gl;
+        state.setClipPlanes(0.2, 500000);
         this.scenes.forEach((scene) => scene.render(state));
     }
 

@@ -1,4 +1,8 @@
 
+export const enum GX2Dimension {
+    _2D = 1,
+}
+
 export const enum GX2SurfaceFormat {
     FLAG_SRGB   = 0x0400,
     FLAG_SNORM  = 0x0200,
