@@ -2090,7 +2090,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_8, context_
                     this.keysDown = new Map();
                     window.addEventListener('keydown', this._onKeyDown.bind(this));
                     window.addEventListener('keyup', this._onKeyUp.bind(this));
-                    window.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
+                    this.toplevel.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
                     this.resetMouse();
                     this.toplevel.addEventListener('mousedown', this._onMouseDown.bind(this));
                     this.toplevel.addEventListener('mouseup', this._onMouseUp.bind(this));
@@ -14434,7 +14434,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                                 continue;
                             var groupOption = document.createElement('option');
                             groupOption.textContent = group.name;
-                            groupOption.group = group;
+                            groupOption.sceneGroup = group;
                             this.groupSelect.appendChild(groupOption);
                         }
                     }
@@ -14452,7 +14452,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     // Make sure combobox is selected
                     for (var i = 0; i < this.groupSelect.options.length; i++) {
                         var groupOption = this.groupSelect.options[i];
-                        if (groupOption.group === group)
+                        if (groupOption.sceneGroup === group)
                             this.groupSelect.selectedIndex = i;
                     }
                     this.currentSceneGroup = group;
@@ -14509,7 +14509,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                 };
                 Main.prototype._onGroupSelectChange = function () {
                     var option = this.groupSelect.selectedOptions.item(0);
-                    var group = option.group;
+                    var group = option.sceneGroup;
                     this._loadSceneGroup(group);
                 };
                 Main.prototype._makeUI = function () {
