@@ -659,9 +659,9 @@ void main() {
     vec4 t_Color2    = u_KonstColor[6]; // ${this.generateColorConstant(rColors[2])}
     vec4 t_ColorPrev = u_KonstColor[7]; // ${this.generateColorConstant(rColors[3])}
 ${this.generateTevStages(tevStages)}
-${this.generateAlphaTest(alphaTest)}
     t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);
     t_ColorPrev.a = TevOverflow(t_ColorPrev.a);
+${this.generateAlphaTest(alphaTest)}
 
     gl_FragColor = t_ColorPrev;
 }
