@@ -6,7 +6,6 @@ const MONOSPACE = '"Source Code Pro", "Droid Sans Mono", monospace';
 declare global {
     interface HTMLTextAreaElement {
         selectionDirection: 'forward' | 'backward' | 'none';
-        setSelectionRange(start: number, end: number, selectionDirection?: 'forward' | 'backward' | 'none'): void;
     }
 }
 
