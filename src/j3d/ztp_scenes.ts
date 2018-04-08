@@ -8,7 +8,7 @@ import * as Yaz0 from '../yaz0';
 
 import * as GX from '../gx/gx_enum';
 
-import { BMD, BMT, BTK, BTI_Texture, BTI } from './j3d';
+import { BMD, BMT, BTK, BTI_Texture, BTI, TEX1_TextureData } from './j3d';
 import * as RARC from './rarc';
 import { Scene } from './render';
 import { RenderState } from '../render';
@@ -17,12 +17,12 @@ function hackMaterials2(scene: Scene): void {
     for (const materialCommand of scene.materialCommands) {
         // Kill any indtex materials...
         for (const texIndex of materialCommand.material.textureIndexes)
-            if (texIndex >= 0 && scene.btiTextures[scene.textureRemapTable[texIndex]].name === 'fbtex_dummy')
+            if (texIndex >= 0 && scene.tex1Samplers[texIndex].name === 'fbtex_dummy')
                 materialCommand.visible = false;
     }
 }
 
-function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: BTI_Texture[]) {
+function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: TEX1_TextureData[]) {
     const bmd = BMD.parse(bmdFile.buffer);
     const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
@@ -31,7 +31,7 @@ function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile
     return scene;
 }
 
-function createScenesFromRARC(gl: WebGL2RenderingContext, rarcName: string, rarc: RARC.RARC, extraTextures: BTI_Texture[]): Scene[] {
+function createScenesFromRARC(gl: WebGL2RenderingContext, rarcName: string, rarc: RARC.RARC, extraTextures: TEX1_TextureData[]): Scene[] {
     const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
     const scenes = bmdFiles.map((bmdFile) => {
         const basename = bmdFile.name.split('.')[0];

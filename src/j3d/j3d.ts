@@ -840,9 +840,38 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
     return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data };
 }
 
+// The way this works is a bit complicated. Basically, textures can have different
+// LOD or wrap modes but share the same literal texture data. As such, we do a bit
+// of remapping here. TEX1_TextureData contains the texture data parameters, and
+// TEX1_Sampler contains the "sampling" parameters like LOD or wrap mode, along with
+// its associated texture data. Each texture in the TEX1 chunk is turned into a
+// TEX1_Surface.
+
+export interface TEX1_TextureData {
+    // XXX(jstpierre): Required for the ZTP BTI hack
+    name: string;
+    width: number;
+    height: number;
+    format: GX.TexFormat;
+    mipCount: number;
+    data: ArrayBufferSlice;
+}
+
+export interface TEX1_Sampler {
+    name: string;
+    wrapS: GX.WrapMode;
+    wrapT: GX.WrapMode;
+    minFilter: GX.TexFilter;
+    magFilter: GX.TexFilter;
+    minLOD: number;
+    maxLOD: number;
+    lodBias: number;
+    textureDataIndex: number;
+}
+
 export interface TEX1 {
-    remapTable: number[];
-    textures: BTI_Texture[];
+    textureDatas: TEX1_TextureData[];
+    samplers: TEX1_Sampler[];
 }
 
 function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
@@ -852,34 +881,49 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
     const nameTableOffs = view.getUint32(0x10);
     const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
 
-    // XXX(jstpierre): For some reason textures aren't deduplicated in a remap table?
-    // It's very wasteful, so dedupe ourselves based on dataStart.
-    const remapTable = [];
-
-    const textures: BTI_Texture[] = [];
+    const samplers: TEX1_Sampler[] = [];
+    const textureDatas: TEX1_TextureData[] = [];
     for (let i = 0; i < textureCount; i++) {
         const textureIdx = textureHeaderOffs + i * 0x20;
         const name = nameTable[i];
         const btiTexture: BTI_Texture = readBTI_Texture(buffer.slice(chunkStart + textureIdx), name);
 
-        // TODO(jstpierre): Dedupe can only happen if all the parameters are the same.
-        // There are quite a lot of textures with different LOD biases, etc.
-        // We should move these parameters to samplers.
-        /*
-        if (btiTexture.data !== null) {
-            const existingIndex = textures.findIndex((tex) => tex.data && tex.data.byteOffset === btiTexture.data.byteOffset);
-            if (existingIndex >= 0) {
-                remapTable.push(existingIndex);
-                continue;
-            }
-        }
-        */
+        let textureDataIndex: number = -1;
 
-        textures.push(btiTexture);
-        remapTable.push(textures.length - 1);
+        // Try to find existing.
+        if (btiTexture.data !== null) {
+            textureDataIndex = textureDatas.findIndex((tex) => tex.data && tex.data.byteOffset === btiTexture.data.byteOffset);
+        }
+
+        if (textureDataIndex < 0) {
+            const textureData: TEX1_TextureData = {
+                name: btiTexture.name,
+                width: btiTexture.width,
+                height: btiTexture.height,
+                format: btiTexture.format,
+                mipCount: btiTexture.mipCount,
+                data: btiTexture.data,
+            };
+            textureDatas.push(textureData);
+            textureDataIndex = textureDatas.length - 1;
+        }
+
+        // Sampler.
+        const sampler: TEX1_Sampler = {
+            name: btiTexture.name,
+            wrapS: btiTexture.wrapS,
+            wrapT: btiTexture.wrapT,
+            minFilter: btiTexture.minFilter,
+            magFilter: btiTexture.magFilter,
+            minLOD: btiTexture.minLOD,
+            maxLOD: btiTexture.maxLOD,
+            lodBias: btiTexture.lodBias,
+            textureDataIndex,
+        };
+        samplers.push(sampler);
     }
 
-    bmd.tex1 = { remapTable, textures };
+    bmd.tex1 = { textureDatas, samplers };
 }
 
 export class BMD {

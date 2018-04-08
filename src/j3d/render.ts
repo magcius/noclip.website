@@ -1,7 +1,7 @@
 
 import { mat3, mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData } from './j3d';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
@@ -300,13 +300,14 @@ export class Command_Material {
             const texIndex = this.material.textureIndexes[i];
             if (texIndex < 0)
                 continue;
-            const remappedIndex = this.scene.textureRemapTable[texIndex];
-            const glTexture = this.scene.glTextures[remappedIndex];
-            const btiTexture = this.scene.btiTextures[remappedIndex];
+            const sampler = this.scene.tex1Samplers[texIndex];
+            const glSampler = this.scene.glSamplers[texIndex];
+            const glTexture = this.scene.glTextures[sampler.textureDataIndex];
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, glTexture);
+            gl.bindSampler(i, glSampler);
             textureScratch[i] = i;
-            materialParamsData[offs + i] = btiTexture.lodBias;
+            materialParamsData[offs + i] = sampler.lodBias;
         }
         gl.uniform1iv(this.program.u_Texture, textureScratch);
         offs += 8;
@@ -355,11 +356,12 @@ export class Scene implements Viewer.Scene {
     public sceneParamsBuffer: WebGLBuffer;
 
     // Internals used by Command_Material.
-    public textureRemapTable: number[];
+    public tex1Samplers: TEX1_Sampler[];
+    public glSamplers: WebGLSampler[];
     public glTextures: WebGLTexture[];
+
     public currentMaterialCommand: Command_Material;
 
-    public btiTextures: BTI_Texture[];
     public materialCommands: Command_Material[];
     private shapeCommands: Command_Shape[];
     private jointMatrices: mat4[];
@@ -374,7 +376,7 @@ export class Scene implements Viewer.Scene {
         public bmd: BMD,
         public btk: BTK,
         public bmt: BMT,
-        public extraTextures: BTI_Texture[] = [],
+        public extraTextures: TEX1_TextureData[] = [],
     ) {
         this.translateModel(gl);
 
@@ -386,6 +388,7 @@ export class Scene implements Viewer.Scene {
         this.bufferCoalescer.destroy(gl);
         this.materialCommands.forEach((command) => command.destroy(gl));
         this.shapeCommands.forEach((command) => command.destroy(gl));
+        this.glSamplers.forEach((sampler) => gl.deleteSampler(sampler));
         this.glTextures.forEach((texture) => gl.deleteTexture(texture));
         gl.deleteBuffer(this.sceneParamsBuffer);
     }
@@ -460,7 +463,7 @@ export class Scene implements Viewer.Scene {
         });
     }
 
-    private loadExtraTexture(texture: BTI_Texture): BTI_Texture {
+    private loadExtraTexture(texture: TEX1_TextureData): TEX1_TextureData {
         // XXX(jstpierre): Better texture replacement API, this one is ZTP specific...
         const textureName = texture.name.toLowerCase().replace('.tga', '');
         for (const extraTexture of this.extraTextures) {
@@ -498,18 +501,23 @@ export class Scene implements Viewer.Scene {
         }
     }
 
-    public static translateTexture(gl: WebGL2RenderingContext, texture: BTI_Texture): WebGLTexture {
+    public static translateSampler(gl: WebGL2RenderingContext, sampler: TEX1_Sampler): WebGLSampler {
+        const glSampler = gl.createSampler();
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, this.translateTexFilter(gl, sampler.minFilter));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, this.translateTexFilter(gl, sampler.magFilter));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, sampler.wrapS));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, sampler.wrapT));
+        gl.samplerParameterf(glSampler, gl.TEXTURE_MIN_LOD, sampler.minLOD);
+        gl.samplerParameterf(glSampler, gl.TEXTURE_MAX_LOD, sampler.maxLOD);
+        return glSampler;
+    }
+
+    public static translateTexture(gl: WebGL2RenderingContext, texture: TEX1_TextureData): WebGLTexture {
         const texId = gl.createTexture();
         (<any> texId).name = texture.name;
         gl.bindTexture(gl.TEXTURE_2D, texId);
 
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, this.translateTexFilter(gl, texture.minFilter));
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, this.translateTexFilter(gl, texture.magFilter));
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, texture.wrapS));
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, texture.wrapT));
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
-        gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, texture.minLOD);
-        gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, texture.maxLOD);
 
         const ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         const format = texture.format;
@@ -536,7 +544,7 @@ export class Scene implements Viewer.Scene {
         return texId;
     }
 
-    private static translateTextureToViewer(texture: BTI_Texture): Viewer.Texture {
+    private static translateTextureToViewer(texture: TEX1_TextureData): Viewer.Texture {
         const surfaces = [];
 
         let width = texture.width, height = texture.height, offs = 0;
@@ -570,23 +578,25 @@ export class Scene implements Viewer.Scene {
     }
 
     public translateTextures(gl: WebGL2RenderingContext) {
-        this.glTextures = [];
-        this.btiTextures = [];
-        this.textures = [];
         const tex1 = this.bmt !== null ? this.bmt.tex1 : this.bmd.tex1;
 
-        for (let i = 0; i < tex1.textures.length; i++) {
-            let btiTexture: BTI_Texture = tex1.textures[i];
-            if (btiTexture.data === null) {
-                btiTexture = this.loadExtraTexture(btiTexture);
+        this.glTextures = [];
+        this.textures = [];
+        for (let textureData of tex1.textureDatas) {
+            if (textureData.data === null) {
+                textureData = this.loadExtraTexture(textureData);
             }
 
-            this.btiTextures.push(btiTexture);
-            this.glTextures.push(Scene.translateTexture(gl, btiTexture));
-            this.textures.push(Scene.translateTextureToViewer(btiTexture));
+            this.glTextures.push(Scene.translateTexture(gl, textureData));
+            this.textures.push(Scene.translateTextureToViewer(textureData));
         }
 
-        this.textureRemapTable = tex1.remapTable;
+        this.glSamplers = [];
+        for (let sampler of tex1.samplers) {
+            this.glSamplers.push(Scene.translateSampler(gl, sampler));
+        }
+
+        this.tex1Samplers = tex1.samplers;
     }
 
     private translateModel(gl: WebGL2RenderingContext) {

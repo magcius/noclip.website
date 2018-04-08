@@ -357,6 +357,7 @@ export class Viewer {
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.onscreenRenderTarget.resolvedColorTexture);
+        gl.bindSampler(0, null);
         gl.disable(gl.DEPTH_TEST);
         gl.disable(gl.CULL_FACE);
         gl.disable(gl.BLEND);
