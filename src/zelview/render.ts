@@ -77,16 +77,14 @@ uniform sampler2D u_texture;
 uniform bool u_useVertexColors;
 uniform int u_alphaTest;
 
-#define TEX_OFFSET(off, tex, texCoord, texSize) texture(tex, texCoord - (off)/texSize)
 vec4 n64Texture2D(sampler2D tex, vec2 texCoord) {
     vec2 texSize = vec2(textureSize(tex, 0));
-    vec2 offset = fract(texCoord*texSize - vec2(0.5));
+    vec2 offset = fract(texCoord * texSize - 0.5);
     offset -= step(1.0, offset.x + offset.y);
-    vec4 zero = vec4(0.0);
-    vec4 c0 = TEX_OFFSET(offset, tex, texCoord, texSize);
-    vec4 c1 = TEX_OFFSET(vec2(offset.x - sign(offset.x), offset.y), tex, texCoord, texSize);
-    vec4 c2 = TEX_OFFSET(vec2(offset.x, offset.y - sign(offset.y)), tex, texCoord, texSize);
-    return c0 + abs(offset.x)*(c1-c0) + abs(offset.y)*(c2-c0);		
+    vec4 c0 = texture2D(tex, texCoord - offset / texSize, 0.0);
+    vec4 c1 = texture2D(tex, texCoord - vec2(offset.x - sign(offset.x), offset.y) / texSize, 0.0);
+    vec4 c2 = texture2D(tex, texCoord - vec2(offset.x, offset.y - sign(offset.y)) / texSize, 0.0);
+    return c0 + abs(offset.x) * (c1 - c0) + abs(offset.y) * (c2 - c0);		
 }
 
 void main() {
@@ -188,7 +186,7 @@ class Scene implements Viewer.MainScene {
         const renderWaterBoxes = this.translateWaterBoxes(gl, mainScene);
         this.render = (state: RenderState) => {
             renderScene(state);
-            renderCollision(state);
+            //renderCollision(state);
             renderWaterBoxes(state);
         };
     }
