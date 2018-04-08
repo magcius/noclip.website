@@ -12330,9 +12330,10 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             util_27.assert(pixels.byteLength > 0);
                             switch (tex.type) {
                                 case "RGBA": {
-                                    var internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : tex.flag === 'SNORM' ? gl.RGBA8I : gl.RGBA8;
-                                    var data = new Uint8Array(pixels);
-                                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+                                    var internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : tex.flag === 'SNORM' ? gl.RGBA8_SNORM : gl.RGBA8;
+                                    var type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                                    var data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
+                                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, type, data);
                                     break;
                                 }
                                 case "BC1":
@@ -12389,10 +12390,29 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
 System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "Progressable", "util"], function (exports_48, context_48) {
     "use strict";
     var __moduleName = context_48 && context_48.id;
+    function collectTextures(scenes) {
+        var textures = [];
+        try {
+            for (var scenes_7 = __values(scenes), scenes_7_1 = scenes_7.next(); !scenes_7_1.done; scenes_7_1 = scenes_7.next()) {
+                var scene = scenes_7_1.value;
+                if (scene)
+                    textures.push.apply(textures, scene.textures);
+            }
+        }
+        catch (e_53_1) { e_53 = { error: e_53_1 }; }
+        finally {
+            try {
+                if (scenes_7_1 && !scenes_7_1.done && (_a = scenes_7.return)) _a.call(scenes_7);
+            }
+            finally { if (e_53) throw e_53.error; }
+        }
+        return textures;
+        var e_53, _a;
+    }
     function createSceneFromFRESBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
         var fres = BFRES.parse(buffer);
-        return new MultiScene([new render_18.Scene(gl, fres, isSkybox)]);
+        return new SplatoonRenderer(null, new render_18.Scene(gl, fres, isSkybox));
     }
     exports_48("createSceneFromFRESBuffer", createSceneFromFRESBuffer);
     function createSceneFromSARCBuffer(gl, buffer, isSkybox) {
@@ -12404,7 +12424,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
         return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
     }
     exports_48("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
-    var BFRES, SARC, Yaz0, render_18, Progressable_6, util_28, MultiScene, SceneDesc, name, id, sceneDescs, sceneGroup;
+    var BFRES, SARC, Yaz0, render_18, Progressable_6, util_28, SplatoonRenderer, SplatoonSceneDesc, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
             function (BFRES_1) {
@@ -12427,87 +12447,77 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
             }
         ],
         execute: function () {
-            MultiScene = /** @class */ (function () {
-                function MultiScene(scenes) {
-                    this.scenes = scenes;
-                    this.textures = [];
-                    try {
-                        for (var _a = __values(this.scenes), _b = _a.next(); !_b.done; _b = _a.next()) {
-                            var scene = _b.value;
-                            this.textures = this.textures.concat(scene.textures);
-                        }
-                    }
-                    catch (e_53_1) { e_53 = { error: e_53_1 }; }
-                    finally {
-                        try {
-                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                        }
-                        finally { if (e_53) throw e_53.error; }
-                    }
-                    var e_53, _c;
+            SplatoonRenderer = /** @class */ (function () {
+                function SplatoonRenderer(mainScene, skyScene) {
+                    this.mainScene = mainScene;
+                    this.skyScene = skyScene;
+                    this.textures = collectTextures([this.mainScene, this.skyScene]);
                 }
-                MultiScene.prototype.render = function (state) {
+                SplatoonRenderer.prototype.render = function (state) {
                     var gl = state.gl;
                     state.setClipPlanes(0.2, 500000);
-                    this.scenes.forEach(function (scene) { return scene.render(state); });
+                    if (this.skyScene) {
+                        this.skyScene.render(state);
+                    }
+                    gl.clear(gl.DEPTH_BUFFER_BIT);
+                    if (this.mainScene) {
+                        this.mainScene.render(state);
+                    }
                 };
-                MultiScene.prototype.destroy = function (gl) {
-                    this.scenes.forEach(function (scene) { return scene.destroy(gl); });
+                SplatoonRenderer.prototype.destroy = function (gl) {
+                    this.skyScene.destroy(gl);
+                    this.mainScene.destroy(gl);
                 };
-                return MultiScene;
+                return SplatoonRenderer;
             }());
-            SceneDesc = /** @class */ (function () {
-                function SceneDesc(name, path) {
+            SplatoonSceneDesc = /** @class */ (function () {
+                function SplatoonSceneDesc(name, path) {
                     this.name = name;
                     this.path = path;
                     this.id = this.path;
                 }
-                SceneDesc.prototype.createScene = function (gl) {
+                SplatoonSceneDesc.prototype.createScene = function (gl) {
                     return Progressable_6.default.all([
-                        this._createSceneFromPath(gl, this.path, false),
+                        this._createSceneFromPath(gl, "data/spl/" + this.path, false),
                         this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
                     ]).then(function (scenes) {
-                        return new MultiScene(scenes);
+                        var _a = __read(scenes, 2), mainScene = _a[0], skyScene = _a[1];
+                        return new SplatoonRenderer(mainScene, skyScene);
                     });
                 };
-                SceneDesc.prototype._createSceneFromPath = function (gl, path, isSkybox) {
+                SplatoonSceneDesc.prototype._createSceneFromPath = function (gl, path, isSkybox) {
                     return util_28.fetch(path).then(function (result) {
                         return createSceneFromSARCBuffer(gl, result, isSkybox);
                     });
                 };
-                return SceneDesc;
+                return SplatoonSceneDesc;
             }());
-            exports_48("SceneDesc", SceneDesc);
             // Splatoon Models
             name = "Splatoon";
-            id = "fres";
+            id = "splatoon";
             sceneDescs = [
-                { name: 'Inkopolis Plaza', path: 'Fld_Plaza00.szs' },
-                { name: 'Inkopolis Plaza Lobby', path: 'Fld_PlazaLobby.szs' },
-                { name: 'Ancho-V Games', path: 'Fld_Office00.szs' },
-                { name: 'Arrowana Mall', path: 'Fld_UpDown00.szs' },
-                { name: 'Blackbelly Skatepark', path: 'Fld_SkatePark00.szs' },
-                { name: 'Bluefin Depot', path: 'Fld_Ruins00.szs' },
-                { name: 'Camp Triggerfish', path: 'Fld_Athletic00.szs' },
-                { name: 'Flounder Heights', path: 'Fld_Jyoheki00.szs' },
-                { name: 'Hammerhead Bridge', path: 'Fld_Kaisou00.szs' },
-                { name: 'Kelp Dome', path: 'Fld_Maze00.szs' },
-                { name: 'Mahi-Mahi Resort', path: 'Fld_Hiagari00.szs' },
-                { name: 'Moray Towers', path: 'Fld_Tuzura00.szs' },
-                { name: 'Museum d\'Alfonsino', path: 'Fld_Pivot00.szs' },
-                { name: 'Pirahna Pit', path: 'Fld_Quarry00.szs' },
-                { name: 'Port Mackerel', path: 'Fld_Amida00.szs' },
-                { name: 'Saltspray Rig', path: 'Fld_SeaPlant00.szs' },
-                { name: 'Urchin Underpass (New)', path: 'Fld_Crank01.szs' },
-                { name: 'Urchin Underpass (Old)', path: 'Fld_Crank00.szs' },
-                { name: 'Walleye Warehouse', path: 'Fld_Warehouse00.szs' },
-                { name: 'Octo Valley', path: 'Fld_World00.szs' },
-                { name: 'Object: Tree', path: 'Obj_Tree02.szs' },
-            ].map(function (entry) {
-                var name = entry.name || entry.path;
-                var path = "data/spl/" + entry.path;
-                return new SceneDesc(name, path);
-            });
+                new SplatoonSceneDesc('Inkopolis Plaza', 'Fld_Plaza00.szs'),
+                new SplatoonSceneDesc('Inkopolis Plaza Lobby', 'Fld_PlazaLobby.szs'),
+                new SplatoonSceneDesc('Ancho-V Games', 'Fld_Office00.szs'),
+                new SplatoonSceneDesc('Arrowana Mall', 'Fld_UpDown00.szs'),
+                new SplatoonSceneDesc('Blackbelly Skatepark', 'Fld_SkatePark00.szs'),
+                new SplatoonSceneDesc('Bluefin Depot', 'Fld_Ruins00.szs'),
+                new SplatoonSceneDesc('Camp Triggerfish', 'Fld_Athletic00.szs'),
+                new SplatoonSceneDesc('Flounder Heights', 'Fld_Jyoheki00.szs'),
+                new SplatoonSceneDesc('Hammerhead Bridge', 'Fld_Kaisou00.szs'),
+                new SplatoonSceneDesc('Kelp Dome', 'Fld_Maze00.szs'),
+                new SplatoonSceneDesc('Mahi-Mahi Resort', 'Fld_Hiagari00.szs'),
+                new SplatoonSceneDesc('Moray Towers', 'Fld_Tuzura00.szs'),
+                new SplatoonSceneDesc('Museum d\'Alfonsino', 'Fld_Pivot00.szs'),
+                new SplatoonSceneDesc('Pirahna Pit', 'Fld_Quarry00.szs'),
+                new SplatoonSceneDesc('Port Mackerel', 'Fld_Amida00.szs'),
+                new SplatoonSceneDesc('Saltspray Rig', 'Fld_SeaPlant00.szs'),
+                new SplatoonSceneDesc('Urchin Underpass (New)', 'Fld_Crank01.szs'),
+                new SplatoonSceneDesc('Urchin Underpass (Old)', 'Fld_Crank00.szs'),
+                new SplatoonSceneDesc('Walleye Warehouse', 'Fld_Warehouse00.szs'),
+                new SplatoonSceneDesc('Octo Valley', 'Fld_World00.szs'),
+                new SplatoonSceneDesc('Object: Tree', 'Obj_Tree02.szs'),
+            ];
             exports_48("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
