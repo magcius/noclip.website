@@ -4,7 +4,7 @@ import { mat3, mat4 } from 'gl-matrix';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 
-import { BlendMode, RenderFlags, RenderState } from 'render';
+import { BlendMode, RenderFlags, RenderState } from '../render';
 import { fetch } from 'util';
 import { MainScene, Scene, Texture } from 'viewer';
 
