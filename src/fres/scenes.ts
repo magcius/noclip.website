@@ -11,31 +11,43 @@ import Progressable from 'Progressable';
 import { fetch, readString } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
-class MultiScene implements Viewer.MainScene {
-    public scenes: Viewer.Scene[];
+function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
+    const textures: Viewer.Texture[] = [];
+    for (const scene of scenes)
+        if (scene)
+            textures.push.apply(textures, scene.textures);
+    return textures;
+}
+
+class SplatoonRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[];
 
-    constructor(scenes: Viewer.Scene[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
+    constructor(public mainScene: Viewer.Scene, public skyScene: Viewer.Scene) {
+        this.textures = collectTextures([this.mainScene, this.skyScene]);
     }
 
     public render(state: RenderState) {
         const gl = state.gl;
         state.setClipPlanes(0.2, 500000);
-        this.scenes.forEach((scene) => scene.render(state));
+
+        if (this.skyScene) {
+            this.skyScene.render(state);
+        }
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        if (this.mainScene) {
+            this.mainScene.render(state);
+        }
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
+        this.skyScene.destroy(gl);
+        this.mainScene.destroy(gl);
     }
 }
 
 export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false): Viewer.MainScene {
     const fres = BFRES.parse(buffer);
-    return new MultiScene([new Scene(gl, fres, isSkybox)]);
+    return new SplatoonRenderer(null, new Scene(gl, fres, isSkybox));
 }
 
 export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false): Viewer.Scene {
@@ -47,7 +59,7 @@ export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: Ar
     return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
 }
 
-export class SceneDesc implements Viewer.SceneDesc {
+class SplatoonSceneDesc implements Viewer.SceneDesc {
     public id: string;
     public name: string;
     public path: string;
@@ -60,10 +72,11 @@ export class SceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return Progressable.all([
-            this._createSceneFromPath(gl, this.path, false),
+            this._createSceneFromPath(gl, `data/spl/${this.path}`, false),
             this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
         ]).then((scenes: Viewer.Scene[]): Viewer.MainScene => {
-            return new MultiScene(scenes);
+            const [mainScene, skyScene] = scenes;
+            return new SplatoonRenderer(mainScene, skyScene);
         });
     }
 
@@ -76,33 +89,29 @@ export class SceneDesc implements Viewer.SceneDesc {
 
 // Splatoon Models
 const name = "Splatoon";
-const id = "fres";
-const sceneDescs: SceneDesc[] = [
-    { name: 'Inkopolis Plaza', path: 'Fld_Plaza00.szs' },
-    { name: 'Inkopolis Plaza Lobby', path: 'Fld_PlazaLobby.szs' },
-    { name: 'Ancho-V Games', path: 'Fld_Office00.szs' },
-    { name: 'Arrowana Mall', path: 'Fld_UpDown00.szs' },
-    { name: 'Blackbelly Skatepark', path: 'Fld_SkatePark00.szs' },
-    { name: 'Bluefin Depot', path: 'Fld_Ruins00.szs' },
-    { name: 'Camp Triggerfish', path: 'Fld_Athletic00.szs' },
-    { name: 'Flounder Heights', path: 'Fld_Jyoheki00.szs' },
-    { name: 'Hammerhead Bridge', path: 'Fld_Kaisou00.szs' },
-    { name: 'Kelp Dome', path: 'Fld_Maze00.szs' },
-    { name: 'Mahi-Mahi Resort', path: 'Fld_Hiagari00.szs' },
-    { name: 'Moray Towers', path: 'Fld_Tuzura00.szs' },
-    { name: 'Museum d\'Alfonsino', path: 'Fld_Pivot00.szs' },
-    { name: 'Pirahna Pit', path: 'Fld_Quarry00.szs' },
-    { name: 'Port Mackerel', path: 'Fld_Amida00.szs' },
-    { name: 'Saltspray Rig', path: 'Fld_SeaPlant00.szs' },
-    { name: 'Urchin Underpass (New)', path: 'Fld_Crank01.szs' },
-    { name: 'Urchin Underpass (Old)', path: 'Fld_Crank00.szs' },
-    { name: 'Walleye Warehouse', path: 'Fld_Warehouse00.szs' },
-    { name: 'Octo Valley', path: 'Fld_World00.szs' },
-    { name: 'Object: Tree', path: 'Obj_Tree02.szs' },
-].map((entry): SceneDesc => {
-    const name = entry.name || entry.path;
-    const path = `data/spl/${entry.path}`;
-    return new SceneDesc(name, path);
-});
+const id = "splatoon";
+const sceneDescs: SplatoonSceneDesc[] = [
+    new SplatoonSceneDesc('Inkopolis Plaza', 'Fld_Plaza00.szs'),
+    new SplatoonSceneDesc('Inkopolis Plaza Lobby', 'Fld_PlazaLobby.szs'),
+    new SplatoonSceneDesc('Ancho-V Games', 'Fld_Office00.szs'),
+    new SplatoonSceneDesc('Arrowana Mall', 'Fld_UpDown00.szs'),
+    new SplatoonSceneDesc('Blackbelly Skatepark', 'Fld_SkatePark00.szs'),
+    new SplatoonSceneDesc('Bluefin Depot', 'Fld_Ruins00.szs'),
+    new SplatoonSceneDesc('Camp Triggerfish', 'Fld_Athletic00.szs'),
+    new SplatoonSceneDesc('Flounder Heights', 'Fld_Jyoheki00.szs'),
+    new SplatoonSceneDesc('Hammerhead Bridge', 'Fld_Kaisou00.szs'),
+    new SplatoonSceneDesc('Kelp Dome', 'Fld_Maze00.szs'),
+    new SplatoonSceneDesc('Mahi-Mahi Resort', 'Fld_Hiagari00.szs'),
+    new SplatoonSceneDesc('Moray Towers', 'Fld_Tuzura00.szs'),
+    new SplatoonSceneDesc('Museum d\'Alfonsino', 'Fld_Pivot00.szs'),
+    new SplatoonSceneDesc('Pirahna Pit', 'Fld_Quarry00.szs'),
+    new SplatoonSceneDesc('Port Mackerel', 'Fld_Amida00.szs'),
+    new SplatoonSceneDesc('Saltspray Rig', 'Fld_SeaPlant00.szs'),
+    new SplatoonSceneDesc('Urchin Underpass (New)', 'Fld_Crank01.szs'),
+    new SplatoonSceneDesc('Urchin Underpass (Old)', 'Fld_Crank00.szs'),
+    new SplatoonSceneDesc('Walleye Warehouse', 'Fld_Warehouse00.szs'),
+    new SplatoonSceneDesc('Octo Valley', 'Fld_World00.szs'),
+    new SplatoonSceneDesc('Object: Tree', 'Obj_Tree02.szs'),
+];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
