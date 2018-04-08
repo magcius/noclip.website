@@ -128,6 +128,14 @@ class DroppedFileSceneDesc implements SceneDesc {
     }
 }
 
+interface SceneGroupOption extends HTMLOptionElement {
+    sceneGroup: SceneGroup;
+}
+
+interface SceneDescOption extends HTMLOptionElement {
+    sceneDesc: SceneDesc;
+}
+
 class Main {
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
@@ -295,8 +303,8 @@ class Main {
 
         // Make sure combobox is selected
         for (let i = 0; i < this.sceneSelect.options.length; i++) {
-            const sceneOption = this.sceneSelect.options[i];
-            if ((<any> sceneOption).sceneDesc === sceneDesc)
+            const sceneOption = (<SceneDescOption> this.sceneSelect.options[i]);
+            if (sceneOption.sceneDesc === sceneDesc)
                 this.sceneSelect.selectedIndex = i;
         }
 
@@ -343,9 +351,9 @@ class Main {
             if (!group.sceneDescs.length)
                 continue;
 
-            const groupOption = document.createElement('option');
+            const groupOption = (<SceneGroupOption> document.createElement('option'));
             groupOption.textContent = group.name;
-            (<any> groupOption).group = group;
+            groupOption.sceneGroup = group;
             this.groupSelect.appendChild(groupOption);
         }
     }
@@ -353,8 +361,8 @@ class Main {
     private _loadSceneGroup(group: SceneGroup, loadDefaultSceneInGroup: boolean = true) {
         // Make sure combobox is selected
         for (let i = 0; i < this.groupSelect.options.length; i++) {
-            const groupOption = this.groupSelect.options[i];
-            if ((<any> groupOption).group === group)
+            const groupOption = (<SceneGroupOption> this.groupSelect.options[i]);
+            if (groupOption.sceneGroup === group)
                 this.groupSelect.selectedIndex = i;
         }
 
@@ -363,9 +371,9 @@ class Main {
         // Clear.
         this.sceneSelect.innerHTML = '';
         for (const sceneDesc of group.sceneDescs) {
-            const sceneOption = document.createElement('option');
+            const sceneOption = (<SceneDescOption> document.createElement('option'));
             sceneOption.textContent = sceneDesc.name;
-            (<any> sceneOption).sceneDesc = sceneDesc;
+            sceneOption.sceneDesc = sceneDesc;
             this.sceneSelect.appendChild(sceneOption);
         }
 
@@ -374,8 +382,8 @@ class Main {
     }
 
     private _onSceneSelectChange() {
-        const option = this.sceneSelect.selectedOptions.item(0);
-        const sceneDesc: SceneDesc = (<any> option).sceneDesc;
+        const option = (<SceneDescOption> this.sceneSelect.selectedOptions.item(0));
+        const sceneDesc: SceneDesc = option.sceneDesc;
         this._loadSceneDesc(sceneDesc);
     }
 
@@ -406,8 +414,8 @@ class Main {
     }
 
     private _onGroupSelectChange() {
-        const option = this.groupSelect.selectedOptions.item(0);
-        const group: SceneGroup = (<any> option).group;
+        const option = (<SceneGroupOption> this.groupSelect.selectedOptions.item(0));
+        const group: SceneGroup = option.sceneGroup;
         this._loadSceneGroup(group);
     }
 
@@ -601,6 +609,13 @@ class Main {
         } else {
             this.viewer.cameraController = new OrbitCameraController();
         }
+    }
+}
+
+// Expand-o!
+declare global {
+    interface Window {
+        main: any;
     }
 }
 
