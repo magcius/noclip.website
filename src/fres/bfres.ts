@@ -1,7 +1,7 @@
 
 import * as GX2Texture from './gx2_texture';
-import { GX2Surface } from './gx2_surface';
-import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode } from './gx2_enum';
+import { GX2Surface, parseGX2Surface } from './gx2_surface';
+import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode, GX2SurfaceFormat } from './gx2_enum';
 
 import { assert, readString } from 'util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
@@ -59,10 +59,11 @@ function parseFTEX(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
     assert(!littleEndian);
 
     const gx2SurfaceOffs = offs + 0x04;
+    const surface = parseGX2Surface(buffer, gx2SurfaceOffs);
+
     const texDataOffs = readBinPtrT(view, offs + 0xB0, littleEndian);
     const mipDataOffs = readBinPtrT(view, offs + 0xB4, littleEndian);
 
-    const surface = GX2Texture.parseGX2Surface(buffer, gx2SurfaceOffs);
     const texData = buffer.subarray(texDataOffs, surface.texDataSize);
     const mipData = buffer.subarray(mipDataOffs, surface.mipDataSize);
     return { surface, texData, mipData };

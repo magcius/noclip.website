@@ -38,6 +38,14 @@ var __spread = (this && this.__spread) || function () {
     for (var ar = [], i = 0; i < arguments.length; i++) ar = ar.concat(__read(arguments[i]));
     return ar;
 };
+var __assign = (this && this.__assign) || Object.assign || function(t) {
+    for (var s, i = 1, n = arguments.length; i < n; i++) {
+        s = arguments[i];
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+            t[p] = s[p];
+    }
+    return t;
+};
 System.register("Progressable", [], function (exports_1, context_1) {
     "use strict";
     var __moduleName = context_1 && context_1.id;
@@ -10536,11 +10544,42 @@ System.register("fres/gx2_enum", [], function (exports_40, context_40) {
         }
     };
 });
-System.register("fres/gx2_surface", [], function (exports_41, context_41) {
+System.register("fres/gx2_surface", ["util"], function (exports_41, context_41) {
     "use strict";
     var __moduleName = context_41 && context_41.id;
+    function parseGX2Surface(buffer, gx2SurfaceOffs) {
+        var view = buffer.slice(gx2SurfaceOffs, gx2SurfaceOffs + 0x9C).createDataView();
+        var dimension = view.getUint32(0x00, false);
+        util_24.assert(dimension === 1 /* _2D */);
+        var width = view.getUint32(0x04, false);
+        var height = view.getUint32(0x08, false);
+        var depth = view.getUint32(0x0C, false);
+        var numMips = view.getUint32(0x10, false);
+        var format = view.getUint32(0x14, false);
+        var aaMode = view.getUint32(0x18, false);
+        var texDataSize = view.getUint32(0x20, false);
+        var mipDataSize = view.getUint32(0x28, false);
+        var tileMode = view.getUint32(0x30, false);
+        var swizzle = view.getUint32(0x34, false);
+        var align = view.getUint32(0x38, false);
+        var pitch = view.getUint32(0x3C, false);
+        var mipDataOffsetTableIdx = 0x40;
+        var mipDataOffsets = [];
+        for (var i = 0; i < 13; i++) {
+            mipDataOffsets.push(view.getUint32(mipDataOffsetTableIdx, false));
+            mipDataOffsetTableIdx += 0x04;
+        }
+        var surface = { format: format, tileMode: tileMode, swizzle: swizzle, width: width, height: height, depth: depth, pitch: pitch, numMips: numMips, aaMode: aaMode, texDataSize: texDataSize, mipDataSize: mipDataSize, mipDataOffsets: mipDataOffsets };
+        return surface;
+    }
+    exports_41("parseGX2Surface", parseGX2Surface);
+    var util_24;
     return {
-        setters: [],
+        setters: [
+            function (util_24_1) {
+                util_24 = util_24_1;
+            }
+        ],
         execute: function () {
         }
     };
@@ -10652,14 +10691,51 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, conte
     "use strict";
     var __moduleName = context_43 && context_43.id;
     // This is all contained in one function in order to make it easier to Worker-ize.
-    function _deswizzle(surface, srcBuffer) {
+    function _deswizzle(inSurface, srcBuffer, mipLevel) {
         var numPipes = 2;
         var numBanks = 4;
         var microTileWidth = 8;
         var microTileHeight = 8;
+        var macroTileWidth = 8 * numBanks;
+        var macroTileHeight = 8 * numPipes;
         var microTilePixels = microTileWidth * microTileHeight;
+        var pipeInterleaveBytes = 256;
+        var numPipeBits = 1;
+        var numBankBits = 2;
+        var numGroupBits = 8;
+        var rowSize = 2048;
+        var swapSize = 256;
+        var splitSize = 2048;
         function memcpy(dst, dstOffs, src, srcOffs, length) {
             dst.set(new Uint8Array(src, srcOffs, length), dstOffs);
+        }
+        function alignPow2(n) {
+            var x = 1;
+            while (x < n)
+                x *= 2;
+            return x;
+        }
+        function align(n, multiple) {
+            var mask = (multiple - 1);
+            return (n + mask) & ~mask;
+        }
+        function computeSurfaceMipLevelTileMode(surface, mipLevel) {
+            // Level starts at 0.
+            if (mipLevel > 0) {
+                surface.width = Math.max(alignPow2(surface.width >> mipLevel), 1);
+                surface.pitch = Math.max(alignPow2(surface.pitch >> mipLevel), 1);
+                surface.height = Math.max(alignPow2(surface.height >> mipLevel), 1);
+                var numSamples = 1 << surface.aaMode;
+                var thickness = computeSurfaceThickness(surface.tileMode);
+                var bytesPerBlock_1 = computeSurfaceBytesPerBlock(surface.format);
+                var microTileThickness = computeSurfaceThickness(surface.tileMode);
+                var bytesPerSample = bytesPerBlock_1 * microTileThickness * microTilePixels;
+                var microTileBytes = bytesPerSample * numSamples;
+                var pitchAlignFactor = Math.max(pipeInterleaveBytes / microTileBytes, 1) | 0;
+                var macroTileHeightBlocks = macroTileHeight * computeSurfaceBlockWidth(surface.format);
+                if (surface.tileMode === 4 /* _2D_TILED_THIN1 */ && (surface.pitch < pitchAlignFactor * macroTileWidth || surface.height < macroTileHeightBlocks))
+                    surface.tileMode = 2 /* _1D_TILED_THIN1 */;
+            }
         }
         function computePipeFromCoordWoRotation(x, y) {
             // NumPipes = 2
@@ -10756,10 +10832,10 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, conte
             }
         }
         function computeMacroTilePitch(tileMode) {
-            return (8 * numBanks) / computeTileModeAspectRatio(tileMode);
+            return macroTileWidth / computeTileModeAspectRatio(tileMode);
         }
         function computeMacroTileHeight(tileMode) {
-            return (8 * numPipes) / computeTileModeAspectRatio(tileMode);
+            return macroTileHeight / computeTileModeAspectRatio(tileMode);
         }
         function computeSurfaceAddrFromCoordMicroTiled(x, y, surface) {
             // XXX(jstpierre): 3D Textures
@@ -10786,13 +10862,6 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, conte
             var numSamples = 1 << surface.aaMode;
             var pipeSwizzle = (surface.swizzle >> 8) & 0x01;
             var bankSwizzle = (surface.swizzle >> 9) & 0x03;
-            var pipeInterleaveBytes = 256;
-            var numPipeBits = 1;
-            var numBankBits = 2;
-            var numGroupBits = 8;
-            var rowSize = 2048;
-            var swapSize = 256;
-            var splitSize = 2048;
             var bytesPerBlock = computeSurfaceBytesPerBlock(surface.format);
             var microTileThickness = computeSurfaceThickness(surface.tileMode);
             var bytesPerSample = bytesPerBlock * microTileThickness * microTilePixels;
@@ -10843,14 +10912,34 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, conte
             var addr = (bankBits | pipeBits | offsetLow | offsetHigh);
             return addr;
         }
+        // Have to spell this thing out the long way...
+        var surface = {
+            format: inSurface.format,
+            tileMode: inSurface.tileMode,
+            aaMode: inSurface.aaMode,
+            swizzle: inSurface.swizzle,
+            width: inSurface.width,
+            height: inSurface.height,
+            depth: inSurface.depth,
+            pitch: inSurface.pitch,
+            numMips: inSurface.numMips,
+            texDataSize: inSurface.texDataSize,
+            mipDataSize: inSurface.mipDataSize,
+            mipDataOffsets: inSurface.mipDataOffsets,
+        };
+        computeSurfaceMipLevelTileMode(surface, mipLevel);
         // For non-BC formats, "block" = 1 pixel.
         var blockSize = computeSurfaceBlockWidth(surface.format);
-        var widthBlocks = ((surface.width + blockSize - 1) / blockSize) | 0;
-        var heightBlocks = ((surface.height + blockSize - 1) / blockSize) | 0;
+        var srcWidthBlocks = ((surface.width + blockSize - 1) / blockSize) | 0;
+        var srcHeightBlocks = ((surface.height + blockSize - 1) / blockSize) | 0;
+        var dstWidth = inSurface.width >>> mipLevel;
+        var dstHeight = inSurface.height >>> mipLevel;
+        var dstWidthBlocks = ((dstWidth + blockSize - 1) / blockSize) | 0;
+        var dstHeightBlocks = ((dstHeight + blockSize - 1) / blockSize) | 0;
         var bytesPerBlock = computeSurfaceBytesPerBlock(surface.format);
-        var dst = new Uint8Array(widthBlocks * heightBlocks * bytesPerBlock);
-        for (var y = 0; y < heightBlocks; y++) {
-            for (var x = 0; x < widthBlocks; x++) {
+        var dst = new Uint8Array(dstWidthBlocks * dstHeightBlocks * bytesPerBlock);
+        for (var y = 0; y < dstHeightBlocks; y++) {
+            for (var x = 0; x < dstWidthBlocks; x++) {
                 var srcIdx = void 0;
                 switch (surface.tileMode) {
                     case 2 /* _1D_TILED_THIN1 */:
@@ -10863,19 +10952,20 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, conte
                         var tileMode_ = surface.tileMode;
                         throw new Error("Unsupported tile mode " + tileMode_.toString(16));
                 }
-                var dstIdx = (y * widthBlocks + x) * bytesPerBlock;
+                var dstIdx = (y * dstWidthBlocks + x) * bytesPerBlock;
                 memcpy(dst, dstIdx, srcBuffer, srcIdx, bytesPerBlock);
             }
         }
-        return dst.buffer;
+        var pixels = dst.buffer;
+        var width = dstWidth;
+        var height = dstHeight;
+        return { width: width, height: height, pixels: pixels };
     }
     function deswizzleWorker(global) {
         global.onmessage = function (e) {
             var req = e.data;
-            var surface = req.surface;
-            var buffer = _deswizzle(surface, req.buffer);
-            var resp = { surface: surface, buffer: buffer };
-            global.postMessage(resp, [buffer]);
+            var decodedSurface = _deswizzle(req.surface, req.buffer, req.mipLevel);
+            global.postMessage(decodedSurface, [decodedSurface.pixels]);
         };
     }
     function makeDeswizzleWorker() {
@@ -10897,11 +10987,9 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, conte
                 function Deswizzler() {
                     this.pool = new worker_util_1.WorkerPool(makeDeswizzleWorker);
                 }
-                Deswizzler.prototype.deswizzle = function (surface, buffer) {
-                    var req = { surface: surface, buffer: buffer };
-                    return this.pool.execute(req).then(function (resp) {
-                        return resp.buffer;
-                    });
+                Deswizzler.prototype.deswizzle = function (surface, buffer, mipLevel) {
+                    var req = { surface: surface, buffer: buffer, mipLevel: mipLevel };
+                    return this.pool.execute(req);
                 };
                 Deswizzler.prototype.terminate = function () {
                     this.pool.terminate();
@@ -10918,31 +11006,6 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, conte
 System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, context_44) {
     "use strict";
     var __moduleName = context_44 && context_44.id;
-    function parseGX2Surface(buffer, gx2SurfaceOffs) {
-        var view = buffer.slice(gx2SurfaceOffs, gx2SurfaceOffs + 0x9C).createDataView();
-        var dimension = view.getUint32(0x00, false);
-        var width = view.getUint32(0x04, false);
-        var height = view.getUint32(0x08, false);
-        var depth = view.getUint32(0x0C, false);
-        var numMips = view.getUint32(0x10, false);
-        var format = view.getUint32(0x14, false);
-        var aaMode = view.getUint32(0x18, false);
-        var texDataSize = view.getUint32(0x20, false);
-        var mipDataSize = view.getUint32(0x28, false);
-        var tileMode = view.getUint32(0x30, false);
-        var swizzle = view.getUint32(0x34, false);
-        var align = view.getUint32(0x38, false);
-        var pitch = view.getUint32(0x3C, false);
-        var mipDataOffsetTableIdx = 0x40;
-        var mipDataOffsets = [];
-        for (var i = 0; i < 13; i++) {
-            mipDataOffsets.push(view.getUint32(mipDataOffsetTableIdx, false));
-            mipDataOffsetTableIdx += 0x04;
-        }
-        var surface = { format: format, tileMode: tileMode, swizzle: swizzle, width: width, height: height, depth: depth, pitch: pitch, aaMode: aaMode, texDataSize: texDataSize, mipDataSize: mipDataSize };
-        return surface;
-    }
-    exports_44("parseGX2Surface", parseGX2Surface);
     // #region Texture Decode
     function expand5to8(n) {
         return (n << (8 - 5)) | (n >>> (10 - 8));
@@ -10956,18 +11019,16 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
         return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
     }
     // Software decompresses from standard BC1 (DXT1) to RGBA.
-    function decompressBC1(texture) {
-        var type = 'RGBA';
+    function decompressBC1Surface(surface, flag) {
         var bytesPerPixel = 4;
-        var flag = texture.flag;
-        var width = texture.width;
-        var height = texture.height;
+        var width = surface.width;
+        var height = surface.height;
         var dst = new Uint8Array(width * height * bytesPerPixel);
-        var view = new DataView(texture.pixels);
+        var view = new DataView(surface.pixels);
         var colorTable = new Uint8Array(16);
         var srcOffs = 0;
-        for (var yy = 0; yy < texture.height; yy += 4) {
-            for (var xx = 0; xx < texture.width; xx += 4) {
+        for (var yy = 0; yy < height; yy += 4) {
+            for (var xx = 0; xx < width; xx += 4) {
                 var color1 = view.getUint16(srcOffs + 0x00, true);
                 var color2 = view.getUint16(srcOffs + 0x02, true);
                 // Fill in first two colors in color table.
@@ -11004,7 +11065,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
                 var bits = view.getUint32(srcOffs + 0x04, true);
                 for (var y = 0; y < 4; y++) {
                     for (var x = 0; x < 4; x++) {
-                        var dstPx = (yy + y) * texture.width + xx + x;
+                        var dstPx = (yy + y) * width + xx + x;
                         var dstOffs = dstPx * 4;
                         var colorIdx = bits & 0x03;
                         dst[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
@@ -11018,22 +11079,20 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
             }
         }
         var pixels = dst.buffer;
-        return { type: type, bytesPerPixel: bytesPerPixel, flag: flag, width: width, height: height, pixels: pixels };
+        return __assign({}, surface, { pixels: pixels });
     }
     // Software decompresses from standard BC3 (DXT5) to RGBA.
-    function decompressBC3(texture) {
-        var type = 'RGBA';
+    function decompressBC3Surface(surface, flag) {
         var bytesPerPixel = 4;
-        var flag = texture.flag;
-        var width = texture.width;
-        var height = texture.height;
+        var width = surface.width;
+        var height = surface.height;
         var dst = new Uint8Array(width * height * bytesPerPixel);
-        var view = new DataView(texture.pixels);
+        var view = new DataView(surface.pixels);
         var colorTable = new Uint8Array(16);
         var alphaTable = new Uint8Array(8);
         var srcOffs = 0;
-        for (var yy = 0; yy < texture.height; yy += 4) {
-            for (var xx = 0; xx < texture.width; xx += 4) {
+        for (var yy = 0; yy < height; yy += 4) {
+            for (var xx = 0; xx < width; xx += 4) {
                 var alpha1 = view.getUint8(srcOffs + 0x00);
                 var alpha2 = view.getUint8(srcOffs + 0x01);
                 alphaTable[0] = alpha1;
@@ -11104,7 +11163,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
                 var colorBits = view.getUint32(srcOffs + 0x04, true);
                 for (var y = 0; y < 4; y++) {
                     for (var x = 0; x < 4; x++) {
-                        var dstIdx = (yy + y) * texture.width + xx + x;
+                        var dstIdx = (yy + y) * width + xx + x;
                         var dstOffs = (dstIdx * bytesPerPixel);
                         var colorIdx = colorBits & 0x03;
                         dst[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
@@ -11117,29 +11176,23 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
             }
         }
         var pixels = dst.buffer;
-        return { type: type, bytesPerPixel: bytesPerPixel, flag: flag, width: width, height: height, pixels: pixels };
+        return __assign({}, surface, { pixels: pixels });
     }
     // Software decompresses from standard BC4/BC5 to R/RG.
-    function decompressBC45(texture) {
+    function decompressBC45Surface(surface, inType, flag) {
         var bytesPerPixel;
-        var type;
-        switch (texture.type) {
+        var width = surface.width;
+        var height = surface.height;
+        switch (inType) {
             case 'BC4':
-                type = 'R';
                 bytesPerPixel = 1;
                 break;
             case 'BC5':
-                type = 'RG';
                 bytesPerPixel = 2;
                 break;
-            default:
-                throw "whoops";
         }
-        var signed = texture.flag === 'SNORM';
-        var flag = texture.flag;
-        var width = texture.width;
-        var height = texture.height;
-        var view = new DataView(texture.pixels);
+        var signed = flag === 'SNORM';
+        var view = new DataView(surface.pixels);
         var dst;
         var colorTable;
         if (signed) {
@@ -11200,73 +11253,107 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
             }
         }
         var pixels = dst.buffer;
-        switch (type) {
-            case 'R':
-                return { type: type, flag: flag, bytesPerPixel: 1, width: width, height: height, pixels: pixels };
-            case 'RG':
-                return { type: type, flag: flag, bytesPerPixel: 2, width: width, height: height, pixels: pixels };
-        }
+        return __assign({}, surface, { pixels: pixels });
     }
-    function decompressBC(texture) {
-        switch (texture.type) {
+    function decompressBCSurface(type, flag, surface) {
+        switch (type) {
             case 'BC1':
-                return decompressBC1(texture);
+                return decompressBC1Surface(surface, flag);
             case 'BC3':
-                return decompressBC3(texture);
+                return decompressBC3Surface(surface, flag);
             case 'BC4':
             case 'BC5':
-                return decompressBC45(texture);
+                return decompressBC45Surface(surface, type, flag);
+        }
+    }
+    exports_44("decompressBCSurface", decompressBCSurface);
+    function decompressBC(texture) {
+        var width = texture.width;
+        var height = texture.height;
+        var surfaces = texture.surfaces.map(function (surface, i) {
+            return decompressBCSurface(texture.type, texture.flag, surface);
+        });
+        switch (texture.type) {
+            case 'BC1':
+            case 'BC3': {
+                // XXX(jstpierre): TypeScript has a hard time figuring this out even though it should know...
+                var flag = texture.flag;
+                return { type: 'RGBA', bytesPerPixel: 4, flag: flag, width: texture.width, height: texture.height, surfaces: surfaces };
+            }
+            case 'BC4': {
+                var flag = texture.flag;
+                return { type: 'R', bytesPerPixel: 1, flag: flag, width: texture.width, height: texture.height, surfaces: surfaces };
+            }
+            case 'BC5': {
+                var flag = texture.flag;
+                return { type: 'RG', bytesPerPixel: 2, flag: flag, width: texture.width, height: texture.height, surfaces: surfaces };
+            }
         }
     }
     exports_44("decompressBC", decompressBC);
-    function decodeSurface(surface, texData, mipData) {
+    function decodeSurface(surface, texData, mipLevel) {
+        return gx2_swizzle_1.deswizzler.deswizzle(surface, texData.castToBuffer(), mipLevel);
+    }
+    exports_44("decodeSurface", decodeSurface);
+    function decodeTexture(surface, texData, mipData) {
+        var surfacePromises = [];
+        for (var i = 0; i < surface.numMips; i++) {
+            var levelData = void 0;
+            if (i === 0) {
+                levelData = texData;
+            }
+            else if (i === 1) {
+                levelData = mipData;
+            }
+            else {
+                var offset = surface.mipDataOffsets[i - 1];
+                levelData = mipData.slice(offset);
+            }
+            surfacePromises.push(decodeSurface(surface, levelData, i));
+        }
         var width = surface.width;
         var height = surface.height;
-        return gx2_swizzle_1.deswizzler.deswizzle(surface, texData.castToBuffer()).then(function (pixels) {
+        return Promise.all(surfacePromises).then(function (surfaces) {
+            surfaces = surfaces.filter(function (surface) { return surface.width > 0 && surface.height > 0; });
             switch (surface.format) {
                 case 49 /* BC1_UNORM */:
-                    return { type: 'BC1', flag: 'UNORM', width: width, height: height, pixels: pixels };
+                    return { type: 'BC1', flag: 'UNORM', width: width, height: height, surfaces: surfaces };
                 case 1073 /* BC1_SRGB */:
-                    return { type: 'BC1', flag: 'SRGB', width: width, height: height, pixels: pixels };
+                    return { type: 'BC1', flag: 'SRGB', width: width, height: height, surfaces: surfaces };
                 case 51 /* BC3_UNORM */:
-                    return { type: 'BC3', flag: 'UNORM', width: width, height: height, pixels: pixels };
+                    return { type: 'BC3', flag: 'UNORM', width: width, height: height, surfaces: surfaces };
                 case 1075 /* BC3_SRGB */:
-                    return { type: 'BC3', flag: 'SRGB', width: width, height: height, pixels: pixels };
+                    return { type: 'BC3', flag: 'SRGB', width: width, height: height, surfaces: surfaces };
                 case 52 /* BC4_UNORM */:
-                    return { type: 'BC4', flag: 'UNORM', width: width, height: height, pixels: pixels };
+                    return { type: 'BC4', flag: 'UNORM', width: width, height: height, surfaces: surfaces };
                 case 564 /* BC4_SNORM */:
-                    return { type: 'BC4', flag: 'SNORM', width: width, height: height, pixels: pixels };
+                    return { type: 'BC4', flag: 'SNORM', width: width, height: height, surfaces: surfaces };
                 case 53 /* BC5_UNORM */:
-                    return { type: 'BC5', flag: 'UNORM', width: width, height: height, pixels: pixels };
+                    return { type: 'BC5', flag: 'UNORM', width: width, height: height, surfaces: surfaces };
                 case 565 /* BC5_SNORM */:
-                    return { type: 'BC5', flag: 'SNORM', width: width, height: height, pixels: pixels };
+                    return { type: 'BC5', flag: 'SNORM', width: width, height: height, surfaces: surfaces };
                 case 26 /* TCS_R8_G8_B8_A8_UNORM */:
-                    return { type: 'RGBA', flag: 'UNORM', bytesPerPixel: 4, width: width, height: height, pixels: pixels };
+                    return { type: 'RGBA', flag: 'UNORM', bytesPerPixel: 4, width: width, height: height, surfaces: surfaces };
                 case 1050 /* TCS_R8_G8_B8_A8_SRGB */:
-                    return { type: 'RGBA', flag: 'SRGB', bytesPerPixel: 4, width: width, height: height, pixels: pixels };
+                    return { type: 'RGBA', flag: 'SRGB', bytesPerPixel: 4, width: width, height: height, surfaces: surfaces };
                 default:
                     throw new Error("Bad format in decodeSurface: " + surface.format.toString(16));
             }
         });
     }
-    exports_44("decodeSurface", decodeSurface);
-    function textureToCanvas(canvas, texture) {
+    exports_44("decodeTexture", decodeTexture);
+    function surfaceToCanvas(canvas, texture, surface) {
+        canvas.width = surface.width;
+        canvas.height = surface.height;
         var ctx = canvas.getContext('2d');
-        var imageData = new ImageData(texture.width, texture.height);
-        // Decompress BC if we have it.
-        switch (texture.type) {
-            case 'BC1':
-            case 'BC3':
-            case 'BC4':
-            case 'BC5':
-                texture = decompressBC(texture);
-                break;
-        }
+        var width = surface.width;
+        var height = surface.height;
+        var imageData = new ImageData(width, height);
         switch (texture.type) {
             case 'R':
                 if (texture.flag === 'UNORM') {
-                    var src_1 = new Uint8Array(texture.pixels);
-                    for (var i = 0; i < texture.width * texture.height; i++) {
+                    var src_1 = new Uint8Array(surface.pixels);
+                    for (var i = 0; i < surface.width * surface.height; i++) {
                         imageData.data[i * 4 + 0] = src_1[i];
                         imageData.data[i * 4 + 1] = src_1[i];
                         imageData.data[i * 4 + 2] = src_1[i];
@@ -11274,8 +11361,8 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
                     }
                 }
                 else {
-                    var src_2 = new Int8Array(texture.pixels);
-                    for (var i = 0; i < texture.width * texture.height; i++) {
+                    var src_2 = new Int8Array(surface.pixels);
+                    for (var i = 0; i < surface.width * surface.height; i++) {
                         imageData.data[i * 4 + 0] = src_2[i] + 128;
                         imageData.data[i * 4 + 1] = src_2[i] + 128;
                         imageData.data[i * 4 + 2] = src_2[i] + 128;
@@ -11285,8 +11372,8 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
                 break;
             case 'RG': {
                 if (texture.flag === 'UNORM') {
-                    var src_3 = new Uint8Array(texture.pixels);
-                    for (var i = 0; i < texture.width * texture.height; i++) {
+                    var src_3 = new Uint8Array(surface.pixels);
+                    for (var i = 0; i < surface.width * surface.height; i++) {
                         imageData.data[i * 4 + 0] = src_3[i * 2 + 0];
                         imageData.data[i * 4 + 1] = src_3[i * 2 + 1];
                         imageData.data[i * 4 + 2] = 0xFF;
@@ -11294,8 +11381,8 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
                     }
                 }
                 else {
-                    var src_4 = new Int8Array(texture.pixels);
-                    for (var i = 0; i < texture.width * texture.height; i++) {
+                    var src_4 = new Int8Array(surface.pixels);
+                    for (var i = 0; i < surface.width * surface.height; i++) {
                         imageData.data[i * 4 + 0] = src_4[i * 2 + 0] + 128;
                         imageData.data[i * 4 + 1] = src_4[i * 2 + 1] + 128;
                         imageData.data[i * 4 + 2] = 0xFF;
@@ -11305,15 +11392,27 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
                 break;
             }
             case 'RGBA':
-                var src = new Uint8Array(texture.pixels);
+                var src = new Uint8Array(surface.pixels);
                 imageData.data.set(src);
                 break;
-            default:
-                throw new Error("Unsupported texture type in textureToCanvas " + texture.type);
         }
         ctx.putImageData(imageData, 0, 0);
     }
-    exports_44("textureToCanvas", textureToCanvas);
+    exports_44("surfaceToCanvas", surfaceToCanvas);
+    function decompressTexture(texture) {
+        switch (texture.type) {
+            case 'R':
+            case 'RG':
+            case 'RGBA':
+                return texture;
+            case 'BC1':
+            case 'BC3':
+            case 'BC4':
+            case 'BC5':
+                return decompressBC(texture);
+        }
+    }
+    exports_44("decompressTexture", decompressTexture);
     var gx2_swizzle_1;
     return {
         setters: [
@@ -11325,7 +11424,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
         }
     };
 });
-System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45, context_45) {
+System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_45, context_45) {
     "use strict";
     var __moduleName = context_45 && context_45.id;
     function readBinPtrT(view, offs, littleEndian) {
@@ -11341,14 +11440,14 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
         var view = buffer.createDataView();
         var tableSize = view.getUint32(tableOffs + 0x00, littleEndian);
         var tableCount = view.getUint32(tableOffs + 0x04, littleEndian);
-        util_24.assert(tableCount === tableCount);
+        util_25.assert(tableCount === tableCount);
         var entries = [];
         var tableIdx = tableOffs + 0x08;
         // Skip root entry.
         tableIdx += 0x10;
         for (var i = 0; i < tableCount; i++) {
             // There's a fancy search tree in here which I don't care about at all...
-            var name_8 = util_24.readString(buffer, readBinPtrT(view, tableIdx + 0x08, littleEndian));
+            var name_8 = util_25.readString(buffer, readBinPtrT(view, tableIdx + 0x08, littleEndian));
             var offs = readBinPtrT(view, tableIdx + 0x0C, littleEndian);
             entries.push({ name: name_8, offs: offs });
             tableIdx += 0x10;
@@ -11358,13 +11457,13 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
     function parseFTEX(buffer, entry, littleEndian) {
         var offs = entry.offs;
         var view = buffer.createDataView();
-        util_24.assert(util_24.readString(buffer, offs + 0x00, 0x04) === 'FTEX');
+        util_25.assert(util_25.readString(buffer, offs + 0x00, 0x04) === 'FTEX');
         // GX2 is Wii U which is a little-endian system.
-        util_24.assert(!littleEndian);
+        util_25.assert(!littleEndian);
         var gx2SurfaceOffs = offs + 0x04;
+        var surface = gx2_surface_1.parseGX2Surface(buffer, gx2SurfaceOffs);
         var texDataOffs = readBinPtrT(view, offs + 0xB0, littleEndian);
         var mipDataOffs = readBinPtrT(view, offs + 0xB4, littleEndian);
-        var surface = GX2Texture.parseGX2Surface(buffer, gx2SurfaceOffs);
         var texData = buffer.subarray(texDataOffs, surface.texDataSize);
         var mipData = buffer.subarray(mipDataOffs, surface.mipDataSize);
         return { surface: surface, texData: texData, mipData: mipData };
@@ -11372,7 +11471,7 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
     function parseFMDL(buffer, entry, littleEndian) {
         var offs = entry.offs;
         var view = buffer.createDataView();
-        util_24.assert(util_24.readString(buffer, offs + 0x00, 0x04) === 'FMDL');
+        util_25.assert(util_25.readString(buffer, offs + 0x00, 0x04) === 'FMDL');
         var fileName = readBinPtrT(view, offs + 0x04, littleEndian);
         var filePath = readBinPtrT(view, offs + 0x08, littleEndian);
         var fsklOffs = readBinPtrT(view, offs + 0x0C, littleEndian);
@@ -11382,8 +11481,8 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
         var fvtxCount = view.getUint16(offs + 0x20, littleEndian);
         var fshpCount = view.getUint16(offs + 0x22, littleEndian);
         var fmatCount = view.getUint16(offs + 0x24, littleEndian);
-        util_24.assert(fshpCount === fshpResDic.length);
-        util_24.assert(fmatCount === fmatResDic.length);
+        util_25.assert(fshpCount === fshpResDic.length);
+        util_25.assert(fmatCount === fmatResDic.length);
         function readBufferData(offs) {
             var size = view.getUint32(offs + 0x04, littleEndian);
             var stride = view.getUint16(offs + 0x02, littleEndian);
@@ -11398,7 +11497,7 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
                 for (var resDic_1 = __values(resDic), resDic_1_1 = resDic_1.next(); !resDic_1_1.done; resDic_1_1 = resDic_1.next()) {
                     var entry_1 = resDic_1_1.value;
                     var key = entry_1.name;
-                    var value = util_24.readString(buffer, entry_1.offs);
+                    var value = util_25.readString(buffer, entry_1.offs);
                     entries.push({ key: key, value: value });
                 }
             }
@@ -11416,18 +11515,18 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
         var fvtxIdx = fvtxOffs;
         var fvtx = [];
         for (var i = 0; i < fvtxCount; i++) {
-            util_24.assert(util_24.readString(buffer, fvtxIdx + 0x00, 0x04) === 'FVTX');
+            util_25.assert(util_25.readString(buffer, fvtxIdx + 0x00, 0x04) === 'FVTX');
             var attribCount = view.getUint8(fvtxIdx + 0x04);
             var bufferCount = view.getUint8(fvtxIdx + 0x05);
             var sectionIndex = view.getUint16(fvtxIdx + 0x06);
-            util_24.assert(i === sectionIndex);
+            util_25.assert(i === sectionIndex);
             var vtxCount = view.getUint16(fvtxIdx + 0x08);
             var attribArrayOffs = readBinPtrT(view, fvtxIdx + 0x10, littleEndian);
             var bufferArrayOffs = readBinPtrT(view, fvtxIdx + 0x18, littleEndian);
             var attribs = [];
             var attribArrayIdx = attribArrayOffs;
             for (var j = 0; j < attribCount; j++) {
-                var name_9 = util_24.readString(buffer, readBinPtrT(view, attribArrayIdx + 0x00, littleEndian));
+                var name_9 = util_25.readString(buffer, readBinPtrT(view, attribArrayIdx + 0x00, littleEndian));
                 var bufferIndex = view.getUint8(attribArrayIdx + 0x04);
                 var bufferStart = view.getUint16(attribArrayIdx + 0x06, littleEndian);
                 var format = view.getUint32(attribArrayIdx + 0x08, littleEndian);
@@ -11438,7 +11537,7 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
             var bufferArrayIdx = bufferArrayOffs;
             for (var j = 0; j < bufferCount; j++) {
                 var bufferData = readBufferData(bufferArrayIdx);
-                util_24.assert(bufferData.stride === 0);
+                util_25.assert(bufferData.stride === 0);
                 buffers.push(bufferData);
                 bufferArrayIdx += 0x18;
             }
@@ -11451,8 +11550,8 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
             for (var fshpResDic_1 = __values(fshpResDic), fshpResDic_1_1 = fshpResDic_1.next(); !fshpResDic_1_1.done; fshpResDic_1_1 = fshpResDic_1.next()) {
                 var fshpEntry = fshpResDic_1_1.value;
                 var offs_1 = fshpEntry.offs;
-                util_24.assert(util_24.readString(buffer, offs_1 + 0x00, 0x04) === 'FSHP');
-                var name_10 = util_24.readString(buffer, readBinPtrT(view, offs_1 + 0x04, littleEndian));
+                util_25.assert(util_25.readString(buffer, offs_1 + 0x00, 0x04) === 'FSHP');
+                var name_10 = util_25.readString(buffer, readBinPtrT(view, offs_1 + 0x04, littleEndian));
                 var fmatIndex = view.getUint16(offs_1 + 0x0E, littleEndian);
                 var fsklIndex = view.getUint16(offs_1 + 0x10, littleEndian);
                 var fvtxIndex = view.getUint16(offs_1 + 0x12, littleEndian);
@@ -11495,8 +11594,8 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
             for (var fmatResDic_1 = __values(fmatResDic), fmatResDic_1_1 = fmatResDic_1.next(); !fmatResDic_1_1.done; fmatResDic_1_1 = fmatResDic_1.next()) {
                 var fmatEntry = fmatResDic_1_1.value;
                 var offs_2 = fmatEntry.offs;
-                util_24.assert(util_24.readString(buffer, offs_2 + 0x00, 0x04) === 'FMAT');
-                var name_11 = util_24.readString(buffer, readBinPtrT(view, offs_2 + 0x04, littleEndian));
+                util_25.assert(util_25.readString(buffer, offs_2 + 0x00, 0x04) === 'FMAT');
+                var name_11 = util_25.readString(buffer, readBinPtrT(view, offs_2 + 0x04, littleEndian));
                 var renderInfoParameterCount = view.getUint16(offs_2 + 0x0E, littleEndian);
                 var textureReferenceCount = view.getUint8(offs_2 + 0x10);
                 var textureSamplerCount = view.getUint8(offs_2 + 0x11);
@@ -11517,7 +11616,7 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
                         var offs_3 = renderInfoParameterEntry.offs;
                         var arrayLength = view.getUint16(offs_3 + 0x00, littleEndian);
                         var type = view.getUint8(offs_3 + 0x02);
-                        var name_12 = util_24.readString(buffer, readBinPtrT(view, offs_3 + 0x04, littleEndian));
+                        var name_12 = util_25.readString(buffer, readBinPtrT(view, offs_3 + 0x04, littleEndian));
                         var arrayIdx = offs_3 + 0x08;
                         switch (type) {
                             case RenderInfoParameterType.Int: {
@@ -11541,7 +11640,7 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
                             case RenderInfoParameterType.String: {
                                 var data = [];
                                 for (var i = 0; i < arrayLength; i++) {
-                                    data.push(util_24.readString(buffer, readBinPtrT(view, arrayIdx, littleEndian)));
+                                    data.push(util_25.readString(buffer, readBinPtrT(view, arrayIdx, littleEndian)));
                                     arrayIdx += 0x04;
                                 }
                                 renderInfoParameters.push({ type: type, name: name_12, data: data });
@@ -11557,7 +11656,7 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
                     }
                     finally { if (e_45) throw e_45.error; }
                 }
-                util_24.assert(textureSamplerCount === textureReferenceCount);
+                util_25.assert(textureSamplerCount === textureReferenceCount);
                 var textureSamplerArrayIdx = textureSamplerArrayOffs;
                 var textureReferenceArrayIdx = textureReferenceArrayOffs;
                 var textureAssigns = [];
@@ -11565,11 +11664,11 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
                     var samplerParam0 = view.getUint32(textureSamplerArrayIdx + 0x00, littleEndian);
                     var samplerParam1 = view.getUint32(textureSamplerArrayIdx + 0x04, littleEndian);
                     var samplerParam2 = view.getUint32(textureSamplerArrayIdx + 0x08, littleEndian);
-                    var attribName = util_24.readString(buffer, readBinPtrT(view, textureSamplerArrayIdx + 0x10, littleEndian));
+                    var attribName = util_25.readString(buffer, readBinPtrT(view, textureSamplerArrayIdx + 0x10, littleEndian));
                     var index = view.getUint8(textureSamplerArrayIdx + 0x14);
-                    util_24.assert(index === i);
+                    util_25.assert(index === i);
                     textureSamplerArrayIdx += 0x18;
-                    var textureName = util_24.readString(buffer, readBinPtrT(view, textureReferenceArrayIdx + 0x00, littleEndian));
+                    var textureName = util_25.readString(buffer, readBinPtrT(view, textureReferenceArrayIdx + 0x00, littleEndian));
                     var ftexOffs = readBinPtrT(view, textureReferenceArrayIdx + 0x04, littleEndian);
                     textureReferenceArrayIdx += 0x08;
                     var texClampU = (samplerParam0 >>> 0) & 0x07;
@@ -11586,23 +11685,23 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
                     var size = view.getUint8(materialParameterArrayIdx + 0x01);
                     var dataOffs = view.getUint16(materialParameterArrayIdx + 0x02, littleEndian);
                     var index = view.getUint16(materialParameterArrayIdx + 0x0C, littleEndian);
-                    util_24.assert(index === i);
-                    var name_13 = util_24.readString(buffer, readBinPtrT(view, materialParameterArrayIdx + 0x10, littleEndian));
+                    util_25.assert(index === i);
+                    var name_13 = util_25.readString(buffer, readBinPtrT(view, materialParameterArrayIdx + 0x10, littleEndian));
                     materialParameterArrayIdx += 0x14;
                     materialParameters.push({ type: type, size: size, dataOffs: dataOffs, name: name_13 });
                 }
                 // Shader assign.
-                var shaderArchiveName = util_24.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x00, littleEndian));
-                var shadingModelName = util_24.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x04, littleEndian));
+                var shaderArchiveName = util_25.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x00, littleEndian));
+                var shadingModelName = util_25.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x04, littleEndian));
                 var vertShaderInputCount = view.getUint8(shaderAssignOffs + 0x0C);
                 var vertShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x10, littleEndian));
-                util_24.assert(vertShaderInputDict.length === vertShaderInputCount);
+                util_25.assert(vertShaderInputDict.length === vertShaderInputCount);
                 var fragShaderInputCount = view.getUint8(shaderAssignOffs + 0x0D);
                 var fragShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x14, littleEndian));
-                util_24.assert(fragShaderInputDict.length === fragShaderInputCount);
+                util_25.assert(fragShaderInputDict.length === fragShaderInputCount);
                 var paramDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x18, littleEndian));
                 var paramCount = view.getUint16(shaderAssignOffs + 0x0E);
-                util_24.assert(paramDict.length === paramCount);
+                util_25.assert(paramDict.length === paramCount);
                 var shaderAssign = {
                     shaderArchiveName: shaderArchiveName,
                     shadingModelName: shadingModelName,
@@ -11636,7 +11735,7 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
     }
     function parse(buffer) {
         var view = buffer.createDataView();
-        util_24.assert(util_24.readString(buffer, 0x00, 0x04) === 'FRES');
+        util_25.assert(util_25.readString(buffer, 0x00, 0x04) === 'FRES');
         var littleEndian;
         switch (view.getUint16(0x08, false)) {
             case 0xFEFF:
@@ -11652,14 +11751,14 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
         var supportedVersions = [
             0x03050003,
         ];
-        util_24.assert(supportedVersions.includes(version));
+        util_25.assert(supportedVersions.includes(version));
         var fileNameOffs = readBinPtrT(view, 0x14, littleEndian);
-        var fileName = util_24.readString(buffer, fileNameOffs);
+        var fileName = util_25.readString(buffer, fileNameOffs);
         function parseResDicIdx(idx) {
             var tableOffs = readBinPtrT(view, 0x20 + idx * 0x04, littleEndian);
             var tableCount = view.getUint16(0x50 + idx * 0x02, littleEndian);
             var resDic = parseResDic(buffer, tableOffs, littleEndian);
-            util_24.assert(tableCount === resDic.length);
+            util_25.assert(tableCount === resDic.length);
             return resDic;
         }
         var fmdlTable = parseResDicIdx(0x00);
@@ -11699,14 +11798,14 @@ System.register("fres/bfres", ["fres/gx2_texture", "util"], function (exports_45
         var e_47, _a, e_48, _b;
     }
     exports_45("parse", parse);
-    var GX2Texture, util_24, UBOParameterType, RenderInfoParameterType;
+    var gx2_surface_1, util_25, UBOParameterType, RenderInfoParameterType;
     return {
         setters: [
-            function (GX2Texture_1) {
-                GX2Texture = GX2Texture_1;
+            function (gx2_surface_1_1) {
+                gx2_surface_1 = gx2_surface_1_1;
             },
-            function (util_24_1) {
-                util_24 = util_24_1;
+            function (util_25_1) {
+                util_25 = util_25_1;
             }
         ],
         execute: function () {
@@ -11758,7 +11857,7 @@ System.register("fres/sarc", ["util"], function (exports_46, context_46) {
     var __moduleName = context_46 && context_46.id;
     function parse(buffer) {
         var view = buffer.createDataView();
-        util_25.assert(util_25.readString(buffer, 0x00, 0x04) === 'SARC');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'SARC');
         var littleEndian;
         switch (view.getUint16(0x06, false)) {
             case 0xFEFF:
@@ -11770,16 +11869,16 @@ System.register("fres/sarc", ["util"], function (exports_46, context_46) {
             default:
                 throw new Error("Invalid BOM");
         }
-        util_25.assert(view.getUint16(0x04, littleEndian) === 0x14); // Header length.
+        util_26.assert(view.getUint16(0x04, littleEndian) === 0x14); // Header length.
         var dataOffset = view.getUint32(0x0C, littleEndian);
         var version = view.getUint16(0x10, littleEndian);
-        util_25.assert(version === 0x100);
-        util_25.assert(util_25.readString(buffer, 0x14, 0x04) === 'SFAT');
-        util_25.assert(view.getUint16(0x18, littleEndian) === 0x0C);
+        util_26.assert(version === 0x100);
+        util_26.assert(util_26.readString(buffer, 0x14, 0x04) === 'SFAT');
+        util_26.assert(view.getUint16(0x18, littleEndian) === 0x0C);
         var fileCount = view.getUint16(0x1A, littleEndian);
         var sfntTableOffs = 0x20 + 0x10 * fileCount;
-        util_25.assert(util_25.readString(buffer, sfntTableOffs, 0x04) === 'SFNT');
-        util_25.assert(view.getUint16(sfntTableOffs + 0x04, littleEndian) === 0x08);
+        util_26.assert(util_26.readString(buffer, sfntTableOffs, 0x04) === 'SFNT');
+        util_26.assert(view.getUint16(sfntTableOffs + 0x04, littleEndian) === 0x08);
         var sfntStringTableOffs = sfntTableOffs + 0x08;
         var files = [];
         var fileTableIdx = 0x20;
@@ -11789,7 +11888,7 @@ System.register("fres/sarc", ["util"], function (exports_46, context_46) {
             var name_14 = void 0;
             if (flags & 0x0100) {
                 var nameOffs = (view.getUint16(fileTableIdx + 0x06, littleEndian) * 4);
-                name_14 = util_25.readString(buffer, sfntStringTableOffs + nameOffs, 0xFF);
+                name_14 = util_26.readString(buffer, sfntStringTableOffs + nameOffs, 0xFF);
             }
             else {
                 name_14 = null;
@@ -11804,11 +11903,11 @@ System.register("fres/sarc", ["util"], function (exports_46, context_46) {
         return { buffer: buffer, files: files };
     }
     exports_46("parse", parse);
-    var util_25;
+    var util_26;
     return {
         setters: [
-            function (util_25_1) {
-                util_25 = util_25_1;
+            function (util_26_1) {
+                util_26 = util_26_1;
             }
         ],
         execute: function () {
@@ -11849,14 +11948,14 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                 throw new Error("Unsupported attribute format " + format);
         }
     }
-    var gx2_swizzle_2, GX2Texture, render_17, endian_2, util_26, ProgramGambit_UBER, Scene;
+    var gx2_swizzle_2, GX2Texture, render_17, endian_2, util_27, ProgramGambit_UBER, Scene;
     return {
         setters: [
             function (gx2_swizzle_2_1) {
                 gx2_swizzle_2 = gx2_swizzle_2_1;
             },
-            function (GX2Texture_2) {
-                GX2Texture = GX2Texture_2;
+            function (GX2Texture_1) {
+                GX2Texture = GX2Texture_1;
             },
             function (render_17_1) {
                 render_17 = render_17_1;
@@ -11864,8 +11963,8 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
             function (endian_2_1) {
                 endian_2 = endian_2_1;
             },
-            function (util_26_1) {
-                util_26 = util_26_1;
+            function (util_27_1) {
+                util_27 = util_27_1;
             }
         ],
         execute: function () {
@@ -11875,7 +11974,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     var _this = _super !== null && _super.apply(this, arguments) || this;
                     _this.$a = ProgramGambit_UBER.attribLocations;
                     _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + _this.$a._p0 + ") in vec3 _p0;\nlayout(location = " + _this.$a._u0 + ") in vec2 _u0;\nout vec2 a_u0;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(_p0, 1.0);\n    a_u0 = _u0;\n}\n";
-                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvec4 textureSRGB(sampler2D s, vec2 uv) {\n    vec4 srgba = texture(s, uv);\n    vec3 srgb = srgba.rgb;\n#ifdef HAS_WEBGL_compressed_texture_s3tc_srgb\n    vec3 rgb = srgb;\n#else\n    // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html\n    vec3 rgb = srgb * (srgb * (srgb * 0.305306011 + 0.682171111) + 0.012522878);\n#endif\n    return vec4(rgb, srgba.a);\n}\n\nvoid main() {\n    o_color = textureSRGB(_a0, a_u0);\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n    o_color.rgb += texture(_e0, a_u0).rgb;\n    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));\n}\n";
+                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvec4 textureSRGB(sampler2D s, vec2 uv) {\n    vec4 srgba = texture(s, uv);\n    vec3 srgb = srgba.rgb;\n#ifdef HAS_WEBGL_compressed_texture_s3tc_srgb\n    vec3 rgb = srgb;\n#else\n    // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html\n    vec3 rgb = srgb * (srgb * (srgb * 0.305306011 + 0.682171111) + 0.012522878);\n#endif\n    return vec4(rgb, srgba.a);\n}\n\nvoid main() {\n    o_color = textureSRGB(_a0, a_u0);\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n    o_color.rgb += textureSRGB(_e0, a_u0).rgb;\n    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));\n}\n";
                     return _this;
                 }
                 ProgramGambit_UBER.prototype.bind = function (gl, prog) {
@@ -11902,15 +12001,24 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     this.textures = this.fres.textures.map(function (textureEntry) {
                         var tex = textureEntry.texture;
                         var surface = tex.surface;
-                        var canvas = document.createElement('canvas');
-                        canvas.width = surface.width;
-                        canvas.height = surface.height;
-                        canvas.title = textureEntry.entry.name + " " + surface.format + " (" + surface.width + "x" + surface.height + ")";
-                        GX2Texture.decodeSurface(tex.surface, tex.texData, tex.mipData).then(function (decodedTexture) {
-                            GX2Texture.textureToCanvas(canvas, decodedTexture);
+                        var canvases = [];
+                        for (var i = 0; i < tex.surface.numMips; i++) {
+                            var canvas = document.createElement('canvas');
+                            canvas.width = 0;
+                            canvas.height = 0;
+                            canvases.push(canvas);
+                        }
+                        GX2Texture.decodeTexture(tex.surface, tex.texData, tex.mipData).then(function (decodedTexture) {
+                            var decompressedTexture = GX2Texture.decompressTexture(decodedTexture);
+                            decompressedTexture.surfaces.forEach(function (decompressedSurface, i) {
+                                var canvas = canvases[i];
+                                canvas.width = decompressedSurface.width;
+                                canvas.height = decompressedSurface.height;
+                                canvas.title = textureEntry.entry.name + " " + surface.format + " (" + surface.width + "x" + surface.height + ")";
+                                GX2Texture.surfaceToCanvas(canvas, decompressedTexture, decompressedSurface);
+                            });
                         });
-                        var surfaces = [canvas];
-                        return { name: textureEntry.entry.name, surfaces: surfaces };
+                        return { name: textureEntry.entry.name, surfaces: canvases };
                     });
                 }
                 Scene.prototype.translateFVTXBuffers = function (fvtx, vertexDatas) {
@@ -11920,8 +12028,8 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         if (location_1 === undefined)
                             continue;
                         var buffer = fvtx.buffers[attrib.bufferIndex];
-                        util_26.assert(buffer.stride === 0);
-                        util_26.assert(attrib.bufferStart === 0);
+                        util_27.assert(buffer.stride === 0);
+                        util_27.assert(attrib.bufferStart === 0);
                         var vertexData = endian_2.betoh(buffer.data, getAttribFormatInfo(attrib.format).elemSize);
                         vertexDatas.push(vertexData);
                     }
@@ -12060,14 +12168,14 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             else if (attribName === '_e0')
                                 uniformLocation = prog.e0Location;
                             else
-                                util_26.assert(false);
+                                util_27.assert(false);
                             gl.uniform1i(uniformLocation, i);
                             var textureAssignIndex = textureAssigns.findIndex(function (textureAssign) { return textureAssign.attribName === attribName; });
                             if (textureAssignIndex >= 0) {
                                 var textureAssign_1 = textureAssigns[textureAssignIndex];
                                 var ftexIndex = _this.fres.textures.findIndex(function (textureEntry) { return textureEntry.entry.offs === textureAssign_1.ftexOffs; });
                                 var ftex = _this.fres.textures[ftexIndex];
-                                util_26.assert(ftex.entry.name === textureAssign_1.textureName);
+                                util_27.assert(ftex.entry.name === textureAssign_1.textureName);
                                 var glTexture = _this.glTextures[ftexIndex];
                                 gl.bindTexture(gl.TEXTURE_2D, glTexture);
                                 var sampler = samplers[textureAssignIndex];
@@ -12100,7 +12208,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     try {
                         for (var _a = __values(fshp.meshes), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var mesh = _b.value;
-                            util_26.assert(mesh.indexBufferData.stride === 0);
+                            util_27.assert(mesh.indexBufferData.stride === 0);
                             var indexData = this.translateIndexBuffer(mesh.indexFormat, mesh.indexBufferData.data);
                             indexDatas.push(indexData);
                         }
@@ -12238,8 +12346,9 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
                     var surface = ftex.texture.surface;
                     // Kick off a decode...
-                    GX2Texture.decodeSurface(surface, ftex.texture.texData, ftex.texture.mipData).then(function (tex) {
+                    GX2Texture.decodeTexture(surface, ftex.texture.texData, ftex.texture.mipData).then(function (tex) {
                         gl.bindTexture(gl.TEXTURE_2D, glTexture);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, tex.surfaces.length - 1);
                         // First check if we have to decompress compressed textures.
                         switch (tex.type) {
                             case "BC1":
@@ -12251,36 +12360,45 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                     tex = GX2Texture.decompressBC(tex);
                                 break;
                         }
-                        switch (tex.type) {
-                            case "R": {
-                                var internalFormat = tex.flag === 'SNORM' ? gl.R8_SNORM : gl.R8;
-                                var type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                                var data = tex.flag === 'SNORM' ? new Int8Array(tex.pixels) : new Uint8Array(tex.pixels);
-                                gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RED, type, data);
-                                break;
+                        tex.surfaces.forEach(function (decodedSurface, i) {
+                            var level = i;
+                            var pixels = decodedSurface.pixels;
+                            var width = decodedSurface.width;
+                            var height = decodedSurface.height;
+                            util_27.assert(pixels.byteLength > 0);
+                            switch (tex.type) {
+                                case "R": {
+                                    var internalFormat = tex.flag === 'SNORM' ? gl.R8_SNORM : gl.R8;
+                                    ;
+                                    var type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                                    var data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
+                                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RED, type, data);
+                                    break;
+                                }
+                                case "RG": {
+                                    var internalFormat = tex.flag === 'SNORM' ? gl.RG8_SNORM : gl.RG8;
+                                    var type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                                    var data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
+                                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RG, type, data);
+                                    break;
+                                }
+                                case "RGBA": {
+                                    var internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
+                                    var data = new Uint8Array(pixels);
+                                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+                                    break;
+                                }
+                                case "BC1":
+                                case "BC3":
+                                case "BC4":
+                                case "BC5": {
+                                    var compressedFormat = _this.getCompressedFormat(gl, tex);
+                                    util_27.assert(compressedFormat !== null);
+                                    gl.compressedTexImage2D(gl.TEXTURE_2D, level, compressedFormat, width, height, 0, new Uint8Array(pixels));
+                                    break;
+                                }
                             }
-                            case "RG": {
-                                var internalFormat = tex.flag === 'SNORM' ? gl.RG8_SNORM : gl.RG8;
-                                var type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                                var data = tex.flag === 'SNORM' ? new Int8Array(tex.pixels) : new Uint8Array(tex.pixels);
-                                gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RG, type, data);
-                                break;
-                            }
-                            case "BC1":
-                            case "BC3":
-                            case "BC4":
-                            case "BC5": {
-                                var compressedFormat = _this.getCompressedFormat(gl, tex);
-                                util_26.assert(compressedFormat !== null);
-                                gl.compressedTexImage2D(gl.TEXTURE_2D, 0, compressedFormat, tex.width, tex.height, 0, new Uint8Array(tex.pixels));
-                                break;
-                            }
-                            case "RGBA": {
-                                var internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
-                                gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(tex.pixels));
-                                break;
-                            }
-                        }
+                        });
                     });
                     return glTexture;
                 };
@@ -12332,14 +12450,14 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
     exports_48("createSceneFromFRESBuffer", createSceneFromFRESBuffer);
     function createSceneFromSARCBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
-        if (util_27.readString(buffer, 0, 4) === 'Yaz0')
+        if (util_28.readString(buffer, 0, 4) === 'Yaz0')
             buffer = Yaz0.decompress(buffer);
         var sarc = SARC.parse(buffer);
         var file = sarc.files.find(function (file) { return file.name.endsWith('.bfres'); });
         return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
     }
     exports_48("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
-    var BFRES, SARC, Yaz0, render_18, Progressable_6, util_27, MultiScene, SceneDesc, name, id, sceneDescs, sceneGroup;
+    var BFRES, SARC, Yaz0, render_18, Progressable_6, util_28, MultiScene, SceneDesc, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
             function (BFRES_1) {
@@ -12357,8 +12475,8 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
             function (Progressable_6_1) {
                 Progressable_6 = Progressable_6_1;
             },
-            function (util_27_1) {
-                util_27 = util_27_1;
+            function (util_28_1) {
+                util_28 = util_28_1;
             }
         ],
         execute: function () {
@@ -12383,6 +12501,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                 }
                 MultiScene.prototype.render = function (state) {
                     var gl = state.gl;
+                    state.setClipPlanes(0.2, 500000);
                     this.scenes.forEach(function (scene) { return scene.render(state); });
                 };
                 MultiScene.prototype.destroy = function (gl) {
@@ -12405,7 +12524,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                     });
                 };
                 SceneDesc.prototype._createSceneFromPath = function (gl, path, isSkybox) {
-                    return util_27.fetch(path).then(function (result) {
+                    return util_28.fetch(path).then(function (result) {
                         return createSceneFromSARCBuffer(gl, result, isSkybox);
                     });
                 };
@@ -12620,7 +12739,7 @@ System.register("dksiv/render", ["gl-matrix", "render"], function (exports_50, c
 System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "util"], function (exports_51, context_51) {
     "use strict";
     var __moduleName = context_51 && context_51.id;
-    var iv_1, render_20, Progressable_7, util_28, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, name, id, sceneGroup;
+    var iv_1, render_20, Progressable_7, util_29, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, name, id, sceneGroup;
     return {
         setters: [
             function (iv_1_1) {
@@ -12632,8 +12751,8 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "ut
             function (Progressable_7_1) {
                 Progressable_7 = Progressable_7_1;
             },
-            function (util_28_1) {
-                util_28 = util_28_1;
+            function (util_29_1) {
+                util_29 = util_29_1;
             }
         ],
         execute: function () {
@@ -12722,7 +12841,7 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "ut
                         line.style.textAlign = 'right';
                         line.style.overflow = 'hidden';
                         var checkbox = document.createElement('input');
-                        checkbox.id = util_28.generateFormID();
+                        checkbox.id = util_29.generateFormID();
                         checkbox.type = 'checkbox';
                         checkbox.checked = true;
                         checkbox.onchange = function () {
@@ -12762,7 +12881,7 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "ut
                     });
                 };
                 SceneDesc.prototype.createSceneForPath = function (gl, path) {
-                    return util_28.fetch(path).then(function (result) {
+                    return util_29.fetch(path).then(function (result) {
                         var iv = iv_1.parseIV(result);
                         var basename = path.split('/').pop();
                         return new render_20.Scene(gl, basename, iv);
@@ -12786,17 +12905,17 @@ System.register("metroid_prime/pak", ["util"], function (exports_52, context_52)
     var __moduleName = context_52 && context_52.id;
     function parse(buffer) {
         var view = buffer.createDataView();
-        util_29.assert(view.getUint32(0x00) === 0x00030005);
+        util_30.assert(view.getUint32(0x00) === 0x00030005);
         // Named resource table.
         var offs = 0x08;
         var namedResourceTableEntries = [];
         var namedResourceTableCount = view.getUint32(offs);
         offs += 0x04;
         for (var i = 0; i < namedResourceTableCount; i++) {
-            var fourCC = util_29.readString(buffer, offs + 0x00, 4, false);
-            var fileID = util_29.readString(buffer, offs + 0x04, 4, false);
+            var fourCC = util_30.readString(buffer, offs + 0x00, 4, false);
+            var fileID = util_30.readString(buffer, offs + 0x04, 4, false);
             var fileNameLength = view.getUint32(offs + 0x08);
-            var fileName = util_29.readString(buffer, offs + 0x0C, fileNameLength, false);
+            var fileName = util_30.readString(buffer, offs + 0x0C, fileNameLength, false);
             namedResourceTableEntries.push({ fourCC: fourCC, fileID: fileID, fileName: fileName });
             offs += 0x0C + fileNameLength;
         }
@@ -12807,8 +12926,8 @@ System.register("metroid_prime/pak", ["util"], function (exports_52, context_52)
         offs += 0x04;
         var _loop_4 = function (i) {
             var isCompressed = !!view.getUint32(offs + 0x00);
-            var fourCC = util_29.readString(buffer, offs + 0x04, 4, false);
-            var fileID = util_29.readString(buffer, offs + 0x08, 4, false);
+            var fourCC = util_30.readString(buffer, offs + 0x04, 4, false);
+            var fileID = util_30.readString(buffer, offs + 0x08, 4, false);
             var fileSize = view.getUint32(offs + 0x0C);
             var fileOffset = view.getUint32(offs + 0x10);
             offs += 0x14;
@@ -12821,8 +12940,8 @@ System.register("metroid_prime/pak", ["util"], function (exports_52, context_52)
             if (resourceTable.has(fileID)) {
                 var existingResource = resourceTable.get(fileID);
                 // Skip files that are apparently the same.
-                util_29.assert(fourCC === existingResource.fourCC);
-                util_29.assert(fileSize === existingResource.fileSize);
+                util_30.assert(fourCC === existingResource.fourCC);
+                util_30.assert(fileSize === existingResource.fileSize);
                 return "continue";
             }
             // Check for a named resource.
@@ -12830,7 +12949,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_52, context_52)
             var namedResourceTableEntry = namedResourceTableEntries.find(function (nr) { return nr.fileID === fileID; });
             if (namedResourceTableEntry) {
                 name_15 = namedResourceTableEntry.fileName;
-                util_29.assert(namedResourceTableEntry.fourCC === fourCC);
+                util_30.assert(namedResourceTableEntry.fourCC === fourCC);
             }
             var fileBuffer = buffer.slice(fileOffset, fileOffset + fileSize);
             var fileResource = { name: name_15, fourCC: fourCC, fileID: fileID, fileSize: fileSize, fileOffset: fileOffset, isCompressed: isCompressed, decompressedSize: decompressedSize, buffer: fileBuffer };
@@ -12844,11 +12963,11 @@ System.register("metroid_prime/pak", ["util"], function (exports_52, context_52)
         return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
     }
     exports_52("parse", parse);
-    var util_29;
+    var util_30;
     return {
         setters: [
-            function (util_29_1) {
-                util_29 = util_29_1;
+            function (util_30_1) {
+                util_30 = util_30_1;
             }
         ],
         execute: function () {
@@ -12921,7 +13040,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
         var textures = [];
         var textureRemapTable = [];
         for (var i = 0; i < textureCount; i++) {
-            var materialTXTRID = util_30.readString(buffer, offs, 0x04, false);
+            var materialTXTRID = util_31.readString(buffer, offs, 0x04, false);
             var txtr = resourceSystem.loadAssetByID(materialTXTRID, 'TXTR');
             var txtrIndex = textures.indexOf(txtr);
             if (txtrIndex >= 0) {
@@ -12948,7 +13067,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             var textureIndexCount = view.getUint32(offs + 0x04);
             offs += 0x08;
             var textureIndexes = [];
-            util_30.assert(textureIndexCount < 8);
+            util_31.assert(textureIndexCount < 8);
             for (var j = 0; j < textureIndexCount; j++) {
                 var textureIndex = view.getUint32(offs);
                 textureIndexes.push(textureIndex);
@@ -12983,7 +13102,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                 offs += 0x04;
             }
             var colorChannelFlagsTableCount = view.getUint32(offs);
-            util_30.assert(colorChannelFlagsTableCount <= 4);
+            util_31.assert(colorChannelFlagsTableCount <= 4);
             offs += 0x04;
             var lightChannels = [];
             // Only color channel 1 is stored in the format.
@@ -13004,7 +13123,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                 alphaChannel: { lightingEnabled: false, ambColorSource: 0 /* REG */, matColorSource: 0 /* REG */ },
             });
             var tevStageCount = view.getUint32(offs);
-            util_30.assert(tevStageCount <= 8);
+            util_31.assert(tevStageCount <= 8);
             offs += 0x04;
             var tevOrderTableOffs = offs + tevStageCount * 0x14;
             var tevStages = [];
@@ -13051,7 +13170,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             // Skip past TEV order table.
             offs = tevOrderTableOffs;
             var texGenCount = view.getUint32(offs);
-            util_30.assert(texGenCount <= 8);
+            util_31.assert(texGenCount <= 8);
             offs += 0x04;
             var texGens = [];
             for (var j = 0; j < texGenCount; j++) {
@@ -13154,7 +13273,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                 ropInfo: ropInfo,
             };
             materials.push({ flags: flags, groupIndex: groupIndex, textureIndexes: textureIndexes, vtxAttrFormat: vtxAttrFormat, gxMaterial: gxMaterial, uvAnimations: uvAnimations });
-            util_30.assert((offs - materialsStart) === materialEndTable[i]);
+            util_31.assert((offs - materialsStart) === materialEndTable[i]);
         }
         return { textures: textures, textureRemapTable: textureRemapTable, materials: materials };
     }
@@ -13198,7 +13317,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             var normalZ = view.getFloat32(surfaceOffs + 0x28);
             // XXX(jstpierre): 0x30 or 0x2C?
             var surfaceHeaderEnd = surfaceOffs + 0x2C + extraDataSize;
-            var primitiveDataOffs = util_30.align(surfaceHeaderEnd, 32);
+            var primitiveDataOffs = util_31.align(surfaceHeaderEnd, 32);
             // Build our vertex format.
             var material = materialSet.materials[materialIndex];
             var vtxAttrFormat = material.vtxAttrFormat;
@@ -13253,7 +13372,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                 drawCallIdx += vertexIndexSize * vertexCount;
             }
             // Make sure the whole thing fits in 16 bits.
-            util_30.assert(totalVertexCount <= 0xFFFF);
+            util_31.assert(totalVertexCount <= 0xFFFF);
             // Now make the data.
             var indexDataIdx = 0;
             var indexData = new Uint16Array(totalTriangleCount * 3);
@@ -13289,7 +13408,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                         }
                         break;
                 }
-                util_30.assert((vertexId - firstVertex) === drawCall.vertexCount);
+                util_31.assert((vertexId - firstVertex) === drawCall.vertexCount);
                 var drawCallIdx = drawCall.srcOffs;
                 for (var j = 0; j < drawCall.vertexCount; j++) {
                     // Copy attribute data.
@@ -13360,9 +13479,9 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                                 packedDataView[packedDataOffs++] = view.getFloat32(uvfSectionOffs + ((index * 2) + 1) * 0x04);
                                 break;
                         }
-                        util_30.assert((packedDataOffs - packedDataOffs__) === format.compCount);
+                        util_31.assert((packedDataOffs - packedDataOffs__) === format.compCount);
                     }
-                    util_30.assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
+                    util_31.assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
                 }
             });
             var surface = {
@@ -13385,9 +13504,9 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
     }
     function parse(resourceSystem, buffer) {
         var view = buffer.createDataView();
-        util_30.assert(view.getUint32(0x00) === 0xDEADBEEF);
+        util_31.assert(view.getUint32(0x00) === 0xDEADBEEF);
         var version = view.getUint32(0x04);
-        util_30.assert(version === 0x0F);
+        util_31.assert(version === 0x0F);
         // 0x10 - 0x34: Transform matrix
         var worldModelCount = view.getUint32(0x38);
         var dataSectionCount = view.getUint32(0x3C);
@@ -13399,15 +13518,15 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             dataSectionSizeTable.push(size);
             dataSectionSizeTableIdx += 0x04;
         }
-        var firstDataSectionOffs = util_30.align(dataSectionSizeTableIdx, 32);
+        var firstDataSectionOffs = util_31.align(dataSectionSizeTableIdx, 32);
         var dataSectionOffsTable = [firstDataSectionOffs];
         for (var i = 1; i < dataSectionCount; i++) {
             var prevOffs = dataSectionOffsTable[i - 1];
             var prevSize = dataSectionSizeTable[i - 1];
-            dataSectionOffsTable.push(util_30.align(prevOffs + prevSize, 32));
+            dataSectionOffsTable.push(util_31.align(prevOffs + prevSize, 32));
         }
         // In practice.
-        util_30.assert(worldGeometrySectionIndex === 0);
+        util_31.assert(worldGeometrySectionIndex === 0);
         // The materials section is always the first index in the world geometry section indexes...
         var materialSectionOffs = dataSectionOffsTable[worldGeometrySectionIndex + 0];
         // Parse out materials.
@@ -13431,14 +13550,14 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
         var _a;
     }
     exports_54("parse", parse);
-    var GX_Material, util_30, endian_3, vtxAttrFormats;
+    var GX_Material, util_31, endian_3, vtxAttrFormats;
     return {
         setters: [
             function (GX_Material_4) {
                 GX_Material = GX_Material_4;
             },
-            function (util_30_1) {
-                util_30 = util_30_1;
+            function (util_31_1) {
+                util_31 = util_31_1;
             },
             function (endian_3_1) {
                 endian_3 = endian_3_1;
@@ -13478,9 +13597,9 @@ System.register("metroid_prime/strg", ["util"], function (exports_55, context_55
     }
     function parse(resourceSystem, buffer) {
         var view = buffer.createDataView();
-        util_31.assert(view.getUint32(0x00) === 0x87654321);
+        util_32.assert(view.getUint32(0x00) === 0x87654321);
         var version = view.getUint32(0x04);
-        util_31.assert(version === 0x00); // Metroid Prime 1
+        util_32.assert(version === 0x00); // Metroid Prime 1
         var languageCount = view.getUint32(0x08);
         var stringCount = view.getUint32(0x0C);
         var languageTableOffs = 0x10;
@@ -13488,7 +13607,7 @@ System.register("metroid_prime/strg", ["util"], function (exports_55, context_55
         var languageTableIdx = languageTableOffs;
         var strings = [];
         for (var i = 0; i < languageCount; i++) {
-            var languageID = util_31.readString(buffer, languageTableIdx + 0x00, 4, false);
+            var languageID = util_32.readString(buffer, languageTableIdx + 0x00, 4, false);
             var languageStringsOffs = view.getUint32(languageTableIdx + 0x04);
             languageTableIdx += 0x08;
             // Load English for now because I am a dirty American.
@@ -13508,11 +13627,11 @@ System.register("metroid_prime/strg", ["util"], function (exports_55, context_55
         return { strings: strings };
     }
     exports_55("parse", parse);
-    var util_31, utf16Decoder;
+    var util_32, utf16Decoder;
     return {
         setters: [
-            function (util_31_1) {
-                util_31 = util_31_1;
+            function (util_32_1) {
+                util_32 = util_32_1;
             }
         ],
         execute: function () {
@@ -13524,7 +13643,7 @@ System.register("metroid_prime/strg", ["util"], function (exports_55, context_55
 System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_56, context_56) {
     "use strict";
     var __moduleName = context_56 && context_56.id;
-    var pako_1, MLVL, MREA, STRG, TXTR, util_32, ArrayBufferSlice_6, FourCCLoaders, ResourceSystem;
+    var pako_1, MLVL, MREA, STRG, TXTR, util_33, ArrayBufferSlice_6, FourCCLoaders, ResourceSystem;
     return {
         setters: [
             function (pako_1_1) {
@@ -13542,8 +13661,8 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
             function (TXTR_1) {
                 TXTR = TXTR_1;
             },
-            function (util_32_1) {
-                util_32 = util_32_1;
+            function (util_33_1) {
+                util_33 = util_33_1;
             },
             function (ArrayBufferSlice_6_1) {
                 ArrayBufferSlice_6 = ArrayBufferSlice_6_1;
@@ -13572,7 +13691,7 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                     }
                 };
                 ResourceSystem.prototype.findResourceByID = function (assetID) {
-                    util_32.assert(assetID.length === 4);
+                    util_33.assert(assetID.length === 4);
                     try {
                         for (var _a = __values(this.paks), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var pak = _b.value;
@@ -13599,7 +13718,7 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                     if (!loaderFunc)
                         return null;
                     var resource = this.findResourceByID(assetID);
-                    util_32.assert(resource.fourCC === fourCC);
+                    util_33.assert(resource.fourCC === fourCC);
                     var buffer = this.loadResourceBuffer(resource);
                     var inst = loaderFunc(this, buffer);
                     this._cache.set(assetID, inst);
@@ -13617,12 +13736,12 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_57, context_57
     var __moduleName = context_57 && context_57.id;
     function parse(resourceSystem, buffer) {
         var view = buffer.createDataView();
-        util_33.assert(view.getUint32(0x00) == 0xDEAFBABE);
+        util_34.assert(view.getUint32(0x00) == 0xDEAFBABE);
         var version = view.getUint32(0x04);
         // Version that appears in Metroid Prime 1.
-        util_33.assert(version === 0x11);
+        util_34.assert(version === 0x11);
         // STRG file ID?
-        var worldNameSTRGID = util_33.readString(buffer, 0x08, 4, false);
+        var worldNameSTRGID = util_34.readString(buffer, 0x08, 4, false);
         var worldNameSTRG = resourceSystem.findResourceByID(worldNameSTRGID);
         resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
         var worldSaveID = view.getUint32(0x0C);
@@ -13640,19 +13759,19 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_57, context_57
         }
         var areaTableOffs = memoryRelayTableIdx;
         var areaTableCount = view.getUint32(areaTableOffs + 0x00);
-        util_33.assert(view.getUint32(areaTableOffs + 0x04) === 0x01);
+        util_34.assert(view.getUint32(areaTableOffs + 0x04) === 0x01);
         var areaTableIdx = areaTableOffs + 0x08;
         var areaTable = [];
         for (var i = 0; i < areaTableCount; i++) {
-            var areaSTRGID = util_33.readString(buffer, areaTableIdx, 4, false);
+            var areaSTRGID = util_34.readString(buffer, areaTableIdx, 4, false);
             var areaSTRG = resourceSystem.findResourceByID(areaSTRGID);
-            util_33.assert(areaSTRG !== null);
+            util_34.assert(areaSTRG !== null);
             areaTableIdx += 0x04;
             areaTableIdx += 0x04 * 12; // Transform matrix
             areaTableIdx += 0x04 * 6; // AABB
-            var areaMREAID = util_33.readString(buffer, areaTableIdx + 0x00, 4, false);
+            var areaMREAID = util_34.readString(buffer, areaTableIdx + 0x00, 4, false);
             var areaMREA = resourceSystem.findResourceByID(areaMREAID);
-            util_33.assert(areaMREA !== null);
+            util_34.assert(areaMREA !== null);
             var areaInternalID = view.getUint32(areaTableIdx + 0x04);
             areaTableIdx += 0x08;
             var attachedAreaCount = view.getUint32(areaTableIdx + 0x00);
@@ -13696,11 +13815,11 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_57, context_57
         return { areaTable: areaTable };
     }
     exports_57("parse", parse);
-    var util_33;
+    var util_34;
     return {
         setters: [
-            function (util_33_1) {
-                util_33 = util_33_1;
+            function (util_34_1) {
+                util_34 = util_34_1;
             }
         ],
         execute: function () {
@@ -13711,7 +13830,7 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_57, context_57
 System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/gx_texture", "gx/gx_material", "render", "util", "ArrayBufferSlice"], function (exports_58, context_58) {
     "use strict";
     var __moduleName = context_58 && context_58.id;
-    var gl_matrix_11, mrea_1, GX_Texture, GX_Material, render_21, util_34, ArrayBufferSlice_7, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
+    var gl_matrix_11, mrea_1, GX_Texture, GX_Material, render_21, util_35, ArrayBufferSlice_7, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
     return {
         setters: [
             function (gl_matrix_11_1) {
@@ -13729,8 +13848,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
             function (render_21_1) {
                 render_21 = render_21_1;
             },
-            function (util_34_1) {
-                util_34 = util_34_1;
+            function (util_35_1) {
+                util_35 = util_35_1;
             },
             function (ArrayBufferSlice_7_1) {
                 ArrayBufferSlice_7 = ArrayBufferSlice_7_1;
@@ -13952,7 +14071,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
             }());
             fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_11.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
             materialParamsSize = 4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 8;
-            packetParamsOffs = util_34.align(materialParamsSize, 64);
+            packetParamsOffs = util_35.align(materialParamsSize, 64);
             packetParamsSize = 11 * 16;
             paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
             Command_Material = /** @class */ (function () {
@@ -14059,7 +14178,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
             return "https://funny.computer/cloud/MetroidPrime1/";
         }
     }
-    var PAK, resource_1, render_22, util_35, Progressable_8, pakBase, MultiScene, MP1SceneDesc, id, name, sceneDescs, sceneGroup;
+    var PAK, resource_1, render_22, util_36, Progressable_8, pakBase, MultiScene, MP1SceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (PAK_1) {
@@ -14071,8 +14190,8 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
             function (render_22_1) {
                 render_22 = render_22_1;
             },
-            function (util_35_1) {
-                util_35 = util_35_1;
+            function (util_36_1) {
+                util_36 = util_36_1;
             },
             function (Progressable_8_1) {
                 Progressable_8 = Progressable_8_1;
@@ -14120,7 +14239,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                     this.id = filename;
                 }
                 MP1SceneDesc.prototype.fetchPak = function (path) {
-                    return util_35.fetch(path).then(function (buffer) {
+                    return util_36.fetch(path).then(function (buffer) {
                         return PAK.parse(buffer);
                     });
                 };
@@ -14133,7 +14252,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                         try {
                             for (var _a = __values(levelPak.namedResourceTable.values()), _b = _a.next(); !_b.done; _b = _a.next()) {
                                 var mlvlEntry = _b.value;
-                                util_35.assert(mlvlEntry.fourCC === 'MLVL');
+                                util_36.assert(mlvlEntry.fourCC === 'MLVL');
                                 var mlvl = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
                                 // Crash my browser please.
                                 var areas = mlvl.areaTable.slice(0, 10);
@@ -14803,7 +14922,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
     "use strict";
     var __moduleName = context_62 && context_62.id;
     function createScene(gl, name) {
-        return util_36.fetch("data/j3d/dolpic0.szs").then(function (buffer) {
+        return util_37.fetch("data/j3d/dolpic0.szs").then(function (buffer) {
             var bufferSlice = Yaz0.decompress(buffer);
             var rarc = RARC.parse(bufferSlice);
             var skyScene = sms_scenes_1.SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
@@ -14816,14 +14935,14 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         });
     }
     exports_62("createScene", createScene);
-    var gl_matrix_12, util_36, GX_Material, j3d_5, RARC, render_23, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
+    var gl_matrix_12, util_37, GX_Material, j3d_5, RARC, render_23, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
     return {
         setters: [
             function (gl_matrix_12_1) {
                 gl_matrix_12 = gl_matrix_12_1;
             },
-            function (util_36_1) {
-                util_36 = util_36_1;
+            function (util_37_1) {
+                util_37 = util_37_1;
             },
             function (GX_Material_6) {
                 GX_Material = GX_Material_6;
