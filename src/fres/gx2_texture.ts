@@ -5,27 +5,9 @@ import { deswizzler } from './gx2_swizzle';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import { assert } from '../util';
 
-interface DecodedTextureR {
-    type: 'R';
-    flag: 'UNORM' | 'SNORM';
-    bytesPerPixel: 1;
-    surfaces: DecodedSurface[];
-    width: number;
-    height: number;
-}
-
-interface DecodedTextureRG {
-    type: 'RG';
-    flag: 'UNORM' | 'SNORM';
-    bytesPerPixel: 2;
-    surfaces: DecodedSurface[];
-    width: number;
-    height: number;
-}
-
 interface DecodedTextureRGBA {
     type: 'RGBA';
-    flag: 'UNORM' | 'SRGB';
+    flag: 'UNORM' | 'SNORM' | 'SRGB';
     bytesPerPixel: 4;
     surfaces: DecodedSurface[];
     width: number;
@@ -49,7 +31,7 @@ interface DecodedTextureBC45 {
 }
 
 export type DecodedTextureBC = DecodedTextureBC13 | DecodedTextureBC45;
-export type DecodedTextureSW = DecodedTextureR | DecodedTextureRG | DecodedTextureRGBA;
+export type DecodedTextureSW = DecodedTextureRGBA;
 export type DecodedTexture = DecodedTextureBC | DecodedTextureSW;
 
 // #region Texture Decode
@@ -249,24 +231,22 @@ function decompressBC3Surface(surface: DecodedSurface, flag: string): DecodedSur
     return { ...surface, pixels };
 }
 
-// Software decompresses from standard BC4/BC5 to R/RG.
-function decompressBC45Surface(surface: DecodedSurface, inType: string, flag: string): DecodedSurface {
-    let bytesPerPixel: 1 | 2;
+// Software decompresses from standard BC4/BC5 to RGBA.
+function decompressBC45Surface(surface: DecodedSurface, inType: 'BC4' | 'BC5', flag: string): DecodedSurface {
+    let bytesPerPixel = 4;
     const width = surface.width;
     const height = surface.height;
-    switch (inType) {
-    case 'BC4':
-        bytesPerPixel = 1;
-        break;
-    case 'BC5':
-        bytesPerPixel = 2;
-        break;
-    }
 
     const signed = flag === 'SNORM';
     const view = new DataView(surface.pixels);
     let dst;
     let colorTable;
+
+    let srcBytesPerPixel;
+    if (inType === 'BC4')
+        srcBytesPerPixel = 1;
+    else
+        srcBytesPerPixel = 2;
 
     if (signed) {
         dst = new Int8Array(width * height * bytesPerPixel);
@@ -279,7 +259,7 @@ function decompressBC45Surface(surface: DecodedSurface, inType: string, flag: st
     let srcOffs = 0;
     for (let yy = 0; yy < height; yy += 4) {
         for (let xx = 0; xx < width; xx += 4) {
-            for (let ch = 0; ch < bytesPerPixel; ch++) {
+            for (let ch = 0; ch < srcBytesPerPixel; ch++) {
                 let red0;
                 let red1;
                 if (signed) {
@@ -318,7 +298,14 @@ function decompressBC45Surface(surface: DecodedSurface, inType: string, flag: st
                         const colorBits = fullShift < 24 ? colorBits0 : colorBits1;
                         const shift = fullShift % 24;
                         const index = (colorBits >>> shift) & 0x07;
-                        dst[dstOffs] = colorTable[index];
+                        if (ch === 0) {
+                            dst[dstOffs + 0] = colorTable[index];
+                            dst[dstOffs + 1] = colorTable[index];
+                            dst[dstOffs + 2] = colorTable[index];
+                            dst[dstOffs + 3] = colorTable[index];
+                        } else {
+                            dst[dstOffs + 3] = colorTable[index];
+                        }
                     }
                 }
 
@@ -351,22 +338,7 @@ export function decompressBC(texture: DecodedTextureBC): DecodedTextureSW {
         return decompressBCSurface(texture.type, texture.flag, surface);
     });
 
-    switch (texture.type) {
-    case 'BC1':
-    case 'BC3': {
-        // XXX(jstpierre): TypeScript has a hard time figuring this out even though it should know...
-        const flag = (<DecodedTextureBC13> texture).flag;
-        return { type: 'RGBA', bytesPerPixel: 4, flag, width: texture.width, height: texture.height, surfaces };
-    }
-    case 'BC4': {
-        const flag = (<DecodedTextureBC45> texture).flag;
-        return { type: 'R', bytesPerPixel: 1, flag, width: texture.width, height: texture.height, surfaces };
-    }
-    case 'BC5': {
-        const flag = (<DecodedTextureBC45> texture).flag;
-        return { type: 'RG', bytesPerPixel: 2, flag, width: texture.width, height: texture.height, surfaces };
-    }
-    }
+    return { type: 'RGBA', bytesPerPixel: 4, flag: texture.flag, width: texture.width, height: texture.height, surfaces };
 }
 
 export function decodeSurface(surface: GX2Surface, texData: ArrayBufferSlice, mipLevel: number): Promise<DecodedSurface> {
@@ -430,48 +402,22 @@ export function surfaceToCanvas(canvas: HTMLCanvasElement, texture: DecodedTextu
     const imageData = new ImageData(width, height);
 
     switch (texture.type) {
-    case 'R':
-        if (texture.flag === 'UNORM') {
-            const src = new Uint8Array(surface.pixels);
-            for (let i = 0; i < surface.width * surface.height; i++) {
-                imageData.data[i * 4 + 0] = src[i];
-                imageData.data[i * 4 + 1] = src[i];
-                imageData.data[i * 4 + 2] = src[i];
-                imageData.data[i * 4 + 3] = 0xFF;
-            }
-        } else {
-            const src = new Int8Array(surface.pixels);
-            for (let i = 0; i < surface.width * surface.height; i++) {
-                imageData.data[i * 4 + 0] = src[i] + 128;
-                imageData.data[i * 4 + 1] = src[i] + 128;
-                imageData.data[i * 4 + 2] = src[i] + 128;
-                imageData.data[i * 4 + 3] = 0xFF;
-            }
-        }
-        break;
-    case 'RG': {
-        if (texture.flag === 'UNORM') {
-            const src = new Uint8Array(surface.pixels);
-            for (let i = 0; i < surface.width * surface.height; i++) {
-                imageData.data[i * 4 + 0] = src[i * 2 + 0];
-                imageData.data[i * 4 + 1] = src[i * 2 + 1];
-                imageData.data[i * 4 + 2] = 0xFF;
-                imageData.data[i * 4 + 3] = 0xFF;
-            }
-        } else {
-            const src = new Int8Array(surface.pixels);
-            for (let i = 0; i < surface.width * surface.height; i++) {
-                imageData.data[i * 4 + 0] = src[i * 2 + 0] + 128;
-                imageData.data[i * 4 + 1] = src[i * 2 + 1] + 128;
-                imageData.data[i * 4 + 2] = 0xFF;
-                imageData.data[i * 4 + 3] = 0xFF;
-            }
-        }
-        break;
-    }
     case 'RGBA':
-        const src = new Uint8Array(surface.pixels);
-        imageData.data.set(src);
+        if (texture.flag === 'UNORM') {
+            const src = new Uint8Array(surface.pixels);
+            imageData.data.set(src);
+        } else if (texture.flag === 'SRGB') {
+            // XXX(jstpierre): SRGB
+            const src = new Uint8Array(surface.pixels);
+            imageData.data.set(src);
+        } else if (texture.flag === 'SNORM') {
+            const src = new Int8Array(surface.pixels);
+            const data = new Uint8Array(surface.pixels.byteLength);
+            for (let i = 0; i < src.length; i++) {
+                data[i] = src[i] + 128;
+            }
+            imageData.data.set(data);
+        }
         break;
     }
     ctx.putImageData(imageData, 0, 0);
@@ -479,8 +425,6 @@ export function surfaceToCanvas(canvas: HTMLCanvasElement, texture: DecodedTextu
 
 export function decompressTexture(texture: DecodedTexture): DecodedTextureSW {
     switch(texture.type) {
-    case 'R':
-    case 'RG':
     case 'RGBA':
         return texture;
     case 'BC1':

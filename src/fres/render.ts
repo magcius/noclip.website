@@ -503,22 +503,8 @@ export class Scene implements Viewer.Scene {
                 assert(pixels.byteLength > 0);
 
                 switch (tex.type) {
-                case "R": {
-                    const internalFormat = tex.flag === 'SNORM' ? gl.R8_SNORM : gl.R8;;
-                    const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                    const data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
-                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RED, type, data);
-                    break;
-                }
-                case "RG": {
-                    const internalFormat = tex.flag === 'SNORM' ? gl.RG8_SNORM : gl.RG8;
-                    const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                    const data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
-                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RG, type, data);
-                    break;
-                }
                 case "RGBA": {
-                    const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
+                    const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : tex.flag === 'SNORM' ? gl.RGBA8I : gl.RGBA8;
                     const data = new Uint8Array(pixels);
                     gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
                     break;
