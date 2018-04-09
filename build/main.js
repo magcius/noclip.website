@@ -8193,8 +8193,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         state.textureImageAddr = addr;
     }
     function cmd_SETTILE(state, w0, w1) {
-        // XXX(jstpierre): Stop wrecking the type system.
-        state.textureTile = {
+        state.currentTile = {
             format: (w0 >> 16) & 0xFF,
             cms: (w1 >> 8) & 0x3,
             cmt: (w1 >> 18) & 0x3,
@@ -8205,17 +8204,20 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             // shiftT: (w1 >> 10) & 0xF,
             maskS: (w1 >> 4) & 0xF,
             maskT: (w1 >> 14) & 0xF,
+            width: 0, height: 0, dstFormat: null,
+            pixels: null, addr: 0, glTextureId: null,
+            uls: 0, ult: 0, lrs: 0, lrt: 0,
         };
-        calcTextureSize(state.textureTile);
     }
     function cmd_SETTILESIZE(state, w0, w1) {
         var tileIdx = (w1 >> 24) & 0x7;
         // XXX(jstpierre): Multiple tiles?
-        var tile = state.textureTile;
+        var tile = state.currentTile;
         tile.uls = (w0 >> 14) & 0x3FF;
         tile.ult = (w0 >> 2) & 0x3FF;
         tile.lrs = (w1 >> 14) & 0x3FF;
         tile.lrt = (w1 >> 2) & 0x3FF;
+        calcTextureSize(tile);
     }
     function cmd_LOADTLUT(state, w0, w1) {
         var rom = state.rom;
@@ -8554,6 +8556,8 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
                 maxTexel = 1024;
                 lineShift = 2;
                 break; // RGBA
+            default:
+                throw "whoops";
         }
         var lineW = texture.lineSize << lineShift;
         var tileW = texture.lrs - texture.uls + 1;
@@ -8589,6 +8593,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         cmd_SETTIMG(state, cmds[0][0], cmds[0][1]);
         cmd_SETTILE(state, cmds[5][0], cmds[5][1]);
         cmd_SETTILESIZE(state, cmds[6][0], cmds[6][1]);
+        state.textureTile = state.currentTile;
         var tile = state.textureTile;
         tile.addr = state.textureImageAddr;
         flushDraw(state);
