@@ -12,33 +12,33 @@ import * as Viewer from '../viewer';
 
 type CmdFunc = (renderState: RenderState) => void;
 
-const UCodeCommands = {
-    VTX: 0x01,
-    TRI1: 0x05,
-    TRI2: 0x06,
-    GEOMETRYMODE: 0xD9,
+const enum UCodeCommands {
+    VTX = 0x01,
+    TRI1 = 0x05,
+    TRI2 = 0x06,
+    GEOMETRYMODE = 0xD9,
 
-    SETOTHERMODE_L: 0xE2,
-    SETOTHERMODE_H: 0xE3,
+    SETOTHERMODE_L = 0xE2,
+    SETOTHERMODE_H = 0xE3,
 
-    DL: 0xDE,
-    ENDDL: 0xDF,
+    DL = 0xDE,
+    ENDDL = 0xDF,
 
-    MTX: 0xDA,
-    POPMTX: 0xD8,
+    MTX = 0xDA,
+    POPMTX = 0xD8,
 
-    TEXTURE: 0xD7,
-    LOADTLUT: 0xF0,
-    LOADBLOCK: 0xF3,
-    SETTILESIZE: 0xF2,
-    SETTILE: 0xF5,
-    SETPRIMCOLOR: 0xF9,
-    SETENVCOLOR: 0xFB,
-    SETCOMBINE: 0xFC,
-    SETTIMG: 0xFD,
-    RDPLOADSYNC: 0xE6,
-    RDPPIPESYNC: 0xE7,
-};
+    TEXTURE = 0xD7,
+    LOADTLUT = 0xF0,
+    LOADBLOCK = 0xF3,
+    SETTILESIZE = 0xF2,
+    SETTILE = 0xF5,
+    SETPRIMCOLOR = 0xF9,
+    SETENVCOLOR = 0xFB,
+    SETCOMBINE = 0xFC,
+    SETTIMG = 0xFD,
+    RDPLOADSYNC = 0xE6,
+    RDPPIPESYNC = 0xE7,
+}
 
 class State {
     public gl: WebGL2RenderingContext;
@@ -61,8 +61,8 @@ class State {
     public currentTile: TextureTile;
     public textureTile: TextureTile;
 
-    public rom: any;
-    public banks: any;
+    public rom: ZELVIEW0.ZELVIEW0;
+    public banks: ZELVIEW0.RomBanks;
 
     public lookupAddress(addr: number) {
         return this.rom.lookupAddress(this.banks, addr);
@@ -837,9 +837,8 @@ function runDL(state: State, addr: number) {
 
         // Texture uploads need to be special.
         if (cmdType === UCodeCommands.SETTIMG) {
-            const U = UCodeCommands;
             const nextCmds = collectNextCmds();
-            if (matchesCmdStream(nextCmds, [U.SETTIMG, U.SETTILE, U.RDPLOADSYNC, U.LOADBLOCK, U.RDPPIPESYNC, U.SETTILE, U.SETTILESIZE])) {
+            if (matchesCmdStream(nextCmds, [UCodeCommands.SETTIMG, UCodeCommands.SETTILE, UCodeCommands.RDPLOADSYNC, UCodeCommands.LOADBLOCK, UCodeCommands.RDPPIPESYNC, UCodeCommands.SETTILE, UCodeCommands.SETTILESIZE])) {
                 loadTextureBlock(state, nextCmds);
                 offs += 7 * 8;
                 continue;
