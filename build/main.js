@@ -8630,13 +8630,12 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             var cmd0 = rom.view.getUint32(offs, false);
             var cmd1 = rom.view.getUint32(offs + 4, false);
             var cmdType = cmd0 >>> 24;
-            if (cmdType === UCodeCommands.ENDDL)
+            if (cmdType === 223 /* ENDDL */)
                 break;
             // Texture uploads need to be special.
-            if (cmdType === UCodeCommands.SETTIMG) {
-                var U = UCodeCommands;
+            if (cmdType === 253 /* SETTIMG */) {
                 var nextCmds = collectNextCmds();
-                if (matchesCmdStream(nextCmds, [U.SETTIMG, U.SETTILE, U.RDPLOADSYNC, U.LOADBLOCK, U.RDPPIPESYNC, U.SETTILE, U.SETTILESIZE])) {
+                if (matchesCmdStream(nextCmds, [253 /* SETTIMG */, 245 /* SETTILE */, 230 /* RDPLOADSYNC */, 243 /* LOADBLOCK */, 231 /* RDPPIPESYNC */, 245 /* SETTILE */, 242 /* SETTILESIZE */])) {
                     loadTextureBlock(state, nextCmds);
                     offs += 7 * 8;
                     continue;
@@ -8677,7 +8676,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         return new DL(vao, state.cmds, state.textures);
     }
     exports_33("readDL", readDL);
-    var gl_matrix_9, Render, render_12, UCodeCommands, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
+    var gl_matrix_9, Render, render_12, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
             function (gl_matrix_9_1) {
@@ -8691,29 +8690,6 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             }
         ],
         execute: function () {
-            UCodeCommands = {
-                VTX: 0x01,
-                TRI1: 0x05,
-                TRI2: 0x06,
-                GEOMETRYMODE: 0xD9,
-                SETOTHERMODE_L: 0xE2,
-                SETOTHERMODE_H: 0xE3,
-                DL: 0xDE,
-                ENDDL: 0xDF,
-                MTX: 0xDA,
-                POPMTX: 0xD8,
-                TEXTURE: 0xD7,
-                LOADTLUT: 0xF0,
-                LOADBLOCK: 0xF3,
-                SETTILESIZE: 0xF2,
-                SETTILE: 0xF5,
-                SETPRIMCOLOR: 0xF9,
-                SETENVCOLOR: 0xFB,
-                SETCOMBINE: 0xFC,
-                SETTIMG: 0xFD,
-                RDPLOADSYNC: 0xE6,
-                RDPPIPESYNC: 0xE7,
-            };
             State = /** @class */ (function () {
                 function State() {
                 }
@@ -8741,19 +8717,19 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             // XXX: This is global to cut down on resources between DLs.
             tileCache = new Map();
             CommandDispatch = {};
-            CommandDispatch[UCodeCommands.VTX] = cmd_VTX;
-            CommandDispatch[UCodeCommands.TRI1] = cmd_TRI1;
-            CommandDispatch[UCodeCommands.TRI2] = cmd_TRI2;
-            CommandDispatch[UCodeCommands.GEOMETRYMODE] = cmd_GEOMETRYMODE;
-            CommandDispatch[UCodeCommands.DL] = cmd_DL;
-            CommandDispatch[UCodeCommands.MTX] = cmd_MTX;
-            CommandDispatch[UCodeCommands.POPMTX] = cmd_POPMTX;
-            CommandDispatch[UCodeCommands.SETOTHERMODE_L] = cmd_SETOTHERMODE_L;
-            CommandDispatch[UCodeCommands.LOADTLUT] = cmd_LOADTLUT;
-            CommandDispatch[UCodeCommands.TEXTURE] = cmd_TEXTURE;
-            CommandDispatch[UCodeCommands.SETTIMG] = cmd_SETTIMG;
-            CommandDispatch[UCodeCommands.SETTILE] = cmd_SETTILE;
-            CommandDispatch[UCodeCommands.SETTILESIZE] = cmd_SETTILESIZE;
+            CommandDispatch[1 /* VTX */] = cmd_VTX;
+            CommandDispatch[5 /* TRI1 */] = cmd_TRI1;
+            CommandDispatch[6 /* TRI2 */] = cmd_TRI2;
+            CommandDispatch[217 /* GEOMETRYMODE */] = cmd_GEOMETRYMODE;
+            CommandDispatch[222 /* DL */] = cmd_DL;
+            CommandDispatch[218 /* MTX */] = cmd_MTX;
+            CommandDispatch[216 /* POPMTX */] = cmd_POPMTX;
+            CommandDispatch[226 /* SETOTHERMODE_L */] = cmd_SETOTHERMODE_L;
+            CommandDispatch[240 /* LOADTLUT */] = cmd_LOADTLUT;
+            CommandDispatch[215 /* TEXTURE */] = cmd_TEXTURE;
+            CommandDispatch[253 /* SETTIMG */] = cmd_SETTIMG;
+            CommandDispatch[245 /* SETTILE */] = cmd_SETTILE;
+            CommandDispatch[242 /* SETTILESIZE */] = cmd_SETTILESIZE;
             F3DEX2 = {};
             DL = /** @class */ (function () {
                 function DL(vao, cmds, textures) {
