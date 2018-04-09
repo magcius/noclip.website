@@ -1,12 +1,12 @@
 
 import { GX2SurfaceFormat, GX2TileMode, GX2AAMode } from './gx2_enum';
-import { GX2Surface, DecodedSurface } from './gx2_surface';
+import { GX2Surface, DeswizzledSurface } from './gx2_surface';
 
 import { assert } from 'util';
 import { WorkerPool, makeWorkerFromSource } from 'worker_util';
 
 // This is all contained in one function in order to make it easier to Worker-ize.
-function _deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: number): DecodedSurface {
+function _deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: number): DeswizzledSurface {
     const numPipes = 2;
     const numBanks = 4;
     const microTileWidth = 8;
@@ -326,13 +326,14 @@ interface DeswizzleRequest {
     surface: GX2Surface;
     buffer: ArrayBuffer;
     mipLevel: number;
+    priority: number;
 }
 
 function deswizzleWorker(global: any): void {
     global.onmessage = (e: MessageEvent) => {
         const req: DeswizzleRequest = e.data;
-        const decodedSurface = _deswizzle(req.surface, req.buffer, req.mipLevel);
-        global.postMessage(decodedSurface, [decodedSurface.pixels]);
+        const deswizzledSurface = _deswizzle(req.surface, req.buffer, req.mipLevel);
+        global.postMessage(deswizzledSurface, [deswizzledSurface.pixels]);
     };
 }
 
@@ -345,14 +346,14 @@ function makeDeswizzleWorker(): Worker {
 }
 
 class Deswizzler {
-    private pool: WorkerPool<DeswizzleRequest, DecodedSurface>;
+    private pool: WorkerPool<DeswizzleRequest, DeswizzledSurface>;
 
     constructor() {
-        this.pool = new WorkerPool<DeswizzleRequest, DecodedSurface>(makeDeswizzleWorker);
+        this.pool = new WorkerPool<DeswizzleRequest, DeswizzledSurface>(makeDeswizzleWorker);
     }
 
-    public deswizzle(surface: GX2Surface, buffer: ArrayBuffer, mipLevel: number): Promise<DecodedSurface> {
-        const req: DeswizzleRequest = { surface, buffer, mipLevel };
+    public deswizzle(surface: GX2Surface, buffer: ArrayBuffer, mipLevel: number): Promise<DeswizzledSurface> {
+        const req: DeswizzleRequest = { surface, buffer, mipLevel, priority: mipLevel };
         return this.pool.execute(req);
     }
 

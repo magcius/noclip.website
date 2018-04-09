@@ -1,11 +1,16 @@
 
-interface WorkerRequest<T> {
-    p: Promise<T>;
-    resolve: (v: T) => void;
+interface WorkerManagerRequest<TReq, TRes> {
+    request: TReq;
+    resolve: (v: TRes) => void;
 }
 
-export class WorkerManager<TReq, TRes> {
-    private outstandingRequests: WorkerRequest<TRes>[] = [];
+interface WorkerRequest {
+    priority: number;
+}
+
+class WorkerManager<TReq extends WorkerRequest, TRes> {
+    private currentRequest: WorkerManagerRequest<TReq, TRes> = null;
+    public onworkerdone: () => void;
 
     constructor(private worker: Worker) {
         this.worker.onmessage = this._workerOnMessage.bind(this);
@@ -13,73 +18,87 @@ export class WorkerManager<TReq, TRes> {
 
     private _workerOnMessage(e: MessageEvent) {
         const resp: TRes = e.data;
-        const outstandingReq = this.outstandingRequests.shift();
-        outstandingReq.resolve(resp);
+        this.currentRequest.resolve(resp);
+        this.currentRequest = null;
+        this.onworkerdone();
+    }
+
+    public execute(req: WorkerManagerRequest<TReq, TRes>): void {
+        this.currentRequest = req;
+        this.worker.postMessage(req.request);
+    }
+
+    public isFree() {
+        return this.currentRequest === null;
     }
 
     public terminate() {
         return this.worker.terminate();
     }
-
-    public execute(req: TReq): Promise<TRes> {
-        let resolve;
-        const p = new Promise<TRes>((resolve_, reject) => {
-            resolve = resolve_;
-        });
-        this.worker.postMessage(req);
-        const outstandingRequest: WorkerRequest<TRes> = { p, resolve };
-        this.outstandingRequests.push(outstandingRequest);
-        return p;
-    }
 }
 
-// TODO(jstpierre): This is a round-robin, which is the best
-// we can do with WebWorkers without SharedArrayBuffer or similar, I think...
-class MultiWorkerManager<TReq, TRes> {
-    private nextWorker: number = 0;
-
-    constructor(private workers: WorkerManager<TReq, TRes>[]) {
-    }
-
-    public terminate() {
-        for (const worker of this.workers)
-            worker.terminate();
-    }
-
-    public execute(req: TReq): Promise<TRes> {
-        const p = this.workers[this.nextWorker].execute(req);
-        this.nextWorker = (this.nextWorker + 1) % this.workers.length;
-        return p;
-    }
-}
-
-export class WorkerPool<TReq, TRes> {
-    private multiWorkerManager: MultiWorkerManager<TReq, TRes>;
+export class WorkerPool<TReq extends WorkerRequest, TRes> {
+    private outstandingRequests: WorkerManagerRequest<TReq, TRes>[] = [];
+    private workers: WorkerManager<TReq, TRes>[] = [];
 
     constructor(private workerConstructor: () => Worker, private numWorkers: number = 8) {
     }
 
     public terminate() {
-        if (this.multiWorkerManager) {
-            this.multiWorkerManager.terminate();
-            this.multiWorkerManager = null;
+        for (const worker of this.workers) {
+            worker.terminate();
         }
+        this.workers = [];
     }
 
     public build() {
-        if (this.multiWorkerManager)
+        if (this.workers.length > 0)
             return;
 
-        const workers: WorkerManager<TReq, TRes>[] = [];
         let numWorkers = this.numWorkers;
-        while(numWorkers--)
-            workers.push(new WorkerManager<TReq, TRes>(this.workerConstructor()));
-        this.multiWorkerManager = new MultiWorkerManager<TReq, TRes>(workers);
+        while(numWorkers--) {
+            const manager = new WorkerManager<TReq, TRes>(this.workerConstructor());
+            manager.onworkerdone = this._onWorkerDone.bind(this);
+            this.workers.push(manager);
+        }
     }
 
-    public execute(req: TReq): Promise<TRes> {
+    public execute(request: TReq): Promise<TRes> {
         this.build();
-        return this.multiWorkerManager.execute(req);
+
+        let resolve;
+        const p = new Promise<TRes>((resolve_, reject) => {
+            resolve = resolve_;
+        });
+        const workerManagerRequest = { request, resolve };
+        this.insertRequest(workerManagerRequest);
+        this.pumpQueue();
+        return p;
+    }
+
+    private insertRequest(workerManagerRequest: WorkerManagerRequest<TReq, TRes>) {
+        let i;
+        for (i = 0; i < this.outstandingRequests.length; i++) {
+            if (this.outstandingRequests[i].request.priority > workerManagerRequest.request.priority)
+                break;
+        }
+        this.outstandingRequests.splice(i, 0, workerManagerRequest);
+    }
+
+    private pumpQueue() {
+        for (const worker of this.workers) {
+            if (this.outstandingRequests.length === 0)
+            return;
+
+            if (worker.isFree()) {
+                const req = this.outstandingRequests.shift();
+                worker.execute(req);
+            }
+        }
+    }
+
+    private _onWorkerDone() {
+        this.pumpQueue();
     }
 }
 

@@ -40,8 +40,10 @@ class SplatoonRenderer implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.skyScene.destroy(gl);
-        this.mainScene.destroy(gl);
+        if (this.skyScene)
+            this.skyScene.destroy(gl);
+        if (this.mainScene)
+            this.mainScene.destroy(gl);
     }
 }
 

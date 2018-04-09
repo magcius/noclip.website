@@ -10595,45 +10595,43 @@ System.register("worker_util", [], function (exports_42, context_42) {
         return w;
     }
     exports_42("makeWorkerFromSource", makeWorkerFromSource);
-    var WorkerManager, MultiWorkerManager, WorkerPool;
+    var WorkerManager, WorkerPool;
     return {
         setters: [],
         execute: function () {
             WorkerManager = /** @class */ (function () {
                 function WorkerManager(worker) {
                     this.worker = worker;
-                    this.outstandingRequests = [];
+                    this.currentRequest = null;
                     this.worker.onmessage = this._workerOnMessage.bind(this);
                 }
                 WorkerManager.prototype._workerOnMessage = function (e) {
                     var resp = e.data;
-                    var outstandingReq = this.outstandingRequests.shift();
-                    outstandingReq.resolve(resp);
+                    this.currentRequest.resolve(resp);
+                    this.currentRequest = null;
+                    this.onworkerdone();
+                };
+                WorkerManager.prototype.execute = function (req) {
+                    this.currentRequest = req;
+                    this.worker.postMessage(req.request);
+                };
+                WorkerManager.prototype.isFree = function () {
+                    return this.currentRequest === null;
                 };
                 WorkerManager.prototype.terminate = function () {
                     return this.worker.terminate();
                 };
-                WorkerManager.prototype.execute = function (req) {
-                    var resolve;
-                    var p = new Promise(function (resolve_, reject) {
-                        resolve = resolve_;
-                    });
-                    this.worker.postMessage(req);
-                    var outstandingRequest = { p: p, resolve: resolve };
-                    this.outstandingRequests.push(outstandingRequest);
-                    return p;
-                };
                 return WorkerManager;
             }());
-            exports_42("WorkerManager", WorkerManager);
-            // TODO(jstpierre): This is a round-robin, which is the best
-            // we can do with WebWorkers without SharedArrayBuffer or similar, I think...
-            MultiWorkerManager = /** @class */ (function () {
-                function MultiWorkerManager(workers) {
-                    this.workers = workers;
-                    this.nextWorker = 0;
+            WorkerPool = /** @class */ (function () {
+                function WorkerPool(workerConstructor, numWorkers) {
+                    if (numWorkers === void 0) { numWorkers = 8; }
+                    this.workerConstructor = workerConstructor;
+                    this.numWorkers = numWorkers;
+                    this.outstandingRequests = [];
+                    this.workers = [];
                 }
-                MultiWorkerManager.prototype.terminate = function () {
+                WorkerPool.prototype.terminate = function () {
                     try {
                         for (var _a = __values(this.workers), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var worker = _b.value;
@@ -10647,39 +10645,61 @@ System.register("worker_util", [], function (exports_42, context_42) {
                         }
                         finally { if (e_42) throw e_42.error; }
                     }
+                    this.workers = [];
                     var e_42, _c;
                 };
-                MultiWorkerManager.prototype.execute = function (req) {
-                    var p = this.workers[this.nextWorker].execute(req);
-                    this.nextWorker = (this.nextWorker + 1) % this.workers.length;
-                    return p;
-                };
-                return MultiWorkerManager;
-            }());
-            WorkerPool = /** @class */ (function () {
-                function WorkerPool(workerConstructor, numWorkers) {
-                    if (numWorkers === void 0) { numWorkers = 8; }
-                    this.workerConstructor = workerConstructor;
-                    this.numWorkers = numWorkers;
-                }
-                WorkerPool.prototype.terminate = function () {
-                    if (this.multiWorkerManager) {
-                        this.multiWorkerManager.terminate();
-                        this.multiWorkerManager = null;
+                WorkerPool.prototype.build = function () {
+                    if (this.workers.length > 0)
+                        return;
+                    var numWorkers = this.numWorkers;
+                    while (numWorkers--) {
+                        var manager = new WorkerManager(this.workerConstructor());
+                        manager.onworkerdone = this._onWorkerDone.bind(this);
+                        this.workers.push(manager);
                     }
                 };
-                WorkerPool.prototype.build = function () {
-                    if (this.multiWorkerManager)
-                        return;
-                    var workers = [];
-                    var numWorkers = this.numWorkers;
-                    while (numWorkers--)
-                        workers.push(new WorkerManager(this.workerConstructor()));
-                    this.multiWorkerManager = new MultiWorkerManager(workers);
-                };
-                WorkerPool.prototype.execute = function (req) {
+                WorkerPool.prototype.execute = function (request) {
                     this.build();
-                    return this.multiWorkerManager.execute(req);
+                    var resolve;
+                    var p = new Promise(function (resolve_, reject) {
+                        resolve = resolve_;
+                    });
+                    var workerManagerRequest = { request: request, resolve: resolve };
+                    this.insertRequest(workerManagerRequest);
+                    this.pumpQueue();
+                    return p;
+                };
+                WorkerPool.prototype.insertRequest = function (workerManagerRequest) {
+                    var i;
+                    for (i = 0; i < this.outstandingRequests.length; i++) {
+                        if (this.outstandingRequests[i].request.priority > workerManagerRequest.request.priority)
+                            break;
+                    }
+                    this.outstandingRequests.splice(i, 0, workerManagerRequest);
+                };
+                WorkerPool.prototype.pumpQueue = function () {
+                    try {
+                        for (var _a = __values(this.workers), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var worker = _b.value;
+                            if (this.outstandingRequests.length === 0)
+                                return;
+                            if (worker.isFree()) {
+                                var req = this.outstandingRequests.shift();
+                                worker.execute(req);
+                            }
+                        }
+                    }
+                    catch (e_43_1) { e_43 = { error: e_43_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_43) throw e_43.error; }
+                    }
+                    var e_43, _c;
+                };
+                WorkerPool.prototype._onWorkerDone = function () {
+                    this.pumpQueue();
                 };
                 return WorkerPool;
             }());
@@ -10964,8 +10984,8 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, conte
     function deswizzleWorker(global) {
         global.onmessage = function (e) {
             var req = e.data;
-            var decodedSurface = _deswizzle(req.surface, req.buffer, req.mipLevel);
-            global.postMessage(decodedSurface, [decodedSurface.pixels]);
+            var deswizzledSurface = _deswizzle(req.surface, req.buffer, req.mipLevel);
+            global.postMessage(deswizzledSurface, [deswizzledSurface.pixels]);
         };
     }
     function makeDeswizzleWorker() {
@@ -10988,7 +11008,7 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_43, conte
                     this.pool = new worker_util_1.WorkerPool(makeDeswizzleWorker);
                 }
                 Deswizzler.prototype.deswizzle = function (surface, buffer, mipLevel) {
-                    var req = { surface: surface, buffer: buffer, mipLevel: mipLevel };
+                    var req = { surface: surface, buffer: buffer, mipLevel: mipLevel, priority: mipLevel };
                     return this.pool.execute(req);
                 };
                 Deswizzler.prototype.terminate = function () {
@@ -11019,7 +11039,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
         return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
     }
     // Software decompresses from standard BC1 (DXT1) to RGBA.
-    function decompressBC1Surface(surface, flag) {
+    function decompressBC1Surface(surface) {
         var bytesPerPixel = 4;
         var width = surface.width;
         var height = surface.height;
@@ -11079,10 +11099,10 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
             }
         }
         var pixels = dst.buffer;
-        return __assign({}, surface, { pixels: pixels });
+        return { type: 'RGBA', flag: surface.flag, width: width, height: height, pixels: pixels };
     }
     // Software decompresses from standard BC3 (DXT5) to RGBA.
-    function decompressBC3Surface(surface, flag) {
+    function decompressBC3Surface(surface) {
         var bytesPerPixel = 4;
         var width = surface.width;
         var height = surface.height;
@@ -11176,19 +11196,19 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
             }
         }
         var pixels = dst.buffer;
-        return __assign({}, surface, { pixels: pixels });
+        return { type: 'RGBA', flag: surface.flag, width: width, height: height, pixels: pixels };
     }
     // Software decompresses from standard BC4/BC5 to RGBA.
-    function decompressBC45Surface(surface, inType, flag) {
+    function decompressBC45Surface(surface) {
         var bytesPerPixel = 4;
         var width = surface.width;
         var height = surface.height;
-        var signed = flag === 'SNORM';
+        var signed = surface.flag === 'SNORM';
         var view = new DataView(surface.pixels);
         var dst;
         var colorTable;
         var srcBytesPerPixel;
-        if (inType === 'BC4')
+        if (surface.type === 'BC4')
             srcBytesPerPixel = 1;
         else
             srcBytesPerPixel = 2;
@@ -11229,27 +11249,34 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
                         colorTable[3] = (3 * red0 + 2 * red1) / 5;
                         colorTable[4] = (2 * red0 + 3 * red1) / 5;
                         colorTable[5] = (1 * red0 + 4 * red1) / 5;
-                        colorTable[6] = signed ? -127 : 0;
-                        colorTable[7] = signed ? 128 : 255;
+                        colorTable[6] = signed ? -128 : 0;
+                        colorTable[7] = signed ? 127 : 255;
                     }
                     var colorBits0 = view.getUint32(srcOffs + 0x02, true) & 0x00FFFFFF;
                     var colorBits1 = view.getUint32(srcOffs + 0x04, true) >>> 8;
                     for (var y = 0; y < 4; y++) {
                         for (var x = 0; x < 4; x++) {
                             var dstIdx = ((yy + y) * width) + xx + x;
-                            var dstOffs = (dstIdx * bytesPerPixel) + ch;
+                            var dstOffs = (dstIdx * bytesPerPixel);
                             var fullShift = (y * 4 + x) * 3;
                             var colorBits = fullShift < 24 ? colorBits0 : colorBits1;
                             var shift = fullShift % 24;
                             var index = (colorBits >>> shift) & 0x07;
-                            if (ch === 0) {
+                            if (srcBytesPerPixel === 1) {
                                 dst[dstOffs + 0] = colorTable[index];
                                 dst[dstOffs + 1] = colorTable[index];
                                 dst[dstOffs + 2] = colorTable[index];
-                                dst[dstOffs + 3] = colorTable[index];
+                                dst[dstOffs + 3] = signed ? 127 : 255;
                             }
                             else {
-                                dst[dstOffs + 3] = colorTable[index];
+                                if (ch === 0) {
+                                    dst[dstOffs + 0] = colorTable[index];
+                                }
+                                else if (ch === 1) {
+                                    dst[dstOffs + 1] = colorTable[index];
+                                    dst[dstOffs + 2] = signed ? 127 : 255;
+                                    dst[dstOffs + 3] = signed ? 127 : 255;
+                                }
                             }
                         }
                     }
@@ -11258,99 +11285,83 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
             }
         }
         var pixels = dst.buffer;
-        return __assign({}, surface, { pixels: pixels });
+        return { type: 'RGBA', flag: surface.flag, width: width, height: height, pixels: pixels };
     }
-    function decompressBCSurface(type, flag, surface) {
-        switch (type) {
+    function decompressBC(surface) {
+        switch (surface.type) {
             case 'BC1':
-                return decompressBC1Surface(surface, flag);
+                return decompressBC1Surface(surface);
             case 'BC3':
-                return decompressBC3Surface(surface, flag);
+                return decompressBC3Surface(surface);
             case 'BC4':
             case 'BC5':
-                return decompressBC45Surface(surface, type, flag);
+                return decompressBC45Surface(surface);
         }
     }
-    exports_44("decompressBCSurface", decompressBCSurface);
-    function decompressBC(texture) {
-        var width = texture.width;
-        var height = texture.height;
-        var surfaces = texture.surfaces.map(function (surface, i) {
-            return decompressBCSurface(texture.type, texture.flag, surface);
-        });
-        return { type: 'RGBA', bytesPerPixel: 4, flag: texture.flag, width: texture.width, height: texture.height, surfaces: surfaces };
-    }
     exports_44("decompressBC", decompressBC);
-    function decodeSurface(surface, texData, mipLevel) {
+    function deswizzleSurface(surface, texData, mipLevel) {
         return gx2_swizzle_1.deswizzler.deswizzle(surface, texData.castToBuffer(), mipLevel);
     }
-    exports_44("decodeSurface", decodeSurface);
-    function decodeTexture(surface, texData, mipData) {
-        var surfacePromises = [];
-        for (var i = 0; i < surface.numMips; i++) {
-            var levelData = void 0;
-            if (i === 0) {
-                levelData = texData;
-            }
-            else if (i === 1) {
-                levelData = mipData;
-            }
-            else {
-                var offset = surface.mipDataOffsets[i - 1];
-                levelData = mipData.slice(offset);
-            }
-            surfacePromises.push(decodeSurface(surface, levelData, i));
+    exports_44("deswizzleSurface", deswizzleSurface);
+    function decodeSurface(surface, texData, mipData, mipLevel) {
+        var levelData;
+        if (mipLevel === 0) {
+            levelData = texData;
+        }
+        else if (mipLevel === 1) {
+            levelData = mipData;
+        }
+        else {
+            var offset = surface.mipDataOffsets[mipLevel - 1];
+            levelData = mipData.slice(offset);
         }
         var width = surface.width;
         var height = surface.height;
-        return Promise.all(surfacePromises).then(function (surfaces) {
-            surfaces = surfaces.filter(function (surface) { return surface.width > 0 && surface.height > 0; });
+        return deswizzleSurface(surface, levelData, mipLevel).then(function (deswizzledSurface) {
             switch (surface.format) {
                 case 49 /* BC1_UNORM */:
-                    return { type: 'BC1', flag: 'UNORM', width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'BC1', flag: 'UNORM' }, deswizzledSurface);
                 case 1073 /* BC1_SRGB */:
-                    return { type: 'BC1', flag: 'SRGB', width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'BC1', flag: 'SRGB' }, deswizzledSurface);
                 case 51 /* BC3_UNORM */:
-                    return { type: 'BC3', flag: 'UNORM', width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'BC3', flag: 'UNORM' }, deswizzledSurface);
                 case 1075 /* BC3_SRGB */:
-                    return { type: 'BC3', flag: 'SRGB', width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'BC3', flag: 'SRGB' }, deswizzledSurface);
                 case 52 /* BC4_UNORM */:
-                    return { type: 'BC4', flag: 'UNORM', width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'BC4', flag: 'UNORM' }, deswizzledSurface);
                 case 564 /* BC4_SNORM */:
-                    return { type: 'BC4', flag: 'SNORM', width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'BC4', flag: 'SNORM' }, deswizzledSurface);
                 case 53 /* BC5_UNORM */:
-                    return { type: 'BC5', flag: 'UNORM', width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'BC5', flag: 'UNORM' }, deswizzledSurface);
                 case 565 /* BC5_SNORM */:
-                    return { type: 'BC5', flag: 'SNORM', width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'BC5', flag: 'SNORM' }, deswizzledSurface);
                 case 26 /* TCS_R8_G8_B8_A8_UNORM */:
-                    return { type: 'RGBA', flag: 'UNORM', bytesPerPixel: 4, width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'RGBA', flag: 'UNORM' }, deswizzledSurface);
                 case 1050 /* TCS_R8_G8_B8_A8_SRGB */:
-                    return { type: 'RGBA', flag: 'SRGB', bytesPerPixel: 4, width: width, height: height, surfaces: surfaces };
+                    return __assign({ type: 'RGBA', flag: 'SRGB' }, deswizzledSurface);
                 default:
                     throw new Error("Bad format in decodeSurface: " + surface.format.toString(16));
             }
         });
     }
-    exports_44("decodeTexture", decodeTexture);
-    function surfaceToCanvas(canvas, texture, surface) {
-        canvas.width = surface.width;
-        canvas.height = surface.height;
+    exports_44("decodeSurface", decodeSurface);
+    function surfaceToCanvas(canvas, surface) {
         var ctx = canvas.getContext('2d');
         var width = surface.width;
         var height = surface.height;
         var imageData = new ImageData(width, height);
-        switch (texture.type) {
+        switch (surface.type) {
             case 'RGBA':
-                if (texture.flag === 'UNORM') {
+                if (surface.flag === 'UNORM') {
                     var src = new Uint8Array(surface.pixels);
                     imageData.data.set(src);
                 }
-                else if (texture.flag === 'SRGB') {
+                else if (surface.flag === 'SRGB') {
                     // XXX(jstpierre): SRGB
                     var src = new Uint8Array(surface.pixels);
                     imageData.data.set(src);
                 }
-                else if (texture.flag === 'SNORM') {
+                else if (surface.flag === 'SNORM') {
                     var src = new Int8Array(surface.pixels);
                     var data = new Uint8Array(surface.pixels.byteLength);
                     for (var i = 0; i < src.length; i++) {
@@ -11363,7 +11374,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
         ctx.putImageData(imageData, 0, 0);
     }
     exports_44("surfaceToCanvas", surfaceToCanvas);
-    function decompressTexture(texture) {
+    function decompressSurface(texture) {
         switch (texture.type) {
             case 'RGBA':
                 return texture;
@@ -11374,7 +11385,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_44, 
                 return decompressBC(texture);
         }
     }
-    exports_44("decompressTexture", decompressTexture);
+    exports_44("decompressSurface", decompressSurface);
     var gx2_swizzle_1;
     return {
         setters: [
@@ -11463,15 +11474,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_45
                     entries.push({ key: key, value: value });
                 }
             }
-            catch (e_43_1) { e_43 = { error: e_43_1 }; }
+            catch (e_44_1) { e_44 = { error: e_44_1 }; }
             finally {
                 try {
                     if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
                 }
-                finally { if (e_43) throw e_43.error; }
+                finally { if (e_44) throw e_44.error; }
             }
             return entries;
-            var e_43, _a;
+            var e_44, _a;
         }
         // Vertex buffers.
         var fvtxIdx = fvtxOffs;
@@ -11543,12 +11554,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_45
                 fshp.push({ name: name_10, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
             }
         }
-        catch (e_44_1) { e_44 = { error: e_44_1 }; }
+        catch (e_45_1) { e_45 = { error: e_45_1 }; }
         finally {
             try {
                 if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
             }
-            finally { if (e_44) throw e_44.error; }
+            finally { if (e_45) throw e_45.error; }
         }
         // Materials.
         var fmat = [];
@@ -11611,12 +11622,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_45
                         }
                     }
                 }
-                catch (e_45_1) { e_45 = { error: e_45_1 }; }
+                catch (e_46_1) { e_46 = { error: e_46_1 }; }
                 finally {
                     try {
                         if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
                     }
-                    finally { if (e_45) throw e_45.error; }
+                    finally { if (e_46) throw e_46.error; }
                 }
                 util_25.assert(textureSamplerCount === textureReferenceCount);
                 var textureSamplerArrayIdx = textureSamplerArrayOffs;
@@ -11685,15 +11696,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_45
                 fmat.push({ name: name_11, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
             }
         }
-        catch (e_46_1) { e_46 = { error: e_46_1 }; }
+        catch (e_47_1) { e_47 = { error: e_47_1 }; }
         finally {
             try {
                 if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
             }
-            finally { if (e_46) throw e_46.error; }
+            finally { if (e_47) throw e_47.error; }
         }
         return { fvtx: fvtx, fshp: fshp, fmat: fmat };
-        var e_44, _a, e_46, _c, e_45, _b;
+        var e_45, _a, e_47, _c, e_46, _b;
     }
     function parse(buffer) {
         var view = buffer.createDataView();
@@ -11734,12 +11745,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_45
                 textures.push({ entry: entry, texture: texture });
             }
         }
-        catch (e_47_1) { e_47 = { error: e_47_1 }; }
+        catch (e_48_1) { e_48 = { error: e_48_1 }; }
         finally {
             try {
                 if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
             }
-            finally { if (e_47) throw e_47.error; }
+            finally { if (e_48) throw e_48.error; }
         }
         var models = [];
         try {
@@ -11749,15 +11760,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_45
                 models.push({ entry: entry, fmdl: fmdl });
             }
         }
-        catch (e_48_1) { e_48 = { error: e_48_1 }; }
+        catch (e_49_1) { e_49 = { error: e_49_1 }; }
         finally {
             try {
                 if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
             }
-            finally { if (e_48) throw e_48.error; }
+            finally { if (e_49) throw e_49.error; }
         }
         return { textures: textures, models: models };
-        var e_47, _a, e_48, _b;
+        var e_48, _a, e_49, _b;
     }
     exports_45("parse", parse);
     var gx2_surface_1, util_25, UBOParameterType, RenderInfoParameterType;
@@ -11959,29 +11970,8 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     this.blankTexture = this.arena.createTexture(gl);
                     gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
                     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+                    this.textures = [];
                     this.modelFuncs = this.translateFRES(gl, this.fres);
-                    this.textures = this.fres.textures.map(function (textureEntry) {
-                        var tex = textureEntry.texture;
-                        var surface = tex.surface;
-                        var canvases = [];
-                        for (var i = 0; i < tex.surface.numMips; i++) {
-                            var canvas = document.createElement('canvas');
-                            canvas.width = 0;
-                            canvas.height = 0;
-                            canvases.push(canvas);
-                        }
-                        GX2Texture.decodeTexture(tex.surface, tex.texData, tex.mipData).then(function (decodedTexture) {
-                            var decompressedTexture = GX2Texture.decompressTexture(decodedTexture);
-                            decompressedTexture.surfaces.forEach(function (decompressedSurface, i) {
-                                var canvas = canvases[i];
-                                canvas.width = decompressedSurface.width;
-                                canvas.height = decompressedSurface.height;
-                                canvas.title = textureEntry.entry.name + " " + surface.format + " (" + surface.width + "x" + surface.height + ")";
-                                GX2Texture.surfaceToCanvas(canvas, decompressedTexture, decompressedSurface);
-                            });
-                        });
-                        return { name: textureEntry.entry.name, surfaces: canvases };
-                    });
                 }
                 Scene.prototype.translateFVTXBuffers = function (fvtx, vertexDatas) {
                     for (var i = 0; i < fvtx.attribs.length; i++) {
@@ -12107,12 +12097,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             samplers.push(sampler);
                         }
                     }
-                    catch (e_49_1) { e_49 = { error: e_49_1 }; }
+                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
                     finally {
                         try {
                             if (textureAssigns_1_1 && !textureAssigns_1_1.done && (_a = textureAssigns_1.return)) _a.call(textureAssigns_1);
                         }
-                        finally { if (e_49) throw e_49.error; }
+                        finally { if (e_50) throw e_50.error; }
                     }
                     var prog = new ProgramGambit_UBER();
                     this.arena.trackProgram(prog);
@@ -12153,7 +12143,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             _loop_3(i);
                         }
                     };
-                    var e_49, _a;
+                    var e_50, _a;
                 };
                 Scene.prototype.translateIndexBuffer = function (indexFormat, indexBufferData) {
                     switch (indexFormat) {
@@ -12175,14 +12165,14 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             indexDatas.push(indexData);
                         }
                     }
-                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
+                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_50) throw e_50.error; }
+                        finally { if (e_51) throw e_51.error; }
                     }
-                    var e_50, _c;
+                    var e_51, _c;
                 };
                 Scene.prototype.translateIndexFormat = function (gl, indexFormat) {
                     // Little-endian translation was done above.
@@ -12214,12 +12204,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             glIndexBuffers.push(coalescedIndex.shift());
                         }
                     }
-                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
+                    catch (e_52_1) { e_52 = { error: e_52_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_51) throw e_51.error; }
+                        finally { if (e_52) throw e_52.error; }
                     }
                     return function (state) {
                         var lod = 0;
@@ -12232,16 +12222,16 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 gl.drawElements(_this.translatePrimType(gl, mesh.primType), submesh.indexBufferCount, _this.translateIndexFormat(gl, mesh.indexFormat), glIndexBuffer.offset + submesh.indexBufferOffset);
                             }
                         }
-                        catch (e_52_1) { e_52 = { error: e_52_1 }; }
+                        catch (e_53_1) { e_53 = { error: e_53_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_52) throw e_52.error; }
+                            finally { if (e_53) throw e_53.error; }
                         }
-                        var e_52, _c;
+                        var e_53, _c;
                     };
-                    var e_51, _c;
+                    var e_52, _c;
                 };
                 Scene.prototype.translateModel = function (gl, model, coalescedVertex, coalescedIndex) {
                     var _this = this;
@@ -12300,54 +12290,75 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     }
                     return null;
                 };
-                Scene.prototype.translateTexture = function (gl, ftex) {
+                Scene.prototype.translateTexture = function (gl, textureEntry) {
                     var _this = this;
                     var glTexture = this.arena.createTexture(gl);
                     gl.bindTexture(gl.TEXTURE_2D, glTexture);
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 0);
                     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
-                    var surface = ftex.texture.surface;
-                    // Kick off a decode...
-                    GX2Texture.decodeTexture(surface, ftex.texture.texData, ftex.texture.mipData).then(function (tex) {
-                        gl.bindTexture(gl.TEXTURE_2D, glTexture);
-                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, tex.surfaces.length - 1);
-                        // First check if we have to decompress compressed textures.
-                        switch (tex.type) {
-                            case "BC1":
-                            case "BC3":
-                            case "BC4":
-                            case "BC5":
-                                var compressedFormat = _this.getCompressedFormat(gl, tex);
-                                if (compressedFormat === null)
-                                    tex = GX2Texture.decompressBC(tex);
-                                break;
-                        }
-                        tex.surfaces.forEach(function (decodedSurface, i) {
-                            var level = i;
+                    var texture = textureEntry.texture;
+                    var surface = texture.surface;
+                    var canvases = [];
+                    var _loop_4 = function (i) {
+                        var mipLevel = i;
+                        var canvas = document.createElement('canvas');
+                        canvas.width = 0;
+                        canvas.height = 0;
+                        canvases.push(canvas);
+                        GX2Texture.decodeSurface(surface, texture.texData, texture.mipData, mipLevel).then(function (decodedSurface) {
+                            // Sometimes the surfaces appear to have garbage sizes.
+                            if (decodedSurface.width === 0 || decodedSurface.height === 0)
+                                return;
+                            gl.bindTexture(gl.TEXTURE_2D, glTexture);
+                            // Decodes should show up in order, thanks to priority. Change this if we ever
+                            // change the logic, because it is indeed sketchy...
+                            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, mipLevel);
+                            // First check if we have to decompress compressed textures.
+                            switch (decodedSurface.type) {
+                                case "BC1":
+                                case "BC3":
+                                case "BC4":
+                                case "BC5":
+                                    var compressedFormat = _this.getCompressedFormat(gl, decodedSurface);
+                                    if (compressedFormat === null)
+                                        decodedSurface = GX2Texture.decompressBC(decodedSurface);
+                                    break;
+                            }
                             var pixels = decodedSurface.pixels;
                             var width = decodedSurface.width;
                             var height = decodedSurface.height;
                             util_27.assert(pixels.byteLength > 0);
-                            switch (tex.type) {
+                            switch (decodedSurface.type) {
                                 case "RGBA": {
-                                    var internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : tex.flag === 'SNORM' ? gl.RGBA8_SNORM : gl.RGBA8;
-                                    var type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                                    var data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
-                                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, type, data);
+                                    var internalFormat = decodedSurface.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : decodedSurface.flag === 'SNORM' ? gl.RGBA8_SNORM : gl.RGBA8;
+                                    var type = decodedSurface.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                                    var data = decodedSurface.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
+                                    gl.texImage2D(gl.TEXTURE_2D, mipLevel, internalFormat, width, height, 0, gl.RGBA, type, data);
                                     break;
                                 }
                                 case "BC1":
                                 case "BC3":
                                 case "BC4":
                                 case "BC5": {
-                                    var compressedFormat = _this.getCompressedFormat(gl, tex);
+                                    var compressedFormat = _this.getCompressedFormat(gl, decodedSurface);
                                     util_27.assert(compressedFormat !== null);
-                                    gl.compressedTexImage2D(gl.TEXTURE_2D, level, compressedFormat, width, height, 0, new Uint8Array(pixels));
+                                    gl.compressedTexImage2D(gl.TEXTURE_2D, mipLevel, compressedFormat, width, height, 0, new Uint8Array(pixels));
                                     break;
                                 }
                             }
+                            // XXX(jstpierre): Do this on a worker as well?
+                            var canvas = canvases[mipLevel];
+                            var decompressedSurface = GX2Texture.decompressSurface(decodedSurface);
+                            canvas.width = decompressedSurface.width;
+                            canvas.height = decompressedSurface.height;
+                            canvas.title = textureEntry.entry.name + " " + surface.format + " (" + surface.width + "x" + surface.height + ")";
+                            GX2Texture.surfaceToCanvas(canvas, decompressedSurface);
                         });
-                    });
+                    };
+                    for (var i = 0; i < surface.numMips; i++) {
+                        _loop_4(i);
+                    }
+                    this.textures.push({ name: textureEntry.entry.name, surfaces: canvases });
                     return glTexture;
                 };
                 Scene.prototype.translateModelBuffers = function (modelEntry, vertexDatas, indexDatas) {
@@ -12399,15 +12410,15 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_53_1) { e_53 = { error: e_53_1 }; }
+        catch (e_54_1) { e_54 = { error: e_54_1 }; }
         finally {
             try {
                 if (scenes_7_1 && !scenes_7_1.done && (_a = scenes_7.return)) _a.call(scenes_7);
             }
-            finally { if (e_53) throw e_53.error; }
+            finally { if (e_54) throw e_54.error; }
         }
         return textures;
-        var e_53, _a;
+        var e_54, _a;
     }
     function createSceneFromFRESBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
@@ -12465,8 +12476,10 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                     }
                 };
                 SplatoonRenderer.prototype.destroy = function (gl) {
-                    this.skyScene.destroy(gl);
-                    this.mainScene.destroy(gl);
+                    if (this.skyScene)
+                        this.skyScene.destroy(gl);
+                    if (this.mainScene)
+                        this.mainScene.destroy(gl);
                 };
                 return SplatoonRenderer;
             }());
@@ -12768,14 +12781,14 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "ut
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_54_1) { e_54 = { error: e_54_1 }; }
+                    catch (e_55_1) { e_55 = { error: e_55_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_54) throw e_54.error; }
+                        finally { if (e_55) throw e_55.error; }
                     }
-                    var e_54, _c;
+                    var e_55, _c;
                 }
                 MultiScene.prototype.createUI = function () {
                     var elem = document.createElement('div');
@@ -12881,7 +12894,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_52, context_52)
         // Regular resource table.
         var resourceTableCount = view.getUint32(offs + 0x00);
         offs += 0x04;
-        var _loop_4 = function (i) {
+        var _loop_5 = function (i) {
             var isCompressed = !!view.getUint32(offs + 0x00);
             var fourCC = util_30.readString(buffer, offs + 0x04, 4, false);
             var fileID = util_30.readString(buffer, offs + 0x08, 4, false);
@@ -12915,7 +12928,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_52, context_52)
                 namedResourceTable.set(fileResource.name, fileResource);
         };
         for (var i = 0; i < resourceTableCount; i++) {
-            _loop_4(i);
+            _loop_5(i);
         }
         return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
     }
@@ -13259,7 +13272,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
         var firstSurfaceOffs = sectionOffsTable[sectionIndex];
         var surfaceCount = view.getUint32(surfaceTableOffs + 0x00);
         var surfaces = [];
-        var _loop_5 = function (i) {
+        var _loop_6 = function (i) {
             var surfaceOffs = sectionOffsTable[sectionIndex];
             var surfaceEnd = firstSurfaceOffs + view.getUint32(surfaceTableOffs + 0x04 + i * 0x04);
             var centerX = view.getFloat32(surfaceOffs + 0x00);
@@ -13289,12 +13302,12 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                     vertexIndexSize += 0x02;
                 }
             }
-            catch (e_55_1) { e_55 = { error: e_55_1 }; }
+            catch (e_56_1) { e_56 = { error: e_56_1 }; }
             finally {
                 try {
                     if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
                 }
-                finally { if (e_55) throw e_55.error; }
+                finally { if (e_56) throw e_56.error; }
             }
             var totalVertexCount = 0;
             var totalTriangleCount = 0;
@@ -13451,10 +13464,10 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             };
             surfaces.push(surface);
             sectionIndex++;
-            var e_55, _a;
+            var e_56, _a;
         };
         for (var i = 0; i < surfaceCount; i++) {
-            _loop_5(i);
+            _loop_6(i);
         }
         var geometry = { surfaces: surfaces };
         return [geometry, sectionIndex];
@@ -13657,15 +13670,15 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                                 return resource;
                         }
                     }
-                    catch (e_56_1) { e_56 = { error: e_56_1 }; }
+                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_56) throw e_56.error; }
+                        finally { if (e_57) throw e_57.error; }
                     }
                     return null;
-                    var e_56, _c;
+                    var e_57, _c;
                 };
                 ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
                     var cached = this._cache.get(assetID);
@@ -14004,15 +14017,15 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                             offset += 4 * attrib.compCount;
                         }
                     }
-                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
+                    catch (e_58_1) { e_58 = { error: e_58_1 }; }
                     finally {
                         try {
                             if (vtxAttrFormats_2_1 && !vtxAttrFormats_2_1.done && (_a = vtxAttrFormats_2.return)) _a.call(vtxAttrFormats_2);
                         }
-                        finally { if (e_57) throw e_57.error; }
+                        finally { if (e_58) throw e_58.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_57, _a;
+                    var e_58, _a;
                 }
                 Command_Surface.prototype.exec = function (state) {
                     var gl = state.gl;
@@ -14169,14 +14182,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_58_1) { e_58 = { error: e_58_1 }; }
+                    catch (e_59_1) { e_59 = { error: e_59_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_58) throw e_58.error; }
+                        finally { if (e_59) throw e_59.error; }
                     }
-                    var e_58, _c;
+                    var e_59, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -14220,15 +14233,15 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                                 return new MultiScene(scenes);
                             }
                         }
-                        catch (e_59_1) { e_59 = { error: e_59_1 }; }
+                        catch (e_60_1) { e_60 = { error: e_60_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_59) throw e_59.error; }
+                            finally { if (e_60) throw e_60.error; }
                         }
                         return null;
-                        var e_59, _c;
+                        var e_60, _c;
                     });
                 };
                 return MP1SceneDesc;
@@ -14472,12 +14485,12 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                             tex.appendChild(canvas);
                         }
                     }
-                    catch (e_60_1) { e_60 = { error: e_60_1 }; }
+                    catch (e_61_1) { e_61 = { error: e_61_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_60) throw e_60.error; }
+                        finally { if (e_61) throw e_61.error; }
                     }
                     tex.onmouseover = function () {
                         canvases.forEach(function (canvas) {
@@ -14497,7 +14510,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     tex.appendChild(label);
                     tex.style.cssFloat = 'left';
                     return tex;
-                    var e_60, _c;
+                    var e_61, _c;
                 };
                 Main.prototype._makeTextureSection = function (textures) {
                     var _this = this;
@@ -14560,14 +14573,14 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                             this.groupSelect.appendChild(groupOption);
                         }
                     }
-                    catch (e_61_1) { e_61 = { error: e_61_1 }; }
+                    catch (e_62_1) { e_62 = { error: e_62_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_61) throw e_61.error; }
+                        finally { if (e_62) throw e_62.error; }
                     }
-                    var e_61, _c;
+                    var e_62, _c;
                 };
                 Main.prototype._loadSceneGroup = function (group, loadDefaultSceneInGroup) {
                     if (loadDefaultSceneInGroup === void 0) { loadDefaultSceneInGroup = true; }
@@ -14589,16 +14602,16 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                             this.sceneSelect.appendChild(sceneOption);
                         }
                     }
-                    catch (e_62_1) { e_62 = { error: e_62_1 }; }
+                    catch (e_63_1) { e_63 = { error: e_63_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_62) throw e_62.error; }
+                        finally { if (e_63) throw e_63.error; }
                     }
                     if (loadDefaultSceneInGroup)
                         this._loadSceneDesc(group.sceneDescs[0]);
-                    var e_62, _c;
+                    var e_63, _c;
                 };
                 Main.prototype._onSceneSelectChange = function () {
                     var option = this.sceneSelect.selectedOptions.item(0);
@@ -14990,16 +15003,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_63_1) { e_63 = { error: e_63_1 }; }
+                        catch (e_64_1) { e_64 = { error: e_64_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_63) throw e_63.error; }
+                            finally { if (e_64) throw e_64.error; }
                         }
                     }
                     return cmd;
-                    var e_63, _c;
+                    var e_64, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
