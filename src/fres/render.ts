@@ -47,7 +47,7 @@ uniform sampler2D _e0;
 vec4 textureSRGB(sampler2D s, vec2 uv) {
     vec4 srgba = texture(s, uv);
     vec3 srgb = srgba.rgb;
-#ifdef HAS_WEBGL_compressed_texture_s3tc_srgb
+#ifdef NOPE_HAS_WEBGL_compressed_texture_s3tc_srgb
     vec3 rgb = srgb;
 #else
     // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html
@@ -416,7 +416,7 @@ export class Scene implements Viewer.Scene {
         };
     }
 
-    private getCompressedFormat(gl: WebGL2RenderingContext, tex: GX2Texture.DecodedSurfaceBC) {
+    private getCompressedFormat(gl: WebGL2RenderingContext, tex: GX2Texture.DecodedSurfaceBC): number  {
         switch (tex.type) {
         case 'BC4':
         case 'BC5':
@@ -424,8 +424,10 @@ export class Scene implements Viewer.Scene {
         }
 
         const ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
-        const ext_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+        // const ext_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
 
+        // XXX(jstpierre): Don't use sRGB for now since we sometimes fall back to SW decode.
+        /*
         if (tex.flag === 'SRGB' && ext_compressed_texture_s3tc_srgb) {
             switch (tex.type) {
             case 'BC1':
@@ -434,9 +436,8 @@ export class Scene implements Viewer.Scene {
                 return ext_compressed_texture_s3tc_srgb.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
             }
         }
+        */
 
-        // If we don't have sRGB samplers, fall back to HW decoding and just get the blending wrong,
-        // since I don't have sRGB decoding in the SW decode fallback path either.
         if (ext_compressed_texture_s3tc) {
             switch (tex.type) {
             case 'BC1':
@@ -477,6 +478,10 @@ export class Scene implements Viewer.Scene {
                 // change the logic, because it is indeed sketchy...
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, mipLevel);
 
+                // XXX(jstpierre): Sometimes Splatoon uses non-block-sized textures. OpenGL does
+                // not like this one bit. If this is the case, decompress in software.
+                const isBlockSized = !!(texture.surface.width & 0x03) || !!(texture.surface.height & 0x03);
+
                 // First check if we have to decompress compressed textures.
                 switch (decodedSurface.type) {
                 case "BC1":
@@ -484,7 +489,7 @@ export class Scene implements Viewer.Scene {
                 case "BC4":
                 case "BC5":
                     const compressedFormat = this.getCompressedFormat(gl, decodedSurface);
-                    if (compressedFormat === null)
+                    if (compressedFormat === null || !isBlockSized)
                         decodedSurface = GX2Texture.decompressBC(decodedSurface);
                     break;
                 }

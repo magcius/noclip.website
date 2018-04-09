@@ -11947,7 +11947,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     var _this = _super !== null && _super.apply(this, arguments) || this;
                     _this.$a = ProgramGambit_UBER.attribLocations;
                     _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + _this.$a._p0 + ") in vec3 _p0;\nlayout(location = " + _this.$a._u0 + ") in vec2 _u0;\nout vec2 a_u0;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(_p0, 1.0);\n    a_u0 = _u0;\n}\n";
-                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvec4 textureSRGB(sampler2D s, vec2 uv) {\n    vec4 srgba = texture(s, uv);\n    vec3 srgb = srgba.rgb;\n#ifdef HAS_WEBGL_compressed_texture_s3tc_srgb\n    vec3 rgb = srgb;\n#else\n    // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html\n    vec3 rgb = srgb * (srgb * (srgb * 0.305306011 + 0.682171111) + 0.012522878);\n#endif\n    return vec4(rgb, srgba.a);\n}\n\nvoid main() {\n    o_color = textureSRGB(_a0, a_u0);\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n    o_color.rgb += textureSRGB(_e0, a_u0).rgb;\n    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));\n}\n";
+                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvec4 textureSRGB(sampler2D s, vec2 uv) {\n    vec4 srgba = texture(s, uv);\n    vec3 srgb = srgba.rgb;\n#ifdef NOPE_HAS_WEBGL_compressed_texture_s3tc_srgb\n    vec3 rgb = srgb;\n#else\n    // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html\n    vec3 rgb = srgb * (srgb * (srgb * 0.305306011 + 0.682171111) + 0.012522878);\n#endif\n    return vec4(rgb, srgba.a);\n}\n\nvoid main() {\n    o_color = textureSRGB(_a0, a_u0);\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n    o_color.rgb += textureSRGB(_e0, a_u0).rgb;\n    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));\n}\n";
                     return _this;
                 }
                 ProgramGambit_UBER.prototype.bind = function (gl, prog) {
@@ -12269,17 +12269,18 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             return null;
                     }
                     var ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
-                    var ext_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+                    // const ext_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+                    // XXX(jstpierre): Don't use sRGB for now since we sometimes fall back to SW decode.
+                    /*
                     if (tex.flag === 'SRGB' && ext_compressed_texture_s3tc_srgb) {
                         switch (tex.type) {
-                            case 'BC1':
-                                return ext_compressed_texture_s3tc_srgb.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
-                            case 'BC3':
-                                return ext_compressed_texture_s3tc_srgb.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
+                        case 'BC1':
+                            return ext_compressed_texture_s3tc_srgb.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
+                        case 'BC3':
+                            return ext_compressed_texture_s3tc_srgb.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
                         }
                     }
-                    // If we don't have sRGB samplers, fall back to HW decoding and just get the blending wrong,
-                    // since I don't have sRGB decoding in the SW decode fallback path either.
+                    */
                     if (ext_compressed_texture_s3tc) {
                         switch (tex.type) {
                             case 'BC1':
@@ -12313,6 +12314,9 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             // Decodes should show up in order, thanks to priority. Change this if we ever
                             // change the logic, because it is indeed sketchy...
                             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, mipLevel);
+                            // XXX(jstpierre): Sometimes Splatoon uses non-block-sized textures. OpenGL does
+                            // not like this one bit. If this is the case, decompress in software.
+                            var isBlockSized = !!(texture.surface.width & 0x03) || !!(texture.surface.height & 0x03);
                             // First check if we have to decompress compressed textures.
                             switch (decodedSurface.type) {
                                 case "BC1":
@@ -12320,7 +12324,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 case "BC4":
                                 case "BC5":
                                     var compressedFormat = _this.getCompressedFormat(gl, decodedSurface);
-                                    if (compressedFormat === null)
+                                    if (compressedFormat === null || !isBlockSized)
                                         decodedSurface = GX2Texture.decompressBC(decodedSurface);
                                     break;
                             }
