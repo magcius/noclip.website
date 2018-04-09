@@ -58,6 +58,7 @@ class State {
 
     public palettePixels: Uint8Array;
     public textureImageAddr: number;
+    public currentTile: TextureTile;
     public textureTile: TextureTile;
 
     public rom: any;
@@ -342,8 +343,7 @@ function cmd_SETTIMG(state: State, w0: number, w1: number) {
 }
 
 function cmd_SETTILE(state: State, w0: number, w1: number) {
-    // XXX(jstpierre): Stop wrecking the type system.
-    state.textureTile = (<TextureTile> {
+    state.currentTile = {
         format: (w0 >> 16) & 0xFF,
         cms: (w1 >> 8) & 0x3,
         cmt: (w1 >> 18) & 0x3,
@@ -354,20 +354,24 @@ function cmd_SETTILE(state: State, w0: number, w1: number) {
         // shiftT: (w1 >> 10) & 0xF,
         maskS: (w1 >> 4) & 0xF,
         maskT: (w1 >> 14) & 0xF,
-    });
 
-    calcTextureSize(state.textureTile);
+        width: 0, height: 0, dstFormat: null,
+        pixels: null, addr: 0, glTextureId: null,
+        uls: 0, ult: 0, lrs: 0, lrt: 0,
+    };
 }
 
 function cmd_SETTILESIZE(state: State, w0: number, w1: number) {
     const tileIdx = (w1 >> 24) & 0x7;
     // XXX(jstpierre): Multiple tiles?
-    const tile = state.textureTile;
+    const tile = state.currentTile;
 
     tile.uls = (w0 >> 14) & 0x3FF;
     tile.ult = (w0 >> 2) & 0x3FF;
     tile.lrs = (w1 >> 14) & 0x3FF;
     tile.lrt = (w1 >> 2) & 0x3FF;
+
+    calcTextureSize(tile);
 }
 
 function cmd_LOADTLUT(state: State, w0: number, w1: number) {
@@ -723,6 +727,8 @@ function calcTextureSize(texture: TextureTile) {
     case 0x90: maxTexel = 2048; lineShift = 0; break; // I
     // 32-bit
     case 0x18: maxTexel = 1024; lineShift = 2; break; // RGBA
+    default:
+        throw "whoops";
     }
 
     const lineW = texture.lineSize << lineShift;
@@ -785,6 +791,7 @@ function loadTextureBlock(state: State, cmds: number[][]) {
     cmd_SETTIMG(state, cmds[0][0], cmds[0][1]);
     cmd_SETTILE(state, cmds[5][0], cmds[5][1]);
     cmd_SETTILESIZE(state, cmds[6][0], cmds[6][1]);
+    state.textureTile = state.currentTile;
     const tile = state.textureTile;
     tile.addr = state.textureImageAddr;
 
