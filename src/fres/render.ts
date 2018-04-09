@@ -129,30 +129,8 @@ export class Scene implements Viewer.Scene {
         gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
+        this.textures = [];
         this.modelFuncs = this.translateFRES(gl, this.fres);
-
-        this.textures = this.fres.textures.map((textureEntry) => {
-            const tex = textureEntry.texture;
-            const surface = tex.surface;
-            const canvases: HTMLCanvasElement[] = [];
-            for (let i = 0; i < tex.surface.numMips; i++) {
-                const canvas = document.createElement('canvas');
-                canvas.width = 0;
-                canvas.height = 0;
-                canvases.push(canvas);
-            }
-            GX2Texture.decodeTexture(tex.surface, tex.texData, tex.mipData).then((decodedTexture) => {
-                const decompressedTexture = GX2Texture.decompressTexture(decodedTexture);
-                decompressedTexture.surfaces.forEach((decompressedSurface, i) => {
-                    const canvas = canvases[i];
-                    canvas.width = decompressedSurface.width;
-                    canvas.height = decompressedSurface.height;
-                    canvas.title = `${textureEntry.entry.name} ${surface.format} (${surface.width}x${surface.height})`;
-                    GX2Texture.surfaceToCanvas(canvas, decompressedTexture, decompressedSurface);
-                });
-            });
-            return { name: textureEntry.entry.name, surfaces: canvases };
-        });
     }
 
     private translateFVTXBuffers(fvtx: BFRES.FVTX, vertexDatas: ArrayBufferSlice[]) {
@@ -438,7 +416,7 @@ export class Scene implements Viewer.Scene {
         };
     }
 
-    private getCompressedFormat(gl: WebGL2RenderingContext, tex: GX2Texture.DecodedTextureBC) {
+    private getCompressedFormat(gl: WebGL2RenderingContext, tex: GX2Texture.DecodedSurfaceBC) {
         switch (tex.type) {
         case 'BC4':
         case 'BC5':
@@ -471,57 +449,81 @@ export class Scene implements Viewer.Scene {
         return null;
     }
 
-    private translateTexture(gl: WebGL2RenderingContext, ftex: BFRES.TextureEntry): WebGLTexture {
+    private translateTexture(gl: WebGL2RenderingContext, textureEntry: BFRES.TextureEntry): WebGLTexture {
         const glTexture = this.arena.createTexture(gl);
         gl.bindTexture(gl.TEXTURE_2D, glTexture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 0);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
-        const surface = ftex.texture.surface;
+        const texture = textureEntry.texture;
+        const surface = texture.surface;
 
-        // Kick off a decode...
-        GX2Texture.decodeTexture(surface, ftex.texture.texData, ftex.texture.mipData).then((tex: GX2Texture.DecodedTexture) => {
-            gl.bindTexture(gl.TEXTURE_2D, glTexture);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, tex.surfaces.length - 1);
+        const canvases: HTMLCanvasElement[] = [];
 
-            // First check if we have to decompress compressed textures.
-            switch (tex.type) {
-            case "BC1":
-            case "BC3":
-            case "BC4":
-            case "BC5":
-                const compressedFormat = this.getCompressedFormat(gl, tex);
-                if (compressedFormat === null)
-                    tex = GX2Texture.decompressBC(tex);
-                break;
-            }
+        for (let i = 0; i < surface.numMips; i++) {
+            const mipLevel = i;
 
-            tex.surfaces.forEach((decodedSurface, i) => {
-                const level = i;
+            const canvas = document.createElement('canvas');
+            canvas.width = 0;
+            canvas.height = 0;
+            canvases.push(canvas);
+
+            GX2Texture.decodeSurface(surface, texture.texData, texture.mipData, mipLevel).then((decodedSurface: GX2Texture.DecodedSurface) => {
+                // Sometimes the surfaces appear to have garbage sizes.
+                if (decodedSurface.width === 0 || decodedSurface.height === 0)
+                    return;
+
+                gl.bindTexture(gl.TEXTURE_2D, glTexture);
+                // Decodes should show up in order, thanks to priority. Change this if we ever
+                // change the logic, because it is indeed sketchy...
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, mipLevel);
+
+                // First check if we have to decompress compressed textures.
+                switch (decodedSurface.type) {
+                case "BC1":
+                case "BC3":
+                case "BC4":
+                case "BC5":
+                    const compressedFormat = this.getCompressedFormat(gl, decodedSurface);
+                    if (compressedFormat === null)
+                        decodedSurface = GX2Texture.decompressBC(decodedSurface);
+                    break;
+                }
+
                 const pixels = decodedSurface.pixels;
                 const width = decodedSurface.width;
                 const height = decodedSurface.height;
                 assert(pixels.byteLength > 0);
 
-                switch (tex.type) {
+                switch (decodedSurface.type) {
                 case "RGBA": {
-                    const internalFormat = tex.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : tex.flag === 'SNORM' ? gl.RGBA8_SNORM : gl.RGBA8;
-                    const type = tex.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                    const data = tex.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
-                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, 0, gl.RGBA, type, data);
+                    const internalFormat = decodedSurface.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : decodedSurface.flag === 'SNORM' ? gl.RGBA8_SNORM : gl.RGBA8;
+                    const type = decodedSurface.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
+                    const data = decodedSurface.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
+                    gl.texImage2D(gl.TEXTURE_2D, mipLevel, internalFormat, width, height, 0, gl.RGBA, type, data);
                     break;
                 }
                 case "BC1":
                 case "BC3":
                 case "BC4":
                 case "BC5": {
-                    const compressedFormat = this.getCompressedFormat(gl, tex);
+                    const compressedFormat = this.getCompressedFormat(gl, decodedSurface);
                     assert(compressedFormat !== null);
-                    gl.compressedTexImage2D(gl.TEXTURE_2D, level, compressedFormat, width, height, 0, new Uint8Array(pixels));
+                    gl.compressedTexImage2D(gl.TEXTURE_2D, mipLevel, compressedFormat, width, height, 0, new Uint8Array(pixels));
                     break;
                 }
                 }
+
+                // XXX(jstpierre): Do this on a worker as well?
+                const canvas = canvases[mipLevel];
+                const decompressedSurface = GX2Texture.decompressSurface(decodedSurface);
+                canvas.width = decompressedSurface.width;
+                canvas.height = decompressedSurface.height;
+                canvas.title = `${textureEntry.entry.name} ${surface.format} (${surface.width}x${surface.height})`;
+                GX2Texture.surfaceToCanvas(canvas, decompressedSurface);
             });
-        });
+        }
+
+        this.textures.push({ name: textureEntry.entry.name, surfaces: canvases });
 
         return glTexture;
     }

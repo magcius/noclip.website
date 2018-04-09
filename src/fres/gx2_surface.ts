@@ -49,7 +49,7 @@ export function parseGX2Surface(buffer: ArrayBufferSlice, gx2SurfaceOffs: number
     return surface;
 }
 
-export interface DecodedSurface {
+export interface DeswizzledSurface {
     width: number;
     height: number;
     pixels: ArrayBuffer;
