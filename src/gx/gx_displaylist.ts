@@ -50,13 +50,27 @@ export function getComponentSize(dataType: GX.CompType): CompSize {
 
 export function getNumComponents(vtxAttrib: GX.VertexAttribute, componentCount: GX.CompCnt): number {
     switch (vtxAttrib) {
+    case GX.VertexAttribute.PNMTXIDX:
+    case GX.VertexAttribute.TEX0MTXIDX:
+    case GX.VertexAttribute.TEX1MTXIDX:
+    case GX.VertexAttribute.TEX2MTXIDX:
+    case GX.VertexAttribute.TEX3MTXIDX:
+    case GX.VertexAttribute.TEX4MTXIDX:
+    case GX.VertexAttribute.TEX5MTXIDX:
+    case GX.VertexAttribute.TEX6MTXIDX:
+    case GX.VertexAttribute.TEX7MTXIDX:
+        return 1;
     case GX.VertexAttribute.POS:
         if (componentCount === GX.CompCnt.POS_XY)
             return 2;
         else if (componentCount === GX.CompCnt.POS_XYZ)
             return 3;
     case GX.VertexAttribute.NRM:
-        return 3;
+    case GX.VertexAttribute.NBT:
+        if (componentCount === GX.CompCnt.NRM_XYZ)
+            return 3;
+        else
+            throw new Error("whoops");
     case GX.VertexAttribute.CLR0:
     case GX.VertexAttribute.CLR1:
         if (componentCount === GX.CompCnt.CLR_RGB)
@@ -75,8 +89,37 @@ export function getNumComponents(vtxAttrib: GX.VertexAttribute, componentCount: 
             return 1;
         else if (componentCount === GX.CompCnt.TEX_ST)
             return 2;
-    default:
-        throw new Error(`Unknown vertex attribute ${vtxAttrib}`);
+    case GX.VertexAttribute.NULL:
+        // Shouldn't ever happen
+        throw new Error("whoops");
+    }
+}
+
+function getAttrName(vtxAttrib: GX.VertexAttribute): string {
+    switch (vtxAttrib) {
+    case GX.VertexAttribute.PNMTXIDX:   return `PNMTXIDX`;
+    case GX.VertexAttribute.TEX0MTXIDX: return `TEX0MTXIDX';`
+    case GX.VertexAttribute.TEX1MTXIDX: return `TEX1MTXIDX';`
+    case GX.VertexAttribute.TEX2MTXIDX: return `TEX2MTXIDX';`
+    case GX.VertexAttribute.TEX3MTXIDX: return `TEX3MTXIDX';`
+    case GX.VertexAttribute.TEX4MTXIDX: return `TEX4MTXIDX';`
+    case GX.VertexAttribute.TEX5MTXIDX: return `TEX5MTXIDX';`
+    case GX.VertexAttribute.TEX6MTXIDX: return `TEX6MTXIDX';`
+    case GX.VertexAttribute.TEX7MTXIDX: return `TEX7MTXIDX';`
+    case GX.VertexAttribute.POS:        return `POS`;
+    case GX.VertexAttribute.NRM:        return `NRM`;
+    case GX.VertexAttribute.NBT:        return `NBT`;
+    case GX.VertexAttribute.CLR0:       return `CLR0`;
+    case GX.VertexAttribute.CLR1:       return `CLR1`;
+    case GX.VertexAttribute.TEX0:       return `TEX0`;
+    case GX.VertexAttribute.TEX1:       return `TEX1`;
+    case GX.VertexAttribute.TEX2:       return `TEX2`;
+    case GX.VertexAttribute.TEX3:       return `TEX3`;
+    case GX.VertexAttribute.TEX4:       return `TEX4`;
+    case GX.VertexAttribute.TEX5:       return `TEX5`;
+    case GX.VertexAttribute.TEX6:       return `TEX6`;
+    case GX.VertexAttribute.TEX7:       return `TEX7`;
+    case GX.VertexAttribute.NULL: throw new Error("whoops");
     }
 }
 
@@ -119,15 +162,13 @@ function translateVattrLayout(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): Vat
             break;
         }
 
-        if (dstVertexSize === 0)
-            firstCompSize = compSize;
         dstVertexSize = align(dstVertexSize, compSize);
         dstAttrOffsets[vtxAttrib] = dstVertexSize;
         srcAttrSizes[vtxAttrib] = attrByteSize;
         dstVertexSize += attrByteSize;
     }
-    // Align the whole thing to the first component's size.
-    dstVertexSize = align(dstVertexSize, firstCompSize);
+    // Align the whole thing to our minimum required alignment (F32).
+    dstVertexSize = align(dstVertexSize, 4);
     return { dstVertexSize, dstAttrOffsets, srcAttrSizes, srcVertexSize };
 }
 
@@ -148,61 +189,45 @@ export interface VtxLoader {
 function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoader {
     const vattrLayout: VattrLayout = translateVattrLayout(vat, vtxDescs);
 
-    function getAttrName(vtxAttrib: GX.VertexAttribute): string {
-        switch (vtxAttrib) {
-        case GX.VertexAttribute.POS:  return `POS`;
-        case GX.VertexAttribute.NRM:  return `NRM`;
-        case GX.VertexAttribute.CLR0: return `CLR0`;
-        case GX.VertexAttribute.CLR1: return `CLR1`;
-        case GX.VertexAttribute.TEX0: return `TEX0`;
-        case GX.VertexAttribute.TEX1: return `TEX1`;
-        case GX.VertexAttribute.TEX2: return `TEX2`;
-        case GX.VertexAttribute.TEX3: return `TEX3`;
-        case GX.VertexAttribute.TEX4: return `TEX4`;
-        case GX.VertexAttribute.TEX5: return `TEX5`;
-        case GX.VertexAttribute.TEX6: return `TEX6`;
-        case GX.VertexAttribute.TEX7: return `TEX7`;
-        default: throw new Error("whoops");
-        }
-    }
-
     function compileVattr(vtxAttrib: GX.VertexAttribute): string {
         if (!vtxDescs[vtxAttrib])
             return '';
 
         const srcAttrSize = vattrLayout.srcAttrSizes[vtxAttrib];
-        let readVertex;
+        if (srcAttrSize === undefined)
+            return '';
+
+        function readIndexTemplate(readIndex: string, drawCallIdxIncr: number): string {
+            const attrOffs = `vtxArrays[${vtxAttrib}].offs + (${srcAttrSize} * ${readIndex})`;
+            return `
+        dstVertexData.set(vtxArrays[${vtxAttrib}].buffer.createTypedArray(Uint8Array, ${attrOffs}, ${srcAttrSize}), ${dstOffs});
+        drawCallIdx += ${drawCallIdxIncr};`.trim();
+        }
+
+        const dstOffs = `dstVertexDataOffs + ${vattrLayout.dstAttrOffsets[vtxAttrib]}`;
+        let readVertex = '';
         switch (vtxDescs[vtxAttrib].type) {
         case GX.AttrType.NONE:
             return '';
         case GX.AttrType.INDEX8:
-            readVertex = `
-        index = view.getUint8(drawCallIdx);
-        drawCallIdx += 1;`.trim();
+            readVertex = readIndexTemplate(`view.getUint8(drawCallIdx)`, 1);
             break;
         case GX.AttrType.INDEX16:
-            readVertex = `
-        index = view.getUint16(drawCallIdx);
-        drawCallIdx += 2;`.trim();
+            readVertex = readIndexTemplate(`view.getUint16(drawCallIdx)`, 2);
             break;
         case GX.AttrType.DIRECT:
+            readVertex = `
+        dstVertexData.set(srcBuffer.createTypedArray(Uint8Array, drawCallIdx, ${srcAttrSize}), ${dstOffs});
+        drawCallIdx += ${srcAttrSize};
+        `.trim();
+            break;
         default:
             throw new Error("whoops");
         }
 
-        switch (vtxDescs[vtxAttrib].type) {
-        case GX.AttrType.INDEX8:
-        case GX.AttrType.INDEX16:
-            // TODO(jstpierre): Stride.
-            readVertex = `${readVertex}
-        attrOffs = vertexArray.offs + (${srcAttrSize} * index);`;
-            break;
-        }
-
-        return `// ${getAttrName(vtxAttrib)}
-        vertexArray = vtxArrays[${vtxAttrib}];
-        ${readVertex}
-        dstVertexData.set(vertexArray.buffer.createTypedArray(Uint8Array, attrOffs, ${srcAttrSize}), dstVertexDataOffs + ${vattrLayout.dstAttrOffsets[vtxAttrib]});`;
+        return `
+        // ${getAttrName(vtxAttrib)}
+        ${readVertex}`.trim() ;
     }
 
     function compileVattrs(): string {
@@ -290,7 +315,6 @@ for (let z = 0; z < drawCalls.length; z++) {
 
     let drawCallIdx = drawCall.srcOffs;
     // Scratch.
-    let index, attrOffs, vertexArray;
     for (let j = 0; j < drawCall.vertexCount; j++) {
 ${compileVattrs()}
         dstVertexDataOffs += ${vattrLayout.dstVertexSize};

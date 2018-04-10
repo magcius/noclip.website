@@ -349,6 +349,12 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
     // Build vattrs for VTX1.
     const vattrs: GX_VtxAttrFmt[] = [];
     const vtxArrays: GX_Array[] = [];
+
+    // Hardcoded by the J3D engine.
+    for (let i = GX.VertexAttribute.PNMTXIDX; i < GX.VertexAttribute.TEX7MTXIDX; i++) {
+        vattrs[i] = { compCnt: 1, compType: GX.CompType.U8 };
+    }
+
     for (const [attr, vertexArray] of bmd.vtx1.vertexArrays.entries()) {
         vattrs[attr] = { compCnt: vertexArray.compCnt, compType: vertexArray.compType };
         vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0 };
@@ -381,6 +387,9 @@ function readSHP1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         const packedVertexAttributes: PackedVertexAttribute[] = [];
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vtxLoader.vattrLayout.dstAttrOffsets.length; vtxAttrib++) {
             if (!vtxDescs[vtxAttrib])
+                continue;
+            // TODO(jstpierre): Support DIRECT attributes.
+            if (vtxArrays[vtxAttrib] === undefined)
                 continue;
             const indexDataType = vtxDescs[vtxAttrib].type;
             const offset = vtxLoader.vattrLayout.dstAttrOffsets[vtxAttrib];

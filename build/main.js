@@ -2482,13 +2482,27 @@ System.register("gx/gx_displaylist", ["util"], function (exports_11, context_11)
     exports_11("getComponentSize", getComponentSize);
     function getNumComponents(vtxAttrib, componentCount) {
         switch (vtxAttrib) {
+            case 0 /* PNMTXIDX */:
+            case 1 /* TEX0MTXIDX */:
+            case 2 /* TEX1MTXIDX */:
+            case 3 /* TEX2MTXIDX */:
+            case 4 /* TEX3MTXIDX */:
+            case 5 /* TEX4MTXIDX */:
+            case 6 /* TEX5MTXIDX */:
+            case 7 /* TEX6MTXIDX */:
+            case 8 /* TEX7MTXIDX */:
+                return 1;
             case 9 /* POS */:
                 if (componentCount === 0 /* POS_XY */)
                     return 2;
                 else if (componentCount === 1 /* POS_XYZ */)
                     return 3;
             case 10 /* NRM */:
-                return 3;
+            case 25 /* NBT */:
+                if (componentCount === 0 /* NRM_XYZ */)
+                    return 3;
+                else
+                    throw new Error("whoops");
             case 11 /* CLR0 */:
             case 12 /* CLR1 */:
                 if (componentCount === 0 /* CLR_RGB */)
@@ -2507,11 +2521,39 @@ System.register("gx/gx_displaylist", ["util"], function (exports_11, context_11)
                     return 1;
                 else if (componentCount === 1 /* TEX_ST */)
                     return 2;
-            default:
-                throw new Error("Unknown vertex attribute " + vtxAttrib);
+            case 255 /* NULL */:
+                // Shouldn't ever happen
+                throw new Error("whoops");
         }
     }
     exports_11("getNumComponents", getNumComponents);
+    function getAttrName(vtxAttrib) {
+        switch (vtxAttrib) {
+            case 0 /* PNMTXIDX */: return "PNMTXIDX";
+            case 1 /* TEX0MTXIDX */: return "TEX0MTXIDX';";
+            case 2 /* TEX1MTXIDX */: return "TEX1MTXIDX';";
+            case 3 /* TEX2MTXIDX */: return "TEX2MTXIDX';";
+            case 4 /* TEX3MTXIDX */: return "TEX3MTXIDX';";
+            case 5 /* TEX4MTXIDX */: return "TEX4MTXIDX';";
+            case 6 /* TEX5MTXIDX */: return "TEX5MTXIDX';";
+            case 7 /* TEX6MTXIDX */: return "TEX6MTXIDX';";
+            case 8 /* TEX7MTXIDX */: return "TEX7MTXIDX';";
+            case 9 /* POS */: return "POS";
+            case 10 /* NRM */: return "NRM";
+            case 25 /* NBT */: return "NBT";
+            case 11 /* CLR0 */: return "CLR0";
+            case 12 /* CLR1 */: return "CLR1";
+            case 13 /* TEX0 */: return "TEX0";
+            case 14 /* TEX1 */: return "TEX1";
+            case 15 /* TEX2 */: return "TEX2";
+            case 16 /* TEX3 */: return "TEX3";
+            case 17 /* TEX4 */: return "TEX4";
+            case 18 /* TEX5 */: return "TEX5";
+            case 19 /* TEX6 */: return "TEX6";
+            case 20 /* TEX7 */: return "TEX7";
+            case 255 /* NULL */: throw new Error("whoops");
+        }
+    }
     function translateVattrLayout(vat, vtxDescs) {
         // First, set up our vertex layout.
         var dstAttrOffsets = [];
@@ -2539,62 +2581,45 @@ System.register("gx/gx_displaylist", ["util"], function (exports_11, context_11)
                     srcVertexSize += 2;
                     break;
             }
-            if (dstVertexSize === 0)
-                firstCompSize = compSize;
             dstVertexSize = util_4.align(dstVertexSize, compSize);
             dstAttrOffsets[vtxAttrib] = dstVertexSize;
             srcAttrSizes[vtxAttrib] = attrByteSize;
             dstVertexSize += attrByteSize;
         }
-        // Align the whole thing to the first component's size.
-        dstVertexSize = util_4.align(dstVertexSize, firstCompSize);
+        // Align the whole thing to our minimum required alignment (F32).
+        dstVertexSize = util_4.align(dstVertexSize, 4);
         return { dstVertexSize: dstVertexSize, dstAttrOffsets: dstAttrOffsets, srcAttrSizes: srcAttrSizes, srcVertexSize: srcVertexSize };
     }
     function _compileVtxLoader(vat, vtxDescs) {
         var vattrLayout = translateVattrLayout(vat, vtxDescs);
-        function getAttrName(vtxAttrib) {
-            switch (vtxAttrib) {
-                case 9 /* POS */: return "POS";
-                case 10 /* NRM */: return "NRM";
-                case 11 /* CLR0 */: return "CLR0";
-                case 12 /* CLR1 */: return "CLR1";
-                case 13 /* TEX0 */: return "TEX0";
-                case 14 /* TEX1 */: return "TEX1";
-                case 15 /* TEX2 */: return "TEX2";
-                case 16 /* TEX3 */: return "TEX3";
-                case 17 /* TEX4 */: return "TEX4";
-                case 18 /* TEX5 */: return "TEX5";
-                case 19 /* TEX6 */: return "TEX6";
-                case 20 /* TEX7 */: return "TEX7";
-                default: throw new Error("whoops");
-            }
-        }
         function compileVattr(vtxAttrib) {
             if (!vtxDescs[vtxAttrib])
                 return '';
             var srcAttrSize = vattrLayout.srcAttrSizes[vtxAttrib];
-            var readVertex;
+            if (srcAttrSize === undefined)
+                return '';
+            function readIndexTemplate(readIndex, drawCallIdxIncr) {
+                var attrOffs = "vtxArrays[" + vtxAttrib + "].offs + (" + srcAttrSize + " * " + readIndex + ")";
+                return ("\n        dstVertexData.set(vtxArrays[" + vtxAttrib + "].buffer.createTypedArray(Uint8Array, " + attrOffs + ", " + srcAttrSize + "), " + dstOffs + ");\n        drawCallIdx += " + drawCallIdxIncr + ";").trim();
+            }
+            var dstOffs = "dstVertexDataOffs + " + vattrLayout.dstAttrOffsets[vtxAttrib];
+            var readVertex = '';
             switch (vtxDescs[vtxAttrib].type) {
                 case 0 /* NONE */:
                     return '';
                 case 2 /* INDEX8 */:
-                    readVertex = "\n        index = view.getUint8(drawCallIdx);\n        drawCallIdx += 1;".trim();
+                    readVertex = readIndexTemplate("view.getUint8(drawCallIdx)", 1);
                     break;
                 case 3 /* INDEX16 */:
-                    readVertex = "\n        index = view.getUint16(drawCallIdx);\n        drawCallIdx += 2;".trim();
+                    readVertex = readIndexTemplate("view.getUint16(drawCallIdx)", 2);
                     break;
                 case 1 /* DIRECT */:
+                    readVertex = ("\n        dstVertexData.set(srcBuffer.createTypedArray(Uint8Array, drawCallIdx, " + srcAttrSize + "), " + dstOffs + ");\n        drawCallIdx += " + srcAttrSize + ";\n        ").trim();
+                    break;
                 default:
                     throw new Error("whoops");
             }
-            switch (vtxDescs[vtxAttrib].type) {
-                case 2 /* INDEX8 */:
-                case 3 /* INDEX16 */:
-                    // TODO(jstpierre): Stride.
-                    readVertex = readVertex + "\n        attrOffs = vertexArray.offs + (" + srcAttrSize + " * index);";
-                    break;
-            }
-            return "// " + getAttrName(vtxAttrib) + "\n        vertexArray = vtxArrays[" + vtxAttrib + "];\n        " + readVertex + "\n        dstVertexData.set(vertexArray.buffer.createTypedArray(Uint8Array, attrOffs, " + srcAttrSize + "), dstVertexDataOffs + " + vattrLayout.dstAttrOffsets[vtxAttrib] + ");";
+            return ("\n        // " + getAttrName(vtxAttrib) + "\n        " + readVertex).trim();
         }
         function compileVattrs() {
             var sources = [];
@@ -2603,7 +2628,7 @@ System.register("gx/gx_displaylist", ["util"], function (exports_11, context_11)
             }
             return sources.join('');
         }
-        var source = "\n\"use strict\";\n\n// Parse display list.\nconst view = srcBuffer.createDataView();\nconst drawCalls = [];\nlet totalVertexCount = 0;\nlet totalTriangleCount = 0;\nlet drawCallIdx = 0;\nwhile (true) {\n    if (drawCallIdx >= srcBuffer.byteLength)\n        break;\n    const cmd = view.getUint8(drawCallIdx);\n    if (cmd === 0)\n        break;\n\n    const primType = cmd & 0xF8;\n    const vertexFormat = cmd & 0x07;\n\n    const vertexCount = view.getUint16(drawCallIdx + 0x01);\n    drawCallIdx += 0x03;\n    const srcOffs = drawCallIdx;\n    const first = totalVertexCount;\n    totalVertexCount += vertexCount;\n\n    switch (primType) {\n    case " + 160 /* TRIANGLEFAN */ + ":\n    case " + 152 /* TRIANGLESTRIP */ + ":\n        totalTriangleCount += (vertexCount - 2);\n        break;\n    default:\n        throw \"whoops\";\n    }\n\n    drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });\n\n    // Skip over the index data.\n    drawCallIdx += " + vattrLayout.srcVertexSize + " * vertexCount;\n}\n\n// Now make the data.\nlet indexDataIdx = 0;\nconst dstIndexData = new Uint16Array(totalTriangleCount * 3);\nlet vertexId = 0;\n\nconst dstVertexDataSize = " + vattrLayout.dstVertexSize + " * totalVertexCount;\nconst dstVertexData = new Uint8Array(dstVertexDataSize);\nlet dstVertexDataOffs = 0;\nfor (let z = 0; z < drawCalls.length; z++) {\n    const drawCall = drawCalls[z];\n\n    // Convert topology to triangles.\n    const firstVertex = vertexId;\n\n    // First triangle is the same for all topo.\n    for (let i = 0; i < 3; i++)\n        dstIndexData[indexDataIdx++] = vertexId++;\n\n    switch (drawCall.primType) {\n    case " + 152 /* TRIANGLESTRIP */ + ":\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 160 /* TRIANGLEFAN */ + ":\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = firstVertex;\n            dstIndexData[indexDataIdx++] = vertexId - 1;\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    }\n\n    let drawCallIdx = drawCall.srcOffs;\n    // Scratch.\n    let index, attrOffs, vertexArray;\n    for (let j = 0; j < drawCall.vertexCount; j++) {\n" + compileVattrs() + "\n        dstVertexDataOffs += " + vattrLayout.dstVertexSize + ";\n    }\n}\nreturn { indexData: dstIndexData, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };\n";
+        var source = "\n\"use strict\";\n\n// Parse display list.\nconst view = srcBuffer.createDataView();\nconst drawCalls = [];\nlet totalVertexCount = 0;\nlet totalTriangleCount = 0;\nlet drawCallIdx = 0;\nwhile (true) {\n    if (drawCallIdx >= srcBuffer.byteLength)\n        break;\n    const cmd = view.getUint8(drawCallIdx);\n    if (cmd === 0)\n        break;\n\n    const primType = cmd & 0xF8;\n    const vertexFormat = cmd & 0x07;\n\n    const vertexCount = view.getUint16(drawCallIdx + 0x01);\n    drawCallIdx += 0x03;\n    const srcOffs = drawCallIdx;\n    const first = totalVertexCount;\n    totalVertexCount += vertexCount;\n\n    switch (primType) {\n    case " + 160 /* TRIANGLEFAN */ + ":\n    case " + 152 /* TRIANGLESTRIP */ + ":\n        totalTriangleCount += (vertexCount - 2);\n        break;\n    default:\n        throw \"whoops\";\n    }\n\n    drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });\n\n    // Skip over the index data.\n    drawCallIdx += " + vattrLayout.srcVertexSize + " * vertexCount;\n}\n\n// Now make the data.\nlet indexDataIdx = 0;\nconst dstIndexData = new Uint16Array(totalTriangleCount * 3);\nlet vertexId = 0;\n\nconst dstVertexDataSize = " + vattrLayout.dstVertexSize + " * totalVertexCount;\nconst dstVertexData = new Uint8Array(dstVertexDataSize);\nlet dstVertexDataOffs = 0;\nfor (let z = 0; z < drawCalls.length; z++) {\n    const drawCall = drawCalls[z];\n\n    // Convert topology to triangles.\n    const firstVertex = vertexId;\n\n    // First triangle is the same for all topo.\n    for (let i = 0; i < 3; i++)\n        dstIndexData[indexDataIdx++] = vertexId++;\n\n    switch (drawCall.primType) {\n    case " + 152 /* TRIANGLESTRIP */ + ":\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 160 /* TRIANGLEFAN */ + ":\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = firstVertex;\n            dstIndexData[indexDataIdx++] = vertexId - 1;\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    }\n\n    let drawCallIdx = drawCall.srcOffs;\n    // Scratch.\n    for (let j = 0; j < drawCall.vertexCount; j++) {\n" + compileVattrs() + "\n        dstVertexDataOffs += " + vattrLayout.dstVertexSize + ";\n    }\n}\nreturn { indexData: dstIndexData, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };\n";
         var runVertices = new Function('vtxArrays', 'srcBuffer', source);
         return { vattrLayout: vattrLayout, runVertices: runVertices };
     }
@@ -2823,7 +2848,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
             }());
             exports_12("Color", Color);
             vtxAttributeGenDefs = [
-                { attrib: 0 /* PTMTXIDX */, name: "PosMtxIdx", storage: "float", scale: false },
+                { attrib: 0 /* PNMTXIDX */, name: "PosMtxIdx", storage: "float", scale: false },
                 { attrib: 9 /* POS */, name: "Position", storage: "vec3", scale: true },
                 { attrib: 10 /* NRM */, name: "Normal", storage: "vec3", scale: true },
                 { attrib: 11 /* CLR0 */, name: "Color0", storage: "vec4", scale: false },
@@ -3403,6 +3428,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         // Build vattrs for VTX1.
         var vattrs = [];
         var vtxArrays = [];
+        // Hardcoded by the J3D engine.
+        for (var i = 0 /* PNMTXIDX */; i < 8 /* TEX7MTXIDX */; i++) {
+            vattrs[i] = { compCnt: 1, compType: 0 /* U8 */ };
+        }
         try {
             for (var _a = __values(bmd.vtx1.vertexArrays.entries()), _b = _a.next(); !_b.done; _b = _a.next()) {
                 var _c = __read(_b.value, 2), attr = _c[0], vertexArray = _c[1];
@@ -3440,6 +3469,9 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var packedVertexAttributes = [];
             for (var vtxAttrib = 0; vtxAttrib < vtxLoader.vattrLayout.dstAttrOffsets.length; vtxAttrib++) {
                 if (!vtxDescs[vtxAttrib])
+                    continue;
+                // TODO(jstpierre): Support DIRECT attributes.
+                if (vtxArrays[vtxAttrib] === undefined)
                     continue;
                 var indexDataType = vtxDescs[vtxAttrib].type;
                 var offset = vtxLoader.vattrLayout.dstAttrOffsets[vtxAttrib];
@@ -4672,10 +4704,14 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         for (var _a = __values(this.shape.packedVertexAttributes), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var attrib = _b.value;
                             var vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
+                            var compType = vertexArray.compType;
+                            var compCount = vertexArray.compCount;
                             var attribLocation = GX_Material.getVertexAttribLocation(attrib.vtxAttrib);
                             gl.enableVertexAttribArray(attribLocation);
-                            var _c = translateCompType(gl, vertexArray.compType), type = _c.type, normalized = _c.normalized;
-                            gl.vertexAttribPointer(attribLocation, vertexArray.compCount, type, normalized, this.shape.packedVertexSize, coalescedBuffers.vertexBuffer.offset + attrib.offset);
+                            var _c = translateCompType(gl, compType), type = _c.type, normalized = _c.normalized;
+                            gl.vertexAttribPointer(attribLocation, compCount, type, normalized, this.shape.packedVertexSize, coalescedBuffers.vertexBuffer.offset + attrib.offset);
+                            if (gl.getError() !== gl.NO_ERROR)
+                                throw new Error();
                         }
                     }
                     catch (e_18_1) { e_18 = { error: e_18_1 }; }
@@ -4699,15 +4735,16 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         case 0 /* NORMAL */:
                             break;
                         case 1 /* BILLBOARD */:
+                        case 2 /* Y_BILLBOARD */:
+                            // TODO(jstpierre): Proper Y
                             var tx = modelView[12];
                             var ty = modelView[13];
                             var tz = modelView[14];
                             gl_matrix_4.mat4.fromTranslation(modelView, [tx, ty, tz]);
                             break;
-                        case 2 /* Y_BILLBOARD */:
                         case 3 /* UNKNOWN */:
                         default:
-                            throw new Error("whoops");
+                        // throw new Error("whoops");
                     }
                     gl_matrix_4.mat4.mul(modelView, modelView, this.scene.modelMatrix);
                 };

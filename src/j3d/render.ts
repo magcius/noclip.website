@@ -1,7 +1,7 @@
 
 import { mat3, mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray } from './j3d';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
@@ -59,20 +59,24 @@ class Command_Shape {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, coalescedBuffers.indexBuffer.buffer);
 
         for (const attrib of this.shape.packedVertexAttributes) {
-            const vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
+            const vertexArray: VertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
+            const compType = vertexArray.compType;
+            const compCount = vertexArray.compCount;
 
             const attribLocation = GX_Material.getVertexAttribLocation(attrib.vtxAttrib);
             gl.enableVertexAttribArray(attribLocation);
 
-            const { type, normalized } = translateCompType(gl, vertexArray.compType);
+            const { type, normalized } = translateCompType(gl, compType);
 
             gl.vertexAttribPointer(
                 attribLocation,
-                vertexArray.compCount,
+                compCount,
                 type, normalized,
                 this.shape.packedVertexSize,
                 coalescedBuffers.vertexBuffer.offset + attrib.offset,
             );
+            if (gl.getError() !== gl.NO_ERROR)
+                throw new Error();
         }
 
         gl.bindVertexArray(null);
@@ -90,15 +94,16 @@ class Command_Shape {
         case ShapeDisplayFlags.NORMAL:
             break;
         case ShapeDisplayFlags.BILLBOARD:
+        case ShapeDisplayFlags.Y_BILLBOARD:
+            // TODO(jstpierre): Proper Y
             const tx = modelView[12];
             const ty = modelView[13];
             const tz = modelView[14];
             mat4.fromTranslation(modelView, [tx, ty, tz]);
             break;
-        case ShapeDisplayFlags.Y_BILLBOARD:
         case ShapeDisplayFlags.UNKNOWN:
         default:
-            throw new Error("whoops");
+            // throw new Error("whoops");
         }
 
         mat4.mul(modelView, modelView, this.scene.modelMatrix);
