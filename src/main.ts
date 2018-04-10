@@ -5,6 +5,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 
 import * as ZTP from './j3d/ztp_scenes';
+import * as MKDD from './j3d/mkdd_scenes';
 import * as ZWW from './j3d/zww_scenes';
 import * as SMS from './j3d/sms_scenes';
 import * as SMG from './j3d/smg_scenes';
@@ -20,6 +21,7 @@ import * as J3D from './j3d/scenes';
 
 const sceneGroups = [
     ZTP.sceneGroup,
+    MKDD.sceneGroup,
     ZWW.sceneGroup,
     SMS.sceneGroup,
     SMG.sceneGroup,
