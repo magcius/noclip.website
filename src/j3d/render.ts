@@ -387,6 +387,10 @@ export class Scene implements Viewer.Scene {
 
         this.sceneParamsBuffer = gl.createBuffer();
         this.modelMatrix = mat4.create();
+
+        // TODO(jstpierre): Support weighted joints.
+        if (this.bmd.drw1.isAnyWeighted)
+            this.visible = false;
     }
 
     public destroy(gl: WebGL2RenderingContext) {

@@ -205,6 +205,7 @@ interface WeightedJoint {
 
 export interface DRW1 {
     weightedJoints: WeightedJoint[];
+    isAnyWeighted: boolean;
 }
 
 function readDRW1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, chunkSize: number) {
@@ -213,14 +214,17 @@ function readDRW1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
     const isWeightedTableOffs = view.getUint32(0x0C);
     const jointIndexTableOffs = view.getUint32(0x10);
 
+    let isAnyWeighted = false;
     const weightedJoints: WeightedJoint[] = [];
     for (let i = 0; i < weightedJointCount; i++) {
         const isWeighted = !!view.getUint8(isWeightedTableOffs + i);
+        if (isWeighted)
+            isAnyWeighted = true;
         const jointIndex = view.getUint16(jointIndexTableOffs + i * 0x02);
         weightedJoints.push({ isWeighted, jointIndex });
     }
 
-    bmd.drw1 = { weightedJoints };
+    bmd.drw1 = { weightedJoints, isAnyWeighted };
 }
 
 export interface Bone {
