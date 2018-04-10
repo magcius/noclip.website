@@ -45,6 +45,15 @@ export function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, 
     return new Scene(gl, bmd, btk, bmt);
 }
 
+function boolSort(a: boolean, b: boolean): number {
+    if (a && !b)
+        return -1;
+    else if (b && !a)
+        return 1;
+    else
+        return 0;
+}
+
 export function createScenesFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Scene[] {
     if (readString(buffer, 0, 4) === 'Yaz0')
         buffer = Yaz0.decompress(buffer);
@@ -52,17 +61,24 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, buffer: Array
     if (readString(buffer, 0, 4) === 'RARC') {
         const rarc = RARC.parse(buffer);
         const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
-        const scenes = bmdFiles.map((bmdFile) => {
+        let scenes = bmdFiles.map((bmdFile) => {
             // Find the corresponding btk.
             const basename = bmdFile.name.split('.')[0];
             const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
             const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
             const scene = createScene(gl, bmdFile, btkFile, bmtFile);
             scene.name = basename;
+            if (basename.includes('_sky'))
+                scene.setIsSkybox(true);
             return scene;
         });
 
-        return scenes.filter((s) => !!s);
+        // Sort skyboxen before non-skyboxen.
+        scenes = scenes.sort((a, b) => {
+            return boolSort(a.isSkybox, b.isSkybox);
+        });
+
+        return scenes;
     }
 
     if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
