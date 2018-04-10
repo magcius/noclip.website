@@ -3519,17 +3519,17 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
         // TODO(jstpierre): Remove these.
-        gl_matrix_3.mat3.fromTranslation(c, [centerS, centerT, centerQ]);
-        gl_matrix_3.mat3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
-        gl_matrix_3.mat3.fromTranslation(m, [translationS, translationT, 0]);
-        gl_matrix_3.mat3.fromRotation(t, rotation * Math.PI);
-        gl_matrix_3.mat3.mul(t, t, ci);
-        gl_matrix_3.mat3.mul(t, c, t);
-        gl_matrix_3.mat3.mul(m, m, t);
-        gl_matrix_3.mat3.fromScaling(t, [scaleS, scaleT, 1]);
-        gl_matrix_3.mat3.mul(t, t, ci);
-        gl_matrix_3.mat3.mul(t, c, t);
-        gl_matrix_3.mat3.mul(m, m, t);
+        gl_matrix_3.mat4.fromTranslation(c, [centerS, centerT, centerQ]);
+        gl_matrix_3.mat4.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
+        gl_matrix_3.mat4.fromTranslation(m, [translationS, translationT, 0]);
+        gl_matrix_3.mat4.fromZRotation(t, rotation * Math.PI);
+        gl_matrix_3.mat4.mul(t, t, ci);
+        gl_matrix_3.mat4.mul(t, c, t);
+        gl_matrix_3.mat4.mul(m, m, t);
+        gl_matrix_3.mat4.fromScaling(t, [scaleS, scaleT, 1]);
+        gl_matrix_3.mat4.mul(t, t, ci);
+        gl_matrix_3.mat4.mul(t, c, t);
+        gl_matrix_3.mat4.mul(m, m, t);
         return m;
     }
     function readColor32(view, srcOffs) {
@@ -3802,7 +3802,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var p32 = view.getFloat32(texMtxOffs + 0x5C);
             var p33 = view.getFloat32(texMtxOffs + 0x60);
             var p = gl_matrix_3.mat4.fromValues(p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33);
-            var matrix = gl_matrix_3.mat3.create();
+            var matrix = gl_matrix_3.mat4.create();
             createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
             var texMtx = { type: type, projection: projection, matrix: matrix };
             return texMtx;
@@ -4040,7 +4040,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             })(HierarchyType || (HierarchyType = {}));
             exports_13("HierarchyType", HierarchyType);
             // temp, center, center inverse
-            t = gl_matrix_3.mat3.create(), c = gl_matrix_3.mat3.create(), ci = gl_matrix_3.mat3.create();
+            t = gl_matrix_3.mat4.create(), c = gl_matrix_3.mat4.create(), ci = gl_matrix_3.mat4.create();
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
@@ -4867,24 +4867,24 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             finalMatrix = matrixScratch;
                             // Multiply in the material matrix if we want that.
                             if (this.scene.useMaterialTexMtx)
-                                gl_matrix_4.mat3.mul(matrixScratch, matrixScratch, texMtx.matrix);
+                                gl_matrix_4.mat4.mul(matrixScratch, matrixScratch, texMtx.matrix);
                         }
                         else {
                             finalMatrix = texMtx.matrix;
                         }
                         // We bind texture matrices as row-major for memory usage purposes.
                         materialParamsData[offs + i * 12 + 0] = finalMatrix[0];
-                        materialParamsData[offs + i * 12 + 1] = finalMatrix[3];
-                        materialParamsData[offs + i * 12 + 2] = finalMatrix[6];
-                        materialParamsData[offs + i * 12 + 3] = 0;
+                        materialParamsData[offs + i * 12 + 1] = finalMatrix[4];
+                        materialParamsData[offs + i * 12 + 2] = finalMatrix[8];
+                        materialParamsData[offs + i * 12 + 3] = finalMatrix[12];
                         materialParamsData[offs + i * 12 + 4] = finalMatrix[1];
-                        materialParamsData[offs + i * 12 + 5] = finalMatrix[4];
-                        materialParamsData[offs + i * 12 + 6] = finalMatrix[7];
-                        materialParamsData[offs + i * 12 + 7] = 0;
+                        materialParamsData[offs + i * 12 + 5] = finalMatrix[5];
+                        materialParamsData[offs + i * 12 + 6] = finalMatrix[9];
+                        materialParamsData[offs + i * 12 + 7] = finalMatrix[13];
                         materialParamsData[offs + i * 12 + 8] = finalMatrix[2];
-                        materialParamsData[offs + i * 12 + 9] = finalMatrix[5];
-                        materialParamsData[offs + i * 12 + 10] = finalMatrix[9];
-                        materialParamsData[offs + i * 12 + 11] = 0;
+                        materialParamsData[offs + i * 12 + 9] = finalMatrix[6];
+                        materialParamsData[offs + i * 12 + 10] = finalMatrix[10];
+                        materialParamsData[offs + i * 12 + 11] = finalMatrix[14];
                     }
                     offs += 4 * 3 * 10;
                     for (var i = 0; i < this.material.postTexMatrices.length; i++) {
@@ -4932,7 +4932,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.program.destroy(gl);
                     gl.deleteBuffer(this.materialParamsBuffer);
                 };
-                Command_Material.matrixScratch = gl_matrix_4.mat3.create();
+                Command_Material.matrixScratch = gl_matrix_4.mat4.create();
                 Command_Material.textureScratch = new Int32Array(8);
                 return Command_Material;
             }());

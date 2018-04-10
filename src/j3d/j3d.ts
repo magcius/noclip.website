@@ -1,7 +1,7 @@
 
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
 
-import { mat2d, mat3 as matrix3, mat4, quat } from 'gl-matrix';
+import { mat4, quat } from 'gl-matrix';
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import { betoh } from 'endian';
@@ -456,7 +456,7 @@ export const enum TexMtxProjection {
 export interface TexMtx {
     type: number;
     projection: TexMtxProjection;
-    matrix: matrix3;
+    matrix: mat4;
 }
 
 export interface MaterialEntry {
@@ -476,20 +476,20 @@ export interface MAT3 {
 }
 
 // temp, center, center inverse
-const t = matrix3.create(), c = matrix3.create(), ci = matrix3.create();
-function createTexMtx(m: matrix3, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
+const t = mat4.create(), c = mat4.create(), ci = mat4.create();
+function createTexMtx(m: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
     // TODO(jstpierre): Remove these.
-    matrix3.fromTranslation(c, [centerS, centerT, centerQ]);
-    matrix3.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
-    matrix3.fromTranslation(m, [translationS, translationT, 0]);
-    matrix3.fromRotation(t, rotation * Math.PI);
-    matrix3.mul(t, t, ci);
-    matrix3.mul(t, c, t);
-    matrix3.mul(m, m, t);
-    matrix3.fromScaling(t, [scaleS, scaleT, 1]);
-    matrix3.mul(t, t, ci);
-    matrix3.mul(t, c, t);
-    matrix3.mul(m, m, t);
+    mat4.fromTranslation(c, [centerS, centerT, centerQ]);
+    mat4.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
+    mat4.fromTranslation(m, [translationS, translationT, 0]);
+    mat4.fromZRotation(t, rotation * Math.PI);
+    mat4.mul(t, t, ci);
+    mat4.mul(t, c, t);
+    mat4.mul(m, m, t);
+    mat4.fromScaling(t, [scaleS, scaleT, 1]);
+    mat4.mul(t, t, ci);
+    mat4.mul(t, c, t);
+    mat4.mul(m, m, t);
     return m;
 }
 
@@ -802,8 +802,9 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             p30, p31, p32, p33,
         );
 
-        const matrix = matrix3.create();
+        const matrix = mat4.create();
         createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+
         const texMtx: TexMtx = { type, projection, matrix };
         return texMtx;
     }
@@ -1228,7 +1229,7 @@ export class BTK {
         return this.ttk1.materialAnimationEntries.find((e) => e.materialName === materialName && e.texMtxIndex === texMtxIndex);
     }
 
-    public calcAnimatedTexMtx(dst: matrix3, materialName: string, texMtxIndex: number, frame: number): boolean {
+    public calcAnimatedTexMtx(dst: mat4, materialName: string, texMtxIndex: number, frame: number): boolean {
         const animationEntry = this.findAnimationEntry(materialName, texMtxIndex);
         if (!animationEntry)
             return false;
