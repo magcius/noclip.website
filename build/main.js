@@ -3353,13 +3353,16 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var weightedJointCount = view.getUint16(0x08);
         var isWeightedTableOffs = view.getUint32(0x0C);
         var jointIndexTableOffs = view.getUint32(0x10);
+        var isAnyWeighted = false;
         var weightedJoints = [];
         for (var i = 0; i < weightedJointCount; i++) {
             var isWeighted = !!view.getUint8(isWeightedTableOffs + i);
+            if (isWeighted)
+                isAnyWeighted = true;
             var jointIndex = view.getUint16(jointIndexTableOffs + i * 0x02);
             weightedJoints.push({ isWeighted: isWeighted, jointIndex: jointIndex });
         }
-        bmd.drw1 = { weightedJoints: weightedJoints };
+        bmd.drw1 = { weightedJoints: weightedJoints, isAnyWeighted: isAnyWeighted };
     }
     function readJNT1Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = buffer.createDataView(chunkStart, chunkSize);
@@ -3995,8 +3998,13 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var idx0 = idx1 - 1;
         var k0 = frames[idx0];
         var k1 = frames[idx1];
+        // HACK(jstpierre): Nintendo sometimes uses weird "reset" tangents
+        // which aren't supposed to be visible. They are visible for us because
+        // "frame" can have a non-zero fractional component. In this case, pick
+        // a value completely.
+        if ((k1.time - k0.time) === 1)
+            return k0.value;
         var t = (frame - k0.time) / (k1.time - k0.time);
-        // return this.lerp(k0, k1, t);
         return hermiteInterpolate(k0, k1, t);
     }
     var gl_matrix_3, ArrayBufferSlice_5, endian_1, util_6, gx_displaylist_1, GX_Material, HierarchyType, t, c, ci, BMD, BTK, BMT, BTI;
@@ -4577,8 +4585,8 @@ System.register("gx/gx_texture", [], function (exports_15, context_15) {
         var srcOffs = 0;
         return decode_Tiled(texture, 8, 4, function (pixels, dstOffs) {
             var ia = view.getUint8(srcOffs);
-            var i = expand4to8(ia & 0x0F);
             var a = expand4to8(ia >>> 4);
+            var i = expand4to8(ia & 0x0F);
             pixels[dstOffs + 0] = i;
             pixels[dstOffs + 1] = i;
             pixels[dstOffs + 2] = i;
@@ -4590,8 +4598,8 @@ System.register("gx/gx_texture", [], function (exports_15, context_15) {
         var view = texture.data.createDataView();
         var srcOffs = 0;
         return decode_Tiled(texture, 4, 4, function (pixels, dstOffs) {
-            var i = view.getUint8(srcOffs + 0);
-            var a = view.getUint8(srcOffs + 1);
+            var a = view.getUint8(srcOffs + 0);
+            var i = view.getUint8(srcOffs + 1);
             pixels[dstOffs + 0] = i;
             pixels[dstOffs + 1] = i;
             pixels[dstOffs + 2] = i;
@@ -4958,6 +4966,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.translateModel(gl);
                     this.sceneParamsBuffer = gl.createBuffer();
                     this.modelMatrix = gl_matrix_4.mat4.create();
+                    // TODO(jstpierre): Support weighted joints.
+                    if (this.bmd.drw1.isAnyWeighted)
+                        this.visible = false;
                 }
                 Scene.prototype.destroy = function (gl) {
                     this.bufferCoalescer.destroy(gl);
@@ -5777,6 +5788,14 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
         return new render_6.Scene(gl, bmd, btk, bmt);
     }
     exports_19("createScene", createScene);
+    function boolSort(a, b) {
+        if (a && !b)
+            return -1;
+        else if (b && !a)
+            return 1;
+        else
+            return 0;
+    }
     function createScenesFromBuffer(gl, buffer) {
         if (util_10.readString(buffer, 0, 4) === 'Yaz0')
             buffer = Yaz0.decompress(buffer);
@@ -5790,9 +5809,15 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                 var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
                 var scene = createScene(gl, bmdFile, btkFile, bmtFile);
                 scene.name = basename;
+                if (basename.includes('_sky'))
+                    scene.setIsSkybox(true);
                 return scene;
             });
-            return scenes.filter(function (s) { return !!s; });
+            // Sort skyboxen before non-skyboxen.
+            scenes = scenes.sort(function (a, b) {
+                return boolSort(a.isSkybox, b.isSkybox);
+            });
+            return scenes;
         }
         if (['J3D2bmd3', 'J3D2bdl4'].includes(util_10.readString(buffer, 0, 8))) {
             var bmd = j3d_4.BMD.parse(buffer);
