@@ -19,7 +19,12 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const path = `data/j3d/mkdd/Course/${this.path}`;
         return fetch(path).then((buffer: ArrayBufferSlice): Viewer.MainScene => {
-            return createMultiSceneFromBuffer(gl, buffer);
+            const multiScene = createMultiSceneFromBuffer(gl, buffer);
+            // Kill skybox flag.
+            multiScene.scenes.forEach((scene) => {
+                scene.setIsSkybox(false);
+            })
+            return multiScene;
         });
     }
 }
