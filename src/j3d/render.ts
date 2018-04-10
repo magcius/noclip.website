@@ -1,5 +1,5 @@
 
-import { mat3, mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray } from './j3d';
 
@@ -162,7 +162,7 @@ class Command_Shape {
 
 const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20 + 8);
 export class Command_Material {
-    private static matrixScratch = mat3.create();
+    private static matrixScratch = mat4.create();
     private static textureScratch = new Int32Array(8);
 
     public bmd: BMD;
@@ -257,24 +257,24 @@ export class Command_Material {
 
                 // Multiply in the material matrix if we want that.
                 if (this.scene.useMaterialTexMtx)
-                    mat3.mul(matrixScratch, matrixScratch, texMtx.matrix);
+                    mat4.mul(matrixScratch, matrixScratch, texMtx.matrix);
             } else {
                 finalMatrix = texMtx.matrix;
             }
 
             // We bind texture matrices as row-major for memory usage purposes.
             materialParamsData[offs + i*12 +  0] = finalMatrix[0];
-            materialParamsData[offs + i*12 +  1] = finalMatrix[3];
-            materialParamsData[offs + i*12 +  2] = finalMatrix[6];
-            materialParamsData[offs + i*12 +  3] = 0;
+            materialParamsData[offs + i*12 +  1] = finalMatrix[4];
+            materialParamsData[offs + i*12 +  2] = finalMatrix[8];
+            materialParamsData[offs + i*12 +  3] = finalMatrix[12];
             materialParamsData[offs + i*12 +  4] = finalMatrix[1];
-            materialParamsData[offs + i*12 +  5] = finalMatrix[4];
-            materialParamsData[offs + i*12 +  6] = finalMatrix[7];
-            materialParamsData[offs + i*12 +  7] = 0;
+            materialParamsData[offs + i*12 +  5] = finalMatrix[5];
+            materialParamsData[offs + i*12 +  6] = finalMatrix[9];
+            materialParamsData[offs + i*12 +  7] = finalMatrix[13];
             materialParamsData[offs + i*12 +  8] = finalMatrix[2];
-            materialParamsData[offs + i*12 +  9] = finalMatrix[5];
-            materialParamsData[offs + i*12 + 10] = finalMatrix[9];
-            materialParamsData[offs + i*12 + 11] = 0;
+            materialParamsData[offs + i*12 +  9] = finalMatrix[6];
+            materialParamsData[offs + i*12 + 10] = finalMatrix[10];
+            materialParamsData[offs + i*12 + 11] = finalMatrix[14];
         }
         offs += 4*3*10;
 

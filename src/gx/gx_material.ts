@@ -1,8 +1,6 @@
 
 // GX materials.
 
-import { mat3 } from 'gl-matrix';
-
 import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';

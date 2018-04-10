@@ -1,5 +1,5 @@
 
-import { mat3, mat4 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
