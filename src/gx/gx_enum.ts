@@ -8,7 +8,7 @@ export const enum PrimitiveType {
 }
 
 export const enum VertexAttribute {
-    PTMTXIDX = 0,
+    PNMTXIDX = 0,
     TEX0MTXIDX = 1,
     TEX1MTXIDX = 2,
     TEX2MTXIDX = 3,
@@ -34,10 +34,17 @@ export const enum VertexAttribute {
 }
 
 export const enum CompCnt {
+    // Position
     POS_XY = 0,
     POS_XYZ = 1,
+    // Normal
+    NRM_XYZ = 0,
+    NRM_NBT = 1,
+    NRM_NBT3 = 2,
+    // Color
     CLR_RGB = 0,
     CLR_RGBA = 1,
+    // TexCoord
     TEX_S = 0,
     TEX_ST = 1,
 }
