@@ -172,8 +172,9 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         // out how much data to upload. We assume the data offset lookup table is sorted
         // in order, and can figure it out by finding the next offset above us.
         const dataOffsLookupTableEntry: number = dataOffsLookupTable + formatIdx*0x04;
+        const dataOffsLookupTableEnd: number = dataOffsLookupTable + dataTables.length*0x04;
         const dataStart: number = view.getUint32(dataOffsLookupTableEntry);
-        const dataEnd: number = getDataEnd(dataOffsLookupTableEntry);
+        const dataEnd: number = getDataEnd(dataOffsLookupTableEntry, dataOffsLookupTableEnd);
         const dataOffs: number = chunkStart + dataStart;
         const dataSize: number = dataEnd - dataStart;
         const compSize = getComponentSize(compType);
@@ -185,9 +186,9 @@ function readVTX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
 
     bmd.vtx1 = { vertexArrays };
 
-    function getDataEnd(dataOffsLookupTableEntry: number) {
+    function getDataEnd(dataOffsLookupTableEntry: number, dataOffsLookupTableEnd: number): number {
         let offs = dataOffsLookupTableEntry + 0x04;
-        while (offs < dataOffsLookupTableEntry) {
+        while (offs < dataOffsLookupTableEnd) {
             const dataOffs = view.getUint32(offs);
             if (dataOffs !== 0)
                 return dataOffs;
