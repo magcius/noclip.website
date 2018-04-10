@@ -3217,7 +3217,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nfloat TevOverflow(float a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_KonstColor[4]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_KonstColor[5]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_KonstColor[6]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_KonstColor[7]; // " + this.generateColorConstant(rColors[3]) + "\n" + this.generateTevStages(tevStages) + "\n    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);\n    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);\n" + this.generateAlphaTest(alphaTest) + "\n\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nfloat TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_KonstColor[4]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_KonstColor[5]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_KonstColor[6]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_KonstColor[7]; // " + this.generateColorConstant(rColors[3]) + "\n" + this.generateTevStages(tevStages) + "\n\n    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);\n    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 GX_Program.ub_SceneParams = 0;
                 GX_Program.ub_MaterialParams = 1;
@@ -3325,8 +3325,9 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             // out how much data to upload. We assume the data offset lookup table is sorted
             // in order, and can figure it out by finding the next offset above us.
             var dataOffsLookupTableEntry = dataOffsLookupTable + formatIdx * 0x04;
+            var dataOffsLookupTableEnd = dataOffsLookupTable + dataTables.length * 0x04;
             var dataStart = view.getUint32(dataOffsLookupTableEntry);
-            var dataEnd = getDataEnd(dataOffsLookupTableEntry);
+            var dataEnd = getDataEnd(dataOffsLookupTableEntry, dataOffsLookupTableEnd);
             var dataOffs = chunkStart + dataStart;
             var dataSize = dataEnd - dataStart;
             var compSize = gx_displaylist_1.getComponentSize(compType);
@@ -3336,9 +3337,9 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             vertexArrays.set(vtxAttrib, vertexArray);
         }
         bmd.vtx1 = { vertexArrays: vertexArrays };
-        function getDataEnd(dataOffsLookupTableEntry) {
+        function getDataEnd(dataOffsLookupTableEntry, dataOffsLookupTableEnd) {
             var offs = dataOffsLookupTableEntry + 0x04;
-            while (offs < dataOffsLookupTableEntry) {
+            while (offs < dataOffsLookupTableEnd) {
                 var dataOffs = view.getUint32(offs);
                 if (dataOffs !== 0)
                     return dataOffs;
@@ -3801,9 +3802,27 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var p31 = view.getFloat32(texMtxOffs + 0x58);
             var p32 = view.getFloat32(texMtxOffs + 0x5C);
             var p33 = view.getFloat32(texMtxOffs + 0x60);
-            var p = gl_matrix_3.mat4.fromValues(p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p30, p31, p32, p33);
+            var p = gl_matrix_3.mat4.fromValues(p00, p10, p20, p30, p01, p11, p21, p31, p02, p12, p22, p32, p03, p13, p23, p33);
             var matrix = gl_matrix_3.mat4.create();
             createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+            switch (type) {
+                case 0x00:
+                case 0x01: // Defino Plaza
+                case 0x0B: // Luigi Circuit
+                    break;
+                case 0x06: // Rainbow Road
+                    gl_matrix_3.mat4.mul(matrix, matrix, gl_matrix_3.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0, 1));
+                case 0x07: // Rainbow Road
+                    gl_matrix_3.mat4.mul(matrix, matrix, gl_matrix_3.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 1));
+                    break;
+                case 0x08: // Peach Beach
+                case 0x09: // Rainbow Road
+                    gl_matrix_3.mat4.mul(matrix, matrix, p);
+                    gl_matrix_3.mat4.mul(matrix, matrix, gl_matrix_3.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 1));
+                    break;
+                default:
+                    throw "whoops";
+            }
             var texMtx = { type: type, projection: projection, matrix: matrix };
             return texMtx;
         }
@@ -4741,6 +4760,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     }
                     switch (this.shape.displayFlags) {
                         case 0 /* NORMAL */:
+                        case 3 /* USE_PNMTXIDX */:
+                            // We should already be using PNMTXIDX in the normal case -- it's hardwired to 0.
                             break;
                         case 1 /* BILLBOARD */:
                         case 2 /* Y_BILLBOARD */:
@@ -4750,9 +4771,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             var tz = modelView[14];
                             gl_matrix_4.mat4.fromTranslation(modelView, [tx, ty, tz]);
                             break;
-                        case 3 /* UNKNOWN */:
                         default:
-                        // throw new Error("whoops");
+                            throw new Error("whoops");
                     }
                     gl_matrix_4.mat4.mul(modelView, modelView, this.scene.modelMatrix);
                 };
@@ -5649,7 +5669,12 @@ System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_19,
                 MKDDSceneDesc.prototype.createScene = function (gl) {
                     var path = "data/j3d/mkdd/Course/" + this.path;
                     return util_10.fetch(path).then(function (buffer) {
-                        return scenes_1.createMultiSceneFromBuffer(gl, buffer);
+                        var multiScene = scenes_1.createMultiSceneFromBuffer(gl, buffer);
+                        // Kill skybox flag.
+                        multiScene.scenes.forEach(function (scene) {
+                            scene.setIsSkybox(false);
+                        });
+                        return multiScene;
                     });
                 };
                 return MKDDSceneDesc;

@@ -642,7 +642,7 @@ float TevBias(float a, float b) { return a + b; }
 vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
 float TevSaturate(float a) { return clamp(a, 0.0, 1.0); }
 vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
-float TevOverflow(float a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
+float TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }
 vec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }
 float TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }
 
@@ -657,10 +657,10 @@ void main() {
     vec4 t_Color2    = u_KonstColor[6]; // ${this.generateColorConstant(rColors[2])}
     vec4 t_ColorPrev = u_KonstColor[7]; // ${this.generateColorConstant(rColors[3])}
 ${this.generateTevStages(tevStages)}
+
     t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);
     t_ColorPrev.a = TevOverflow(t_ColorPrev.a);
 ${this.generateAlphaTest(alphaTest)}
-
     gl_FragColor = t_ColorPrev;
 }
 `;
