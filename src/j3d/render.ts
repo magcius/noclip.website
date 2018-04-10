@@ -92,6 +92,8 @@ class Command_Shape {
 
         switch (this.shape.displayFlags) {
         case ShapeDisplayFlags.NORMAL:
+        case ShapeDisplayFlags.USE_PNMTXIDX:
+            // We should already be using PNMTXIDX in the normal case -- it's hardwired to 0.
             break;
         case ShapeDisplayFlags.BILLBOARD:
         case ShapeDisplayFlags.Y_BILLBOARD:
@@ -101,9 +103,8 @@ class Command_Shape {
             const tz = modelView[14];
             mat4.fromTranslation(modelView, [tx, ty, tz]);
             break;
-        case ShapeDisplayFlags.UNKNOWN:
         default:
-            // throw new Error("whoops");
+            throw new Error("whoops");
         }
 
         mat4.mul(modelView, modelView, this.scene.modelMatrix);

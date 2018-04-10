@@ -300,7 +300,7 @@ export const enum ShapeDisplayFlags {
     NORMAL = 0,
     BILLBOARD = 1,
     Y_BILLBOARD = 2,
-    UNKNOWN = 3,
+    USE_PNMTXIDX = 3,
 }
 
 export interface Shape {
@@ -797,14 +797,48 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         const p33 = view.getFloat32(texMtxOffs + 0x60);
 
         const p = mat4.fromValues(
-            p00, p01, p02, p03,
-            p10, p11, p12, p13,
-            p20, p21, p22, p23,
-            p30, p31, p32, p33,
+            p00, p10, p20, p30,
+            p01, p11, p21, p31,
+            p02, p12, p22, p32,
+            p03, p13, p23, p33,
         );
 
         const matrix = mat4.create();
         createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+
+        switch (type) {
+        case 0x00:
+        case 0x01: // Defino Plaza
+        case 0x0B: // Luigi Circuit
+            break;
+        case 0x06: // Rainbow Road
+            mat4.mul(matrix, matrix, mat4.fromValues(
+                0.5,  0,   0, 0,
+                0,   -0.5, 0, 0,
+                0,    0,   0, 0,
+                0.5,  0.5, 0, 1,
+            ))
+        case 0x07: // Rainbow Road
+            mat4.mul(matrix, matrix, mat4.fromValues(
+                0.5,  0,   0, 0,
+                0,   -0.5, 0, 0,
+                0.5,  0.5, 1, 0,
+                0,    0,   0, 1,
+            ));
+            break;
+        case 0x08: // Peach Beach
+        case 0x09: // Rainbow Road
+            mat4.mul(matrix, matrix, p);
+            mat4.mul(matrix, matrix, mat4.fromValues(
+                0.5,  0,   0, 0,
+                0,   -0.5, 0, 0,
+                0.5,  0.5, 1, 0,
+                0,    0,   0, 1,
+            ));
+            break;
+        default:
+            throw "whoops";
+        }
 
         const texMtx: TexMtx = { type, projection, matrix };
         return texMtx;
