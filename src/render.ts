@@ -505,7 +505,7 @@ export class BufferCoalescer {
     }
 }
 
-class FullscreenCopyProgram extends Program {
+export class FullscreenProgram extends Program {
     public vert: string = `
 out vec2 v_TexCoord;
 
@@ -516,6 +516,9 @@ void main() {
     gl_Position.zw = vec2(1);
 }
 `;
+}
+
+class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
@@ -553,7 +556,7 @@ export class RenderState {
     private onscreenRenderTarget: RenderTarget;
     private realOnscreenRenderTarget: RenderTarget;
     private fullscreenCopyProgram: FullscreenCopyProgram;
-    private fullscreenCopyFlags: RenderFlags;
+    private fullscreenFlags: RenderFlags;
 
     constructor(public gl: WebGL2RenderingContext) {
         this.programCache = new ProgramCache(this.gl);
@@ -567,10 +570,10 @@ export class RenderState {
 
         this.realOnscreenRenderTarget = new RealOnscreenRenderTarget();
         this.fullscreenCopyProgram = new FullscreenCopyProgram();
-        this.fullscreenCopyFlags = new RenderFlags();
-        this.fullscreenCopyFlags.depthTest = false;
-        this.fullscreenCopyFlags.blendMode = BlendMode.NONE;
-        this.fullscreenCopyFlags.cullMode = CullMode.NONE;
+        this.fullscreenFlags = new RenderFlags();
+        this.fullscreenFlags.depthTest = false;
+        this.fullscreenFlags.blendMode = BlendMode.NONE;
+        this.fullscreenFlags.cullMode = CullMode.NONE;
     }
 
     public reset() {
@@ -584,31 +587,37 @@ export class RenderState {
         mat4.copy(this.view, m);
     }
 
-    public blitRenderTarget(srcRenderTarget: RenderTarget, includeDepth: boolean = false): void {
+    public blitRenderTargetDepth(srcRenderTarget: RenderTarget): void {
         const gl = this.gl;
-
         // Blit depth.
-        if (includeDepth) {
-            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, srcRenderTarget.msaaFramebuffer);
-            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
-            gl.blitFramebuffer(
-                0, 0, srcRenderTarget.width, srcRenderTarget.height,
-                0, 0, this.onscreenRenderTarget.width, this.onscreenRenderTarget.height,
-                gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT, gl.NEAREST
-            );
-        }
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, srcRenderTarget.msaaFramebuffer);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
+        gl.blitFramebuffer(
+            0, 0, srcRenderTarget.width, srcRenderTarget.height,
+            0, 0, this.onscreenRenderTarget.width, this.onscreenRenderTarget.height,
+            gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT, gl.NEAREST
+        );
+    }
 
+    // XXX(jstpierre): Design a better API than this.
+    public runFullscreen(flags: RenderFlags = null): void {
+        const gl = this.gl;
+        this.useFlags(flags !== null ? flags : this.fullscreenFlags);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+
+    public blitRenderTarget(srcRenderTarget: RenderTarget, flags: RenderFlags = null): void {
+        const gl = this.gl;
         // First, resolve MSAA buffer to a standard buffer.
         srcRenderTarget.resolve(gl);
         // Make sure to re-bind our destination RT, since the resolve screws things up...
         this.useRenderTarget(this.currentRenderTarget);
         // Now, copy the onscreen RT to the screen.
         this.useProgram(this.fullscreenCopyProgram);
-        this.useFlags(this.fullscreenCopyFlags);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, srcRenderTarget.resolvedColorTexture);
         gl.bindSampler(0, null);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        this.runFullscreen(flags);
     }
 
     public useRenderTarget(renderTarget: RenderTarget) {
