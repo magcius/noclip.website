@@ -381,7 +381,7 @@ export class Program {
             return n.replace(/[/][/].*$/, '');
         }).filter((n) => {
             // Filter whitespace.
-            const isEmpty = !n || /^\s+%/.test(n);
+            const isEmpty = !n || /^\s+$/.test(n);
             return !isEmpty;
         });
 
