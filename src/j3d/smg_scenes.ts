@@ -94,7 +94,6 @@ class SMGSceneDesc implements Viewer.SceneDesc {
         assert(scenes.length === 1);
         const scene: Scene = scenes[0];
         scene.setFPS(60);
-        scene.setUseMaterialTexMtx(true);
         scene.setIsSkybox(isSkybox);
         return scene;
     }

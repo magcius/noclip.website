@@ -237,7 +237,6 @@ class WindWakerRenderer implements Viewer.MainScene {
         const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
         const scene = new Scene(gl, bdl, btk, null);
         scene.setIsSkybox(isSkybox);
-        scene.setUseMaterialTexMtx(false);
         return scene;
     }
 

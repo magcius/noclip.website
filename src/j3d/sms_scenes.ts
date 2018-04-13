@@ -66,7 +66,6 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         const scene = createScene(gl, bmdFile, btkFile, bmtFile);
         scene.name = basename;
         scene.setIsSkybox(isSkybox);
-        scene.setUseMaterialTexMtx(false);
         return scene;
     }
 
