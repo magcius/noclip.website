@@ -1531,7 +1531,7 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
         var e_7, _a, e_8, _b;
     }
     exports_7("coalesceBuffer", coalesceBuffer);
-    var gl_matrix_1, util_2, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RealOnscreenRenderTarget, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer, FullscreenCopyProgram, RenderState;
+    var gl_matrix_1, util_2, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RealOnscreenRenderTarget, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer, FullscreenProgram, FullscreenCopyProgram, RenderState;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -1993,16 +1993,25 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                 return BufferCoalescer;
             }());
             exports_7("BufferCoalescer", BufferCoalescer);
+            FullscreenProgram = /** @class */ (function (_super) {
+                __extends(FullscreenProgram, _super);
+                function FullscreenProgram() {
+                    var _this = _super !== null && _super.apply(this, arguments) || this;
+                    _this.vert = "\nout vec2 v_TexCoord;\n\nvoid main() {\n    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;\n    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;\n    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);\n    gl_Position.zw = vec2(1);\n}\n";
+                    return _this;
+                }
+                return FullscreenProgram;
+            }(Program));
+            exports_7("FullscreenProgram", FullscreenProgram);
             FullscreenCopyProgram = /** @class */ (function (_super) {
                 __extends(FullscreenCopyProgram, _super);
                 function FullscreenCopyProgram() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nout vec2 v_TexCoord;\n\nvoid main() {\n    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;\n    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;\n    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);\n    gl_Position.zw = vec2(1);\n}\n";
                     _this.frag = "\nuniform sampler2D u_Texture;\nin vec2 v_TexCoord;\n\nvoid main() {\n    vec4 color = texture(u_Texture, v_TexCoord);\n    gl_FragColor = vec4(color.rgb, 1.0);\n}\n";
                     return _this;
                 }
                 return FullscreenCopyProgram;
-            }(Program));
+            }(FullscreenProgram));
             RenderState = /** @class */ (function () {
                 function RenderState(gl) {
                     this.gl = gl;
@@ -2018,10 +2027,10 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                     this.scratchMatrix = gl_matrix_1.mat4.create();
                     this.realOnscreenRenderTarget = new RealOnscreenRenderTarget();
                     this.fullscreenCopyProgram = new FullscreenCopyProgram();
-                    this.fullscreenCopyFlags = new RenderFlags();
-                    this.fullscreenCopyFlags.depthTest = false;
-                    this.fullscreenCopyFlags.blendMode = BlendMode.NONE;
-                    this.fullscreenCopyFlags.cullMode = CullMode.NONE;
+                    this.fullscreenFlags = new RenderFlags();
+                    this.fullscreenFlags.depthTest = false;
+                    this.fullscreenFlags.blendMode = BlendMode.NONE;
+                    this.fullscreenFlags.cullMode = CullMode.NONE;
                 }
                 RenderState.prototype.reset = function () {
                     this.drawCallCount = 0;
@@ -2032,26 +2041,33 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                 RenderState.prototype.setView = function (m) {
                     gl_matrix_1.mat4.copy(this.view, m);
                 };
-                RenderState.prototype.blitRenderTarget = function (srcRenderTarget, includeDepth) {
-                    if (includeDepth === void 0) { includeDepth = false; }
+                RenderState.prototype.blitRenderTargetDepth = function (srcRenderTarget) {
                     var gl = this.gl;
                     // Blit depth.
-                    if (includeDepth) {
-                        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, srcRenderTarget.msaaFramebuffer);
-                        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
-                        gl.blitFramebuffer(0, 0, srcRenderTarget.width, srcRenderTarget.height, 0, 0, this.onscreenRenderTarget.width, this.onscreenRenderTarget.height, gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT, gl.NEAREST);
-                    }
+                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, srcRenderTarget.msaaFramebuffer);
+                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
+                    gl.blitFramebuffer(0, 0, srcRenderTarget.width, srcRenderTarget.height, 0, 0, this.onscreenRenderTarget.width, this.onscreenRenderTarget.height, gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT, gl.NEAREST);
+                };
+                // XXX(jstpierre): Design a better API than this.
+                RenderState.prototype.runFullscreen = function (flags) {
+                    if (flags === void 0) { flags = null; }
+                    var gl = this.gl;
+                    this.useFlags(flags !== null ? flags : this.fullscreenFlags);
+                    gl.drawArrays(gl.TRIANGLES, 0, 3);
+                };
+                RenderState.prototype.blitRenderTarget = function (srcRenderTarget, flags) {
+                    if (flags === void 0) { flags = null; }
+                    var gl = this.gl;
                     // First, resolve MSAA buffer to a standard buffer.
                     srcRenderTarget.resolve(gl);
                     // Make sure to re-bind our destination RT, since the resolve screws things up...
                     this.useRenderTarget(this.currentRenderTarget);
                     // Now, copy the onscreen RT to the screen.
                     this.useProgram(this.fullscreenCopyProgram);
-                    this.useFlags(this.fullscreenCopyFlags);
                     gl.activeTexture(gl.TEXTURE0);
                     gl.bindTexture(gl.TEXTURE_2D, srcRenderTarget.resolvedColorTexture);
                     gl.bindSampler(0, null);
-                    gl.drawArrays(gl.TRIANGLES, 0, 3);
+                    this.runFullscreen(flags);
                 };
                 RenderState.prototype.useRenderTarget = function (renderTarget) {
                     var gl = this.gl;
@@ -3781,7 +3797,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_15, cont
                 };
                 GX_Program.prototype.generateIndTexStage = function (stage) {
                     var i = stage.index;
-                    return "\n    // Indirect " + i + "\n    vec3 t_IndTexCoord" + i + " = texture(u_Texture[" + stage.texture + "], " + this.generateIndTexStageScale(stage) + ").abg;";
+                    return "\n    // Indirect " + i + "\n    vec3 t_IndTexCoord" + i + " = SampleTexture(" + stage.texture + ", " + this.generateIndTexStageScale(stage) + ").abg;";
                 };
                 GX_Program.prototype.generateIndTexStages = function (stages) {
                     var _this = this;
@@ -3862,7 +3878,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_15, cont
                     }
                 };
                 GX_Program.prototype.generateTexAccess = function (stage) {
-                    return "texture(u_Texture[" + stage.texMap + "], t_TexCoord, GetTextureLODBias(" + stage.texMap + "))";
+                    return "SampleTexture(" + stage.texMap + ", t_TexCoord)";
                 };
                 GX_Program.prototype.generateColorIn = function (stage, colorIn) {
                     var i = stage.index;
@@ -4064,7 +4080,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_15, cont
                 };
                 GX_Program.prototype.generateUBO = function () {
                     var scaledVecCount = scaledVtxAttributes.length >> 2;
-                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_KonstColor[8];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    mat4x2 u_IndTexMtx[3];\n    vec4 u_TextureLODBias[2];\n};\n\nfloat GetTextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureLODBias[index >> 2][index & 3]; }\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_ModelView;\n    mat4 u_PosMtx[10];\n};\n";
+                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_KonstColor[8];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    mat4x2 u_IndTexMtx[3];\n    vec4 u_TextureLODBias[2];\n};\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_ModelView;\n    mat4 u_PosMtx[10];\n};\n";
                 };
                 GX_Program.prototype.generateShaders = function () {
                     var ubo = this.generateUBO();
@@ -4074,7 +4090,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_15, cont
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n" + this.generateTexCoordGetters() + "\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nfloat TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_KonstColor[4]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_KonstColor[5]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_KonstColor[6]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_KonstColor[7]; // " + this.generateColorConstant(rColors[3]) + "\n\n    vec2 t_TexCoord = vec2(0.0, 0.0);\n" + this.generateIndTexStages(indTexStages) + "\n" + this.generateTevStages(tevStages) + "\n\n    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);\n    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n" + this.generateTexCoordGetters() + "\n\nfloat GetTextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureLODBias[index >> 2][index & 3]; }\nvec4 SampleTexture(int index, vec2 coord) { return texture(u_Texture[index], coord, GetTextureLODBias(index)); }\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nfloat TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_KonstColor[4]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_KonstColor[5]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_KonstColor[6]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_KonstColor[7]; // " + this.generateColorConstant(rColors[3]) + "\n\n    vec2 t_TexCoord = vec2(0.0, 0.0);\n" + this.generateIndTexStages(indTexStages) + "\n" + this.generateTevStages(tevStages) + "\n\n    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);\n    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 GX_Program.ub_SceneParams = 0;
                 GX_Program.ub_MaterialParams = 1;
@@ -7072,7 +7088,8 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
         try {
             for (var scenes_5 = __values(scenes), scenes_5_1 = scenes_5.next(); !scenes_5_1.done; scenes_5_1 = scenes_5.next()) {
                 var scene = scenes_5_1.value;
-                textures.push.apply(textures, scene.textures);
+                if (scene)
+                    textures.push.apply(textures, scene.textures);
             }
         }
         catch (e_33_1) { e_33 = { error: e_33_1 }; }
@@ -7085,7 +7102,7 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
         return textures;
         var e_33, _a;
     }
-    var Progressable_4, util_14, render_7, scenes_6, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
+    var Progressable_4, util_14, render_7, scenes_6, BloomPassBlurProgram, BloomPassBokehProgram, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (Progressable_4_1) {
@@ -7102,6 +7119,25 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
             }
         ],
         execute: function () {
+            // Should I try to do this with GX? lol.
+            BloomPassBlurProgram = /** @class */ (function (_super) {
+                __extends(BloomPassBlurProgram, _super);
+                function BloomPassBlurProgram() {
+                    var _this = _super !== null && _super.apply(this, arguments) || this;
+                    _this.frag = "\nuniform sampler2D u_Texture;\nin vec2 v_TexCoord;\n\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nvoid main() {\n    // Nintendo does this in two separate draws. We combine into one here...\n    vec3 c = vec3(0.0);\n    // Pass 1.\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.00562, -1.0 *  0.00000)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 * -0.00866)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 * -0.00866)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00562, -1.0 *  0.00000)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 *  0.00866)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 *  0.00866)).rgb * 0.15686);\n    // Pass 2.\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.00977, -1.0 * -0.00993)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.00004, -1.0 * -0.02000)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00972, -1.0 * -0.01006)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00976, -1.0 *  0.00993)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00004, -1.0 *  0.02000)).rgb * 0.15686);\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.00972, -1.0 *  0.01006)).rgb * 0.15686);\n    gl_FragColor = vec4(c.rgb, 1.0);\n}\n";
+                    return _this;
+                }
+                return BloomPassBlurProgram;
+            }(render_7.FullscreenProgram));
+            BloomPassBokehProgram = /** @class */ (function (_super) {
+                __extends(BloomPassBokehProgram, _super);
+                function BloomPassBokehProgram() {
+                    var _this = _super !== null && _super.apply(this, arguments) || this;
+                    _this.frag = "\nuniform sampler2D u_Texture;\nin vec2 v_TexCoord;\n\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nvoid main() {\n    vec3 f = vec3(0.0);\n    vec3 c;\n\n    // TODO(jstpierre): Double-check these passes. It seems weighted towards the top left. IS IT THE BLUR???\n\n    // Pass 1.\n    c = vec3(0.0);\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.02250, -1.0 *  0.00000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.01949, -1.0 * -0.02000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 * -0.03464)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.04000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 * -0.03464)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.01948, -1.0 * -0.02001)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.02250, -1.0 *  0.00000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.01949, -1.0 *  0.02000)).rgb) * 0.23529;\n    f += TevOverflow(c);\n    // Pass 2.\n    c = vec3(0.0);\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 *  0.03464)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.00000, -1.0 *  0.04000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 *  0.03464)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.01948, -1.0 *  0.02001)).rgb) * 0.23529;\n    f += TevOverflow(c);\n    // Pass 3.\n    c = vec3(0.0);\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.03937, -1.0 *  0.00000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.03410, -1.0 * -0.03499)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.01970, -1.0 * -0.06061)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.07000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.01968, -1.0 * -0.06063)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.03409, -1.0 * -0.03502)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.03937, -1.0 *  0.00000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.03410, -1.0 *  0.03499)).rgb) * 0.23529;\n    f += TevOverflow(c);\n    // Pass 4.\n    c = vec3(0.0);\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.01970, -1.0 *  0.06061)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.07000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.01968, -1.0 *  0.06063)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.03409, -1.0 *  0.03502)).rgb) * 0.23529;\n    f += TevOverflow(c);\n    // Pass 5.\n    c = vec3(0.0);\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.05063, -1.0 *  0.00000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.04385, -1.0 * -0.04499)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.02532, -1.0 * -0.07793)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.09000)).rgb) * 0.23529;\n    f += TevOverflow(c);\n    // Pass 6.\n    c = vec3(0.0);\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.02532, -1.0 *  0.07793)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.09000)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.02531, -1.0 *  0.07795)).rgb) * 0.23529;\n    c += (texture(u_Texture, v_TexCoord + vec2(-0.04384, -1.0 *  0.04502)).rgb) * 0.23529;\n    f += TevOverflow(c);\n\n    f = clamp(f, 0.0, 1.0);\n\n    // Combine pass.\n    vec3 g;\n    g = (texture(u_Texture, v_TexCoord).rgb * 0.43137);\n    g += f * 0.43137;\n\n    gl_FragColor = vec4(g, 1.0);\n}\n";
+                    return _this;
+                }
+                return BloomPassBokehProgram;
+            }(render_7.FullscreenProgram));
             SMGRenderer = /** @class */ (function () {
                 function SMGRenderer(gl, mainScene, skyboxScene, bloomScene, indirectScene) {
                     this.mainScene = mainScene;
@@ -7109,9 +7145,18 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                     this.bloomScene = bloomScene;
                     this.indirectScene = indirectScene;
                     this.textures = [];
-                    this.textures = collectTextures([mainScene, skyboxScene, bloomScene]);
                     this.mainRenderTarget = new render_7.RenderTarget();
-                    this.bloomRenderTarget = new render_7.RenderTarget();
+                    // Bloom stuff.
+                    this.bloomRenderTarget1 = new render_7.RenderTarget();
+                    this.bloomRenderTarget2 = new render_7.RenderTarget();
+                    this.bloomRenderTarget3 = new render_7.RenderTarget();
+                    this.bloomPassBlurProgram = new BloomPassBlurProgram();
+                    this.bloomPassBokehProgram = new BloomPassBokehProgram();
+                    this.textures = collectTextures([mainScene, skyboxScene, bloomScene, indirectScene]);
+                    this.bloomCombineFlags = new render_7.RenderFlags();
+                    this.bloomCombineFlags.blendMode = render_7.BlendMode.ADD;
+                    this.bloomCombineFlags.blendSrc = render_7.BlendFactor.ONE;
+                    this.bloomCombineFlags.blendDst = render_7.BlendFactor.ONE;
                 }
                 SMGRenderer.prototype.render = function (state) {
                     var gl = state.gl;
@@ -7126,7 +7171,8 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                     this.mainScene.renderTransparent(state);
                     // Copy to main render target.
                     state.useRenderTarget(null);
-                    state.blitRenderTarget(this.mainRenderTarget, true);
+                    state.blitRenderTarget(this.mainRenderTarget);
+                    state.blitRenderTargetDepth(this.mainRenderTarget);
                     if (this.indirectScene) {
                         this.indirectScene.bindState(state);
                         this.indirectScene.renderOpaque(state);
@@ -7136,25 +7182,53 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                         texProjection[5] = -state.projection[5];
                         this.indirectScene.setTextureOverride("IndDummy", this.mainRenderTarget.resolvedColorTexture);
                     }
-                    /*
                     if (this.bloomScene) {
-                        const gl = state.gl;
-                        this.bloomRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
-                        state.useRenderTarget(this.bloomRenderTarget);
+                        var gl_1 = state.gl;
+                        var bloomRenderTargetScene = this.bloomRenderTarget1;
+                        bloomRenderTargetScene.setParameters(gl_1, state.currentRenderTarget.width, state.currentRenderTarget.height);
+                        state.useRenderTarget(bloomRenderTargetScene);
+                        state.blitRenderTargetDepth(this.mainRenderTarget);
+                        gl_1.clearColor(0, 0, 0, 0);
+                        gl_1.clear(gl_1.COLOR_BUFFER_BIT);
                         this.bloomScene.render(state);
-            
-                        // Do our bloom pass.
-                        // state.useProgram(this.bloomProgram);
+                        // First downsample.
+                        var bloomRenderTargetDownsample = this.bloomRenderTarget2;
+                        var bloomWidth = state.currentRenderTarget.width >> 2;
+                        var bloomHeight = state.currentRenderTarget.height >> 2;
+                        bloomRenderTargetDownsample.setParameters(gl_1, bloomWidth, bloomHeight);
+                        state.useRenderTarget(bloomRenderTargetDownsample);
+                        state.blitRenderTarget(bloomRenderTargetScene);
+                        // First pass is a blur.
+                        var bloomRenderTargetBlur = this.bloomRenderTarget3;
+                        bloomRenderTargetDownsample.resolve(gl_1);
+                        bloomRenderTargetBlur.setParameters(gl_1, bloomRenderTargetDownsample.width, bloomRenderTargetDownsample.height);
+                        state.useRenderTarget(bloomRenderTargetBlur);
+                        state.useProgram(this.bloomPassBlurProgram);
+                        gl_1.bindTexture(gl_1.TEXTURE_2D, bloomRenderTargetDownsample.resolvedColorTexture);
+                        state.runFullscreen();
+                        // TODO(jstpierre): Downsample blur / bokeh as well.
+                        // Second pass is bokeh-ify.
+                        // We can ditch the second render target now, so just reuse it.
+                        var bloomRenderTargetBokeh = this.bloomRenderTarget2;
+                        bloomRenderTargetBlur.resolve(gl_1);
+                        state.useRenderTarget(bloomRenderTargetBokeh);
+                        state.useProgram(this.bloomPassBokehProgram);
+                        gl_1.clear(gl_1.COLOR_BUFFER_BIT);
+                        gl_1.bindTexture(gl_1.TEXTURE_2D, bloomRenderTargetBlur.resolvedColorTexture);
+                        state.runFullscreen();
+                        // Third pass combines.
                         state.useRenderTarget(null);
+                        state.blitRenderTarget(bloomRenderTargetBokeh, this.bloomCombineFlags);
                     }
-                    */
                 };
                 SMGRenderer.prototype.destroy = function (gl) {
                     this.mainScene.destroy(gl);
                     this.skyboxScene.destroy(gl);
                     this.bloomScene.destroy(gl);
                     this.indirectScene.destroy(gl);
-                    this.bloomRenderTarget.destroy(gl);
+                    this.bloomRenderTarget1.destroy(gl);
+                    this.bloomRenderTarget2.destroy(gl);
+                    this.bloomRenderTarget3.destroy(gl);
                 };
                 return SMGRenderer;
             }());

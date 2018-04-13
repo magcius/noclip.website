@@ -3,7 +3,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 import { assert, fetch } from 'util';
 
-import { Program, RenderState, RenderTarget } from '../render';
+import { Program, RenderState, RenderTarget, FullscreenProgram, RenderFlags, BlendMode, BlendFactor } from '../render';
 import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK } from './j3d';
@@ -13,15 +13,127 @@ import { createScenesFromBuffer } from './scenes';
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
     for (const scene of scenes)
-        textures.push.apply(textures, scene.textures);
+        if (scene)
+            textures.push.apply(textures, scene.textures);
     return textures;
+}
+
+// Should I try to do this with GX? lol.
+class BloomPassBlurProgram extends FullscreenProgram {
+    public frag: string = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
+void main() {
+    // Nintendo does this in two separate draws. We combine into one here...
+    vec3 c = vec3(0.0);
+    // Pass 1.
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00562, -1.0 *  0.00000)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 * -0.00866)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 * -0.00866)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00562, -1.0 *  0.00000)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 *  0.00866)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 *  0.00866)).rgb * 0.15686);
+    // Pass 2.
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00977, -1.0 * -0.00993)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00004, -1.0 * -0.02000)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00972, -1.0 * -0.01006)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00976, -1.0 *  0.00993)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00004, -1.0 *  0.02000)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00972, -1.0 *  0.01006)).rgb * 0.15686);
+    gl_FragColor = vec4(c.rgb, 1.0);
+}
+`;
+}
+
+class BloomPassBokehProgram extends FullscreenProgram {
+    public frag: string = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
+void main() {
+    vec3 f = vec3(0.0);
+    vec3 c;
+
+    // TODO(jstpierre): Double-check these passes. It seems weighted towards the top left. IS IT THE BLUR???
+
+    // Pass 1.
+    c = vec3(0.0);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.02250, -1.0 *  0.00000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01949, -1.0 * -0.02000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 * -0.03464)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.04000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 * -0.03464)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01948, -1.0 * -0.02001)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.02250, -1.0 *  0.00000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01949, -1.0 *  0.02000)).rgb) * 0.23529;
+    f += TevOverflow(c);
+    // Pass 2.
+    c = vec3(0.0);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 *  0.03464)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00000, -1.0 *  0.04000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 *  0.03464)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01948, -1.0 *  0.02001)).rgb) * 0.23529;
+    f += TevOverflow(c);
+    // Pass 3.
+    c = vec3(0.0);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.03937, -1.0 *  0.00000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.03410, -1.0 * -0.03499)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01970, -1.0 * -0.06061)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.07000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01968, -1.0 * -0.06063)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.03409, -1.0 * -0.03502)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.03937, -1.0 *  0.00000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.03410, -1.0 *  0.03499)).rgb) * 0.23529;
+    f += TevOverflow(c);
+    // Pass 4.
+    c = vec3(0.0);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01970, -1.0 *  0.06061)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.07000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01968, -1.0 *  0.06063)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.03409, -1.0 *  0.03502)).rgb) * 0.23529;
+    f += TevOverflow(c);
+    // Pass 5.
+    c = vec3(0.0);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.05063, -1.0 *  0.00000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.04385, -1.0 * -0.04499)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.02532, -1.0 * -0.07793)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.09000)).rgb) * 0.23529;
+    f += TevOverflow(c);
+    // Pass 6.
+    c = vec3(0.0);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.02532, -1.0 *  0.07793)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.09000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.02531, -1.0 *  0.07795)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.04384, -1.0 *  0.04502)).rgb) * 0.23529;
+    f += TevOverflow(c);
+
+    f = clamp(f, 0.0, 1.0);
+
+    // Combine pass.
+    vec3 g;
+    g = (texture(u_Texture, v_TexCoord).rgb * 0.43137);
+    g += f * 0.43137;
+
+    gl_FragColor = vec4(g, 1.0);
+}
+`;
 }
 
 class SMGRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
 
-    private bloomRenderTarget: RenderTarget;
-    private mainRenderTarget: RenderTarget;
+    private mainRenderTarget: RenderTarget = new RenderTarget();
+
+    // Bloom stuff.
+    private bloomRenderTarget1: RenderTarget = new RenderTarget();
+    private bloomRenderTarget2: RenderTarget = new RenderTarget();
+    private bloomRenderTarget3: RenderTarget = new RenderTarget();
+    private bloomPassBlurProgram: BloomPassBlurProgram = new BloomPassBlurProgram();
+    private bloomPassBokehProgram: BloomPassBokehProgram = new BloomPassBokehProgram();
+    private bloomCombineFlags: RenderFlags;
 
     constructor(
         gl: WebGL2RenderingContext,
@@ -30,10 +142,12 @@ class SMGRenderer implements Viewer.MainScene {
         private bloomScene: Scene,
         private indirectScene: Scene,
     ) {
-        this.textures = collectTextures([mainScene, skyboxScene, bloomScene]);
+        this.textures = collectTextures([mainScene, skyboxScene, bloomScene, indirectScene]);
+        this.bloomCombineFlags = new RenderFlags();
 
-        this.mainRenderTarget = new RenderTarget();
-        this.bloomRenderTarget = new RenderTarget();
+        this.bloomCombineFlags.blendMode = BlendMode.ADD;
+        this.bloomCombineFlags.blendSrc = BlendFactor.ONE;
+        this.bloomCombineFlags.blendDst = BlendFactor.ONE;
     }
 
     public render(state: RenderState): void {
@@ -54,7 +168,8 @@ class SMGRenderer implements Viewer.MainScene {
 
         // Copy to main render target.
         state.useRenderTarget(null);
-        state.blitRenderTarget(this.mainRenderTarget, true);
+        state.blitRenderTarget(this.mainRenderTarget);
+        state.blitRenderTargetDepth(this.mainRenderTarget);
 
         if (this.indirectScene) {
             this.indirectScene.bindState(state);
@@ -66,18 +181,50 @@ class SMGRenderer implements Viewer.MainScene {
             this.indirectScene.setTextureOverride("IndDummy", this.mainRenderTarget.resolvedColorTexture);
         }
 
-        /*
         if (this.bloomScene) {
             const gl = state.gl;
-            this.bloomRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
-            state.useRenderTarget(this.bloomRenderTarget);
+
+            const bloomRenderTargetScene = this.bloomRenderTarget1;
+            bloomRenderTargetScene.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
+            state.useRenderTarget(bloomRenderTargetScene);
+            state.blitRenderTargetDepth(this.mainRenderTarget);
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
             this.bloomScene.render(state);
 
-            // Do our bloom pass.
-            // state.useProgram(this.bloomProgram);
+            // First downsample.
+            const bloomRenderTargetDownsample = this.bloomRenderTarget2;
+            const bloomWidth = state.currentRenderTarget.width >> 2;
+            const bloomHeight = state.currentRenderTarget.height >> 2;
+            bloomRenderTargetDownsample.setParameters(gl, bloomWidth, bloomHeight);
+            state.useRenderTarget(bloomRenderTargetDownsample);
+            state.blitRenderTarget(bloomRenderTargetScene);
+
+            // First pass is a blur.
+            const bloomRenderTargetBlur = this.bloomRenderTarget3;
+            bloomRenderTargetDownsample.resolve(gl);
+            bloomRenderTargetBlur.setParameters(gl, bloomRenderTargetDownsample.width, bloomRenderTargetDownsample.height);
+            state.useRenderTarget(bloomRenderTargetBlur);
+            state.useProgram(this.bloomPassBlurProgram);
+            gl.bindTexture(gl.TEXTURE_2D, bloomRenderTargetDownsample.resolvedColorTexture);
+            state.runFullscreen();
+
+            // TODO(jstpierre): Downsample blur / bokeh as well.
+
+            // Second pass is bokeh-ify.
+            // We can ditch the second render target now, so just reuse it.
+            const bloomRenderTargetBokeh = this.bloomRenderTarget2;
+            bloomRenderTargetBlur.resolve(gl);
+            state.useRenderTarget(bloomRenderTargetBokeh);
+            state.useProgram(this.bloomPassBokehProgram);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.bindTexture(gl.TEXTURE_2D, bloomRenderTargetBlur.resolvedColorTexture);
+            state.runFullscreen();
+
+            // Third pass combines.
             state.useRenderTarget(null);
+            state.blitRenderTarget(bloomRenderTargetBokeh, this.bloomCombineFlags);
         }
-        */
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
@@ -85,7 +232,9 @@ class SMGRenderer implements Viewer.MainScene {
         this.skyboxScene.destroy(gl);
         this.bloomScene.destroy(gl);
         this.indirectScene.destroy(gl);
-        this.bloomRenderTarget.destroy(gl);
+        this.bloomRenderTarget1.destroy(gl);
+        this.bloomRenderTarget2.destroy(gl);
+        this.bloomRenderTarget3.destroy(gl);
     }
 }
 
