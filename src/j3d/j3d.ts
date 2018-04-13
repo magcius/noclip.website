@@ -932,6 +932,8 @@ export interface TEX1_TextureData {
 }
 
 export interface TEX1_Sampler {
+    index: number;
+
     name: string;
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
@@ -964,7 +966,7 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
 
         let textureDataIndex: number = -1;
 
-        // Try to find existing.
+        // Try to find existing texture data.
         if (btiTexture.data !== null) {
             textureDataIndex = textureDatas.findIndex((tex) => tex.data && tex.data.byteOffset === btiTexture.data.byteOffset);
         }
@@ -984,6 +986,7 @@ function readTEX1Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
 
         // Sampler.
         const sampler: TEX1_Sampler = {
+            index: i,
             name: btiTexture.name,
             wrapS: btiTexture.wrapS,
             wrapT: btiTexture.wrapT,

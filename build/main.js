@@ -1531,7 +1531,7 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
         var e_7, _a, e_8, _b;
     }
     exports_7("coalesceBuffer", coalesceBuffer);
-    var gl_matrix_1, util_2, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RenderState, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer;
+    var gl_matrix_1, util_2, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RealOnscreenRenderTarget, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer, FullscreenCopyProgram, RenderState;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -1685,22 +1685,22 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                     if (this.resolvedColorTexture)
                         gl.deleteTexture(this.resolvedColorTexture);
                 };
-                RenderTarget.prototype.setParameters = function (gl, width, height) {
-                    if (this.width === width && this.height === height)
+                RenderTarget.prototype.setParameters = function (gl, width, height, samples) {
+                    if (samples === void 0) { samples = 0; }
+                    if (this.width === width && this.height === height && this.samples == samples)
                         return;
                     this.destroy(gl);
                     this.width = width;
                     this.height = height;
+                    this.samples = samples;
                     gl.getExtension('EXT_color_buffer_float');
-                    // XXX(jstpierre): Configurable?
-                    var samples = gl.getParameter(gl.SAMPLES);
                     // MSAA FB.
                     this.msaaColorRenderbuffer = gl.createRenderbuffer();
                     gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaColorRenderbuffer);
                     gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, this.width, this.height);
                     this.msaaDepthRenderbuffer = gl.createRenderbuffer();
                     gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaDepthRenderbuffer);
-                    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT16, this.width, this.height);
+                    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH24_STENCIL8, this.width, this.height);
                     this.msaaFramebuffer = gl.createFramebuffer();
                     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.msaaFramebuffer);
                     gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, this.msaaColorRenderbuffer);
@@ -1727,93 +1727,19 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                 return RenderTarget;
             }());
             exports_7("RenderTarget", RenderTarget);
-            RenderState = /** @class */ (function () {
-                function RenderState(gl) {
-                    this.gl = gl;
-                    // State.
-                    this.currentProgram = null;
-                    this.currentFlags = new RenderFlags();
-                    this.currentRenderTarget = null;
-                    this.programCache = new ProgramCache(this.gl);
-                    this.time = 0;
-                    this.fov = Math.PI / 4;
-                    this.projection = gl_matrix_1.mat4.create();
-                    this.view = gl_matrix_1.mat4.create();
-                    this.scratchMatrix = gl_matrix_1.mat4.create();
+            // XXX(jstpierre): Dumb polymorphic hack
+            RealOnscreenRenderTarget = /** @class */ (function (_super) {
+                __extends(RealOnscreenRenderTarget, _super);
+                function RealOnscreenRenderTarget() {
+                    return _super !== null && _super.apply(this, arguments) || this;
                 }
-                RenderState.prototype.reset = function () {
-                    this.drawCallCount = 0;
-                    this.frameStartTime = window.performance.now();
-                    this.useRenderTarget(this.onscreenRenderTarget);
-                    this.useFlags(RenderFlags.default);
+                RealOnscreenRenderTarget.prototype.setParameters = function (gl, width, height) {
+                    this.width = width;
+                    this.height = height;
+                    this.msaaFramebuffer = null;
                 };
-                RenderState.prototype.setView = function (m) {
-                    gl_matrix_1.mat4.copy(this.view, m);
-                };
-                RenderState.prototype.useRenderTarget = function (renderTarget) {
-                    var gl = this.gl;
-                    this.currentRenderTarget = renderTarget !== null ? renderTarget : this.onscreenRenderTarget;
-                    this.bindViewport();
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
-                };
-                RenderState.prototype.bindViewport = function () {
-                    var gl = this.gl;
-                    var width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
-                    gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
-                    gl.viewport(0, 0, width, height);
-                };
-                RenderState.prototype.setClipPlanes = function (near, far) {
-                    this.nearClipPlane = near;
-                    this.farClipPlane = far;
-                    if (this.currentRenderTarget) {
-                        var width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
-                        gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
-                    }
-                };
-                RenderState.prototype.setOnscreenRenderTarget = function (renderTarget) {
-                    this.onscreenRenderTarget = renderTarget;
-                };
-                RenderState.prototype.compileProgram = function (prog) {
-                    return prog.compile(this.gl, this.programCache);
-                };
-                RenderState.prototype.useProgram = function (prog) {
-                    var gl = this.gl;
-                    this.currentProgram = prog;
-                    gl.useProgram(this.compileProgram(prog));
-                };
-                RenderState.prototype.updateModelView = function (isSkybox, model) {
-                    if (isSkybox === void 0) { isSkybox = false; }
-                    if (model === void 0) { model = null; }
-                    var scratch = this.scratchMatrix;
-                    gl_matrix_1.mat4.copy(scratch, this.view);
-                    if (isSkybox) {
-                        scratch[12] = 0;
-                        scratch[13] = 0;
-                        scratch[14] = 0;
-                    }
-                    if (model)
-                        gl_matrix_1.mat4.mul(scratch, scratch, model);
-                    return scratch;
-                };
-                RenderState.prototype.bindModelView = function (isSkybox, model) {
-                    if (isSkybox === void 0) { isSkybox = false; }
-                    if (model === void 0) { model = null; }
-                    var gl = this.gl;
-                    var prog = this.currentProgram;
-                    var scratch = this.updateModelView(isSkybox, model);
-                    gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
-                    gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);
-                };
-                RenderState.prototype.useFlags = function (flags) {
-                    var gl = this.gl;
-                    // TODO(jstpierre): Move the flattening to a stack, possibly?
-                    RenderFlags.flatten(flags, this.currentFlags);
-                    RenderFlags.apply(gl, this.currentFlags, flags);
-                    this.currentFlags = flags;
-                };
-                return RenderState;
-            }());
-            exports_7("RenderState", RenderState);
+                return RealOnscreenRenderTarget;
+            }(RenderTarget));
             DEBUG = true;
             Program = /** @class */ (function () {
                 function Program() {
@@ -2067,6 +1993,139 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                 return BufferCoalescer;
             }());
             exports_7("BufferCoalescer", BufferCoalescer);
+            FullscreenCopyProgram = /** @class */ (function (_super) {
+                __extends(FullscreenCopyProgram, _super);
+                function FullscreenCopyProgram() {
+                    var _this = _super !== null && _super.apply(this, arguments) || this;
+                    _this.vert = "\nout vec2 v_TexCoord;\n\nvoid main() {\n    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;\n    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;\n    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);\n    gl_Position.zw = vec2(1);\n}\n";
+                    _this.frag = "\nuniform sampler2D u_Texture;\nin vec2 v_TexCoord;\n\nvoid main() {\n    vec4 color = texture(u_Texture, v_TexCoord);\n    gl_FragColor = vec4(color.rgb, 1.0);\n}\n";
+                    return _this;
+                }
+                return FullscreenCopyProgram;
+            }(Program));
+            RenderState = /** @class */ (function () {
+                function RenderState(gl) {
+                    this.gl = gl;
+                    // State.
+                    this.currentProgram = null;
+                    this.currentFlags = new RenderFlags();
+                    this.currentRenderTarget = null;
+                    this.programCache = new ProgramCache(this.gl);
+                    this.time = 0;
+                    this.fov = Math.PI / 4;
+                    this.projection = gl_matrix_1.mat4.create();
+                    this.view = gl_matrix_1.mat4.create();
+                    this.scratchMatrix = gl_matrix_1.mat4.create();
+                    this.realOnscreenRenderTarget = new RealOnscreenRenderTarget();
+                    this.fullscreenCopyProgram = new FullscreenCopyProgram();
+                    this.fullscreenCopyFlags = new RenderFlags();
+                    this.fullscreenCopyFlags.depthTest = false;
+                    this.fullscreenCopyFlags.blendMode = BlendMode.NONE;
+                    this.fullscreenCopyFlags.cullMode = CullMode.NONE;
+                }
+                RenderState.prototype.reset = function () {
+                    this.drawCallCount = 0;
+                    this.frameStartTime = window.performance.now();
+                    this.useRenderTarget(this.onscreenRenderTarget);
+                    this.useFlags(RenderFlags.default);
+                };
+                RenderState.prototype.setView = function (m) {
+                    gl_matrix_1.mat4.copy(this.view, m);
+                };
+                RenderState.prototype.blitRenderTarget = function (srcRenderTarget, includeDepth) {
+                    if (includeDepth === void 0) { includeDepth = false; }
+                    var gl = this.gl;
+                    // Blit depth.
+                    if (includeDepth) {
+                        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, srcRenderTarget.msaaFramebuffer);
+                        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
+                        gl.blitFramebuffer(0, 0, srcRenderTarget.width, srcRenderTarget.height, 0, 0, this.onscreenRenderTarget.width, this.onscreenRenderTarget.height, gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT, gl.NEAREST);
+                    }
+                    // First, resolve MSAA buffer to a standard buffer.
+                    srcRenderTarget.resolve(gl);
+                    // Make sure to re-bind our destination RT, since the resolve screws things up...
+                    this.useRenderTarget(this.currentRenderTarget);
+                    // Now, copy the onscreen RT to the screen.
+                    this.useProgram(this.fullscreenCopyProgram);
+                    this.useFlags(this.fullscreenCopyFlags);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, srcRenderTarget.resolvedColorTexture);
+                    gl.bindSampler(0, null);
+                    gl.drawArrays(gl.TRIANGLES, 0, 3);
+                };
+                RenderState.prototype.useRenderTarget = function (renderTarget) {
+                    var gl = this.gl;
+                    this.currentRenderTarget = renderTarget !== null ? renderTarget : this.onscreenRenderTarget;
+                    this.bindViewport();
+                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
+                };
+                // Should only be used by viewer, basically...
+                RenderState.prototype.useRealOnscreenRenderTarget = function (width, height) {
+                    var gl = this.gl;
+                    this.realOnscreenRenderTarget.setParameters(null, width, height);
+                    this.currentRenderTarget = this.realOnscreenRenderTarget;
+                    gl.viewport(0, 0, width, height);
+                };
+                RenderState.prototype.bindViewport = function () {
+                    var gl = this.gl;
+                    var width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+                    gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+                    gl.viewport(0, 0, width, height);
+                };
+                RenderState.prototype.setClipPlanes = function (near, far) {
+                    this.nearClipPlane = near;
+                    this.farClipPlane = far;
+                    if (this.currentRenderTarget) {
+                        var width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+                        gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+                    }
+                };
+                RenderState.prototype.setOnscreenRenderTarget = function (renderTarget) {
+                    var gl = this.gl;
+                    this.onscreenRenderTarget = renderTarget;
+                    util_2.assert(this.onscreenRenderTarget.samples === 0);
+                };
+                RenderState.prototype.compileProgram = function (prog) {
+                    return prog.compile(this.gl, this.programCache);
+                };
+                RenderState.prototype.useProgram = function (prog) {
+                    var gl = this.gl;
+                    this.currentProgram = prog;
+                    gl.useProgram(this.compileProgram(prog));
+                };
+                RenderState.prototype.updateModelView = function (isSkybox, model) {
+                    if (isSkybox === void 0) { isSkybox = false; }
+                    if (model === void 0) { model = null; }
+                    var scratch = this.scratchMatrix;
+                    gl_matrix_1.mat4.copy(scratch, this.view);
+                    if (isSkybox) {
+                        scratch[12] = 0;
+                        scratch[13] = 0;
+                        scratch[14] = 0;
+                    }
+                    if (model)
+                        gl_matrix_1.mat4.mul(scratch, scratch, model);
+                    return scratch;
+                };
+                RenderState.prototype.bindModelView = function (isSkybox, model) {
+                    if (isSkybox === void 0) { isSkybox = false; }
+                    if (model === void 0) { model = null; }
+                    var gl = this.gl;
+                    var prog = this.currentProgram;
+                    var scratch = this.updateModelView(isSkybox, model);
+                    gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
+                    gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);
+                };
+                RenderState.prototype.useFlags = function (flags) {
+                    var gl = this.gl;
+                    // TODO(jstpierre): Move the flattening to a stack, possibly?
+                    RenderFlags.flatten(flags, this.currentFlags);
+                    RenderFlags.apply(gl, this.currentFlags, flags);
+                    this.currentFlags = flags;
+                };
+                return RenderState;
+            }());
+            exports_7("RenderState", RenderState);
         }
     };
 });
@@ -2080,7 +2139,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_8, context_
     function clampRange(v, lim) {
         return clamp(v, -lim, lim);
     }
-    var gl_matrix_2, render_1, InputManager, FPSCameraController, OrbitCameraController, FullscreenCopyProgram, Viewer;
+    var gl_matrix_2, render_1, InputManager, FPSCameraController, OrbitCameraController, Viewer;
     return {
         setters: [
             function (gl_matrix_2_1) {
@@ -2295,26 +2354,15 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_8, context_
                 return OrbitCameraController;
             }());
             exports_8("OrbitCameraController", OrbitCameraController);
-            FullscreenCopyProgram = /** @class */ (function (_super) {
-                __extends(FullscreenCopyProgram, _super);
-                function FullscreenCopyProgram() {
-                    var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nout vec2 v_TexCoord;\n\nvoid main() {\n    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;\n    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;\n    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);\n    gl_Position.zw = vec2(1);\n}\n";
-                    _this.frag = "\nuniform sampler2D u_Texture;\nin vec2 v_TexCoord;\n\nvoid main() {\n    vec4 color = texture(u_Texture, v_TexCoord);\n    gl_FragColor = vec4(color.rgb, 1.0);\n}\n";
-                    return _this;
-                }
-                return FullscreenCopyProgram;
-            }(render_1.Program));
             Viewer = /** @class */ (function () {
                 function Viewer(canvas) {
                     this.canvas = canvas;
-                    var gl = canvas.getContext("webgl2", { alpha: false });
+                    var gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
                     this.renderState = new render_1.RenderState(gl);
                     this.inputManager = new InputManager(this.canvas);
                     this.camera = gl_matrix_2.mat4.create();
                     this.cameraController = null;
                     this.onscreenRenderTarget = new render_1.RenderTarget();
-                    this.fullscreenCopyProgram = new FullscreenCopyProgram();
                 }
                 Viewer.prototype.reset = function () {
                     var gl = this.renderState.gl;
@@ -2333,19 +2381,8 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_8, context_
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                     // Main scene. This renders to the onscreen target.
                     this.scene.render(this.renderState);
-                    // Draw onscreen to canvas. First, resolve MSAA buffer to a standard buffer.
-                    this.onscreenRenderTarget.resolve(gl);
-                    // Now, copy the onscreen RT to the screen.
-                    this.renderState.useProgram(this.fullscreenCopyProgram);
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-                    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-                    gl.activeTexture(gl.TEXTURE0);
-                    gl.bindTexture(gl.TEXTURE_2D, this.onscreenRenderTarget.resolvedColorTexture);
-                    gl.bindSampler(0, null);
-                    gl.disable(gl.DEPTH_TEST);
-                    gl.disable(gl.CULL_FACE);
-                    gl.disable(gl.BLEND);
-                    gl.drawArrays(gl.TRIANGLES, 0, 3);
+                    this.renderState.useRealOnscreenRenderTarget(this.canvas.width, this.canvas.height);
+                    this.renderState.blitRenderTarget(this.onscreenRenderTarget);
                     var frameEndTime = window.performance.now();
                     var diff = frameEndTime - this.renderState.frameStartTime;
                     // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
@@ -4718,7 +4755,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var name_3 = nameTable[i];
             var btiTexture = readBTI_Texture(buffer.slice(chunkStart + textureIdx), name_3);
             var textureDataIndex = -1;
-            // Try to find existing.
+            // Try to find existing texture data.
             if (btiTexture.data !== null) {
                 textureDataIndex = textureDatas.findIndex(function (tex) { return tex.data && tex.data.byteOffset === btiTexture.data.byteOffset; });
             }
@@ -4736,6 +4773,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             }
             // Sampler.
             var sampler = {
+                index: i,
                 name: btiTexture.name,
                 wrapS: btiTexture.wrapS,
                 wrapT: btiTexture.wrapT,
@@ -5832,8 +5870,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         if (texIndex < 0)
                             continue;
                         var sampler = this.scene.tex1Samplers[texIndex];
-                        var glSampler = this.scene.glSamplers[texIndex];
-                        var glTexture = this.scene.glTextures[sampler.textureDataIndex];
+                        var _a = __read(this.scene.getGLTexture(sampler), 2), glSampler = _a[0], glTexture = _a[1];
                         gl.activeTexture(gl.TEXTURE0 + i);
                         gl.bindTexture(gl.TEXTURE_2D, glTexture);
                         gl.bindSampler(i, glSampler);
@@ -5881,6 +5918,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.fps = 30;
                     this.colorOverrides = [];
                     this.alphaOverrides = [];
+                    this.textureOverrides = new Map();
                     this.translateModel(gl);
                     this.sceneParamsBuffer = gl.createBuffer();
                     this.modelMatrix = gl_matrix_5.mat4.create();
@@ -5896,6 +5934,10 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.glTextures.forEach(function (texture) { return gl.deleteTexture(texture); });
                     gl.deleteBuffer(this.sceneParamsBuffer);
                 };
+                // TODO(jstpierre): Merge texture override & extra textures technology...
+                Scene.prototype.setTextureOverride = function (name, newTexture) {
+                    this.textureOverrides.set(name, newTexture);
+                };
                 Scene.prototype.setColorOverride = function (i, color) {
                     this.colorOverrides[i] = color;
                 };
@@ -5907,6 +5949,14 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 Scene.prototype.setFPS = function (v) {
                     this.fps = v;
+                };
+                Scene.prototype.getGLTexture = function (tex1Sampler) {
+                    var texture;
+                    var sampler = this.glSamplers[tex1Sampler.index];
+                    texture = this.textureOverrides.get(tex1Sampler.name);
+                    if (texture === undefined)
+                        texture = this.glTextures[tex1Sampler.textureDataIndex];
+                    return [sampler, texture];
                 };
                 Scene.prototype.getTimeInFrames = function (milliseconds) {
                     return (milliseconds / 1000) * this.fps;
@@ -7053,22 +7103,39 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
         ],
         execute: function () {
             SMGRenderer = /** @class */ (function () {
-                function SMGRenderer(gl, mainScene, skyboxScene, bloomScene) {
+                function SMGRenderer(gl, mainScene, skyboxScene, bloomScene, indirectScene) {
                     this.mainScene = mainScene;
                     this.skyboxScene = skyboxScene;
                     this.bloomScene = bloomScene;
+                    this.indirectScene = indirectScene;
                     this.textures = [];
                     this.textures = collectTextures([mainScene, skyboxScene, bloomScene]);
+                    this.mainRenderTarget = new render_7.RenderTarget();
                     this.bloomRenderTarget = new render_7.RenderTarget();
                 }
                 SMGRenderer.prototype.render = function (state) {
                     var gl = state.gl;
+                    this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
+                    state.useRenderTarget(this.mainRenderTarget);
+                    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                     this.skyboxScene.bindState(state);
                     this.skyboxScene.renderOpaque(state);
                     gl.clear(gl.DEPTH_BUFFER_BIT);
                     this.mainScene.bindState(state);
                     this.mainScene.renderOpaque(state);
                     this.mainScene.renderTransparent(state);
+                    // Copy to main render target.
+                    state.useRenderTarget(null);
+                    state.blitRenderTarget(this.mainRenderTarget, true);
+                    if (this.indirectScene) {
+                        this.indirectScene.bindState(state);
+                        this.indirectScene.renderOpaque(state);
+                        var texProjection = this.indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
+                        // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
+                        texProjection[0] = state.projection[0];
+                        texProjection[5] = -state.projection[5];
+                        this.indirectScene.setTextureOverride("IndDummy", this.mainRenderTarget.resolvedColorTexture);
+                    }
                     /*
                     if (this.bloomScene) {
                         const gl = state.gl;
@@ -7086,18 +7153,21 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                     this.mainScene.destroy(gl);
                     this.skyboxScene.destroy(gl);
                     this.bloomScene.destroy(gl);
+                    this.indirectScene.destroy(gl);
                     this.bloomRenderTarget.destroy(gl);
                 };
                 return SMGRenderer;
             }());
             SMGSceneDesc = /** @class */ (function () {
-                function SMGSceneDesc(name, mainScenePath, skyboxScenePath, bloomScenePath) {
+                function SMGSceneDesc(name, mainScenePath, skyboxScenePath, bloomScenePath, indirectScenePath) {
                     if (skyboxScenePath === void 0) { skyboxScenePath = null; }
                     if (bloomScenePath === void 0) { bloomScenePath = null; }
+                    if (indirectScenePath === void 0) { indirectScenePath = null; }
                     this.name = name;
                     this.mainScenePath = mainScenePath;
                     this.skyboxScenePath = skyboxScenePath;
                     this.bloomScenePath = bloomScenePath;
+                    this.indirectScenePath = indirectScenePath;
                     this.id = mainScenePath;
                 }
                 SMGSceneDesc.prototype.createScene = function (gl) {
@@ -7105,13 +7175,17 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                         this.fetchScene(gl, this.mainScenePath, false),
                         this.fetchScene(gl, this.skyboxScenePath, true),
                         this.fetchScene(gl, this.bloomScenePath, false),
+                        this.fetchScene(gl, this.indirectScenePath, false),
                     ]).then(function (scenes) {
-                        var _a = __read(scenes, 3), mainScene = _a[0], skyboxScene = _a[1], bloomScene = _a[2];
-                        return new SMGRenderer(gl, mainScene, skyboxScene, bloomScene);
+                        var _a = __read(scenes, 4), mainScene = _a[0], skyboxScene = _a[1], bloomScene = _a[2], indirectScene = _a[3];
+                        return new SMGRenderer(gl, mainScene, skyboxScene, bloomScene, indirectScene);
                     });
                 };
-                SMGSceneDesc.prototype.fetchScene = function (gl, path, isSkybox) {
+                SMGSceneDesc.prototype.fetchScene = function (gl, filename, isSkybox) {
                     var _this = this;
+                    if (filename === null)
+                        return new Progressable_4.default(Promise.resolve(null));
+                    var path = "data/j3d/smg/" + filename;
                     return util_14.fetch(path).then(function (buffer) { return _this.createSceneFromBuffer(gl, buffer, isSkybox); });
                 };
                 SMGSceneDesc.prototype.createSceneFromBuffer = function (gl, buffer, isSkybox) {
@@ -7127,7 +7201,7 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
             id = "smg";
             name = "Super Mario Galaxy";
             sceneDescs = [
-                new SMGSceneDesc("Peach's Castle Garden", "data/j3d/PeachCastleGardenPlanet.arc", "data/j3d/GalaxySky.arc", "data/j3d/PeachCastleGardenPlanetBloom.arc"),
+                new SMGSceneDesc("Peach's Castle Garden", "PeachCastleGardenPlanet.arc", "GalaxySky.arc", "PeachCastleGardenPlanetBloom.arc", "PeachCastleGardenPlanetIndirect.arc"),
             ];
             exports_25("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }

@@ -21,20 +21,27 @@ class SMGRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
 
     private bloomRenderTarget: RenderTarget;
+    private mainRenderTarget: RenderTarget;
 
     constructor(
         gl: WebGL2RenderingContext,
         private mainScene: Scene,
         private skyboxScene: Scene,
         private bloomScene: Scene,
+        private indirectScene: Scene,
     ) {
         this.textures = collectTextures([mainScene, skyboxScene, bloomScene]);
 
+        this.mainRenderTarget = new RenderTarget();
         this.bloomRenderTarget = new RenderTarget();
     }
 
     public render(state: RenderState): void {
         const gl = state.gl;
+
+        this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
+        state.useRenderTarget(this.mainRenderTarget);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         this.skyboxScene.bindState(state);
         this.skyboxScene.renderOpaque(state);
@@ -44,6 +51,20 @@ class SMGRenderer implements Viewer.MainScene {
         this.mainScene.bindState(state);
         this.mainScene.renderOpaque(state);
         this.mainScene.renderTransparent(state);
+
+        // Copy to main render target.
+        state.useRenderTarget(null);
+        state.blitRenderTarget(this.mainRenderTarget, true);
+
+        if (this.indirectScene) {
+            this.indirectScene.bindState(state);
+            this.indirectScene.renderOpaque(state);
+            const texProjection = this.indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
+            // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
+            texProjection[0] = state.projection[0];
+            texProjection[5] = -state.projection[5];
+            this.indirectScene.setTextureOverride("IndDummy", this.mainRenderTarget.resolvedColorTexture);
+        }
 
         /*
         if (this.bloomScene) {
@@ -63,6 +84,7 @@ class SMGRenderer implements Viewer.MainScene {
         this.mainScene.destroy(gl);
         this.skyboxScene.destroy(gl);
         this.bloomScene.destroy(gl);
+        this.indirectScene.destroy(gl);
         this.bloomRenderTarget.destroy(gl);
     }
 }
@@ -70,7 +92,13 @@ class SMGRenderer implements Viewer.MainScene {
 class SMGSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
-    constructor(public name: string, private mainScenePath: string, private skyboxScenePath: string = null, private bloomScenePath: string = null) {
+    constructor(
+        public name: string,
+        private mainScenePath: string,
+        private skyboxScenePath: string = null,
+        private bloomScenePath: string = null,
+        private indirectScenePath: string = null,
+    ) {
         this.id = mainScenePath;
     }
 
@@ -79,13 +107,17 @@ class SMGSceneDesc implements Viewer.SceneDesc {
             this.fetchScene(gl, this.mainScenePath, false),
             this.fetchScene(gl, this.skyboxScenePath, true),
             this.fetchScene(gl, this.bloomScenePath, false),
+            this.fetchScene(gl, this.indirectScenePath, false),
         ]).then((scenes: Scene[]) => {
-            const [mainScene, skyboxScene, bloomScene] = scenes;
-            return new SMGRenderer(gl, mainScene, skyboxScene, bloomScene);
+            const [mainScene, skyboxScene, bloomScene, indirectScene] = scenes;
+            return new SMGRenderer(gl, mainScene, skyboxScene, bloomScene, indirectScene);
         });
     }
 
-    private fetchScene(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): Progressable<Scene> {
+    private fetchScene(gl: WebGL2RenderingContext, filename: string, isSkybox: boolean): Progressable<Scene> {
+        if (filename === null)
+            return new Progressable<Scene>(Promise.resolve(null));
+        const path: string = `data/j3d/smg/${filename}`;
         return fetch(path).then((buffer: ArrayBufferSlice) => this.createSceneFromBuffer(gl, buffer, isSkybox));
     }
 
@@ -103,7 +135,7 @@ const id = "smg";
 const name = "Super Mario Galaxy";
 
 const sceneDescs: Viewer.SceneDesc[] = [
-    new SMGSceneDesc("Peach's Castle Garden", "data/j3d/PeachCastleGardenPlanet.arc", "data/j3d/GalaxySky.arc", "data/j3d/PeachCastleGardenPlanetBloom.arc"),
+    new SMGSceneDesc("Peach's Castle Garden", "PeachCastleGardenPlanet.arc", "GalaxySky.arc", "PeachCastleGardenPlanetBloom.arc", "PeachCastleGardenPlanetIndirect.arc"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

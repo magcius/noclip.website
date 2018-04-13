@@ -374,8 +374,7 @@ export class Command_Material {
             if (texIndex < 0)
                 continue;
             const sampler = this.scene.tex1Samplers[texIndex];
-            const glSampler = this.scene.glSamplers[texIndex];
-            const glTexture = this.scene.glTextures[sampler.textureDataIndex];
+            const [glSampler, glTexture] = this.scene.getGLTexture(sampler);
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, glTexture);
             gl.bindSampler(i, glSampler);
@@ -429,8 +428,9 @@ export class Scene implements Viewer.Scene {
 
     // Internals used by Command_Material.
     public tex1Samplers: TEX1_Sampler[];
-    public glSamplers: WebGLSampler[];
-    public glTextures: WebGLTexture[];
+    private glSamplers: WebGLSampler[];
+    private glTextures: WebGLTexture[];
+    public textureOverrides = new Map<string, WebGLTexture>();
 
     public currentMaterialCommand: Command_Material;
 
@@ -469,6 +469,11 @@ export class Scene implements Viewer.Scene {
         gl.deleteBuffer(this.sceneParamsBuffer);
     }
 
+    // TODO(jstpierre): Merge texture override & extra textures technology...
+    public setTextureOverride(name: string, newTexture: WebGLTexture) {
+        this.textureOverrides.set(name, newTexture);
+    }
+
     public setColorOverride(i: ColorOverride, color: GX_Material.Color) {
         this.colorOverrides[i] = color;
     }
@@ -483,6 +488,18 @@ export class Scene implements Viewer.Scene {
 
     public setFPS(v: number) {
         this.fps = v;
+    }
+
+    public getGLTexture(tex1Sampler: TEX1_Sampler): [WebGLSampler, WebGLTexture] {
+        let texture: WebGLTexture;
+        const sampler = this.glSamplers[tex1Sampler.index];
+
+        texture = this.textureOverrides.get(tex1Sampler.name);
+
+        if (texture === undefined)
+            texture = this.glTextures[tex1Sampler.textureDataIndex];
+
+        return [sampler, texture];
     }
 
     public getTimeInFrames(milliseconds: number) {
