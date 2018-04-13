@@ -360,7 +360,7 @@ export class GX_Program extends Program {
         const i = stage.index;
         return `
     // Indirect ${i}
-    vec3 t_IndTexCoord${i} = texture(u_Texture[${stage.texture}], ${this.generateIndTexStageScale(stage)}).abg;`;
+    vec3 t_IndTexCoord${i} = SampleTexture(${stage.texture}, ${this.generateIndTexStageScale(stage)}).abg;`;
     }
 
     private generateIndTexStages(stages: IndTexStage[]): string {
@@ -445,7 +445,7 @@ export class GX_Program extends Program {
     }
 
     private generateTexAccess(stage: TevStage) {
-        return `texture(u_Texture[${stage.texMap}], t_TexCoord, GetTextureLODBias(${stage.texMap}))`;
+        return `SampleTexture(${stage.texMap}, t_TexCoord)`;
     }
 
     private generateColorIn(stage: TevStage, colorIn: GX.CombineColorInput) {
@@ -718,8 +718,6 @@ layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_TextureLODBias[2];
 };
 
-float GetTextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureLODBias[index >> 2][index & 3]; }
-
 // Expected to change with each shape packet.
 layout(std140) uniform ub_PacketParams {
     mat4 u_ModelView;
@@ -785,6 +783,10 @@ in vec3 v_TexCoord5;
 in vec3 v_TexCoord6;
 in vec3 v_TexCoord7;
 ${this.generateTexCoordGetters()}
+
+float GetTextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureLODBias[index >> 2][index & 3]; }
+vec4 SampleTexture(int index, vec2 coord) { return texture(u_Texture[index], coord, GetTextureLODBias(index)); }
+
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
 vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
