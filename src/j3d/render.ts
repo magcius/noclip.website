@@ -252,15 +252,11 @@ export class Command_Material {
             if (texMtx === null)
                 continue;
 
-            let finalMatrix;
+            let finalMatrix = matrixScratch;
             if (this.btk && this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, this.scene.getTimeInFrames(state.time))) {
-                finalMatrix = matrixScratch;
-
-                // Multiply in the material matrix if we want that.
-                if (this.scene.useMaterialTexMtx)
-                    mat4.mul(matrixScratch, matrixScratch, texMtx.matrix);
+                ;
             } else {
-                finalMatrix = texMtx.matrix;
+                mat4.copy(finalMatrix, texMtx.matrix);
             }
 
             // We bind texture matrices as row-major for memory usage purposes.

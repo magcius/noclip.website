@@ -20,8 +20,8 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         const path = `data/j3d/mkdd/Course/${this.path}`;
         return fetch(path).then((buffer: ArrayBufferSlice): Viewer.MainScene => {
             const multiScene = createMultiSceneFromBuffer(gl, buffer);
-            // Kill skybox flag.
             multiScene.scenes.forEach((scene) => {
+                // Kill skybox flag.
                 scene.setIsSkybox(false);
             })
             return multiScene;
