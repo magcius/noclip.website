@@ -483,11 +483,8 @@ function createTexMtx(m: mat4, scaleS: number, scaleT: number, rotation: number,
     mat4.fromTranslation(c, [centerS, centerT, centerQ]);
     mat4.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
     mat4.fromTranslation(m, [translationS, translationT, 0]);
-    mat4.fromZRotation(t, rotation * Math.PI);
-    mat4.mul(t, t, ci);
-    mat4.mul(t, c, t);
-    mat4.mul(m, m, t);
     mat4.fromScaling(t, [scaleS, scaleT, 1]);
+    mat4.rotateZ(t, t, rotation * Math.PI);
     mat4.mul(t, t, ci);
     mat4.mul(t, c, t);
     mat4.mul(m, m, t);
