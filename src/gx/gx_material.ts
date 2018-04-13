@@ -493,7 +493,7 @@ export class GX_Program extends Program {
         }
     }
 
-    private generateTevOpBiasScaleClamp(value: string, bias: GX.TevBias, scale: GX.TevScale, clamp: boolean) {
+    private generateTevOpBiasScaleClamp(value: string, bias: GX.TevBias, scale: GX.TevScale) {
         let v = value;
 
         if (bias === GX.TevBias.ADDHALF)
@@ -508,24 +508,30 @@ export class GX_Program extends Program {
         else if (scale === GX.TevScale.DIVIDE_2)
             v = `(${v}) * 0.5`;
 
-        if (clamp)
-            v = `TevSaturate(${v})`;
-
         return v;
     }
 
-    private generateTevOpValue(op: GX.TevOp, bias: GX.TevBias, scale: GX.TevScale, clamp: boolean, a: string, b: string, c: string, d: string) {
+    private generateTevOp(op: GX.TevOp, bias: GX.TevBias, scale: GX.TevScale, a: string, b: string, c: string, d: string) {
         switch (op) {
         case GX.TevOp.ADD:
         case GX.TevOp.SUB:
             const o = (op === GX.TevOp.ADD) ? '+' : '-';
             const v = `mix(${a}, ${b}, ${c}) ${o} ${d}`;
-            return this.generateTevOpBiasScaleClamp(v, bias, scale, clamp);
+            return this.generateTevOpBiasScaleClamp(v, bias, scale);
         case GX.TevOp.COMP_R8_GT:
             return `TevCompR8GT(${a}, ${b}, ${c}) + ${d}`;
         default:
             throw new Error("whoops");
         }
+    }
+
+    private generateTevOpValue(op: GX.TevOp, bias: GX.TevBias, scale: GX.TevScale, clamp: boolean, a: string, b: string, c: string, d: string) {
+        const expr = this.generateTevOp(op, bias, scale, a, b, c, d);
+
+        if (clamp)
+            return `TevSaturate(${expr})`;
+        else
+            return expr;
     }
 
     private generateColorOp(stage: TevStage) {

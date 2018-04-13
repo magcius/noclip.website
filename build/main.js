@@ -3922,7 +3922,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_15, cont
                         case 3 /* REG2 */: return "t_Color2";
                     }
                 };
-                GX_Program.prototype.generateTevOpBiasScaleClamp = function (value, bias, scale, clamp) {
+                GX_Program.prototype.generateTevOpBiasScaleClamp = function (value, bias, scale) {
                     var v = value;
                     if (bias === 1 /* ADDHALF */)
                         v = "TevBias(" + v + ", 0.5)";
@@ -3934,22 +3934,27 @@ System.register("gx/gx_material", ["render", "util"], function (exports_15, cont
                         v = "(" + v + ") * 4.0";
                     else if (scale === 3 /* DIVIDE_2 */)
                         v = "(" + v + ") * 0.5";
-                    if (clamp)
-                        v = "TevSaturate(" + v + ")";
                     return v;
                 };
-                GX_Program.prototype.generateTevOpValue = function (op, bias, scale, clamp, a, b, c, d) {
+                GX_Program.prototype.generateTevOp = function (op, bias, scale, a, b, c, d) {
                     switch (op) {
                         case 0 /* ADD */:
                         case 1 /* SUB */:
                             var o = (op === 0 /* ADD */) ? '+' : '-';
                             var v = "mix(" + a + ", " + b + ", " + c + ") " + o + " " + d;
-                            return this.generateTevOpBiasScaleClamp(v, bias, scale, clamp);
+                            return this.generateTevOpBiasScaleClamp(v, bias, scale);
                         case 8 /* COMP_R8_GT */:
                             return "TevCompR8GT(" + a + ", " + b + ", " + c + ") + " + d;
                         default:
                             throw new Error("whoops");
                     }
+                };
+                GX_Program.prototype.generateTevOpValue = function (op, bias, scale, clamp, a, b, c, d) {
+                    var expr = this.generateTevOp(op, bias, scale, a, b, c, d);
+                    if (clamp)
+                        return "TevSaturate(" + expr + ")";
+                    else
+                        return expr;
                 };
                 GX_Program.prototype.generateColorOp = function (stage) {
                     var a = "TevOverflow(" + this.generateColorIn(stage, stage.colorInA) + ")";
