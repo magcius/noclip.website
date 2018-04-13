@@ -357,7 +357,7 @@ export const enum Register {
     REG2 = 3,
 }
 
-export const enum TexCoordSlot {
+export const enum TexCoordID {
     TEXCOORD0 = 0,
     TEXCOORD1 = 1,
     TEXCOORD2 = 2,
@@ -366,6 +366,7 @@ export const enum TexCoordSlot {
     TEXCOORD5 = 5,
     TEXCOORD6 = 6,
     TEXCOORD7 = 7,
+    NULL = 0xFF,
 }
 
 export const enum ColorChannelId {
@@ -396,4 +397,76 @@ export const enum AttrType {
     DIRECT = 1,
     INDEX8 = 2,
     INDEX16 = 3,
+}
+
+export const enum TexMapID {
+    TEXMAP0 = 0,
+    TEXMAP1 = 1,
+    TEXMAP2 = 2,
+    TEXMAP3 = 3,
+    TEXMAP4 = 4,
+    TEXMAP5 = 5,
+    TEXMAP6 = 6,
+    TEXMAP7 = 7,
+    TEXMAP_NULL = 0xFF,
+}
+
+export const enum IndTexScale {
+    _1 = 0,
+    _2 = 1,
+    _4 = 2,
+    _8 = 3,
+    _16 = 4,
+    _32 = 5,
+    _64 = 6,
+    _128 = 7,
+    _256 = 8,
+}
+
+export const enum IndTexBiasSel {
+    NONE = 0,
+    S = 1,
+    T = 2,
+    ST = 3,
+    U = 4,
+    SU = 5,
+    TU = 6,
+    STU = 7,
+}
+
+export const enum IndTexFormat {
+    _8 = 0, // 8-bit texture offset
+    _5 = 1, // 5-bit texture offset
+    _4 = 2, // 4-bit texture offset
+    _3 = 3, // 3-bit texture offset
+}
+
+export const enum IndTexWrap {
+    OFF = 0,
+    _256 = 1,
+    _128 = 2,
+    _64 = 3,
+    _32 = 4,
+    _16 = 5,
+    _0 = 6,
+}
+
+export const enum IndTexStageID {
+    STAGE0 = 0,
+    STAGE1 = 1,
+    STAGE2 = 2,
+    STAGE3 = 3,
+}
+
+export const enum IndTexMtxID {
+    OFF = 0,
+    _0 = 1,
+    _1 = 2,
+    _2 = 3,
+    S0 = 5,
+    S1 = 6,
+    S2 = 7,
+    T0 = 9,
+    T1 = 10,
+    T2 = 11,
 }

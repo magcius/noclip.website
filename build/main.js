@@ -1842,7 +1842,7 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                         return n.replace(/[/][/].*$/, '');
                     }).filter(function (n) {
                         // Filter whitespace.
-                        var isEmpty = !n || /^\s+%/.test(n);
+                        var isEmpty = !n || /^\s+$/.test(n);
                         return !isEmpty;
                     });
                     var precision = lines.find(function (line) { return line.startsWith('precision'); }) || 'precision mediump float;';
@@ -2706,14 +2706,727 @@ System.register("gx/gx_displaylist", ["util"], function (exports_11, context_11)
         }
     };
 });
-// GX materials.
-System.register("gx/gx_material", ["render", "util"], function (exports_12, context_12) {
+System.register("sm64ds/nitro_tex", [], function (exports_12, context_12) {
     "use strict";
     var __moduleName = context_12 && context_12.id;
+    function expand3to8(n) {
+        return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
+    }
+    function expand5to8(n) {
+        return (n << (8 - 5)) | (n >>> (10 - 8));
+    }
+    function s3tcblend(a, b) {
+        // return (a*3 + b*5) / 8;
+        return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
+    }
+    function bgr5(pixels, dstOffs, p) {
+        pixels[dstOffs + 0] = expand5to8(p & 0x1F);
+        pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
+        pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
+    }
+    exports_12("bgr5", bgr5);
+    function readTexture_A3I5(width, height, texData, palData) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = texData.createDataView();
+        var palView = palData.createDataView();
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var x = 0; x < width; x++) {
+                var texBlock = texView.getUint8(srcOffs++);
+                var palIdx = (texBlock & 0x1F) << 1;
+                var alpha = texBlock >>> 5;
+                var p = palView.getUint16(palIdx, true);
+                var dstOffs = 4 * ((y * width) + x);
+                bgr5(pixels, dstOffs, p);
+                pixels[dstOffs + 3] = expand3to8(alpha);
+            }
+        }
+        return pixels;
+    }
+    function readTexture_Palette16(width, height, texData, palData, color0) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = texData.createDataView();
+        var palView = palData.createDataView();
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var xx = 0; xx < width; xx += 4) {
+                var texBlock = texView.getUint16(srcOffs, true);
+                srcOffs += 2;
+                for (var x = 0; x < 4; x++) {
+                    var palIdx = texBlock & 0x0F;
+                    var p = palView.getUint16(palIdx * 2, true);
+                    var dstOffs = 4 * ((y * width) + xx + x);
+                    bgr5(pixels, dstOffs, p);
+                    pixels[dstOffs + 3] = palIdx === 0 ? (color0 ? 0x00 : 0xFF) : 0xFF;
+                    texBlock >>= 4;
+                }
+            }
+        }
+        return pixels;
+    }
+    function readTexture_Palette256(width, height, texData, palData, color0) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = texData.createDataView();
+        var palView = palData.createDataView();
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var xx = 0; xx < width; xx++) {
+                var palIdx = texView.getUint8(srcOffs++);
+                var p = palView.getUint16(palIdx * 2, true);
+                var dstOffs = 4 * ((y * width) + xx);
+                bgr5(pixels, dstOffs, p);
+                pixels[dstOffs + 3] = palIdx === 0 ? (color0 ? 0x00 : 0xFF) : 0xFF;
+            }
+        }
+        return pixels;
+    }
+    function readTexture_CMPR_4x4(width, height, texData, palData) {
+        function getPal16(offs) {
+            return offs < palView.byteLength ? palView.getUint16(offs, true) : 0;
+        }
+        function buildColorTable(palBlock) {
+            var palMode = palBlock >> 14;
+            var palOffs = (palBlock & 0x3FFF) << 2;
+            var colorTable = new Uint8Array(16);
+            var p0 = getPal16(palOffs + 0x00);
+            bgr5(colorTable, 0, p0);
+            colorTable[3] = 0xFF;
+            var p1 = getPal16(palOffs + 0x02);
+            bgr5(colorTable, 4, p1);
+            colorTable[7] = 0xFF;
+            if (palMode === 0) {
+                // PTY=0, A=0
+                var p2 = getPal16(palOffs + 0x04);
+                bgr5(colorTable, 8, p2);
+                colorTable[11] = 0xFF;
+                // Color4 is transparent black.
+            }
+            else if (palMode === 1) {
+                // PTY=1, A=0
+                // Color3 is a blend of Color1/Color2.
+                colorTable[8] = (colorTable[0] + colorTable[4]) >>> 1;
+                colorTable[9] = (colorTable[1] + colorTable[5]) >>> 1;
+                colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
+                colorTable[11] = 0xFF;
+                // Color4 is transparent black.
+            }
+            else if (palMode === 2) {
+                // PTY=0, A=1
+                var p2 = getPal16(palOffs + 0x04);
+                bgr5(colorTable, 8, p2);
+                colorTable[11] = 0xFF;
+                var p3 = getPal16(palOffs + 0x06);
+                bgr5(colorTable, 12, p3);
+                colorTable[15] = 0xFF;
+            }
+            else {
+                colorTable[8] = s3tcblend(colorTable[4], colorTable[0]);
+                colorTable[9] = s3tcblend(colorTable[5], colorTable[1]);
+                colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
+                colorTable[11] = 0xFF;
+                colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
+                colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
+                colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
+                colorTable[15] = 0xFF;
+            }
+            return colorTable;
+        }
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = texData.createDataView();
+        var palView = palData.createDataView();
+        var palIdxStart = (width * height) / 4;
+        var srcOffs = 0;
+        for (var yy = 0; yy < height; yy += 4) {
+            for (var xx = 0; xx < width; xx += 4) {
+                var texBlock = texView.getUint32((srcOffs * 0x04), true);
+                var palBlock = texView.getUint16(palIdxStart + (srcOffs * 0x02), true);
+                var colorTable = buildColorTable(palBlock);
+                for (var y = 0; y < 4; y++) {
+                    for (var x = 0; x < 4; x++) {
+                        var colorIdx = texBlock & 0x03;
+                        var dstOffs = 4 * (((yy + y) * width) + xx + x);
+                        pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
+                        pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
+                        pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
+                        pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
+                        texBlock >>= 2;
+                    }
+                }
+                srcOffs++;
+            }
+        }
+        return pixels;
+    }
+    function readTexture_A5I3(width, height, texData, palData) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = texData.createDataView();
+        var palView = palData.createDataView();
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var x = 0; x < width; x++) {
+                var texBlock = texView.getUint8(srcOffs++);
+                var palIdx = (texBlock & 0x03) << 1;
+                var alpha = texBlock >>> 3;
+                var p = palView.getUint16(palIdx, true);
+                var dstOffs = 4 * ((y * width) + x);
+                bgr5(pixels, dstOffs, p);
+                pixels[dstOffs + 3] = expand5to8(alpha);
+            }
+        }
+        return pixels;
+    }
+    function readTexture_Direct(width, height, texData) {
+        var pixels = new Uint8Array(width * height * 4);
+        var texView = texData.createDataView();
+        var srcOffs = 0;
+        for (var y = 0; y < height; y++) {
+            for (var x = 0; x < width; x++) {
+                var p = texView.getUint16(srcOffs, true);
+                var dstOffs = 4 * ((y * width) + x);
+                bgr5(pixels, dstOffs, p);
+                pixels[dstOffs + 3] = 0xFF;
+                srcOffs += 2;
+            }
+        }
+        return pixels;
+    }
+    function readTexture(format, width, height, texData, palData, color0) {
+        switch (format) {
+            case Format.Tex_A3I5:
+                return readTexture_A3I5(width, height, texData, palData);
+            case Format.Tex_Palette16:
+                return readTexture_Palette16(width, height, texData, palData, color0);
+            case Format.Tex_Palette256:
+                return readTexture_Palette256(width, height, texData, palData, color0);
+            case Format.Tex_CMPR_4x4:
+                return readTexture_CMPR_4x4(width, height, texData, palData);
+            case Format.Tex_A5I3:
+                return readTexture_A5I3(width, height, texData, palData);
+            case Format.Tex_Direct:
+                return readTexture_Direct(width, height, texData);
+            default:
+                throw new Error("Unsupported texture type! " + format);
+        }
+    }
+    exports_12("readTexture", readTexture);
+    var Format;
+    return {
+        setters: [],
+        execute: function () {
+            // Read DS texture formats.
+            (function (Format) {
+                Format[Format["Tex_None"] = 0] = "Tex_None";
+                Format[Format["Tex_A3I5"] = 1] = "Tex_A3I5";
+                Format[Format["Tex_Palette4"] = 2] = "Tex_Palette4";
+                Format[Format["Tex_Palette16"] = 3] = "Tex_Palette16";
+                Format[Format["Tex_Palette256"] = 4] = "Tex_Palette256";
+                Format[Format["Tex_CMPR_4x4"] = 5] = "Tex_CMPR_4x4";
+                Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
+                Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
+            })(Format || (Format = {}));
+            exports_12("Format", Format);
+        }
+    };
+});
+// Read DS Geometry Engine commands.
+System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_13, context_13) {
+    "use strict";
+    var __moduleName = context_13 && context_13.id;
+    function bgr5(pixel) {
+        nitro_tex_1.bgr5(tmp, 0, pixel);
+        var r = tmp[0], g = tmp[1], b = tmp[2];
+        return { r: r, g: g, b: b };
+    }
+    exports_13("bgr5", bgr5);
+    function cmd_MTX_RESTORE(ctx) {
+        // XXX: We don't implement the matrix stack yet.
+        ctx.readParam();
+    }
+    function cmd_COLOR(ctx) {
+        var param = ctx.readParam();
+        ctx.s_color = bgr5(param);
+    }
+    function cmd_NORMAL(ctx) {
+        var param = ctx.readParam();
+    }
+    function cmd_TEXCOORD(ctx) {
+        var param = ctx.readParam();
+        var s = param & 0xFFFF;
+        var t = param >> 16;
+        // Sign extend.
+        s = (s << 16 >> 16);
+        t = (t << 16 >> 16);
+        // Fixed point.
+        s = s / 16.0;
+        t = t / 16.0;
+        ctx.s_texCoord = { s: s, t: t };
+    }
+    function cmd_VTX_16(ctx) {
+        var param1 = ctx.readParam();
+        var x = (param1 & 0xFFFF);
+        var y = (param1 >> 16) & 0xFFFF;
+        var param2 = ctx.readParam();
+        var z = (param2 & 0xFFFF);
+        // Sign extend.
+        x = (x << 16 >> 16);
+        y = (y << 16 >> 16);
+        z = (z << 16 >> 16);
+        // Fixed point.
+        x = x / 4096.0;
+        y = y / 4096.0;
+        z = z / 4096.0;
+        ctx.vtx(x, y, z);
+    }
+    function cmd_VTX_10(ctx) {
+        var param = ctx.readParam();
+        var x = (param & 0x03FF);
+        var y = (param >> 10) & 0x03FF;
+        var z = (param >> 20) & 0x03FF;
+        // Sign extend.
+        x = (x << 22 >> 22);
+        y = (y << 22 >> 22);
+        z = (z << 22 >> 22);
+        // Fixed point.
+        x = x / 64.0;
+        y = y / 64.0;
+        z = z / 64.0;
+        ctx.vtx(x, y, z);
+    }
+    function cmd_VTX_XY(ctx) {
+        var param = ctx.readParam();
+        var x = (param & 0xFFFF);
+        var y = (param >> 16) & 0xFFFF;
+        // Sign extend.
+        x = (x << 16 >> 16);
+        y = (y << 16 >> 16);
+        // Fixed point.
+        x = x / 4096.0;
+        y = y / 4096.0;
+        ctx.vtx(x, y, ctx.s_vtx.z);
+    }
+    function cmd_VTX_XZ(ctx) {
+        var param = ctx.readParam();
+        var x = (param & 0xFFFF);
+        var z = (param >> 16) & 0xFFFF;
+        // Sign extend.
+        x = (x << 16 >> 16);
+        z = (z << 16 >> 16);
+        // Fixed point.
+        x = x / 4096.0;
+        z = z / 4096.0;
+        ctx.vtx(x, ctx.s_vtx.y, z);
+    }
+    function cmd_VTX_YZ(ctx) {
+        var param = ctx.readParam();
+        var y = (param & 0xFFFF);
+        var z = (param >> 16) & 0xFFFF;
+        // Sign extend.
+        y = (y << 16 >> 16);
+        z = (z << 16 >> 16);
+        // Fixed point.
+        y = y / 4096.0;
+        z = z / 4096.0;
+        ctx.vtx(ctx.s_vtx.x, y, z);
+    }
+    function cmd_VTX_DIFF(ctx) {
+        var param = ctx.readParam();
+        var x = (param & 0x03FF);
+        var y = (param >> 10) & 0x03FF;
+        var z = (param >> 20) & 0x03FF;
+        // Sign extend.
+        x = (x << 22 >> 22);
+        y = (y << 22 >> 22);
+        z = (z << 22 >> 22);
+        // Fixed point.
+        x = x / 4096.0;
+        y = y / 4096.0;
+        z = z / 4096.0;
+        // Add on the difference...
+        x += ctx.s_vtx.x;
+        y += ctx.s_vtx.y;
+        z += ctx.s_vtx.z;
+        ctx.vtx(x, y, z);
+    }
+    function cmd_DIF_AMB(ctx) {
+        var param = ctx.readParam();
+        // TODO: lighting
+    }
+    function cmd_BEGIN_VTXS(ctx) {
+        var param = ctx.readParam();
+        var polyType = param & 0x03;
+        ctx.s_polyType = polyType;
+        ctx.vtxs = [];
+    }
+    function cmd_END_VTXS(ctx) {
+        var nVerts = ctx.vtxs.length;
+        var vtxBuffer = new Float32Array(nVerts * VERTEX_SIZE);
+        for (var i = 0; i < nVerts; i++) {
+            var v = ctx.vtxs[i];
+            var vtxArray = new Float32Array(vtxBuffer.buffer, i * VERTEX_BYTES, VERTEX_SIZE);
+            vtxArray[0] = v.pos.x;
+            vtxArray[1] = v.pos.y;
+            vtxArray[2] = v.pos.z;
+            vtxArray[3] = v.color.r / 0xFF;
+            vtxArray[4] = v.color.g / 0xFF;
+            vtxArray[5] = v.color.b / 0xFF;
+            vtxArray[6] = ctx.alpha / 0xFF;
+            vtxArray[7] = v.uv.s;
+            vtxArray[8] = v.uv.t;
+        }
+        var idxBuffer;
+        if (ctx.s_polyType === PolyType.TRIANGLES) {
+            idxBuffer = new Uint16Array(nVerts);
+            for (var i = 0; i < nVerts; i++)
+                idxBuffer[i] = i;
+        }
+        else if (ctx.s_polyType === PolyType.QUADS) {
+            idxBuffer = new Uint16Array(nVerts / 4 * 6);
+            var dst = 0;
+            for (var i = 0; i < nVerts; i += 4) {
+                idxBuffer[dst++] = i + 0;
+                idxBuffer[dst++] = i + 1;
+                idxBuffer[dst++] = i + 2;
+                idxBuffer[dst++] = i + 2;
+                idxBuffer[dst++] = i + 3;
+                idxBuffer[dst++] = i + 0;
+            }
+        }
+        else if (ctx.s_polyType === PolyType.TRIANGLE_STRIP) {
+            idxBuffer = new Uint16Array((nVerts - 2) * 3);
+            var dst = 0;
+            for (var i = 0; i < nVerts - 2; i++) {
+                if (i % 2 === 0) {
+                    idxBuffer[dst++] = i + 0;
+                    idxBuffer[dst++] = i + 1;
+                    idxBuffer[dst++] = i + 2;
+                }
+                else {
+                    idxBuffer[dst++] = i + 1;
+                    idxBuffer[dst++] = i + 0;
+                    idxBuffer[dst++] = i + 2;
+                }
+            }
+        }
+        else if (ctx.s_polyType === PolyType.QUAD_STRIP) {
+            idxBuffer = new Uint16Array(((nVerts - 2) / 2) * 6);
+            var dst = 0;
+            for (var i = 0; i < nVerts; i += 2) {
+                idxBuffer[dst++] = i + 0;
+                idxBuffer[dst++] = i + 1;
+                idxBuffer[dst++] = i + 3;
+                idxBuffer[dst++] = i + 3;
+                idxBuffer[dst++] = i + 2;
+                idxBuffer[dst++] = i + 0;
+            }
+        }
+        var packet = { vertData: vtxBuffer, idxData: idxBuffer, polyType: ctx.s_polyType };
+        ctx.packets.push(packet);
+    }
+    function runCmd(ctx, cmd) {
+        switch (cmd) {
+            case 0: return;
+            case CmdType.MTX_RESTORE: return cmd_MTX_RESTORE(ctx);
+            case CmdType.COLOR: return cmd_COLOR(ctx);
+            case CmdType.NORMAL: return cmd_NORMAL(ctx);
+            case CmdType.TEXCOORD: return cmd_TEXCOORD(ctx);
+            case CmdType.VTX_16: return cmd_VTX_16(ctx);
+            case CmdType.VTX_10: return cmd_VTX_10(ctx);
+            case CmdType.VTX_XY: return cmd_VTX_XY(ctx);
+            case CmdType.VTX_XZ: return cmd_VTX_XZ(ctx);
+            case CmdType.VTX_YZ: return cmd_VTX_YZ(ctx);
+            case CmdType.VTX_DIFF: return cmd_VTX_DIFF(ctx);
+            case CmdType.DIF_AMB: return cmd_DIF_AMB(ctx);
+            case CmdType.BEGIN_VTXS: return cmd_BEGIN_VTXS(ctx);
+            case CmdType.END_VTXS: return cmd_END_VTXS(ctx);
+            default: console.warn("Missing command", cmd.toString(16));
+        }
+    }
+    function readCmds(buffer, baseCtx) {
+        var ctx = new ContextInternal(buffer, baseCtx);
+        while (ctx.offs < buffer.byteLength) {
+            // Commands are packed 4 at a time...
+            var cmd0 = ctx.view.getUint8(ctx.offs++);
+            var cmd1 = ctx.view.getUint8(ctx.offs++);
+            var cmd2 = ctx.view.getUint8(ctx.offs++);
+            var cmd3 = ctx.view.getUint8(ctx.offs++);
+            runCmd(ctx, cmd0);
+            runCmd(ctx, cmd1);
+            runCmd(ctx, cmd2);
+            runCmd(ctx, cmd3);
+        }
+        return ctx.packets;
+    }
+    exports_13("readCmds", readCmds);
+    var nitro_tex_1, CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, tmp, Context, ContextInternal;
+    return {
+        setters: [
+            function (nitro_tex_1_1) {
+                nitro_tex_1 = nitro_tex_1_1;
+            }
+        ],
+        execute: function () {
+            // tslint:disable:variable-name
+            (function (CmdType) {
+                CmdType[CmdType["MTX_RESTORE"] = 20] = "MTX_RESTORE";
+                CmdType[CmdType["COLOR"] = 32] = "COLOR";
+                CmdType[CmdType["NORMAL"] = 33] = "NORMAL";
+                CmdType[CmdType["TEXCOORD"] = 34] = "TEXCOORD";
+                CmdType[CmdType["VTX_16"] = 35] = "VTX_16";
+                CmdType[CmdType["VTX_10"] = 36] = "VTX_10";
+                CmdType[CmdType["VTX_XY"] = 37] = "VTX_XY";
+                CmdType[CmdType["VTX_XZ"] = 38] = "VTX_XZ";
+                CmdType[CmdType["VTX_YZ"] = 39] = "VTX_YZ";
+                CmdType[CmdType["VTX_DIFF"] = 40] = "VTX_DIFF";
+                CmdType[CmdType["DIF_AMB"] = 48] = "DIF_AMB";
+                CmdType[CmdType["BEGIN_VTXS"] = 64] = "BEGIN_VTXS";
+                CmdType[CmdType["END_VTXS"] = 65] = "END_VTXS";
+            })(CmdType || (CmdType = {}));
+            (function (PolyType) {
+                PolyType[PolyType["TRIANGLES"] = 0] = "TRIANGLES";
+                PolyType[PolyType["QUADS"] = 1] = "QUADS";
+                PolyType[PolyType["TRIANGLE_STRIP"] = 2] = "TRIANGLE_STRIP";
+                PolyType[PolyType["QUAD_STRIP"] = 3] = "QUAD_STRIP";
+            })(PolyType || (PolyType = {}));
+            // 3 pos + 4 color + 2 uv
+            VERTEX_SIZE = 9;
+            VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+            tmp = new Uint8Array(3);
+            Context = /** @class */ (function () {
+                function Context() {
+                }
+                return Context;
+            }());
+            exports_13("Context", Context);
+            ContextInternal = /** @class */ (function () {
+                function ContextInternal(buffer, baseCtx) {
+                    this.offs = 0;
+                    this.alpha = baseCtx.alpha;
+                    this.s_color = baseCtx.color;
+                    this.view = buffer.createDataView();
+                    this.s_texCoord = { s: 0, t: 0 };
+                    this.packets = [];
+                }
+                ContextInternal.prototype.readParam = function () {
+                    return this.view.getUint32((this.offs += 4) - 4, true);
+                };
+                ContextInternal.prototype.vtx = function (x, y, z) {
+                    this.s_vtx = { x: x, y: y, z: z };
+                    this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord });
+                };
+                return ContextInternal;
+            }());
+        }
+    };
+});
+System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_14, context_14) {
+    "use strict";
+    var __moduleName = context_14 && context_14.id;
+    function parseModel(bmd, buffer, idx) {
+        var offs = bmd.modelOffsBase + idx * 0x40;
+        var view = buffer.createDataView();
+        var model = new Model();
+        model.id = view.getUint32(offs + 0x00, true);
+        model.name = util_5.readString(buffer, view.getUint32(offs + 0x04, true), 0xFF);
+        model.parentID = view.getUint16(offs + 0x08, true);
+        // Local transform.
+        var xs = view.getUint32(offs + 0x10, true);
+        var ys = view.getUint32(offs + 0x14, true);
+        var zs = view.getUint32(offs + 0x18, true);
+        var xr = view.getUint16(offs + 0x1C, true);
+        var yr = view.getUint16(offs + 0x1E, true);
+        var zr = view.getUint16(offs + 0x20, true);
+        var xt = view.getUint16(offs + 0x24, true);
+        var yt = view.getUint16(offs + 0x28, true);
+        var zt = view.getUint16(offs + 0x2C, true);
+        // A "batch" is a combination of a material and a poly.
+        var batchCount = view.getUint32(offs + 0x30, true);
+        var batchMaterialOffs = view.getUint32(offs + 0x34, true);
+        var batchPolyOffs = view.getUint32(offs + 0x38, true);
+        model.batches = [];
+        for (var i = 0; i < batchCount; i++) {
+            var materialIdx = view.getUint8(batchMaterialOffs + i);
+            var material = parseMaterial(bmd, buffer, materialIdx);
+            var baseCtx = { color: material.diffuse, alpha: material.alpha };
+            var polyIdx = view.getUint8(batchPolyOffs + i);
+            var poly = parsePoly(bmd, buffer, polyIdx, baseCtx);
+            model.batches.push({ material: material, poly: poly });
+        }
+        return model;
+    }
+    function parsePoly(bmd, buffer, idx, baseCtx) {
+        var view = buffer.createDataView();
+        var offs = view.getUint32((bmd.polyOffsBase + idx * 0x08) + 0x04, true);
+        var gxCmdSize = view.getUint32(offs + 0x08, true);
+        var gxCmdOffs = view.getUint32(offs + 0x0C, true);
+        var gxCmdBuf = buffer.slice(gxCmdOffs, gxCmdOffs + gxCmdSize);
+        var packets = NITRO_GX.readCmds(gxCmdBuf, baseCtx);
+        return { packets: packets };
+    }
+    function parseMaterial(bmd, buffer, idx) {
+        var view = buffer.createDataView();
+        var offs = bmd.materialOffsBase + idx * 0x30;
+        var material = new Material();
+        material.name = util_5.readString(buffer, view.getUint32(offs + 0x00, true), 0xFF);
+        material.texCoordMat = gl_matrix_3.mat2d.create();
+        var textureIdx = view.getUint32(offs + 0x04, true);
+        if (textureIdx !== 0xFFFFFFFF) {
+            var paletteIdx = view.getUint32(offs + 0x08, true);
+            var textureKey = new TextureKey(textureIdx, paletteIdx);
+            material.texture = parseTexture(bmd, buffer, textureKey);
+            material.texParams = material.texture.params | view.getUint32(offs + 0x20, true);
+            if (material.texParams >> 30) {
+                var scaleS = view.getInt32(offs + 0x0C, true) / 4096.0;
+                var scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
+                var transS = view.getInt32(offs + 0x18, true) / 4096.0;
+                var transT = view.getInt32(offs + 0x1C, true) / 4096.0;
+                gl_matrix_3.mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
+                gl_matrix_3.mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
+            }
+            var texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
+            gl_matrix_3.mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
+        }
+        else {
+            material.texture = null;
+            material.texParams = 0;
+        }
+        var polyAttribs = view.getUint32(offs + 0x24, true);
+        var alpha = (polyAttribs >> 16) & 0x1F;
+        alpha = (alpha << (8 - 5)) | (alpha >>> (10 - 8));
+        var renderWhichFaces = (polyAttribs >> 6) & 0x03;
+        material.renderWhichFaces = renderWhichFaces;
+        // NITRO's Rendering Engine uses two passes. Opaque, then Transparent.
+        // A transparent polygon is one that has an alpha of < 0xFF, or uses
+        // A5I3 / A3I5 textures.
+        material.isTranslucent = (alpha < 0xFF) || (material.texture && material.texture.isTranslucent);
+        // Do transparent polys write to the depth buffer?
+        var xl = (polyAttribs >>> 11) & 0x01;
+        if (xl)
+            material.depthWrite = true;
+        else
+            material.depthWrite = !material.isTranslucent;
+        var difAmb = view.getUint32(offs + 0x28, true);
+        if (difAmb & 0x8000)
+            material.diffuse = NITRO_GX.bgr5(difAmb);
+        else
+            material.diffuse = { r: 0xFF, g: 0xFF, b: 0xFF };
+        material.alpha = alpha;
+        return material;
+    }
+    function parseTexture(bmd, buffer, key) {
+        if (bmd.textureCache.has(key.toString()))
+            return bmd.textureCache.get(key.toString());
+        var view = buffer.createDataView();
+        var texOffs = bmd.textureOffsBase + key.texIdx * 0x14;
+        var texture = new Texture();
+        texture.id = key.texIdx;
+        texture.name = util_5.readString(buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
+        var texDataOffs = view.getUint32(texOffs + 0x04, true);
+        var texDataSize = view.getUint32(texOffs + 0x08, true);
+        var texData = buffer.slice(texDataOffs);
+        texture.params = view.getUint32(texOffs + 0x10, true);
+        texture.format = (texture.params >> 26) & 0x07;
+        texture.width = 8 << ((texture.params >> 20) & 0x07);
+        texture.height = 8 << ((texture.params >> 23) & 0x07);
+        var color0 = !!((texture.params >> 29) & 0x01);
+        var palData = null;
+        if (key.palIdx !== 0xFFFFFFFF) {
+            var palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
+            texture.paletteName = util_5.readString(buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
+            var palDataOffs = view.getUint32(palOffs + 0x04, true);
+            var palDataSize = view.getUint32(palOffs + 0x08, true);
+            palData = buffer.slice(palDataOffs, palDataOffs + palDataSize);
+        }
+        texture.pixels = NITRO_Tex.readTexture(texture.format, texture.width, texture.height, texData, palData, color0);
+        texture.isTranslucent = (texture.format === NITRO_Tex.Format.Tex_A5I3 ||
+            texture.format === NITRO_Tex.Format.Tex_A3I5);
+        bmd.textures.push(texture);
+        bmd.textureCache.set(key.toString(), texture);
+        return texture;
+    }
+    function parse(buffer) {
+        var view = buffer.createDataView();
+        var bmd = new BMD();
+        bmd.scaleFactor = (1 << view.getUint32(0x00, true));
+        bmd.modelCount = view.getUint32(0x04, true);
+        bmd.modelOffsBase = view.getUint32(0x08, true);
+        bmd.polyCount = view.getUint32(0x0C, true);
+        bmd.polyOffsBase = view.getUint32(0x10, true);
+        bmd.textureCount = view.getUint32(0x14, true);
+        bmd.textureOffsBase = view.getUint32(0x18, true);
+        bmd.paletteCount = view.getUint32(0x1C, true);
+        bmd.paletteOffsBase = view.getUint32(0x20, true);
+        bmd.materialCount = view.getUint32(0x24, true);
+        bmd.materialOffsBase = view.getUint32(0x28, true);
+        bmd.textureCache = new Map();
+        bmd.textures = [];
+        bmd.models = [];
+        for (var i = 0; i < bmd.modelCount; i++)
+            bmd.models.push(parseModel(bmd, buffer, i));
+        return bmd;
+    }
+    exports_14("parse", parse);
+    var gl_matrix_3, NITRO_GX, NITRO_Tex, util_5, Material, Model, TextureKey, Texture, BMD;
+    return {
+        setters: [
+            function (gl_matrix_3_1) {
+                gl_matrix_3 = gl_matrix_3_1;
+            },
+            function (NITRO_GX_1) {
+                NITRO_GX = NITRO_GX_1;
+            },
+            function (NITRO_Tex_1) {
+                NITRO_Tex = NITRO_Tex_1;
+            },
+            function (util_5_1) {
+                util_5 = util_5_1;
+            }
+        ],
+        execute: function () {
+            Material = /** @class */ (function () {
+                function Material() {
+                }
+                return Material;
+            }());
+            exports_14("Material", Material);
+            Model = /** @class */ (function () {
+                function Model() {
+                }
+                return Model;
+            }());
+            exports_14("Model", Model);
+            TextureKey = /** @class */ (function () {
+                function TextureKey(texIdx, palIdx) {
+                    this.texIdx = texIdx;
+                    this.palIdx = palIdx;
+                }
+                TextureKey.prototype.toString = function () {
+                    return "TextureKey " + this.texIdx + " " + this.palIdx;
+                };
+                return TextureKey;
+            }());
+            Texture = /** @class */ (function () {
+                function Texture() {
+                }
+                return Texture;
+            }());
+            exports_14("Texture", Texture);
+            BMD = /** @class */ (function () {
+                function BMD() {
+                }
+                return BMD;
+            }());
+            exports_14("BMD", BMD);
+        }
+    };
+});
+// GX materials.
+System.register("gx/gx_material", ["render", "util"], function (exports_15, context_15) {
+    "use strict";
+    var __moduleName = context_15 && context_15.id;
     function getVertexAttribLocation(vtxAttrib) {
         return vtxAttributeGenDefs.findIndex(function (genDef) { return genDef.attrib === vtxAttrib; });
     }
-    exports_12("getVertexAttribLocation", getVertexAttribLocation);
+    exports_15("getVertexAttribLocation", getVertexAttribLocation);
     // #endregion
     // #region Material flags generation.
     function translateCullMode(cullMode) {
@@ -2811,7 +3524,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
         }
         return renderFlags;
     }
-    exports_12("translateRenderFlags", translateRenderFlags);
+    exports_15("translateRenderFlags", translateRenderFlags);
     // #endregion
     // XXX(jstpierre): Put this somewhere better.
     // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
@@ -2825,15 +3538,15 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
         var textureLODBias = Math.log2(Math.min(viewportWidth / efbWidth, viewportHeight / efbHeight));
         return textureLODBias;
     }
-    exports_12("getTextureLODBias", getTextureLODBias);
-    var render_2, util_5, Color, vtxAttributeGenDefs, scaledVtxAttributes, GX_Program;
+    exports_15("getTextureLODBias", getTextureLODBias);
+    var render_2, util_6, Color, vtxAttributeGenDefs, scaledVtxAttributes, GX_Program;
     return {
         setters: [
             function (render_2_1) {
                 render_2 = render_2_1;
             },
-            function (util_5_1) {
-                util_5 = util_5_1;
+            function (util_6_1) {
+                util_6 = util_6_1;
             }
         ],
         execute: function () {
@@ -2846,7 +3559,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
                 }
                 return Color;
             }());
-            exports_12("Color", Color);
+            exports_15("Color", Color);
             vtxAttributeGenDefs = [
                 { attrib: 0 /* PNMTXIDX */, name: "PosMtxIdx", storage: "float", scale: false },
                 { attrib: 9 /* POS */, name: "Position", storage: "vec3", scale: true },
@@ -2862,8 +3575,8 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
                 { attrib: 19 /* TEX6 */, name: "Tex6", storage: "vec2", scale: true },
                 { attrib: 20 /* TEX7 */, name: "Tex7", storage: "vec2", scale: true },
             ];
-            exports_12("scaledVtxAttributes", scaledVtxAttributes = vtxAttributeGenDefs.filter(function (a) { return a.scale; }).map(function (a) { return a.attrib; }));
-            while (scaledVtxAttributes.length < util_5.align(scaledVtxAttributes.length, 4))
+            exports_15("scaledVtxAttributes", scaledVtxAttributes = vtxAttributeGenDefs.filter(function (a) { return a.scale; }).map(function (a) { return a.attrib; }));
+            while (scaledVtxAttributes.length < util_6.align(scaledVtxAttributes.length, 4))
                 scaledVtxAttributes.push(-1);
             GX_Program = /** @class */ (function (_super) {
                 __extends(GX_Program, _super);
@@ -3003,6 +3716,42 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
                         return _this.generateTexGen(tg);
                     }).join('');
                 };
+                GX_Program.prototype.generateTexCoordGetters = function () {
+                    return this.material.texGens.map(function (n, i) {
+                        return "vec2 ReadTexCoord" + i + "() { return v_TexCoord" + i + ".xy / v_TexCoord" + i + ".z; }\n";
+                    }).join('');
+                };
+                // IndTex
+                GX_Program.prototype.generateIndTexStageScaleN = function (scale) {
+                    switch (scale) {
+                        case 0 /* _1 */: return "1.0";
+                        case 1 /* _2 */: return "1.0/2.0";
+                        case 2 /* _4 */: return "1.0/4.0";
+                        case 3 /* _8 */: return "1.0/8.0";
+                        case 4 /* _16 */: return "1.0/16.0";
+                        case 5 /* _32 */: return "1.0/32.0";
+                        case 6 /* _64 */: return "1.0/64.0";
+                        case 7 /* _128 */: return "1.0/128.0";
+                        case 8 /* _256 */: return "1.0/256.0";
+                    }
+                };
+                GX_Program.prototype.generateIndTexStageScale = function (stage) {
+                    var baseCoord = "ReadTexCoord" + stage.texCoordId + "()";
+                    if (stage.scaleS === 0 /* _1 */ && stage.scaleT === 0 /* _1 */)
+                        return baseCoord;
+                    else
+                        return baseCoord + " * vec2(" + this.generateIndTexStageScaleN(stage.scaleS) + ", " + this.generateIndTexStageScaleN(stage.scaleT) + ")";
+                };
+                GX_Program.prototype.generateIndTexStage = function (stage) {
+                    var i = stage.index;
+                    return "\n    // Indirect " + i + "\n    vec3 t_IndTexCoord" + i + " = texture(u_Texture[" + stage.texture + "], " + this.generateIndTexStageScale(stage) + ").abg;";
+                };
+                GX_Program.prototype.generateIndTexStages = function (stages) {
+                    var _this = this;
+                    return stages.map(function (stage) {
+                        return _this.generateIndTexStage(stage);
+                    }).join('');
+                };
                 // TEV
                 GX_Program.prototype.generateKonstColorSel = function (konstColor) {
                     switch (konstColor) {
@@ -3076,7 +3825,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
                     }
                 };
                 GX_Program.prototype.generateTexAccess = function (stage) {
-                    return "textureProj(u_Texture[" + stage.texMap + "], v_TexCoord" + stage.texCoordId + ", GetTextureLODBias(" + stage.texMap + "))";
+                    return "texture(u_Texture[" + stage.texMap + "], t_TexCoord, GetTextureLODBias(" + stage.texMap + "))";
                 };
                 GX_Program.prototype.generateColorIn = function (stage, colorIn) {
                     var i = stage.index;
@@ -3165,9 +3914,79 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
                     var value = this.generateTevOpValue(stage.alphaOp, stage.alphaBias, stage.alphaScale, stage.alphaClamp, a, b, c, d);
                     return this.generateTevRegister(stage.alphaRegId) + ".a = " + value;
                 };
+                GX_Program.prototype.generateTevTexCoordWrapN = function (texCoord, wrap) {
+                    switch (wrap) {
+                        case 0 /* OFF */: return texCoord;
+                        case 6 /* _0 */: return '0.0';
+                        case 1 /* _256 */: return "mod(" + texCoord + ", 256.0)";
+                        case 2 /* _128 */: return "mod(" + texCoord + ", 128.0)";
+                        case 3 /* _64 */: return "mod(" + texCoord + ", 64.0)";
+                        case 4 /* _32 */: return "mod(" + texCoord + ", 32.0)";
+                        case 5 /* _16 */: return "mod(" + texCoord + ", 16.0)";
+                    }
+                };
+                GX_Program.prototype.generateTevTexCoordWrap = function (stage) {
+                    var baseCoord = "ReadTexCoord" + stage.texCoordId + "()";
+                    if (stage.indTexWrapS === 0 /* OFF */ && stage.indTexWrapT === 0 /* OFF */)
+                        return baseCoord;
+                    else
+                        return "vec2(" + this.generateTevTexCoordWrapN(baseCoord + ".x", stage.indTexWrapS) + ", " + this.generateTevTexCoordWrapN(baseCoord + ".y", stage.indTexWrapT) + ")";
+                };
+                GX_Program.prototype.generateTevTexCoordIndTexCoordBias = function (stage) {
+                    var bias = (stage.indTexFormat === 0 /* _8 */) ? '-128.0' : "1.0";
+                    switch (stage.indTexBiasSel) {
+                        case 0 /* NONE */: return "";
+                        case 1 /* S */: return " + vec3(" + bias + ", 0.0, 0.0)";
+                        case 3 /* ST */: return " + vec3(" + bias + ", " + bias + ", 0.0)";
+                        case 5 /* SU */: return " + vec3(" + bias + ", 0.0, " + bias + ")";
+                        case 2 /* T */: return " + vec3(0.0, " + bias + ", 0.0)";
+                        case 6 /* TU */: return " + vec3(0.0, " + bias + ", " + bias + ")";
+                        case 4 /* U */: return " + vec3(0.0, 0.0, " + bias + ")";
+                        case 7 /* STU */: return " + vec3(" + bias + ")";
+                    }
+                };
+                GX_Program.prototype.generateTevTexCoordIndTexCoord = function (stage) {
+                    var baseCoord = "(t_IndTexCoord" + stage.indTexStage + " * 255.0)";
+                    switch (stage.indTexFormat) {
+                        case 0 /* _8 */: return baseCoord;
+                        default:
+                        case 1 /* _5 */: throw new Error("whoops");
+                    }
+                };
+                GX_Program.prototype.generateTevTexCoordIndirectMtx = function (stage) {
+                    var indTevCoord = "(" + this.generateTevTexCoordIndTexCoord(stage) + this.generateTevTexCoordIndTexCoordBias(stage) + ")";
+                    switch (stage.indTexMatrix) {
+                        case 1 /* _0 */: return "(u_IndTexMtx[0] * vec4(" + indTevCoord + ", 0.0))";
+                        case 2 /* _1 */: return "(u_IndTexMtx[1] * vec4(" + indTevCoord + ", 0.0))";
+                        case 3 /* _2 */: return "(u_IndTexMtx[2] * vec4(" + indTevCoord + ", 0.0))";
+                        default:
+                        case 0 /* OFF */: throw new Error("whoops");
+                    }
+                };
+                GX_Program.prototype.generateTevTexCoordIndirectTranslation = function (stage) {
+                    return "(" + this.generateTevTexCoordIndirectMtx(stage) + " / vec2(textureSize(u_Texture[" + stage.texCoordId + "], 0)))";
+                };
+                GX_Program.prototype.generateTevTexCoordIndirect = function (stage) {
+                    var baseCoord = this.generateTevTexCoordWrap(stage);
+                    if (stage.indTexMatrix !== 0 /* OFF */)
+                        return baseCoord + " + " + this.generateTevTexCoordIndirectTranslation(stage);
+                    else
+                        return baseCoord;
+                };
+                GX_Program.prototype.generateTevTexCoord = function (stage) {
+                    if (stage.texCoordId === 255 /* NULL */)
+                        return '';
+                    var finalCoord = this.generateTevTexCoordIndirect(stage);
+                    if (stage.indTexAddPrev) {
+                        return "t_TexCoord += " + finalCoord + ";";
+                    }
+                    else {
+                        return "t_TexCoord = " + finalCoord + ";";
+                    }
+                };
                 GX_Program.prototype.generateTevStage = function (stage) {
                     var i = stage.index;
-                    return "\n    // TEV Stage " + i + "\n    // colorIn: " + stage.colorInA + " " + stage.colorInB + " " + stage.colorInC + " " + stage.colorInD + "  colorOp: " + stage.colorOp + " colorBias: " + stage.colorBias + " colorScale: " + stage.colorScale + " colorClamp: " + stage.colorClamp + " colorRegId: " + stage.colorRegId + "\n    // alphaIn: " + stage.alphaInA + " " + stage.alphaInB + " " + stage.alphaInC + " " + stage.alphaInD + "  alphaOp: " + stage.alphaOp + " alphaBias: " + stage.alphaBias + " alphaScale: " + stage.alphaScale + " alphaClamp: " + stage.alphaClamp + " alphaRegId: " + stage.alphaRegId + "\n    // texCoordId: " + stage.texCoordId + " texMap: " + stage.texMap + " channelId: " + stage.channelId + "\n    " + this.generateColorOp(stage) + ";\n    " + this.generateAlphaOp(stage) + ";";
+                    return "\n    // TEV Stage " + i + "\n    " + this.generateTevTexCoord(stage) + "\n    // Color Combine\n    // colorIn: " + stage.colorInA + " " + stage.colorInB + " " + stage.colorInC + " " + stage.colorInD + "  colorOp: " + stage.colorOp + " colorBias: " + stage.colorBias + " colorScale: " + stage.colorScale + " colorClamp: " + stage.colorClamp + " colorRegId: " + stage.colorRegId + "\n    // alphaIn: " + stage.alphaInA + " " + stage.alphaInB + " " + stage.alphaInC + " " + stage.alphaInD + "  alphaOp: " + stage.alphaOp + " alphaBias: " + stage.alphaBias + " alphaScale: " + stage.alphaScale + " alphaClamp: " + stage.alphaClamp + " alphaRegId: " + stage.alphaRegId + "\n    // texCoordId: " + stage.texCoordId + " texMap: " + stage.texMap + " channelId: " + stage.channelId + "\n    " + this.generateColorOp(stage) + ";\n    " + this.generateAlphaOp(stage) + ";";
                 };
                 GX_Program.prototype.generateTevStages = function (tevStages) {
                     var _this = this;
@@ -3208,30 +4027,31 @@ System.register("gx/gx_material", ["render", "util"], function (exports_12, cont
                 };
                 GX_Program.prototype.generateUBO = function () {
                     var scaledVecCount = scaledVtxAttributes.length >> 2;
-                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_KonstColor[8];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    vec4 u_TextureLODBias[2];\n};\n\nfloat GetTextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureLODBias[index >> 2][index & 3]; }\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_ModelView;\n    mat4 u_PosMtx[10];\n};\n";
+                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_KonstColor[8];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    mat4x2 u_IndTexMtx[3];\n    vec4 u_TextureLODBias[2];\n};\n\nfloat GetTextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureLODBias[index >> 2][index & 3]; }\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_ModelView;\n    mat4 u_PosMtx[10];\n};\n";
                 };
                 GX_Program.prototype.generateShaders = function () {
                     var ubo = this.generateUBO();
                     this.vert = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\n" + this.generateVertAttributeDefs() + "\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];\n    vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);\n    v_Position = t_Position.xyz;\n    v_Normal = ReadAttrib_Normal();\n" + this.generateLightChannels() + "\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_Projection * u_ModelView * t_Position;\n}\n";
                     var tevStages = this.material.tevStages;
+                    var indTexStages = this.material.indTexStages;
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nfloat TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_KonstColor[4]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_KonstColor[5]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_KonstColor[6]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_KonstColor[7]; // " + this.generateColorConstant(rColors[3]) + "\n" + this.generateTevStages(tevStages) + "\n\n    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);\n    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n" + this.generateTexCoordGetters() + "\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nfloat TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_KonstColor[4]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_KonstColor[5]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_KonstColor[6]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_KonstColor[7]; // " + this.generateColorConstant(rColors[3]) + "\n\n    vec2 t_TexCoord = vec2(0.0, 0.0);\n" + this.generateIndTexStages(indTexStages) + "\n" + this.generateTevStages(tevStages) + "\n\n    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);\n    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 GX_Program.ub_SceneParams = 0;
                 GX_Program.ub_MaterialParams = 1;
                 GX_Program.ub_PacketParams = 2;
                 return GX_Program;
             }(render_2.Program));
-            exports_12("GX_Program", GX_Program);
+            exports_15("GX_Program", GX_Program);
         }
     };
 });
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
-System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "gx/gx_displaylist", "gx/gx_material"], function (exports_13, context_13) {
+System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "gx/gx_displaylist", "gx/gx_material"], function (exports_16, context_16) {
     "use strict";
-    var __moduleName = context_13 && context_13.id;
+    var __moduleName = context_16 && context_16.id;
     function readStringTable(buffer, offs) {
         var view = buffer.createDataView(offs);
         var stringCount = view.getUint16(0x00);
@@ -3239,7 +4059,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var strings = [];
         for (var i = 0; i < stringCount; i++) {
             var stringOffs = view.getUint16(tableIdx);
-            var str = util_6.readString(buffer, offs + stringOffs, 255);
+            var str = util_7.readString(buffer, offs + stringOffs, 255);
             strings.push(str);
             tableIdx += 0x04;
         }
@@ -3281,7 +4101,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     break;
             }
         }
-        util_6.assert(parentStack.length === 1);
+        util_7.assert(parentStack.length === 1);
         bmd.inf1 = { sceneGraph: parentStack.pop() };
     }
     function readVTX1Chunk(bmd, buffer, chunkStart, chunkSize) {
@@ -3368,7 +4188,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
     function readJNT1Chunk(bmd, buffer, chunkStart, chunkSize) {
         var view = buffer.createDataView(chunkStart, chunkSize);
         var boneDataCount = view.getUint16(0x08);
-        util_6.assert(view.getUint16(0x0A) === 0xFFFF);
+        util_7.assert(view.getUint16(0x0A) === 0xFFFF);
         var boneDataTableOffs = view.getUint32(0x0C);
         var remapTableOffs = view.getUint32(0x10);
         var remapTable = [];
@@ -3376,7 +4196,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
         var nameTableOffs = view.getUint32(0x14);
         var nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
-        var q = gl_matrix_3.quat.create();
+        var q = gl_matrix_4.quat.create();
         var bones = [];
         var boneDataTableIdx = boneDataTableOffs;
         for (var i = 0; i < boneDataCount; i++) {
@@ -3391,9 +4211,9 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var translationY = view.getFloat32(boneDataTableIdx + 0x1C);
             var translationZ = view.getFloat32(boneDataTableIdx + 0x20);
             // Skipping bounding box data for now.
-            gl_matrix_3.quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
-            var matrix = gl_matrix_3.mat4.create();
-            gl_matrix_3.mat4.fromRotationTranslationScale(matrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
+            gl_matrix_4.quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
+            var matrix = gl_matrix_4.mat4.create();
+            gl_matrix_4.mat4.fromRotationTranslationScale(matrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
             bones.push({ name: name_1, matrix: matrix });
             boneDataTableIdx += 0x40;
         }
@@ -3454,7 +4274,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var shapeIdx = shapeTableOffs;
         for (var i = 0; i < shapeCount; i++) {
             var displayFlags = view.getUint8(shapeIdx + 0x00);
-            util_6.assert(view.getUint8(shapeIdx + 0x01) == 0xFF);
+            util_7.assert(view.getUint8(shapeIdx + 0x01) == 0xFF);
             var packetCount = view.getUint16(shapeIdx + 0x02);
             var attribOffs = view.getUint16(shapeIdx + 0x04);
             var firstMatrix = view.getUint16(shapeIdx + 0x06);
@@ -3520,17 +4340,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
         // TODO(jstpierre): Remove these.
-        gl_matrix_3.mat4.fromTranslation(c, [centerS, centerT, centerQ]);
-        gl_matrix_3.mat4.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
-        gl_matrix_3.mat4.fromTranslation(m, [translationS, translationT, 0]);
-        gl_matrix_3.mat4.fromZRotation(t, rotation * Math.PI);
-        gl_matrix_3.mat4.mul(t, t, ci);
-        gl_matrix_3.mat4.mul(t, c, t);
-        gl_matrix_3.mat4.mul(m, m, t);
-        gl_matrix_3.mat4.fromScaling(t, [scaleS, scaleT, 1]);
-        gl_matrix_3.mat4.mul(t, t, ci);
-        gl_matrix_3.mat4.mul(t, c, t);
-        gl_matrix_3.mat4.mul(m, m, t);
+        gl_matrix_4.mat4.fromTranslation(c, [centerS, centerT, centerQ]);
+        gl_matrix_4.mat4.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
+        gl_matrix_4.mat4.fromTranslation(m, [translationS, translationT, 0]);
+        gl_matrix_4.mat4.fromScaling(t, [scaleS, scaleT, 1]);
+        gl_matrix_4.mat4.rotateZ(t, t, rotation * Math.PI);
+        gl_matrix_4.mat4.mul(t, t, ci);
+        gl_matrix_4.mat4.mul(t, c, t);
+        gl_matrix_4.mat4.mul(m, m, t);
         return m;
     }
     function readColor32(view, srcOffs) {
@@ -3557,6 +4374,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var maxIndex = Math.max.apply(null, remapTable);
         var nameTableOffs = view.getUint32(0x14);
         var nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
+        var indirectTableOffset = view.getUint32(0x18);
         var cullModeTableOffs = view.getUint32(0x1C);
         var materialColorTableOffs = view.getUint32(0x20);
         var colorChanCountTableOffs = view.getUint32(0x24);
@@ -3611,12 +4429,12 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 var type = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x00);
                 var source = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
                 var matrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
-                util_6.assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
+                util_7.assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
                 var postMatrix = 125 /* PTIDENTITY */;
                 var postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
                 if (postTexGenTableOffs > 0 && postTexGenIndex >= 0) {
                     postMatrix = view.getUint8(postTexGenTableOffs + texGenIndex * 0x04 + 0x02);
-                    util_6.assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
+                    util_7.assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
                 }
                 var normalize = false;
                 var texGen = { index: index_1, type: type, source: source, matrix: matrix, normalize: normalize, postMatrix: postMatrix };
@@ -3663,13 +4481,46 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 }
                 textureIndexTableIdx += 0x02;
             }
+            var indirectEntryOffs = indirectTableOffset + i * 0x138;
+            var indirectStageCount = view.getUint8(indirectEntryOffs + 0x00);
+            util_7.assert(indirectStageCount <= 4);
+            var indTexStages = [];
+            for (var j = 0; j < indirectStageCount; j++) {
+                var index_2 = j;
+                // SetIndTexOrder
+                var indTexOrderOffs = indirectEntryOffs + 0x04 + j * 0x04;
+                var texCoordId = view.getUint8(indTexOrderOffs + 0x00);
+                var texture = view.getUint8(indTexOrderOffs + 0x01);
+                // SetIndTexCoordScale
+                var indTexScaleOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + j * 0x04;
+                var scaleS = view.getUint8(indTexScaleOffs + 0x00);
+                var scaleT = view.getUint8(indTexScaleOffs + 0x01);
+                indTexStages.push({ index: index_2, texCoordId: texCoordId, texture: texture, scaleS: scaleS, scaleT: scaleT });
+            }
+            // SetIndTexMatrix
+            var indTexMatrices = [];
+            for (var j = 0; j < 3; j++) {
+                var indTexMatrixOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + j * 0x1C;
+                var p00 = view.getFloat32(indTexMatrixOffs + 0x00);
+                var p01 = view.getFloat32(indTexMatrixOffs + 0x04);
+                var p02 = view.getFloat32(indTexMatrixOffs + 0x08);
+                var p10 = view.getFloat32(indTexMatrixOffs + 0x0C);
+                var p11 = view.getFloat32(indTexMatrixOffs + 0x10);
+                var p12 = view.getFloat32(indTexMatrixOffs + 0x14);
+                var scale = Math.pow(2, view.getInt8(indTexMatrixOffs + 0x18));
+                var m = new Float32Array([
+                    p00 * scale, p01 * scale, p02 * scale,
+                    p10 * scale, p11 * scale, p12 * scale,
+                ]);
+                indTexMatrices.push(m);
+            }
             var tevStages = [];
             for (var j = 0; j < 16; j++) {
                 // TevStage
                 var tevStageIndex = view.getInt16(materialEntryIdx + 0xE4 + j * 0x02);
                 if (tevStageIndex < 0)
                     continue;
-                var index_2 = j;
+                var index_3 = j;
                 var tevStageOffs = tevStageTableOffs + tevStageIndex * 0x14;
                 // const unknown0 = view.getUint8(tevStageOffs + 0x00);
                 var colorInA = view.getUint8(tevStageOffs + 0x01);
@@ -3697,16 +4548,36 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 var texCoordId = view.getUint8(tevOrderOffs + 0x00);
                 var texMap = view.getUint8(tevOrderOffs + 0x01);
                 var channelId = view.getUint8(tevOrderOffs + 0x02);
-                util_6.assert(view.getUint8(tevOrderOffs + 0x03) === 0xFF);
+                util_7.assert(view.getUint8(tevOrderOffs + 0x03) === 0xFF);
                 // KonstSel
                 var konstColorSel = view.getUint8(materialEntryIdx + 0x9C + j);
                 var konstAlphaSel = view.getUint8(materialEntryIdx + 0xAC + j);
+                // SetTevIndirect
+                var indTexStageOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + (0x04 * 4) + j * 0x0C;
+                var indTexStage = view.getUint8(indTexStageOffs + 0x00);
+                var indTexFormat = view.getUint8(indTexStageOffs + 0x01);
+                var indTexBiasSel = view.getUint8(indTexStageOffs + 0x02);
+                var indTexMatrix = view.getUint8(indTexStageOffs + 0x03);
+                util_7.assert(indTexMatrix <= 11 /* T2 */);
+                var indTexWrapS = view.getUint8(indTexStageOffs + 0x04);
+                var indTexWrapT = view.getUint8(indTexStageOffs + 0x05);
+                var indTexAddPrev = !!view.getUint8(indTexStageOffs + 0x06);
+                var indTexUseOrigLOD = !!view.getUint8(indTexStageOffs + 0x07);
+                // bumpAlpha
                 var tevStage = {
-                    index: index_2,
+                    index: index_3,
                     colorInA: colorInA, colorInB: colorInB, colorInC: colorInC, colorInD: colorInD, colorOp: colorOp, colorBias: colorBias, colorScale: colorScale, colorClamp: colorClamp, colorRegId: colorRegId,
                     alphaInA: alphaInA, alphaInB: alphaInB, alphaInC: alphaInC, alphaInD: alphaInD, alphaOp: alphaOp, alphaBias: alphaBias, alphaScale: alphaScale, alphaClamp: alphaClamp, alphaRegId: alphaRegId,
                     texCoordId: texCoordId, texMap: texMap, channelId: channelId,
                     konstColorSel: konstColorSel, konstAlphaSel: konstAlphaSel,
+                    indTexStage: indTexStage,
+                    indTexFormat: indTexFormat,
+                    indTexBiasSel: indTexBiasSel,
+                    indTexMatrix: indTexMatrix,
+                    indTexWrapS: indTexWrapS,
+                    indTexWrapT: indTexWrapT,
+                    indTexAddPrev: indTexAddPrev,
+                    indTexUseOrigLOD: indTexUseOrigLOD,
                 };
                 tevStages.push(tevStage);
             }
@@ -3742,6 +4613,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 colorRegisters: colorRegisters,
                 colorConstants: colorConstants,
                 tevStages: tevStages,
+                indTexStages: indTexStages,
                 alphaTest: alphaTest,
                 ropInfo: ropInfo,
             };
@@ -3753,6 +4625,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 postTexMatrices: postTexMatrices,
                 gxMaterial: gxMaterial,
                 colorMatRegs: colorMatRegs,
+                indTexMatrices: indTexMatrices,
             });
             materialEntryIdx += 0x014C;
         }
@@ -3760,7 +4633,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         function readColorChannel(tableOffs, colorChanIndex) {
             var colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
             var lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
-            util_6.assert(view.getUint8(colorChanOffs + 0x00) < 2);
+            util_7.assert(view.getUint8(colorChanOffs + 0x00) < 2);
             var matColorSource = view.getUint8(colorChanOffs + 0x01);
             var litMask = view.getUint8(colorChanOffs + 0x02);
             var diffuseFunction = view.getUint8(colorChanOffs + 0x03);
@@ -3775,14 +4648,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var texMtxOffs = tableOffs + texMtxIndex * 0x64;
             var projection = view.getUint8(texMtxOffs + 0x00);
             var type = view.getUint8(texMtxOffs + 0x01);
-            util_6.assert(view.getUint16(texMtxOffs + 0x02) === 0xFFFF);
+            util_7.assert(view.getUint16(texMtxOffs + 0x02) === 0xFFFF);
             var centerS = view.getFloat32(texMtxOffs + 0x04);
             var centerT = view.getFloat32(texMtxOffs + 0x08);
             var centerQ = view.getFloat32(texMtxOffs + 0x0C);
             var scaleS = view.getFloat32(texMtxOffs + 0x10);
             var scaleT = view.getFloat32(texMtxOffs + 0x14);
             var rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
-            util_6.assert(view.getUint16(texMtxOffs + 0x1A) === 0xFFFF);
+            util_7.assert(view.getUint16(texMtxOffs + 0x1A) === 0xFFFF);
             var translationS = view.getFloat32(texMtxOffs + 0x1C);
             var translationT = view.getFloat32(texMtxOffs + 0x20);
             // A second matrix?
@@ -3802,28 +4675,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var p31 = view.getFloat32(texMtxOffs + 0x58);
             var p32 = view.getFloat32(texMtxOffs + 0x5C);
             var p33 = view.getFloat32(texMtxOffs + 0x60);
-            var p = gl_matrix_3.mat4.fromValues(p00, p10, p20, p30, p01, p11, p21, p31, p02, p12, p22, p32, p03, p13, p23, p33);
-            var matrix = gl_matrix_3.mat4.create();
+            var projectionMatrix = gl_matrix_4.mat4.fromValues(p00, p10, p20, p30, p01, p11, p21, p31, p02, p12, p22, p32, p03, p13, p23, p33);
+            var matrix = gl_matrix_4.mat4.create();
             createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-            switch (type) {
-                case 0x00:
-                case 0x01: // Defino Plaza
-                case 0x0B: // Luigi Circuit
-                    break;
-                case 0x06: // Rainbow Road
-                    gl_matrix_3.mat4.mul(matrix, matrix, gl_matrix_3.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0, 1));
-                case 0x07: // Rainbow Road
-                    gl_matrix_3.mat4.mul(matrix, matrix, gl_matrix_3.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 1));
-                    break;
-                case 0x08: // Peach Beach
-                case 0x09: // Rainbow Road
-                    gl_matrix_3.mat4.mul(matrix, matrix, p);
-                    gl_matrix_3.mat4.mul(matrix, matrix, gl_matrix_3.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 1));
-                    break;
-                default:
-                    throw "whoops";
-            }
-            var texMtx = { type: type, projection: projection, matrix: matrix };
+            var texMtx = { type: type, projection: projection, projectionMatrix: projectionMatrix, matrix: matrix };
             return texMtx;
         }
     }
@@ -3844,7 +4699,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var mipCount = view.getUint8(0x18);
         var lodBias = view.getInt16(0x1A) * 1 / 100;
         var dataOffs = view.getUint32(0x1C);
-        util_6.assert(minLOD === 0);
+        util_7.assert(minLOD === 0);
         var data = null;
         if (dataOffs !== 0)
             data = buffer.slice(dataOffs);
@@ -3915,7 +4770,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var sTableOffs = chunkStart + view.getUint32(0x28);
         var rTableOffs = chunkStart + view.getUint32(0x2C);
         var tTableOffs = chunkStart + view.getUint32(0x30);
-        var rotationScale = Math.pow(2, rotationDecimal);
+        var rotationScale = Math.pow(2, rotationDecimal) / 32767;
         function convertRotationTable(table) {
             var v = new Float32Array(table.length);
             for (var i = 0; i < table.length; i++)
@@ -4026,11 +4881,11 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var t = (frame - k0.time) / (k1.time - k0.time);
         return hermiteInterpolate(k0, k1, t);
     }
-    var gl_matrix_3, ArrayBufferSlice_5, endian_1, util_6, gx_displaylist_1, GX_Material, HierarchyType, t, c, ci, BMD, BTK, BMT, BTI;
+    var gl_matrix_4, ArrayBufferSlice_5, endian_1, util_7, gx_displaylist_1, GX_Material, HierarchyType, t, c, ci, BMD, BTK, BMT, BTI;
     return {
         setters: [
-            function (gl_matrix_3_1) {
-                gl_matrix_3 = gl_matrix_3_1;
+            function (gl_matrix_4_1) {
+                gl_matrix_4 = gl_matrix_4_1;
             },
             function (ArrayBufferSlice_5_1) {
                 ArrayBufferSlice_5 = ArrayBufferSlice_5_1;
@@ -4038,8 +4893,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             function (endian_1_1) {
                 endian_1 = endian_1_1;
             },
-            function (util_6_1) {
-                util_6 = util_6_1;
+            function (util_7_1) {
+                util_7 = util_7_1;
             },
             function (gx_displaylist_1_1) {
                 gx_displaylist_1 = gx_displaylist_1_1;
@@ -4057,17 +4912,17 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 HierarchyType[HierarchyType["Material"] = 17] = "Material";
                 HierarchyType[HierarchyType["Shape"] = 18] = "Shape";
             })(HierarchyType || (HierarchyType = {}));
-            exports_13("HierarchyType", HierarchyType);
+            exports_16("HierarchyType", HierarchyType);
             // temp, center, center inverse
-            t = gl_matrix_3.mat4.create(), c = gl_matrix_3.mat4.create(), ci = gl_matrix_3.mat4.create();
+            t = gl_matrix_4.mat4.create(), c = gl_matrix_4.mat4.create(), ci = gl_matrix_4.mat4.create();
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
                 BMD.parse = function (buffer) {
                     var bmd = new BMD();
                     var view = buffer.createDataView();
-                    var magic = util_6.readString(buffer, 0, 8);
-                    util_6.assert(magic === 'J3D2bmd3' || magic === 'J3D2bdl4');
+                    var magic = util_7.readString(buffer, 0, 8);
+                    util_7.assert(magic === 'J3D2bmd3' || magic === 'J3D2bdl4');
                     var size = view.getUint32(0x08);
                     var numChunks = view.getUint32(0x0C);
                     var offs = 0x20;
@@ -4084,7 +4939,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     };
                     for (var i = 0; i < numChunks; i++) {
                         var chunkStart = offs;
-                        var chunkId = util_6.readString(buffer, chunkStart + 0x00, 4);
+                        var chunkId = util_7.readString(buffer, chunkStart + 0x00, 4);
                         var chunkSize = view.getUint32(chunkStart + 0x04);
                         var parseFunc = parseFuncs[chunkId];
                         if (parseFunc === undefined)
@@ -4097,15 +4952,15 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BMD;
             }());
-            exports_13("BMD", BMD);
+            exports_16("BMD", BMD);
             BTK = /** @class */ (function () {
                 function BTK() {
                 }
                 BTK.parse = function (buffer) {
                     var btk = new BTK();
                     var view = buffer.createDataView();
-                    var magic = util_6.readString(buffer, 0, 8);
-                    util_6.assert(magic === 'J3D1btk1');
+                    var magic = util_7.readString(buffer, 0, 8);
+                    util_7.assert(magic === 'J3D1btk1');
                     var size = view.getUint32(0x08);
                     var numChunks = view.getUint32(0x0C);
                     var offs = 0x20;
@@ -4114,7 +4969,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     };
                     for (var i = 0; i < numChunks; i++) {
                         var chunkStart = offs;
-                        var chunkId = util_6.readString(buffer, chunkStart + 0x00, 4);
+                        var chunkId = util_7.readString(buffer, chunkStart + 0x00, 4);
                         var chunkSize = view.getUint32(chunkStart + 0x04);
                         var parseFunc = parseFuncs[chunkId];
                         if (parseFunc === undefined)
@@ -4140,7 +4995,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     var centerQ = animationEntry.centerQ;
                     var scaleS = sampleAnimationData(animationEntry.s.scale, animFrame);
                     var scaleT = sampleAnimationData(animationEntry.t.scale, animFrame);
-                    var rotation = sampleAnimationData(animationEntry.s.rotation, animFrame);
+                    var rotation = sampleAnimationData(animationEntry.q.rotation, animFrame);
                     var translationS = sampleAnimationData(animationEntry.s.translation, animFrame);
                     var translationT = sampleAnimationData(animationEntry.t.translation, animFrame);
                     createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
@@ -4148,15 +5003,15 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BTK;
             }());
-            exports_13("BTK", BTK);
+            exports_16("BTK", BTK);
             BMT = /** @class */ (function () {
                 function BMT() {
                 }
                 BMT.parse = function (buffer) {
                     var bmt = new BMT();
                     var view = buffer.createDataView();
-                    var magic = util_6.readString(buffer, 0, 8);
-                    util_6.assert(magic === 'J3D2bmt3');
+                    var magic = util_7.readString(buffer, 0, 8);
+                    util_7.assert(magic === 'J3D2bmt3');
                     var size = view.getUint32(0x08);
                     var numChunks = view.getUint32(0x0C);
                     var offs = 0x20;
@@ -4167,7 +5022,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     };
                     for (var i = 0; i < numChunks; i++) {
                         var chunkStart = offs;
-                        var chunkId = util_6.readString(buffer, chunkStart + 0x00, 4);
+                        var chunkId = util_7.readString(buffer, chunkStart + 0x00, 4);
                         var chunkSize = view.getUint32(chunkStart + 0x04);
                         var parseFunc = parseFuncs[chunkId];
                         if (parseFunc === undefined)
@@ -4180,7 +5035,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BMT;
             }());
-            exports_13("BMT", BMT);
+            exports_16("BMT", BMT);
             BTI = /** @class */ (function () {
                 function BTI() {
                 }
@@ -4192,17 +5047,17 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BTI;
             }());
-            exports_13("BTI", BTI);
+            exports_16("BTI", BTI);
         }
     };
 });
 // Nintendo RARC file format.
-System.register("j3d/rarc", ["util"], function (exports_14, context_14) {
+System.register("j3d/rarc", ["util"], function (exports_17, context_17) {
     "use strict";
-    var __moduleName = context_14 && context_14.id;
+    var __moduleName = context_17 && context_17.id;
     function parse(buffer) {
         var view = buffer.createDataView();
-        util_7.assert(util_7.readString(buffer, 0x00, 0x04) === 'RARC');
+        util_8.assert(util_8.readString(buffer, 0x00, 0x04) === 'RARC');
         var size = view.getUint32(0x04);
         var dataOffs = view.getUint32(0x0C) + 0x20;
         var dirCount = view.getUint32(0x20);
@@ -4214,9 +5069,9 @@ System.register("j3d/rarc", ["util"], function (exports_14, context_14) {
         var dirEntries = [];
         var allFiles = [];
         for (var i = 0; i < dirCount; i++) {
-            var type = util_7.readString(buffer, dirTableIdx + 0x00, 0x04, false);
+            var type = util_8.readString(buffer, dirTableIdx + 0x00, 0x04, false);
             var nameOffs = view.getUint32(dirTableIdx + 0x04);
-            var name_4 = util_7.readString(buffer, strTableOffs + nameOffs, -1, true);
+            var name_4 = util_8.readString(buffer, strTableOffs + nameOffs, -1, true);
             var nameHash = view.getUint16(dirTableIdx + 0x08);
             var fileEntryCount_1 = view.getUint16(dirTableIdx + 0x0A);
             var fileEntryFirstIndex = view.getUint32(dirTableIdx + 0x0C);
@@ -4229,7 +5084,7 @@ System.register("j3d/rarc", ["util"], function (exports_14, context_14) {
                 var nameHash_1 = view.getUint16(fileEntryIdx + 0x02);
                 var flags = view.getUint8(fileEntryIdx + 0x04);
                 var nameOffs_1 = view.getUint16(fileEntryIdx + 0x06);
-                var name_5 = util_7.readString(buffer, strTableOffs + nameOffs_1, -1, true);
+                var name_5 = util_8.readString(buffer, strTableOffs + nameOffs_1, -1, true);
                 var entryDataOffs = view.getUint32(fileEntryIdx + 0x08);
                 var entryDataSize = view.getUint32(fileEntryIdx + 0x0C);
                 fileEntryIdx += 0x14;
@@ -4263,18 +5118,18 @@ System.register("j3d/rarc", ["util"], function (exports_14, context_14) {
             return dir;
         }
         var root = translateDirEntry(0);
-        util_7.assert(root.type === 'ROOT');
+        util_8.assert(root.type === 'ROOT');
         var rarc = new RARC();
         rarc.files = allFiles;
         rarc.root = root;
         return rarc;
     }
-    exports_14("parse", parse);
-    var util_7, RARC;
+    exports_17("parse", parse);
+    var util_8, RARC;
     return {
         setters: [
-            function (util_7_1) {
-                util_7 = util_7_1;
+            function (util_8_1) {
+                util_8 = util_8_1;
             }
         ],
         execute: function () {
@@ -4319,14 +5174,14 @@ System.register("j3d/rarc", ["util"], function (exports_14, context_14) {
                 };
                 return RARC;
             }());
-            exports_14("RARC", RARC);
+            exports_17("RARC", RARC);
         }
     };
 });
 // GX texture decoding
-System.register("gx/gx_texture", [], function (exports_15, context_15) {
+System.register("gx/gx_texture", [], function (exports_18, context_18) {
     "use strict";
-    var __moduleName = context_15 && context_15.id;
+    var __moduleName = context_18 && context_18.id;
     function expand3to8(n) {
         return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
     }
@@ -4360,7 +5215,7 @@ System.register("gx/gx_texture", [], function (exports_15, context_15) {
         // All palette-formats are 16-bit.
         return paletteSize * 2;
     }
-    exports_15("calcPaletteSize", calcPaletteSize);
+    exports_18("calcPaletteSize", calcPaletteSize);
     function calcTextureSize(format, width, height) {
         var numPixels = width * height;
         switch (format) {
@@ -4388,7 +5243,7 @@ System.register("gx/gx_texture", [], function (exports_15, context_15) {
                 throw new Error("whoops");
         }
     }
-    exports_15("calcTextureSize", calcTextureSize);
+    exports_18("calcTextureSize", calcTextureSize);
     function calcFullTextureSize(format, width, height, mipCount) {
         var textureSize = 0;
         while (mipCount--) {
@@ -4398,7 +5253,7 @@ System.register("gx/gx_texture", [], function (exports_15, context_15) {
         }
         return textureSize;
     }
-    exports_15("calcFullTextureSize", calcFullTextureSize);
+    exports_18("calcFullTextureSize", calcFullTextureSize);
     // GX's CMPR format is S3TC but using GX's tiled addressing.
     function decode_CMPR_to_S3TC(texture) {
         // CMPR goes in 2x2 "macro-blocks" of four S3TC normal blocks.
@@ -4663,16 +5518,16 @@ System.register("gx/gx_texture", [], function (exports_15, context_15) {
                 return decode_Dummy(texture);
         }
     }
-    exports_15("decodeTexture", decodeTexture);
+    exports_18("decodeTexture", decodeTexture);
     return {
         setters: [],
         execute: function () {
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "render"], function (exports_16, context_16) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "render"], function (exports_19, context_19) {
     "use strict";
-    var __moduleName = context_16 && context_16.id;
+    var __moduleName = context_19 && context_19.id;
     function translateCompType(gl, compType) {
         switch (compType) {
             case 4 /* F32 */:
@@ -4691,11 +5546,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 throw new Error("Unknown CompType " + compType);
         }
     }
-    var gl_matrix_4, j3d_1, GX_Material, GX_Texture, render_3, packetParamsData, modelViewScratch, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, Scene;
+    var gl_matrix_5, j3d_1, GX_Material, GX_Texture, render_3, packetParamsData, modelViewScratch, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, Scene;
     return {
         setters: [
-            function (gl_matrix_4_1) {
-                gl_matrix_4 = gl_matrix_4_1;
+            function (gl_matrix_5_1) {
+                gl_matrix_5 = gl_matrix_5_1;
             },
             function (j3d_1_1) {
                 j3d_1 = j3d_1_1;
@@ -4712,7 +5567,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
         ],
         execute: function () {
             packetParamsData = new Float32Array(11 * 16);
-            modelViewScratch = gl_matrix_4.mat4.create();
+            modelViewScratch = gl_matrix_5.mat4.create();
             Command_Shape = /** @class */ (function () {
                 function Command_Shape(gl, scene, shape, coalescedBuffers, jointMatrices) {
                     this.scene = scene;
@@ -4752,7 +5607,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     var e_18, _d;
                 }
                 Command_Shape.prototype.computeModelView = function (modelView, state) {
-                    gl_matrix_4.mat4.copy(modelView, state.view);
+                    gl_matrix_5.mat4.copy(modelView, state.view);
                     if (this.scene.isSkybox) {
                         modelView[12] = 0;
                         modelView[13] = 0;
@@ -4769,12 +5624,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             var tx = modelView[12];
                             var ty = modelView[13];
                             var tz = modelView[14];
-                            gl_matrix_4.mat4.fromTranslation(modelView, [tx, ty, tz]);
+                            gl_matrix_5.mat4.fromTranslation(modelView, [tx, ty, tz]);
                             break;
                         default:
                             throw new Error("whoops");
                     }
-                    gl_matrix_4.mat4.mul(modelView, modelView, this.scene.modelMatrix);
+                    gl_matrix_5.mat4.mul(modelView, modelView, this.scene.modelMatrix);
                 };
                 Command_Shape.prototype.exec = function (state) {
                     var _this = this;
@@ -4817,7 +5672,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 return Command_Shape;
             }());
-            materialParamsData = new Float32Array(4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 8);
+            materialParamsData = new Float32Array(4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 8);
             Command_Material = /** @class */ (function () {
                 function Command_Material(gl, scene, material) {
                     this.visible = true;
@@ -4882,15 +5737,44 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         var texMtx = this.material.texMatrices[i];
                         if (texMtx === null)
                             continue;
-                        var finalMatrix = void 0;
+                        var finalMatrix = matrixScratch;
                         if (this.btk && this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, this.scene.getTimeInFrames(state.time))) {
-                            finalMatrix = matrixScratch;
-                            // Multiply in the material matrix if we want that.
-                            if (this.scene.useMaterialTexMtx)
-                                gl_matrix_4.mat4.mul(matrixScratch, matrixScratch, texMtx.matrix);
+                            ;
                         }
                         else {
-                            finalMatrix = texMtx.matrix;
+                            gl_matrix_5.mat4.copy(finalMatrix, texMtx.matrix);
+                        }
+                        switch (texMtx.type) {
+                            case 0x00: // Normal. Does nothing.
+                                break;
+                            case 0x01: // Defino Plaza
+                            case 0x0B: // Luigi Circuit
+                                break;
+                            case 0x06: // Rainbow Road
+                                gl_matrix_5.mat4.mul(finalMatrix, finalMatrix, gl_matrix_5.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 1, 0));
+                                gl_matrix_5.mat4.mul(finalMatrix, finalMatrix, state.view);
+                                finalMatrix[12] = 0;
+                                finalMatrix[13] = 0;
+                                finalMatrix[14] = 0;
+                                break;
+                            case 0x07: // Rainbow Road
+                                gl_matrix_5.mat4.mul(finalMatrix, finalMatrix, gl_matrix_5.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 0));
+                                gl_matrix_5.mat4.mul(finalMatrix, finalMatrix, state.view);
+                                finalMatrix[12] = 0;
+                                finalMatrix[13] = 0;
+                                finalMatrix[14] = 0;
+                                break;
+                            case 0x08: // Peach Beach
+                                gl_matrix_5.mat4.mul(finalMatrix, finalMatrix, gl_matrix_5.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 0));
+                                gl_matrix_5.mat4.mul(finalMatrix, finalMatrix, texMtx.projectionMatrix);
+                                break;
+                            case 0x09: // Rainbow Road
+                                gl_matrix_5.mat4.mul(finalMatrix, finalMatrix, gl_matrix_5.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 0));
+                                gl_matrix_5.mat4.mul(finalMatrix, finalMatrix, texMtx.projectionMatrix);
+                                gl_matrix_5.mat4.mul(finalMatrix, finalMatrix, state.view);
+                                break;
+                            default:
+                                throw "whoops";
                         }
                         // We bind texture matrices as row-major for memory usage purposes.
                         materialParamsData[offs + i * 12 + 0] = finalMatrix[0];
@@ -4926,6 +5810,21 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         materialParamsData[offs + i * 12 + 11] = 0;
                     }
                     offs += 4 * 3 * 20;
+                    for (var i = 0; i < this.material.indTexMatrices.length; i++) {
+                        var indTexMtx = this.material.indTexMatrices[i];
+                        if (indTexMtx === null)
+                            continue;
+                        var finalMatrix = indTexMtx;
+                        materialParamsData[offs + i * 8 + 0] = finalMatrix[0];
+                        materialParamsData[offs + i * 8 + 1] = finalMatrix[1];
+                        materialParamsData[offs + i * 8 + 2] = finalMatrix[2];
+                        materialParamsData[offs + i * 8 + 3] = 0;
+                        materialParamsData[offs + i * 8 + 4] = finalMatrix[3];
+                        materialParamsData[offs + i * 8 + 5] = finalMatrix[4];
+                        materialParamsData[offs + i * 8 + 6] = finalMatrix[5];
+                        materialParamsData[offs + i * 8 + 7] = 0;
+                    }
+                    offs += 4 * 2 * 3;
                     // Bind textures.
                     var textureScratch = Command_Material.textureScratch;
                     for (var i = 0; i < this.material.textureIndexes.length; i++) {
@@ -4952,11 +5851,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.program.destroy(gl);
                     gl.deleteBuffer(this.materialParamsBuffer);
                 };
-                Command_Material.matrixScratch = gl_matrix_4.mat4.create();
+                Command_Material.matrixScratch = gl_matrix_5.mat4.create();
                 Command_Material.textureScratch = new Int32Array(8);
                 return Command_Material;
             }());
-            exports_16("Command_Material", Command_Material);
+            exports_19("Command_Material", Command_Material);
             (function (ColorOverride) {
                 ColorOverride[ColorOverride["K0"] = 0] = "K0";
                 ColorOverride[ColorOverride["K1"] = 1] = "K1";
@@ -4967,7 +5866,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 ColorOverride[ColorOverride["C2"] = 6] = "C2";
                 ColorOverride[ColorOverride["C3"] = 7] = "C3";
             })(ColorOverride || (ColorOverride = {}));
-            exports_16("ColorOverride", ColorOverride);
+            exports_19("ColorOverride", ColorOverride);
             sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4);
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, btk, bmt, extraTextures) {
@@ -4979,13 +5878,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.name = '';
                     this.visible = true;
                     this.isSkybox = false;
-                    this.useMaterialTexMtx = true;
                     this.fps = 30;
                     this.colorOverrides = [];
                     this.alphaOverrides = [];
                     this.translateModel(gl);
                     this.sceneParamsBuffer = gl.createBuffer();
-                    this.modelMatrix = gl_matrix_4.mat4.create();
+                    this.modelMatrix = gl_matrix_5.mat4.create();
                     // TODO(jstpierre): Support weighted joints.
                     if (this.bmd.drw1.isAnyWeighted)
                         this.visible = false;
@@ -5009,12 +5907,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 Scene.prototype.setFPS = function (v) {
                     this.fps = v;
-                };
-                Scene.prototype.setUseMaterialTexMtx = function (v) {
-                    // Wind Waker's BTK animations seem to override the existing baked-in TexMtx.
-                    // Super Mario Galaxy seems to stack them. I couldn't find any flag behavior for this,
-                    // implying it's probably an engine change rather than separate BMD behavior.
-                    this.useMaterialTexMtx = v;
                 };
                 Scene.prototype.getTimeInFrames = function (milliseconds) {
                     return (milliseconds / 1000) * this.fps;
@@ -5226,7 +6118,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     // Iterate through scene graph.
                     var context = {
                         commandList: null,
-                        parentJointMatrix: gl_matrix_4.mat4.create(),
+                        parentJointMatrix: gl_matrix_5.mat4.create(),
                     };
                     this.translateSceneGraph(this.bmd.inf1.sceneGraph, context);
                 };
@@ -5241,8 +6133,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             break;
                         case j3d_1.HierarchyType.Joint:
                             var boneMatrix = jnt1.bones[jnt1.remapTable[node.jointIdx]].matrix;
-                            var jointMatrix = gl_matrix_4.mat4.create();
-                            gl_matrix_4.mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
+                            var jointMatrix = gl_matrix_5.mat4.create();
+                            gl_matrix_5.mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
                             this.jointMatrices[node.jointIdx] = jointMatrix;
                             parentJointMatrix = jointMatrix;
                             break;
@@ -5271,13 +6163,13 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 return Scene;
             }());
-            exports_16("Scene", Scene);
+            exports_19("Scene", Scene);
         }
     };
 });
-System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_17, context_17) {
+System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_20, context_20) {
     "use strict";
-    var __moduleName = context_17 && context_17.id;
+    var __moduleName = context_20 && context_20.id;
     function hackMaterials2(scene) {
         try {
             for (var _a = __values(scene.materialCommands), _b = _a.next(); !_b.done; _b = _a.next()) {
@@ -5328,14 +6220,14 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
         });
         return scenes.filter(function (s) { return !!s; });
     }
-    var Progressable_2, util_8, Yaz0, j3d_2, RARC, render_4, TwilightPrincessScene, TwilightPrincessSceneDesc, id, name, sceneDescs, sceneGroup;
+    var Progressable_2, util_9, Yaz0, j3d_2, RARC, render_4, TwilightPrincessScene, TwilightPrincessSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (Progressable_2_1) {
                 Progressable_2 = Progressable_2_1;
             },
-            function (util_8_1) {
-                util_8 = util_8_1;
+            function (util_9_1) {
+                util_9 = util_9_1;
             },
             function (Yaz0_1) {
                 Yaz0 = Yaz0_1;
@@ -5440,7 +6332,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
                         line.style.textAlign = 'right';
                         line.style.overflow = 'hidden';
                         var checkbox = document.createElement('input');
-                        checkbox.id = util_8.generateFormID();
+                        checkbox.id = util_9.generateFormID();
                         checkbox.type = 'checkbox';
                         checkbox.checked = true;
                         checkbox.onchange = function () {
@@ -5485,7 +6377,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
                     var _this = this;
                     var basePath = "data/j3d/ztp/" + this.folder;
                     var paths = __spread(["STG_00.arc"], this.roomPaths).map(function (path) { return basePath + "/" + path; });
-                    return Progressable_2.default.all(paths.map(function (path) { return util_8.fetch(path); })).then(function (buffers) {
+                    return Progressable_2.default.all(paths.map(function (path) { return util_9.fetch(path); })).then(function (buffers) {
                         var stageBuffer = Yaz0.decompress(buffers.shift());
                         var stageRarc = RARC.parse(stageBuffer);
                         var texcFolder = stageRarc.findDir("texc");
@@ -5532,20 +6424,20 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
                 new TwilightPrincessSceneDesc("Palace of Twilight", "D_MN08", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R04_00.arc", "R05_00.arc", "R07_00.arc", "R08_00.arc", "R09_00.arc", "R10_00.arc", "R11_00.arc"]),
                 new TwilightPrincessSceneDesc("Hyrule Castle", "D_MN09", ["R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R08_00.arc", "R09_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R15_00.arc", "R01_00.arc", "R02_00.arc"]),
             ];
-            exports_17("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_20("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_18, context_18) {
+System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_21, context_21) {
     "use strict";
-    var __moduleName = context_18 && context_18.id;
+    var __moduleName = context_21 && context_21.id;
     function createScene(gl, bmdFile, btkFile, bmtFile) {
         var bmd = j3d_3.BMD.parse(bmdFile.buffer);
         var btk = btkFile ? j3d_3.BTK.parse(btkFile.buffer) : null;
         var bmt = bmtFile ? j3d_3.BMT.parse(bmtFile.buffer) : null;
         return new render_5.Scene(gl, bmd, btk, bmt);
     }
-    exports_18("createScene", createScene);
+    exports_21("createScene", createScene);
     function boolSort(a, b) {
         if (a && !b)
             return -1;
@@ -5555,9 +6447,9 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
             return 0;
     }
     function createScenesFromBuffer(gl, buffer) {
-        if (util_9.readString(buffer, 0, 4) === 'Yaz0')
+        if (util_10.readString(buffer, 0, 4) === 'Yaz0')
             buffer = Yaz0.decompress(buffer);
-        if (util_9.readString(buffer, 0, 4) === 'RARC') {
+        if (util_10.readString(buffer, 0, 4) === 'RARC') {
             var rarc_1 = RARC.parse(buffer);
             var bmdFiles = rarc_1.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
             var scenes = bmdFiles.map(function (bmdFile) {
@@ -5577,22 +6469,22 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
             });
             return scenes;
         }
-        if (['J3D2bmd3', 'J3D2bdl4'].includes(util_9.readString(buffer, 0, 8))) {
+        if (['J3D2bmd3', 'J3D2bdl4'].includes(util_10.readString(buffer, 0, 8))) {
             var bmd = j3d_3.BMD.parse(buffer);
             return [new render_5.Scene(gl, bmd, null, null)];
         }
         return null;
     }
-    exports_18("createScenesFromBuffer", createScenesFromBuffer);
+    exports_21("createScenesFromBuffer", createScenesFromBuffer);
     function createMultiSceneFromBuffer(gl, buffer) {
         return new MultiScene(createScenesFromBuffer(gl, buffer));
     }
-    exports_18("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
-    var util_9, Yaz0, j3d_3, RARC, render_5, MultiScene;
+    exports_21("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
+    var util_10, Yaz0, j3d_3, RARC, render_5, MultiScene;
     return {
         setters: [
-            function (util_9_1) {
-                util_9 = util_9_1;
+            function (util_10_1) {
+                util_10 = util_10_1;
             },
             function (Yaz0_2) {
                 Yaz0 = Yaz0_2;
@@ -5640,21 +6532,21 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                 };
                 return MultiScene;
             }());
-            exports_18("MultiScene", MultiScene);
+            exports_21("MultiScene", MultiScene);
         }
     };
 });
-System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_19, context_19) {
+System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_22, context_22) {
     "use strict";
-    var __moduleName = context_19 && context_19.id;
-    var scenes_1, util_10, id, name, MKDDSceneDesc, sceneDescs, sceneGroup;
+    var __moduleName = context_22 && context_22.id;
+    var scenes_1, util_11, id, name, MKDDSceneDesc, sceneDescs, sceneGroup;
     return {
         setters: [
             function (scenes_1_1) {
                 scenes_1 = scenes_1_1;
             },
-            function (util_10_1) {
-                util_10 = util_10_1;
+            function (util_11_1) {
+                util_11 = util_11_1;
             }
         ],
         execute: function () {
@@ -5668,10 +6560,10 @@ System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_19,
                 }
                 MKDDSceneDesc.prototype.createScene = function (gl) {
                     var path = "data/j3d/mkdd/Course/" + this.path;
-                    return util_10.fetch(path).then(function (buffer) {
+                    return util_11.fetch(path).then(function (buffer) {
                         var multiScene = scenes_1.createMultiSceneFromBuffer(gl, buffer);
-                        // Kill skybox flag.
                         multiScene.scenes.forEach(function (scene) {
+                            // Kill skybox flag.
                             scene.setIsSkybox(false);
                         });
                         return multiScene;
@@ -5697,13 +6589,13 @@ System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_19,
                 new MKDDSceneDesc("Bowser's Castle", 'Koopa.arc'),
                 new MKDDSceneDesc("Rainbow Road", 'Rainbow.arc'),
             ];
-            exports_19("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_22("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_20, context_20) {
+System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_23, context_23) {
     "use strict";
-    var __moduleName = context_20 && context_20.id;
+    var __moduleName = context_23 && context_23.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -5723,17 +6615,17 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
         return textures;
         var e_29, _a;
     }
-    var gl_matrix_5, Progressable_3, util_11, Yaz0, GX_Material, j3d_4, RARC, render_6, CameraPos, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
+    var gl_matrix_6, Progressable_3, util_12, Yaz0, GX_Material, j3d_4, RARC, render_6, CameraPos, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
         setters: [
-            function (gl_matrix_5_1) {
-                gl_matrix_5 = gl_matrix_5_1;
+            function (gl_matrix_6_1) {
+                gl_matrix_6 = gl_matrix_6_1;
             },
             function (Progressable_3_1) {
                 Progressable_3 = Progressable_3_1;
             },
-            function (util_11_1) {
-                util_11 = util_11_1;
+            function (util_12_1) {
+                util_12 = util_12_1;
             },
             function (Yaz0_3) {
                 Yaz0 = Yaz0_3;
@@ -5762,7 +6654,7 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     this.lz = lz;
                 }
                 CameraPos.prototype.set = function (m) {
-                    gl_matrix_5.mat4.lookAt(m, [this.x, this.y, this.z], [this.lx, this.ly, this.lz], [0, 1, 0]);
+                    gl_matrix_6.mat4.lookAt(m, [this.x, this.y, this.z], [this.lx, this.ly, this.lz], [0, 1, 0]);
                 };
                 return CameraPos;
             }());
@@ -5792,7 +6684,7 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     var chunkOffsets = new Map();
                     var chunkTableIdx = 0x04;
                     for (var i = 0; i < chunkCount; i++) {
-                        var type = util_11.readString(buffer, chunkTableIdx + 0x00, 0x04);
+                        var type = util_12.readString(buffer, chunkTableIdx + 0x00, 0x04);
                         var offs = view.getUint32(chunkTableIdx + 0x08);
                         chunkOffsets.set(type, offs);
                         chunkTableIdx += 0x0C;
@@ -5921,7 +6813,6 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     var btk = btkFile ? j3d_4.BTK.parse(btkFile.buffer) : null;
                     var scene = new render_6.Scene(gl, bdl, btk, null);
                     scene.setIsSkybox(isSkybox);
-                    scene.setUseMaterialTexMtx(false);
                     return scene;
                 };
                 WindWakerRenderer.prototype._onTimeOfDayChange = function (e) {
@@ -5940,8 +6831,8 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     var _this = this;
                     var roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
                     return Progressable_3.default.all([
-                        util_11.fetch("data/j3d/ww/sea/Stage.arc"),
-                        util_11.fetch(this.path),
+                        util_12.fetch("data/j3d/ww/sea/Stage.arc"),
+                        util_12.fetch(this.path),
                     ]).then(function (_a) {
                         var _b = __read(_a, 2), stage = _b[0], room = _b[1];
                         var stageRarc = RARC.parse(Yaz0.decompress(stage));
@@ -5959,13 +6850,13 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
             ];
             id = "zww";
             name = "The Legend of Zelda: The Wind Waker";
-            exports_20("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_23("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], function (exports_21, context_21) {
+System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], function (exports_24, context_24) {
     "use strict";
-    var __moduleName = context_21 && context_21.id;
+    var __moduleName = context_24 && context_24.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -5985,11 +6876,11 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
         return textures;
         var e_30, _a;
     }
-    var util_12, Yaz0, RARC, scenes_4, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
+    var util_13, Yaz0, RARC, scenes_4, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
-            function (util_12_1) {
-                util_12 = util_12_1;
+            function (util_13_1) {
+                util_13 = util_13_1;
             },
             function (Yaz0_4) {
                 Yaz0 = Yaz0_4;
@@ -6049,7 +6940,7 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                 };
                 return SunshineRenderer;
             }());
-            exports_21("SunshineRenderer", SunshineRenderer);
+            exports_24("SunshineRenderer", SunshineRenderer);
             SunshineSceneDesc = /** @class */ (function () {
                 function SunshineSceneDesc(path, name) {
                     this.path = path;
@@ -6067,11 +6958,10 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                     var scene = scenes_4.createScene(gl, bmdFile, btkFile, bmtFile);
                     scene.name = basename;
                     scene.setIsSkybox(isSkybox);
-                    scene.setUseMaterialTexMtx(false);
                     return scene;
                 };
                 SunshineSceneDesc.prototype.createScene = function (gl) {
-                    return util_12.fetch(this.path).then(function (result) {
+                    return util_13.fetch(this.path).then(function (result) {
                         var rarc = RARC.parse(Yaz0.decompress(result));
                         // For those curious, the "actual" way the engine loads files is done through
                         // the scene description in scene.bin, with the "map/map" paths hardcoded in
@@ -6109,7 +6999,7 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                 };
                 return SunshineSceneDesc;
             }());
-            exports_21("SunshineSceneDesc", SunshineSceneDesc);
+            exports_24("SunshineSceneDesc", SunshineSceneDesc);
             id = "sms";
             name = "Super Mario Sunshine";
             sceneDescs = [
@@ -6120,13 +7010,13 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                 new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
                 new SunshineSceneDesc("data/j3d/monte3.szs", "Pianta Village"),
             ];
-            exports_21("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_24("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes"], function (exports_22, context_22) {
+System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes"], function (exports_25, context_25) {
     "use strict";
-    var __moduleName = context_22 && context_22.id;
+    var __moduleName = context_25 && context_25.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -6145,14 +7035,14 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
         return textures;
         var e_33, _a;
     }
-    var Progressable_4, util_13, render_7, scenes_6, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
+    var Progressable_4, util_14, render_7, scenes_6, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (Progressable_4_1) {
                 Progressable_4 = Progressable_4_1;
             },
-            function (util_13_1) {
-                util_13 = util_13_1;
+            function (util_14_1) {
+                util_14 = util_14_1;
             },
             function (render_7_1) {
                 render_7 = render_7_1;
@@ -6222,14 +7112,13 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                 };
                 SMGSceneDesc.prototype.fetchScene = function (gl, path, isSkybox) {
                     var _this = this;
-                    return util_13.fetch(path).then(function (buffer) { return _this.createSceneFromBuffer(gl, buffer, isSkybox); });
+                    return util_14.fetch(path).then(function (buffer) { return _this.createSceneFromBuffer(gl, buffer, isSkybox); });
                 };
                 SMGSceneDesc.prototype.createSceneFromBuffer = function (gl, buffer, isSkybox) {
                     var scenes = scenes_6.createScenesFromBuffer(gl, buffer);
-                    util_13.assert(scenes.length === 1);
+                    util_14.assert(scenes.length === 1);
                     var scene = scenes[0];
                     scene.setFPS(60);
-                    scene.setUseMaterialTexMtx(true);
                     scene.setIsSkybox(isSkybox);
                     return scene;
                 };
@@ -6240,22 +7129,22 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
             sceneDescs = [
                 new SMGSceneDesc("Peach's Castle Garden", "data/j3d/PeachCastleGardenPlanet.arc", "data/j3d/GalaxySky.arc", "data/j3d/PeachCastleGardenPlanetBloom.arc"),
             ];
-            exports_22("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_25("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("sm64ds/crg0", ["util"], function (exports_23, context_23) {
+System.register("sm64ds/crg0", ["util"], function (exports_26, context_26) {
     "use strict";
-    var __moduleName = context_23 && context_23.id;
+    var __moduleName = context_26 && context_26.id;
     function parse(buffer) {
         var view = buffer.createDataView();
-        util_14.assert(util_14.readString(buffer, 0, 0x04) === 'CRG0');
+        util_15.assert(util_15.readString(buffer, 0, 0x04) === 'CRG0');
         var levelTableCount = view.getUint32(0x08, false);
         var levelTableOffs = view.getUint32(0x0C, false);
         var levels = [];
         var levelTableIdx = levelTableOffs;
         for (var i = 0; i < levelTableCount; i++) {
-            util_14.assert(view.getUint8(levelTableIdx) === 0x4d);
+            util_15.assert(view.getUint8(levelTableIdx) === 0x4d);
             var levelId = view.getUint8(levelTableIdx + 0x01);
             var levelAttributesCount = view.getUint8(levelTableIdx + 0x02);
             var levelMaterialsCount = view.getUint8(levelTableIdx + 0x03);
@@ -6264,15 +7153,15 @@ System.register("sm64ds/crg0", ["util"], function (exports_23, context_23) {
             for (var j = 0; j < levelAttributesCount; j++) {
                 var keyOffs = view.getUint32(levelTableIdx + 0x00, false);
                 var valueOffs = view.getUint32(levelTableIdx + 0x04, false);
-                var key = util_14.readString(buffer, keyOffs, 0x20);
-                var value = util_14.readString(buffer, valueOffs, 0x20);
+                var key = util_15.readString(buffer, keyOffs, 0x20);
+                var value = util_15.readString(buffer, valueOffs, 0x20);
                 levelTableIdx += 0x08;
                 levelAttributes.set(key, value);
             }
             var materials = [];
             for (var j = 0; j < levelMaterialsCount; j++) {
                 var materialNameOffs = view.getUint32(levelTableIdx + 0x00, false);
-                var materialName = util_14.readString(buffer, materialNameOffs, 0x20);
+                var materialName = util_15.readString(buffer, materialNameOffs, 0x20);
                 levelTableIdx += 0x04;
                 var scaleOffs = view.getUint32(levelTableIdx + 0x00, false);
                 var scaleCount = view.getUint32(levelTableIdx + 0x04, false);
@@ -6303,39 +7192,10 @@ System.register("sm64ds/crg0", ["util"], function (exports_23, context_23) {
         }
         return { levels: levels };
     }
-    exports_23("parse", parse);
-    var util_14;
+    exports_26("parse", parse);
+    var util_15;
     return {
         setters: [
-            function (util_14_1) {
-                util_14 = util_14_1;
-            }
-        ],
-        execute: function () {
-        }
-    };
-});
-// SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
-System.register("sm64ds/lz77", ["lz77", "util"], function (exports_24, context_24) {
-    "use strict";
-    var __moduleName = context_24 && context_24.id;
-    function isLZ77(srcBuffer) {
-        return (util_15.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
-    }
-    exports_24("isLZ77", isLZ77);
-    function maybeDecompress(srcBuffer) {
-        if (isLZ77(srcBuffer))
-            return lz77_1.decompress(srcBuffer.slice(4));
-        else
-            return srcBuffer;
-    }
-    exports_24("maybeDecompress", maybeDecompress);
-    var lz77_1, util_15;
-    return {
-        setters: [
-            function (lz77_1_1) {
-                lz77_1 = lz77_1_1;
-            },
             function (util_15_1) {
                 util_15 = util_15_1;
             }
@@ -6344,716 +7204,32 @@ System.register("sm64ds/lz77", ["lz77", "util"], function (exports_24, context_2
         }
     };
 });
-System.register("sm64ds/nitro_tex", [], function (exports_25, context_25) {
-    "use strict";
-    var __moduleName = context_25 && context_25.id;
-    function expand3to8(n) {
-        return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
-    }
-    function expand5to8(n) {
-        return (n << (8 - 5)) | (n >>> (10 - 8));
-    }
-    function s3tcblend(a, b) {
-        // return (a*3 + b*5) / 8;
-        return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
-    }
-    function bgr5(pixels, dstOffs, p) {
-        pixels[dstOffs + 0] = expand5to8(p & 0x1F);
-        pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
-        pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
-    }
-    exports_25("bgr5", bgr5);
-    function readTexture_A3I5(width, height, texData, palData) {
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = texData.createDataView();
-        var palView = palData.createDataView();
-        var srcOffs = 0;
-        for (var y = 0; y < height; y++) {
-            for (var x = 0; x < width; x++) {
-                var texBlock = texView.getUint8(srcOffs++);
-                var palIdx = (texBlock & 0x1F) << 1;
-                var alpha = texBlock >>> 5;
-                var p = palView.getUint16(palIdx, true);
-                var dstOffs = 4 * ((y * width) + x);
-                bgr5(pixels, dstOffs, p);
-                pixels[dstOffs + 3] = expand3to8(alpha);
-            }
-        }
-        return pixels;
-    }
-    function readTexture_Palette16(width, height, texData, palData, color0) {
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = texData.createDataView();
-        var palView = palData.createDataView();
-        var srcOffs = 0;
-        for (var y = 0; y < height; y++) {
-            for (var xx = 0; xx < width; xx += 4) {
-                var texBlock = texView.getUint16(srcOffs, true);
-                srcOffs += 2;
-                for (var x = 0; x < 4; x++) {
-                    var palIdx = texBlock & 0x0F;
-                    var p = palView.getUint16(palIdx * 2, true);
-                    var dstOffs = 4 * ((y * width) + xx + x);
-                    bgr5(pixels, dstOffs, p);
-                    pixels[dstOffs + 3] = palIdx === 0 ? (color0 ? 0x00 : 0xFF) : 0xFF;
-                    texBlock >>= 4;
-                }
-            }
-        }
-        return pixels;
-    }
-    function readTexture_Palette256(width, height, texData, palData, color0) {
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = texData.createDataView();
-        var palView = palData.createDataView();
-        var srcOffs = 0;
-        for (var y = 0; y < height; y++) {
-            for (var xx = 0; xx < width; xx++) {
-                var palIdx = texView.getUint8(srcOffs++);
-                var p = palView.getUint16(palIdx * 2, true);
-                var dstOffs = 4 * ((y * width) + xx);
-                bgr5(pixels, dstOffs, p);
-                pixels[dstOffs + 3] = palIdx === 0 ? (color0 ? 0x00 : 0xFF) : 0xFF;
-            }
-        }
-        return pixels;
-    }
-    function readTexture_CMPR_4x4(width, height, texData, palData) {
-        function getPal16(offs) {
-            return offs < palView.byteLength ? palView.getUint16(offs, true) : 0;
-        }
-        function buildColorTable(palBlock) {
-            var palMode = palBlock >> 14;
-            var palOffs = (palBlock & 0x3FFF) << 2;
-            var colorTable = new Uint8Array(16);
-            var p0 = getPal16(palOffs + 0x00);
-            bgr5(colorTable, 0, p0);
-            colorTable[3] = 0xFF;
-            var p1 = getPal16(palOffs + 0x02);
-            bgr5(colorTable, 4, p1);
-            colorTable[7] = 0xFF;
-            if (palMode === 0) {
-                // PTY=0, A=0
-                var p2 = getPal16(palOffs + 0x04);
-                bgr5(colorTable, 8, p2);
-                colorTable[11] = 0xFF;
-                // Color4 is transparent black.
-            }
-            else if (palMode === 1) {
-                // PTY=1, A=0
-                // Color3 is a blend of Color1/Color2.
-                colorTable[8] = (colorTable[0] + colorTable[4]) >>> 1;
-                colorTable[9] = (colorTable[1] + colorTable[5]) >>> 1;
-                colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
-                colorTable[11] = 0xFF;
-                // Color4 is transparent black.
-            }
-            else if (palMode === 2) {
-                // PTY=0, A=1
-                var p2 = getPal16(palOffs + 0x04);
-                bgr5(colorTable, 8, p2);
-                colorTable[11] = 0xFF;
-                var p3 = getPal16(palOffs + 0x06);
-                bgr5(colorTable, 12, p3);
-                colorTable[15] = 0xFF;
-            }
-            else {
-                colorTable[8] = s3tcblend(colorTable[4], colorTable[0]);
-                colorTable[9] = s3tcblend(colorTable[5], colorTable[1]);
-                colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
-                colorTable[11] = 0xFF;
-                colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
-                colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
-                colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
-                colorTable[15] = 0xFF;
-            }
-            return colorTable;
-        }
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = texData.createDataView();
-        var palView = palData.createDataView();
-        var palIdxStart = (width * height) / 4;
-        var srcOffs = 0;
-        for (var yy = 0; yy < height; yy += 4) {
-            for (var xx = 0; xx < width; xx += 4) {
-                var texBlock = texView.getUint32((srcOffs * 0x04), true);
-                var palBlock = texView.getUint16(palIdxStart + (srcOffs * 0x02), true);
-                var colorTable = buildColorTable(palBlock);
-                for (var y = 0; y < 4; y++) {
-                    for (var x = 0; x < 4; x++) {
-                        var colorIdx = texBlock & 0x03;
-                        var dstOffs = 4 * (((yy + y) * width) + xx + x);
-                        pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
-                        pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
-                        pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
-                        pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
-                        texBlock >>= 2;
-                    }
-                }
-                srcOffs++;
-            }
-        }
-        return pixels;
-    }
-    function readTexture_A5I3(width, height, texData, palData) {
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = texData.createDataView();
-        var palView = palData.createDataView();
-        var srcOffs = 0;
-        for (var y = 0; y < height; y++) {
-            for (var x = 0; x < width; x++) {
-                var texBlock = texView.getUint8(srcOffs++);
-                var palIdx = (texBlock & 0x03) << 1;
-                var alpha = texBlock >>> 3;
-                var p = palView.getUint16(palIdx, true);
-                var dstOffs = 4 * ((y * width) + x);
-                bgr5(pixels, dstOffs, p);
-                pixels[dstOffs + 3] = expand5to8(alpha);
-            }
-        }
-        return pixels;
-    }
-    function readTexture_Direct(width, height, texData) {
-        var pixels = new Uint8Array(width * height * 4);
-        var texView = texData.createDataView();
-        var srcOffs = 0;
-        for (var y = 0; y < height; y++) {
-            for (var x = 0; x < width; x++) {
-                var p = texView.getUint16(srcOffs, true);
-                var dstOffs = 4 * ((y * width) + x);
-                bgr5(pixels, dstOffs, p);
-                pixels[dstOffs + 3] = 0xFF;
-                srcOffs += 2;
-            }
-        }
-        return pixels;
-    }
-    function readTexture(format, width, height, texData, palData, color0) {
-        switch (format) {
-            case Format.Tex_A3I5:
-                return readTexture_A3I5(width, height, texData, palData);
-            case Format.Tex_Palette16:
-                return readTexture_Palette16(width, height, texData, palData, color0);
-            case Format.Tex_Palette256:
-                return readTexture_Palette256(width, height, texData, palData, color0);
-            case Format.Tex_CMPR_4x4:
-                return readTexture_CMPR_4x4(width, height, texData, palData);
-            case Format.Tex_A5I3:
-                return readTexture_A5I3(width, height, texData, palData);
-            case Format.Tex_Direct:
-                return readTexture_Direct(width, height, texData);
-            default:
-                throw new Error("Unsupported texture type! " + format);
-        }
-    }
-    exports_25("readTexture", readTexture);
-    var Format;
-    return {
-        setters: [],
-        execute: function () {
-            // Read DS texture formats.
-            (function (Format) {
-                Format[Format["Tex_None"] = 0] = "Tex_None";
-                Format[Format["Tex_A3I5"] = 1] = "Tex_A3I5";
-                Format[Format["Tex_Palette4"] = 2] = "Tex_Palette4";
-                Format[Format["Tex_Palette16"] = 3] = "Tex_Palette16";
-                Format[Format["Tex_Palette256"] = 4] = "Tex_Palette256";
-                Format[Format["Tex_CMPR_4x4"] = 5] = "Tex_CMPR_4x4";
-                Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
-                Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
-            })(Format || (Format = {}));
-            exports_25("Format", Format);
-        }
-    };
-});
-// Read DS Geometry Engine commands.
-System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_26, context_26) {
-    "use strict";
-    var __moduleName = context_26 && context_26.id;
-    function bgr5(pixel) {
-        nitro_tex_1.bgr5(tmp, 0, pixel);
-        var r = tmp[0], g = tmp[1], b = tmp[2];
-        return { r: r, g: g, b: b };
-    }
-    exports_26("bgr5", bgr5);
-    function cmd_MTX_RESTORE(ctx) {
-        // XXX: We don't implement the matrix stack yet.
-        ctx.readParam();
-    }
-    function cmd_COLOR(ctx) {
-        var param = ctx.readParam();
-        ctx.s_color = bgr5(param);
-    }
-    function cmd_NORMAL(ctx) {
-        var param = ctx.readParam();
-    }
-    function cmd_TEXCOORD(ctx) {
-        var param = ctx.readParam();
-        var s = param & 0xFFFF;
-        var t = param >> 16;
-        // Sign extend.
-        s = (s << 16 >> 16);
-        t = (t << 16 >> 16);
-        // Fixed point.
-        s = s / 16.0;
-        t = t / 16.0;
-        ctx.s_texCoord = { s: s, t: t };
-    }
-    function cmd_VTX_16(ctx) {
-        var param1 = ctx.readParam();
-        var x = (param1 & 0xFFFF);
-        var y = (param1 >> 16) & 0xFFFF;
-        var param2 = ctx.readParam();
-        var z = (param2 & 0xFFFF);
-        // Sign extend.
-        x = (x << 16 >> 16);
-        y = (y << 16 >> 16);
-        z = (z << 16 >> 16);
-        // Fixed point.
-        x = x / 4096.0;
-        y = y / 4096.0;
-        z = z / 4096.0;
-        ctx.vtx(x, y, z);
-    }
-    function cmd_VTX_10(ctx) {
-        var param = ctx.readParam();
-        var x = (param & 0x03FF);
-        var y = (param >> 10) & 0x03FF;
-        var z = (param >> 20) & 0x03FF;
-        // Sign extend.
-        x = (x << 22 >> 22);
-        y = (y << 22 >> 22);
-        z = (z << 22 >> 22);
-        // Fixed point.
-        x = x / 64.0;
-        y = y / 64.0;
-        z = z / 64.0;
-        ctx.vtx(x, y, z);
-    }
-    function cmd_VTX_XY(ctx) {
-        var param = ctx.readParam();
-        var x = (param & 0xFFFF);
-        var y = (param >> 16) & 0xFFFF;
-        // Sign extend.
-        x = (x << 16 >> 16);
-        y = (y << 16 >> 16);
-        // Fixed point.
-        x = x / 4096.0;
-        y = y / 4096.0;
-        ctx.vtx(x, y, ctx.s_vtx.z);
-    }
-    function cmd_VTX_XZ(ctx) {
-        var param = ctx.readParam();
-        var x = (param & 0xFFFF);
-        var z = (param >> 16) & 0xFFFF;
-        // Sign extend.
-        x = (x << 16 >> 16);
-        z = (z << 16 >> 16);
-        // Fixed point.
-        x = x / 4096.0;
-        z = z / 4096.0;
-        ctx.vtx(x, ctx.s_vtx.y, z);
-    }
-    function cmd_VTX_YZ(ctx) {
-        var param = ctx.readParam();
-        var y = (param & 0xFFFF);
-        var z = (param >> 16) & 0xFFFF;
-        // Sign extend.
-        y = (y << 16 >> 16);
-        z = (z << 16 >> 16);
-        // Fixed point.
-        y = y / 4096.0;
-        z = z / 4096.0;
-        ctx.vtx(ctx.s_vtx.x, y, z);
-    }
-    function cmd_VTX_DIFF(ctx) {
-        var param = ctx.readParam();
-        var x = (param & 0x03FF);
-        var y = (param >> 10) & 0x03FF;
-        var z = (param >> 20) & 0x03FF;
-        // Sign extend.
-        x = (x << 22 >> 22);
-        y = (y << 22 >> 22);
-        z = (z << 22 >> 22);
-        // Fixed point.
-        x = x / 4096.0;
-        y = y / 4096.0;
-        z = z / 4096.0;
-        // Add on the difference...
-        x += ctx.s_vtx.x;
-        y += ctx.s_vtx.y;
-        z += ctx.s_vtx.z;
-        ctx.vtx(x, y, z);
-    }
-    function cmd_DIF_AMB(ctx) {
-        var param = ctx.readParam();
-        // TODO: lighting
-    }
-    function cmd_BEGIN_VTXS(ctx) {
-        var param = ctx.readParam();
-        var polyType = param & 0x03;
-        ctx.s_polyType = polyType;
-        ctx.vtxs = [];
-    }
-    function cmd_END_VTXS(ctx) {
-        var nVerts = ctx.vtxs.length;
-        var vtxBuffer = new Float32Array(nVerts * VERTEX_SIZE);
-        for (var i = 0; i < nVerts; i++) {
-            var v = ctx.vtxs[i];
-            var vtxArray = new Float32Array(vtxBuffer.buffer, i * VERTEX_BYTES, VERTEX_SIZE);
-            vtxArray[0] = v.pos.x;
-            vtxArray[1] = v.pos.y;
-            vtxArray[2] = v.pos.z;
-            vtxArray[3] = v.color.r / 0xFF;
-            vtxArray[4] = v.color.g / 0xFF;
-            vtxArray[5] = v.color.b / 0xFF;
-            vtxArray[6] = ctx.alpha / 0xFF;
-            vtxArray[7] = v.uv.s;
-            vtxArray[8] = v.uv.t;
-        }
-        var idxBuffer;
-        if (ctx.s_polyType === PolyType.TRIANGLES) {
-            idxBuffer = new Uint16Array(nVerts);
-            for (var i = 0; i < nVerts; i++)
-                idxBuffer[i] = i;
-        }
-        else if (ctx.s_polyType === PolyType.QUADS) {
-            idxBuffer = new Uint16Array(nVerts / 4 * 6);
-            var dst = 0;
-            for (var i = 0; i < nVerts; i += 4) {
-                idxBuffer[dst++] = i + 0;
-                idxBuffer[dst++] = i + 1;
-                idxBuffer[dst++] = i + 2;
-                idxBuffer[dst++] = i + 2;
-                idxBuffer[dst++] = i + 3;
-                idxBuffer[dst++] = i + 0;
-            }
-        }
-        else if (ctx.s_polyType === PolyType.TRIANGLE_STRIP) {
-            idxBuffer = new Uint16Array((nVerts - 2) * 3);
-            var dst = 0;
-            for (var i = 0; i < nVerts - 2; i++) {
-                if (i % 2 === 0) {
-                    idxBuffer[dst++] = i + 0;
-                    idxBuffer[dst++] = i + 1;
-                    idxBuffer[dst++] = i + 2;
-                }
-                else {
-                    idxBuffer[dst++] = i + 1;
-                    idxBuffer[dst++] = i + 0;
-                    idxBuffer[dst++] = i + 2;
-                }
-            }
-        }
-        else if (ctx.s_polyType === PolyType.QUAD_STRIP) {
-            idxBuffer = new Uint16Array(((nVerts - 2) / 2) * 6);
-            var dst = 0;
-            for (var i = 0; i < nVerts; i += 2) {
-                idxBuffer[dst++] = i + 0;
-                idxBuffer[dst++] = i + 1;
-                idxBuffer[dst++] = i + 3;
-                idxBuffer[dst++] = i + 3;
-                idxBuffer[dst++] = i + 2;
-                idxBuffer[dst++] = i + 0;
-            }
-        }
-        var packet = { vertData: vtxBuffer, idxData: idxBuffer, polyType: ctx.s_polyType };
-        ctx.packets.push(packet);
-    }
-    function runCmd(ctx, cmd) {
-        switch (cmd) {
-            case 0: return;
-            case CmdType.MTX_RESTORE: return cmd_MTX_RESTORE(ctx);
-            case CmdType.COLOR: return cmd_COLOR(ctx);
-            case CmdType.NORMAL: return cmd_NORMAL(ctx);
-            case CmdType.TEXCOORD: return cmd_TEXCOORD(ctx);
-            case CmdType.VTX_16: return cmd_VTX_16(ctx);
-            case CmdType.VTX_10: return cmd_VTX_10(ctx);
-            case CmdType.VTX_XY: return cmd_VTX_XY(ctx);
-            case CmdType.VTX_XZ: return cmd_VTX_XZ(ctx);
-            case CmdType.VTX_YZ: return cmd_VTX_YZ(ctx);
-            case CmdType.VTX_DIFF: return cmd_VTX_DIFF(ctx);
-            case CmdType.DIF_AMB: return cmd_DIF_AMB(ctx);
-            case CmdType.BEGIN_VTXS: return cmd_BEGIN_VTXS(ctx);
-            case CmdType.END_VTXS: return cmd_END_VTXS(ctx);
-            default: console.warn("Missing command", cmd.toString(16));
-        }
-    }
-    function readCmds(buffer, baseCtx) {
-        var ctx = new ContextInternal(buffer, baseCtx);
-        while (ctx.offs < buffer.byteLength) {
-            // Commands are packed 4 at a time...
-            var cmd0 = ctx.view.getUint8(ctx.offs++);
-            var cmd1 = ctx.view.getUint8(ctx.offs++);
-            var cmd2 = ctx.view.getUint8(ctx.offs++);
-            var cmd3 = ctx.view.getUint8(ctx.offs++);
-            runCmd(ctx, cmd0);
-            runCmd(ctx, cmd1);
-            runCmd(ctx, cmd2);
-            runCmd(ctx, cmd3);
-        }
-        return ctx.packets;
-    }
-    exports_26("readCmds", readCmds);
-    var nitro_tex_1, CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, tmp, Context, ContextInternal;
-    return {
-        setters: [
-            function (nitro_tex_1_1) {
-                nitro_tex_1 = nitro_tex_1_1;
-            }
-        ],
-        execute: function () {
-            // tslint:disable:variable-name
-            (function (CmdType) {
-                CmdType[CmdType["MTX_RESTORE"] = 20] = "MTX_RESTORE";
-                CmdType[CmdType["COLOR"] = 32] = "COLOR";
-                CmdType[CmdType["NORMAL"] = 33] = "NORMAL";
-                CmdType[CmdType["TEXCOORD"] = 34] = "TEXCOORD";
-                CmdType[CmdType["VTX_16"] = 35] = "VTX_16";
-                CmdType[CmdType["VTX_10"] = 36] = "VTX_10";
-                CmdType[CmdType["VTX_XY"] = 37] = "VTX_XY";
-                CmdType[CmdType["VTX_XZ"] = 38] = "VTX_XZ";
-                CmdType[CmdType["VTX_YZ"] = 39] = "VTX_YZ";
-                CmdType[CmdType["VTX_DIFF"] = 40] = "VTX_DIFF";
-                CmdType[CmdType["DIF_AMB"] = 48] = "DIF_AMB";
-                CmdType[CmdType["BEGIN_VTXS"] = 64] = "BEGIN_VTXS";
-                CmdType[CmdType["END_VTXS"] = 65] = "END_VTXS";
-            })(CmdType || (CmdType = {}));
-            (function (PolyType) {
-                PolyType[PolyType["TRIANGLES"] = 0] = "TRIANGLES";
-                PolyType[PolyType["QUADS"] = 1] = "QUADS";
-                PolyType[PolyType["TRIANGLE_STRIP"] = 2] = "TRIANGLE_STRIP";
-                PolyType[PolyType["QUAD_STRIP"] = 3] = "QUAD_STRIP";
-            })(PolyType || (PolyType = {}));
-            // 3 pos + 4 color + 2 uv
-            VERTEX_SIZE = 9;
-            VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
-            tmp = new Uint8Array(3);
-            Context = /** @class */ (function () {
-                function Context() {
-                }
-                return Context;
-            }());
-            exports_26("Context", Context);
-            ContextInternal = /** @class */ (function () {
-                function ContextInternal(buffer, baseCtx) {
-                    this.offs = 0;
-                    this.alpha = baseCtx.alpha;
-                    this.s_color = baseCtx.color;
-                    this.view = buffer.createDataView();
-                    this.s_texCoord = { s: 0, t: 0 };
-                    this.packets = [];
-                }
-                ContextInternal.prototype.readParam = function () {
-                    return this.view.getUint32((this.offs += 4) - 4, true);
-                };
-                ContextInternal.prototype.vtx = function (x, y, z) {
-                    this.s_vtx = { x: x, y: y, z: z };
-                    this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord });
-                };
-                return ContextInternal;
-            }());
-        }
-    };
-});
-System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_27, context_27) {
+// SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
+System.register("sm64ds/lz77", ["lz77", "util"], function (exports_27, context_27) {
     "use strict";
     var __moduleName = context_27 && context_27.id;
-    function parseModel(bmd, buffer, idx) {
-        var offs = bmd.modelOffsBase + idx * 0x40;
-        var view = buffer.createDataView();
-        var model = new Model();
-        model.id = view.getUint32(offs + 0x00, true);
-        model.name = util_16.readString(buffer, view.getUint32(offs + 0x04, true), 0xFF);
-        model.parentID = view.getUint16(offs + 0x08, true);
-        // Local transform.
-        var xs = view.getUint32(offs + 0x10, true);
-        var ys = view.getUint32(offs + 0x14, true);
-        var zs = view.getUint32(offs + 0x18, true);
-        var xr = view.getUint16(offs + 0x1C, true);
-        var yr = view.getUint16(offs + 0x1E, true);
-        var zr = view.getUint16(offs + 0x20, true);
-        var xt = view.getUint16(offs + 0x24, true);
-        var yt = view.getUint16(offs + 0x28, true);
-        var zt = view.getUint16(offs + 0x2C, true);
-        // A "batch" is a combination of a material and a poly.
-        var batchCount = view.getUint32(offs + 0x30, true);
-        var batchMaterialOffs = view.getUint32(offs + 0x34, true);
-        var batchPolyOffs = view.getUint32(offs + 0x38, true);
-        model.batches = [];
-        for (var i = 0; i < batchCount; i++) {
-            var materialIdx = view.getUint8(batchMaterialOffs + i);
-            var material = parseMaterial(bmd, buffer, materialIdx);
-            var baseCtx = { color: material.diffuse, alpha: material.alpha };
-            var polyIdx = view.getUint8(batchPolyOffs + i);
-            var poly = parsePoly(bmd, buffer, polyIdx, baseCtx);
-            model.batches.push({ material: material, poly: poly });
-        }
-        return model;
+    function isLZ77(srcBuffer) {
+        return (util_16.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
     }
-    function parsePoly(bmd, buffer, idx, baseCtx) {
-        var view = buffer.createDataView();
-        var offs = view.getUint32((bmd.polyOffsBase + idx * 0x08) + 0x04, true);
-        var gxCmdSize = view.getUint32(offs + 0x08, true);
-        var gxCmdOffs = view.getUint32(offs + 0x0C, true);
-        var gxCmdBuf = buffer.slice(gxCmdOffs, gxCmdOffs + gxCmdSize);
-        var packets = NITRO_GX.readCmds(gxCmdBuf, baseCtx);
-        return { packets: packets };
-    }
-    function parseMaterial(bmd, buffer, idx) {
-        var view = buffer.createDataView();
-        var offs = bmd.materialOffsBase + idx * 0x30;
-        var material = new Material();
-        material.name = util_16.readString(buffer, view.getUint32(offs + 0x00, true), 0xFF);
-        material.texCoordMat = gl_matrix_6.mat2d.create();
-        var textureIdx = view.getUint32(offs + 0x04, true);
-        if (textureIdx !== 0xFFFFFFFF) {
-            var paletteIdx = view.getUint32(offs + 0x08, true);
-            var textureKey = new TextureKey(textureIdx, paletteIdx);
-            material.texture = parseTexture(bmd, buffer, textureKey);
-            material.texParams = material.texture.params | view.getUint32(offs + 0x20, true);
-            if (material.texParams >> 30) {
-                var scaleS = view.getInt32(offs + 0x0C, true) / 4096.0;
-                var scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
-                var transS = view.getInt32(offs + 0x18, true) / 4096.0;
-                var transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-                gl_matrix_6.mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-                gl_matrix_6.mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
-            }
-            var texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
-            gl_matrix_6.mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
-        }
-        else {
-            material.texture = null;
-            material.texParams = 0;
-        }
-        var polyAttribs = view.getUint32(offs + 0x24, true);
-        var alpha = (polyAttribs >> 16) & 0x1F;
-        alpha = (alpha << (8 - 5)) | (alpha >>> (10 - 8));
-        var renderWhichFaces = (polyAttribs >> 6) & 0x03;
-        material.renderWhichFaces = renderWhichFaces;
-        // NITRO's Rendering Engine uses two passes. Opaque, then Transparent.
-        // A transparent polygon is one that has an alpha of < 0xFF, or uses
-        // A5I3 / A3I5 textures.
-        material.isTranslucent = (alpha < 0xFF) || (material.texture && material.texture.isTranslucent);
-        // Do transparent polys write to the depth buffer?
-        var xl = (polyAttribs >>> 11) & 0x01;
-        if (xl)
-            material.depthWrite = true;
+    exports_27("isLZ77", isLZ77);
+    function maybeDecompress(srcBuffer) {
+        if (isLZ77(srcBuffer))
+            return lz77_1.decompress(srcBuffer.slice(4));
         else
-            material.depthWrite = !material.isTranslucent;
-        var difAmb = view.getUint32(offs + 0x28, true);
-        if (difAmb & 0x8000)
-            material.diffuse = NITRO_GX.bgr5(difAmb);
-        else
-            material.diffuse = { r: 0xFF, g: 0xFF, b: 0xFF };
-        material.alpha = alpha;
-        return material;
+            return srcBuffer;
     }
-    function parseTexture(bmd, buffer, key) {
-        if (bmd.textureCache.has(key.toString()))
-            return bmd.textureCache.get(key.toString());
-        var view = buffer.createDataView();
-        var texOffs = bmd.textureOffsBase + key.texIdx * 0x14;
-        var texture = new Texture();
-        texture.id = key.texIdx;
-        texture.name = util_16.readString(buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
-        var texDataOffs = view.getUint32(texOffs + 0x04, true);
-        var texDataSize = view.getUint32(texOffs + 0x08, true);
-        var texData = buffer.slice(texDataOffs);
-        texture.params = view.getUint32(texOffs + 0x10, true);
-        texture.format = (texture.params >> 26) & 0x07;
-        texture.width = 8 << ((texture.params >> 20) & 0x07);
-        texture.height = 8 << ((texture.params >> 23) & 0x07);
-        var color0 = !!((texture.params >> 29) & 0x01);
-        var palData = null;
-        if (key.palIdx !== 0xFFFFFFFF) {
-            var palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
-            texture.paletteName = util_16.readString(buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
-            var palDataOffs = view.getUint32(palOffs + 0x04, true);
-            var palDataSize = view.getUint32(palOffs + 0x08, true);
-            palData = buffer.slice(palDataOffs, palDataOffs + palDataSize);
-        }
-        texture.pixels = NITRO_Tex.readTexture(texture.format, texture.width, texture.height, texData, palData, color0);
-        texture.isTranslucent = (texture.format === NITRO_Tex.Format.Tex_A5I3 ||
-            texture.format === NITRO_Tex.Format.Tex_A3I5);
-        bmd.textures.push(texture);
-        bmd.textureCache.set(key.toString(), texture);
-        return texture;
-    }
-    function parse(buffer) {
-        var view = buffer.createDataView();
-        var bmd = new BMD();
-        bmd.scaleFactor = (1 << view.getUint32(0x00, true));
-        bmd.modelCount = view.getUint32(0x04, true);
-        bmd.modelOffsBase = view.getUint32(0x08, true);
-        bmd.polyCount = view.getUint32(0x0C, true);
-        bmd.polyOffsBase = view.getUint32(0x10, true);
-        bmd.textureCount = view.getUint32(0x14, true);
-        bmd.textureOffsBase = view.getUint32(0x18, true);
-        bmd.paletteCount = view.getUint32(0x1C, true);
-        bmd.paletteOffsBase = view.getUint32(0x20, true);
-        bmd.materialCount = view.getUint32(0x24, true);
-        bmd.materialOffsBase = view.getUint32(0x28, true);
-        bmd.textureCache = new Map();
-        bmd.textures = [];
-        bmd.models = [];
-        for (var i = 0; i < bmd.modelCount; i++)
-            bmd.models.push(parseModel(bmd, buffer, i));
-        return bmd;
-    }
-    exports_27("parse", parse);
-    var gl_matrix_6, NITRO_GX, NITRO_Tex, util_16, Material, Model, TextureKey, Texture, BMD;
+    exports_27("maybeDecompress", maybeDecompress);
+    var lz77_1, util_16;
     return {
         setters: [
-            function (gl_matrix_6_1) {
-                gl_matrix_6 = gl_matrix_6_1;
-            },
-            function (NITRO_GX_1) {
-                NITRO_GX = NITRO_GX_1;
-            },
-            function (NITRO_Tex_1) {
-                NITRO_Tex = NITRO_Tex_1;
+            function (lz77_1_1) {
+                lz77_1 = lz77_1_1;
             },
             function (util_16_1) {
                 util_16 = util_16_1;
             }
         ],
         execute: function () {
-            Material = /** @class */ (function () {
-                function Material() {
-                }
-                return Material;
-            }());
-            exports_27("Material", Material);
-            Model = /** @class */ (function () {
-                function Model() {
-                }
-                return Model;
-            }());
-            exports_27("Model", Model);
-            TextureKey = /** @class */ (function () {
-                function TextureKey(texIdx, palIdx) {
-                    this.texIdx = texIdx;
-                    this.palIdx = palIdx;
-                }
-                TextureKey.prototype.toString = function () {
-                    return "TextureKey " + this.texIdx + " " + this.palIdx;
-                };
-                return TextureKey;
-            }());
-            Texture = /** @class */ (function () {
-                function Texture() {
-                }
-                return Texture;
-            }());
-            exports_27("Texture", Texture);
-            BMD = /** @class */ (function () {
-                function BMD() {
-                }
-                return BMD;
-            }());
-            exports_27("BMD", BMD);
         }
     };
 });
@@ -13249,13 +13425,22 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                 var alphaRegId = (alphaCombineFlags >>> 9) & 0x03;
                 var texCoordId = view.getUint8(tevOrderTableOffs + 0x03);
                 var texMap = view.getUint8(tevOrderTableOffs + 0x02);
-                var index_3 = j;
+                var index_4 = j;
                 var tevStage = {
-                    index: index_3,
+                    index: index_4,
                     colorInA: colorInA, colorInB: colorInB, colorInC: colorInC, colorInD: colorInD, colorOp: colorOp, colorBias: colorBias, colorScale: colorScale, colorClamp: colorClamp, colorRegId: colorRegId,
                     alphaInA: alphaInA, alphaInB: alphaInB, alphaInC: alphaInC, alphaInD: alphaInD, alphaOp: alphaOp, alphaBias: alphaBias, alphaScale: alphaScale, alphaClamp: alphaClamp, alphaRegId: alphaRegId,
                     texCoordId: texCoordId, texMap: texMap, channelId: channelId,
                     konstColorSel: konstColorSel, konstAlphaSel: konstAlphaSel,
+                    // We don't use indtex.
+                    indTexStage: 0 /* STAGE0 */,
+                    indTexMatrix: 0 /* OFF */,
+                    indTexFormat: 0 /* _8 */,
+                    indTexBiasSel: 0 /* NONE */,
+                    indTexWrapS: 0 /* OFF */,
+                    indTexWrapT: 0 /* OFF */,
+                    indTexAddPrev: false,
+                    indTexUseOrigLOD: false,
                 };
                 tevStages.push(tevStage);
                 offs += 0x14;
@@ -13268,14 +13453,14 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             offs += 0x04;
             var texGens = [];
             for (var j = 0; j < texGenCount; j++) {
-                var index_4 = j;
+                var index_5 = j;
                 var flags_1 = view.getUint32(offs);
                 var type = (flags_1 >>> 0) & 0x0F;
                 var source = (flags_1 >>> 4) & 0x0F;
                 var matrix = ((flags_1 >>> 9) & 0x1F) + 30;
                 var normalize = !!(flags_1 & 14);
                 var postMatrix = ((flags_1 >>> 15) & 0x3F) + 64;
-                texGens.push({ index: index_4, type: type, source: source, matrix: matrix, normalize: normalize, postMatrix: postMatrix });
+                texGens.push({ index: index_5, type: type, source: source, matrix: matrix, normalize: normalize, postMatrix: postMatrix });
                 offs += 0x04;
             }
             var uvAnimations = [];
@@ -13365,6 +13550,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                 tevStages: tevStages,
                 alphaTest: alphaTest,
                 ropInfo: ropInfo,
+                indTexStages: [],
             };
             materials.push({ flags: flags, groupIndex: groupIndex, textureIndexes: textureIndexes, vtxAttrFormat: vtxAttrFormat, gxMaterial: gxMaterial, uvAnimations: uvAnimations });
             util_32.assert((offs - materialsStart) === materialEndTable[i]);
@@ -14164,7 +14350,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                 return Command_Surface;
             }());
             fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_11.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-            materialParamsSize = 4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 8;
+            materialParamsSize = 4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 8;
             packetParamsOffs = util_36.align(materialParamsSize, 64);
             packetParamsSize = 11 * 16;
             paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
@@ -14230,6 +14416,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                         paramsData[offs + i * 12 + 11] = 0;
                     }
                     offs += 4 * 3 * 20;
+                    // IndTexMtx. Indirect texturing isn't used.
+                    offs += 4 * 3 * 2;
                     // LOD biases. These are all set to 1.
                     for (var i = 0; i < 9; i++) {
                         paramsData[offs + i] = 1;

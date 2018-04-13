@@ -7,6 +7,7 @@ import * as Viewer from '../viewer';
 
 import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontFaceMode, Program, RenderFlags, RenderState } from '../render';
 import { align } from '../util';
+import { Material } from '../sm64ds/nitro_bmd';
 
 // #region Material definition.
 export interface GXMaterial {
@@ -25,6 +26,8 @@ export interface GXMaterial {
     colorRegisters: Color[];
     colorConstants: Color[];
     tevStages: TevStage[];
+    // Indirect TEV state
+    indTexStages: IndTexStage[];
 
     // Raster / blend state.
     alphaTest: AlphaTest;
@@ -57,6 +60,15 @@ export interface TexGen {
     postMatrix: GX.PostTexGenMatrix;
 }
 
+export interface IndTexStage {
+    index: number;
+
+    texCoordId: GX.TexCoordID;
+    texture: GX.TexMapID;
+    scaleS: GX.IndTexScale;
+    scaleT: GX.IndTexScale;
+}
+
 export interface TevStage {
     index: number;
 
@@ -81,12 +93,22 @@ export interface TevStage {
     alphaRegId: GX.Register;
 
     // SetTevOrder
-    texCoordId: GX.TexCoordSlot;
-    texMap: number;
+    texCoordId: GX.TexCoordID;
+    texMap: GX.TexMapID;
     channelId: GX.ColorChannelId;
 
     konstColorSel: GX.KonstColorSel;
     konstAlphaSel: GX.KonstAlphaSel;
+
+    // SetTevIndirect
+    indTexStage: GX.IndTexStageID;
+    indTexFormat: GX.IndTexFormat;
+    indTexBiasSel: GX.IndTexBiasSel;
+    indTexMatrix: GX.IndTexMtxID;
+    indTexWrapS: GX.IndTexWrap;
+    indTexWrapT: GX.IndTexWrap;
+    indTexAddPrev: boolean;
+    indTexUseOrigLOD: boolean;
 }
 
 export interface AlphaTest {
@@ -305,6 +327,48 @@ export class GX_Program extends Program {
         }).join('');
     }
 
+    private generateTexCoordGetters(): string {
+        return this.material.texGens.map((n, i) => {
+            return `vec2 ReadTexCoord${i}() { return v_TexCoord${i}.xy / v_TexCoord${i}.z; }\n`;
+        }).join('');
+    }
+
+    // IndTex
+    private generateIndTexStageScaleN(scale: GX.IndTexScale): string {
+        switch (scale) {
+        case GX.IndTexScale._1: return `1.0`;
+        case GX.IndTexScale._2: return `1.0/2.0`;
+        case GX.IndTexScale._4: return `1.0/4.0`;
+        case GX.IndTexScale._8: return `1.0/8.0`;
+        case GX.IndTexScale._16: return `1.0/16.0`;
+        case GX.IndTexScale._32: return `1.0/32.0`;
+        case GX.IndTexScale._64: return `1.0/64.0`;
+        case GX.IndTexScale._128: return `1.0/128.0`;
+        case GX.IndTexScale._256: return `1.0/256.0`;
+        }
+    }
+
+    private generateIndTexStageScale(stage: IndTexStage): string {
+        const baseCoord = `ReadTexCoord${stage.texCoordId}()`;
+        if (stage.scaleS === GX.IndTexScale._1 && stage.scaleT === GX.IndTexScale._1)
+            return baseCoord;
+        else
+            return `${baseCoord} * vec2(${this.generateIndTexStageScaleN(stage.scaleS)}, ${this.generateIndTexStageScaleN(stage.scaleT)})`;
+    }
+
+    private generateIndTexStage(stage: IndTexStage): string {
+        const i = stage.index;
+        return `
+    // Indirect ${i}
+    vec3 t_IndTexCoord${i} = texture(u_Texture[${stage.texture}], ${this.generateIndTexStageScale(stage)}).abg;`;
+    }
+
+    private generateIndTexStages(stages: IndTexStage[]): string {
+        return stages.map((stage) => {
+            return this.generateIndTexStage(stage);
+        }).join('');
+    }
+
     // TEV
     private generateKonstColorSel(konstColor: GX.KonstColorSel): string {
         switch (konstColor) {
@@ -381,7 +445,7 @@ export class GX_Program extends Program {
     }
 
     private generateTexAccess(stage: TevStage) {
-        return `textureProj(u_Texture[${stage.texMap}], v_TexCoord${stage.texCoordId}, GetTextureLODBias(${stage.texMap}))`;
+        return `texture(u_Texture[${stage.texMap}], t_TexCoord, GetTextureLODBias(${stage.texMap}))`;
     }
 
     private generateColorIn(stage: TevStage, colorIn: GX.CombineColorInput) {
@@ -482,11 +546,93 @@ export class GX_Program extends Program {
         return `${this.generateTevRegister(stage.alphaRegId)}.a = ${value}`;
     }
 
-    private generateTevStage(stage: TevStage) {
+    private generateTevTexCoordWrapN(texCoord: string, wrap: GX.IndTexWrap): string {
+        switch (wrap) {
+        case GX.IndTexWrap.OFF:  return texCoord;
+        case GX.IndTexWrap._0:   return '0.0';
+        case GX.IndTexWrap._256: return `mod(${texCoord}, 256.0)`;
+        case GX.IndTexWrap._128: return `mod(${texCoord}, 128.0)`;
+        case GX.IndTexWrap._64:  return `mod(${texCoord}, 64.0)`;
+        case GX.IndTexWrap._32:  return `mod(${texCoord}, 32.0)`;
+        case GX.IndTexWrap._16:  return `mod(${texCoord}, 16.0)`;
+        }
+    }
+
+    private generateTevTexCoordWrap(stage: TevStage): string {
+        const baseCoord = `ReadTexCoord${stage.texCoordId}()`;
+        if (stage.indTexWrapS === GX.IndTexWrap.OFF && stage.indTexWrapT === GX.IndTexWrap.OFF)
+            return baseCoord;
+        else
+            return `vec2(${this.generateTevTexCoordWrapN(`${baseCoord}.x`, stage.indTexWrapS)}, ${this.generateTevTexCoordWrapN(`${baseCoord}.y`, stage.indTexWrapT)})`;
+    }
+
+    private generateTevTexCoordIndTexCoordBias(stage: TevStage): string {
+        const bias = (stage.indTexFormat === GX.IndTexFormat._8) ? '-128.0' : `1.0`;
+
+        switch (stage.indTexBiasSel) {
+        case GX.IndTexBiasSel.NONE: return ``;
+        case GX.IndTexBiasSel.S:    return ` + vec3(${bias}, 0.0, 0.0)`;
+        case GX.IndTexBiasSel.ST:   return ` + vec3(${bias}, ${bias}, 0.0)`;
+        case GX.IndTexBiasSel.SU:   return ` + vec3(${bias}, 0.0, ${bias})`;
+        case GX.IndTexBiasSel.T:    return ` + vec3(0.0, ${bias}, 0.0)`;
+        case GX.IndTexBiasSel.TU:   return ` + vec3(0.0, ${bias}, ${bias})`;
+        case GX.IndTexBiasSel.U:    return ` + vec3(0.0, 0.0, ${bias})`;
+        case GX.IndTexBiasSel.STU:  return ` + vec3(${bias})`;
+        }
+    }
+
+    private generateTevTexCoordIndTexCoord(stage: TevStage): string {
+        const baseCoord = `(t_IndTexCoord${stage.indTexStage} * 255.0)`;
+        switch (stage.indTexFormat) {
+        case GX.IndTexFormat._8: return baseCoord;
+        default:
+        case GX.IndTexFormat._5: throw new Error("whoops");
+        }
+    }
+
+    private generateTevTexCoordIndirectMtx(stage: TevStage): string {
+        const indTevCoord = `(${this.generateTevTexCoordIndTexCoord(stage)}${this.generateTevTexCoordIndTexCoordBias(stage)})`;
+
+        switch (stage.indTexMatrix) {
+        case GX.IndTexMtxID._0:  return `(u_IndTexMtx[0] * vec4(${indTevCoord}, 0.0))`;
+        case GX.IndTexMtxID._1:  return `(u_IndTexMtx[1] * vec4(${indTevCoord}, 0.0))`;
+        case GX.IndTexMtxID._2:  return `(u_IndTexMtx[2] * vec4(${indTevCoord}, 0.0))`;
+        default:
+        case GX.IndTexMtxID.OFF: throw new Error("whoops");
+        }
+    }
+
+    private generateTevTexCoordIndirectTranslation(stage: TevStage): string {
+        return `(${this.generateTevTexCoordIndirectMtx(stage)} / vec2(textureSize(u_Texture[${stage.texCoordId}], 0)))`;
+    }
+
+    private generateTevTexCoordIndirect(stage: TevStage): string {
+        const baseCoord = this.generateTevTexCoordWrap(stage);
+        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF)
+            return `${baseCoord} + ${this.generateTevTexCoordIndirectTranslation(stage)}`;
+        else
+            return baseCoord;
+    }
+
+    private generateTevTexCoord(stage: TevStage): string {
+        if (stage.texCoordId === GX.TexCoordID.NULL)
+            return '';
+
+        const finalCoord = this.generateTevTexCoordIndirect(stage);
+        if (stage.indTexAddPrev) {
+            return `t_TexCoord += ${finalCoord};`;
+        } else {
+            return `t_TexCoord = ${finalCoord};`;
+        }
+    }
+
+    private generateTevStage(stage: TevStage): string {
         const i = stage.index;
 
         return `
     // TEV Stage ${i}
+    ${this.generateTevTexCoord(stage)}
+    // Color Combine
     // colorIn: ${stage.colorInA} ${stage.colorInB} ${stage.colorInC} ${stage.colorInD}  colorOp: ${stage.colorOp} colorBias: ${stage.colorBias} colorScale: ${stage.colorScale} colorClamp: ${stage.colorClamp} colorRegId: ${stage.colorRegId}
     // alphaIn: ${stage.alphaInA} ${stage.alphaInB} ${stage.alphaInC} ${stage.alphaInD}  alphaOp: ${stage.alphaOp} alphaBias: ${stage.alphaBias} alphaScale: ${stage.alphaScale} alphaClamp: ${stage.alphaClamp} alphaRegId: ${stage.alphaRegId}
     // texCoordId: ${stage.texCoordId} texMap: ${stage.texMap} channelId: ${stage.channelId}
@@ -568,6 +714,7 @@ layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_KonstColor[8];
     mat4x3 u_TexMtx[10];
     mat4x3 u_PostTexMtx[20];
+    mat4x2 u_IndTexMtx[3];
     vec4 u_TextureLODBias[2];
 };
 
@@ -614,6 +761,7 @@ ${this.generateTexGens(this.material.texGens)}
 `;
 
         const tevStages = this.material.tevStages;
+        const indTexStages = this.material.indTexStages;
         const alphaTest = this.material.alphaTest;
         const kColors = this.material.colorConstants;
         const rColors = this.material.colorRegisters;
@@ -636,7 +784,7 @@ in vec3 v_TexCoord4;
 in vec3 v_TexCoord5;
 in vec3 v_TexCoord6;
 in vec3 v_TexCoord7;
-
+${this.generateTexCoordGetters()}
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
 vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
@@ -656,6 +804,9 @@ void main() {
     vec4 t_Color1    = u_KonstColor[5]; // ${this.generateColorConstant(rColors[1])}
     vec4 t_Color2    = u_KonstColor[6]; // ${this.generateColorConstant(rColors[2])}
     vec4 t_ColorPrev = u_KonstColor[7]; // ${this.generateColorConstant(rColors[3])}
+
+    vec2 t_TexCoord = vec2(0.0, 0.0);
+${this.generateIndTexStages(indTexStages)}
 ${this.generateTevStages(tevStages)}
 
     t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);

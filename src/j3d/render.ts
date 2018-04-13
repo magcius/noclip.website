@@ -161,7 +161,7 @@ class Command_Shape {
     }
 }
 
-const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20 + 8);
+const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 8);
 export class Command_Material {
     private static matrixScratch = mat4.create();
     private static textureScratch = new Int32Array(8);
@@ -259,6 +259,60 @@ export class Command_Material {
                 mat4.copy(finalMatrix, texMtx.matrix);
             }
 
+            switch(texMtx.type) {
+            case 0x00: // Normal. Does nothing.
+                break;
+
+            case 0x01: // Defino Plaza
+            case 0x0B: // Luigi Circuit
+                break;
+            case 0x06: // Rainbow Road
+                mat4.mul(finalMatrix, finalMatrix, mat4.fromValues(
+                    0.5, 0,   0, 0,
+                    0,  -0.5, 0, 0,
+                    0,   0,   0, 0,
+                    0.5, 0.5, 1, 0,
+                ));
+                mat4.mul(finalMatrix, finalMatrix, state.view);
+                finalMatrix[12] = 0;
+                finalMatrix[13] = 0;
+                finalMatrix[14] = 0;
+                break;
+            case 0x07: // Rainbow Road
+                mat4.mul(finalMatrix, finalMatrix, mat4.fromValues(
+                    0.5,  0,   0, 0,
+                    0,   -0.5, 0, 0,
+                    0.5,  0.5, 1, 0,
+                    0,    0,   0, 0,
+                ));
+                mat4.mul(finalMatrix, finalMatrix, state.view);
+                finalMatrix[12] = 0;
+                finalMatrix[13] = 0;
+                finalMatrix[14] = 0;
+                break;
+            case 0x08: // Peach Beach
+                mat4.mul(finalMatrix, finalMatrix, mat4.fromValues(
+                    0.5,  0,   0, 0,
+                    0,   -0.5, 0, 0,
+                    0.5,  0.5, 1, 0,
+                    0,    0,   0, 0,
+                ));
+                mat4.mul(finalMatrix, finalMatrix, texMtx.projectionMatrix);
+                break;
+            case 0x09: // Rainbow Road
+                mat4.mul(finalMatrix, finalMatrix, mat4.fromValues(
+                    0.5,  0,   0, 0,
+                    0,   -0.5, 0, 0,
+                    0.5,  0.5, 1, 0,
+                    0,    0,   0, 0,
+                ));
+                mat4.mul(finalMatrix, finalMatrix, texMtx.projectionMatrix);
+                mat4.mul(finalMatrix, finalMatrix, state.view);
+                break;
+            default:
+                throw "whoops";
+            }
+
             // We bind texture matrices as row-major for memory usage purposes.
             materialParamsData[offs + i*12 +  0] = finalMatrix[0];
             materialParamsData[offs + i*12 +  1] = finalMatrix[4];
@@ -295,6 +349,23 @@ export class Command_Material {
             materialParamsData[offs + i*12 + 11] = 0;
         }
         offs += 4*3*20;
+
+        for (let i = 0; i < this.material.indTexMatrices.length; i++) {
+            const indTexMtx = this.material.indTexMatrices[i];
+            if (indTexMtx === null)
+                continue;
+
+            const finalMatrix = indTexMtx;
+            materialParamsData[offs + i*8 + 0] = finalMatrix[0];
+            materialParamsData[offs + i*8 + 1] = finalMatrix[1];
+            materialParamsData[offs + i*8 + 2] = finalMatrix[2];
+            materialParamsData[offs + i*8 + 3] = 0;
+            materialParamsData[offs + i*8 + 4] = finalMatrix[3];
+            materialParamsData[offs + i*8 + 5] = finalMatrix[4];
+            materialParamsData[offs + i*8 + 6] = finalMatrix[5];
+            materialParamsData[offs + i*8 + 7] = 0;
+        }
+        offs += 4*2*3;
 
         // Bind textures.
         const textureScratch = Command_Material.textureScratch;
@@ -346,7 +417,6 @@ export class Scene implements Viewer.Scene {
     public name: string = '';
     public visible: boolean = true;
     public isSkybox: boolean = false;
-    public useMaterialTexMtx: boolean = true;
     public fps: number = 30;
 
     public modelMatrix: mat4;
@@ -413,13 +483,6 @@ export class Scene implements Viewer.Scene {
 
     public setFPS(v: number) {
         this.fps = v;
-    }
-
-    public setUseMaterialTexMtx(v: boolean) {
-        // Wind Waker's BTK animations seem to override the existing baked-in TexMtx.
-        // Super Mario Galaxy seems to stack them. I couldn't find any flag behavior for this,
-        // implying it's probably an engine change rather than separate BMD behavior.
-        this.useMaterialTexMtx = v;
     }
 
     public getTimeInFrames(milliseconds: number) {

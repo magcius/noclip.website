@@ -271,7 +271,7 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
     0, 0, 0, 1,
 );
 
-const materialParamsSize = 4*2 + 4*8 + 4*3*10 + 4*3*20 + 8;
+const materialParamsSize = 4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 8;
 const packetParamsOffs = align(materialParamsSize, 64);
 const packetParamsSize = 11*16;
 const paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
@@ -352,6 +352,9 @@ class Command_Material {
             paramsData[offs + i*12 + 11] = 0;
         }
         offs += 4*3*20;
+
+        // IndTexMtx. Indirect texturing isn't used.
+        offs += 4*3*2;
 
         // LOD biases. These are all set to 1.
         for (let i = 0; i < 9; i++) {
