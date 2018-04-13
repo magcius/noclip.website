@@ -457,6 +457,7 @@ export const enum TexMtxProjection {
 export interface TexMtx {
     type: number;
     projection: TexMtxProjection;
+    projectionMatrix: mat4;
     matrix: mat4;
 }
 
@@ -468,6 +469,7 @@ export interface MaterialEntry {
     gxMaterial: GX_Material.GXMaterial;
     texMatrices: TexMtx[];
     postTexMatrices: TexMtx[];
+    indTexMatrices: Float32Array[];
     colorMatRegs: GX_Material.Color[];
 }
 
@@ -521,6 +523,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
     const nameTableOffs = view.getUint32(0x14);
     const nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
 
+    const indirectTableOffset = view.getUint32(0x18);
     const cullModeTableOffs = view.getUint32(0x1C);
     const materialColorTableOffs = view.getUint32(0x20);
     const colorChanCountTableOffs = view.getUint32(0x24);
@@ -636,6 +639,42 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             textureIndexTableIdx += 0x02;
         }
 
+        const indirectEntryOffs = indirectTableOffset + i * 0x138;
+        const indirectStageCount = view.getUint8(indirectEntryOffs + 0x00);
+        assert(indirectStageCount <= 4);
+
+        const indTexStages: GX_Material.IndTexStage[] = [];
+        for (let j = 0; j < indirectStageCount; j++) {
+            const index = j;
+            // SetIndTexOrder
+            const indTexOrderOffs = indirectEntryOffs + 0x04 + j * 0x04;
+            const texCoordId: GX.TexCoordID = view.getUint8(indTexOrderOffs + 0x00);
+            const texture: GX.TexMapID = view.getUint8(indTexOrderOffs + 0x01);
+            // SetIndTexCoordScale
+            const indTexScaleOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + j * 0x04;
+            const scaleS: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x00);
+            const scaleT: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x01);
+            indTexStages.push({ index, texCoordId, texture, scaleS, scaleT });
+        }
+
+        // SetIndTexMatrix
+        const indTexMatrices: Float32Array[] = [];
+        for (let j = 0; j < 3; j++) {
+            const indTexMatrixOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + j * 0x1C;
+            const p00 = view.getFloat32(indTexMatrixOffs + 0x00);
+            const p01 = view.getFloat32(indTexMatrixOffs + 0x04);
+            const p02 = view.getFloat32(indTexMatrixOffs + 0x08);
+            const p10 = view.getFloat32(indTexMatrixOffs + 0x0C);
+            const p11 = view.getFloat32(indTexMatrixOffs + 0x10);
+            const p12 = view.getFloat32(indTexMatrixOffs + 0x14);
+            const scale = Math.pow(2, view.getInt8(indTexMatrixOffs + 0x18));
+            const m = new Float32Array([
+                p00*scale, p01*scale, p02*scale,
+                p10*scale, p11*scale, p12*scale,
+            ]);
+            indTexMatrices.push(m);
+        }
+
         const tevStages: GX_Material.TevStage[] = [];
         for (let j = 0; j < 16; j++) {
             // TevStage
@@ -671,7 +710,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             // TevOrder
             const tevOrderIndex = view.getUint16(materialEntryIdx + 0xBC + j * 0x02);
             const tevOrderOffs = tevOrderTableOffs + tevOrderIndex * 0x04;
-            const texCoordId: GX.TexCoordSlot = view.getUint8(tevOrderOffs + 0x00);
+            const texCoordId: GX.TexCoordID = view.getUint8(tevOrderOffs + 0x00);
             const texMap: number = view.getUint8(tevOrderOffs + 0x01);
             const channelId: GX.ColorChannelId = view.getUint8(tevOrderOffs + 0x02);
             assert(view.getUint8(tevOrderOffs + 0x03) === 0xFF);
@@ -680,12 +719,33 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             const konstColorSel: GX.KonstColorSel = view.getUint8(materialEntryIdx + 0x9C + j);
             const konstAlphaSel: GX.KonstAlphaSel = view.getUint8(materialEntryIdx + 0xAC + j);
 
+            // SetTevIndirect
+            const indTexStageOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + (0x04 * 4) + j * 0x0C;
+            const indTexStage: GX.IndTexStageID = view.getUint8(indTexStageOffs + 0x00);
+            const indTexFormat: GX.IndTexFormat = view.getUint8(indTexStageOffs + 0x01);
+            const indTexBiasSel: GX.IndTexBiasSel = view.getUint8(indTexStageOffs + 0x02);
+            const indTexMatrix: GX.IndTexMtxID = view.getUint8(indTexStageOffs + 0x03);
+            assert(indTexMatrix <= GX.IndTexMtxID.T2);
+            const indTexWrapS: GX.IndTexWrap = view.getUint8(indTexStageOffs + 0x04);
+            const indTexWrapT: GX.IndTexWrap = view.getUint8(indTexStageOffs + 0x05);
+            const indTexAddPrev: boolean = !!view.getUint8(indTexStageOffs + 0x06);
+            const indTexUseOrigLOD: boolean = !!view.getUint8(indTexStageOffs + 0x07);
+            // bumpAlpha
+
             const tevStage: GX_Material.TevStage = {
                 index,
                 colorInA, colorInB, colorInC, colorInD, colorOp, colorBias, colorScale, colorClamp, colorRegId,
                 alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId,
                 texCoordId, texMap, channelId,
                 konstColorSel, konstAlphaSel,
+                indTexStage,
+                indTexFormat,
+                indTexBiasSel,
+                indTexMatrix,
+                indTexWrapS,
+                indTexWrapT,
+                indTexAddPrev,
+                indTexUseOrigLOD,
             };
             tevStages.push(tevStage);
         }
@@ -726,6 +786,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             colorRegisters,
             colorConstants,
             tevStages,
+            indTexStages,
             alphaTest,
             ropInfo,
         };
@@ -738,6 +799,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             postTexMatrices,
             gxMaterial,
             colorMatRegs,
+            indTexMatrices,
         });
         materialEntryIdx += 0x014C;
     }
@@ -793,7 +855,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         const p32 = view.getFloat32(texMtxOffs + 0x5C);
         const p33 = view.getFloat32(texMtxOffs + 0x60);
 
-        const p = mat4.fromValues(
+        const projectionMatrix = mat4.fromValues(
             p00, p10, p20, p30,
             p01, p11, p21, p31,
             p02, p12, p22, p32,
@@ -803,41 +865,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
         const matrix = mat4.create();
         createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
 
-        switch (type) {
-        case 0x00:
-        case 0x01: // Defino Plaza
-        case 0x0B: // Luigi Circuit
-            break;
-        case 0x06: // Rainbow Road
-            mat4.mul(matrix, matrix, mat4.fromValues(
-                0.5,  0,   0, 0,
-                0,   -0.5, 0, 0,
-                0,    0,   0, 0,
-                0.5,  0.5, 0, 1,
-            ))
-        case 0x07: // Rainbow Road
-            mat4.mul(matrix, matrix, mat4.fromValues(
-                0.5,  0,   0, 0,
-                0,   -0.5, 0, 0,
-                0.5,  0.5, 1, 0,
-                0,    0,   0, 1,
-            ));
-            break;
-        case 0x08: // Peach Beach
-        case 0x09: // Rainbow Road
-            mat4.mul(matrix, matrix, p);
-            mat4.mul(matrix, matrix, mat4.fromValues(
-                0.5,  0,   0, 0,
-                0,   -0.5, 0, 0,
-                0.5,  0.5, 1, 0,
-                0,    0,   0, 1,
-            ));
-            break;
-        default:
-            throw "whoops";
-        }
-
-        const texMtx: TexMtx = { type, projection, matrix };
+        const texMtx: TexMtx = { type, projection, projectionMatrix, matrix };
         return texMtx;
     }
 }

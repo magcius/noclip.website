@@ -230,7 +230,7 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSli
             const alphaClamp: boolean     = !!(alphaCombineFlags >>> 8);
             const alphaRegId: GX.Register = (alphaCombineFlags >>> 9) & 0x03;
 
-            const texCoordId: GX.TexCoordSlot = view.getUint8(tevOrderTableOffs + 0x03);
+            const texCoordId: GX.TexCoordID = view.getUint8(tevOrderTableOffs + 0x03);
             const texMap: number = view.getUint8(tevOrderTableOffs + 0x02);
 
             const index = j;
@@ -241,6 +241,16 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSli
                 alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId,
                 texCoordId, texMap, channelId,
                 konstColorSel, konstAlphaSel,
+
+                // We don't use indtex.
+                indTexStage: GX.IndTexStageID.STAGE0,
+                indTexMatrix: GX.IndTexMtxID.OFF,
+                indTexFormat: GX.IndTexFormat._8,
+                indTexBiasSel: GX.IndTexBiasSel.NONE,
+                indTexWrapS: GX.IndTexWrap.OFF,
+                indTexWrapT: GX.IndTexWrap.OFF,
+                indTexAddPrev: false,
+                indTexUseOrigLOD: false,
             };
 
             tevStages.push(tevStage);
@@ -365,6 +375,7 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSli
             tevStages,
             alphaTest,
             ropInfo,
+            indTexStages: [],
         };
 
         materials.push({ flags, groupIndex, textureIndexes, vtxAttrFormat, gxMaterial, uvAnimations });
