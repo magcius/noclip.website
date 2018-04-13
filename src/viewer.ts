@@ -280,28 +280,6 @@ export class OrbitCameraController implements CameraController {
     }
 }
 
-class FullscreenCopyProgram extends Program {
-    public vert: string = `
-out vec2 v_TexCoord;
-
-void main() {
-    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(1);
-}
-`;
-    public frag: string = `
-uniform sampler2D u_Texture;
-in vec2 v_TexCoord;
-
-void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
-    gl_FragColor = vec4(color.rgb, 1.0);
-}
-`;
-}
-
 export class Viewer {
     public camera: mat4;
     public inputManager: InputManager;
@@ -310,10 +288,9 @@ export class Viewer {
     public renderState: RenderState;
     public onscreenRenderTarget: RenderTarget;
     public scene: MainScene;
-    public fullscreenCopyProgram: Program;
 
     constructor(public canvas: HTMLCanvasElement) {
-        const gl = canvas.getContext("webgl2", { alpha: false });
+        const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
         this.renderState = new RenderState(gl);
 
         this.inputManager = new InputManager(this.canvas);
@@ -322,7 +299,6 @@ export class Viewer {
         this.cameraController = null;
 
         this.onscreenRenderTarget = new RenderTarget();
-        this.fullscreenCopyProgram = new FullscreenCopyProgram();
     }
 
     public reset() {
@@ -349,19 +325,8 @@ export class Viewer {
         // Main scene. This renders to the onscreen target.
         this.scene.render(this.renderState);
 
-        // Draw onscreen to canvas. First, resolve MSAA buffer to a standard buffer.
-        this.onscreenRenderTarget.resolve(gl);
-        // Now, copy the onscreen RT to the screen.
-        this.renderState.useProgram(this.fullscreenCopyProgram);
-        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-        gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.onscreenRenderTarget.resolvedColorTexture);
-        gl.bindSampler(0, null);
-        gl.disable(gl.DEPTH_TEST);
-        gl.disable(gl.CULL_FACE);
-        gl.disable(gl.BLEND);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        this.renderState.useRealOnscreenRenderTarget(this.canvas.width, this.canvas.height);
+        this.renderState.blitRenderTarget(this.onscreenRenderTarget);
 
         const frameEndTime = window.performance.now();
         const diff = frameEndTime - this.renderState.frameStartTime;

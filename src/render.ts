@@ -139,6 +139,7 @@ RenderFlags.default.frontFace = FrontFaceMode.CCW;
 export class RenderTarget {
     public width: number;
     public height: number;
+    public samples: number;
 
     public msaaFramebuffer: WebGLFramebuffer;
     public msaaColorRenderbuffer: WebGLRenderbuffer;
@@ -161,19 +162,17 @@ export class RenderTarget {
             gl.deleteTexture(this.resolvedColorTexture);
     }
 
-    public setParameters(gl: WebGL2RenderingContext, width: number, height: number) {
-        if (this.width === width && this.height === height)
+    public setParameters(gl: WebGL2RenderingContext, width: number, height: number, samples: number = 0) {
+        if (this.width === width && this.height === height && this.samples == samples)
             return;
 
         this.destroy(gl);
 
         this.width = width;
         this.height = height;
+        this.samples = samples;
 
         gl.getExtension('EXT_color_buffer_float');
-
-        // XXX(jstpierre): Configurable?
-        const samples = gl.getParameter(gl.SAMPLES);
 
         // MSAA FB.
         this.msaaColorRenderbuffer = gl.createRenderbuffer();
@@ -181,7 +180,7 @@ export class RenderTarget {
         gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, this.width, this.height);
         this.msaaDepthRenderbuffer = gl.createRenderbuffer();
         gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaDepthRenderbuffer);
-        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT16, this.width, this.height);
+        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH24_STENCIL8, this.width, this.height);
         this.msaaFramebuffer = gl.createFramebuffer();
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.msaaFramebuffer);
         gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, this.msaaColorRenderbuffer);
@@ -209,119 +208,12 @@ export class RenderTarget {
     }
 }
 
-
-export class RenderState {
-    private programCache: ProgramCache;
-
-    // State.
-    public currentProgram: Program = null;
-    public currentFlags: RenderFlags = new RenderFlags();
-    public currentRenderTarget: RenderTarget = null;
-
-    // Parameters.
-    public fov: number;
-    public time: number;
-
-    public projection: mat4;
-    public view: mat4;
-
-    public nearClipPlane: number;
-    public farClipPlane: number;
-
-    private scratchMatrix: mat4;
-
-    public drawCallCount: number;
-    public frameStartTime: number;
-
-    private onscreenRenderTarget: RenderTarget;
-
-    constructor(public gl: WebGL2RenderingContext) {
-        this.programCache = new ProgramCache(this.gl);
-
-        this.time = 0;
-        this.fov = Math.PI / 4;
-
-        this.projection = mat4.create();
-        this.view = mat4.create();
-        this.scratchMatrix = mat4.create();
-    }
-
-    public reset() {
-        this.drawCallCount = 0;
-        this.frameStartTime = window.performance.now();
-        this.useRenderTarget(this.onscreenRenderTarget);
-        this.useFlags(RenderFlags.default);
-    }
-
-    public setView(m: mat4) {
-        mat4.copy(this.view, m);
-    }
-
-    public useRenderTarget(renderTarget: RenderTarget) {
-        const gl = this.gl;
-        this.currentRenderTarget = renderTarget !== null ? renderTarget : this.onscreenRenderTarget;
-        this.bindViewport();
-        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
-    }
-
-    public bindViewport(): void {
-        const gl = this.gl;
-        const width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
-        mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
-        gl.viewport(0, 0, width, height);
-    }
-
-    public setClipPlanes(near: number, far: number) {
-        this.nearClipPlane = near;
-        this.farClipPlane = far;
-        if (this.currentRenderTarget) {
-            const width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
-            mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
-        }
-    }
-
-    public setOnscreenRenderTarget(renderTarget: RenderTarget) {
-        this.onscreenRenderTarget = renderTarget;
-    }
-
-    public compileProgram(prog: Program) {
-        return prog.compile(this.gl, this.programCache);
-    }
-
-    public useProgram(prog: Program) {
-        const gl = this.gl;
-        this.currentProgram = prog;
-        gl.useProgram(this.compileProgram(prog));
-    }
-
-    public updateModelView(isSkybox: boolean = false, model: mat4 = null): mat4 {
-        const scratch = this.scratchMatrix;
-        mat4.copy(scratch, this.view);
-        if (isSkybox) {
-            scratch[12] = 0;
-            scratch[13] = 0;
-            scratch[14] = 0;
-        }
-
-        if (model)
-            mat4.mul(scratch, scratch, model);
-        return scratch;
-    }
-
-    public bindModelView(isSkybox: boolean = false, model: mat4 = null) {
-        const gl = this.gl;
-        const prog = this.currentProgram;
-        const scratch = this.updateModelView(isSkybox, model);
-        gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
-        gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);
-    }
-
-    public useFlags(flags: RenderFlags) {
-        const gl = this.gl;
-        // TODO(jstpierre): Move the flattening to a stack, possibly?
-        RenderFlags.flatten(flags, this.currentFlags);
-        RenderFlags.apply(gl, this.currentFlags, flags);
-        this.currentFlags = flags;
+// XXX(jstpierre): Dumb polymorphic hack
+class RealOnscreenRenderTarget extends RenderTarget {
+    public setParameters(gl: WebGL2RenderingContext, width: number, height: number) {
+        this.width = width;
+        this.height = height;
+        this.msaaFramebuffer = null;
     }
 }
 
@@ -610,5 +502,189 @@ export class BufferCoalescer {
     public destroy(gl: WebGL2RenderingContext): void {
         gl.deleteBuffer(this.vertexBuffer);
         gl.deleteBuffer(this.indexBuffer);
+    }
+}
+
+class FullscreenCopyProgram extends Program {
+    public vert: string = `
+out vec2 v_TexCoord;
+
+void main() {
+    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
+    gl_Position.zw = vec2(1);
+}
+`;
+    public frag: string = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 color = texture(u_Texture, v_TexCoord);
+    gl_FragColor = vec4(color.rgb, 1.0);
+}
+`;
+}
+
+export class RenderState {
+    private programCache: ProgramCache;
+
+    // State.
+    public currentProgram: Program = null;
+    public currentFlags: RenderFlags = new RenderFlags();
+    public currentRenderTarget: RenderTarget = null;
+
+    // Parameters.
+    public fov: number;
+    public time: number;
+
+    public projection: mat4;
+    public view: mat4;
+
+    public nearClipPlane: number;
+    public farClipPlane: number;
+
+    private scratchMatrix: mat4;
+
+    public drawCallCount: number;
+    public frameStartTime: number;
+
+    private onscreenRenderTarget: RenderTarget;
+    private realOnscreenRenderTarget: RenderTarget;
+    private fullscreenCopyProgram: FullscreenCopyProgram;
+    private fullscreenCopyFlags: RenderFlags;
+
+    constructor(public gl: WebGL2RenderingContext) {
+        this.programCache = new ProgramCache(this.gl);
+
+        this.time = 0;
+        this.fov = Math.PI / 4;
+
+        this.projection = mat4.create();
+        this.view = mat4.create();
+        this.scratchMatrix = mat4.create();
+
+        this.realOnscreenRenderTarget = new RealOnscreenRenderTarget();
+        this.fullscreenCopyProgram = new FullscreenCopyProgram();
+        this.fullscreenCopyFlags = new RenderFlags();
+        this.fullscreenCopyFlags.depthTest = false;
+        this.fullscreenCopyFlags.blendMode = BlendMode.NONE;
+        this.fullscreenCopyFlags.cullMode = CullMode.NONE;
+    }
+
+    public reset() {
+        this.drawCallCount = 0;
+        this.frameStartTime = window.performance.now();
+        this.useRenderTarget(this.onscreenRenderTarget);
+        this.useFlags(RenderFlags.default);
+    }
+
+    public setView(m: mat4) {
+        mat4.copy(this.view, m);
+    }
+
+    public blitRenderTarget(srcRenderTarget: RenderTarget, includeDepth: boolean = false): void {
+        const gl = this.gl;
+
+        // Blit depth.
+        if (includeDepth) {
+            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, srcRenderTarget.msaaFramebuffer);
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
+            gl.blitFramebuffer(
+                0, 0, srcRenderTarget.width, srcRenderTarget.height,
+                0, 0, this.onscreenRenderTarget.width, this.onscreenRenderTarget.height,
+                gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT, gl.NEAREST
+            );
+        }
+
+        // First, resolve MSAA buffer to a standard buffer.
+        srcRenderTarget.resolve(gl);
+        // Make sure to re-bind our destination RT, since the resolve screws things up...
+        this.useRenderTarget(this.currentRenderTarget);
+        // Now, copy the onscreen RT to the screen.
+        this.useProgram(this.fullscreenCopyProgram);
+        this.useFlags(this.fullscreenCopyFlags);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, srcRenderTarget.resolvedColorTexture);
+        gl.bindSampler(0, null);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+
+    public useRenderTarget(renderTarget: RenderTarget) {
+        const gl = this.gl;
+        this.currentRenderTarget = renderTarget !== null ? renderTarget : this.onscreenRenderTarget;
+        this.bindViewport();
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
+    }
+
+    // Should only be used by viewer, basically...
+    public useRealOnscreenRenderTarget(width: number, height: number) {
+        const gl = this.gl;
+        this.realOnscreenRenderTarget.setParameters(null, width, height);
+        this.currentRenderTarget = this.realOnscreenRenderTarget;
+        gl.viewport(0, 0, width, height);
+    }
+
+    public bindViewport(): void {
+        const gl = this.gl;
+        const width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+        mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+        gl.viewport(0, 0, width, height);
+    }
+
+    public setClipPlanes(near: number, far: number) {
+        this.nearClipPlane = near;
+        this.farClipPlane = far;
+        if (this.currentRenderTarget) {
+            const width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+            mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+        }
+    }
+
+    public setOnscreenRenderTarget(renderTarget: RenderTarget) {
+        const gl = this.gl;
+        this.onscreenRenderTarget = renderTarget;
+        assert(this.onscreenRenderTarget.samples === 0);
+    }
+
+    public compileProgram(prog: Program) {
+        return prog.compile(this.gl, this.programCache);
+    }
+
+    public useProgram(prog: Program) {
+        const gl = this.gl;
+        this.currentProgram = prog;
+        gl.useProgram(this.compileProgram(prog));
+    }
+
+    public updateModelView(isSkybox: boolean = false, model: mat4 = null): mat4 {
+        const scratch = this.scratchMatrix;
+        mat4.copy(scratch, this.view);
+        if (isSkybox) {
+            scratch[12] = 0;
+            scratch[13] = 0;
+            scratch[14] = 0;
+        }
+
+        if (model)
+            mat4.mul(scratch, scratch, model);
+        return scratch;
+    }
+
+    public bindModelView(isSkybox: boolean = false, model: mat4 = null) {
+        const gl = this.gl;
+        const prog = this.currentProgram;
+        const scratch = this.updateModelView(isSkybox, model);
+        gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
+        gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);
+    }
+
+    public useFlags(flags: RenderFlags) {
+        const gl = this.gl;
+        // TODO(jstpierre): Move the flattening to a stack, possibly?
+        RenderFlags.flatten(flags, this.currentFlags);
+        RenderFlags.apply(gl, this.currentFlags, flags);
+        this.currentFlags = flags;
     }
 }
