@@ -1092,7 +1092,7 @@ function readTTK1Chunk(btk: BTK, buffer: ArrayBufferSlice, chunkStart: number, c
     const rTableOffs = chunkStart + view.getUint32(0x2C);
     const tTableOffs = chunkStart + view.getUint32(0x30);
 
-    const rotationScale = Math.pow(2, rotationDecimal);
+    const rotationScale = Math.pow(2, rotationDecimal) / 32767;
 
     function convertRotationTable(table: Int16Array): Float32Array {
         const v = new Float32Array(table.length);
@@ -1278,7 +1278,7 @@ export class BTK {
         const centerQ = animationEntry.centerQ;
         const scaleS = sampleAnimationData(animationEntry.s.scale, animFrame);
         const scaleT = sampleAnimationData(animationEntry.t.scale, animFrame);
-        const rotation = sampleAnimationData(animationEntry.s.rotation, animFrame);
+        const rotation = sampleAnimationData(animationEntry.q.rotation, animFrame);
         const translationS = sampleAnimationData(animationEntry.s.translation, animFrame);
         const translationT = sampleAnimationData(animationEntry.t.translation, animFrame);
         createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
