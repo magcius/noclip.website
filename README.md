@@ -1,4 +1,13 @@
-# Jasper's Model Viewer
+<img align="right" src="logo.png">
+# Model Viewer
+
+View video game models in your browser. Mostly focused on Nintendo models.
+
+Currently supported:
+
+ * [The Legend of Zelda: Wind Waker
+
+Model Viewer for various games.
 
 This is a fairly simple model and scene viewer that runs in your web browser.
 
@@ -17,3 +26,5 @@ Other tools I've written:
  * [Dark Souls model viewer](http://magcius.github.io/dunky.js/)
 
 Perhaps they will be integrated into this tool at some point.
+
+See the application for full credits.

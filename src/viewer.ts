@@ -4,6 +4,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import { RenderState, RenderFlags, RenderTarget, Program } from './render';
+import * as UI from './ui';
 
 import Progressable from 'Progressable';
 
@@ -388,6 +389,7 @@ export class Viewer {
 export interface MainScene extends Scene {
     resetCamera?(m: mat4): void;
     createUI?(): HTMLElement;
+    createPanels?(): UI.Panel[];
 }
 
 export interface SceneDesc {
