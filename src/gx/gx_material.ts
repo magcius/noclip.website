@@ -9,6 +9,9 @@ import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontF
 import { align } from '../util';
 import { Material } from '../sm64ds/nitro_bmd';
 
+export const EFB_WIDTH = 640;
+export const EFB_HEIGHT = 528;
+
 // #region Material definition.
 export interface GXMaterial {
     // Debugging & ID
@@ -360,7 +363,7 @@ export class GX_Program extends Program {
         const i = stage.index;
         return `
     // Indirect ${i}
-    vec3 t_IndTexCoord${i} = SampleTexture(${stage.texture}, ${this.generateIndTexStageScale(stage)}).abg;`;
+    vec3 t_IndTexCoord${i} = TextureSample(${stage.texture}, ${this.generateIndTexStageScale(stage)}).abg;`;
     }
 
     private generateIndTexStages(stages: IndTexStage[]): string {
@@ -445,7 +448,7 @@ export class GX_Program extends Program {
     }
 
     private generateTexAccess(stage: TevStage) {
-        return `SampleTexture(${stage.texMap}, t_TexCoord)`;
+        return `TextureSample(${stage.texMap}, t_TexCoord)`;
     }
 
     private generateColorIn(stage: TevStage, colorIn: GX.CombineColorInput) {
@@ -609,7 +612,7 @@ export class GX_Program extends Program {
     }
 
     private generateTevTexCoordIndirectTranslation(stage: TevStage): string {
-        return `(${this.generateTevTexCoordIndirectMtx(stage)} / vec2(textureSize(u_Texture[${stage.texCoordId}], 0)))`;
+        return `(${this.generateTevTexCoordIndirectMtx(stage)} / TextureSize(${stage.texCoordId}))`;
     }
 
     private generateTevTexCoordIndirect(stage: TevStage): string {
@@ -721,7 +724,8 @@ layout(row_major, std140) uniform ub_MaterialParams {
     mat4x3 u_TexMtx[10];
     mat4x3 u_PostTexMtx[20];
     mat4x2 u_IndTexMtx[3];
-    vec4 u_TextureLODBias[2];
+    // SizeX, SizeY, 0, Bias
+    vec4 u_TextureParams[8];
 };
 
 // Expected to change with each shape packet.
@@ -790,8 +794,9 @@ in vec3 v_TexCoord6;
 in vec3 v_TexCoord7;
 ${this.generateTexCoordGetters()}
 
-float GetTextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureLODBias[index >> 2][index & 3]; }
-vec4 SampleTexture(int index, vec2 coord) { return texture(u_Texture[index], coord, GetTextureLODBias(index)); }
+float TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }
+vec2 TextureSize(int index) { return u_TextureParams[index].xy; }
+vec4 TextureSample(int index, vec2 coord) { return texture(u_Texture[index], coord, TextureLODBias(index)); }
 
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
@@ -932,10 +937,8 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
 // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
 // make sure textures are sampled correctly...
 export function getTextureLODBias(state: RenderState): number {
-    const efbWidth = 640;
-    const efbHeight = 528;
     const viewportWidth = state.currentRenderTarget.width;
     const viewportHeight = state.currentRenderTarget.height;
-    const textureLODBias = Math.log2(Math.min(viewportWidth / efbWidth, viewportHeight / efbHeight));
+    const textureLODBias = Math.log2(Math.min(viewportWidth / EFB_WIDTH, viewportHeight / EFB_HEIGHT));
     return textureLODBias;
 }

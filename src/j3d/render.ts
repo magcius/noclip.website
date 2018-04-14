@@ -161,7 +161,7 @@ class Command_Shape {
     }
 }
 
-const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 8);
+const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8);
 export class Command_Material {
     private static matrixScratch = mat4.create();
     private static textureScratch = new Int32Array(8);
@@ -373,16 +373,17 @@ export class Command_Material {
             const texIndex = this.material.textureIndexes[i];
             if (texIndex < 0)
                 continue;
-            const sampler = this.scene.tex1Samplers[texIndex];
-            const [glSampler, glTexture] = this.scene.getGLTexture(sampler);
+            const textureBindData = this.scene.getTextureBindData(texIndex);
             gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, glTexture);
-            gl.bindSampler(i, glSampler);
+            gl.bindTexture(gl.TEXTURE_2D, textureBindData.glTexture);
+            gl.bindSampler(i, textureBindData.glSampler);
             textureScratch[i] = i;
-            materialParamsData[offs + i] = sampler.lodBias;
+            materialParamsData[offs + i*4 + 0] = textureBindData.width;
+            materialParamsData[offs + i*4 + 1] = textureBindData.height;
+            materialParamsData[offs + i*4 + 3] = textureBindData.lodBias;
         }
         gl.uniform1iv(this.program.u_Texture, textureScratch);
-        offs += 8;
+        offs += 4*8;
 
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);
 
@@ -409,6 +410,21 @@ export enum ColorOverride {
     C0, C1, C2, C3,
 }
 
+interface TextureBindData {
+    glTexture: WebGLTexture;
+    glSampler: WebGLSampler;
+    width: number;
+    height: number;
+    lodBias: number;
+}
+
+// Used mostly by indirect texture FB installations...
+export interface TextureOverride {
+    glTexture: WebGLTexture;
+    width?: number;
+    height?: number;
+}
+
 const sceneParamsData = new Float32Array(4*4 + 4*4 + 4);
 export class Scene implements Viewer.Scene {
     public textures: Viewer.Texture[];
@@ -426,11 +442,12 @@ export class Scene implements Viewer.Scene {
     public alphaOverrides: number[] = [];
     public sceneParamsBuffer: WebGLBuffer;
 
-    // Internals used by Command_Material.
-    public tex1Samplers: TEX1_Sampler[];
+    // Texture information.
+    private tex1TextureDatas: TEX1_TextureData[];
+    private tex1Samplers: TEX1_Sampler[];
     private glSamplers: WebGLSampler[];
     private glTextures: WebGLTexture[];
-    public textureOverrides = new Map<string, WebGLTexture>();
+    public textureOverrides = new Map<string, TextureOverride>();
 
     public currentMaterialCommand: Command_Material;
 
@@ -469,11 +486,6 @@ export class Scene implements Viewer.Scene {
         gl.deleteBuffer(this.sceneParamsBuffer);
     }
 
-    // TODO(jstpierre): Merge texture override & extra textures technology...
-    public setTextureOverride(name: string, newTexture: WebGLTexture) {
-        this.textureOverrides.set(name, newTexture);
-    }
-
     public setColorOverride(i: ColorOverride, color: GX_Material.Color) {
         this.colorOverrides[i] = color;
     }
@@ -490,16 +502,40 @@ export class Scene implements Viewer.Scene {
         this.fps = v;
     }
 
-    public getGLTexture(tex1Sampler: TEX1_Sampler): [WebGLSampler, WebGLTexture] {
-        let texture: WebGLTexture;
-        const sampler = this.glSamplers[tex1Sampler.index];
+    public setTextureOverride(name: string, override: TextureOverride) {
+        this.textureOverrides.set(name, override);
+    }
 
-        texture = this.textureOverrides.get(tex1Sampler.name);
+    public getTextureBindData(texIndex: number): TextureBindData {
+        const tex1Sampler = this.tex1Samplers[texIndex];
 
-        if (texture === undefined)
-            texture = this.glTextures[tex1Sampler.textureDataIndex];
+        const textureOverride: TextureOverride = this.textureOverrides.get(tex1Sampler.name);
 
-        return [sampler, texture];
+        let glTexture: WebGLTexture;
+        let width: number;
+        let height: number;
+        if (textureOverride !== undefined) {
+            glTexture = textureOverride.glTexture;
+            width = textureOverride.width;
+            height = textureOverride.height;
+        } else {
+            glTexture = this.glTextures[tex1Sampler.textureDataIndex];
+        }
+
+        const tex1TextureData = this.tex1TextureDatas[tex1Sampler.textureDataIndex];
+        if (width === undefined)
+            width = tex1TextureData.width;
+        if (height === undefined)
+            height = tex1TextureData.height;
+
+        const glSampler = this.glSamplers[tex1Sampler.index];
+        return {
+            glSampler,
+            glTexture,
+            width,
+            height,
+            lodBias: tex1Sampler.lodBias,
+        };
     }
 
     public getTimeInFrames(milliseconds: number) {
@@ -682,6 +718,7 @@ export class Scene implements Viewer.Scene {
             this.glSamplers.push(Scene.translateSampler(gl, sampler));
         }
 
+        this.tex1TextureDatas = tex1.textureDatas;
         this.tex1Samplers = tex1.samplers;
     }
 
