@@ -15767,6 +15767,21 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                 SeaPlaneScene.prototype.getTimeInFrames = function (milliseconds) {
                     return (milliseconds / 1000) * this.fps * this.animationScale;
                 };
+                SeaPlaneScene.prototype.getTextureBindData = function (texIndex) {
+                    var tex1Sampler = this.tex1Samplers[texIndex];
+                    var glTexture = this.glTextures[tex1Sampler.textureDataIndex];
+                    var tex1TextureData = this.tex1TextureDatas[tex1Sampler.textureDataIndex];
+                    var width = tex1TextureData.width;
+                    var height = tex1TextureData.height;
+                    var glSampler = this.glSamplers[tex1Sampler.index];
+                    return {
+                        glSampler: glSampler,
+                        glTexture: glTexture,
+                        width: width,
+                        height: height,
+                        lodBias: tex1Sampler.lodBias,
+                    };
+                };
                 return SeaPlaneScene;
             }());
             PlaneShape = /** @class */ (function () {

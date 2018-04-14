@@ -410,7 +410,7 @@ export enum ColorOverride {
     C0, C1, C2, C3,
 }
 
-interface TextureBindData {
+export interface TextureBindData {
     glTexture: WebGLTexture;
     glSampler: WebGLSampler;
     width: number;

@@ -11,9 +11,9 @@ import { MainScene, Scene, Texture } from 'viewer';
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 
-import { BMD, BMT, BTK, MaterialEntry, TEX1, BTI_Texture } from 'j3d/j3d';
+import { BMD, BMT, BTK, MaterialEntry, TEX1, BTI_Texture, TEX1_TextureData, TEX1_Sampler } from 'j3d/j3d';
 import * as RARC from 'j3d/rarc';
-import { Command_Material, Scene as J3DScene } from 'j3d/render';
+import { Command_Material, Scene as J3DScene, TextureBindData } from 'j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from 'j3d/sms_scenes';
 import * as Yaz0 from 'yaz0';
 
@@ -35,9 +35,11 @@ class SeaPlaneScene implements Scene {
     public animationScale: number = 5;
 
     // Play make-believe for Command_Material.
-    public glTextures: WebGLTexture[];
-    public btiTextures: BTI_Texture[];
-    public textureRemapTable: number[];
+    private tex1TextureDatas: TEX1_TextureData[];
+    private tex1Samplers: TEX1_Sampler[];
+    private glSamplers: WebGLSampler[];
+    private glTextures: WebGLTexture[];
+
     public bmt: BMT = null;
     public isSkybox: boolean = false;
     public useMaterialTexMtx: boolean = false;
@@ -142,6 +144,24 @@ class SeaPlaneScene implements Scene {
     public getTimeInFrames(milliseconds: number) {
         return (milliseconds / 1000) * this.fps * this.animationScale;
     }
+    public getTextureBindData(texIndex: number): TextureBindData {
+        const tex1Sampler = this.tex1Samplers[texIndex];
+
+        const glTexture: WebGLTexture = this.glTextures[tex1Sampler.textureDataIndex];
+        const tex1TextureData = this.tex1TextureDatas[tex1Sampler.textureDataIndex];
+        const width = tex1TextureData.width;
+        const height = tex1TextureData.height;
+
+        const glSampler = this.glSamplers[tex1Sampler.index];
+        return {
+            glSampler,
+            glTexture,
+            width,
+            height,
+            lodBias: tex1Sampler.lodBias,
+        };
+    }
+
 }
 
 class PlaneShape {
