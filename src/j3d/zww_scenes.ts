@@ -150,33 +150,50 @@ class WindWakerRenderer implements Viewer.MainScene {
         // Windows / doors.
         this.model3 = this.createScene(gl, roomRarc, `model3`, false);
 
-        // Noon.
-        this.setTimeOfDay(0x02);
-
         this.textures = collectTextures([this.vr_sky, this.vr_kasumi_mae, this.vr_uso_umi, this.vr_back_cloud, this.model, this.model1, this.model3]);
     }
 
     public setTimeOfDay(timeOfDay: number) {
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`);
-        const colors = WindWakerRenderer.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay);
+        const colors = timeOfDay === 0 ? undefined : WindWakerRenderer.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay - 1);
 
-        this.model.setColorOverride(ColorOverride.K0, colors.light);
-        this.model.setColorOverride(ColorOverride.C0, colors.amb);
+        if (colors !== undefined) {
+            this.model.setColorOverride(ColorOverride.K0, colors.light);
+            this.model.setColorOverride(ColorOverride.C0, colors.amb);
 
-        if (this.model1) {
-            this.model1.setColorOverride(ColorOverride.K0, colors.ocean);
-            this.model1.setColorOverride(ColorOverride.C0, colors.wave);
-            this.model1.setColorOverride(ColorOverride.C1, colors.splash);
-            this.model1.setColorOverride(ColorOverride.K1, colors.splash2);
+            if (this.model1) {
+                this.model1.setColorOverride(ColorOverride.K0, colors.ocean);
+                this.model1.setColorOverride(ColorOverride.C0, colors.wave);
+                this.model1.setColorOverride(ColorOverride.C1, colors.splash);
+                this.model1.setColorOverride(ColorOverride.K1, colors.splash2);
+            }
+            if (this.model3)
+                this.model3.setColorOverride(ColorOverride.C0, colors.doors);
+
+            this.vr_sky.setColorOverride(ColorOverride.K0, colors.vr_sky);
+            this.vr_uso_umi.setColorOverride(ColorOverride.K0, colors.vr_uso_umi);
+            this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, colors.vr_kasumi_mae);
+            this.vr_back_cloud.setColorOverride(ColorOverride.K0, colors.vr_back_cloud);
+            this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, colors.vr_back_cloud.a);
+        } else {
+            this.model.setColorOverride(ColorOverride.K0, undefined);
+            this.model.setColorOverride(ColorOverride.C0, undefined);
+
+            if (this.model1) {
+                this.model1.setColorOverride(ColorOverride.K0, undefined);
+                this.model1.setColorOverride(ColorOverride.C0, undefined);
+                this.model1.setColorOverride(ColorOverride.C1, undefined);
+                this.model1.setColorOverride(ColorOverride.K1, undefined);
+            }
+            if (this.model3)
+                this.model3.setColorOverride(ColorOverride.C0, undefined);
+
+            this.vr_sky.setColorOverride(ColorOverride.K0, undefined);
+            this.vr_uso_umi.setColorOverride(ColorOverride.K0, undefined);
+            this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, undefined);
+            this.vr_back_cloud.setColorOverride(ColorOverride.K0, undefined);
+            this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, undefined);
         }
-        if (this.model3)
-            this.model3.setColorOverride(ColorOverride.C0, colors.doors);
-
-        this.vr_sky.setColorOverride(ColorOverride.K0, colors.vr_sky);
-        this.vr_uso_umi.setColorOverride(ColorOverride.K0, colors.vr_uso_umi);
-        this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, colors.vr_kasumi_mae);
-        this.vr_back_cloud.setColorOverride(ColorOverride.K0, colors.vr_back_cloud);
-        this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, colors.vr_back_cloud.a);
     }
 
     public createPanels(): UI.Panel[] {
@@ -184,11 +201,11 @@ class WindWakerRenderer implements Viewer.MainScene {
         timeOfDayPanel.setTitle(TIME_OF_DAY_ICON, "Time of Day");
 
         const selector = new UI.SimpleSingleSelect();
-        selector.setStrings([ 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ]);
+        selector.setStrings([ '(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ]);
         selector.onselectionchange = (index: number) => {
             this.setTimeOfDay(index);
         };
-        selector.selectItem(0x02); // Day
+        selector.selectItem(3); // Day
         timeOfDayPanel.contents.appendChild(selector.elem);
 
         return [timeOfDayPanel];
