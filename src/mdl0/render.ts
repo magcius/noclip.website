@@ -104,6 +104,8 @@ class FancyGrid {
         gl.enableVertexAttribArray(this.program.positionLocation);
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        gl.disableVertexAttribArray(this.program.positionLocation);
     }
 
     private _createBuffers(gl: WebGL2RenderingContext) {
@@ -213,6 +215,9 @@ class Scene implements Viewer.MainScene {
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuffer);
         gl.drawElements(gl.TRIANGLES, this.mdl0.idxData.length, gl.UNSIGNED_SHORT, 0);
+
+        gl.disableVertexAttribArray(this.program.colorLocation);
+        gl.disableVertexAttribArray(this.program.positionLocation);
 
         this.fancyGrid.render(state);
     }

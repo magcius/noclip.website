@@ -8,6 +8,7 @@ import { fetch, readString } from 'util';
 import { RenderState } from '../render';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
+import * as UI from '../ui';
 
 import * as GX_Material from 'gx/gx_material';
 
@@ -29,6 +30,8 @@ function collectTextures(scenes: Scene[]): Viewer.Texture[] {
             textures.push.apply(textures, scene.textures);
     return textures;
 }
+
+const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
 class WindWakerRenderer implements Viewer.MainScene {
     public static getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number) {
@@ -176,22 +179,19 @@ class WindWakerRenderer implements Viewer.MainScene {
         this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, colors.vr_back_cloud.a);
     }
 
-    public createUI(): HTMLElement {
-        const elem = document.createElement('div');
+    public createPanels(): UI.Panel[] {
+        const timeOfDayPanel = new UI.Panel();
+        timeOfDayPanel.setTitle(TIME_OF_DAY_ICON, "Time of Day");
 
-        this.timeOfDaySelect = document.createElement('select');
-        this.timeOfDaySelect.onchange = this._onTimeOfDayChange.bind(this);
+        const selector = new UI.SimpleSelect();
+        selector.setStrings([ 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ]);
+        selector.onselectionchange = (index: number) => {
+            this.setTimeOfDay(index);
+        };
+        selector.selectItem(0x02); // Day
+        timeOfDayPanel.contents.appendChild(selector.elem);
 
-        [ 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ].forEach((label) => {
-            const option = document.createElement('option');
-            option.textContent = label;
-            this.timeOfDaySelect.appendChild(option);
-        });
-
-        this.timeOfDaySelect.selectedIndex = 0x02;
-        elem.appendChild(this.timeOfDaySelect);
-
-        return elem;
+        return [timeOfDayPanel];
     }
 
     public resetCamera(m: mat4) {
@@ -238,10 +238,6 @@ class WindWakerRenderer implements Viewer.MainScene {
         const scene = new Scene(gl, bdl, btk, null);
         scene.setIsSkybox(isSkybox);
         return scene;
-    }
-
-    private _onTimeOfDayChange(e: UIEvent) {
-        this.setTimeOfDay(this.timeOfDaySelect.selectedIndex);
     }
 }
 

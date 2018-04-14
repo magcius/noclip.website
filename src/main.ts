@@ -1,5 +1,5 @@
 
-import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, OrbitCameraController, Texture } from './viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, CameraControllerClass } from './viewer';
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
@@ -18,6 +18,7 @@ import * as DKSIV from './dksiv/scenes';
 import * as MP1 from './metroid_prime/scenes';
 
 import * as J3D from './j3d/scenes';
+import { UI } from './ui';
 
 const sceneGroups = [
     ZTP.sceneGroup,
@@ -65,14 +66,18 @@ class ProgressBar {
         }
     }
 
-    set(p: Progressable<MainScene>) {
+    public set(p: Progressable<MainScene>) {
         if (this.progressable)
             this.progressable.onProgress = null;
 
         this.progressable = p;
 
-        if (this.progressable)
+        if (this.progressable) {
+            this.progressable.then(() => {
+                this.set(null);
+            });
             this.progressable.onProgress = this.sync.bind(this);
+        }
 
         this.sync();
     }
@@ -138,6 +143,41 @@ interface SceneDescOption extends HTMLOptionElement {
     sceneDesc: SceneDesc;
 }
 
+class SceneLoader {
+    public currentScene: MainScene;
+    public onscenechanged: () => void;
+
+    constructor(public viewer: Viewer) {
+    }
+
+    public setScene(scene: MainScene, sceneDesc?: SceneDesc) {
+        this.currentScene = scene;
+
+        let cameraControllerClass: CameraControllerClass;
+        if (sceneDesc !== undefined)
+            cameraControllerClass = sceneDesc.defaultCameraController;
+        if (cameraControllerClass === undefined)
+            cameraControllerClass = FPSCameraController;
+
+        const viewer = this.viewer;
+        viewer.setCameraControllerClass(cameraControllerClass);
+        viewer.setScene(scene);
+
+        this.onscenechanged();
+    }
+
+    public loadSceneDesc(sceneDesc: SceneDesc): Progressable<MainScene> {
+        this.setScene(null);
+
+        const gl = this.viewer.renderState.gl;
+        const progressable = sceneDesc.createScene(gl);
+        progressable.then((scene: MainScene) => {
+            this.setScene(scene, sceneDesc);
+        });
+        return progressable;
+    }
+}
+
 class Main {
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
@@ -147,20 +187,14 @@ class Main {
 
     private uiContainers: HTMLElement;
     private dragHighlight: HTMLElement;
-    private groupSelect: HTMLSelectElement;
-    private sceneSelect: HTMLSelectElement;
-    private texturesView: HTMLElement;
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
     private progressBar: ProgressBar;
-    private cameraControllerSelect: HTMLSelectElement;
 
     private sceneUIContainer: HTMLElement;
 
-    private popup: HTMLElement;
-    private popupSettingsPane: HTMLElement;
-    private popupHelpPane: HTMLElement;
-    private popupPaneContainer: HTMLElement;
+    private sceneLoader: SceneLoader;
+    private ui: UI;
 
     constructor() {
         this.canvas = document.createElement('canvas');
@@ -186,6 +220,8 @@ class Main {
         this.viewer = new Viewer(this.canvas);
         this.viewer.start();
 
+        this.sceneLoader = new SceneLoader(this.viewer);
+        this.sceneLoader.onscenechanged = this._onSceneChanged.bind(this);
         this._makeUI();
 
         this.groups = sceneGroups;
@@ -197,15 +233,9 @@ class Main {
 
         // Load the state from the hash
         this._loadState(window.location.hash.slice(1));
-        // If it didn't work, fall back to defaults.
-        if (!this.currentSceneDesc)
-            this._loadSceneGroup(this.groups[0]);
     }
 
     private _deselectUI() {
-        // Take focus off of the select.
-        this.groupSelect.blur();
-        this.sceneSelect.blur();
         this.canvas.focus();
     }
 
@@ -217,8 +247,7 @@ class Main {
         const sceneDesc = new DroppedFileSceneDesc(file);
         this.droppedFileGroup.sceneDescs.push(sceneDesc);
         this._loadSceneGroups();
-        this._loadSceneGroup(this.droppedFileGroup, false);
-        this._loadSceneDesc(sceneDesc);
+        this._loadSceneDesc(this.droppedFileGroup, sceneDesc);
     }
 
     private _onResize() {
@@ -229,14 +258,14 @@ class Main {
     private _loadState(state: string) {
         const [groupId, ...sceneRest] = state.split('/');
         const sceneId = decodeURIComponent(sceneRest.join('/'));
+
         const group = this.groups.find((g) => g.id === groupId);
         if (!group)
             return;
+
         const desc = group.sceneDescs.find((d) => d.id === sceneId);
-        if (!desc)
-            return;
-        this._loadSceneGroup(group, false);
-        this._loadSceneDesc(desc);
+        const hasDesc = desc !== undefined;
+        this._loadSceneDesc(group, desc);
     }
 
     private _saveState() {
@@ -245,185 +274,51 @@ class Main {
         return `${groupId}/${sceneId}`;
     }
 
-    private _makeTextureElem(texture: Texture): HTMLElement {
-        const tex = document.createElement('div');
-        tex.style.margin = '.5em';
-        tex.style.padding = '.5em';
-        tex.style.backgroundColor = 'rgb(245, 237, 222)';
-        tex.style.border = '1px solid #666';
-        tex.style.textAlign = 'center';
-        tex.style.verticalAlign = 'bottom';
+    private _onSceneChanged(): void {
+        const scene = this.viewer.scene;
+        this.ui.sceneChanged();
 
-        const canvases: HTMLCanvasElement[] = [];
+        this.sceneUIContainer.innerHTML = '';
+        if (scene && scene.createUI)
+            this.sceneUIContainer.appendChild(scene.createUI());
 
-        for (const canvas of texture.surfaces) {
-            canvas.style.margin = '2px';
-            canvas.style.border = '1px dashed black';
-            canvases.push(canvas);
-            tex.appendChild(canvas);
-        }
-
-        tex.onmouseover = () => {
-            canvases.forEach((canvas) => {
-                canvas.style.backgroundColor = '';
-                canvas.style.backgroundImage = 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAGElEQVQYlWNgYGCQwoKxgqGgcJA5h3yFAAs8BRWVSwooAAAAAElFTkSuQmCC")';
-            });
-        };
-        tex.onmouseout = () => {
-            canvases.forEach((canvas) => {
-                canvas.style.backgroundColor = 'black';
-                canvas.style.backgroundImage = '';
-            });
-        }
-        tex.onmouseout(null);
-
-        const label = document.createElement('div');
-        label.textContent = texture.name;
-        tex.appendChild(label);
-
-        tex.style.cssFloat = 'left';
-        return tex;
+        if (scene && scene.createPanels) 
+            this.ui.setScenePanels(scene.createPanels());
     }
 
-    private _makeTextureSection(textures: Texture[]): HTMLElement {
-        const toplevel = document.createElement('div');
-        toplevel.innerHTML = `
-<h2>Textures</h2>
-`;
-        textures.forEach((texture) => {
-            const elem = this._makeTextureElem(texture);
-            toplevel.appendChild(elem);
-        });
-        return toplevel;
+    private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
+        this._loadSceneDesc(sceneGroup, sceneDesc);
     }
 
-    private _loadSceneDesc(sceneDesc: SceneDesc) {
+    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
         if (this.currentSceneDesc === sceneDesc)
             return;
 
+        this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;
+        this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
-        // Make sure combobox is selected
-        for (let i = 0; i < this.sceneSelect.options.length; i++) {
-            const sceneOption = (<SceneDescOption> this.sceneSelect.options[i]);
-            if (sceneOption.sceneDesc === sceneDesc)
-                this.sceneSelect.selectedIndex = i;
-        }
-
-        const gl = this.viewer.renderState.gl;
-
-        const progressable = sceneDesc.createScene(gl);
-        this.viewer.setScene(null);
+        const progressable = this.sceneLoader.loadSceneDesc(sceneDesc);
         this.progressBar.set(progressable);
-
-        this.sceneUIContainer.innerHTML = '';
-
-        progressable.promise.then((result: MainScene) => {
-            this.progressBar.set(null);
-            if (sceneDesc.defaultCameraController)
-                this.viewer.setCameraControllerClass(sceneDesc.defaultCameraController);
-            else
-                this.viewer.setCameraControllerClass(FPSCameraController);
-
-            this.viewer.setScene(result);
-
-            this.texturesView.innerHTML = '';
-            this.texturesView.appendChild(this._makeTextureSection(result.textures));
-
-            this.sceneUIContainer.innerHTML = '';
-
-            if (result.createUI)
-                this.sceneUIContainer.appendChild(result.createUI());
-
-            if (this.viewer.cameraController.constructor === FPSCameraController) {
-                this.cameraControllerSelect.selectedIndex = 0;
-            } else {
-                this.cameraControllerSelect.selectedIndex = 1;
-            }
-        });
 
         this._deselectUI();
         window.history.replaceState('', '', '#' + this._saveState());
     }
 
     private _loadSceneGroups() {
-        this.groupSelect.innerHTML = '';
-
-        for (const group of this.groups) {
-            if (!group.sceneDescs.length)
-                continue;
-
-            const groupOption = (<SceneGroupOption> document.createElement('option'));
-            groupOption.textContent = group.name;
-            groupOption.sceneGroup = group;
-            this.groupSelect.appendChild(groupOption);
-        }
-    }
-
-    private _loadSceneGroup(group: SceneGroup, loadDefaultSceneInGroup: boolean = true) {
-        // Make sure combobox is selected
-        for (let i = 0; i < this.groupSelect.options.length; i++) {
-            const groupOption = (<SceneGroupOption> this.groupSelect.options[i]);
-            if (groupOption.sceneGroup === group)
-                this.groupSelect.selectedIndex = i;
-        }
-
-        this.currentSceneGroup = group;
-
-        // Clear.
-        this.sceneSelect.innerHTML = '';
-        for (const sceneDesc of group.sceneDescs) {
-            const sceneOption = (<SceneDescOption> document.createElement('option'));
-            sceneOption.textContent = sceneDesc.name;
-            sceneOption.sceneDesc = sceneDesc;
-            this.sceneSelect.appendChild(sceneOption);
-        }
-
-        if (loadDefaultSceneInGroup)
-            this._loadSceneDesc(group.sceneDescs[0]);
-    }
-
-    private _onSceneSelectChange() {
-        const option = (<SceneDescOption> this.sceneSelect.selectedOptions.item(0));
-        const sceneDesc: SceneDesc = option.sceneDesc;
-        this._loadSceneDesc(sceneDesc);
-    }
-
-    private showPopup(contents: HTMLElement) {
-        if (contents === null) {
-            this.popupPaneContainer.innerHTML = '';
-            this.popup.style.display = 'none';
-        } else if (contents.parentNode) {
-            // Already sowing these contents, hide popup.
-            this.showPopup(null);
-        } else {
-            this.popupPaneContainer.innerHTML = '';
-            this.popupPaneContainer.appendChild(contents);
-            this.popup.style.display = 'block';
-        }
-    }
-
-    private _onGearButtonClicked() {
-        this.showPopup(this.popupSettingsPane);
-    }
-
-    private _onHelpButtonClicked() {
-        this.showPopup(this.popupHelpPane);
-    }
-
-    private _onCloseButtonClicked() {
-        this.showPopup(null);
-    }
-
-    private _onGroupSelectChange() {
-        const option = (<SceneGroupOption> this.groupSelect.selectedOptions.item(0));
-        const group: SceneGroup = option.sceneGroup;
-        this._loadSceneGroup(group);
+        this.ui.sceneSelect.setSceneGroups(this.groups);
     }
 
     private _makeUI() {
         this.uiContainers = document.createElement('div');
         document.body.appendChild(this.uiContainers);
+
+        this.ui = new UI(this.viewer);
+        this.ui.elem.style.position = 'absolute';
+        this.ui.elem.style.left = '2em';
+        this.ui.elem.style.top = '2em';
+        this.uiContainers.appendChild(this.ui.elem);
+        this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
 
         this.dragHighlight = document.createElement('div');
         this.uiContainers.appendChild(this.dragHighlight);
@@ -456,12 +351,6 @@ class Main {
         uiContainerL.style.bottom = '2em';
         this.uiContainers.appendChild(uiContainerL);
 
-        const uiContainerR = document.createElement('div');
-        uiContainerR.style.position = 'absolute';
-        uiContainerR.style.right = '2em';
-        uiContainerR.style.bottom = '2em';
-        this.uiContainers.appendChild(uiContainerR);
-
         this.sceneUIContainer = document.createElement('div');
         this.sceneUIContainer.style.position = 'absolute';
         this.sceneUIContainer.style.right = '2em';
@@ -470,146 +359,16 @@ class Main {
             e.preventDefault();
         };
         this.uiContainers.appendChild(this.sceneUIContainer);
-
-        this.groupSelect = document.createElement('select');
-        this.groupSelect.onchange = this._onGroupSelectChange.bind(this);
-        this.groupSelect.style.marginRight = '1em';
-        uiContainerL.appendChild(this.groupSelect);
-
-        this.sceneSelect = document.createElement('select');
-        this.sceneSelect.onchange = this._onSceneSelectChange.bind(this);
-        this.sceneSelect.style.marginRight = '1em';
-        uiContainerL.appendChild(this.sceneSelect);
-
-        this.popup = document.createElement('div');
-        this.popup.style.backgroundColor = 'white';
-        this.popup.style.position = 'absolute';
-        this.popup.style.top = '2em';
-        this.popup.style.left = '2em';
-        this.popup.style.right = '2em';
-        this.popup.style.bottom = '5em';
-        this.popup.style.border = '1px solid #666';
-        this.popup.style.padding = '1em';
-        this.popup.style.display = 'none';
-        this.popup.style.overflow = 'auto';
-        this.popup.style.font = '100% sans-serif';
-
-        const closeButton = document.createElement('button');
-        closeButton.style.position = 'fixed';
-        closeButton.style.top = '3em';
-        closeButton.style.right = '4em';
-        closeButton.textContent = 'X';
-        closeButton.onclick = this._onCloseButtonClicked.bind(this);
-        this.popup.appendChild(closeButton);
-
-        this.popupPaneContainer = document.createElement('div');
-        this.popup.appendChild(this.popupPaneContainer);
-        this.uiContainers.appendChild(this.popup);
-
-        // Settings.
-        this.popupSettingsPane = document.createElement('div');
-
-        this.popupSettingsPane.innerHTML = `
-<h2>Settings</h2>
-`;
-
-        const fovSliderLabel = document.createElement('label');
-        fovSliderLabel.textContent = "Field of View";
-        this.popupSettingsPane.appendChild(fovSliderLabel);
-
-        const fovSlider = document.createElement('input');
-        fovSlider.type = 'range';
-        fovSlider.max = '100';
-        fovSlider.min = '1';
-        fovSlider.oninput = this._onFovSliderChange.bind(this);
-        this.popupSettingsPane.appendChild(fovSlider);
-
-        this.popupSettingsPane.appendChild(document.createElement('br'));
-
-        const cameraControllerLabel = document.createElement('label');
-        cameraControllerLabel.textContent = "Camera Controller";
-        this.popupSettingsPane.appendChild(cameraControllerLabel);
-        this.cameraControllerSelect = document.createElement('select');
-        const cameraControllerFPS = document.createElement('option');
-        cameraControllerFPS.textContent = 'WASD';
-        this.cameraControllerSelect.appendChild(cameraControllerFPS);
-        const cameraControllerOrbit = document.createElement('option');
-        cameraControllerOrbit.textContent = 'Orbit';
-        this.cameraControllerSelect.appendChild(cameraControllerOrbit);
-        this.cameraControllerSelect.onchange = this._onCameraControllerSelect.bind(this);
-        this.popupSettingsPane.appendChild(this.cameraControllerSelect);
-
-        this.texturesView = document.createElement('div');
-        this.popupSettingsPane.appendChild(this.texturesView);
-
-        const gearButton = document.createElement('button');
-        gearButton.style.width = '2em';
-        gearButton.style.height = '2em';
-        gearButton.style.padding = '0';
-        gearButton.style.marginLeft = '1em';
-        gearButton.textContent = '⚙';
-        gearButton.onclick = this._onGearButtonClicked.bind(this);
-        uiContainerR.appendChild(gearButton);
-
-        this.popupHelpPane = document.createElement('div');
-        this.popupHelpPane.style.padding = '2em';
-        this.popupHelpPane.innerHTML = `
-<h1>Jasper's Model Viewer</h1>
-<h2>Created by <a href="http://github.com/magcius">Jasper St. Pierre</a></h2>
-
-<p> Basic controls: Use WASD to move around, B to reset the camera, and Z to toggle the UI. Hold
- Shift to go faster, twiddle the mouse wheel to go even faster than that. </p>
-
-<p> Based on reverse engineering work by myself and a large collection of people. Special thanks to
-  <a href="https://twitter.com/LordNed">LordNed</a>,
-  <a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,
-  <a href="https://twitter.com/StapleButter">StapleButter</a>,
-  <a href="https://twitter.com/xdanieldzd">xdanieldzd</a>,
-  <a href="https://twitter.com/Jewelots_">Jewel</a>,
-  <a href="https://twitter.com/instant_grat">Simon</a>,
-  <a href="https://github.com/vlad001">vlad001</a>,
-  and the rest of the Dolphin and Citra crews.
-</p>
-
-<p> All art belongs to the original creators. Nintendo's artists especially are fantastic.
-`;
-        const helpButton = document.createElement('button');
-        helpButton.style.width = '2em';
-        helpButton.style.height = '2em';
-        helpButton.style.padding = '0';
-        helpButton.style.marginLeft = '1em';
-        helpButton.textContent = '?';
-        helpButton.onclick = this._onHelpButtonClicked.bind(this);
-        uiContainerR.appendChild(helpButton);
     }
 
     private _toggleUI() {
-        this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? 'block' : 'none';
+        this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? '' : 'none';
     }
 
     private _onKeyDown(e: KeyboardEvent) {
         if (e.key === 'z') {
             this._toggleUI();
             event.preventDefault();
-        }
-    }
-
-    private _getSliderT(slider: HTMLInputElement) {
-        return (+slider.value - +slider.min) / (+slider.max - +slider.min);
-    }
-
-    private _onFovSliderChange(e: UIEvent) {
-        const slider = (<HTMLInputElement> e.target);
-        const value = this._getSliderT(slider);
-        this.viewer.renderState.fov = value * (Math.PI * 0.995);
-    }
-
-    private _onCameraControllerSelect(e: UIEvent) {
-        const index = this.cameraControllerSelect.selectedIndex;
-        if (index === 0) {
-            this.viewer.cameraController = new FPSCameraController();
-        } else {
-            this.viewer.cameraController = new OrbitCameraController();
         }
     }
 }
