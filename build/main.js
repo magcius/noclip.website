@@ -15416,6 +15416,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     this._loadSceneGroups();
                     // Load the state from the hash
                     this._loadState(window.location.hash.slice(1));
+                    // Make the user choose a scene if there's nothing loaded by default...
+                    if (this.currentSceneDesc === undefined)
+                        this.ui.sceneSelect.setExpanded(true);
                 }
                 Main.prototype._deselectUI = function () {
                     this.canvas.focus();
