@@ -588,12 +588,12 @@ class ViewerSettings extends Panel {
     cursor: pointer;
     background: #aaa;
 }
-.SettingsHeader, #CameraControllerWASD, #CameraControllerOrbit {
+.SettingsHeader, .CameraControllerWASD, .CameraControllerOrbit {
     text-align: center;
     font-weight: bold;
     line-height: 24px;
 }
-#CameraControllerWASD, #CameraControllerOrbit {
+.CameraControllerWASD, .CameraControllerOrbit {
     background: #444;
     line-height: 32px;
     cursor: pointer;
