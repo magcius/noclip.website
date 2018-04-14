@@ -182,6 +182,10 @@ class Main {
 
         // Load the state from the hash
         this._loadState(window.location.hash.slice(1));
+
+        // Make the user choose a scene if there's nothing loaded by default...
+        if (this.currentSceneDesc === undefined)
+            this.ui.sceneSelect.setExpanded(true);
     }
 
     private _deselectUI() {
