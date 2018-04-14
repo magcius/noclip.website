@@ -7292,8 +7292,6 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     this.model1 = this.createScene(gl, roomRarc, "model1", false);
                     // Windows / doors.
                     this.model3 = this.createScene(gl, roomRarc, "model3", false);
-                    // Noon.
-                    this.setTimeOfDay(0x02);
                     this.textures = collectTextures([this.vr_sky, this.vr_kasumi_mae, this.vr_uso_umi, this.vr_back_cloud, this.model, this.model1, this.model3]);
                 }
                 WindWakerRenderer.getColorsFromDZS = function (buffer, roomIdx, timeOfDay) {
@@ -7363,33 +7361,52 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                 };
                 WindWakerRenderer.prototype.setTimeOfDay = function (timeOfDay) {
                     var dzsFile = this.stageRarc.findFile("dzs/stage.dzs");
-                    var colors = WindWakerRenderer.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay);
-                    this.model.setColorOverride(render_7.ColorOverride.K0, colors.light);
-                    this.model.setColorOverride(render_7.ColorOverride.C0, colors.amb);
-                    if (this.model1) {
-                        this.model1.setColorOverride(render_7.ColorOverride.K0, colors.ocean);
-                        this.model1.setColorOverride(render_7.ColorOverride.C0, colors.wave);
-                        this.model1.setColorOverride(render_7.ColorOverride.C1, colors.splash);
-                        this.model1.setColorOverride(render_7.ColorOverride.K1, colors.splash2);
+                    var colors = timeOfDay === 0 ? undefined : WindWakerRenderer.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay - 1);
+                    if (colors !== undefined) {
+                        this.model.setColorOverride(render_7.ColorOverride.K0, colors.light);
+                        this.model.setColorOverride(render_7.ColorOverride.C0, colors.amb);
+                        if (this.model1) {
+                            this.model1.setColorOverride(render_7.ColorOverride.K0, colors.ocean);
+                            this.model1.setColorOverride(render_7.ColorOverride.C0, colors.wave);
+                            this.model1.setColorOverride(render_7.ColorOverride.C1, colors.splash);
+                            this.model1.setColorOverride(render_7.ColorOverride.K1, colors.splash2);
+                        }
+                        if (this.model3)
+                            this.model3.setColorOverride(render_7.ColorOverride.C0, colors.doors);
+                        this.vr_sky.setColorOverride(render_7.ColorOverride.K0, colors.vr_sky);
+                        this.vr_uso_umi.setColorOverride(render_7.ColorOverride.K0, colors.vr_uso_umi);
+                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.C0, colors.vr_kasumi_mae);
+                        this.vr_back_cloud.setColorOverride(render_7.ColorOverride.K0, colors.vr_back_cloud);
+                        this.vr_back_cloud.setAlphaOverride(render_7.ColorOverride.K0, colors.vr_back_cloud.a);
                     }
-                    if (this.model3)
-                        this.model3.setColorOverride(render_7.ColorOverride.C0, colors.doors);
-                    this.vr_sky.setColorOverride(render_7.ColorOverride.K0, colors.vr_sky);
-                    this.vr_uso_umi.setColorOverride(render_7.ColorOverride.K0, colors.vr_uso_umi);
-                    this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.C0, colors.vr_kasumi_mae);
-                    this.vr_back_cloud.setColorOverride(render_7.ColorOverride.K0, colors.vr_back_cloud);
-                    this.vr_back_cloud.setAlphaOverride(render_7.ColorOverride.K0, colors.vr_back_cloud.a);
+                    else {
+                        this.model.setColorOverride(render_7.ColorOverride.K0, undefined);
+                        this.model.setColorOverride(render_7.ColorOverride.C0, undefined);
+                        if (this.model1) {
+                            this.model1.setColorOverride(render_7.ColorOverride.K0, undefined);
+                            this.model1.setColorOverride(render_7.ColorOverride.C0, undefined);
+                            this.model1.setColorOverride(render_7.ColorOverride.C1, undefined);
+                            this.model1.setColorOverride(render_7.ColorOverride.K1, undefined);
+                        }
+                        if (this.model3)
+                            this.model3.setColorOverride(render_7.ColorOverride.C0, undefined);
+                        this.vr_sky.setColorOverride(render_7.ColorOverride.K0, undefined);
+                        this.vr_uso_umi.setColorOverride(render_7.ColorOverride.K0, undefined);
+                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.C0, undefined);
+                        this.vr_back_cloud.setColorOverride(render_7.ColorOverride.K0, undefined);
+                        this.vr_back_cloud.setAlphaOverride(render_7.ColorOverride.K0, undefined);
+                    }
                 };
                 WindWakerRenderer.prototype.createPanels = function () {
                     var _this = this;
                     var timeOfDayPanel = new UI.Panel();
                     timeOfDayPanel.setTitle(TIME_OF_DAY_ICON, "Time of Day");
                     var selector = new UI.SimpleSingleSelect();
-                    selector.setStrings(['Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night']);
+                    selector.setStrings(['(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night']);
                     selector.onselectionchange = function (index) {
                         _this.setTimeOfDay(index);
                     };
-                    selector.selectItem(0x02); // Day
+                    selector.selectItem(3); // Day
                     timeOfDayPanel.contents.appendChild(selector.elem);
                     return [timeOfDayPanel];
                 };
