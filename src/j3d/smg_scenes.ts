@@ -7,8 +7,9 @@ import { Program, RenderState, RenderTarget, FullscreenProgram, RenderFlags, Ble
 import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK } from './j3d';
-import { Scene } from './render';
+import { Scene, TextureOverride } from './render';
 import { createScenesFromBuffer } from './scenes';
+import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
@@ -172,13 +173,14 @@ class SMGRenderer implements Viewer.MainScene {
         state.blitRenderTargetDepth(this.mainRenderTarget);
 
         if (this.indirectScene) {
-            this.indirectScene.bindState(state);
-            this.indirectScene.renderOpaque(state);
             const texProjection = this.indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
             // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
             texProjection[0] = state.projection[0];
             texProjection[5] = -state.projection[5];
-            this.indirectScene.setTextureOverride("IndDummy", this.mainRenderTarget.resolvedColorTexture);
+            const textureOverride: TextureOverride = { glTexture: this.mainRenderTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            this.indirectScene.setTextureOverride("IndDummy", textureOverride);
+            this.indirectScene.bindState(state);
+            this.indirectScene.renderOpaque(state);
         }
 
         if (this.bloomScene) {

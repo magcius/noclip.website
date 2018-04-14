@@ -10,16 +10,16 @@ import * as GX from '../gx/gx_enum';
 
 import { BMD, BMT, BTK, BTI_Texture, BTI, TEX1_TextureData } from './j3d';
 import * as RARC from './rarc';
-import { Scene } from './render';
-import { RenderState } from '../render';
+import { Scene, TextureOverride } from './render';
+import { RenderState, RenderTarget } from '../render';
+import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 
-function hackMaterials2(scene: Scene): void {
-    for (const materialCommand of scene.materialCommands) {
-        // Kill any indtex materials...
-        for (const texIndex of materialCommand.material.textureIndexes)
-            if (texIndex >= 0 && scene.tex1Samplers[texIndex].name === 'fbtex_dummy')
-                materialCommand.visible = false;
-    }
+function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
+    const textures: Viewer.Texture[] = [];
+    for (const scene of scenes)
+        if (scene)
+            textures.push.apply(textures, scene.textures);
+    return textures;
 }
 
 function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: TEX1_TextureData[]) {
@@ -27,7 +27,6 @@ function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile
     const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     const scene = new Scene(gl, bmd, btk, bmt, extraTextures);
-    hackMaterials2(scene);
     return scene;
 }
 
@@ -45,13 +44,31 @@ function createScenesFromRARC(gl: WebGL2RenderingContext, rarcName: string, rarc
     return scenes.filter((s) => !!s);
 }
 
-
-class TwilightPrincessScene implements Viewer.MainScene {
+class TwilightPrincessRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
 
+    private mainRenderTarget: RenderTarget = new RenderTarget();
+    private opaqueScenes: Scene[] = [];
+    private indTexScenes: Scene[] = [];
+    private transparentScenes: Scene[] = [];
+    private windowScenes: Scene[] = [];
+
     constructor(public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: Scene[], public roomScenes: Scene[]) {
-        for (const scene of [...this.skyboxScenes, ...this.roomScenes])
-            this.textures = this.textures.concat(scene.textures);
+        this.textures = collectTextures([...this.skyboxScenes, ...this.roomScenes]);
+
+        this.roomScenes.forEach((scene) => {
+            if (scene.name.endsWith('model')) {
+                this.opaqueScenes.push(scene);
+            } else if (scene.name.endsWith('model1')) {
+                this.indTexScenes.push(scene);
+            } else if (scene.name.endsWith('model2')) {
+                this.transparentScenes.push(scene);
+            } else if (scene.name.endsWith('model3')) {
+                this.windowScenes.push(scene);
+            } else {
+                throw "whoops";
+            }
+        });
     }
 
     public createUI(): HTMLElement {
@@ -130,11 +147,44 @@ class TwilightPrincessScene implements Viewer.MainScene {
 
     public render(state: RenderState) {
         const gl = state.gl;
+
+        // Draw skybox + opaque to main RT.
+        this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
+        state.useRenderTarget(this.mainRenderTarget);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         this.skyboxScenes.forEach((scene) => {
             scene.render(state);
         });
         gl.clear(gl.DEPTH_BUFFER_BIT);
-        this.roomScenes.forEach((scene) => {
+
+        this.opaqueScenes.forEach((scene) => {
+            scene.render(state);
+        });
+
+        // Copy to main render target.
+        state.useRenderTarget(null);
+        state.blitRenderTarget(this.mainRenderTarget);
+        state.blitRenderTargetDepth(this.mainRenderTarget);
+
+        // IndTex.
+        this.indTexScenes.forEach((indirectScene) => {
+            const texProjection = indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
+            // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
+            texProjection[0] = state.projection[0];
+            texProjection[5] = -state.projection[5];
+            const textureOverride: TextureOverride = { glTexture: this.mainRenderTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            indirectScene.setTextureOverride("fbtex_dummy", textureOverride);
+            indirectScene.render(state);
+        });
+
+        // Transparent.
+        this.transparentScenes.forEach((scene) => {
+            scene.render(state);
+        });
+
+        // Window & Doorway fades. Separate so that the renderer can override color registers separately.
+        // We don't do anything about this yet...
+        this.windowScenes.forEach((scene) => {
             scene.render(state);
         });
     }
@@ -187,7 +237,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             const roomScenes: Scene[] = [];
             roomScenes_.forEach((scenes: Scene[]) => roomScenes.push.apply(roomScenes, scenes));
 
-            return new TwilightPrincessScene(stageRarc, roomRarcs, skyboxScenes, roomScenes);
+            return new TwilightPrincessRenderer(stageRarc, roomRarcs, skyboxScenes, roomScenes);
         });
     }
 }
