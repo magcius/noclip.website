@@ -5,6 +5,7 @@ import { assert, fetch, readString, generateFormID } from 'util';
 
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
+import * as UI from '../ui';
 
 import * as GX from '../gx/gx_enum';
 
@@ -71,78 +72,10 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
         });
     }
 
-    public createUI(): HTMLElement {
-        const elem = document.createElement('div');
-        elem.style.backgroundColor = 'white';
-        elem.style.border = '1px solid #999';
-        elem.style.font = '100% sans-serif';
-        elem.style.boxSizing = 'border-box';
-        elem.style.padding = '1em';
-        elem.style.overflow = 'hidden';
-
-        elem.onmouseover = () => {
-            elem.style.width = 'auto';
-            elem.style.height = 'auto';
-        };
-        elem.onmouseout = () => {
-            elem.style.width = '0';
-            elem.style.height = '0';
-        };
-        elem.onmouseout(null);
-
-        const selectAll = document.createElement('button');
-        selectAll.textContent = 'All';
-        selectAll.onclick = () => {
-            for (const checkbox of checkboxes) {
-                checkbox.checked = true;
-                checkbox.onchange(null);
-            }
-        };
-        selectAll.style.display = 'block';
-        selectAll.style.width = '100%';
-        elem.appendChild(selectAll);
-
-        const selectNone = document.createElement('button');
-        selectNone.textContent = 'None';
-        selectNone.onclick = () => {
-            for (const checkbox of checkboxes) {
-                checkbox.checked = false;
-                checkbox.onchange(null);
-            }
-        };
-        selectNone.style.display = 'block';
-        selectNone.style.width = '100%';
-        elem.appendChild(selectNone);
-
-        const checkboxes: HTMLInputElement[] = [];
-        this.roomScenes.forEach((scene) => {
-            const line = document.createElement('div');
-            line.style.textAlign = 'right';
-            line.style.overflow = 'hidden';
-
-            const checkbox = document.createElement('input');
-            checkbox.id = generateFormID();
-
-            checkbox.type = 'checkbox';
-            checkbox.checked = true;
-            checkbox.onchange = () => {
-                scene.visible = checkbox.checked;
-            };
-            checkboxes.push(checkbox);
-
-            const label = document.createElement('label');
-            label.textContent = scene.name;
-            label.htmlFor = checkbox.id;
-            label.style.webkitUserSelect = 'none';
-            label.style.userSelect = 'none';
-
-            line.appendChild(label);
-            line.appendChild(checkbox);
-
-            elem.appendChild(line);
-        });
-
-        return elem;
+    public createPanels(): UI.Panel[] {
+        const layers = new UI.LayerPanel();
+        layers.setLayers(this.roomScenes);
+        return [layers];
     }
 
     public render(state: RenderState) {

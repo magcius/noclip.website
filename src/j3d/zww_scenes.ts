@@ -183,7 +183,7 @@ class WindWakerRenderer implements Viewer.MainScene {
         const timeOfDayPanel = new UI.Panel();
         timeOfDayPanel.setTitle(TIME_OF_DAY_ICON, "Time of Day");
 
-        const selector = new UI.SimpleSelect();
+        const selector = new UI.SimpleSingleSelect();
         selector.setStrings([ 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ]);
         selector.onselectionchange = (index: number) => {
             this.setTimeOfDay(index);

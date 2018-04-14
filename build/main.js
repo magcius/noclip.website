@@ -128,6 +128,7 @@ System.register("util", ["ArrayBufferSlice", "Progressable"], function (exports_
         request.send();
         var p = new Promise(function (resolve, reject) {
             request.onload = function () {
+                pr.setProgress(1);
                 var buffer = request.response;
                 var slice = new ArrayBufferSlice_1.default(buffer);
                 resolve(slice);
@@ -2149,6 +2150,9 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
 System.register("ui", ["viewer"], function (exports_8, context_8) {
     "use strict";
     var __moduleName = context_8 && context_8.id;
+    function createDOMFromString(s) {
+        return document.createRange().createContextualFragment(s);
+    }
     function setElementHighlighted(elem, highlighted, normalTextColor) {
         if (normalTextColor === void 0) { normalTextColor = ''; }
         elem.classList.toggle('Highlighted', highlighted);
@@ -2162,7 +2166,7 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
         }
     }
     function highlightFlair(i) {
-        return { index: i, backgroundColor: HIGHLIGHT_COLOR, color: 'black' };
+        return { index: i, background: HIGHLIGHT_COLOR, color: 'black' };
     }
     function cloneCanvas(dst, src) {
         dst.width = src.width;
@@ -2170,7 +2174,7 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
         var ctx = dst.getContext('2d');
         ctx.drawImage(src, 0, 0);
     }
-    var Viewer, HIGHLIGHT_COLOR, SimpleScrollList, SimpleSelect, Panel, OPEN_ICON, SceneSelect, CHECKERBOARD_IMAGE, TEXTURES_ICON, TextureViewer, FRUSTUM_ICON, ViewerSettings, ABOUT_ICON, About, UI;
+    var Viewer, HIGHLIGHT_COLOR, ScrollSelect, SingleSelect, SimpleSingleSelect, MultiSelect, Panel, OPEN_ICON, SceneSelect, CHECKERBOARD_IMAGE, TEXTURES_ICON, TextureViewer, FRUSTUM_ICON, ViewerSettings, ABOUT_ICON, About, LAYER_ICON, LayerPanel, UI;
     return {
         setters: [
             function (Viewer_1) {
@@ -2179,68 +2183,148 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
         ],
         execute: function () {
             HIGHLIGHT_COLOR = 'rgb(255, 66, 95)';
-            SimpleScrollList = /** @class */ (function () {
-                function SimpleScrollList() {
+            ScrollSelect = /** @class */ (function () {
+                function ScrollSelect() {
                     this.toplevel = document.createElement('div');
-                    this.toplevel.style.height = "200px";
-                    this.toplevel.style.overflow = 'auto';
+                    this.scrollContainer = document.createElement('div');
+                    this.scrollContainer.style.height = "200px";
+                    this.scrollContainer.style.overflow = 'auto';
+                    this.toplevel.appendChild(this.scrollContainer);
                     this.elem = this.toplevel;
                 }
-                SimpleScrollList.prototype.setStrings = function (strings) {
+                ScrollSelect.prototype.setStrings = function (strings) {
                     var _this = this;
-                    this.toplevel.style.display = (strings.length > 0) ? '' : 'none';
-                    this.toplevel.innerHTML = '';
+                    this.scrollContainer.style.display = (strings.length > 0) ? '' : 'none';
+                    this.scrollContainer.innerHTML = '';
                     var _loop_1 = function (i) {
                         var selector = document.createElement('div');
-                        selector.style.fontWeight = 'bold';
-                        selector.textContent = strings[i];
+                        selector.style.display = 'list-item';
                         selector.style.cursor = 'pointer';
+                        var textSpan = document.createElement('span');
+                        textSpan.style.fontWeight = 'bold';
+                        textSpan.textContent = strings[i];
+                        selector.appendChild(textSpan);
                         var index = i;
                         selector.onclick = function () {
-                            _this.selectItem(index);
+                            _this.itemClicked(index);
                         };
-                        this_1.toplevel.appendChild(selector);
+                        this_1.scrollContainer.appendChild(selector);
                     };
                     var this_1 = this;
                     for (var i = 0; i < strings.length; i++) {
                         _loop_1(i);
                     }
                 };
-                SimpleScrollList.prototype.selectItem = function (index) {
-                    this.onselectionchange(index);
+                ScrollSelect.prototype.getNumItems = function () {
+                    return this.scrollContainer.childElementCount;
                 };
-                SimpleScrollList.prototype.setFlairs = function (flairs) {
+                ScrollSelect.prototype.setFlairs = function (flairs) {
                     var _loop_2 = function (i) {
-                        var selector = this_2.toplevel.children.item(i);
+                        var selector = this_2.scrollContainer.children.item(i);
                         var flair = flairs.find(function (flair) { return flair.index === i; });
-                        var backgroundColor = (flair !== undefined && flair.backgroundColor !== undefined) ? flair.backgroundColor : '';
-                        selector.style.backgroundColor = backgroundColor;
+                        var background = (flair !== undefined && flair.background !== undefined) ? flair.background : '';
+                        selector.style.background = background;
+                        var textSpan = selector.querySelector('span');
                         var color = (flair !== undefined && flair.color !== undefined) ? flair.color : '';
-                        selector.style.color = color;
+                        textSpan.style.color = color;
+                        if (flair !== undefined && flair.bulletColor !== undefined) {
+                            selector.style.listStyleType = 'disc';
+                            selector.style.listStylePosition = 'inside';
+                            selector.style.marginLeft = '4px';
+                            selector.style.color = flair.bulletColor;
+                        }
+                        else {
+                            selector.style.listStyleType = '';
+                            selector.style.color = '';
+                            selector.style.marginLeft = '';
+                        }
                     };
                     var this_2 = this;
-                    for (var i = 0; i < this.toplevel.childElementCount; i++) {
+                    for (var i = 0; i < this.getNumItems(); i++) {
                         _loop_2(i);
                     }
                 };
-                SimpleScrollList.prototype.setHighlighted = function (highlightedIndex) {
-                    this.setFlairs([highlightFlair(highlightedIndex)]);
-                };
-                return SimpleScrollList;
+                return ScrollSelect;
             }());
-            exports_8("SimpleScrollList", SimpleScrollList);
-            SimpleSelect = /** @class */ (function (_super) {
-                __extends(SimpleSelect, _super);
-                function SimpleSelect() {
+            exports_8("ScrollSelect", ScrollSelect);
+            SingleSelect = /** @class */ (function (_super) {
+                __extends(SingleSelect, _super);
+                function SingleSelect() {
                     return _super !== null && _super.apply(this, arguments) || this;
                 }
-                SimpleSelect.prototype.selectItem = function (index) {
+                SingleSelect.prototype.itemClicked = function (index) {
+                    this.selectItem(index);
+                };
+                SingleSelect.prototype.selectItem = function (index) {
+                    this.onselectionchange(index);
+                };
+                SingleSelect.prototype.setHighlighted = function (highlightedIndex) {
+                    this.setFlairs([highlightFlair(highlightedIndex)]);
+                };
+                return SingleSelect;
+            }(ScrollSelect));
+            exports_8("SingleSelect", SingleSelect);
+            SimpleSingleSelect = /** @class */ (function (_super) {
+                __extends(SimpleSingleSelect, _super);
+                function SimpleSingleSelect() {
+                    return _super !== null && _super.apply(this, arguments) || this;
+                }
+                SimpleSingleSelect.prototype.selectItem = function (index) {
                     _super.prototype.selectItem.call(this, index);
                     this.setHighlighted(index);
                 };
-                return SimpleSelect;
-            }(SimpleScrollList));
-            exports_8("SimpleSelect", SimpleSelect);
+                return SimpleSingleSelect;
+            }(SingleSelect));
+            exports_8("SimpleSingleSelect", SimpleSingleSelect);
+            MultiSelect = /** @class */ (function (_super) {
+                __extends(MultiSelect, _super);
+                function MultiSelect() {
+                    var _this = _super.call(this) || this;
+                    _this.itemIsOn = [];
+                    var allNone = createDOMFromString("\n<div style=\"display: grid; grid-template-columns: 1fr 1fr; grid-gap: 4px;\">\n<style>\n.AllButton, .NoneButton {\n    text-align: center;\n    line-height: 32px;\n    cursor: pointer;\n    background: #666;\n    font-weight: bold;\n}\n</style>\n<div class=\"AllButton\">All</div><div class=\"NoneButton\">None</div>\n</div>\n");
+                    _this.toplevel.insertBefore(allNone, _this.toplevel.firstChild);
+                    var allButton = _this.toplevel.querySelector('.AllButton');
+                    allButton.onclick = function () {
+                        for (var i = 0; i < _this.getNumItems(); i++)
+                            _this.setItemIsOn(i, true);
+                        _this.syncFlairs();
+                    };
+                    var noneButton = _this.toplevel.querySelector('.NoneButton');
+                    noneButton.onclick = function () {
+                        for (var i = 0; i < _this.getNumItems(); i++)
+                            _this.setItemIsOn(i, false);
+                        _this.syncFlairs();
+                    };
+                    return _this;
+                }
+                MultiSelect.prototype.setItemIsOn = function (index, v) {
+                    this.itemIsOn[index] = v;
+                    this.onitemchanged(index, this.itemIsOn[index]);
+                };
+                MultiSelect.prototype.itemClicked = function (index) {
+                    this.setItemIsOn(index, !this.itemIsOn[index]);
+                    this.syncFlairs();
+                };
+                MultiSelect.prototype.syncFlairs = function () {
+                    var flairs = [];
+                    for (var i = 0; i < this.getNumItems(); i++) {
+                        var bulletColor = !!this.itemIsOn[i] ? HIGHLIGHT_COLOR : '#aaa';
+                        var color = !!this.itemIsOn[i] ? 'white' : '#aaa';
+                        flairs.push({ index: i, bulletColor: bulletColor, color: color });
+                    }
+                    this.setFlairs(flairs);
+                };
+                MultiSelect.prototype.setItemsSelected = function (isOn) {
+                    this.itemIsOn = isOn;
+                    this.syncFlairs();
+                };
+                MultiSelect.prototype.setItemSelected = function (index, v) {
+                    this.itemIsOn[index] = v;
+                    this.syncFlairs();
+                };
+                return MultiSelect;
+            }(ScrollSelect));
+            exports_8("MultiSelect", MultiSelect);
             Panel = /** @class */ (function () {
                 function Panel() {
                     var _this = this;
@@ -2311,17 +2395,20 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
                     this.toplevel.style.display = v ? 'grid' : 'none';
                 };
                 Panel.prototype.setTitle = function (icon, title) {
-                    var svgIcon = document.createRange().createContextualFragment(icon).querySelector('svg');
+                    var svgIcon = createDOMFromString(icon).querySelector('svg');
                     this.svgIcon = svgIcon;
                     this.svgIcon.style.gridColumn = '1';
                     this.header.textContent = title;
                     this.header.appendChild(this.svgIcon);
                     this.setExpanded(false);
                 };
+                Panel.prototype.syncHeaderStyle = function () {
+                    this.svgIcon.style.fill = this.expanded ? 'black' : '';
+                    setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
+                };
                 Panel.prototype.setExpanded = function (expanded) {
                     this.expanded = expanded;
-                    setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
-                    this.svgIcon.style.fill = this.expanded ? 'black' : '';
+                    this.syncHeaderStyle();
                     this.syncSize();
                 };
                 Panel.prototype.toggleExpanded = function () {
@@ -2339,9 +2426,9 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
                     _this.sceneGroups = [];
                     _this.sceneDescs = [];
                     _this.setTitle(OPEN_ICON, 'Scenes');
-                    _this.sceneGroupList = new SimpleScrollList();
+                    _this.sceneGroupList = new SingleSelect();
                     _this.contents.appendChild(_this.sceneGroupList.elem);
-                    _this.sceneDescList = new SimpleScrollList();
+                    _this.sceneDescList = new SingleSelect();
                     _this.sceneDescList.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
                     _this.sceneDescList.elem.style.width = '400px';
                     _this.extraRack.appendChild(_this.sceneDescList.elem);
@@ -2353,25 +2440,58 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
                     };
                     return _this;
                 }
-                SceneSelect.prototype.selectSceneDesc = function (i) {
-                    this.onscenedescselected(this.selectedSceneGroup, this.sceneDescs[i]);
-                };
-                SceneSelect.prototype.syncFlairs = function () {
-                    var selectedGroupIndex = this.sceneGroups.indexOf(this.selectedSceneGroup);
-                    var flairs = [{ index: selectedGroupIndex, backgroundColor: HIGHLIGHT_COLOR, color: 'black' }];
-                    var currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
-                    if (currentGroupIndex >= 0)
-                        flairs.push({ index: currentGroupIndex, backgroundColor: '#aaa' });
-                    this.sceneGroupList.setFlairs(flairs);
-                    var selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
-                    if (selectedDescIndex >= 0)
-                        this.sceneDescList.setHighlighted(selectedDescIndex);
+                SceneSelect.prototype.setProgressable = function (p) {
+                    var _this = this;
+                    this.setLoadProgress(p.progress);
+                    p.onProgress = function () {
+                        _this.setLoadProgress(p.progress);
+                    };
                 };
                 SceneSelect.prototype.setCurrentDesc = function (sceneGroup, sceneDesc) {
                     this.selectedSceneGroup = sceneGroup;
                     this.currentSceneGroup = sceneGroup;
                     this.currentSceneDesc = sceneDesc;
                     this.syncSceneDescs();
+                };
+                SceneSelect.prototype.setSceneGroups = function (sceneGroups) {
+                    this.sceneGroups = sceneGroups;
+                    var strings = this.sceneGroups.filter(function (g) { return g.sceneDescs.length > 0; }).map(function (g) { return g.name; });
+                    this.sceneGroupList.setStrings(strings);
+                    this.syncSceneDescs();
+                };
+                SceneSelect.prototype.setLoadProgress = function (pct) {
+                    this.loadProgress = pct;
+                    this.syncFlairs();
+                    this.syncHeaderStyle();
+                };
+                SceneSelect.prototype.selectSceneDesc = function (i) {
+                    this.onscenedescselected(this.selectedSceneGroup, this.sceneDescs[i]);
+                };
+                SceneSelect.prototype.getLoadingGradient = function () {
+                    var pct = Math.round(this.loadProgress * 100) + "%";
+                    var loadingGradient = "linear-gradient(to right, " + HIGHLIGHT_COLOR + " " + pct + ", transparent " + pct + ")";
+                    return loadingGradient;
+                };
+                SceneSelect.prototype.syncHeaderStyle = function () {
+                    _super.prototype.syncHeaderStyle.call(this);
+                    setElementHighlighted(this.header, this.expanded);
+                    if (this.expanded)
+                        this.header.style.background = HIGHLIGHT_COLOR;
+                    else
+                        this.header.style.background = this.getLoadingGradient();
+                };
+                SceneSelect.prototype.syncFlairs = function () {
+                    var selectedGroupIndex = this.sceneGroups.indexOf(this.selectedSceneGroup);
+                    var flairs = [{ index: selectedGroupIndex, background: HIGHLIGHT_COLOR, color: 'black' }];
+                    var currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
+                    if (currentGroupIndex >= 0)
+                        flairs.push({ index: currentGroupIndex, background: '#aaa' });
+                    this.sceneGroupList.setFlairs(flairs);
+                    var selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
+                    if (selectedDescIndex >= 0) {
+                        var loadingGradient = this.getLoadingGradient();
+                        this.sceneDescList.setFlairs([{ index: selectedDescIndex, background: loadingGradient }]);
+                    }
                 };
                 SceneSelect.prototype.selectSceneGroup = function (i) {
                     var sceneGroup = this.sceneGroups[i];
@@ -2392,12 +2512,6 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
                     this.sceneDescList.setStrings(strings);
                     this.syncFlairs();
                 };
-                SceneSelect.prototype.setSceneGroups = function (sceneGroups) {
-                    this.sceneGroups = sceneGroups;
-                    var strings = this.sceneGroups.filter(function (g) { return g.sceneDescs.length > 0; }).map(function (g) { return g.name; });
-                    this.sceneGroupList.setStrings(strings);
-                    this.syncSceneDescs();
-                };
                 return SceneSelect;
             }(Panel));
             CHECKERBOARD_IMAGE = 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAGElEQVQYlWNgYGCQwoKxgqGgcJA5h3yFAAs8BRWVSwooAAAAAElFTkSuQmCC")';
@@ -2408,7 +2522,7 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
                     var _this = _super.call(this) || this;
                     _this.textureList = [];
                     _this.setTitle(TEXTURES_ICON, 'Textures');
-                    _this.scrollList = new SimpleScrollList();
+                    _this.scrollList = new SingleSelect();
                     _this.scrollList.elem.style.height = "200px";
                     _this.scrollList.elem.style.overflow = 'auto';
                     _this.scrollList.onselectionchange = function (i) {
@@ -2477,14 +2591,14 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
                     _this.viewer = viewer;
                     _this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
                     // TODO(jstpierre): make css not leak
-                    _this.contents.innerHTML = "\n<style>\n.Slider {\n    -webkit-appearance: none;\n    width: 100%;\n    height: 24px;\n    margin: 0;\n}\n.Slider::-moz-range-thumb {\n    width: 16px;\n    height: 24px;\n    cursor: pointer;\n    background: " + HIGHLIGHT_COLOR + ";\n    border-radius: 0;\n    border: none;\n}\n.Slider::-webkit-slider-thumb {\n    width: 16px;\n    height: 24px;\n    cursor: pointer;\n    background: " + HIGHLIGHT_COLOR + ";\n    border-radius: 0;\n    border: none;\n}\n.Slider::-moz-range-track {\n    height: 24px;\n    cursor: pointer;\n    background: #444;\n}\n.Slider::-webkit-slider-runnable-track {\n    height: 24px;\n    cursor: pointer;\n    background: #444;\n}\n.Slider::-moz-range-progress {\n    height: 24px;\n    cursor: pointer;\n    background: #aaa;\n}\n.SettingsHeader, #CameraControllerWASD, #CameraControllerOrbit {\n    text-align: center;\n    font-weight: bold;\n    line-height: 24px;\n}\n#CameraControllerWASD, #CameraControllerOrbit {\n    background: #444;\n    line-height: 32px;\n    cursor: pointer;\n}\n</style>\n<div class=\"SettingsHeader\">Field of View</div>\n<div><input class=\"Slider\" id=\"FoVSlider\" type=\"range\" min=\"1\" max=\"100\"></div>\n<div class=\"SettingsHeader\">Camera Controller</div>\n<div style=\"display: grid; grid-template-columns: 1fr 1fr;\">\n<div id=\"CameraControllerWASD\">WASD</div><div id=\"CameraControllerOrbit\">Orbit</div>\n</div>\n";
-                    _this.fovSlider = _this.contents.querySelector('#FoVSlider');
+                    _this.contents.innerHTML = "\n<style>\n.Slider {\n    -webkit-appearance: none;\n    width: 100%;\n    height: 24px;\n    margin: 0;\n}\n.Slider::-moz-range-thumb {\n    width: 16px;\n    height: 24px;\n    cursor: pointer;\n    background: " + HIGHLIGHT_COLOR + ";\n    border-radius: 0;\n    border: none;\n}\n.Slider::-webkit-slider-thumb {\n    width: 16px;\n    height: 24px;\n    cursor: pointer;\n    background: " + HIGHLIGHT_COLOR + ";\n    border-radius: 0;\n    border: none;\n}\n.Slider::-moz-range-track {\n    height: 24px;\n    cursor: pointer;\n    background: #444;\n}\n.Slider::-webkit-slider-runnable-track {\n    height: 24px;\n    cursor: pointer;\n    background: #444;\n}\n.Slider::-moz-range-progress {\n    height: 24px;\n    cursor: pointer;\n    background: #aaa;\n}\n.SettingsHeader, #CameraControllerWASD, #CameraControllerOrbit {\n    text-align: center;\n    font-weight: bold;\n    line-height: 24px;\n}\n#CameraControllerWASD, #CameraControllerOrbit {\n    background: #444;\n    line-height: 32px;\n    cursor: pointer;\n}\n</style>\n<div class=\"SettingsHeader\">Field of View</div>\n<div><input class=\"Slider FoVSlider\" type=\"range\" min=\"1\" max=\"100\"></div>\n<div class=\"SettingsHeader\">Camera Controller</div>\n<div style=\"display: grid; grid-template-columns: 1fr 1fr;\">\n<div class=\"CameraControllerWASD\">WASD</div><div class=\"CameraControllerOrbit\">Orbit</div>\n</div>\n";
+                    _this.fovSlider = _this.contents.querySelector('.FoVSlider');
                     _this.fovSlider.oninput = _this.onFovSliderChange.bind(_this);
-                    _this.cameraControllerWASD = _this.contents.querySelector('#CameraControllerWASD');
+                    _this.cameraControllerWASD = _this.contents.querySelector('.CameraControllerWASD');
                     _this.cameraControllerWASD.onclick = function () {
                         _this.setCameraControllerClass(Viewer.FPSCameraController);
                     };
-                    _this.cameraControllerOrbit = _this.contents.querySelector('#CameraControllerOrbit');
+                    _this.cameraControllerOrbit = _this.contents.querySelector('.CameraControllerOrbit');
                     _this.cameraControllerOrbit.onclick = function () {
                         _this.setCameraControllerClass(Viewer.OrbitCameraController);
                     };
@@ -2514,11 +2628,36 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
                 function About() {
                     var _this = _super.call(this) || this;
                     _this.setTitle(ABOUT_ICON, 'About');
-                    _this.contents.innerHTML = "\n<div id=\"About\">\n<style>\n#About {\n    padding: 12px;\n    line-height: 1.2;\n}\n#About a {\n    color: white;\n}\n#About li span {\n    color: #aaa;\n}\n#About h2 {\n    vertical-align: middle;\n    font-size: 2em;\n    text-align: center;\n    margin: 0px;\n}\n</style>\n\n<h2> <img style=\"vertical-align: middle;\" src=\"logo.png\"> MODEL VIEWER </h2>\n\n<p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>\n<p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to go faster than that.\n<strong>B</strong> resets the camera, and <strong>Z</strong> toggles the UI. </p>\n\n<p><strong>CODE PRIMARILY WRITTEN</strong> by <a href=\"https://github.com/magcius\">Jasper</a></p>\n\n<p><strong>MODELS</strong> \u00A9 Nintendo, SEGA, Retro Studios, FROM Software</p>\n\n<p><strong>CODE HELP AND FRIENDSHIP</strong> from\n<a href=\"https://twitter.com/beholdnec\">N.E.C.</a>,\n<a href=\"https://twitter.com/LordNed\">LordNed</a>,\n<a href=\"https://twitter.com/SageOfMirrors\">SageOfMirrors</a>,\n<a href=\"https://github.com/blank63\">blank63</a>,\n<a href=\"https://twitter.com/StapleButter\">StapleButter</a>,\n<a href=\"https://twitter.com/xdanieldzd\">xdanieldzd</a>,\n<a href=\"https://github.com/vlad001\">vlad001</a>,\n<a href=\"https://twitter.com/Jewelots_\">Jewel</a>,\n<a href=\"https://twitter.com/instant_grat\">Instant Grat</a>,\nand <a href=\"https://twitter.com/__Aruki\">Aruki</a></p>\n\n<p><strong>ICONS</strong> from <a href=\"https://thenounproject.com/\">The Noun Project</a>, used under Creative Commons CC-BY:</p>\n<ul>\n<li> Truncated Pyramid <span>by</span> Bohdan Burmich\n<li> Images <span>by</span> Creative Stall\n<li> Help <span>by</span> Gregor Cresnar\n<li> Open <span>by</span> Landan Lloyd\n<li> Nightshift <span>by mikicon\n</ul>\n</div>\n";
+                    _this.contents.innerHTML = "\n<div id=\"About\">\n<style>\n#About {\n    padding: 12px;\n    line-height: 1.2;\n}\n#About a {\n    color: white;\n}\n#About li span {\n    color: #aaa;\n}\n#About h2 {\n    vertical-align: middle;\n    font-size: 2em;\n    text-align: center;\n    margin: 0px;\n}\n</style>\n\n<h2><img style=\"vertical-align: middle;\" src=\"logo.png\">MODEL VIEWER</h2>\n\n<p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>\n<p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to go faster than that.\n<strong>B</strong> resets the camera, and <strong>Z</strong> toggles the UI. </p>\n\n<p><strong>CODE PRIMARILY WRITTEN</strong> by <a href=\"https://github.com/magcius\">Jasper</a></p>\n\n<p><strong>MODELS</strong> \u00A9 Nintendo, SEGA, Retro Studios, FROM Software</p>\n\n<p><strong>CODE HELP AND FRIENDSHIP</strong> from\n<a href=\"https://twitter.com/beholdnec\">N.E.C.</a>,\n<a href=\"https://twitter.com/LordNed\">LordNed</a>,\n<a href=\"https://twitter.com/SageOfMirrors\">SageOfMirrors</a>,\n<a href=\"https://github.com/blank63\">blank63</a>,\n<a href=\"https://twitter.com/StapleButter\">StapleButter</a>,\n<a href=\"https://twitter.com/xdanieldzd\">xdanieldzd</a>,\n<a href=\"https://github.com/vlad001\">vlad001</a>,\n<a href=\"https://twitter.com/Jewelots_\">Jewel</a>,\n<a href=\"https://twitter.com/instant_grat\">Instant Grat</a>,\nand <a href=\"https://twitter.com/__Aruki\">Aruki</a></p>\n\n<p><strong>ICONS</strong> from <a href=\"https://thenounproject.com/\">The Noun Project</a>, used under Creative Commons CC-BY:</p>\n<ul>\n<li> Truncated Pyramid <span>by</span> Bohdan Burmich\n<li> Images <span>by</span> Creative Stall\n<li> Help <span>by</span> Gregor Cresnar\n<li> Open <span>by</span> Landan Lloyd\n<li> Nightshift <span>by</span> mikicon\n<li> Layer <span>by</span> Chameleon Design\n</ul>\n</div>\n";
                     return _this;
                 }
                 return About;
             }(Panel));
+            LAYER_ICON = "<svg viewBox=\"0 0 16 16\" height=\"20\" fill=\"white\"><g transform=\"translate(0,-1036.3622)\"><path d=\"m 8,1039.2486 -0.21875,0.125 -4.90625,2.4375 5.125,2.5625 5.125,-2.5625 L 8,1039.2486 z m -3,4.5625 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1043.8111 z m 0,3 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1046.8111 z\"/></g></svg>";
+            LayerPanel = /** @class */ (function (_super) {
+                __extends(LayerPanel, _super);
+                function LayerPanel() {
+                    var _this = _super.call(this) || this;
+                    _this.setTitle(LAYER_ICON, 'Layers');
+                    _this.multiSelect = new MultiSelect();
+                    _this.multiSelect.onitemchanged = _this._onItemChanged.bind(_this);
+                    _this.contents.appendChild(_this.multiSelect.elem);
+                    return _this;
+                }
+                LayerPanel.prototype._onItemChanged = function (index, visible) {
+                    this.layers[index].setVisible(visible);
+                };
+                ;
+                LayerPanel.prototype.setLayers = function (layers) {
+                    this.layers = layers;
+                    var strings = layers.map(function (layer) { return layer.name; });
+                    var isOn = strings.map(function () { return true; });
+                    this.multiSelect.setStrings(strings);
+                    this.multiSelect.setItemsSelected(isOn);
+                };
+                return LayerPanel;
+            }(Panel));
+            exports_8("LayerPanel", LayerPanel);
             UI = /** @class */ (function () {
                 function UI(viewer) {
                     this.viewer = viewer;
@@ -2630,6 +2769,8 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     this.grabbing = v;
                     this.toplevel.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
                     this.toplevel.style.cursor = v ? 'grabbing' : 'grab';
+                    document.body.style.setProperty('pointer-events', v ? 'none' : '', 'important');
+                    this.toplevel.style.setProperty('pointer-events', v ? 'auto' : '', 'important');
                 };
                 InputManager.prototype._onMouseMove = function (e) {
                     if (!this.grabbing)
@@ -6394,6 +6535,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 Scene.prototype.setTextureOverride = function (name, override) {
                     this.textureOverrides.set(name, override);
                 };
+                Scene.prototype.setVisible = function (v) {
+                    this.visible = v;
+                };
                 Scene.prototype.getTextureBindData = function (texIndex) {
                     var tex1Sampler = this.tex1Samplers[texIndex];
                     var textureOverride = this.textureOverrides.get(tex1Sampler.name);
@@ -6682,7 +6826,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
         }
     };
 });
-System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_21, context_21) {
+System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_21, context_21) {
     "use strict";
     var __moduleName = context_21 && context_21.id;
     function collectTextures(scenes) {
@@ -6723,7 +6867,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
         });
         return scenes.filter(function (s) { return !!s; });
     }
-    var Progressable_2, util_9, Yaz0, j3d_2, RARC, render_4, render_5, gx_material_1, TwilightPrincessRenderer, TwilightPrincessSceneDesc, id, name, sceneDescs, sceneGroup;
+    var Progressable_2, util_9, Yaz0, UI, j3d_2, RARC, render_4, render_5, gx_material_1, TwilightPrincessRenderer, TwilightPrincessSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (Progressable_2_1) {
@@ -6734,6 +6878,9 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
             },
             function (Yaz0_1) {
                 Yaz0 = Yaz0_1;
+            },
+            function (UI_1) {
+                UI = UI_1;
             },
             function (j3d_2_1) {
                 j3d_2 = j3d_2_1;
@@ -6784,90 +6931,10 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "j3d/j3d", "j
                         }
                     });
                 }
-                TwilightPrincessRenderer.prototype.createUI = function () {
-                    var elem = document.createElement('div');
-                    elem.style.backgroundColor = 'white';
-                    elem.style.border = '1px solid #999';
-                    elem.style.font = '100% sans-serif';
-                    elem.style.boxSizing = 'border-box';
-                    elem.style.padding = '1em';
-                    elem.style.overflow = 'hidden';
-                    elem.onmouseover = function () {
-                        elem.style.width = 'auto';
-                        elem.style.height = 'auto';
-                    };
-                    elem.onmouseout = function () {
-                        elem.style.width = '0';
-                        elem.style.height = '0';
-                    };
-                    elem.onmouseout(null);
-                    var selectAll = document.createElement('button');
-                    selectAll.textContent = 'All';
-                    selectAll.onclick = function () {
-                        try {
-                            for (var checkboxes_1 = __values(checkboxes), checkboxes_1_1 = checkboxes_1.next(); !checkboxes_1_1.done; checkboxes_1_1 = checkboxes_1.next()) {
-                                var checkbox = checkboxes_1_1.value;
-                                checkbox.checked = true;
-                                checkbox.onchange(null);
-                            }
-                        }
-                        catch (e_25_1) { e_25 = { error: e_25_1 }; }
-                        finally {
-                            try {
-                                if (checkboxes_1_1 && !checkboxes_1_1.done && (_a = checkboxes_1.return)) _a.call(checkboxes_1);
-                            }
-                            finally { if (e_25) throw e_25.error; }
-                        }
-                        var e_25, _a;
-                    };
-                    selectAll.style.display = 'block';
-                    selectAll.style.width = '100%';
-                    elem.appendChild(selectAll);
-                    var selectNone = document.createElement('button');
-                    selectNone.textContent = 'None';
-                    selectNone.onclick = function () {
-                        try {
-                            for (var checkboxes_2 = __values(checkboxes), checkboxes_2_1 = checkboxes_2.next(); !checkboxes_2_1.done; checkboxes_2_1 = checkboxes_2.next()) {
-                                var checkbox = checkboxes_2_1.value;
-                                checkbox.checked = false;
-                                checkbox.onchange(null);
-                            }
-                        }
-                        catch (e_26_1) { e_26 = { error: e_26_1 }; }
-                        finally {
-                            try {
-                                if (checkboxes_2_1 && !checkboxes_2_1.done && (_a = checkboxes_2.return)) _a.call(checkboxes_2);
-                            }
-                            finally { if (e_26) throw e_26.error; }
-                        }
-                        var e_26, _a;
-                    };
-                    selectNone.style.display = 'block';
-                    selectNone.style.width = '100%';
-                    elem.appendChild(selectNone);
-                    var checkboxes = [];
-                    this.roomScenes.forEach(function (scene) {
-                        var line = document.createElement('div');
-                        line.style.textAlign = 'right';
-                        line.style.overflow = 'hidden';
-                        var checkbox = document.createElement('input');
-                        checkbox.id = util_9.generateFormID();
-                        checkbox.type = 'checkbox';
-                        checkbox.checked = true;
-                        checkbox.onchange = function () {
-                            scene.visible = checkbox.checked;
-                        };
-                        checkboxes.push(checkbox);
-                        var label = document.createElement('label');
-                        label.textContent = scene.name;
-                        label.htmlFor = checkbox.id;
-                        label.style.webkitUserSelect = 'none';
-                        label.style.userSelect = 'none';
-                        line.appendChild(label);
-                        line.appendChild(checkbox);
-                        elem.appendChild(line);
-                    });
-                    return elem;
+                TwilightPrincessRenderer.prototype.createPanels = function () {
+                    var layers = new UI.LayerPanel();
+                    layers.setLayers(this.roomScenes);
+                    return [layers];
                 };
                 TwilightPrincessRenderer.prototype.render = function (state) {
                     var _this = this;
@@ -7068,14 +7135,14 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_27_1) { e_27 = { error: e_27_1 }; }
+                    catch (e_25_1) { e_25 = { error: e_25_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_27) throw e_27.error; }
+                        finally { if (e_25) throw e_25.error; }
                     }
-                    var e_27, _c;
+                    var e_25, _c;
                 };
                 return MultiScene;
             }());
@@ -7152,15 +7219,15 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_28_1) { e_28 = { error: e_28_1 }; }
+        catch (e_26_1) { e_26 = { error: e_26_1 }; }
         finally {
             try {
                 if (scenes_3_1 && !scenes_3_1.done && (_a = scenes_3.return)) _a.call(scenes_3);
             }
-            finally { if (e_28) throw e_28.error; }
+            finally { if (e_26) throw e_26.error; }
         }
         return textures;
-        var e_28, _a;
+        var e_26, _a;
     }
     var gl_matrix_6, Progressable_3, util_12, Yaz0, UI, GX_Material, j3d_4, RARC, render_7, CameraPos, TIME_OF_DAY_ICON, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
@@ -7177,8 +7244,8 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
             function (Yaz0_3) {
                 Yaz0 = Yaz0_3;
             },
-            function (UI_1) {
-                UI = UI_1;
+            function (UI_2) {
+                UI = UI_2;
             },
             function (GX_Material_3) {
                 GX_Material = GX_Material_3;
@@ -7317,7 +7384,7 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     var _this = this;
                     var timeOfDayPanel = new UI.Panel();
                     timeOfDayPanel.setTitle(TIME_OF_DAY_ICON, "Time of Day");
-                    var selector = new UI.SimpleSelect();
+                    var selector = new UI.SimpleSingleSelect();
                     selector.setStrings(['Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night']);
                     selector.onselectionchange = function (index) {
                         _this.setTimeOfDay(index);
@@ -7413,15 +7480,15 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_29_1) { e_29 = { error: e_29_1 }; }
+        catch (e_27_1) { e_27 = { error: e_27_1 }; }
         finally {
             try {
                 if (scenes_4_1 && !scenes_4_1.done && (_a = scenes_4.return)) _a.call(scenes_4);
             }
-            finally { if (e_29) throw e_29.error; }
+            finally { if (e_27) throw e_27.error; }
         }
         return textures;
-        var e_29, _a;
+        var e_27, _a;
     }
     var util_13, Yaz0, RARC, scenes_5, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
@@ -7467,14 +7534,14 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                             scene.render(renderState);
                         }
                     }
-                    catch (e_30_1) { e_30 = { error: e_30_1 }; }
+                    catch (e_28_1) { e_28 = { error: e_28_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_30) throw e_30.error; }
+                        finally { if (e_28) throw e_28.error; }
                     }
-                    var e_30, _c;
+                    var e_28, _c;
                 };
                 SunshineRenderer.prototype.destroy = function (gl) {
                     if (this.skyScene)
@@ -7533,15 +7600,15 @@ System.register("j3d/sms_scenes", ["util", "yaz0", "j3d/rarc", "j3d/scenes"], fu
                                 extraScenes.push(scene);
                             }
                         }
-                        catch (e_31_1) { e_31 = { error: e_31_1 }; }
+                        catch (e_29_1) { e_29 = { error: e_29_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                             }
-                            finally { if (e_31) throw e_31.error; }
+                            finally { if (e_29) throw e_29.error; }
                         }
                         return new SunshineRenderer(skyScene, mapScene, seaScene, extraScenes);
-                        var e_31, _d;
+                        var e_29, _d;
                     });
                 };
                 return SunshineSceneDesc;
@@ -7573,15 +7640,15 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_32_1) { e_32 = { error: e_32_1 }; }
+        catch (e_30_1) { e_30 = { error: e_30_1 }; }
         finally {
             try {
                 if (scenes_6_1 && !scenes_6_1.done && (_a = scenes_6.return)) _a.call(scenes_6);
             }
-            finally { if (e_32) throw e_32.error; }
+            finally { if (e_30) throw e_30.error; }
         }
         return textures;
-        var e_32, _a;
+        var e_30, _a;
     }
     var Progressable_4, util_14, render_8, scenes_7, gx_material_2, BloomPassBlurProgram, BloomPassBokehProgram, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
@@ -7890,15 +7957,15 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_33_1) { e_33 = { error: e_33_1 }; }
+        catch (e_31_1) { e_31 = { error: e_31_1 }; }
         finally {
             try {
                 if (scenes_8_1 && !scenes_8_1.done && (_a = scenes_8.return)) _a.call(scenes_8);
             }
-            finally { if (e_33) throw e_33.error; }
+            finally { if (e_31) throw e_31.error; }
         }
         return textures;
-        var e_33, _a;
+        var e_31, _a;
     }
     var gl_matrix_7, CRG0, LZ77, NITRO_BMD, render_9, util_17, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, BMDRenderer, SM64DSRenderer, SceneDesc;
     return {
@@ -8055,12 +8122,12 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                         gl_matrix_7.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
-                            catch (e_34_1) { e_34 = { error: e_34_1 }; }
+                            catch (e_32_1) { e_32 = { error: e_32_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_34) throw e_34.error; }
+                                finally { if (e_32) throw e_32.error; }
                             }
                             gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                             gl_matrix_7.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
@@ -8071,7 +8138,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                             gl.bindTexture(gl.TEXTURE_2D, texId);
                         }
                         state.useFlags(renderFlags);
-                        var e_34, _c;
+                        var e_32, _c;
                     };
                 };
                 BMDRenderer.prototype.translateBatch = function (gl, batch) {
@@ -8096,23 +8163,23 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                     this.translateBatch(gl, batch);
                                 }
                             }
-                            catch (e_35_1) { e_35 = { error: e_35_1 }; }
+                            catch (e_33_1) { e_33 = { error: e_33_1 }; }
                             finally {
                                 try {
                                     if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
                                 }
-                                finally { if (e_35) throw e_35.error; }
+                                finally { if (e_33) throw e_33.error; }
                             }
                         }
                     }
-                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
+                    catch (e_34_1) { e_34 = { error: e_34_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
                         }
-                        finally { if (e_36) throw e_36.error; }
+                        finally { if (e_34) throw e_34.error; }
                     }
-                    var e_36, _f, e_35, _e;
+                    var e_34, _f, e_33, _e;
                 };
                 BMDRenderer.prototype.destroy = function (gl) {
                     this.arena.destroy(gl);
@@ -8868,15 +8935,15 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                                 return entry;
                         }
                     }
-                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
+                    catch (e_35_1) { e_35 = { error: e_35_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_37) throw e_37.error; }
+                        finally { if (e_35) throw e_35.error; }
                     }
                     return null;
-                    var e_37, _c;
+                    var e_35, _c;
                 };
                 ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
                     var bankIdx = addr >>> 24;
@@ -11151,15 +11218,15 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 gl.drawElements(gl.TRIANGLES, prm.count, _this.translateDataType(gl, prm.indexType), prm.offset * _this.dataTypeSize(prm.indexType));
                             }
                         }
-                        catch (e_38_1) { e_38 = { error: e_38_1 }; }
+                        catch (e_36_1) { e_36 = { error: e_36_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_38) throw e_38.error; }
+                            finally { if (e_36) throw e_36.error; }
                         }
                         gl.bindVertexArray(null);
-                        var e_38, _c;
+                        var e_36, _c;
                     };
                 };
                 Scene.prototype.translateTexture = function (gl, texture) {
@@ -11252,14 +11319,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 func();
                             }
                         }
-                        catch (e_39_1) { e_39 = { error: e_39_1 }; }
+                        catch (e_37_1) { e_37 = { error: e_37_1 }; }
                         finally {
                             try {
                                 if (meshFuncs_1_1 && !meshFuncs_1_1.done && (_a = meshFuncs_1.return)) _a.call(meshFuncs_1);
                             }
-                            finally { if (e_39) throw e_39.error; }
+                            finally { if (e_37) throw e_37.error; }
                         }
-                        var e_39, _a;
+                        var e_37, _a;
                     };
                 };
                 Scene.prototype.translateModel = function (gl, mesh) {
@@ -11290,14 +11357,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
+                    catch (e_38_1) { e_38 = { error: e_38_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_40) throw e_40.error; }
+                        finally { if (e_38) throw e_38.error; }
                     }
-                    var e_40, _c;
+                    var e_38, _c;
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -11570,15 +11637,15 @@ System.register("worker_util", [], function (exports_44, context_44) {
                             worker.terminate();
                         }
                     }
-                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
+                    catch (e_39_1) { e_39 = { error: e_39_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_41) throw e_41.error; }
+                        finally { if (e_39) throw e_39.error; }
                     }
                     this.workers = [];
-                    var e_41, _c;
+                    var e_39, _c;
                 };
                 WorkerPool.prototype.build = function () {
                     if (this.workers.length > 0)
@@ -11621,14 +11688,14 @@ System.register("worker_util", [], function (exports_44, context_44) {
                             }
                         }
                     }
-                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
+                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_42) throw e_42.error; }
+                        finally { if (e_40) throw e_40.error; }
                     }
-                    var e_42, _c;
+                    var e_40, _c;
                 };
                 WorkerPool.prototype._onWorkerDone = function () {
                     this.pumpQueue();
@@ -12406,15 +12473,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                     entries.push({ key: key, value: value });
                 }
             }
-            catch (e_43_1) { e_43 = { error: e_43_1 }; }
+            catch (e_41_1) { e_41 = { error: e_41_1 }; }
             finally {
                 try {
                     if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
                 }
-                finally { if (e_43) throw e_43.error; }
+                finally { if (e_41) throw e_41.error; }
             }
             return entries;
-            var e_43, _a;
+            var e_41, _a;
         }
         // Vertex buffers.
         var fvtxIdx = fvtxOffs;
@@ -12486,12 +12553,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                 fshp.push({ name: name_10, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
             }
         }
-        catch (e_44_1) { e_44 = { error: e_44_1 }; }
+        catch (e_42_1) { e_42 = { error: e_42_1 }; }
         finally {
             try {
                 if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
             }
-            finally { if (e_44) throw e_44.error; }
+            finally { if (e_42) throw e_42.error; }
         }
         // Materials.
         var fmat = [];
@@ -12554,12 +12621,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                         }
                     }
                 }
-                catch (e_45_1) { e_45 = { error: e_45_1 }; }
+                catch (e_43_1) { e_43 = { error: e_43_1 }; }
                 finally {
                     try {
                         if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
                     }
-                    finally { if (e_45) throw e_45.error; }
+                    finally { if (e_43) throw e_43.error; }
                 }
                 util_26.assert(textureSamplerCount === textureReferenceCount);
                 var textureSamplerArrayIdx = textureSamplerArrayOffs;
@@ -12628,15 +12695,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                 fmat.push({ name: name_11, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
             }
         }
-        catch (e_46_1) { e_46 = { error: e_46_1 }; }
+        catch (e_44_1) { e_44 = { error: e_44_1 }; }
         finally {
             try {
                 if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
             }
-            finally { if (e_46) throw e_46.error; }
+            finally { if (e_44) throw e_44.error; }
         }
         return { fvtx: fvtx, fshp: fshp, fmat: fmat };
-        var e_44, _a, e_46, _c, e_45, _b;
+        var e_42, _a, e_44, _c, e_43, _b;
     }
     function parse(buffer) {
         var view = buffer.createDataView();
@@ -12677,12 +12744,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                 textures.push({ entry: entry, texture: texture });
             }
         }
-        catch (e_47_1) { e_47 = { error: e_47_1 }; }
+        catch (e_45_1) { e_45 = { error: e_45_1 }; }
         finally {
             try {
                 if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
             }
-            finally { if (e_47) throw e_47.error; }
+            finally { if (e_45) throw e_45.error; }
         }
         var models = [];
         try {
@@ -12692,15 +12759,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                 models.push({ entry: entry, fmdl: fmdl });
             }
         }
-        catch (e_48_1) { e_48 = { error: e_48_1 }; }
+        catch (e_46_1) { e_46 = { error: e_46_1 }; }
         finally {
             try {
                 if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
             }
-            finally { if (e_48) throw e_48.error; }
+            finally { if (e_46) throw e_46.error; }
         }
         return { textures: textures, models: models };
-        var e_47, _a, e_48, _b;
+        var e_45, _a, e_46, _b;
     }
     exports_47("parse", parse);
     var gx2_surface_1, util_26, UBOParameterType, RenderInfoParameterType;
@@ -13029,12 +13096,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             samplers.push(sampler);
                         }
                     }
-                    catch (e_49_1) { e_49 = { error: e_49_1 }; }
+                    catch (e_47_1) { e_47 = { error: e_47_1 }; }
                     finally {
                         try {
                             if (textureAssigns_1_1 && !textureAssigns_1_1.done && (_a = textureAssigns_1.return)) _a.call(textureAssigns_1);
                         }
-                        finally { if (e_49) throw e_49.error; }
+                        finally { if (e_47) throw e_47.error; }
                     }
                     var prog = new ProgramGambit_UBER();
                     this.arena.trackProgram(prog);
@@ -13075,7 +13142,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             _loop_5(i);
                         }
                     };
-                    var e_49, _a;
+                    var e_47, _a;
                 };
                 Scene.prototype.translateIndexBuffer = function (indexFormat, indexBufferData) {
                     switch (indexFormat) {
@@ -13097,14 +13164,14 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             indexDatas.push(indexData);
                         }
                     }
-                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
+                    catch (e_48_1) { e_48 = { error: e_48_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_50) throw e_50.error; }
+                        finally { if (e_48) throw e_48.error; }
                     }
-                    var e_50, _c;
+                    var e_48, _c;
                 };
                 Scene.prototype.translateIndexFormat = function (gl, indexFormat) {
                     // Little-endian translation was done above.
@@ -13136,12 +13203,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             glIndexBuffers.push(coalescedIndex.shift());
                         }
                     }
-                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
+                    catch (e_49_1) { e_49 = { error: e_49_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_51) throw e_51.error; }
+                        finally { if (e_49) throw e_49.error; }
                     }
                     return function (state) {
                         var lod = 0;
@@ -13154,16 +13221,16 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 gl.drawElements(_this.translatePrimType(gl, mesh.primType), submesh.indexBufferCount, _this.translateIndexFormat(gl, mesh.indexFormat), glIndexBuffer.offset + submesh.indexBufferOffset);
                             }
                         }
-                        catch (e_52_1) { e_52 = { error: e_52_1 }; }
+                        catch (e_50_1) { e_50 = { error: e_50_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_52) throw e_52.error; }
+                            finally { if (e_50) throw e_50.error; }
                         }
-                        var e_52, _c;
+                        var e_50, _c;
                     };
-                    var e_51, _c;
+                    var e_49, _c;
                 };
                 Scene.prototype.translateModel = function (gl, model, coalescedVertex, coalescedIndex) {
                     var _this = this;
@@ -13346,15 +13413,15 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_53_1) { e_53 = { error: e_53_1 }; }
+        catch (e_51_1) { e_51 = { error: e_51_1 }; }
         finally {
             try {
                 if (scenes_9_1 && !scenes_9_1.done && (_a = scenes_9.return)) _a.call(scenes_9);
             }
-            finally { if (e_53) throw e_53.error; }
+            finally { if (e_51) throw e_51.error; }
         }
         return textures;
-        var e_53, _a;
+        var e_51, _a;
     }
     function createSceneFromFRESBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
@@ -13603,8 +13670,8 @@ System.register("dksiv/render", ["gl-matrix", "render"], function (exports_52, c
                 return Chunk;
             }());
             Scene = /** @class */ (function () {
-                function Scene(gl, label, iv) {
-                    this.label = label;
+                function Scene(gl, name, iv) {
+                    this.name = name;
                     this.iv = iv;
                     this.textures = [];
                     this.visible = true;
@@ -13642,10 +13709,10 @@ System.register("dksiv/render", ["gl-matrix", "render"], function (exports_52, c
         }
     };
 });
-System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "util"], function (exports_53, context_53) {
+System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable", "util"], function (exports_53, context_53) {
     "use strict";
     var __moduleName = context_53 && context_53.id;
-    var iv_1, render_21, Progressable_7, util_30, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, name, id, sceneGroup;
+    var iv_1, render_21, UI, Progressable_7, util_30, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, name, id, sceneGroup;
     return {
         setters: [
             function (iv_1_1) {
@@ -13653,6 +13720,9 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "ut
             },
             function (render_21_1) {
                 render_21 = render_21_1;
+            },
+            function (UI_3) {
+                UI = UI_3;
             },
             function (Progressable_7_1) {
                 Progressable_7 = Progressable_7_1;
@@ -13717,50 +13787,19 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "Progressable", "ut
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_54_1) { e_54 = { error: e_54_1 }; }
+                    catch (e_52_1) { e_52 = { error: e_52_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_54) throw e_54.error; }
+                        finally { if (e_52) throw e_52.error; }
                     }
-                    var e_54, _c;
+                    var e_52, _c;
                 }
-                MultiScene.prototype.createUI = function () {
-                    var elem = document.createElement('div');
-                    elem.style.backgroundColor = 'white';
-                    elem.style.border = '1px solid #999';
-                    elem.style.font = '100% sans-serif';
-                    elem.style.boxSizing = 'border-box';
-                    elem.style.padding = '1em';
-                    elem.onmouseover = function () {
-                        elem.style.width = 'auto';
-                        elem.style.height = 'auto';
-                    };
-                    elem.onmouseout = function () {
-                        elem.style.width = '0';
-                        elem.style.height = '0';
-                    };
-                    elem.onmouseout(null);
-                    this.scenes.forEach(function (scene) {
-                        var line = document.createElement('div');
-                        line.style.textAlign = 'right';
-                        line.style.overflow = 'hidden';
-                        var checkbox = document.createElement('input');
-                        checkbox.id = util_30.generateFormID();
-                        checkbox.type = 'checkbox';
-                        checkbox.checked = true;
-                        checkbox.onchange = function () {
-                            scene.setVisible(checkbox.checked);
-                        };
-                        var label = document.createElement('label');
-                        label.textContent = scene.label;
-                        label.htmlFor = checkbox.id;
-                        line.appendChild(label);
-                        line.appendChild(checkbox);
-                        elem.appendChild(line);
-                    });
-                    return elem;
+                MultiScene.prototype.createPanels = function () {
+                    var layers = new UI.LayerPanel();
+                    layers.setLayers(this.scenes);
+                    return [layers];
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -14248,12 +14287,12 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                     vertexIndexSize += 0x02;
                 }
             }
-            catch (e_55_1) { e_55 = { error: e_55_1 }; }
+            catch (e_53_1) { e_53 = { error: e_53_1 }; }
             finally {
                 try {
                     if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
                 }
-                finally { if (e_55) throw e_55.error; }
+                finally { if (e_53) throw e_53.error; }
             }
             var totalVertexCount = 0;
             var totalTriangleCount = 0;
@@ -14410,7 +14449,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             };
             surfaces.push(surface);
             sectionIndex++;
-            var e_55, _a;
+            var e_53, _a;
         };
         for (var i = 0; i < surfaceCount; i++) {
             _loop_8(i);
@@ -14616,15 +14655,15 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                                 return resource;
                         }
                     }
-                    catch (e_56_1) { e_56 = { error: e_56_1 }; }
+                    catch (e_54_1) { e_54 = { error: e_54_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_56) throw e_56.error; }
+                        finally { if (e_54) throw e_54.error; }
                     }
                     return null;
-                    var e_56, _c;
+                    var e_54, _c;
                 };
                 ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
                     var cached = this._cache.get(assetID);
@@ -14963,15 +15002,15 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                             offset += 4 * attrib.compCount;
                         }
                     }
-                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
+                    catch (e_55_1) { e_55 = { error: e_55_1 }; }
                     finally {
                         try {
                             if (vtxAttrFormats_2_1 && !vtxAttrFormats_2_1.done && (_a = vtxAttrFormats_2.return)) _a.call(vtxAttrFormats_2);
                         }
-                        finally { if (e_57) throw e_57.error; }
+                        finally { if (e_55) throw e_55.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_57, _a;
+                    var e_55, _a;
                 }
                 Command_Surface.prototype.exec = function (state) {
                     var gl = state.gl;
@@ -15128,14 +15167,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_58_1) { e_58 = { error: e_58_1 }; }
+                    catch (e_56_1) { e_56 = { error: e_56_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_58) throw e_58.error; }
+                        finally { if (e_56) throw e_56.error; }
                     }
-                    var e_58, _c;
+                    var e_56, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -15179,15 +15218,15 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                                 return new MultiScene(scenes);
                             }
                         }
-                        catch (e_59_1) { e_59 = { error: e_59_1 }; }
+                        catch (e_57_1) { e_57 = { error: e_57_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_59) throw e_59.error; }
+                            finally { if (e_57) throw e_57.error; }
                         }
                         return null;
-                        var e_59, _c;
+                        var e_57, _c;
                     });
                 };
                 return MP1SceneDesc;
@@ -15205,7 +15244,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
 System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "dksiv/scenes", "metroid_prime/scenes", "j3d/scenes", "ui"], function (exports_62, context_62) {
     "use strict";
     var __moduleName = context_62 && context_62.id;
-    var viewer_1, ArrayBufferSlice_8, Progressable_9, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, DKSIV, MP1, J3D, ui_1, sceneGroups, ProgressBar, DroppedFileSceneDesc, SceneLoader, Main;
+    var viewer_1, ArrayBufferSlice_8, Progressable_9, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, DKSIV, MP1, J3D, ui_1, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
     return {
         setters: [
             function (viewer_1_1) {
@@ -15275,42 +15314,6 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                 DKSIV.sceneGroup,
                 MP1.sceneGroup,
             ];
-            ProgressBar = /** @class */ (function () {
-                function ProgressBar() {
-                    this.toplevel = document.createElement('div');
-                    this.toplevel.style.border = '1px solid black';
-                    this.barFill = document.createElement('div');
-                    this.barFill.style.backgroundColor = 'black';
-                    this.barFill.style.height = '100%';
-                    this.toplevel.appendChild(this.barFill);
-                    this.elem = this.toplevel;
-                    this.progressable = null;
-                    this.sync();
-                }
-                ProgressBar.prototype.sync = function () {
-                    if (this.progressable) {
-                        this.toplevel.style.visibility = '';
-                        this.barFill.style.width = (this.progressable.progress * 100) + '%';
-                    }
-                    else {
-                        this.toplevel.style.visibility = 'hidden';
-                    }
-                };
-                ProgressBar.prototype.set = function (p) {
-                    var _this = this;
-                    if (this.progressable)
-                        this.progressable.onProgress = null;
-                    this.progressable = p;
-                    if (this.progressable) {
-                        this.progressable.then(function () {
-                            _this.set(null);
-                        });
-                        this.progressable.onProgress = this.sync.bind(this);
-                    }
-                    this.sync();
-                };
-                return ProgressBar;
-            }());
             DroppedFileSceneDesc = /** @class */ (function () {
                 function DroppedFileSceneDesc(file) {
                     this.file = file;
@@ -15449,11 +15452,10 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                 Main.prototype._onSceneChanged = function () {
                     var scene = this.viewer.scene;
                     this.ui.sceneChanged();
-                    this.sceneUIContainer.innerHTML = '';
-                    if (scene && scene.createUI)
-                        this.sceneUIContainer.appendChild(scene.createUI());
                     if (scene && scene.createPanels)
                         this.ui.setScenePanels(scene.createPanels());
+                    else
+                        this.ui.setScenePanels([]);
                 };
                 Main.prototype._onSceneDescSelected = function (sceneGroup, sceneDesc) {
                     this._loadSceneDesc(sceneGroup, sceneDesc);
@@ -15465,7 +15467,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     this.currentSceneDesc = sceneDesc;
                     this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
                     var progressable = this.sceneLoader.loadSceneDesc(sceneDesc);
-                    this.progressBar.set(progressable);
+                    this.ui.sceneSelect.setProgressable(progressable);
                     this._deselectUI();
                     window.history.replaceState('', '', '#' + this._saveState());
                 };
@@ -15492,30 +15494,6 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     this.dragHighlight.style.boxShadow = '0 0 40px 5px white inset';
                     this.dragHighlight.style.display = 'none';
                     this.dragHighlight.style.pointerEvents = 'none';
-                    var progressBarContainer = document.createElement('div');
-                    progressBarContainer.style.position = 'absolute';
-                    progressBarContainer.style.left = '2em';
-                    progressBarContainer.style.right = '2em';
-                    progressBarContainer.style.top = '50%';
-                    progressBarContainer.style.marginTop = '-20px';
-                    progressBarContainer.style.pointerEvents = 'none';
-                    this.progressBar = new ProgressBar();
-                    this.progressBar.elem.style.height = '40px';
-                    progressBarContainer.appendChild(this.progressBar.elem);
-                    this.uiContainers.appendChild(progressBarContainer);
-                    var uiContainerL = document.createElement('div');
-                    uiContainerL.style.position = 'absolute';
-                    uiContainerL.style.left = '2em';
-                    uiContainerL.style.bottom = '2em';
-                    this.uiContainers.appendChild(uiContainerL);
-                    this.sceneUIContainer = document.createElement('div');
-                    this.sceneUIContainer.style.position = 'absolute';
-                    this.sceneUIContainer.style.right = '2em';
-                    this.sceneUIContainer.style.top = '2em';
-                    this.sceneUIContainer.onkeydown = function (e) {
-                        e.preventDefault();
-                    };
-                    this.uiContainers.appendChild(this.sceneUIContainer);
                 };
                 Main.prototype._toggleUI = function () {
                     this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? '' : 'none';
@@ -15736,16 +15714,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_60_1) { e_60 = { error: e_60_1 }; }
+                        catch (e_58_1) { e_58 = { error: e_58_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_60) throw e_60.error; }
+                            finally { if (e_58) throw e_58.error; }
                         }
                     }
                     return cmd;
-                    var e_60, _c;
+                    var e_58, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;

@@ -150,7 +150,7 @@ export class Scene implements Viewer.Scene {
     private chunks: Chunk[];
     private renderFlags: RenderFlags;
 
-    constructor(gl: WebGL2RenderingContext, public label: string, public iv: IV.IV) {
+    constructor(gl: WebGL2RenderingContext, public name: string, public iv: IV.IV) {
         this.chunks = this.iv.chunks.map((chunk) => new Chunk(gl, chunk));
 
         this.program = new IVProgram();

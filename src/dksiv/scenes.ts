@@ -4,6 +4,7 @@ import { Scene } from './render';
 
 import { RenderState } from '../render';
 import { MainScene, SceneGroup, Texture } from '../viewer';
+import * as UI from '../ui';
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
@@ -67,49 +68,10 @@ class MultiScene implements MainScene {
             this.textures = this.textures.concat(scene.textures);
     }
 
-    public createUI(): HTMLElement {
-        const elem = document.createElement('div');
-        elem.style.backgroundColor = 'white';
-        elem.style.border = '1px solid #999';
-        elem.style.font = '100% sans-serif';
-        elem.style.boxSizing = 'border-box';
-        elem.style.padding = '1em';
-
-        elem.onmouseover = () => {
-            elem.style.width = 'auto';
-            elem.style.height = 'auto';
-        };
-        elem.onmouseout = () => {
-            elem.style.width = '0';
-            elem.style.height = '0';
-        };
-        elem.onmouseout(null);
-
-        this.scenes.forEach((scene) => {
-            const line = document.createElement('div');
-            line.style.textAlign = 'right';
-            line.style.overflow = 'hidden';
-
-            const checkbox = document.createElement('input');
-            checkbox.id = generateFormID();
-
-            checkbox.type = 'checkbox';
-            checkbox.checked = true;
-            checkbox.onchange = () => {
-                scene.setVisible(checkbox.checked);
-            };
-
-            const label = document.createElement('label');
-            label.textContent = scene.label;
-            label.htmlFor = checkbox.id;
-
-            line.appendChild(label);
-            line.appendChild(checkbox);
-
-            elem.appendChild(line);
-        });
-
-        return elem;
+    public createPanels(): UI.Panel[] {
+        const layers = new UI.LayerPanel();
+        layers.setLayers(this.scenes);
+        return [layers];
     }
 
     public render(renderState: RenderState) {
