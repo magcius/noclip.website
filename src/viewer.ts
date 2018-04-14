@@ -84,6 +84,8 @@ class InputManager {
         this.grabbing = v;
         this.toplevel.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
         this.toplevel.style.cursor = v ? 'grabbing' : 'grab';
+        document.body.style.setProperty('pointer-events', v ? 'none' : '', 'important');
+        this.toplevel.style.setProperty('pointer-events', v ? 'auto' : '', 'important');
     }
 
     private _onMouseMove(e: MouseEvent) {
@@ -388,7 +390,6 @@ export class Viewer {
 
 export interface MainScene extends Scene {
     resetCamera?(m: mat4): void;
-    createUI?(): HTMLElement;
     createPanels?(): UI.Panel[];
 }
 

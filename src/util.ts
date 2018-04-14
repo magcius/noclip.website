@@ -10,6 +10,7 @@ export function fetch(path: string): Progressable<ArrayBufferSlice> {
 
     const p = new Promise<ArrayBufferSlice>((resolve, reject) => {
         request.onload = () => {
+            pr.setProgress(1);
             const buffer: ArrayBuffer = request.response;
             const slice = new ArrayBufferSlice(buffer);
             resolve(slice);

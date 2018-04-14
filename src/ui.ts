@@ -12,6 +12,10 @@ declare global {
     }
 }
 
+function createDOMFromString(s: string): DocumentFragment {
+    return document.createRange().createContextualFragment(s);
+}
+
 function setElementHighlighted(elem: HTMLElement, highlighted: boolean, normalTextColor: string = '') {
     elem.classList.toggle('Highlighted', highlighted);
 
@@ -26,58 +30,94 @@ function setElementHighlighted(elem: HTMLElement, highlighted: boolean, normalTe
 
 export interface Flair {
     index: number;
-    backgroundColor?: string;
+    background?: string;
     color?: string;
+    bulletColor?: string;
 }
 
 function highlightFlair(i: number): Flair {
-    return { index: i, backgroundColor: HIGHLIGHT_COLOR, color: 'black' };
+    return { index: i, background: HIGHLIGHT_COLOR, color: 'black' };
 }
 
-export class SimpleScrollList {
-    public elem: HTMLElement;
-    public onselectionchange: (index: number) => void;
+export interface Widget {
+    elem: HTMLElement;
+}
 
-    private toplevel: HTMLElement;
+export abstract class ScrollSelect implements Widget {
+    public elem: HTMLElement;
+
+    protected toplevel: HTMLElement;
+    protected scrollContainer: HTMLElement;
 
     constructor() {
         this.toplevel = document.createElement('div');
-        this.toplevel.style.height = `200px`;
-        this.toplevel.style.overflow = 'auto';
+
+        this.scrollContainer = document.createElement('div');
+        this.scrollContainer.style.height = `200px`;
+        this.scrollContainer.style.overflow = 'auto';
+        this.toplevel.appendChild(this.scrollContainer);
 
         this.elem = this.toplevel;
     }
 
     public setStrings(strings: string[]): void {
-        this.toplevel.style.display = (strings.length > 0) ? '' : 'none';
-        this.toplevel.innerHTML = '';
+        this.scrollContainer.style.display = (strings.length > 0) ? '' : 'none';
+        this.scrollContainer.innerHTML = '';
         for (let i = 0; i < strings.length; i++) {
             const selector = document.createElement('div');
-            selector.style.fontWeight = 'bold';
-            selector.textContent = strings[i];
+            selector.style.display = 'list-item';
             selector.style.cursor = 'pointer';
+            const textSpan = document.createElement('span');
+            textSpan.style.fontWeight = 'bold';
+            textSpan.textContent = strings[i];
+            selector.appendChild(textSpan);
             const index = i;
             selector.onclick = () => {
-                this.selectItem(index);
+                this.itemClicked(index);
             };
-            this.toplevel.appendChild(selector);
+            this.scrollContainer.appendChild(selector);
         }
     }
 
-    public selectItem(index: number) {
-        this.onselectionchange(index);
+    public getNumItems() {
+        return this.scrollContainer.childElementCount;
     }
 
     public setFlairs(flairs: Flair[]) {
-        for (let i = 0; i < this.toplevel.childElementCount; i++) {
-            const selector = <HTMLElement> this.toplevel.children.item(i);
+        for (let i = 0; i < this.getNumItems(); i++) {
+            const selector = <HTMLElement> this.scrollContainer.children.item(i);
             const flair = flairs.find((flair) => flair.index === i);
 
-            const backgroundColor = (flair !== undefined && flair.backgroundColor !== undefined) ? flair.backgroundColor : '';
-            selector.style.backgroundColor = backgroundColor;
+            const background = (flair !== undefined && flair.background !== undefined) ? flair.background : '';
+            selector.style.background = background;
+            const textSpan = selector.querySelector('span');
             const color = (flair !== undefined && flair.color !== undefined) ? flair.color : '';
-            selector.style.color = color;
+            textSpan.style.color = color;
+            if (flair !== undefined && flair.bulletColor !== undefined) {
+                selector.style.listStyleType = 'disc';
+                selector.style.listStylePosition = 'inside';
+                selector.style.marginLeft = '4px';
+                selector.style.color = flair.bulletColor;
+            } else {
+                selector.style.listStyleType = '';
+                selector.style.color = '';
+                selector.style.marginLeft = '';
+            }
         }
+    }
+
+    protected abstract itemClicked(index: number): void;
+}
+
+export class SingleSelect extends ScrollSelect {
+    public onselectionchange: (index: number) => void;
+
+    public itemClicked(index: number) {
+        this.selectItem(index);
+    }
+    
+    public selectItem(index: number) {
+        this.onselectionchange(index);
     }
 
     public setHighlighted(highlightedIndex: number) {
@@ -85,23 +125,87 @@ export class SimpleScrollList {
     }
 }
 
-export class SimpleSelect extends SimpleScrollList {
+export class SimpleSingleSelect extends SingleSelect {
     public selectItem(index: number) {
         super.selectItem(index);
         this.setHighlighted(index);
     }
 }
 
-export interface Widget {
-    elem: HTMLElement;
+export class MultiSelect extends ScrollSelect {
+    public itemIsOn: boolean[] = [];
+    public onitemchanged: (index: number, v: boolean) => void;
+
+    constructor() {
+        super();
+
+        const allNone = createDOMFromString(`
+<div style="display: grid; grid-template-columns: 1fr 1fr; grid-gap: 4px;">
+<style>
+.AllButton, .NoneButton {
+    text-align: center;
+    line-height: 32px;
+    cursor: pointer;
+    background: #666;
+    font-weight: bold;
+}
+</style>
+<div class="AllButton">All</div><div class="NoneButton">None</div>
+</div>
+`);
+        this.toplevel.insertBefore(allNone, this.toplevel.firstChild);
+
+        const allButton: HTMLElement = this.toplevel.querySelector('.AllButton');
+        allButton.onclick = () => {
+            for (let i = 0; i < this.getNumItems(); i++)
+                this.setItemIsOn(i, true);
+            this.syncFlairs();
+        };
+        const noneButton: HTMLElement = this.toplevel.querySelector('.NoneButton');
+        noneButton.onclick = () => {
+            for (let i = 0; i < this.getNumItems(); i++)
+                this.setItemIsOn(i, false);
+            this.syncFlairs();
+        };
+    }
+
+    private setItemIsOn(index: number, v: boolean) {
+        this.itemIsOn[index] = v;
+        this.onitemchanged(index, this.itemIsOn[index]);
+    }
+
+    public itemClicked(index: number) {
+        this.setItemIsOn(index, !this.itemIsOn[index]);
+        this.syncFlairs();
+    }
+
+    private syncFlairs() {
+        const flairs: Flair[] = [];
+        for (let i = 0; i < this.getNumItems(); i++) {
+            const bulletColor = !!this.itemIsOn[i] ? HIGHLIGHT_COLOR : '#aaa';
+            const color = !!this.itemIsOn[i] ? 'white' : '#aaa';
+            flairs.push({ index: i, bulletColor, color });
+        }
+        this.setFlairs(flairs);
+    }
+
+    public setItemsSelected(isOn: boolean[]) {
+        this.itemIsOn = isOn;
+        this.syncFlairs();
+    }
+
+    public setItemSelected(index: number, v: boolean) {
+        this.itemIsOn[index] = v;
+        this.syncFlairs();
+    }
 }
 
 export class Panel implements Widget {
     public elem: HTMLElement;
 
-    private expanded: boolean;
-    private header: HTMLElement;
-    private svgIcon: SVGSVGElement;
+    protected expanded: boolean;
+    protected header: HTMLElement;
+    protected svgIcon: SVGSVGElement;
 
     private toplevel: HTMLElement;
     public extraRack: HTMLElement;
@@ -184,7 +288,7 @@ export class Panel implements Widget {
     }
 
     public setTitle(icon: string, title: string) {
-        const svgIcon = document.createRange().createContextualFragment(icon).querySelector('svg');
+        const svgIcon = createDOMFromString(icon).querySelector('svg');
         this.svgIcon = svgIcon;
         this.svgIcon.style.gridColumn = '1';
         this.header.textContent = title;
@@ -193,10 +297,14 @@ export class Panel implements Widget {
         this.setExpanded(false);
     }
 
+    protected syncHeaderStyle() {
+        this.svgIcon.style.fill = this.expanded ? 'black' : '';
+        setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
+    }
+
     public setExpanded(expanded: boolean) {
         this.expanded = expanded;
-        setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
-        this.svgIcon.style.fill = this.expanded ? 'black' : '';
+        this.syncHeaderStyle();
         this.syncSize();
     }
 
@@ -211,12 +319,13 @@ class SceneSelect extends Panel {
     private sceneGroups: Viewer.SceneGroup[] = [];
     private sceneDescs: Viewer.SceneDesc[] = [];
 
-    private sceneGroupList: SimpleScrollList;
-    private sceneDescList: SimpleScrollList;
+    private sceneGroupList: SingleSelect;
+    private sceneDescList: SingleSelect;
 
     private selectedSceneGroup: Viewer.SceneGroup;
     private currentSceneGroup: Viewer.SceneGroup;
     private currentSceneDesc: Viewer.SceneDesc;
+    private loadProgress: number;
 
     public onscenedescselected: (sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) => void;
 
@@ -224,10 +333,10 @@ class SceneSelect extends Panel {
         super();
         this.setTitle(OPEN_ICON, 'Scenes');
 
-        this.sceneGroupList = new SimpleScrollList();
+        this.sceneGroupList = new SingleSelect();
         this.contents.appendChild(this.sceneGroupList.elem);
 
-        this.sceneDescList = new SimpleScrollList();
+        this.sceneDescList = new SingleSelect();
         this.sceneDescList.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
         this.sceneDescList.elem.style.width = '400px';
         this.extraRack.appendChild(this.sceneDescList.elem);
@@ -241,22 +350,11 @@ class SceneSelect extends Panel {
         };
     }
 
-    private selectSceneDesc(i: number) {
-        this.onscenedescselected(this.selectedSceneGroup, this.sceneDescs[i]);
-    }
-
-    private syncFlairs() {
-        const selectedGroupIndex = this.sceneGroups.indexOf(this.selectedSceneGroup);
-        const flairs: Flair[] = [ { index: selectedGroupIndex, backgroundColor: HIGHLIGHT_COLOR, color: 'black' } ];
-
-        const currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
-        if (currentGroupIndex >= 0)
-            flairs.push({ index: currentGroupIndex, backgroundColor: '#aaa' });
-        this.sceneGroupList.setFlairs(flairs);
-
-        const selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
-        if (selectedDescIndex >= 0)
-            this.sceneDescList.setHighlighted(selectedDescIndex);
+    public setProgressable(p: Progressable<Viewer.MainScene>) {
+        this.setLoadProgress(p.progress);
+        p.onProgress = () => {
+            this.setLoadProgress(p.progress);
+        };
     }
 
     public setCurrentDesc(sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) {
@@ -264,6 +362,56 @@ class SceneSelect extends Panel {
         this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;
         this.syncSceneDescs();
+    }
+
+    public setSceneGroups(sceneGroups: Viewer.SceneGroup[]) {
+        this.sceneGroups = sceneGroups;
+        const strings = this.sceneGroups.filter((g) => g.sceneDescs.length > 0).map((g) => g.name);
+        this.sceneGroupList.setStrings(strings);
+        this.syncSceneDescs();
+    }
+
+    public setLoadProgress(pct: number) {
+        this.loadProgress = pct;
+        this.syncFlairs();
+        this.syncHeaderStyle();
+    }
+
+    private selectSceneDesc(i: number) {
+        this.onscenedescselected(this.selectedSceneGroup, this.sceneDescs[i]);
+    }
+
+    private getLoadingGradient() {
+        const pct = `${Math.round(this.loadProgress * 100)}%`;
+        const loadingGradient = `linear-gradient(to right, ${HIGHLIGHT_COLOR} ${pct}, transparent ${pct})`;
+        return loadingGradient;
+    }
+
+    protected syncHeaderStyle() {
+        super.syncHeaderStyle();
+
+        setElementHighlighted(this.header, this.expanded);
+
+        if (this.expanded)
+            this.header.style.background = HIGHLIGHT_COLOR;
+        else
+            this.header.style.background = this.getLoadingGradient();
+    }
+
+    private syncFlairs() {
+        const selectedGroupIndex = this.sceneGroups.indexOf(this.selectedSceneGroup);
+        const flairs: Flair[] = [ { index: selectedGroupIndex, background: HIGHLIGHT_COLOR, color: 'black' } ];
+
+        const currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
+        if (currentGroupIndex >= 0)
+            flairs.push({ index: currentGroupIndex, background: '#aaa' });
+        this.sceneGroupList.setFlairs(flairs);
+
+        const selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
+        if (selectedDescIndex >= 0) {
+            const loadingGradient = this.getLoadingGradient();
+            this.sceneDescList.setFlairs([ { index: selectedDescIndex, background: loadingGradient } ]);
+        }
     }
 
     private selectSceneGroup(i: number) {
@@ -287,13 +435,6 @@ class SceneSelect extends Panel {
         this.sceneDescList.setStrings(strings);
         this.syncFlairs();
     }
-
-    public setSceneGroups(sceneGroups: Viewer.SceneGroup[]) {
-        this.sceneGroups = sceneGroups;
-        const strings = this.sceneGroups.filter((g) => g.sceneDescs.length > 0).map((g) => g.name);
-        this.sceneGroupList.setStrings(strings);
-        this.syncSceneDescs();
-    }
 }
 
 function cloneCanvas(dst: HTMLCanvasElement, src: HTMLCanvasElement): void {
@@ -308,7 +449,7 @@ const CHECKERBOARD_IMAGE = 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA
 const TEXTURES_ICON = `<svg viewBox="0 0 512 512" height="20" fill="white"><path d="M143.5,143.5v300h300v-300H143.5z M274.8,237.2c10.3,0,18.7,8.4,18.7,18.9c0,10.3-8.4,18.7-18.7,18.7   c-10.3,0-18.7-8.4-18.7-18.7C256,245.6,264.4,237.2,274.8,237.2z M406,406H181v-56.2l56.2-56.1l37.5,37.3l75-74.8l56.2,56.1V406z"/><polygon points="387.2,68.6 68.5,68.6 68.5,368.5 106,368.5 106,106 387.2,106"/></svg>`;
 
 export class TextureViewer extends Panel {
-    private scrollList: SimpleScrollList;
+    private scrollList: SingleSelect;
     private surfaceView: HTMLElement;
     private fullSurfaceView: HTMLCanvasElement;
     private properties: HTMLElement;
@@ -319,7 +460,7 @@ export class TextureViewer extends Panel {
 
         this.setTitle(TEXTURES_ICON, 'Textures');
 
-        this.scrollList = new SimpleScrollList();
+        this.scrollList = new SingleSelect();
         this.scrollList.elem.style.height = `200px`;
         this.scrollList.elem.style.overflow = 'auto';
         this.scrollList.onselectionchange = (i: number) => {
@@ -459,21 +600,21 @@ class ViewerSettings extends Panel {
 }
 </style>
 <div class="SettingsHeader">Field of View</div>
-<div><input class="Slider" id="FoVSlider" type="range" min="1" max="100"></div>
+<div><input class="Slider FoVSlider" type="range" min="1" max="100"></div>
 <div class="SettingsHeader">Camera Controller</div>
 <div style="display: grid; grid-template-columns: 1fr 1fr;">
-<div id="CameraControllerWASD">WASD</div><div id="CameraControllerOrbit">Orbit</div>
+<div class="CameraControllerWASD">WASD</div><div class="CameraControllerOrbit">Orbit</div>
 </div>
 `;
-        this.fovSlider = this.contents.querySelector('#FoVSlider');
+        this.fovSlider = this.contents.querySelector('.FoVSlider');
         this.fovSlider.oninput = this.onFovSliderChange.bind(this);
 
-        this.cameraControllerWASD = this.contents.querySelector('#CameraControllerWASD');
+        this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
         this.cameraControllerWASD.onclick = () => {
             this.setCameraControllerClass(Viewer.FPSCameraController);
         };
 
-        this.cameraControllerOrbit = this.contents.querySelector('#CameraControllerOrbit');
+        this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit');
         this.cameraControllerOrbit.onclick = () => {
             this.setCameraControllerClass(Viewer.OrbitCameraController);
         };
@@ -529,7 +670,7 @@ class About extends Panel {
 }
 </style>
 
-<h2> <img style="vertical-align: middle;" src="logo.png"> MODEL VIEWER </h2>
+<h2><img style="vertical-align: middle;" src="logo.png">MODEL VIEWER</h2>
 
 <p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>
 <p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to go faster than that.
@@ -557,12 +698,46 @@ and <a href="https://twitter.com/__Aruki">Aruki</a></p>
 <li> Images <span>by</span> Creative Stall
 <li> Help <span>by</span> Gregor Cresnar
 <li> Open <span>by</span> Landan Lloyd
-<li> Nightshift <span>by mikicon
+<li> Nightshift <span>by</span> mikicon
+<li> Layer <span>by</span> Chameleon Design
 </ul>
 </div>
 `;
     }
 }
+
+export interface Layer {
+    name: string;
+    setVisible(v: boolean): void;
+}
+
+const LAYER_ICON = `<svg viewBox="0 0 16 16" height="20" fill="white"><g transform="translate(0,-1036.3622)"><path d="m 8,1039.2486 -0.21875,0.125 -4.90625,2.4375 5.125,2.5625 5.125,-2.5625 L 8,1039.2486 z m -3,4.5625 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1043.8111 z m 0,3 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1046.8111 z"/></g></svg>`;
+
+export class LayerPanel extends Panel {
+    private multiSelect: MultiSelect;
+    private layers: Layer[];
+
+    constructor() {
+        super();
+        this.setTitle(LAYER_ICON, 'Layers');
+        this.multiSelect = new MultiSelect();
+        this.multiSelect.onitemchanged = this._onItemChanged.bind(this);
+        this.contents.appendChild(this.multiSelect.elem);
+    }
+
+    private _onItemChanged(index: number, visible: boolean): void {
+        this.layers[index].setVisible(visible);
+    };
+
+    public setLayers(layers: Layer[]): void {
+        this.layers = layers;
+        const strings = layers.map((layer) => layer.name);
+        const isOn = strings.map(() => true);
+        this.multiSelect.setStrings(strings);
+        this.multiSelect.setItemsSelected(isOn);
+    }
+}
+
 
 export class UI {
     public elem: HTMLElement;

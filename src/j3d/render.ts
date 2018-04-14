@@ -506,6 +506,10 @@ export class Scene implements Viewer.Scene {
         this.textureOverrides.set(name, override);
     }
 
+    public setVisible(v: boolean): void {
+        this.visible = v;
+    }
+
     public getTextureBindData(texIndex: number): TextureBindData {
         const tex1Sampler = this.tex1Samplers[texIndex];
 

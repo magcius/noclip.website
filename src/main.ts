@@ -35,54 +35,6 @@ const sceneGroups = [
     MP1.sceneGroup,
 ];
 
-class ProgressBar {
-    public elem: HTMLElement;
-
-    private toplevel: HTMLDivElement;
-    private barFill: HTMLDivElement;
-    private progressable: Progressable<MainScene>;
-
-    constructor() {
-        this.toplevel = document.createElement('div');
-        this.toplevel.style.border = '1px solid black';
-
-        this.barFill = document.createElement('div');
-        this.barFill.style.backgroundColor = 'black';
-        this.barFill.style.height = '100%';
-
-        this.toplevel.appendChild(this.barFill);
-        this.elem = this.toplevel;
-        this.progressable = null;
-
-        this.sync();
-    }
-
-    public sync() {
-        if (this.progressable) {
-            this.toplevel.style.visibility = '';
-            this.barFill.style.width = (this.progressable.progress * 100) + '%';
-        } else {
-            this.toplevel.style.visibility = 'hidden';
-        }
-    }
-
-    public set(p: Progressable<MainScene>) {
-        if (this.progressable)
-            this.progressable.onProgress = null;
-
-        this.progressable = p;
-
-        if (this.progressable) {
-            this.progressable.then(() => {
-                this.set(null);
-            });
-            this.progressable.onProgress = this.sync.bind(this);
-        }
-
-        this.sync();
-    }
-}
-
 class DroppedFileSceneDesc implements SceneDesc {
     public id: string;
     public name: string;
@@ -189,9 +141,6 @@ class Main {
     private dragHighlight: HTMLElement;
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
-    private progressBar: ProgressBar;
-
-    private sceneUIContainer: HTMLElement;
 
     private sceneLoader: SceneLoader;
     private ui: UI;
@@ -278,12 +227,10 @@ class Main {
         const scene = this.viewer.scene;
         this.ui.sceneChanged();
 
-        this.sceneUIContainer.innerHTML = '';
-        if (scene && scene.createUI)
-            this.sceneUIContainer.appendChild(scene.createUI());
-
         if (scene && scene.createPanels) 
             this.ui.setScenePanels(scene.createPanels());
+        else
+            this.ui.setScenePanels([]);
     }
 
     private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
@@ -299,7 +246,7 @@ class Main {
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
         const progressable = this.sceneLoader.loadSceneDesc(sceneDesc);
-        this.progressBar.set(progressable);
+        this.ui.sceneSelect.setProgressable(progressable);
 
         this._deselectUI();
         window.history.replaceState('', '', '#' + this._saveState());
@@ -331,34 +278,6 @@ class Main {
         this.dragHighlight.style.boxShadow = '0 0 40px 5px white inset';
         this.dragHighlight.style.display = 'none';
         this.dragHighlight.style.pointerEvents = 'none';
-
-        const progressBarContainer = document.createElement('div');
-        progressBarContainer.style.position = 'absolute';
-        progressBarContainer.style.left = '2em';
-        progressBarContainer.style.right = '2em';
-        progressBarContainer.style.top = '50%';
-        progressBarContainer.style.marginTop = '-20px';
-        progressBarContainer.style.pointerEvents = 'none';
-
-        this.progressBar = new ProgressBar();
-        this.progressBar.elem.style.height = '40px';
-        progressBarContainer.appendChild(this.progressBar.elem);
-        this.uiContainers.appendChild(progressBarContainer);
-
-        const uiContainerL = document.createElement('div');
-        uiContainerL.style.position = 'absolute';
-        uiContainerL.style.left = '2em';
-        uiContainerL.style.bottom = '2em';
-        this.uiContainers.appendChild(uiContainerL);
-
-        this.sceneUIContainer = document.createElement('div');
-        this.sceneUIContainer.style.position = 'absolute';
-        this.sceneUIContainer.style.right = '2em';
-        this.sceneUIContainer.style.top = '2em';
-        this.sceneUIContainer.onkeydown = (e) => {
-            e.preventDefault();
-        };
-        this.uiContainers.appendChild(this.sceneUIContainer);
     }
 
     private _toggleUI() {
