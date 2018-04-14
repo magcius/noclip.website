@@ -502,10 +502,10 @@ function readColor32(view: DataView, srcOffs: number): GX_Material.Color {
 }
 
 function readColorShort(view: DataView, srcOffs: number): GX_Material.Color {
-    const r = view.getUint16(srcOffs + 0x00) / 255;
-    const g = view.getUint16(srcOffs + 0x02) / 255;
-    const b = view.getUint16(srcOffs + 0x04) / 255;
-    const a = view.getUint16(srcOffs + 0x06) / 255;
+    const r = view.getInt16(srcOffs + 0x00) / 255;
+    const g = view.getInt16(srcOffs + 0x02) / 255;
+    const b = view.getInt16(srcOffs + 0x04) / 255;
+    const a = view.getInt16(srcOffs + 0x06) / 255;
     return new GX_Material.Color(r, g, b, a);
 }
 
