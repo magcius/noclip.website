@@ -26,6 +26,7 @@ export interface RomBanks {
 export class ZELVIEW0 {
     public entries: VFSEntry[];
     public sceneFile: VFSEntry;
+    public buffer: ArrayBufferSlice;
     public view: DataView;
 
     public lookupFile(pStart: number): VFSEntry {
@@ -111,6 +112,7 @@ export function readZELVIEW0(buffer: ArrayBufferSlice): ZELVIEW0 {
     zelview0.entries = entries;
     zelview0.sceneFile = entries[mainFile];
     zelview0.view = view;
+    zelview0.buffer = buffer;
 
     return zelview0;
 }
@@ -359,8 +361,8 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
             const lastEntry = nEntries - 1;
             const bg = loadAddress(meshAddr + (lastEntry * 0x0C) + 0x08);
             const bgOffs = rom.lookupAddress(banks, bg);
-            const buffer = rom.view.buffer.slice(bgOffs);
-            const blob = new Blob([buffer], { type: 'image/jpeg' });
+            const buffer = rom.buffer.slice(bgOffs);
+            const blob = new Blob([buffer.castToBuffer()], { type: 'image/jpeg' });
             const url = window.URL.createObjectURL(blob);
             mesh.bg = loadImage(gl, url);
         } else if (type === 2) {
