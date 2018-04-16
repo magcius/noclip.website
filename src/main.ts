@@ -291,7 +291,7 @@ class Main {
     private _onKeyDown(e: KeyboardEvent) {
         if (e.key === 'z') {
             this._toggleUI();
-            event.preventDefault();
+            e.preventDefault();
         }
     }
 }

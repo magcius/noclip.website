@@ -6490,7 +6490,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 ColorOverride[ColorOverride["C3"] = 7] = "C3";
             })(ColorOverride || (ColorOverride = {}));
             exports_20("ColorOverride", ColorOverride);
-            sceneParamsData = new Float32Array(4 * 4 + 4 * 4 + 4);
+            sceneParamsData = new Float32Array(4 * 4 + GX_Material.scaledVtxAttributes.length + 4);
             Scene = /** @class */ (function () {
                 function Scene(gl, bmd, btk, bmt, extraTextures) {
                     if (extraTextures === void 0) { extraTextures = []; }
@@ -6579,7 +6579,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     sceneParamsData.set(state.projection, offs);
                     offs += 4 * 4;
                     sceneParamsData.set(this.attrScaleData, offs);
-                    offs += 4 * 4;
+                    offs += GX_Material.scaledVtxAttributes.length;
                     sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
                     gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
                     gl.bufferData(gl.UNIFORM_BUFFER, sceneParamsData, gl.DYNAMIC_DRAW);
@@ -6926,6 +6926,9 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                         else if (scene.name.endsWith('model3')) {
                             _this.windowScenes.push(scene);
                         }
+                        else if (scene.name.endsWith('model4')) {
+                            _this.transparentScenes.push(scene);
+                        }
                         else {
                             throw "whoops";
                         }
@@ -7037,6 +7040,8 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                 new TwilightPrincessSceneDesc("City in the Sky", "D_MN07", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R07_00.arc", "R08_00.arc", "R10_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R15_00.arc", "R16_00.arc"]),
                 new TwilightPrincessSceneDesc("Palace of Twilight", "D_MN08", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R04_00.arc", "R05_00.arc", "R07_00.arc", "R08_00.arc", "R09_00.arc", "R10_00.arc", "R11_00.arc"]),
                 new TwilightPrincessSceneDesc("Hyrule Castle", "D_MN09", ["R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R08_00.arc", "R09_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R15_00.arc", "R01_00.arc", "R02_00.arc"]),
+                new TwilightPrincessSceneDesc("Hyrule Field", "F_SP102", ["R00_00.arc"]),
+                new TwilightPrincessSceneDesc("Fishing Pond", "F_SP127", ["R00_00.arc"]),
             ];
             exports_21("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
@@ -8682,6 +8687,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         zelview0.entries = entries;
         zelview0.sceneFile = entries[mainFile];
         zelview0.view = view;
+        zelview0.buffer = buffer;
         return zelview0;
     }
     exports_34("readZELVIEW0", readZELVIEW0);
@@ -8873,8 +8879,8 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                 var lastEntry = nEntries - 1;
                 var bg = loadAddress(meshAddr + (lastEntry * 0x0C) + 0x08);
                 var bgOffs = rom.lookupAddress(banks, bg);
-                var buffer = rom.view.buffer.slice(bgOffs);
-                var blob = new Blob([buffer], { type: 'image/jpeg' });
+                var buffer = rom.buffer.slice(bgOffs);
+                var blob = new Blob([buffer.castToBuffer()], { type: 'image/jpeg' });
                 var url = window.URL.createObjectURL(blob);
                 mesh.bg = loadImage(gl, url);
             }
@@ -15521,7 +15527,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                 Main.prototype._onKeyDown = function (e) {
                     if (e.key === 'z') {
                         this._toggleUI();
-                        event.preventDefault();
+                        e.preventDefault();
                     }
                 };
                 return Main;
