@@ -68,7 +68,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
                 this.windowScenes.push(scene);
             } else if (scene.name.endsWith('model4')) {
                 this.transparentScenes.push(scene);
-            } else {
+             } else {
                 throw "whoops";
             }
         });
