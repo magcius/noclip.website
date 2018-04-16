@@ -66,6 +66,8 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
                 this.transparentScenes.push(scene);
             } else if (scene.name.endsWith('model3')) {
                 this.windowScenes.push(scene);
+            } else if (scene.name.endsWith('model4')) {
+                this.transparentScenes.push(scene);
             } else {
                 throw "whoops";
             }
@@ -188,6 +190,8 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new TwilightPrincessSceneDesc("City in the Sky", "D_MN07", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R07_00.arc", "R08_00.arc", "R10_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R15_00.arc", "R16_00.arc"]),
     new TwilightPrincessSceneDesc("Palace of Twilight", "D_MN08", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R04_00.arc", "R05_00.arc", "R07_00.arc", "R08_00.arc", "R09_00.arc", "R10_00.arc", "R11_00.arc"]),
     new TwilightPrincessSceneDesc("Hyrule Castle", "D_MN09", ["R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R08_00.arc", "R09_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R15_00.arc", "R01_00.arc", "R02_00.arc"]),
+    new TwilightPrincessSceneDesc("Hyrule Field", "F_SP102", ["R00_00.arc"]),
+    new TwilightPrincessSceneDesc("Fishing Pond", "F_SP127", ["R00_00.arc"]),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
