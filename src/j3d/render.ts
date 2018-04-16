@@ -425,7 +425,7 @@ export interface TextureOverride {
     height?: number;
 }
 
-const sceneParamsData = new Float32Array(4*4 + 4*4 + 4);
+const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
 export class Scene implements Viewer.Scene {
     public textures: Viewer.Texture[];
 
@@ -559,7 +559,7 @@ export class Scene implements Viewer.Scene {
         sceneParamsData.set(state.projection, offs);
         offs += 4*4;
         sceneParamsData.set(this.attrScaleData, offs);
-        offs += 4*4;
+        offs += GX_Material.scaledVtxAttributes.length;
         sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
