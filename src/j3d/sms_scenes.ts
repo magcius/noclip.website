@@ -3,13 +3,14 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 import { fetch } from 'util';
 
-import { RenderState } from '../render';
+import { RenderState, RenderTarget } from '../render';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import * as RARC from './rarc';
-import { ColorOverride, Scene } from './render';
+import { ColorOverride, Scene, TextureOverride } from './render';
 import { createScene } from './scenes';
+import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
@@ -21,28 +22,49 @@ function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
 
 export class SunshineRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
+    private mainRenderTarget: RenderTarget = new RenderTarget();
 
-    constructor(public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public extraScenes: Viewer.Scene[]) {
-        this.textures = collectTextures([skyScene, mapScene, seaScene].concat(extraScenes));
+    constructor(public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: Scene, public extraScenes: Scene[], public rarc: RARC.RARC = null) {
+        this.textures = collectTextures([skyScene, mapScene, seaScene, seaIndirectScene].concat(extraScenes));
     }
 
-    public render(renderState: RenderState): void {
-        const gl = renderState.gl;
+    public render(state: RenderState): void {
+        const gl = state.gl;
+
+        this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
+        state.useRenderTarget(this.mainRenderTarget);
         gl.clearColor(0, 0, 0.125, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
 
         if (this.skyScene) {
-            this.skyScene.render(renderState);
+            this.skyScene.render(state);
             gl.clear(gl.DEPTH_BUFFER_BIT);
         }
 
         if (this.mapScene)
-            this.mapScene.render(renderState);
+            this.mapScene.render(state);
         if (this.seaScene)
-            this.seaScene.render(renderState);
+            this.seaScene.render(state);
 
         for (const scene of this.extraScenes)
-            scene.render(renderState);
+            scene.render(state);
+
+        // Copy to main render target.
+        state.useRenderTarget(null);
+        state.blitRenderTarget(this.mainRenderTarget);
+        state.blitRenderTargetDepth(this.mainRenderTarget);
+
+        // XXX(jstpierre): does sea go before or after seaindirect?
+        if (this.seaIndirectScene) {
+            const indirectScene = this.seaIndirectScene;
+            const texProjection = indirectScene.materialCommands[0].material.texMatrices[1].projectionMatrix;
+            // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
+            texProjection[0] = state.projection[0];
+            texProjection[5] = -state.projection[5];
+            const textureOverride: TextureOverride = { glTexture: this.mainRenderTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            indirectScene.setTextureOverride("indirectdummy", textureOverride);
+            indirectScene.render(state);
+        }
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
@@ -89,22 +111,20 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
             const mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map', false);
             const seaScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sea', false);
+            const seaIndirectScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'seaindirect', false);
 
             const extraScenes: Scene[] = [];
             for (const file of rarc.findDir('map/map').files) {
                 const [basename, extension] = file.name.split('.');
                 if (extension !== 'bmd')
                     continue;
-                if (['sky', 'map', 'sea'].includes(basename))
-                    continue;
-                // Indirect stuff would require engine support.
-                if (basename.includes('indirect'))
+                if (['sky', 'map', 'sea', 'seaindirect'].includes(basename))
                     continue;
                 const scene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, basename, false);
                 extraScenes.push(scene);
             }
 
-            return new SunshineRenderer(skyScene, mapScene, seaScene, extraScenes);
+            return new SunshineRenderer(skyScene, mapScene, seaScene, seaIndirectScene, extraScenes, rarc);
         });
     }
 }

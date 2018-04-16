@@ -25,7 +25,7 @@ for (let i = 0; i < 11; i++) {
     packetParamsData.set(posMtx, i * 16);
 }
 
-const sceneParamsData = new Float32Array(4*4 + 4*4 + 4);
+const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
 class SeaPlaneScene implements Scene {
     public textures: Texture[];
 
@@ -125,7 +125,7 @@ class SeaPlaneScene implements Scene {
         sceneParamsData.set(state.projection, offs);
         offs += 4*4;
         sceneParamsData.set(this.attrScaleData, offs);
-        offs += 4*4;
+        offs += GX_Material.scaledVtxAttributes.length;
         sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
@@ -259,8 +259,9 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
         const seaScene = new SeaPlaneScene(gl, bmd, btk, name);
         return new SunshineRenderer(
             skyScene,
-            null,
+            null, // map
             seaScene,
+            null, // seaindirect
             [],
         );
     });

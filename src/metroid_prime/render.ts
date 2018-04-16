@@ -13,7 +13,7 @@ import { RenderState, RenderFlags, CoalescedBuffers, BufferCoalescer } from '../
 import { align } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
-const sceneParamsData = new Float32Array(4*4 + 4*4 + 4);
+const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
 const attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
 // Cheap bad way to do a scale up.
 attrScaleData[0] = 10.0;
@@ -174,7 +174,7 @@ export class Scene implements Viewer.MainScene {
         sceneParamsData.set(state.projection, offs);
         offs += 4*4;
         sceneParamsData.set(attrScaleData, offs);
-        offs += 4*4;
+        offs += GX_Material.scaledVtxAttributes.length;
         sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
