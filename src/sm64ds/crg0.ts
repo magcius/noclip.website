@@ -75,7 +75,7 @@ export function parse(buffer: ArrayBufferSlice): CRG0 {
                 { property: 'scale', values: scaleValues },
                 { property: 'rotation', values: rotationValues },
                 { property: 'x', values: translationXValues },
-                { property: 'x', values: translationYValues },
+                { property: 'y', values: translationYValues },
             ];
 
             materials.push({ name: materialName, animations });
