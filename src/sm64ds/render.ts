@@ -299,7 +299,8 @@ class SM64DSRenderer implements Viewer.MainScene {
 
     public destroy(gl: WebGL2RenderingContext) {
         this.mainBMD.destroy(gl);
-        this.skyboxBMD.destroy(gl);
+        if (this.skyboxBMD)
+            this.skyboxBMD.destroy(gl);
     }
 }
 
