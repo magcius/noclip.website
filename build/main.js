@@ -7930,7 +7930,7 @@ System.register("sm64ds/crg0", ["util"], function (exports_27, context_27) {
                     { property: 'scale', values: scaleValues },
                     { property: 'rotation', values: rotationValues },
                     { property: 'x', values: translationXValues },
-                    { property: 'x', values: translationYValues },
+                    { property: 'y', values: translationYValues },
                 ];
                 materials.push({ name: materialName, animations: animations });
             }
@@ -8264,7 +8264,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 };
                 SM64DSRenderer.prototype.destroy = function (gl) {
                     this.mainBMD.destroy(gl);
-                    this.skyboxBMD.destroy(gl);
+                    if (this.skyboxBMD)
+                        this.skyboxBMD.destroy(gl);
                 };
                 return SM64DSRenderer;
             }());
