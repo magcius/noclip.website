@@ -222,8 +222,9 @@ class Main {
 
     private _onResize() {
         const devicePixelRatio = window.devicePixelRatio || 1;
-        this.canvas.width = Math.ceil(window.innerWidth * devicePixelRatio);
-        this.canvas.height = Math.ceil(window.innerHeight * devicePixelRatio);
+        this.canvas.setAttribute('style', `width: ${window.innerWidth}px; height: ${window.innerHeight}px;`);
+        this.canvas.width = window.innerWidth * devicePixelRatio;
+        this.canvas.height = window.innerHeight * devicePixelRatio;
     }
 
     private _loadState(state: string) {
