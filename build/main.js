@@ -15736,7 +15736,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                         // Disable blending.
                         gxMaterial.tevStages[0].alphaInD = 6 /* KONST */;
                         gxMaterial.tevStages[1].alphaInD = 6 /* KONST */;
-                        gxMaterial.ropInfo.blendMode.dstFactor = 5 /* INVSRCALPHA */;
+                        gxMaterial.ropInfo.blendMode.srcFactor = 1 /* ONE */;
+                        gxMaterial.ropInfo.blendMode.dstFactor = 0 /* ZERO */;
                     }
                     if (configName.includes('opaque')) {
                         // Make it always opaque.
@@ -15748,6 +15749,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                         gxMaterial.tevStages[1].colorInC = 11 /* RASA */;
                         gxMaterial.tevStages[1].colorInD = 0 /* CPREV */;
                         gxMaterial.tevStages[1].colorScale = 0 /* SCALE_1 */;
+                        gxMaterial.tevStages[1].colorClamp = true;
                         // Use one TEV stage.
                         if (configName.includes('layer0')) {
                             gxMaterial.tevStages.length = 1;
@@ -15761,11 +15763,10 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                     var cmd = new render_25.Command_Material(gl, scene, material);
                     if (configName.includes('nomip')) {
                         try {
-                            for (var _a = __values(this.glTextures), _b = _a.next(); !_b.done; _b = _a.next()) {
-                                var texture = _b.value;
-                                gl.bindTexture(gl.TEXTURE_2D, texture);
-                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, 1);
-                                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
+                            for (var _a = __values(this.glSamplers), _b = _a.next(); !_b.done; _b = _a.next()) {
+                                var sampler = _b.value;
+                                gl.samplerParameterf(sampler, gl.TEXTURE_MIN_LOD, 1);
+                                gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
                         catch (e_58_1) { e_58 = { error: e_58_1 }; }

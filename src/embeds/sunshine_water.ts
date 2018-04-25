@@ -80,7 +80,8 @@ class SeaPlaneScene implements Scene {
             // Disable blending.
             gxMaterial.tevStages[0].alphaInD = GX.CombineAlphaInput.KONST;
             gxMaterial.tevStages[1].alphaInD = GX.CombineAlphaInput.KONST;
-            gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
+            gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
+            gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ZERO;
         }
 
         if (configName.includes('opaque')) {
@@ -93,6 +94,7 @@ class SeaPlaneScene implements Scene {
             gxMaterial.tevStages[1].colorInC = GX.CombineColorInput.RASA;
             gxMaterial.tevStages[1].colorInD = GX.CombineColorInput.CPREV;
             gxMaterial.tevStages[1].colorScale = GX.TevScale.SCALE_1;
+            gxMaterial.tevStages[1].colorClamp = true;
 
             // Use one TEV stage.
             if (configName.includes('layer0')) {
@@ -107,10 +109,9 @@ class SeaPlaneScene implements Scene {
         const cmd = new Command_Material(gl, scene, material);
 
         if (configName.includes('nomip')) {
-            for (const texture of this.glTextures) {
-                gl.bindTexture(gl.TEXTURE_2D, texture);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, 1);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, 1);
+            for (const sampler of this.glSamplers) {
+                gl.samplerParameterf(sampler, gl.TEXTURE_MIN_LOD, 1);
+                gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
             }
         }
 
