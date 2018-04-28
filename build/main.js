@@ -4590,7 +4590,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_16, cont
                 };
                 GX_Program.prototype.generateTevTexCoordIndirect = function (stage) {
                     var baseCoord = this.generateTevTexCoordWrap(stage);
-                    if (stage.indTexMatrix !== 0 /* OFF */)
+                    if (stage.indTexMatrix !== 0 /* OFF */ && stage.indTexStage < this.material.indTexStages.length - 1)
                         return baseCoord + " + " + this.generateTevTexCoordIndirectTranslation(stage);
                     else
                         return baseCoord;

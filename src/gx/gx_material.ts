@@ -617,7 +617,7 @@ export class GX_Program extends Program {
 
     private generateTevTexCoordIndirect(stage: TevStage): string {
         const baseCoord = this.generateTevTexCoordWrap(stage);
-        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF)
+        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF && stage.indTexStage < this.material.indTexStages.length - 1)
             return `${baseCoord} + ${this.generateTevTexCoordIndirectTranslation(stage)}`;
         else
             return baseCoord;
