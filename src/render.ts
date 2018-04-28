@@ -449,7 +449,7 @@ void main() {
 `;
 }
 
-const RENDER_SAMPLES = 0;
+const RENDER_SAMPLES = 4;
 
 export class ColorTarget {
     public width: number;
