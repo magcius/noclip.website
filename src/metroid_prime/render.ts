@@ -271,7 +271,7 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
     0, 0, 0, 1,
 );
 
-const materialParamsSize = 4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8;
+const materialParamsSize = 4*2 + 4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8;
 const packetParamsOffs = align(materialParamsSize, 64);
 const packetParamsSize = 11*16;
 const paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
@@ -299,6 +299,8 @@ class Command_Material {
         let offs = 0;
 
         // color mat regs not used.
+        offs += 4*2;
+        // amb mat regs not used.
         offs += 4*2;
 
         for (let i = 0; i < 8; i++) {
