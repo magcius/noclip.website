@@ -3,7 +3,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { RenderState, RenderFlags, RenderTarget, Program } from './render';
+import { RenderState, RenderFlags, Program, ColorTarget, DepthTarget } from './render';
 import * as UI from './ui';
 
 import Progressable from 'Progressable';
@@ -296,7 +296,8 @@ export class Viewer {
     public cameraController: CameraController;
 
     public renderState: RenderState;
-    public onscreenRenderTarget: RenderTarget;
+    public onscreenColorTarget: ColorTarget = new ColorTarget();
+    public onscreenDepthTarget: DepthTarget = new DepthTarget();
     public scene: MainScene;
 
     constructor(public canvas: HTMLCanvasElement) {
@@ -307,8 +308,6 @@ export class Viewer {
 
         this.camera = mat4.create();
         this.cameraController = null;
-
-        this.onscreenRenderTarget = new RenderTarget();
     }
 
     public reset() {
@@ -325,9 +324,9 @@ export class Viewer {
         if (!this.scene)
             return;
 
-        this.onscreenRenderTarget.setParameters(gl, this.canvas.width, this.canvas.height);
-        this.renderState.setOnscreenRenderTarget(this.onscreenRenderTarget);
-
+        this.onscreenColorTarget.setParameters(gl, this.canvas.width, this.canvas.height);
+        this.onscreenDepthTarget.setParameters(gl, this.canvas.width, this.canvas.height);
+        this.renderState.setOnscreenRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
         this.renderState.reset();
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -335,8 +334,8 @@ export class Viewer {
         // Main scene. This renders to the onscreen target.
         this.scene.render(this.renderState);
 
-        this.renderState.useRealOnscreenRenderTarget(this.canvas.width, this.canvas.height);
-        this.renderState.blitRenderTarget(this.onscreenRenderTarget);
+        // Blit to the screen.
+        this.renderState.blitOnscreenToGL();
 
         const frameEndTime = window.performance.now();
         const diff = frameEndTime - this.renderState.frameStartTime;

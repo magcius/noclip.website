@@ -12,7 +12,7 @@ import * as GX from '../gx/gx_enum';
 import { BMD, BMT, BTK, BTI_Texture, BTI, TEX1_TextureData } from './j3d';
 import * as RARC from './rarc';
 import { Scene, TextureOverride } from './render';
-import { RenderState, RenderTarget } from '../render';
+import { RenderState, ColorTarget } from '../render';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
@@ -48,7 +48,7 @@ function createScenesFromRARC(gl: WebGL2RenderingContext, rarcName: string, rarc
 class TwilightPrincessRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
 
-    private mainRenderTarget: RenderTarget = new RenderTarget();
+    private mainColorTarget: ColorTarget = new ColorTarget();
     private opaqueScenes: Scene[] = [];
     private indTexScenes: Scene[] = [];
     private transparentScenes: Scene[] = [];
@@ -84,8 +84,8 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
         const gl = state.gl;
 
         // Draw skybox + opaque to main RT.
-        this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
-        state.useRenderTarget(this.mainRenderTarget);
+        this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+        state.useRenderTarget(this.mainColorTarget);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         this.skyboxScenes.forEach((scene) => {
             scene.render(state);
@@ -97,9 +97,8 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
         });
 
         // Copy to main render target.
-        state.useRenderTarget(null);
-        state.blitRenderTarget(this.mainRenderTarget);
-        state.blitRenderTargetDepth(this.mainRenderTarget);
+        state.useRenderTarget(state.onscreenColorTarget);
+        state.blitColorTarget(this.mainColorTarget);
 
         // IndTex.
         this.indTexScenes.forEach((indirectScene) => {
@@ -107,7 +106,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
             // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
             texProjection[0] = state.projection[0];
             texProjection[5] = -state.projection[5];
-            const textureOverride: TextureOverride = { glTexture: this.mainRenderTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
             indirectScene.setTextureOverride("fbtex_dummy", textureOverride);
             indirectScene.render(state);
         });
