@@ -471,6 +471,7 @@ export interface MaterialEntry {
     postTexMatrices: TexMtx[];
     indTexMatrices: Float32Array[];
     colorMatRegs: GX_Material.Color[];
+    colorAmbRegs: GX_Material.Color[];
 }
 
 export interface MAT3 {
@@ -528,6 +529,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
     const materialColorTableOffs = view.getUint32(0x20);
     const colorChanCountTableOffs = view.getUint32(0x24);
     const colorChanTableOffs = view.getUint32(0x28);
+    const ambientColorTableOffs = view.getUint32(0x2C);
     const texGenTableOffs = view.getUint32(0x38);
     const postTexGenTableOffs = view.getUint32(0x3C);
     const textureTableOffs = view.getUint32(0x48);
@@ -561,6 +563,14 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             const matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
             const matColorReg = readColor32(view, matColorOffs);
             colorMatRegs[j] = matColorReg;
+        }
+
+        const colorAmbRegs: GX_Material.Color[] = [null, null];
+        for (let j = 0; j < 2; j++) {
+            const ambColorIndex = view.getUint16(materialEntryIdx + 0x14 + j * 0x02);
+            const ambColorOffs = ambientColorTableOffs + ambColorIndex * 0x04;
+            const ambColorReg = readColor32(view, ambColorOffs);
+            colorAmbRegs[j] = ambColorReg;
         }
 
         const lightChannelCount = view.getUint8(colorChanCountTableOffs + colorChanCountIndex);
@@ -799,6 +809,7 @@ function readMAT3Chunk(bmd: BMD, buffer: ArrayBufferSlice, chunkStart: number, c
             postTexMatrices,
             gxMaterial,
             colorMatRegs,
+            colorAmbRegs,
             indTexMatrices,
         });
         materialEntryIdx += 0x014C;

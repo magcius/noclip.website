@@ -161,7 +161,7 @@ class Command_Shape {
     }
 }
 
-const materialParamsData = new Float32Array(4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8);
+const materialParamsData = new Float32Array(4*2 + 4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8);
 export class Command_Material {
     private static matrixScratch = mat4.create();
     private static textureScratch = new Int32Array(8);
@@ -206,8 +206,20 @@ export class Command_Material {
         state.useFlags(this.renderFlags);
 
         let offs = 0;
+
         for (let i = 0; i < 2; i++) {
             const color = this.material.colorMatRegs[i];
+            if (color !== null) {
+                materialParamsData[offs+i*4+0] = color.r;
+                materialParamsData[offs+i*4+1] = color.g;
+                materialParamsData[offs+i*4+2] = color.b;
+                materialParamsData[offs+i*4+3] = color.a;
+            }
+        }
+        offs += 4*2;
+
+        for (let i = 0; i < 2; i++) {
+            const color = this.material.colorAmbRegs[i];
             if (color !== null) {
                 materialParamsData[offs+i*4+0] = color.r;
                 materialParamsData[offs+i*4+1] = color.g;
@@ -407,7 +419,7 @@ interface HierarchyTraverseContext {
 
 export enum ColorOverride {
     K0, K1, K2, K3,
-    C0, C1, C2, C3,
+    CPREV, C0, C1, C2,
 }
 
 export interface TextureBindData {

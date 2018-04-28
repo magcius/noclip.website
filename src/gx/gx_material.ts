@@ -217,8 +217,7 @@ export class GX_Program extends Program {
     private generateAmbientSource(chan: ColorChannelControl, i: number) {
         switch (chan.ambColorSource) {
             case GX.ColorSrc.VTX: return `ReadAttrib_Color${i}()`;
-            // TODO(jstpierre): amb regs
-            case GX.ColorSrc.REG: return `vec4(1.0)`; // return `u_ColorMatReg[${i}]`;
+            case GX.ColorSrc.REG: return `u_ColorAmbReg[${i}]`;
         }
     }
 
@@ -229,7 +228,7 @@ export class GX_Program extends Program {
         if (chan.lightingEnabled) {
             // XXX(jstpierre): This is awful but seems to work.
             const ambSource = this.generateAmbientSource(chan, i);
-            return `(0.3 * ${ambSource} * ${matSource})`;
+            return `(2.0 * ${ambSource} * ${matSource})`;
         } else {
             // If lighting is off, it's the material color.
             return matSource;
@@ -720,6 +719,7 @@ layout(std140) uniform ub_SceneParams {
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_ColorMatReg[2];
+    vec4 u_ColorAmbReg[2];
     vec4 u_KonstColor[8];
     mat4x3 u_TexMtx[10];
     mat4x3 u_PostTexMtx[20];
@@ -942,3 +942,4 @@ export function getTextureLODBias(state: RenderState): number {
     const textureLODBias = Math.log2(Math.min(viewportWidth / EFB_WIDTH, viewportHeight / EFB_HEIGHT));
     return textureLODBias;
 }
+

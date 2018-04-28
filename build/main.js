@@ -4250,8 +4250,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_16, cont
                 GX_Program.prototype.generateAmbientSource = function (chan, i) {
                     switch (chan.ambColorSource) {
                         case 1 /* VTX */: return "ReadAttrib_Color" + i + "()";
-                        // TODO(jstpierre): amb regs
-                        case 0 /* REG */: return "vec4(1.0)"; // return `u_ColorMatReg[${i}]`;
+                        case 0 /* REG */: return "u_ColorAmbReg[" + i + "]";
                     }
                 };
                 GX_Program.prototype.generateColorChannel = function (chan, i) {
@@ -4260,7 +4259,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_16, cont
                     if (chan.lightingEnabled) {
                         // XXX(jstpierre): This is awful but seems to work.
                         var ambSource = this.generateAmbientSource(chan, i);
-                        return "(0.3 * " + ambSource + " * " + matSource + ")";
+                        return "(2.0 * " + ambSource + " * " + matSource + ")";
                     }
                     else {
                         // If lighting is off, it's the material color.
@@ -4670,7 +4669,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_16, cont
                 };
                 GX_Program.prototype.generateUBO = function () {
                     var scaledVecCount = scaledVtxAttributes.length >> 2;
-                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_KonstColor[8];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    mat4x2 u_IndTexMtx[3];\n    // SizeX, SizeY, 0, Bias\n    vec4 u_TextureParams[8];\n};\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_ModelView;\n    mat4 u_PosMtx[10];\n};\n";
+                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_ColorAmbReg[2];\n    vec4 u_KonstColor[8];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    mat4x2 u_IndTexMtx[3];\n    // SizeX, SizeY, 0, Bias\n    vec4 u_TextureParams[8];\n};\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_ModelView;\n    mat4 u_PosMtx[10];\n};\n";
                 };
                 GX_Program.prototype.generateShaders = function () {
                     var ubo = this.generateUBO();
@@ -5022,6 +5021,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var materialColorTableOffs = view.getUint32(0x20);
         var colorChanCountTableOffs = view.getUint32(0x24);
         var colorChanTableOffs = view.getUint32(0x28);
+        var ambientColorTableOffs = view.getUint32(0x2C);
         var texGenTableOffs = view.getUint32(0x38);
         var postTexGenTableOffs = view.getUint32(0x3C);
         var textureTableOffs = view.getUint32(0x48);
@@ -5053,6 +5053,13 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 var matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
                 var matColorReg = readColor32(view, matColorOffs);
                 colorMatRegs[j] = matColorReg;
+            }
+            var colorAmbRegs = [null, null];
+            for (var j = 0; j < 2; j++) {
+                var ambColorIndex = view.getUint16(materialEntryIdx + 0x14 + j * 0x02);
+                var ambColorOffs = ambientColorTableOffs + ambColorIndex * 0x04;
+                var ambColorReg = readColor32(view, ambColorOffs);
+                colorAmbRegs[j] = ambColorReg;
             }
             var lightChannelCount = view.getUint8(colorChanCountTableOffs + colorChanCountIndex);
             var lightChannels = [];
@@ -5268,6 +5275,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 postTexMatrices: postTexMatrices,
                 gxMaterial: gxMaterial,
                 colorMatRegs: colorMatRegs,
+                colorAmbRegs: colorAmbRegs,
                 indTexMatrices: indTexMatrices,
             });
             materialEntryIdx += 0x014C;
@@ -6319,7 +6327,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 return Command_Shape;
             }());
-            materialParamsData = new Float32Array(4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 4 * 8);
+            materialParamsData = new Float32Array(4 * 2 + 4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 4 * 8);
             Command_Material = /** @class */ (function () {
                 function Command_Material(gl, scene, material) {
                     this.visible = true;
@@ -6344,6 +6352,16 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     var offs = 0;
                     for (var i = 0; i < 2; i++) {
                         var color = this.material.colorMatRegs[i];
+                        if (color !== null) {
+                            materialParamsData[offs + i * 4 + 0] = color.r;
+                            materialParamsData[offs + i * 4 + 1] = color.g;
+                            materialParamsData[offs + i * 4 + 2] = color.b;
+                            materialParamsData[offs + i * 4 + 3] = color.a;
+                        }
+                    }
+                    offs += 4 * 2;
+                    for (var i = 0; i < 2; i++) {
+                        var color = this.material.colorAmbRegs[i];
                         if (color !== null) {
                             materialParamsData[offs + i * 4 + 0] = color.r;
                             materialParamsData[offs + i * 4 + 1] = color.g;
@@ -6508,10 +6526,10 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 ColorOverride[ColorOverride["K1"] = 1] = "K1";
                 ColorOverride[ColorOverride["K2"] = 2] = "K2";
                 ColorOverride[ColorOverride["K3"] = 3] = "K3";
-                ColorOverride[ColorOverride["C0"] = 4] = "C0";
-                ColorOverride[ColorOverride["C1"] = 5] = "C1";
-                ColorOverride[ColorOverride["C2"] = 6] = "C2";
-                ColorOverride[ColorOverride["C3"] = 7] = "C3";
+                ColorOverride[ColorOverride["CPREV"] = 4] = "CPREV";
+                ColorOverride[ColorOverride["C0"] = 5] = "C0";
+                ColorOverride[ColorOverride["C1"] = 6] = "C1";
+                ColorOverride[ColorOverride["C2"] = 7] = "C2";
             })(ColorOverride || (ColorOverride = {}));
             exports_20("ColorOverride", ColorOverride);
             sceneParamsData = new Float32Array(4 * 4 + GX_Material.scaledVtxAttributes.length + 4);
@@ -7391,35 +7409,35 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     var colors = timeOfDay === 0 ? undefined : WindWakerRenderer.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay - 1);
                     if (colors !== undefined) {
                         this.model.setColorOverride(render_7.ColorOverride.K0, colors.light);
-                        this.model.setColorOverride(render_7.ColorOverride.C0, colors.amb);
+                        this.model.setColorOverride(render_7.ColorOverride.CPREV, colors.amb);
                         if (this.model1) {
                             this.model1.setColorOverride(render_7.ColorOverride.K0, colors.ocean);
-                            this.model1.setColorOverride(render_7.ColorOverride.C0, colors.wave);
-                            this.model1.setColorOverride(render_7.ColorOverride.C1, colors.splash);
+                            this.model1.setColorOverride(render_7.ColorOverride.CPREV, colors.wave);
+                            this.model1.setColorOverride(render_7.ColorOverride.C0, colors.splash);
                             this.model1.setColorOverride(render_7.ColorOverride.K1, colors.splash2);
                         }
                         if (this.model3)
-                            this.model3.setColorOverride(render_7.ColorOverride.C0, colors.doors);
+                            this.model3.setColorOverride(render_7.ColorOverride.CPREV, colors.doors);
                         this.vr_sky.setColorOverride(render_7.ColorOverride.K0, colors.vr_sky);
                         this.vr_uso_umi.setColorOverride(render_7.ColorOverride.K0, colors.vr_uso_umi);
-                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.C0, colors.vr_kasumi_mae);
+                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.CPREV, colors.vr_kasumi_mae);
                         this.vr_back_cloud.setColorOverride(render_7.ColorOverride.K0, colors.vr_back_cloud);
                         this.vr_back_cloud.setAlphaOverride(render_7.ColorOverride.K0, colors.vr_back_cloud.a);
                     }
                     else {
                         this.model.setColorOverride(render_7.ColorOverride.K0, undefined);
-                        this.model.setColorOverride(render_7.ColorOverride.C0, undefined);
+                        this.model.setColorOverride(render_7.ColorOverride.CPREV, undefined);
                         if (this.model1) {
                             this.model1.setColorOverride(render_7.ColorOverride.K0, undefined);
+                            this.model1.setColorOverride(render_7.ColorOverride.CPREV, undefined);
                             this.model1.setColorOverride(render_7.ColorOverride.C0, undefined);
-                            this.model1.setColorOverride(render_7.ColorOverride.C1, undefined);
                             this.model1.setColorOverride(render_7.ColorOverride.K1, undefined);
                         }
                         if (this.model3)
                             this.model3.setColorOverride(render_7.ColorOverride.C0, undefined);
                         this.vr_sky.setColorOverride(render_7.ColorOverride.K0, undefined);
                         this.vr_uso_umi.setColorOverride(render_7.ColorOverride.K0, undefined);
-                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.C0, undefined);
+                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.CPREV, undefined);
                         this.vr_back_cloud.setColorOverride(render_7.ColorOverride.K0, undefined);
                         this.vr_back_cloud.setAlphaOverride(render_7.ColorOverride.K0, undefined);
                     }
@@ -15093,7 +15111,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                 return Command_Surface;
             }());
             fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_11.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-            materialParamsSize = 4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 4 * 8;
+            materialParamsSize = 4 * 2 + 4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 4 * 8;
             packetParamsOffs = util_37.align(materialParamsSize, 64);
             packetParamsSize = 11 * 16;
             paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
@@ -15111,6 +15129,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     state.useFlags(this.renderFlags);
                     var offs = 0;
                     // color mat regs not used.
+                    offs += 4 * 2;
+                    // amb mat regs not used.
                     offs += 4 * 2;
                     for (var i = 0; i < 8; i++) {
                         var fallbackColor = void 0;
