@@ -3,7 +3,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 import { fetch } from 'util';
 
-import { RenderState, RenderTarget } from '../render';
+import { RenderState, ColorTarget } from '../render';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
@@ -22,7 +22,7 @@ function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
 
 export class SunshineRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
-    private mainRenderTarget: RenderTarget = new RenderTarget();
+    private mainColorTarget: ColorTarget = new ColorTarget();
 
     constructor(public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: Scene, public extraScenes: Scene[], public rarc: RARC.RARC = null) {
         this.textures = collectTextures([skyScene, mapScene, seaScene, seaIndirectScene].concat(extraScenes));
@@ -31,8 +31,8 @@ export class SunshineRenderer implements Viewer.MainScene {
     public render(state: RenderState): void {
         const gl = state.gl;
 
-        this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
-        state.useRenderTarget(this.mainRenderTarget);
+        this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+        state.useRenderTarget(this.mainColorTarget);
         gl.clearColor(0, 0, 0.125, 1);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
 
@@ -50,9 +50,8 @@ export class SunshineRenderer implements Viewer.MainScene {
             scene.render(state);
 
         // Copy to main render target.
-        state.useRenderTarget(null);
-        state.blitRenderTarget(this.mainRenderTarget);
-        state.blitRenderTargetDepth(this.mainRenderTarget);
+        state.useRenderTarget(state.onscreenColorTarget);
+        state.blitColorTarget(this.mainColorTarget);
 
         // XXX(jstpierre): does sea go before or after seaindirect?
         if (this.seaIndirectScene) {
@@ -61,7 +60,7 @@ export class SunshineRenderer implements Viewer.MainScene {
             // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
             texProjection[0] = state.projection[0];
             texProjection[5] = -state.projection[5];
-            const textureOverride: TextureOverride = { glTexture: this.mainRenderTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
             indirectScene.setTextureOverride("indirectdummy", textureOverride);
             indirectScene.render(state);
         }

@@ -1532,7 +1532,7 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
         var e_7, _a, e_8, _b;
     }
     exports_7("coalesceBuffer", coalesceBuffer);
-    var gl_matrix_1, util_2, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, RenderTarget, RealOnscreenRenderTarget, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer, FullscreenProgram, FullscreenCopyProgram, RenderState;
+    var gl_matrix_1, util_2, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer, FullscreenProgram, FullscreenCopyProgram, RENDER_SAMPLES, ColorTarget, DepthTarget, RenderState;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -1671,76 +1671,6 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
             RenderFlags.default.depthWrite = true;
             RenderFlags.default.depthFunc = CompareMode.LEQUAL;
             RenderFlags.default.frontFace = FrontFaceMode.CCW;
-            RenderTarget = /** @class */ (function () {
-                function RenderTarget() {
-                }
-                RenderTarget.prototype.destroy = function (gl) {
-                    if (this.msaaFramebuffer)
-                        gl.deleteFramebuffer(this.msaaFramebuffer);
-                    if (this.msaaColorRenderbuffer)
-                        gl.deleteRenderbuffer(this.msaaColorRenderbuffer);
-                    if (this.msaaDepthRenderbuffer)
-                        gl.deleteRenderbuffer(this.msaaDepthRenderbuffer);
-                    if (this.resolvedFramebuffer)
-                        gl.deleteFramebuffer(this.resolvedFramebuffer);
-                    if (this.resolvedColorTexture)
-                        gl.deleteTexture(this.resolvedColorTexture);
-                };
-                RenderTarget.prototype.setParameters = function (gl, width, height, samples) {
-                    if (samples === void 0) { samples = 0; }
-                    if (this.width === width && this.height === height && this.samples == samples)
-                        return;
-                    this.destroy(gl);
-                    this.width = width;
-                    this.height = height;
-                    this.samples = samples;
-                    gl.getExtension('EXT_color_buffer_float');
-                    // MSAA FB.
-                    this.msaaColorRenderbuffer = gl.createRenderbuffer();
-                    gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaColorRenderbuffer);
-                    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, this.width, this.height);
-                    this.msaaDepthRenderbuffer = gl.createRenderbuffer();
-                    gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaDepthRenderbuffer);
-                    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH24_STENCIL8, this.width, this.height);
-                    this.msaaFramebuffer = gl.createFramebuffer();
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.msaaFramebuffer);
-                    gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, this.msaaColorRenderbuffer);
-                    gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.msaaDepthRenderbuffer);
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-                    // Resolved.
-                    this.resolvedColorTexture = gl.createTexture();
-                    gl.bindTexture(gl.TEXTURE_2D, this.resolvedColorTexture);
-                    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, this.width, this.height);
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                    this.resolvedFramebuffer = gl.createFramebuffer();
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.resolvedFramebuffer);
-                    gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.resolvedColorTexture, 0);
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-                };
-                RenderTarget.prototype.resolve = function (gl) {
-                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.msaaFramebuffer);
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.resolvedFramebuffer);
-                    gl.blitFramebuffer(0, 0, this.width, this.height, 0, 0, this.width, this.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-                };
-                return RenderTarget;
-            }());
-            exports_7("RenderTarget", RenderTarget);
-            // XXX(jstpierre): Dumb polymorphic hack
-            RealOnscreenRenderTarget = /** @class */ (function (_super) {
-                __extends(RealOnscreenRenderTarget, _super);
-                function RealOnscreenRenderTarget() {
-                    return _super !== null && _super.apply(this, arguments) || this;
-                }
-                RealOnscreenRenderTarget.prototype.setParameters = function (gl, width, height) {
-                    this.width = width;
-                    this.height = height;
-                    this.msaaFramebuffer = null;
-                };
-                return RealOnscreenRenderTarget;
-            }(RenderTarget));
             DEBUG = true;
             Program = /** @class */ (function () {
                 function Program() {
@@ -2013,41 +1943,109 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                 }
                 return FullscreenCopyProgram;
             }(FullscreenProgram));
+            RENDER_SAMPLES = 0;
+            ColorTarget = /** @class */ (function () {
+                function ColorTarget() {
+                }
+                ColorTarget.prototype.destroy = function (gl) {
+                    if (this.msaaColorRenderbuffer)
+                        gl.deleteRenderbuffer(this.msaaColorRenderbuffer);
+                    if (this.resolvedColorTexture)
+                        gl.deleteTexture(this.resolvedColorTexture);
+                };
+                ColorTarget.prototype.setParameters = function (gl, width, height, samples) {
+                    if (samples === void 0) { samples = RENDER_SAMPLES; }
+                    if (this.width === width && this.height === height && this.samples === samples)
+                        return;
+                    this.destroy(gl);
+                    this.width = width;
+                    this.height = height;
+                    this.samples = samples;
+                    this.msaaColorRenderbuffer = gl.createRenderbuffer();
+                    gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaColorRenderbuffer);
+                    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, this.width, this.height);
+                    this.resolvedColorTexture = gl.createTexture();
+                    gl.bindTexture(gl.TEXTURE_2D, this.resolvedColorTexture);
+                    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, this.width, this.height);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                };
+                ColorTarget.prototype.resolve = function (gl) {
+                    var readFramebuffer = gl.createFramebuffer();
+                    var resolveFramebuffer = gl.createFramebuffer();
+                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, readFramebuffer);
+                    gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, this.msaaColorRenderbuffer);
+                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, resolveFramebuffer);
+                    gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.resolvedColorTexture, 0);
+                    gl.blitFramebuffer(0, 0, this.width, this.height, 0, 0, this.width, this.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+                    gl.deleteFramebuffer(readFramebuffer);
+                    gl.deleteFramebuffer(resolveFramebuffer);
+                    return this.resolvedColorTexture;
+                };
+                return ColorTarget;
+            }());
+            exports_7("ColorTarget", ColorTarget);
+            DepthTarget = /** @class */ (function () {
+                function DepthTarget() {
+                }
+                DepthTarget.prototype.destroy = function (gl) {
+                    if (this.msaaDepthRenderbuffer)
+                        gl.deleteRenderbuffer(this.msaaDepthRenderbuffer);
+                };
+                DepthTarget.prototype.setParameters = function (gl, width, height, samples) {
+                    if (samples === void 0) { samples = RENDER_SAMPLES; }
+                    if (this.width === width && this.height === height && this.samples === samples)
+                        return;
+                    this.destroy(gl);
+                    this.width = width;
+                    this.height = height;
+                    this.samples = samples;
+                    this.msaaDepthRenderbuffer = gl.createRenderbuffer();
+                    gl.bindRenderbuffer(gl.RENDERBUFFER, this.msaaDepthRenderbuffer);
+                    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH24_STENCIL8, this.width, this.height);
+                };
+                return DepthTarget;
+            }());
+            exports_7("DepthTarget", DepthTarget);
+            // XXX(jstpierre): This is becoming a lot more than just some render state.
+            // Rename to "SceneRenderer" at some point?
             RenderState = /** @class */ (function () {
                 function RenderState(gl) {
                     this.gl = gl;
                     // State.
                     this.currentProgram = null;
                     this.currentFlags = new RenderFlags();
-                    this.currentRenderTarget = null;
+                    this.currentColorTarget = null;
+                    this.currentDepthTarget = null;
                     this.programCache = new ProgramCache(this.gl);
                     this.time = 0;
                     this.fov = Math.PI / 4;
                     this.projection = gl_matrix_1.mat4.create();
                     this.view = gl_matrix_1.mat4.create();
                     this.scratchMatrix = gl_matrix_1.mat4.create();
-                    this.realOnscreenRenderTarget = new RealOnscreenRenderTarget();
                     this.fullscreenCopyProgram = new FullscreenCopyProgram();
                     this.fullscreenFlags = new RenderFlags();
                     this.fullscreenFlags.depthTest = false;
                     this.fullscreenFlags.blendMode = BlendMode.NONE;
                     this.fullscreenFlags.cullMode = CullMode.NONE;
+                    this.msaaFramebuffer = gl.createFramebuffer();
                 }
+                RenderState.prototype.destroy = function () {
+                    var gl = this.gl;
+                    gl.deleteFramebuffer(this.msaaFramebuffer);
+                };
                 RenderState.prototype.reset = function () {
                     this.drawCallCount = 0;
                     this.frameStartTime = window.performance.now();
-                    this.useRenderTarget(this.onscreenRenderTarget);
+                    this.useRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
                     this.useFlags(RenderFlags.default);
                 };
                 RenderState.prototype.setView = function (m) {
                     gl_matrix_1.mat4.copy(this.view, m);
-                };
-                RenderState.prototype.blitRenderTargetDepth = function (srcRenderTarget) {
-                    var gl = this.gl;
-                    // Blit depth.
-                    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, srcRenderTarget.msaaFramebuffer);
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
-                    gl.blitFramebuffer(0, 0, srcRenderTarget.width, srcRenderTarget.height, 0, 0, this.onscreenRenderTarget.width, this.onscreenRenderTarget.height, gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT, gl.NEAREST);
                 };
                 // XXX(jstpierre): Design a better API than this.
                 RenderState.prototype.runFullscreen = function (flags) {
@@ -2056,51 +2054,64 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                     this.useFlags(flags !== null ? flags : this.fullscreenFlags);
                     gl.drawArrays(gl.TRIANGLES, 0, 3);
                 };
-                RenderState.prototype.blitRenderTarget = function (srcRenderTarget, flags) {
+                RenderState.prototype.blitFullscreenTexture = function (colorTexture, flags) {
                     if (flags === void 0) { flags = null; }
                     var gl = this.gl;
-                    // First, resolve MSAA buffer to a standard buffer.
-                    srcRenderTarget.resolve(gl);
-                    // Make sure to re-bind our destination RT, since the resolve screws things up...
-                    this.useRenderTarget(this.currentRenderTarget);
-                    // Now, copy the onscreen RT to the screen.
                     this.useProgram(this.fullscreenCopyProgram);
                     gl.activeTexture(gl.TEXTURE0);
-                    gl.bindTexture(gl.TEXTURE_2D, srcRenderTarget.resolvedColorTexture);
+                    gl.bindTexture(gl.TEXTURE_2D, colorTexture);
                     gl.bindSampler(0, null);
                     this.runFullscreen(flags);
                 };
-                RenderState.prototype.useRenderTarget = function (renderTarget) {
+                RenderState.prototype.blitColorTarget = function (colorTarget, flags) {
+                    if (flags === void 0) { flags = null; }
                     var gl = this.gl;
-                    this.currentRenderTarget = renderTarget !== null ? renderTarget : this.onscreenRenderTarget;
-                    this.bindViewport();
-                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.currentRenderTarget.msaaFramebuffer);
+                    var resolvedColorTexture = colorTarget.resolve(gl);
+                    // Make sure to re-bind our destination RT, since the resolve screws things up...
+                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.msaaFramebuffer);
+                    this.blitFullscreenTexture(resolvedColorTexture, flags);
                 };
-                // Should only be used by viewer, basically...
-                RenderState.prototype.useRealOnscreenRenderTarget = function (width, height) {
+                RenderState.prototype.blitOnscreenToGL = function () {
                     var gl = this.gl;
-                    this.realOnscreenRenderTarget.setParameters(null, width, height);
-                    this.currentRenderTarget = this.realOnscreenRenderTarget;
-                    gl.viewport(0, 0, width, height);
+                    var resolvedColorTexture = this.onscreenColorTarget.resolve(gl);
+                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+                    this.blitFullscreenTexture(resolvedColorTexture);
+                };
+                RenderState.prototype.setOnscreenRenderTarget = function (colorTarget, depthTarget) {
+                    this.onscreenColorTarget = colorTarget;
+                    this.onscreenDepthTarget = depthTarget;
+                };
+                RenderState.prototype.useRenderTarget = function (colorTarget, depthTarget) {
+                    if (depthTarget === void 0) { depthTarget = this.onscreenDepthTarget; }
+                    var gl = this.gl;
+                    if (colorTarget !== null && depthTarget !== null) {
+                        // Assert our invariants.
+                        util_2.assert(colorTarget.width === depthTarget.width);
+                        util_2.assert(colorTarget.height === depthTarget.height);
+                        util_2.assert(colorTarget.samples === depthTarget.samples);
+                    }
+                    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.msaaFramebuffer);
+                    this.currentColorTarget = colorTarget;
+                    var colorRenderbuffer = this.currentColorTarget ? this.currentColorTarget.msaaColorRenderbuffer : null;
+                    gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colorRenderbuffer);
+                    this.currentDepthTarget = depthTarget;
+                    var depthRenderbuffer = this.currentDepthTarget ? this.currentDepthTarget.msaaDepthRenderbuffer : null;
+                    gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRenderbuffer);
+                    this.bindViewport();
                 };
                 RenderState.prototype.bindViewport = function () {
                     var gl = this.gl;
-                    var width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+                    var width = this.currentColorTarget.width, height = this.currentColorTarget.height;
                     gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
                     gl.viewport(0, 0, width, height);
                 };
                 RenderState.prototype.setClipPlanes = function (near, far) {
                     this.nearClipPlane = near;
                     this.farClipPlane = far;
-                    if (this.currentRenderTarget) {
-                        var width = this.currentRenderTarget.width, height = this.currentRenderTarget.height;
+                    if (this.currentColorTarget) {
+                        var width = this.currentColorTarget.width, height = this.currentColorTarget.height;
                         gl_matrix_1.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
                     }
-                };
-                RenderState.prototype.setOnscreenRenderTarget = function (renderTarget) {
-                    var gl = this.gl;
-                    this.onscreenRenderTarget = renderTarget;
-                    util_2.assert(this.onscreenRenderTarget.samples === 0);
                 };
                 RenderState.prototype.compileProgram = function (prog) {
                     return prog.compile(this.gl, this.programCache);
@@ -2945,12 +2956,13 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
             Viewer = /** @class */ (function () {
                 function Viewer(canvas) {
                     this.canvas = canvas;
+                    this.onscreenColorTarget = new render_1.ColorTarget();
+                    this.onscreenDepthTarget = new render_1.DepthTarget();
                     var gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
                     this.renderState = new render_1.RenderState(gl);
                     this.inputManager = new InputManager(this.canvas);
                     this.camera = gl_matrix_2.mat4.create();
                     this.cameraController = null;
-                    this.onscreenRenderTarget = new render_1.RenderTarget();
                 }
                 Viewer.prototype.reset = function () {
                     var gl = this.renderState.gl;
@@ -2963,14 +2975,15 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     var gl = this.renderState.gl;
                     if (!this.scene)
                         return;
-                    this.onscreenRenderTarget.setParameters(gl, this.canvas.width, this.canvas.height);
-                    this.renderState.setOnscreenRenderTarget(this.onscreenRenderTarget);
+                    this.onscreenColorTarget.setParameters(gl, this.canvas.width, this.canvas.height);
+                    this.onscreenDepthTarget.setParameters(gl, this.canvas.width, this.canvas.height);
+                    this.renderState.setOnscreenRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
                     this.renderState.reset();
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                     // Main scene. This renders to the onscreen target.
                     this.scene.render(this.renderState);
-                    this.renderState.useRealOnscreenRenderTarget(this.canvas.width, this.canvas.height);
-                    this.renderState.blitRenderTarget(this.onscreenRenderTarget);
+                    // Blit to the screen.
+                    this.renderState.blitOnscreenToGL();
                     var frameEndTime = window.performance.now();
                     var diff = frameEndTime - this.renderState.frameStartTime;
                     // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
@@ -4156,8 +4169,8 @@ System.register("gx/gx_material", ["render", "util"], function (exports_16, cont
     // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
     // make sure textures are sampled correctly...
     function getTextureLODBias(state) {
-        var viewportWidth = state.currentRenderTarget.width;
-        var viewportHeight = state.currentRenderTarget.height;
+        var viewportWidth = state.onscreenColorTarget.width;
+        var viewportHeight = state.onscreenColorTarget.height;
         var textureLODBias = Math.log2(Math.min(viewportWidth / EFB_WIDTH, viewportHeight / EFB_HEIGHT));
         return textureLODBias;
     }
@@ -4598,7 +4611,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_16, cont
                 };
                 GX_Program.prototype.generateTevTexCoordIndirect = function (stage) {
                     var baseCoord = this.generateTevTexCoordWrap(stage);
-                    if (stage.indTexMatrix !== 0 /* OFF */ && stage.indTexStage < this.material.indTexStages.length - 1)
+                    if (stage.indTexMatrix !== 0 /* OFF */ && stage.indTexStage < this.material.indTexStages.length)
                         return baseCoord + " + " + this.generateTevTexCoordIndirectTranslation(stage);
                     else
                         return baseCoord;
@@ -6915,7 +6928,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                     this.skyboxScenes = skyboxScenes;
                     this.roomScenes = roomScenes;
                     this.textures = [];
-                    this.mainRenderTarget = new render_5.RenderTarget();
+                    this.mainColorTarget = new render_5.ColorTarget();
                     this.opaqueScenes = [];
                     this.indTexScenes = [];
                     this.transparentScenes = [];
@@ -6951,8 +6964,8 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                     var _this = this;
                     var gl = state.gl;
                     // Draw skybox + opaque to main RT.
-                    this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
-                    state.useRenderTarget(this.mainRenderTarget);
+                    this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+                    state.useRenderTarget(this.mainColorTarget);
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                     this.skyboxScenes.forEach(function (scene) {
                         scene.render(state);
@@ -6962,16 +6975,15 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                         scene.render(state);
                     });
                     // Copy to main render target.
-                    state.useRenderTarget(null);
-                    state.blitRenderTarget(this.mainRenderTarget);
-                    state.blitRenderTargetDepth(this.mainRenderTarget);
+                    state.useRenderTarget(state.onscreenColorTarget);
+                    state.blitColorTarget(this.mainColorTarget);
                     // IndTex.
                     this.indTexScenes.forEach(function (indirectScene) {
                         var texProjection = indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
                         // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
                         texProjection[0] = state.projection[0];
                         texProjection[5] = -state.projection[5];
-                        var textureOverride = { glTexture: _this.mainRenderTarget.resolvedColorTexture, width: gx_material_1.EFB_WIDTH, height: gx_material_1.EFB_HEIGHT };
+                        var textureOverride = { glTexture: _this.mainColorTarget.resolvedColorTexture, width: gx_material_1.EFB_WIDTH, height: gx_material_1.EFB_HEIGHT };
                         indirectScene.setTextureOverride("fbtex_dummy", textureOverride);
                         indirectScene.render(state);
                     });
@@ -7553,13 +7565,13 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                     this.extraScenes = extraScenes;
                     this.rarc = rarc;
                     this.textures = [];
-                    this.mainRenderTarget = new render_8.RenderTarget();
+                    this.mainColorTarget = new render_8.ColorTarget();
                     this.textures = collectTextures([skyScene, mapScene, seaScene, seaIndirectScene].concat(extraScenes));
                 }
                 SunshineRenderer.prototype.render = function (state) {
                     var gl = state.gl;
-                    this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
-                    state.useRenderTarget(this.mainRenderTarget);
+                    this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+                    state.useRenderTarget(this.mainColorTarget);
                     gl.clearColor(0, 0, 0.125, 1);
                     gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
                     if (this.skyScene) {
@@ -7584,9 +7596,8 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                         finally { if (e_28) throw e_28.error; }
                     }
                     // Copy to main render target.
-                    state.useRenderTarget(null);
-                    state.blitRenderTarget(this.mainRenderTarget);
-                    state.blitRenderTargetDepth(this.mainRenderTarget);
+                    state.useRenderTarget(state.onscreenColorTarget);
+                    state.blitColorTarget(this.mainColorTarget);
                     // XXX(jstpierre): does sea go before or after seaindirect?
                     if (this.seaIndirectScene) {
                         var indirectScene = this.seaIndirectScene;
@@ -7594,7 +7605,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                         // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
                         texProjection[0] = state.projection[0];
                         texProjection[5] = -state.projection[5];
-                        var textureOverride = { glTexture: this.mainRenderTarget.resolvedColorTexture, width: gx_material_2.EFB_WIDTH, height: gx_material_2.EFB_HEIGHT };
+                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_2.EFB_WIDTH, height: gx_material_2.EFB_HEIGHT };
                         indirectScene.setTextureOverride("indirectdummy", textureOverride);
                         indirectScene.render(state);
                     }
@@ -7751,11 +7762,11 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                     this.bloomScene = bloomScene;
                     this.indirectScene = indirectScene;
                     this.textures = [];
-                    this.mainRenderTarget = new render_9.RenderTarget();
+                    this.mainColorTarget = new render_9.ColorTarget();
                     // Bloom stuff.
-                    this.bloomRenderTarget1 = new render_9.RenderTarget();
-                    this.bloomRenderTarget2 = new render_9.RenderTarget();
-                    this.bloomRenderTarget3 = new render_9.RenderTarget();
+                    this.bloomColorTarget1 = new render_9.ColorTarget();
+                    this.bloomColorTarget2 = new render_9.ColorTarget();
+                    this.bloomColorTarget3 = new render_9.ColorTarget();
                     this.bloomPassBlurProgram = new BloomPassBlurProgram();
                     this.bloomPassBokehProgram = new BloomPassBokehProgram();
                     this.textures = collectTextures([mainScene, skyboxScene, bloomScene, indirectScene]);
@@ -7766,8 +7777,8 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                 }
                 SMGRenderer.prototype.render = function (state) {
                     var gl = state.gl;
-                    this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
-                    state.useRenderTarget(this.mainRenderTarget);
+                    this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+                    state.useRenderTarget(this.mainColorTarget);
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                     this.skyboxScene.bindState(state);
                     this.skyboxScene.renderOpaque(state);
@@ -7776,56 +7787,54 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                     this.mainScene.renderOpaque(state);
                     this.mainScene.renderTransparent(state);
                     // Copy to main render target.
-                    state.useRenderTarget(null);
-                    state.blitRenderTarget(this.mainRenderTarget);
-                    state.blitRenderTargetDepth(this.mainRenderTarget);
+                    state.useRenderTarget(state.onscreenColorTarget);
+                    state.blitColorTarget(this.mainColorTarget);
                     if (this.indirectScene) {
                         var texProjection = this.indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
                         // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
                         texProjection[0] = state.projection[0];
                         texProjection[5] = -state.projection[5];
-                        var textureOverride = { glTexture: this.mainRenderTarget.resolvedColorTexture, width: gx_material_3.EFB_WIDTH, height: gx_material_3.EFB_HEIGHT };
+                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_3.EFB_WIDTH, height: gx_material_3.EFB_HEIGHT };
                         this.indirectScene.setTextureOverride("IndDummy", textureOverride);
                         this.indirectScene.bindState(state);
                         this.indirectScene.renderOpaque(state);
                     }
                     if (this.bloomScene) {
                         var gl_1 = state.gl;
-                        var bloomRenderTargetScene = this.bloomRenderTarget1;
-                        bloomRenderTargetScene.setParameters(gl_1, state.currentRenderTarget.width, state.currentRenderTarget.height);
-                        state.useRenderTarget(bloomRenderTargetScene);
-                        state.blitRenderTargetDepth(this.mainRenderTarget);
+                        var bloomColorTargetScene = this.bloomColorTarget1;
+                        bloomColorTargetScene.setParameters(gl_1, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+                        state.useRenderTarget(bloomColorTargetScene);
                         gl_1.clearColor(0, 0, 0, 0);
                         gl_1.clear(gl_1.COLOR_BUFFER_BIT);
                         this.bloomScene.render(state);
                         // First downsample.
-                        var bloomRenderTargetDownsample = this.bloomRenderTarget2;
-                        var bloomWidth = state.currentRenderTarget.width >> 2;
-                        var bloomHeight = state.currentRenderTarget.height >> 2;
-                        bloomRenderTargetDownsample.setParameters(gl_1, bloomWidth, bloomHeight);
-                        state.useRenderTarget(bloomRenderTargetDownsample);
-                        state.blitRenderTarget(bloomRenderTargetScene);
+                        var bloomColorTargetDownsample = this.bloomColorTarget2;
+                        var bloomWidth = state.onscreenColorTarget.width >> 2;
+                        var bloomHeight = state.onscreenColorTarget.height >> 2;
+                        bloomColorTargetDownsample.setParameters(gl_1, bloomWidth, bloomHeight);
+                        state.useRenderTarget(bloomColorTargetDownsample, null);
+                        state.blitColorTarget(bloomColorTargetScene);
                         // First pass is a blur.
-                        var bloomRenderTargetBlur = this.bloomRenderTarget3;
-                        bloomRenderTargetDownsample.resolve(gl_1);
-                        bloomRenderTargetBlur.setParameters(gl_1, bloomRenderTargetDownsample.width, bloomRenderTargetDownsample.height);
-                        state.useRenderTarget(bloomRenderTargetBlur);
+                        var bloomColorTargetBlur = this.bloomColorTarget3;
+                        bloomColorTargetDownsample.resolve(gl_1);
+                        bloomColorTargetBlur.setParameters(gl_1, bloomColorTargetDownsample.width, bloomColorTargetDownsample.height);
+                        state.useRenderTarget(bloomColorTargetBlur, null);
                         state.useProgram(this.bloomPassBlurProgram);
-                        gl_1.bindTexture(gl_1.TEXTURE_2D, bloomRenderTargetDownsample.resolvedColorTexture);
+                        gl_1.bindTexture(gl_1.TEXTURE_2D, bloomColorTargetDownsample.resolvedColorTexture);
                         state.runFullscreen();
                         // TODO(jstpierre): Downsample blur / bokeh as well.
                         // Second pass is bokeh-ify.
                         // We can ditch the second render target now, so just reuse it.
-                        var bloomRenderTargetBokeh = this.bloomRenderTarget2;
-                        bloomRenderTargetBlur.resolve(gl_1);
-                        state.useRenderTarget(bloomRenderTargetBokeh);
+                        var bloomColorTargetBokeh = this.bloomColorTarget2;
+                        bloomColorTargetBlur.resolve(gl_1);
+                        state.useRenderTarget(bloomColorTargetBokeh, null);
                         state.useProgram(this.bloomPassBokehProgram);
                         gl_1.clear(gl_1.COLOR_BUFFER_BIT);
-                        gl_1.bindTexture(gl_1.TEXTURE_2D, bloomRenderTargetBlur.resolvedColorTexture);
+                        gl_1.bindTexture(gl_1.TEXTURE_2D, bloomColorTargetBlur.resolvedColorTexture);
                         state.runFullscreen();
                         // Third pass combines.
-                        state.useRenderTarget(null);
-                        state.blitRenderTarget(bloomRenderTargetBokeh, this.bloomCombineFlags);
+                        state.useRenderTarget(state.onscreenColorTarget);
+                        state.blitColorTarget(bloomColorTargetBokeh, this.bloomCombineFlags);
                     }
                 };
                 SMGRenderer.prototype.destroy = function (gl) {
@@ -7833,9 +7842,9 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                     this.skyboxScene.destroy(gl);
                     this.bloomScene.destroy(gl);
                     this.indirectScene.destroy(gl);
-                    this.bloomRenderTarget1.destroy(gl);
-                    this.bloomRenderTarget2.destroy(gl);
-                    this.bloomRenderTarget3.destroy(gl);
+                    this.bloomColorTarget1.destroy(gl);
+                    this.bloomColorTarget2.destroy(gl);
+                    this.bloomColorTarget3.destroy(gl);
                 };
                 return SMGRenderer;
             }());

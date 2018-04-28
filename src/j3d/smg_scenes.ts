@@ -3,7 +3,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 import { assert, fetch } from 'util';
 
-import { Program, RenderState, RenderTarget, FullscreenProgram, RenderFlags, BlendMode, BlendFactor } from '../render';
+import { Program, RenderState, ColorTarget, FullscreenProgram, RenderFlags, BlendMode, BlendFactor } from '../render';
 import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK } from './j3d';
@@ -126,12 +126,12 @@ void main() {
 class SMGRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
 
-    private mainRenderTarget: RenderTarget = new RenderTarget();
+    private mainColorTarget: ColorTarget = new ColorTarget();
 
     // Bloom stuff.
-    private bloomRenderTarget1: RenderTarget = new RenderTarget();
-    private bloomRenderTarget2: RenderTarget = new RenderTarget();
-    private bloomRenderTarget3: RenderTarget = new RenderTarget();
+    private bloomColorTarget1: ColorTarget = new ColorTarget();
+    private bloomColorTarget2: ColorTarget = new ColorTarget();
+    private bloomColorTarget3: ColorTarget = new ColorTarget();
     private bloomPassBlurProgram: BloomPassBlurProgram = new BloomPassBlurProgram();
     private bloomPassBokehProgram: BloomPassBokehProgram = new BloomPassBokehProgram();
     private bloomCombineFlags: RenderFlags;
@@ -154,8 +154,8 @@ class SMGRenderer implements Viewer.MainScene {
     public render(state: RenderState): void {
         const gl = state.gl;
 
-        this.mainRenderTarget.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
-        state.useRenderTarget(this.mainRenderTarget);
+        this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+        state.useRenderTarget(this.mainColorTarget);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         this.skyboxScene.bindState(state);
@@ -168,16 +168,15 @@ class SMGRenderer implements Viewer.MainScene {
         this.mainScene.renderTransparent(state);
 
         // Copy to main render target.
-        state.useRenderTarget(null);
-        state.blitRenderTarget(this.mainRenderTarget);
-        state.blitRenderTargetDepth(this.mainRenderTarget);
+        state.useRenderTarget(state.onscreenColorTarget);
+        state.blitColorTarget(this.mainColorTarget);
 
         if (this.indirectScene) {
             const texProjection = this.indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
             // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
             texProjection[0] = state.projection[0];
             texProjection[5] = -state.projection[5];
-            const textureOverride: TextureOverride = { glTexture: this.mainRenderTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
             this.indirectScene.setTextureOverride("IndDummy", textureOverride);
             this.indirectScene.bindState(state);
             this.indirectScene.renderOpaque(state);
@@ -186,46 +185,45 @@ class SMGRenderer implements Viewer.MainScene {
         if (this.bloomScene) {
             const gl = state.gl;
 
-            const bloomRenderTargetScene = this.bloomRenderTarget1;
-            bloomRenderTargetScene.setParameters(gl, state.currentRenderTarget.width, state.currentRenderTarget.height);
-            state.useRenderTarget(bloomRenderTargetScene);
-            state.blitRenderTargetDepth(this.mainRenderTarget);
+            const bloomColorTargetScene = this.bloomColorTarget1;
+            bloomColorTargetScene.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+            state.useRenderTarget(bloomColorTargetScene);
             gl.clearColor(0, 0, 0, 0);
             gl.clear(gl.COLOR_BUFFER_BIT);
             this.bloomScene.render(state);
 
             // First downsample.
-            const bloomRenderTargetDownsample = this.bloomRenderTarget2;
-            const bloomWidth = state.currentRenderTarget.width >> 2;
-            const bloomHeight = state.currentRenderTarget.height >> 2;
-            bloomRenderTargetDownsample.setParameters(gl, bloomWidth, bloomHeight);
-            state.useRenderTarget(bloomRenderTargetDownsample);
-            state.blitRenderTarget(bloomRenderTargetScene);
+            const bloomColorTargetDownsample = this.bloomColorTarget2;
+            const bloomWidth = state.onscreenColorTarget.width >> 2;
+            const bloomHeight = state.onscreenColorTarget.height >> 2;
+            bloomColorTargetDownsample.setParameters(gl, bloomWidth, bloomHeight);
+            state.useRenderTarget(bloomColorTargetDownsample, null);
+            state.blitColorTarget(bloomColorTargetScene);
 
             // First pass is a blur.
-            const bloomRenderTargetBlur = this.bloomRenderTarget3;
-            bloomRenderTargetDownsample.resolve(gl);
-            bloomRenderTargetBlur.setParameters(gl, bloomRenderTargetDownsample.width, bloomRenderTargetDownsample.height);
-            state.useRenderTarget(bloomRenderTargetBlur);
+            const bloomColorTargetBlur = this.bloomColorTarget3;
+            bloomColorTargetDownsample.resolve(gl);
+            bloomColorTargetBlur.setParameters(gl, bloomColorTargetDownsample.width, bloomColorTargetDownsample.height);
+            state.useRenderTarget(bloomColorTargetBlur, null);
             state.useProgram(this.bloomPassBlurProgram);
-            gl.bindTexture(gl.TEXTURE_2D, bloomRenderTargetDownsample.resolvedColorTexture);
+            gl.bindTexture(gl.TEXTURE_2D, bloomColorTargetDownsample.resolvedColorTexture);
             state.runFullscreen();
 
             // TODO(jstpierre): Downsample blur / bokeh as well.
 
             // Second pass is bokeh-ify.
             // We can ditch the second render target now, so just reuse it.
-            const bloomRenderTargetBokeh = this.bloomRenderTarget2;
-            bloomRenderTargetBlur.resolve(gl);
-            state.useRenderTarget(bloomRenderTargetBokeh);
+            const bloomColorTargetBokeh = this.bloomColorTarget2;
+            bloomColorTargetBlur.resolve(gl);
+            state.useRenderTarget(bloomColorTargetBokeh, null);
             state.useProgram(this.bloomPassBokehProgram);
             gl.clear(gl.COLOR_BUFFER_BIT);
-            gl.bindTexture(gl.TEXTURE_2D, bloomRenderTargetBlur.resolvedColorTexture);
+            gl.bindTexture(gl.TEXTURE_2D, bloomColorTargetBlur.resolvedColorTexture);
             state.runFullscreen();
 
             // Third pass combines.
-            state.useRenderTarget(null);
-            state.blitRenderTarget(bloomRenderTargetBokeh, this.bloomCombineFlags);
+            state.useRenderTarget(state.onscreenColorTarget);
+            state.blitColorTarget(bloomColorTargetBokeh, this.bloomCombineFlags);
         }
     }
 
@@ -234,9 +232,9 @@ class SMGRenderer implements Viewer.MainScene {
         this.skyboxScene.destroy(gl);
         this.bloomScene.destroy(gl);
         this.indirectScene.destroy(gl);
-        this.bloomRenderTarget1.destroy(gl);
-        this.bloomRenderTarget2.destroy(gl);
-        this.bloomRenderTarget3.destroy(gl);
+        this.bloomColorTarget1.destroy(gl);
+        this.bloomColorTarget2.destroy(gl);
+        this.bloomColorTarget3.destroy(gl);
     }
 }
 
