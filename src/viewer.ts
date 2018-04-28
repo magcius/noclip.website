@@ -42,15 +42,12 @@ class InputManager {
         this.toplevel = toplevel;
 
         this.keysDown = new Map<number, boolean>();
-        window.addEventListener('keydown', this._onKeyDown.bind(this));
-        window.addEventListener('keyup', this._onKeyUp.bind(this));
-        this.toplevel.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
+        window.addEventListener('keydown', this._onKeyDown);
+        window.addEventListener('keyup', this._onKeyUp);
+        this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
+        this.toplevel.addEventListener('mousedown', this._onMouseDown);
 
         this.resetMouse();
-
-        this.toplevel.addEventListener('mousedown', this._onMouseDown.bind(this));
-        this.toplevel.addEventListener('mouseup', this._onMouseUp.bind(this));
-        this.toplevel.addEventListener('mousemove', this._onMouseMove.bind(this));
     }
 
     public isKeyDown(key: string) {
@@ -68,27 +65,37 @@ class InputManager {
         this.dz = 0;
     }
 
-    private _onKeyDown(e: KeyboardEvent) {
+    private _onKeyDown = (e: KeyboardEvent) => {
         this.keysDown.set(e.keyCode, true);
-    }
-    private _onKeyUp(e: KeyboardEvent) {
+    };
+    private _onKeyUp = (e: KeyboardEvent) => {
         this.keysDown.delete(e.keyCode);
-    }
+    };
 
-    private _onWheel(e: WheelEvent) {
+    private _onWheel = (e: WheelEvent) => {
         e.preventDefault();
         this.dz += Math.sign(e.deltaY) * -4;
-    }
+    };
 
     private _setGrabbing(v: boolean) {
+        if (this.grabbing === v)
+            return;
+
         this.grabbing = v;
         this.toplevel.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
         this.toplevel.style.cursor = v ? 'grabbing' : 'grab';
-        document.body.style.setProperty('pointer-events', v ? 'none' : '', 'important');
         this.toplevel.style.setProperty('pointer-events', v ? 'auto' : '', 'important');
+
+        if (v) {
+            document.addEventListener('mousemove', this._onMouseMove);
+            document.addEventListener('mouseup', this._onMouseUp);
+        } else {
+            document.removeEventListener('mousemove', this._onMouseMove);
+            document.removeEventListener('mouseup', this._onMouseUp);
+        }
     }
 
-    private _onMouseMove(e: MouseEvent) {
+    private _onMouseMove = (e: MouseEvent) => {
         if (!this.grabbing)
             return;
         const dx = e.pageX - this.lastX;
@@ -97,12 +104,12 @@ class InputManager {
         this.lastY = e.pageY;
         this.dx += dx;
         this.dy += dy;
-    }
-    private _onMouseUp(e: MouseEvent) {
+    };
+    private _onMouseUp = (e: MouseEvent) => {
         this._setGrabbing(false);
         this.button = 0;
     }
-    private _onMouseDown(e: MouseEvent) {
+    private _onMouseDown = (e: MouseEvent) => {
         this.button = e.button;
         this.lastX = e.pageX;
         this.lastY = e.pageY;

@@ -2730,16 +2730,49 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
         execute: function () {
             InputManager = /** @class */ (function () {
                 function InputManager(toplevel) {
+                    var _this = this;
                     this.grabbing = false;
+                    this._onKeyDown = function (e) {
+                        _this.keysDown.set(e.keyCode, true);
+                    };
+                    this._onKeyUp = function (e) {
+                        _this.keysDown.delete(e.keyCode);
+                    };
+                    this._onWheel = function (e) {
+                        e.preventDefault();
+                        _this.dz += Math.sign(e.deltaY) * -4;
+                    };
+                    this._onMouseMove = function (e) {
+                        if (!_this.grabbing)
+                            return;
+                        var dx = e.pageX - _this.lastX;
+                        var dy = e.pageY - _this.lastY;
+                        _this.lastX = e.pageX;
+                        _this.lastY = e.pageY;
+                        _this.dx += dx;
+                        _this.dy += dy;
+                    };
+                    this._onMouseUp = function (e) {
+                        _this._setGrabbing(false);
+                        _this.button = 0;
+                    };
+                    this._onMouseDown = function (e) {
+                        _this.button = e.button;
+                        _this.lastX = e.pageX;
+                        _this.lastY = e.pageY;
+                        _this._setGrabbing(true);
+                        // Needed to make the cursor update in Chrome. See:
+                        // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
+                        _this.toplevel.focus();
+                        e.preventDefault();
+                    };
                     this.toplevel = toplevel;
                     this.keysDown = new Map();
-                    window.addEventListener('keydown', this._onKeyDown.bind(this));
-                    window.addEventListener('keyup', this._onKeyUp.bind(this));
-                    this.toplevel.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
+                    window.addEventListener('keydown', this._onKeyDown);
+                    window.addEventListener('keyup', this._onKeyUp);
+                    this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
+                    this.toplevel.addEventListener('mousedown', this._onMouseDown);
                     this.resetMouse();
-                    this.toplevel.addEventListener('mousedown', this._onMouseDown.bind(this));
-                    this.toplevel.addEventListener('mouseup', this._onMouseUp.bind(this));
-                    this.toplevel.addEventListener('mousemove', this._onMouseMove.bind(this));
                 }
                 InputManager.prototype.isKeyDown = function (key) {
                     return this.keysDown.get(key.charCodeAt(0));
@@ -2755,46 +2788,21 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     this.dy = 0;
                     this.dz = 0;
                 };
-                InputManager.prototype._onKeyDown = function (e) {
-                    this.keysDown.set(e.keyCode, true);
-                };
-                InputManager.prototype._onKeyUp = function (e) {
-                    this.keysDown.delete(e.keyCode);
-                };
-                InputManager.prototype._onWheel = function (e) {
-                    e.preventDefault();
-                    this.dz += Math.sign(e.deltaY) * -4;
-                };
                 InputManager.prototype._setGrabbing = function (v) {
+                    if (this.grabbing === v)
+                        return;
                     this.grabbing = v;
                     this.toplevel.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
                     this.toplevel.style.cursor = v ? 'grabbing' : 'grab';
-                    document.body.style.setProperty('pointer-events', v ? 'none' : '', 'important');
                     this.toplevel.style.setProperty('pointer-events', v ? 'auto' : '', 'important');
-                };
-                InputManager.prototype._onMouseMove = function (e) {
-                    if (!this.grabbing)
-                        return;
-                    var dx = e.pageX - this.lastX;
-                    var dy = e.pageY - this.lastY;
-                    this.lastX = e.pageX;
-                    this.lastY = e.pageY;
-                    this.dx += dx;
-                    this.dy += dy;
-                };
-                InputManager.prototype._onMouseUp = function (e) {
-                    this._setGrabbing(false);
-                    this.button = 0;
-                };
-                InputManager.prototype._onMouseDown = function (e) {
-                    this.button = e.button;
-                    this.lastX = e.pageX;
-                    this.lastY = e.pageY;
-                    this._setGrabbing(true);
-                    // Needed to make the cursor update in Chrome. See:
-                    // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
-                    this.toplevel.focus();
-                    e.preventDefault();
+                    if (v) {
+                        document.addEventListener('mousemove', this._onMouseMove);
+                        document.addEventListener('mouseup', this._onMouseUp);
+                    }
+                    else {
+                        document.removeEventListener('mousemove', this._onMouseMove);
+                        document.removeEventListener('mouseup', this._onMouseUp);
+                    }
                 };
                 return InputManager;
             }());
