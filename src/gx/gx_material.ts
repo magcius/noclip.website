@@ -617,7 +617,7 @@ export class GX_Program extends Program {
 
     private generateTevTexCoordIndirect(stage: TevStage): string {
         const baseCoord = this.generateTevTexCoordWrap(stage);
-        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF && stage.indTexStage < this.material.indTexStages.length - 1)
+        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF && stage.indTexStage < this.material.indTexStages.length)
             return `${baseCoord} + ${this.generateTevTexCoordIndirectTranslation(stage)}`;
         else
             return baseCoord;
@@ -937,8 +937,8 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
 // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
 // make sure textures are sampled correctly...
 export function getTextureLODBias(state: RenderState): number {
-    const viewportWidth = state.currentRenderTarget.width;
-    const viewportHeight = state.currentRenderTarget.height;
+    const viewportWidth = state.onscreenColorTarget.width;
+    const viewportHeight = state.onscreenColorTarget.height;
     const textureLODBias = Math.log2(Math.min(viewportWidth / EFB_WIDTH, viewportHeight / EFB_HEIGHT));
     return textureLODBias;
 }
