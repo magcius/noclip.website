@@ -1943,7 +1943,7 @@ System.register("render", ["gl-matrix", "util", "CodeEditor"], function (exports
                 }
                 return FullscreenCopyProgram;
             }(FullscreenProgram));
-            RENDER_SAMPLES = 0;
+            RENDER_SAMPLES = 4;
             ColorTarget = /** @class */ (function () {
                 function ColorTarget() {
                 }
