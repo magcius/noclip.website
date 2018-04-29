@@ -720,7 +720,8 @@ layout(std140) uniform ub_SceneParams {
 layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_ColorMatReg[2];
     vec4 u_ColorAmbReg[2];
-    vec4 u_KonstColor[8];
+    vec4 u_KonstColor[4];
+    vec4 u_Color[4];
     mat4x3 u_TexMtx[10];
     mat4x3 u_PostTexMtx[20];
     mat4x2 u_IndTexMtx[3];
@@ -813,10 +814,10 @@ void main() {
     vec4 s_kColor2   = u_KonstColor[2]; // ${this.generateColorConstant(kColors[2])}
     vec4 s_kColor3   = u_KonstColor[3]; // ${this.generateColorConstant(kColors[3])}
 
-    vec4 t_Color0    = u_KonstColor[4]; // ${this.generateColorConstant(rColors[0])}
-    vec4 t_Color1    = u_KonstColor[5]; // ${this.generateColorConstant(rColors[1])}
-    vec4 t_Color2    = u_KonstColor[6]; // ${this.generateColorConstant(rColors[2])}
-    vec4 t_ColorPrev = u_KonstColor[7]; // ${this.generateColorConstant(rColors[3])}
+    vec4 t_Color0    = u_Color[0]; // ${this.generateColorConstant(rColors[0])}
+    vec4 t_Color1    = u_Color[1]; // ${this.generateColorConstant(rColors[1])}
+    vec4 t_Color2    = u_Color[2]; // ${this.generateColorConstant(rColors[2])}
+    vec4 t_ColorPrev = u_Color[3]; // ${this.generateColorConstant(rColors[3])}
 
     vec2 t_TexCoord = vec2(0.0, 0.0);
 ${this.generateIndTexStages(indTexStages)}
@@ -942,4 +943,3 @@ export function getTextureLODBias(state: RenderState): number {
     const textureLODBias = Math.log2(Math.min(viewportWidth / EFB_WIDTH, viewportHeight / EFB_HEIGHT));
     return textureLODBias;
 }
-

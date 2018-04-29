@@ -207,34 +207,16 @@ export class Command_Material {
 
         let offs = 0;
 
-        for (let i = 0; i < 2; i++) {
-            const color = this.material.colorMatRegs[i];
-            if (color !== null) {
-                materialParamsData[offs+i*4+0] = color.r;
-                materialParamsData[offs+i*4+1] = color.g;
-                materialParamsData[offs+i*4+2] = color.b;
-                materialParamsData[offs+i*4+3] = color.a;
-            }
-        }
-        offs += 4*2;
-
-        for (let i = 0; i < 2; i++) {
-            const color = this.material.colorAmbRegs[i];
-            if (color !== null) {
-                materialParamsData[offs+i*4+0] = color.r;
-                materialParamsData[offs+i*4+1] = color.g;
-                materialParamsData[offs+i*4+2] = color.b;
-                materialParamsData[offs+i*4+3] = color.a;
-            }
-        }
-        offs += 4*2;
-
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 12; i++) {
             let fallbackColor: GX_Material.Color;
-            if (i >= 4)
-                fallbackColor = this.material.gxMaterial.colorRegisters[i - 4];
+            if (i < 2)
+                fallbackColor = this.material.colorMatRegs[i];
+            else if (i < 4)
+                fallbackColor = this.material.colorAmbRegs[i - 2];
+            else if (i < 8)
+                fallbackColor = this.material.gxMaterial.colorConstants[i - 4];
             else
-                fallbackColor = this.material.gxMaterial.colorConstants[i];
+                fallbackColor = this.material.gxMaterial.colorRegisters[i - 8];
 
             let color: GX_Material.Color;
             if (this.scene.colorOverrides[i]) {
@@ -255,7 +237,7 @@ export class Command_Material {
             materialParamsData[offs + i*4 + 2] = color.b;
             materialParamsData[offs + i*4 + 3] = alpha;
         }
-        offs += 4*8;
+        offs += 4*12;
 
         // Bind our texture matrices.
         const matrixScratch = Command_Material.matrixScratch;
@@ -418,6 +400,7 @@ interface HierarchyTraverseContext {
 }
 
 export enum ColorOverride {
+    MAT0, MAT1, AMB0, AMB1,
     K0, K1, K2, K3,
     CPREV, C0, C1, C2,
 }
