@@ -183,17 +183,32 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
         return { type: 'Light', klass, name, size, x, y, z, r, g, b, a, intensity };
     }
     // Models
+    case 'BananaTree':
     case 'Coin':
     case 'CoinRed':
-    case 'Palm':
-    case 'PalmOugi':
+    case 'Fence':
+    case 'FenceInner':
+    case 'FenceRevolve':
+    case 'FenceWaterH':
+    case 'FenceWaterV':
+    case 'FerrisWheel':
+    case 'IceBlock':
     case 'Manhole':
     case 'MapObjBase':
     case 'MapStaticObj':
+    case 'Merrygoround':
+    case 'MonumentShine':
+    case 'Palm':
+    case 'PalmNatume':
+    case 'PalmOugi':
+    case 'PinnaDoor':
+    case 'ShellCup':
     case 'WoodBarrel':
     case 'WoodBlock':
+    case 'Viking':
     {
-        const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsi s');
+        // XXX(jstpierre): MapObjBase AirportPole seemingly has extra junk after it?
+        const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsi s.');
         return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
     }
     // Extra unk junk
@@ -218,6 +233,7 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
         return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
     }
     case 'Billboard':
+    case 'BrickBlock':
     case 'DolWeathercock':
     case 'WoodBox':
     {
@@ -379,11 +395,22 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         }
 
         const modelLookup: ModelLookup[] = [
+            { k: 'BananaTree', m: 'BananaTree', p: 'mapobj/bananatree' },
+            { k: 'BrickBlock', m: 'BrickBlock', p: 'mapobj/brickblock' },
             { k: 'Coin', m: 'coin', p: 'mapobj/coin' },
             { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
             { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
+            { k: 'CoinRed', m: 'coin_red', p: 'mapobj/coin_red' },
             { k: 'CoinBlue', m: 'coin_blue', p: 'mapobj/coin_blue' },
             { k: 'DolWeathercock', m: 'dptWeathercock', p: 'mapobj/dptweathercock' },
+            { k: 'Fence', m: 'fence_normal', p: 'mapobj/fence_normal' },
+            { k: 'Fence', m: 'fence3x3', p: 'mapobj/fence_half' },
+            { k: 'FenceRevolve', m: 'fence_revolve', p: 'mapobj/fence_revolve_outer' },
+            { k: 'FenceInner', m: 'fenceInnerGreen', p: 'mapobj/fenceinnergreen' },
+            { k: 'FenceWaterH', m: 'FenceWaterH', p: 'mapobj/fencewaterh' },
+            { k: 'FenceWaterV', m: 'FenceWaterV', p: 'mapobj/fencewaterv' },
+            { k: 'FerrisWheel', m: 'FerrisWheel', p: 'mapobj/ferriswheel' },
+            { k: 'IceBlock', m: 'IceBlock', p: 'mapobj/iceblock' },
             { k: 'Manhole', m: 'manhole', p: 'mapobj/manhole' },
             { k: 'MapObjBase', m: 'DokanGate', p: 'mapobj/efdokangate' },
             { k: 'MapObjBase', m: 'ArrowBoardLR', s: () => bmtm('mapobj/arrowboardlr.bmd', 'mapobj/arrowboard.bmt') },
@@ -391,11 +418,16 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             { k: 'MapObjBase', m: 'ArrowBoardDown', s: () => bmtm('mapobj/arrowboarddown.bmd', 'mapobj/arrowboard.bmt') },
             { k: 'MapObjBase', m: 'monte_chair', p: 'mapobj/monte_chair_model' },
             { k: 'MapStaticObj', m: 'ReflectSky', s: () => bmtm('map/map/reflectsky.bmd', 'map/map/sky.bmt') },
+            { k: 'Merrygoround', m: 'merry', p: 'mapobj/merry' },
             { k: 'NozzleBox', m: 'NozzleBox', p: 'mapobj/nozzlebox' },
             { k: 'Palm', m: 'palmNormal', p: 'mapobj/palmnormal' },
             { k: 'Palm', m: 'palmLeaf', p: 'mapobj/palmleaf' },
+            { k: 'PalmNatume', m: 'palmNatume', p: 'mapobj/palmnatume' },
             { k: 'PalmOugi', m: 'palmOugi', p: 'mapobj/palmougi' },
+            { k: 'PinnaDoor', m: 'PinnaDoor', p: 'mapobj/pinnadoor' },
+            { k: 'ShellCup', m: 'ShellCup', p: 'mapobj/shellcup' },
             { k: 'Shine', m: 'shine', p: 'mapobj/shine' },
+            { k: 'Viking', m: 'viking', p: 'mapobj/viking' },
             { k: 'WoodBox', m: 'WoodBox', p: 'mapobj/kibako' },
             { k: 'WoodBarrel', m: 'wood_barrel', s: () => bmtm('mapobj/barrel_normal.bmd', 'mapobj/barrel.bmt') },
         ];
@@ -451,7 +483,6 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SunshineSceneDesc("data/j3d/sms/delfino0.szs", "Delfino Hotel"),
     new SunshineSceneDesc("data/j3d/sms/mare0.szs", "Noki Bay"),
     new SunshineSceneDesc("data/j3d/sms/monte3.szs", "Pianta Village"),
-    new SunshineSceneDesc("data/j3d/sms/dolpic_ex0.szs", "Dolpic Ex0"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
