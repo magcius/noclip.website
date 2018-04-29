@@ -5403,84 +5403,6 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         }
         return { textureDatas: textureDatas, samplers: samplers };
     }
-    function readTTK1Chunk(buffer) {
-        var view = buffer.createDataView();
-        var loopMode = view.getUint8(0x08);
-        var rotationDecimal = view.getUint8(0x09);
-        var duration = view.getUint16(0x0A);
-        var animationCount = view.getUint16(0x0C) / 3;
-        var sCount = view.getUint16(0x0E);
-        var rCount = view.getUint16(0x10);
-        var tCount = view.getUint16(0x12);
-        var animationTableOffs = view.getUint32(0x14);
-        var remapTableOffs = view.getUint32(0x18);
-        var materialNameTableOffs = view.getUint32(0x1C);
-        var texMtxIndexTableOffs = view.getUint32(0x20);
-        var textureCenterTableOffs = view.getUint32(0x24);
-        var sTableOffs = view.getUint32(0x28);
-        var rTableOffs = view.getUint32(0x2C);
-        var tTableOffs = view.getUint32(0x30);
-        var rotationScale = Math.pow(2, rotationDecimal) / 32767;
-        function convertRotationTable(table) {
-            var v = new Float32Array(table.length);
-            for (var i = 0; i < table.length; i++)
-                v[i] = table[i] * rotationScale;
-            return v;
-        }
-        var sTable = endian_1.betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
-        var rTable = convertRotationTable(endian_1.betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array));
-        var tTable = endian_1.betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
-        var materialNameTable = readStringTable(buffer, materialNameTableOffs);
-        var animationTableIdx = animationTableOffs;
-        function readAnimationTrack(data) {
-            var count = view.getUint16(animationTableIdx + 0x00);
-            var index = view.getUint16(animationTableIdx + 0x02);
-            var tangent = view.getUint16(animationTableIdx + 0x04);
-            animationTableIdx += 0x06;
-            // Special exception.
-            if (count === 1) {
-                var value = data[index];
-                var frames_1 = [{ time: 0, value: value, tangentIn: 0, tangentOut: 0 }];
-                return { frames: frames_1 };
-            }
-            else {
-                var frames_2 = [];
-                if (tangent === 0 /* IN */) {
-                    for (var i = index; i < index + 3 * count; i += 3) {
-                        var time = data[i + 0], value = data[i + 1], tangentIn = data[i + 2], tangentOut = tangentIn;
-                        frames_2.push({ time: time, value: value, tangentIn: tangentIn, tangentOut: tangentOut });
-                    }
-                }
-                else if (tangent === 1 /* IN_OUT */) {
-                    for (var i = index; i < index + 4 * count; i += 4) {
-                        var time = data[i + 0], value = data[i + 1], tangentIn = data[i + 2], tangentOut = data[i + 3];
-                        frames_2.push({ time: time, value: value, tangentIn: tangentIn, tangentOut: tangentOut });
-                    }
-                }
-                return { frames: frames_2 };
-            }
-        }
-        function readAnimationComponent() {
-            var scale = readAnimationTrack(sTable);
-            var rotation = readAnimationTrack(rTable);
-            var translation = readAnimationTrack(tTable);
-            return { scale: scale, rotation: rotation, translation: translation };
-        }
-        var materialAnimationEntries = [];
-        for (var i = 0; i < animationCount; i++) {
-            var materialName = materialNameTable[i];
-            var remapIndex = view.getUint16(remapTableOffs + i * 0x02);
-            var texMtxIndex = view.getUint8(texMtxIndexTableOffs + i);
-            var centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
-            var centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
-            var centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
-            var s = readAnimationComponent();
-            var t_1 = readAnimationComponent();
-            var q = readAnimationComponent();
-            materialAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, texMtxIndex: texMtxIndex, centerS: centerS, centerT: centerT, centerQ: centerQ, s: s, t: t_1, q: q });
-        }
-        return { duration: duration, loopMode: loopMode, materialAnimationEntries: materialAnimationEntries };
-    }
     function applyLoopMode(t, loopMode) {
         switch (loopMode) {
             case 0 /* ONCE */:
@@ -5492,6 +5414,12 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             case 4 /* MIRRORED_REPEAT */:
                 return 1 - Math.abs((t % 2) - 1);
         }
+    }
+    function getAnimFrame(anim, frame) {
+        var lastFrame = anim.duration - 1;
+        var normTime = frame / lastFrame;
+        var animFrame = applyLoopMode(normTime, anim.loopMode) * lastFrame;
+        return animFrame;
     }
     function cubicEval(cf0, cf1, cf2, cf3, t) {
         return (((cf0 * t + cf1) * t + cf2) * t + cf3);
@@ -5531,7 +5459,156 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var t = (frame - k0.time) / (k1.time - k0.time);
         return hermiteInterpolate(k0, k1, t);
     }
-    var gl_matrix_4, ArrayBufferSlice_5, endian_1, util_7, gx_displaylist_1, GX_Material, HierarchyType, t, c, ci, J3DFileReaderHelper, BMD, BTK, BMT, BTI;
+    function translateAnimationTrack(data, scale, count, index, tangent) {
+        // Special exception.
+        if (count === 1) {
+            var value = data[index];
+            var frames_1 = [{ time: 0, value: value, tangentIn: 0, tangentOut: 0 }];
+            return { frames: frames_1 };
+        }
+        else {
+            var frames_2 = [];
+            if (tangent === 0 /* IN */) {
+                for (var i = index; i < index + 3 * count; i += 3) {
+                    var time = data[i + 0], value = data[i + 1] * scale, tangentIn = data[i + 2] * scale, tangentOut = tangentIn;
+                    frames_2.push({ time: time, value: value, tangentIn: tangentIn, tangentOut: tangentOut });
+                }
+            }
+            else if (tangent === 1 /* IN_OUT */) {
+                for (var i = index; i < index + 4 * count; i += 4) {
+                    var time = data[i + 0], value = data[i + 1] * scale, tangentIn = data[i + 2] * scale, tangentOut = data[i + 3] * scale;
+                    frames_2.push({ time: time, value: value, tangentIn: tangentIn, tangentOut: tangentOut });
+                }
+            }
+            return { frames: frames_2 };
+        }
+    }
+    function readTTK1Chunk(buffer) {
+        var view = buffer.createDataView();
+        var loopMode = view.getUint8(0x08);
+        var rotationDecimal = view.getUint8(0x09);
+        var duration = view.getUint16(0x0A);
+        var animationCount = view.getUint16(0x0C) / 3;
+        var sCount = view.getUint16(0x0E);
+        var rCount = view.getUint16(0x10);
+        var tCount = view.getUint16(0x12);
+        var animationTableOffs = view.getUint32(0x14);
+        var remapTableOffs = view.getUint32(0x18);
+        var materialNameTableOffs = view.getUint32(0x1C);
+        var texMtxIndexTableOffs = view.getUint32(0x20);
+        var textureCenterTableOffs = view.getUint32(0x24);
+        var sTableOffs = view.getUint32(0x28);
+        var rTableOffs = view.getUint32(0x2C);
+        var tTableOffs = view.getUint32(0x30);
+        var rotationScale = Math.pow(2, rotationDecimal) / 32767;
+        var sTable = endian_1.betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
+        var rTable = endian_1.betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array);
+        var tTable = endian_1.betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
+        var materialNameTable = readStringTable(buffer, materialNameTableOffs);
+        var animationTableIdx = animationTableOffs;
+        function readAnimationTrack(data, scale) {
+            var count = view.getUint16(animationTableIdx + 0x00);
+            var index = view.getUint16(animationTableIdx + 0x02);
+            var tangent = view.getUint16(animationTableIdx + 0x04);
+            animationTableIdx += 0x06;
+            return translateAnimationTrack(data, scale, count, index, tangent);
+        }
+        function readAnimationComponent() {
+            var scale = readAnimationTrack(sTable, 1);
+            var rotation = readAnimationTrack(rTable, rotationScale);
+            var translation = readAnimationTrack(tTable, 1);
+            return { scale: scale, rotation: rotation, translation: translation };
+        }
+        var uvAnimationEntries = [];
+        for (var i = 0; i < animationCount; i++) {
+            var materialName = materialNameTable[i];
+            var remapIndex = view.getUint16(remapTableOffs + i * 0x02);
+            var texMtxIndex = view.getUint8(texMtxIndexTableOffs + i);
+            var centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
+            var centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
+            var centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
+            var s = readAnimationComponent();
+            var t_1 = readAnimationComponent();
+            var q = readAnimationComponent();
+            uvAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, texMtxIndex: texMtxIndex, centerS: centerS, centerT: centerT, centerQ: centerQ, s: s, t: t_1, q: q });
+        }
+        return { duration: duration, loopMode: loopMode, uvAnimationEntries: uvAnimationEntries };
+    }
+    function readTRK1Chunk(buffer) {
+        var view = buffer.createDataView();
+        var loopMode = view.getUint8(0x08);
+        var duration = view.getUint16(0x0A);
+        var registerColorAnimationTableCount = view.getUint16(0x0C);
+        var konstantColorAnimationTableCount = view.getUint16(0x0E);
+        var registerRCount = view.getUint16(0x10);
+        var registerGCount = view.getUint16(0x12);
+        var registerBCount = view.getUint16(0x14);
+        var registerACount = view.getUint16(0x16);
+        var konstantRCount = view.getUint16(0x18);
+        var konstantGCount = view.getUint16(0x1A);
+        var konstantBCount = view.getUint16(0x1C);
+        var konstantACount = view.getUint16(0x1E);
+        var registerColorAnimationTableOffs = view.getUint32(0x20);
+        var konstantColorAnimationTableOffs = view.getUint32(0x24);
+        var registerRemapTableOffs = view.getUint32(0x28);
+        var konstantRemapTableOffs = view.getUint32(0x2C);
+        var registerNameTableOffs = view.getUint32(0x30);
+        var konstantNameTableOffs = view.getUint32(0x34);
+        var registerROffs = view.getUint32(0x38);
+        var registerGOffs = view.getUint32(0x3C);
+        var registerBOffs = view.getUint32(0x40);
+        var registerAOffs = view.getUint32(0x44);
+        var konstantROffs = view.getUint32(0x48);
+        var konstantGOffs = view.getUint32(0x4C);
+        var konstantBOffs = view.getUint32(0x50);
+        var konstantAOffs = view.getUint32(0x54);
+        var registerNameTable = readStringTable(buffer, registerNameTableOffs);
+        var konstantNameTable = readStringTable(buffer, konstantNameTableOffs);
+        var animationTableIdx;
+        function readAnimationTrack(data) {
+            var count = view.getUint16(animationTableIdx + 0x00);
+            var index = view.getUint16(animationTableIdx + 0x02);
+            var tangent = view.getUint16(animationTableIdx + 0x04);
+            animationTableIdx += 0x06;
+            return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
+        }
+        var registerRTable = endian_1.betoh(buffer.subarray(registerROffs, registerRCount * 2), 2).createTypedArray(Int16Array);
+        var registerGTable = endian_1.betoh(buffer.subarray(registerGOffs, registerGCount * 2), 2).createTypedArray(Int16Array);
+        var registerBTable = endian_1.betoh(buffer.subarray(registerBOffs, registerBCount * 2), 2).createTypedArray(Int16Array);
+        var registerATable = endian_1.betoh(buffer.subarray(registerAOffs, registerACount * 2), 2).createTypedArray(Int16Array);
+        var registerAnimationEntries = [];
+        animationTableIdx = registerColorAnimationTableOffs;
+        for (var i = 0; i < registerColorAnimationTableCount; i++) {
+            var materialName = registerNameTable[i];
+            var remapIndex = view.getUint16(registerRemapTableOffs + i * 0x02);
+            var r = readAnimationTrack(registerRTable);
+            var g = readAnimationTrack(registerGTable);
+            var b = readAnimationTrack(registerBTable);
+            var a = readAnimationTrack(registerATable);
+            var colorId = view.getUint8(animationTableIdx);
+            animationTableIdx += 0x04;
+            registerAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, colorId: colorId, r: r, g: g, b: b, a: a });
+        }
+        var konstantRTable = endian_1.betoh(buffer.subarray(konstantROffs, konstantRCount * 2), 2).createTypedArray(Int16Array);
+        var konstantGTable = endian_1.betoh(buffer.subarray(konstantGOffs, konstantGCount * 2), 2).createTypedArray(Int16Array);
+        var konstantBTable = endian_1.betoh(buffer.subarray(konstantBOffs, konstantBCount * 2), 2).createTypedArray(Int16Array);
+        var konstantATable = endian_1.betoh(buffer.subarray(konstantAOffs, konstantACount * 2), 2).createTypedArray(Int16Array);
+        var konstantAnimationEntries = [];
+        animationTableIdx = konstantColorAnimationTableOffs;
+        for (var i = 0; i < konstantColorAnimationTableCount; i++) {
+            var materialName = konstantNameTable[i];
+            var remapIndex = view.getUint16(konstantRemapTableOffs + i * 0x02);
+            var r = readAnimationTrack(konstantRTable);
+            var g = readAnimationTrack(konstantGTable);
+            var b = readAnimationTrack(konstantBTable);
+            var a = readAnimationTrack(konstantATable);
+            var colorId = view.getUint8(animationTableIdx);
+            animationTableIdx += 0x04;
+            konstantAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, colorId: colorId, r: r, g: g, b: b, a: a });
+        }
+        return { duration: duration, loopMode: loopMode, registerAnimationEntries: registerAnimationEntries, konstantAnimationEntries: konstantAnimationEntries };
+    }
+    var gl_matrix_4, ArrayBufferSlice_5, endian_1, util_7, gx_displaylist_1, GX_Material, HierarchyType, t, c, ci, J3DFileReaderHelper, BMD, BTK, BRK, BMT, BTI;
     return {
         setters: [
             function (gl_matrix_4_1) {
@@ -5575,10 +5652,16 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     this.numChunks = this.view.getUint32(0x0C);
                     // Serialized VeRsion N?
                     var svr = util_7.readString(buffer, 0x10, 0x10);
-                    var version = this.magic.charAt(7);
-                    util_7.assert(svr === "SVR" + version + "\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF");
+                    util_7.assert(svr.slice(0, 3) === 'SVR' && svr.slice(4) == '\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF');
                     this.offs = 0x20;
                 }
+                J3DFileReaderHelper.prototype.maybeNextChunk = function (maybeChunkId) {
+                    var chunkStart = this.offs;
+                    var chunkId = util_7.readString(this.buffer, chunkStart + 0x00, 4);
+                    var chunkSize = this.view.getUint32(chunkStart + 0x04);
+                    if (chunkId === maybeChunkId)
+                        this.offs += chunkSize;
+                };
                 J3DFileReaderHelper.prototype.nextChunk = function (expectedChunkId) {
                     var chunkStart = this.offs;
                     var chunkId = util_7.readString(this.buffer, chunkStart + 0x00, 4);
@@ -5598,11 +5681,12 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     util_7.assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
                     bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
                     bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
-                    j3d.nextChunk('EVP1'); // TODO: implement
+                    var evp1 = j3d.nextChunk('EVP1'); // TODO: implement
                     bmd.drw1 = readDRW1Chunk(j3d.nextChunk('DRW1'));
                     bmd.jnt1 = readJNT1Chunk(j3d.nextChunk('JNT1'));
                     bmd.shp1 = readSHP1Chunk(j3d.nextChunk('SHP1'), bmd);
                     bmd.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+                    var mdl3 = j3d.maybeNextChunk('MDL3');
                     bmd.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
                     return bmd;
                 };
@@ -5619,16 +5703,11 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     btk.ttk1 = readTTK1Chunk(j3d.nextChunk('TTK1'));
                     return btk;
                 };
-                BTK.prototype.findAnimationEntry = function (materialName, texMtxIndex) {
-                    return this.ttk1.materialAnimationEntries.find(function (e) { return e.materialName === materialName && e.texMtxIndex === texMtxIndex; });
-                };
                 BTK.prototype.calcAnimatedTexMtx = function (dst, materialName, texMtxIndex, frame) {
                     var animationEntry = this.findAnimationEntry(materialName, texMtxIndex);
                     if (!animationEntry)
                         return false;
-                    var lastFrame = this.ttk1.duration - 1;
-                    var normTime = frame / lastFrame;
-                    var animFrame = applyLoopMode(normTime, this.ttk1.loopMode) * lastFrame;
+                    var animFrame = getAnimFrame(this.ttk1, frame);
                     var centerS = animationEntry.centerS;
                     var centerT = animationEntry.centerT;
                     var centerQ = animationEntry.centerQ;
@@ -5640,9 +5719,56 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
                     return true;
                 };
+                BTK.prototype.findAnimationEntry = function (materialName, texMtxIndex) {
+                    return this.ttk1.uvAnimationEntries.find(function (e) { return e.materialName === materialName && e.texMtxIndex === texMtxIndex; });
+                };
                 return BTK;
             }());
             exports_17("BTK", BTK);
+            BRK = /** @class */ (function () {
+                function BRK() {
+                }
+                BRK.parse = function (buffer) {
+                    var brk = new BRK();
+                    var j3d = new J3DFileReaderHelper(buffer);
+                    util_7.assert(j3d.magic === 'J3D1brk1');
+                    brk.trk1 = readTRK1Chunk(j3d.nextChunk('TRK1'));
+                    return brk;
+                };
+                BRK.prototype.calcColorOverrides = function (dst, offs, materialName, frame) {
+                    var animFrame = getAnimFrame(this.trk1, frame);
+                    var _loop_4 = function (i) {
+                        var animationEntry = this_3.trk1.konstantAnimationEntries.find(function (e) { return e.materialName === materialName && e.colorId === i; });
+                        if (!animationEntry)
+                            return "continue";
+                        dst[offs + i * 4 + 0] = sampleAnimationData(animationEntry.r, animFrame);
+                        dst[offs + i * 4 + 1] = sampleAnimationData(animationEntry.g, animFrame);
+                        dst[offs + i * 4 + 2] = sampleAnimationData(animationEntry.b, animFrame);
+                        dst[offs + i * 4 + 3] = sampleAnimationData(animationEntry.a, animFrame);
+                    };
+                    var this_3 = this;
+                    for (var i = 0; i < 4; i++) {
+                        _loop_4(i);
+                    }
+                    offs += 4 * 4;
+                    var _loop_5 = function (i) {
+                        var animationEntry = this_4.trk1.registerAnimationEntries.find(function (e) { return e.materialName === materialName && e.colorId === i; });
+                        if (!animationEntry)
+                            return "continue";
+                        dst[offs + i * 4 + 0] = sampleAnimationData(animationEntry.r, animFrame);
+                        dst[offs + i * 4 + 1] = sampleAnimationData(animationEntry.g, animFrame);
+                        dst[offs + i * 4 + 2] = sampleAnimationData(animationEntry.b, animFrame);
+                        dst[offs + i * 4 + 3] = sampleAnimationData(animationEntry.a, animFrame);
+                    };
+                    var this_4 = this;
+                    for (var i = 0; i < 4; i++) {
+                        _loop_5(i);
+                    }
+                    offs += 4 * 4;
+                };
+                return BRK;
+            }());
+            exports_17("BRK", BRK);
             BMT = /** @class */ (function () {
                 function BMT() {
                 }
@@ -5759,7 +5885,7 @@ System.register("j3d/rarc", ["util"], function (exports_18, context_18) {
                 }
                 RARC.prototype.findDirParts = function (parts) {
                     var dir = this.root;
-                    var _loop_4 = function (part) {
+                    var _loop_6 = function (part) {
                         dir = dir.subdirs.find(function (subdir) { return subdir.name === part; });
                         if (dir === undefined)
                             return { value: null };
@@ -5767,7 +5893,7 @@ System.register("j3d/rarc", ["util"], function (exports_18, context_18) {
                     try {
                         for (var parts_1 = __values(parts), parts_1_1 = parts_1.next(); !parts_1_1.done; parts_1_1 = parts_1.next()) {
                             var part = parts_1_1.value;
-                            var state_1 = _loop_4(part);
+                            var state_1 = _loop_6(part);
                             if (typeof state_1 === "object")
                                 return state_1.value;
                         }
@@ -6303,6 +6429,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.name = material.name;
                     this.scene = scene;
                     this.bmd = scene.bmd;
+                    this.brk = scene.brk;
                     this.btk = scene.btk;
                     this.bmt = scene.bmt;
                     this.material = material;
@@ -6315,6 +6442,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.scene.currentMaterialCommand = this;
                     if (!this.scene.currentMaterialCommand.visible)
                         return;
+                    var animationFrame = this.scene.getTimeInFrames(state.time);
                     var gl = state.gl;
                     state.useProgram(this.program);
                     state.useFlags(this.renderFlags);
@@ -6348,6 +6476,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         materialParamsData[offs + i * 4 + 2] = color.b;
                         materialParamsData[offs + i * 4 + 3] = alpha;
                     }
+                    if (this.brk !== null) {
+                        this.brk.calcColorOverrides(materialParamsData, 4 * 2 + 4 * 2, this.material.name, animationFrame);
+                    }
                     offs += 4 * 12;
                     // Bind our texture matrices.
                     var matrixScratch = Command_Material.matrixScratch;
@@ -6356,12 +6487,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         if (texMtx === null)
                             continue;
                         var finalMatrix = matrixScratch;
-                        if (this.btk && this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, this.scene.getTimeInFrames(state.time))) {
-                            ;
-                        }
-                        else {
-                            gl_matrix_5.mat4.copy(finalMatrix, texMtx.matrix);
-                        }
+                        gl_matrix_5.mat4.copy(finalMatrix, texMtx.matrix);
+                        if (this.btk !== null)
+                            this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, animationFrame);
                         switch (texMtx.type) {
                             case 0x00: // Normal. Does nothing.
                                 break;
@@ -6491,10 +6619,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
             exports_20("ColorOverride", ColorOverride);
             sceneParamsData = new Float32Array(4 * 4 + GX_Material.scaledVtxAttributes.length + 4);
             Scene = /** @class */ (function () {
-                function Scene(gl, bmd, btk, bmt, extraTextures) {
+                // TODO(jstpierre): SceneLoader. This constructor is getting unwieldy.
+                function Scene(gl, bmd, btk, brk, bmt, extraTextures) {
                     if (extraTextures === void 0) { extraTextures = []; }
                     this.bmd = bmd;
                     this.btk = btk;
+                    this.brk = brk;
                     this.bmt = bmt;
                     this.extraTextures = extraTextures;
                     this.name = '';
@@ -6846,11 +6976,12 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
         return textures;
         var e_24, _a;
     }
-    function createScene(gl, bmdFile, btkFile, bmtFile, extraTextures) {
+    function createScene(gl, bmdFile, btkFile, brkFile, bmtFile, extraTextures) {
         var bmd = j3d_2.BMD.parse(bmdFile.buffer);
         var btk = btkFile ? j3d_2.BTK.parse(btkFile.buffer) : null;
+        var brk = brkFile ? j3d_2.BRK.parse(brkFile.buffer) : null;
         var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
-        var scene = new render_4.Scene(gl, bmd, btk, bmt, extraTextures);
+        var scene = new render_4.Scene(gl, bmd, btk, brk, bmt, extraTextures);
         return scene;
     }
     function createScenesFromRARC(gl, rarcName, rarc, extraTextures) {
@@ -6858,8 +6989,9 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
         var scenes = bmdFiles.map(function (bmdFile) {
             var basename = bmdFile.name.split('.')[0];
             var btkFile = rarc.files.find(function (f) { return f.name === basename + ".btk"; });
+            var brkFile = rarc.files.find(function (f) { return f.name === basename + ".brk"; });
             var bmtFile = rarc.files.find(function (f) { return f.name === basename + ".bmt"; });
-            var scene = createScene(gl, bmdFile, btkFile, bmtFile, extraTextures);
+            var scene = createScene(gl, bmdFile, btkFile, brkFile, bmtFile, extraTextures);
             scene.name = rarcName + "/" + basename;
             return scene;
         });
@@ -7005,7 +7137,8 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                             if (!bmdFile)
                                 return null;
                             var btkFile = stageRarc.findFile("btk/" + basename + ".btk");
-                            var scene = createScene(gl, bmdFile, btkFile, null, extraTextures);
+                            var brkFile = stageRarc.findFile("brk/" + basename + ".brk");
+                            var scene = createScene(gl, bmdFile, btkFile, brkFile, null, extraTextures);
                             scene.setIsSkybox(true);
                             return scene;
                         }).filter(function (s) { return !!s; });
@@ -7047,11 +7180,12 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
 System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_22, context_22) {
     "use strict";
     var __moduleName = context_22 && context_22.id;
-    function createScene(gl, bmdFile, btkFile, bmtFile) {
+    function createScene(gl, bmdFile, btkFile, brkFile, bmtFile) {
         var bmd = j3d_3.BMD.parse(bmdFile.buffer);
         var btk = btkFile ? j3d_3.BTK.parse(btkFile.buffer) : null;
+        var brk = brkFile ? j3d_3.BRK.parse(brkFile.buffer) : null;
         var bmt = bmtFile ? j3d_3.BMT.parse(bmtFile.buffer) : null;
-        return new render_6.Scene(gl, bmd, btk, bmt);
+        return new render_6.Scene(gl, bmd, btk, brk, bmt);
     }
     exports_22("createScene", createScene);
     function boolSort(a, b) {
@@ -7072,8 +7206,9 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                 // Find the corresponding btk.
                 var basename = bmdFile.name.split('.')[0];
                 var btkFile = rarc_1.files.find(function (f) { return f.name === basename + ".btk"; });
+                var brkFile = rarc_1.files.find(function (f) { return f.name === basename + ".brk"; });
                 var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
-                var scene = createScene(gl, bmdFile, btkFile, bmtFile);
+                var scene = createScene(gl, bmdFile, btkFile, brkFile, bmtFile);
                 scene.name = basename;
                 if (basename.includes('_sky'))
                     scene.setIsSkybox(true);
@@ -7087,7 +7222,7 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
         }
         if (['J3D2bmd3', 'J3D2bdl4'].includes(util_11.readString(buffer, 0, 8))) {
             var bmd = j3d_3.BMD.parse(buffer);
-            return [new render_6.Scene(gl, bmd, null, null)];
+            return [new render_6.Scene(gl, bmd, null, null, null)];
         }
         return null;
     }
@@ -7445,9 +7580,11 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     if (!bdlFile)
                         return null;
                     var btkFile = rarc.findFile("btk/" + name + ".btk");
+                    var brkFile = rarc.findFile("brk/" + name + ".brk");
                     var bdl = j3d_4.BMD.parse(bdlFile.buffer);
                     var btk = btkFile ? j3d_4.BTK.parse(btkFile.buffer) : null;
-                    var scene = new render_7.Scene(gl, bdl, btk, null);
+                    var brk = brkFile ? j3d_4.BRK.parse(brkFile.buffer) : null;
+                    var scene = new render_7.Scene(gl, bdl, btk, brk, null);
                     scene.setIsSkybox(isSkybox);
                     return scene;
                 };
@@ -7613,8 +7750,9 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                     if (!bmdFile)
                         return null;
                     var btkFile = rarc.findFile("map/map/" + basename + ".btk");
+                    var brkFile = rarc.findFile("map/map/" + basename + ".brk");
                     var bmtFile = rarc.findFile("map/map/" + basename + ".bmt");
-                    var scene = scenes_5.createScene(gl, bmdFile, btkFile, bmtFile);
+                    var scene = scenes_5.createScene(gl, bmdFile, btkFile, brkFile, bmtFile);
                     scene.name = basename;
                     scene.setIsSkybox(isSkybox);
                     return scene;
@@ -13153,7 +13291,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         state.useProgram(prog);
                         state.bindModelView(_this.isSkybox);
                         state.useFlags(renderFlags);
-                        var _loop_5 = function (i) {
+                        var _loop_7 = function (i) {
                             var attribName = attribNames[i];
                             gl.activeTexture(gl.TEXTURE0 + i);
                             var uniformLocation = void 0;
@@ -13182,7 +13320,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         };
                         // Textures.
                         for (var i = 0; i < attribNames.length; i++) {
-                            _loop_5(i);
+                            _loop_7(i);
                         }
                     };
                     var e_47, _a;
@@ -13342,7 +13480,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     var texture = textureEntry.texture;
                     var surface = texture.surface;
                     var canvases = [];
-                    var _loop_6 = function (i) {
+                    var _loop_8 = function (i) {
                         var mipLevel = i;
                         var canvas = document.createElement('canvas');
                         canvas.width = 0;
@@ -13402,7 +13540,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         });
                     };
                     for (var i = 0; i < surface.numMips; i++) {
-                        _loop_6(i);
+                        _loop_8(i);
                     }
                     this.textures.push({ name: textureEntry.entry.name, surfaces: canvases });
                     return glTexture;
@@ -13912,7 +14050,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_54, context_54)
         // Regular resource table.
         var resourceTableCount = view.getUint32(offs + 0x00);
         offs += 0x04;
-        var _loop_7 = function (i) {
+        var _loop_9 = function (i) {
             var isCompressed = !!view.getUint32(offs + 0x00);
             var fourCC = util_32.readString(buffer, offs + 0x04, 4, false);
             var fileID = util_32.readString(buffer, offs + 0x08, 4, false);
@@ -13946,7 +14084,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_54, context_54)
                 namedResourceTable.set(fileResource.name, fileResource);
         };
         for (var i = 0; i < resourceTableCount; i++) {
-            _loop_7(i);
+            _loop_9(i);
         }
         return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
     }
@@ -14300,7 +14438,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
         var firstSurfaceOffs = sectionOffsTable[sectionIndex];
         var surfaceCount = view.getUint32(surfaceTableOffs + 0x00);
         var surfaces = [];
-        var _loop_8 = function (i) {
+        var _loop_10 = function (i) {
             var surfaceOffs = sectionOffsTable[sectionIndex];
             var surfaceEnd = firstSurfaceOffs + view.getUint32(surfaceTableOffs + 0x04 + i * 0x04);
             var centerX = view.getFloat32(surfaceOffs + 0x00);
@@ -14495,7 +14633,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             var e_53, _a;
         };
         for (var i = 0; i < surfaceCount; i++) {
-            _loop_8(i);
+            _loop_10(i);
         }
         var geometry = { surfaces: surfaces };
         return [geometry, sectionIndex];
