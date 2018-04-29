@@ -486,6 +486,15 @@ export class GX_Program extends Program {
         }
     }
 
+    private generateTevInputs(stage: TevStage) {
+        return `
+    t_TevA = TevOverflow(vec4(${this.generateColorIn(stage, stage.colorInA)}, ${this.generateAlphaIn(stage, stage.alphaInA)}));
+    t_TevB = TevOverflow(vec4(${this.generateColorIn(stage, stage.colorInB)}, ${this.generateAlphaIn(stage, stage.alphaInB)}));
+    t_TevC = TevOverflow(vec4(${this.generateColorIn(stage, stage.colorInC)}, ${this.generateAlphaIn(stage, stage.alphaInC)}));
+    t_TevD = TevOverflow(vec4(${this.generateColorIn(stage, stage.colorInD)}, ${this.generateAlphaIn(stage, stage.alphaInD)}));
+`.trim();
+    }
+
     private generateTevRegister(regId: GX.Register) {
         switch (regId) {
         case GX.Register.PREV: return `t_ColorPrev`;
@@ -513,22 +522,24 @@ export class GX_Program extends Program {
         return v;
     }
 
-    private generateTevOp(op: GX.TevOp, bias: GX.TevBias, scale: GX.TevScale, a: string, b: string, c: string, d: string) {
+    private generateTevOp(op: GX.TevOp, bias: GX.TevBias, scale: GX.TevScale, a: string, b: string, c: string, d: string, zero: string) {
         switch (op) {
         case GX.TevOp.ADD:
         case GX.TevOp.SUB:
             const o = (op === GX.TevOp.ADD) ? '+' : '-';
             const v = `mix(${a}, ${b}, ${c}) ${o} ${d}`;
             return this.generateTevOpBiasScaleClamp(v, bias, scale);
-        case GX.TevOp.COMP_R8_GT:
-            return `TevCompR8GT(${a}, ${b}, ${c}) + ${d}`;
+        case GX.TevOp.COMP_R8_GT:     return `((t_TevA.r >  t_TevB.r) ? ${c} : ${zero}) + ${d}`;
+        case GX.TevOp.COMP_R8_EQ:     return `((t_TevA.r == t_TevB.r) ? ${c} : ${zero}) + ${d}`;
+        case GX.TevOp.COMP_GR16_GT:   return `((TevPack16(t_TevA.rg) >  TevPack16(t_TevB.rg)) ? ${c} : ${zero}) + ${d}`;
+        case GX.TevOp.COMP_GR16_EQ:   return `((TevPack16(t_TevA.rg) == TevPack16(t_TevB.rg)) ? ${c} : ${zero}) + ${d}`;
         default:
             throw new Error("whoops");
         }
     }
 
-    private generateTevOpValue(op: GX.TevOp, bias: GX.TevBias, scale: GX.TevScale, clamp: boolean, a: string, b: string, c: string, d: string) {
-        const expr = this.generateTevOp(op, bias, scale, a, b, c, d);
+    private generateTevOpValue(op: GX.TevOp, bias: GX.TevBias, scale: GX.TevScale, clamp: boolean, a: string, b: string, c: string, d: string, zero: string) {
+        const expr = this.generateTevOp(op, bias, scale, a, b, c, d, zero);
 
         if (clamp)
             return `TevSaturate(${expr})`;
@@ -537,21 +548,15 @@ export class GX_Program extends Program {
     }
 
     private generateColorOp(stage: TevStage) {
-        const a = `TevOverflow(${this.generateColorIn(stage, stage.colorInA)})`;
-        const b = `TevOverflow(${this.generateColorIn(stage, stage.colorInB)})`;
-        const c = `TevOverflow(${this.generateColorIn(stage, stage.colorInC)})`;
-        const d = this.generateColorIn(stage, stage.colorInD);
-        const value = this.generateTevOpValue(stage.colorOp, stage.colorBias, stage.colorScale, stage.colorClamp, a, b, c, d);
-        return `${this.generateTevRegister(stage.colorRegId)}.rgb = ${value}`;
+        const a = `t_TevA.rgb`, b = `t_TevB.rgb`, c = `t_TevC.rgb`, d = `t_TevD.rgb`, zero = `vec3(0)`;
+        const value = this.generateTevOpValue(stage.colorOp, stage.colorBias, stage.colorScale, stage.colorClamp, a, b, c, d, zero);
+        return `${this.generateTevRegister(stage.colorRegId)}.rgb = ${value};`;
     }
 
     private generateAlphaOp(stage: TevStage) {
-        const a = `TevOverflow(${this.generateAlphaIn(stage, stage.alphaInA)})`;
-        const b = `TevOverflow(${this.generateAlphaIn(stage, stage.alphaInB)})`;
-        const c = `TevOverflow(${this.generateAlphaIn(stage, stage.alphaInC)})`;
-        const d = this.generateAlphaIn(stage, stage.alphaInD);
-        const value = this.generateTevOpValue(stage.alphaOp, stage.alphaBias, stage.alphaScale, stage.alphaClamp, a, b, c, d);
-        return `${this.generateTevRegister(stage.alphaRegId)}.a = ${value}`;
+        const a = `t_TevA.a`, b = `t_TevB.a`, c = `t_TevC.a`, d = `t_TevD.a`, zero = '0.0';
+        const value = this.generateTevOpValue(stage.alphaOp, stage.alphaBias, stage.alphaScale, stage.alphaClamp, a, b, c, d, zero);
+        return `${this.generateTevRegister(stage.alphaRegId)}.a = ${value};`;
     }
 
     private generateTevTexCoordWrapN(texCoord: string, wrap: GX.IndTexWrap): string {
@@ -644,8 +649,9 @@ export class GX_Program extends Program {
     // colorIn: ${stage.colorInA} ${stage.colorInB} ${stage.colorInC} ${stage.colorInD}  colorOp: ${stage.colorOp} colorBias: ${stage.colorBias} colorScale: ${stage.colorScale} colorClamp: ${stage.colorClamp} colorRegId: ${stage.colorRegId}
     // alphaIn: ${stage.alphaInA} ${stage.alphaInB} ${stage.alphaInC} ${stage.alphaInD}  alphaOp: ${stage.alphaOp} alphaBias: ${stage.alphaBias} alphaScale: ${stage.alphaScale} alphaClamp: ${stage.alphaClamp} alphaRegId: ${stage.alphaRegId}
     // texCoordId: ${stage.texCoordId} texMap: ${stage.texMap} channelId: ${stage.channelId}
-    ${this.generateColorOp(stage)};
-    ${this.generateAlphaOp(stage)};`;
+    ${this.generateTevInputs(stage)}
+    ${this.generateColorOp(stage)}
+    ${this.generateAlphaOp(stage)}`;
     }
 
     private generateTevStages(tevStages: TevStage[]) {
@@ -803,10 +809,10 @@ vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
 vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
 float TevSaturate(float a) { return clamp(a, 0.0, 1.0); }
-vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
 float TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }
-vec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }
-float TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }
+vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
+float TevPack16(vec2 a) { return dot(a, vec2(1.0, 256.0)); }
+float TevPack24(vec3 a) { return dot(a, vec3(1.0, 256.0, 256.0 * 256.0)); }
 
 void main() {
     vec4 s_kColor0   = u_KonstColor[0]; // ${this.generateColorConstant(kColors[0])}
@@ -821,10 +827,10 @@ void main() {
 
     vec2 t_TexCoord = vec2(0.0, 0.0);
 ${this.generateIndTexStages(indTexStages)}
+    vec4 t_TevA, t_TevB, t_TevC, t_TevD;
 ${this.generateTevStages(tevStages)}
 
-    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);
-    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);
+    t_ColorPrev = TevOverflow(t_ColorPrev);
 ${this.generateAlphaTest(alphaTest)}
     gl_FragColor = t_ColorPrev;
 }
