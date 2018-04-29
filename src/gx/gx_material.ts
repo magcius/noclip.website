@@ -228,7 +228,7 @@ export class GX_Program extends Program {
         if (chan.lightingEnabled) {
             // XXX(jstpierre): This is awful but seems to work.
             const ambSource = this.generateAmbientSource(chan, i);
-            return `(2.0 * ${ambSource} * ${matSource})`;
+            return `(0.5 * (${ambSource} + 1.0) * ${matSource})`;
         } else {
             // If lighting is off, it's the material color.
             return matSource;
