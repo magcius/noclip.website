@@ -207,9 +207,9 @@ class BMDRenderer {
                     const time = state.time / 30;
                     const value = anim.values[(time | 0) % anim.values.length];
                     if (anim.property === 'x')
-                        mat3.translate(texAnimMat, texAnimMat, [0, value]);
+                        mat3.translate(texAnimMat, texAnimMat, [-value, 0]);
                     else if (anim.property === 'y')
-                        mat3.translate(texAnimMat, texAnimMat, [value, 0]);
+                        mat3.translate(texAnimMat, texAnimMat, [0, value]);
                     else if (anim.property === 'scale')
                         mat3.scale(texAnimMat, texAnimMat, [value, value]);
                     else if (anim.property === 'rotation')

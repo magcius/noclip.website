@@ -8418,9 +8418,9 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                     var time = state.time / 30;
                                     var value = anim.values[(time | 0) % anim.values.length];
                                     if (anim.property === 'x')
-                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [0, value]);
+                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [-value, 0]);
                                     else if (anim.property === 'y')
-                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [value, 0]);
+                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [0, value]);
                                     else if (anim.property === 'scale')
                                         gl_matrix_7.mat3.scale(texAnimMat, texAnimMat, [value, value]);
                                     else if (anim.property === 'rotation')
