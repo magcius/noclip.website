@@ -4259,7 +4259,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_16, cont
                     if (chan.lightingEnabled) {
                         // XXX(jstpierre): This is awful but seems to work.
                         var ambSource = this.generateAmbientSource(chan, i);
-                        return "(0.5 * (" + ambSource + " + 1.0) * " + matSource + ")";
+                        return "(0.5 * (" + ambSource + " + 0.6) * " + matSource + ")";
                     }
                     else {
                         // If lighting is off, it's the material color.
@@ -7879,17 +7879,32 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                     return { type: 'Light', klass: klass, name: name, size: size, x: x, y: y, z: z, r: r, g: g, b: b, a: a, intensity: intensity };
                 }
             // Models
+            case 'BananaTree':
             case 'Coin':
             case 'CoinRed':
-            case 'Palm':
-            case 'PalmOugi':
+            case 'Fence':
+            case 'FenceInner':
+            case 'FenceRevolve':
+            case 'FenceWaterH':
+            case 'FenceWaterV':
+            case 'FerrisWheel':
+            case 'IceBlock':
             case 'Manhole':
             case 'MapObjBase':
             case 'MapStaticObj':
+            case 'Merrygoround':
+            case 'MonumentShine':
+            case 'Palm':
+            case 'PalmNatume':
+            case 'PalmOugi':
+            case 'PinnaDoor':
+            case 'ShellCup':
             case 'WoodBarrel':
             case 'WoodBlock':
+            case 'Viking':
                 {
-                    var _e = __read(unpack(params, 'ffffff fffsi s'), 13), paramsSize = _e[0], x = _e[1], y = _e[2], z = _e[3], rotationX = _e[4], rotationY = _e[5], rotationZ = _e[6], scaleX = _e[7], scaleY = _e[8], scaleZ = _e[9], manager = _e[10], flags = _e[11], model = _e[12];
+                    // XXX(jstpierre): MapObjBase AirportPole seemingly has extra junk after it?
+                    var _e = __read(unpack(params, 'ffffff fffsi s.'), 13), paramsSize = _e[0], x = _e[1], y = _e[2], z = _e[3], rotationX = _e[4], rotationY = _e[5], rotationZ = _e[6], scaleX = _e[7], scaleY = _e[8], scaleZ = _e[9], manager = _e[10], flags = _e[11], model = _e[12];
                     return { type: 'Model', klass: klass, name: name, size: size, x: x, y: y, z: z, rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ, manager: manager, model: model };
                 }
             // Extra unk junk
@@ -7914,6 +7929,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                     return { type: 'Model', klass: klass, name: name, size: size, x: x, y: y, z: z, rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ, manager: manager, model: model };
                 }
             case 'Billboard':
+            case 'BrickBlock':
             case 'DolWeathercock':
             case 'WoodBox':
                 {
@@ -8107,11 +8123,22 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                         return scenes_5.createScene(gl, bmdFile, null, null, bmtFile);
                     }
                     var modelLookup = [
+                        { k: 'BananaTree', m: 'BananaTree', p: 'mapobj/bananatree' },
+                        { k: 'BrickBlock', m: 'BrickBlock', p: 'mapobj/brickblock' },
                         { k: 'Coin', m: 'coin', p: 'mapobj/coin' },
                         { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
                         { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
+                        { k: 'CoinRed', m: 'coin_red', p: 'mapobj/coin_red' },
                         { k: 'CoinBlue', m: 'coin_blue', p: 'mapobj/coin_blue' },
                         { k: 'DolWeathercock', m: 'dptWeathercock', p: 'mapobj/dptweathercock' },
+                        { k: 'Fence', m: 'fence_normal', p: 'mapobj/fence_normal' },
+                        { k: 'Fence', m: 'fence3x3', p: 'mapobj/fence_half' },
+                        { k: 'FenceRevolve', m: 'fence_revolve', p: 'mapobj/fence_revolve_outer' },
+                        { k: 'FenceInner', m: 'fenceInnerGreen', p: 'mapobj/fenceinnergreen' },
+                        { k: 'FenceWaterH', m: 'FenceWaterH', p: 'mapobj/fencewaterh' },
+                        { k: 'FenceWaterV', m: 'FenceWaterV', p: 'mapobj/fencewaterv' },
+                        { k: 'FerrisWheel', m: 'FerrisWheel', p: 'mapobj/ferriswheel' },
+                        { k: 'IceBlock', m: 'IceBlock', p: 'mapobj/iceblock' },
                         { k: 'Manhole', m: 'manhole', p: 'mapobj/manhole' },
                         { k: 'MapObjBase', m: 'DokanGate', p: 'mapobj/efdokangate' },
                         { k: 'MapObjBase', m: 'ArrowBoardLR', s: function () { return bmtm('mapobj/arrowboardlr.bmd', 'mapobj/arrowboard.bmt'); } },
@@ -8119,11 +8146,16 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                         { k: 'MapObjBase', m: 'ArrowBoardDown', s: function () { return bmtm('mapobj/arrowboarddown.bmd', 'mapobj/arrowboard.bmt'); } },
                         { k: 'MapObjBase', m: 'monte_chair', p: 'mapobj/monte_chair_model' },
                         { k: 'MapStaticObj', m: 'ReflectSky', s: function () { return bmtm('map/map/reflectsky.bmd', 'map/map/sky.bmt'); } },
+                        { k: 'Merrygoround', m: 'merry', p: 'mapobj/merry' },
                         { k: 'NozzleBox', m: 'NozzleBox', p: 'mapobj/nozzlebox' },
                         { k: 'Palm', m: 'palmNormal', p: 'mapobj/palmnormal' },
                         { k: 'Palm', m: 'palmLeaf', p: 'mapobj/palmleaf' },
+                        { k: 'PalmNatume', m: 'palmNatume', p: 'mapobj/palmnatume' },
                         { k: 'PalmOugi', m: 'palmOugi', p: 'mapobj/palmougi' },
+                        { k: 'PinnaDoor', m: 'PinnaDoor', p: 'mapobj/pinnadoor' },
+                        { k: 'ShellCup', m: 'ShellCup', p: 'mapobj/shellcup' },
                         { k: 'Shine', m: 'shine', p: 'mapobj/shine' },
+                        { k: 'Viking', m: 'viking', p: 'mapobj/viking' },
                         { k: 'WoodBox', m: 'WoodBox', p: 'mapobj/kibako' },
                         { k: 'WoodBarrel', m: 'wood_barrel', s: function () { return bmtm('mapobj/barrel_normal.bmd', 'mapobj/barrel.bmt'); } },
                     ];
@@ -8176,7 +8208,6 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                 new SunshineSceneDesc("data/j3d/sms/delfino0.szs", "Delfino Hotel"),
                 new SunshineSceneDesc("data/j3d/sms/mare0.szs", "Noki Bay"),
                 new SunshineSceneDesc("data/j3d/sms/monte3.szs", "Pianta Village"),
-                new SunshineSceneDesc("data/j3d/sms/dolpic_ex0.szs", "Dolpic Ex0"),
             ];
             exports_25("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
