@@ -1309,7 +1309,7 @@ function translateAnimationTrack(data: Float32Array | Int16Array, scale: number,
     // Special exception.
     if (count === 1) {
         const value = data[index];
-        const frames = [ { time: 0, value: value, tangentIn: 0, tangentOut: 0 } ];
+        const frames = [ { time: 0, value: value * scale, tangentIn: 0, tangentOut: 0 } ];
         return { frames };
     } else {
         const frames: AnimationKeyframe[] = [];

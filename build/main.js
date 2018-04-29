@@ -5504,7 +5504,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         // Special exception.
         if (count === 1) {
             var value = data[index];
-            var frames_1 = [{ time: 0, value: value, tangentIn: 0, tangentOut: 0 }];
+            var frames_1 = [{ time: 0, value: value * scale, tangentIn: 0, tangentOut: 0 }];
             return { frames: frames_1 };
         }
         else {
