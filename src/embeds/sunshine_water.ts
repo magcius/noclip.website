@@ -249,11 +249,11 @@ class PlaneShape {
 }
 
 export function createScene(gl: WebGL2RenderingContext, name: string): Progressable<MainScene> {
-    return fetch("data/j3d/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
+    return fetch("data/j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
         const bufferSlice: ArrayBufferSlice = Yaz0.decompress(buffer);
         const rarc = RARC.parse(bufferSlice);
 
-        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
+        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
 
         const bmdFile = rarc.findFile('map/map/sea.bmd');
         const btkFile = rarc.findFile('map/map/sea.btk');

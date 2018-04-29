@@ -1127,12 +1127,16 @@ class J3DFileReaderHelper {
         this.offs = 0x20;
     }
 
-    public maybeNextChunk(maybeChunkId: string): void {
+    public maybeNextChunk(maybeChunkId: string): ArrayBufferSlice {
         const chunkStart = this.offs;
         const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
         const chunkSize = this.view.getUint32(chunkStart + 0x04);
-        if (chunkId === maybeChunkId)
+        if (chunkId === maybeChunkId) {
             this.offs += chunkSize;
+            return this.buffer.subarray(chunkStart, chunkSize);
+        } else {
+            return null;
+        }
     }
 
     public nextChunk(expectedChunkId: string): ArrayBufferSlice {
@@ -1186,7 +1190,11 @@ export class BMT {
         const j3d = new J3DFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D2bmt3');
 
-        bmt.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+        const mat3Chunk = j3d.maybeNextChunk('MAT3');
+        if (mat3Chunk !== null)
+            bmt.mat3 = readMAT3Chunk(mat3Chunk);
+        else
+            bmt.mat3 = null;
         bmt.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
 
         return bmt;
