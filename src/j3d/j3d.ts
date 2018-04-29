@@ -1027,10 +1027,17 @@ class J3DFileReaderHelper {
 
         // Serialized VeRsion N?
         const svr = readString(buffer, 0x10, 0x10);
-        const version = this.magic.charAt(7);
-        assert(svr === `SVR${version}\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF`);
+        assert(svr.slice(0, 3) === 'SVR' && svr.slice(4) == '\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF');
 
         this.offs = 0x20;
+    }
+
+    public maybeNextChunk(maybeChunkId: string): void {
+        const chunkStart = this.offs;
+        const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
+        const chunkSize = this.view.getUint32(chunkStart + 0x04);
+        if (chunkId === maybeChunkId)
+            this.offs += chunkSize;
     }
 
     public nextChunk(expectedChunkId: string): ArrayBufferSlice {
@@ -1052,11 +1059,12 @@ export class BMD {
 
         bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
         bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
-        j3d.nextChunk('EVP1'); // TODO: implement
+        const evp1 = j3d.nextChunk('EVP1'); // TODO: implement
         bmd.drw1 = readDRW1Chunk(j3d.nextChunk('DRW1'));
         bmd.jnt1 = readJNT1Chunk(j3d.nextChunk('JNT1'));
         bmd.shp1 = readSHP1Chunk(j3d.nextChunk('SHP1'), bmd);
         bmd.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+        const mdl3 = j3d.maybeNextChunk('MDL3');
         bmd.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
 
         return bmd;
@@ -1094,117 +1102,27 @@ export interface AnimationTrack {
     frames: AnimationKeyframe[];
 }
 
-export interface AnimationComponent {
+export interface UVAnimationComponent {
     scale: AnimationTrack;
     rotation: AnimationTrack;
     translation: AnimationTrack;
 }
 
-export interface MaterialAnimationEntry {
+export interface UVAnimationEntry {
     materialName: string;
     remapIndex: number;
     texMtxIndex: number;
     centerS: number;
     centerT: number;
     centerQ: number;
-    s: AnimationComponent;
-    t: AnimationComponent;
-    q: AnimationComponent;
+    s: UVAnimationComponent;
+    t: UVAnimationComponent;
+    q: UVAnimationComponent;
 }
 
-export interface TTK1 {
+interface AnimationBase {
     duration: number;
     loopMode: LoopMode;
-    materialAnimationEntries: MaterialAnimationEntry[];
-}
-
-function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
-    const view = buffer.createDataView();
-    const loopMode: LoopMode = view.getUint8(0x08);
-    const rotationDecimal = view.getUint8(0x09);
-    const duration = view.getUint16(0x0A);
-    const animationCount = view.getUint16(0x0C) / 3;
-    const sCount = view.getUint16(0x0E);
-    const rCount = view.getUint16(0x10);
-    const tCount = view.getUint16(0x12);
-    const animationTableOffs = view.getUint32(0x14);
-    const remapTableOffs = view.getUint32(0x18);
-    const materialNameTableOffs = view.getUint32(0x1C);
-    const texMtxIndexTableOffs = view.getUint32(0x20);
-    const textureCenterTableOffs = view.getUint32(0x24);
-    const sTableOffs = view.getUint32(0x28);
-    const rTableOffs = view.getUint32(0x2C);
-    const tTableOffs = view.getUint32(0x30);
-
-    const rotationScale = Math.pow(2, rotationDecimal) / 32767;
-
-    function convertRotationTable(table: Int16Array): Float32Array {
-        const v = new Float32Array(table.length);
-        for (let i = 0; i < table.length; i++)
-            v[i] = table[i] * rotationScale;
-        return v;
-    }
-
-    const sTable = betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
-    const rTable = convertRotationTable(betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array));
-    const tTable = betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
-
-    const materialNameTable = readStringTable(buffer, materialNameTableOffs);
-
-    let animationTableIdx = animationTableOffs;
-
-    function readAnimationTrack(data: Float32Array): AnimationTrack {
-        const count = view.getUint16(animationTableIdx + 0x00);
-        const index = view.getUint16(animationTableIdx + 0x02);
-        const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
-        animationTableIdx += 0x06;
-
-        // Special exception.
-        if (count === 1) {
-            const value = data[index];
-            const frames = [ { time: 0, value: value, tangentIn: 0, tangentOut: 0 } ];
-            return { frames };
-        } else {
-            const frames: AnimationKeyframe[] = [];
-
-            if (tangent === TangentType.IN) {
-                for (let i = index; i < index + 3 * count; i += 3) {
-                    const time = data[i+0], value = data[i+1], tangentIn = data[i+2], tangentOut = tangentIn;
-                    frames.push({ time, value, tangentIn, tangentOut });
-                }
-            } else if (tangent === TangentType.IN_OUT) {
-                for (let i = index; i < index + 4 * count; i += 4) {
-                    const time = data[i+0], value = data[i+1], tangentIn = data[i+2], tangentOut = data[i+3];
-                    frames.push({ time, value, tangentIn, tangentOut });
-                }
-            }
-
-            return { frames };
-        }
-    }
-
-    function readAnimationComponent(): AnimationComponent {
-        const scale = readAnimationTrack(sTable);
-        const rotation = readAnimationTrack(rTable);
-        const translation = readAnimationTrack(tTable);
-        return { scale, rotation, translation };
-    }
-
-    const materialAnimationEntries: MaterialAnimationEntry[] = [];
-    for (let i = 0; i < animationCount; i++) {
-        const materialName = materialNameTable[i];
-        const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
-        const texMtxIndex = view.getUint8(texMtxIndexTableOffs + i);
-        const centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
-        const centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
-        const centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
-        const s = readAnimationComponent();
-        const t = readAnimationComponent();
-        const q = readAnimationComponent();
-        materialAnimationEntries.push({ materialName, remapIndex, texMtxIndex, centerS, centerT, centerQ, s, t, q });
-    }
-
-    return { duration, loopMode, materialAnimationEntries };
 }
 
 function applyLoopMode(t: number, loopMode: LoopMode) {
@@ -1218,6 +1136,13 @@ function applyLoopMode(t: number, loopMode: LoopMode) {
     case LoopMode.MIRRORED_REPEAT:
         return 1 - Math.abs((t % 2) - 1);
     }
+}
+
+function getAnimFrame(anim: AnimationBase, frame: number): number {
+    const lastFrame = anim.duration - 1;
+    const normTime = frame / lastFrame;
+    const animFrame = applyLoopMode(normTime, anim.loopMode) * lastFrame;
+    return animFrame;
 }
 
 function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number): number {
@@ -1267,6 +1192,95 @@ function sampleAnimationData(track: AnimationTrack, frame: number) {
     return hermiteInterpolate(k0, k1, t);
 }
 
+function translateAnimationTrack(data: Float32Array | Int16Array, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
+    // Special exception.
+    if (count === 1) {
+        const value = data[index];
+        const frames = [ { time: 0, value: value, tangentIn: 0, tangentOut: 0 } ];
+        return { frames };
+    } else {
+        const frames: AnimationKeyframe[] = [];
+
+        if (tangent === TangentType.IN) {
+            for (let i = index; i < index + 3 * count; i += 3) {
+                const time = data[i+0], value = data[i+1] * scale, tangentIn = data[i+2] * scale, tangentOut = tangentIn;
+                frames.push({ time, value, tangentIn, tangentOut });
+            }
+        } else if (tangent === TangentType.IN_OUT) {
+            for (let i = index; i < index + 4 * count; i += 4) {
+                const time = data[i+0], value = data[i+1] * scale, tangentIn = data[i+2] * scale, tangentOut = data[i+3] * scale;
+                frames.push({ time, value, tangentIn, tangentOut });
+            }
+        }
+
+        return { frames };
+    }
+}
+
+export interface TTK1 extends AnimationBase {
+    uvAnimationEntries: UVAnimationEntry[];
+}
+
+function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
+    const view = buffer.createDataView();
+    const loopMode: LoopMode = view.getUint8(0x08);
+    const rotationDecimal = view.getUint8(0x09);
+    const duration = view.getUint16(0x0A);
+    const animationCount = view.getUint16(0x0C) / 3;
+    const sCount = view.getUint16(0x0E);
+    const rCount = view.getUint16(0x10);
+    const tCount = view.getUint16(0x12);
+    const animationTableOffs = view.getUint32(0x14);
+    const remapTableOffs = view.getUint32(0x18);
+    const materialNameTableOffs = view.getUint32(0x1C);
+    const texMtxIndexTableOffs = view.getUint32(0x20);
+    const textureCenterTableOffs = view.getUint32(0x24);
+    const sTableOffs = view.getUint32(0x28);
+    const rTableOffs = view.getUint32(0x2C);
+    const tTableOffs = view.getUint32(0x30);
+
+    const rotationScale = Math.pow(2, rotationDecimal) / 32767;
+
+    const sTable = betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
+    const rTable = betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array);
+    const tTable = betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
+
+    const materialNameTable = readStringTable(buffer, materialNameTableOffs);
+
+    let animationTableIdx = animationTableOffs;
+
+    function readAnimationTrack(data: Int16Array | Float32Array, scale: number) {
+        const count = view.getUint16(animationTableIdx + 0x00);
+        const index = view.getUint16(animationTableIdx + 0x02);
+        const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
+        animationTableIdx += 0x06;
+        return translateAnimationTrack(data, scale, count, index, tangent);
+    }
+
+    function readAnimationComponent(): UVAnimationComponent {
+        const scale = readAnimationTrack(sTable, 1);
+        const rotation = readAnimationTrack(rTable, rotationScale);
+        const translation = readAnimationTrack(tTable, 1);
+        return { scale, rotation, translation };
+    }
+
+    const uvAnimationEntries: UVAnimationEntry[] = [];
+    for (let i = 0; i < animationCount; i++) {
+        const materialName = materialNameTable[i];
+        const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
+        const texMtxIndex = view.getUint8(texMtxIndexTableOffs + i);
+        const centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
+        const centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
+        const centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
+        const s = readAnimationComponent();
+        const t = readAnimationComponent();
+        const q = readAnimationComponent();
+        uvAnimationEntries.push({ materialName, remapIndex, texMtxIndex, centerS, centerT, centerQ, s, t, q });
+    }
+
+    return { duration, loopMode, uvAnimationEntries };
+}
+
 export class BTK {
     public static parse(buffer: ArrayBufferSlice): BTK {
         const btk = new BTK();
@@ -1281,18 +1295,12 @@ export class BTK {
 
     public ttk1: TTK1;
 
-    public findAnimationEntry(materialName: string, texMtxIndex: number) {
-        return this.ttk1.materialAnimationEntries.find((e) => e.materialName === materialName && e.texMtxIndex === texMtxIndex);
-    }
-
     public calcAnimatedTexMtx(dst: mat4, materialName: string, texMtxIndex: number, frame: number): boolean {
         const animationEntry = this.findAnimationEntry(materialName, texMtxIndex);
         if (!animationEntry)
             return false;
 
-        const lastFrame = this.ttk1.duration - 1;
-        const normTime = frame / lastFrame;
-        const animFrame = applyLoopMode(normTime, this.ttk1.loopMode) * lastFrame;
+        const animFrame = getAnimFrame(this.ttk1, frame);
 
         const centerS = animationEntry.centerS;
         const centerT = animationEntry.centerT;
@@ -1305,6 +1313,152 @@ export class BTK {
         createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
         return true;
     }
+
+    private findAnimationEntry(materialName: string, texMtxIndex: number): UVAnimationEntry {
+        return this.ttk1.uvAnimationEntries.find((e) => e.materialName === materialName && e.texMtxIndex === texMtxIndex);
+    }
+}
+
+interface PaletteAnimationEntry {
+    materialName: string;
+    remapIndex: number;
+    colorId: number; // register or constant index
+    r: AnimationTrack;
+    g: AnimationTrack;
+    b: AnimationTrack;
+    a: AnimationTrack;
+}
+
+export interface TRK1 extends AnimationBase {
+    registerAnimationEntries: PaletteAnimationEntry[];
+    konstantAnimationEntries: PaletteAnimationEntry[];
+}
+
+function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
+    const view = buffer.createDataView();
+    const loopMode: LoopMode = view.getUint8(0x08);
+    const duration = view.getUint16(0x0A);
+    const registerColorAnimationTableCount = view.getUint16(0x0C);
+    const konstantColorAnimationTableCount = view.getUint16(0x0E);
+    const registerRCount = view.getUint16(0x10);
+    const registerGCount = view.getUint16(0x12);
+    const registerBCount = view.getUint16(0x14);
+    const registerACount = view.getUint16(0x16);
+    const konstantRCount = view.getUint16(0x18);
+    const konstantGCount = view.getUint16(0x1A);
+    const konstantBCount = view.getUint16(0x1C);
+    const konstantACount = view.getUint16(0x1E);
+    const registerColorAnimationTableOffs = view.getUint32(0x20);
+    const konstantColorAnimationTableOffs = view.getUint32(0x24);
+    const registerRemapTableOffs = view.getUint32(0x28);
+    const konstantRemapTableOffs = view.getUint32(0x2C);
+    const registerNameTableOffs = view.getUint32(0x30);
+    const konstantNameTableOffs = view.getUint32(0x34);
+    const registerROffs = view.getUint32(0x38);
+    const registerGOffs = view.getUint32(0x3C);
+    const registerBOffs = view.getUint32(0x40);
+    const registerAOffs = view.getUint32(0x44);
+    const konstantROffs = view.getUint32(0x48);
+    const konstantGOffs = view.getUint32(0x4C);
+    const konstantBOffs = view.getUint32(0x50);
+    const konstantAOffs = view.getUint32(0x54);
+    const registerNameTable = readStringTable(buffer, registerNameTableOffs);
+    const konstantNameTable = readStringTable(buffer, konstantNameTableOffs);
+
+    let animationTableIdx: number;
+
+    function readAnimationTrack(data: Int16Array) {
+        const count = view.getUint16(animationTableIdx + 0x00);
+        const index = view.getUint16(animationTableIdx + 0x02);
+        const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
+        animationTableIdx += 0x06;
+        return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
+    }
+
+    const registerRTable = betoh(buffer.subarray(registerROffs, registerRCount * 2), 2).createTypedArray(Int16Array);
+    const registerGTable = betoh(buffer.subarray(registerGOffs, registerGCount * 2), 2).createTypedArray(Int16Array);
+    const registerBTable = betoh(buffer.subarray(registerBOffs, registerBCount * 2), 2).createTypedArray(Int16Array);
+    const registerATable = betoh(buffer.subarray(registerAOffs, registerACount * 2), 2).createTypedArray(Int16Array);
+
+    const registerAnimationEntries: PaletteAnimationEntry[] = [];
+
+    animationTableIdx = registerColorAnimationTableOffs;
+    for (let i = 0; i < registerColorAnimationTableCount; i++) {
+        const materialName = registerNameTable[i];
+        const remapIndex = view.getUint16(registerRemapTableOffs + i * 0x02);
+        const r = readAnimationTrack(registerRTable);
+        const g = readAnimationTrack(registerGTable);
+        const b = readAnimationTrack(registerBTable);
+        const a = readAnimationTrack(registerATable);
+        const colorId = view.getUint8(animationTableIdx);
+        animationTableIdx += 0x04;
+        registerAnimationEntries.push({ materialName, remapIndex, colorId, r, g, b, a });
+    }
+
+    const konstantRTable = betoh(buffer.subarray(konstantROffs, konstantRCount * 2), 2).createTypedArray(Int16Array);
+    const konstantGTable = betoh(buffer.subarray(konstantGOffs, konstantGCount * 2), 2).createTypedArray(Int16Array);
+    const konstantBTable = betoh(buffer.subarray(konstantBOffs, konstantBCount * 2), 2).createTypedArray(Int16Array);
+    const konstantATable = betoh(buffer.subarray(konstantAOffs, konstantACount * 2), 2).createTypedArray(Int16Array);
+
+    const konstantAnimationEntries: PaletteAnimationEntry[] = [];
+
+    animationTableIdx = konstantColorAnimationTableOffs;
+    for (let i = 0; i < konstantColorAnimationTableCount; i++) {
+        const materialName = konstantNameTable[i];
+        const remapIndex = view.getUint16(konstantRemapTableOffs + i * 0x02);
+        const r = readAnimationTrack(konstantRTable);
+        const g = readAnimationTrack(konstantGTable);
+        const b = readAnimationTrack(konstantBTable);
+        const a = readAnimationTrack(konstantATable);
+        const colorId = view.getUint8(animationTableIdx);
+        animationTableIdx += 0x04;
+        konstantAnimationEntries.push({ materialName, remapIndex, colorId, r, g, b, a });
+    }
+
+    return { duration, loopMode, registerAnimationEntries, konstantAnimationEntries };
+}
+
+export class BRK {
+    public static parse(buffer: ArrayBufferSlice): BRK {
+        const brk = new BRK();
+
+        const j3d = new J3DFileReaderHelper(buffer);
+        assert(j3d.magic === 'J3D1brk1');
+
+        brk.trk1 = readTRK1Chunk(j3d.nextChunk('TRK1'));
+
+        return brk;
+    }
+
+    public calcColorOverrides(dst: Float32Array, offs: number, materialName: string, frame: number): void {
+        const animFrame = getAnimFrame(this.trk1, frame);
+
+        for (let i = 0; i < 4; i++) {
+            const animationEntry = this.trk1.konstantAnimationEntries.find((e) => e.materialName === materialName && e.colorId === i);
+            if (!animationEntry)
+                continue;
+
+            dst[offs + i*4 + 0] = sampleAnimationData(animationEntry.r, animFrame);
+            dst[offs + i*4 + 1] = sampleAnimationData(animationEntry.g, animFrame);
+            dst[offs + i*4 + 2] = sampleAnimationData(animationEntry.b, animFrame);
+            dst[offs + i*4 + 3] = sampleAnimationData(animationEntry.a, animFrame);
+        }
+        offs += 4*4;
+
+        for (let i = 0; i < 4; i++) {
+            const animationEntry = this.trk1.registerAnimationEntries.find((e) => e.materialName === materialName && e.colorId === i);
+            if (!animationEntry)
+                continue;
+
+            dst[offs + i*4 + 0] = sampleAnimationData(animationEntry.r, animFrame);
+            dst[offs + i*4 + 1] = sampleAnimationData(animationEntry.g, animFrame);
+            dst[offs + i*4 + 2] = sampleAnimationData(animationEntry.b, animFrame);
+            dst[offs + i*4 + 3] = sampleAnimationData(animationEntry.a, animFrame);
+        }
+        offs += 4*4;
+    }
+
+    public trk1: TRK1;
 }
 
 export class BMT {

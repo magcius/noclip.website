@@ -9,7 +9,7 @@ import * as UI from '../ui';
 
 import * as GX from '../gx/gx_enum';
 
-import { BMD, BMT, BTK, BTI_Texture, BTI, TEX1_TextureData } from './j3d';
+import { BMD, BMT, BTK, BTI_Texture, BTI, TEX1_TextureData, BRK } from './j3d';
 import * as RARC from './rarc';
 import { Scene, TextureOverride } from './render';
 import { RenderState, ColorTarget } from '../render';
@@ -23,11 +23,12 @@ function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     return textures;
 }
 
-function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: TEX1_TextureData[]) {
+function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: TEX1_TextureData[]) {
     const bmd = BMD.parse(bmdFile.buffer);
     const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
+    const brk = brkFile ? BRK.parse(brkFile.buffer) : null;
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const scene = new Scene(gl, bmd, btk, bmt, extraTextures);
+    const scene = new Scene(gl, bmd, btk, brk, bmt, extraTextures);
     return scene;
 }
 
@@ -36,8 +37,9 @@ function createScenesFromRARC(gl: WebGL2RenderingContext, rarcName: string, rarc
     const scenes = bmdFiles.map((bmdFile) => {
         const basename = bmdFile.name.split('.')[0];
         const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
+        const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`);
         const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
-        const scene = createScene(gl, bmdFile, btkFile, bmtFile, extraTextures);
+        const scene = createScene(gl, bmdFile, btkFile, brkFile, bmtFile, extraTextures);
         scene.name = `${rarcName}/${basename}`;
         return scene;
     });
@@ -154,7 +156,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 if (!bmdFile)
                     return null;
                 const btkFile = stageRarc.findFile(`btk/${basename}.btk`);
-                const scene = createScene(gl, bmdFile, btkFile, null, extraTextures);
+                const brkFile = stageRarc.findFile(`brk/${basename}.brk`);
+                const scene = createScene(gl, bmdFile, btkFile, brkFile, null, extraTextures);
                 scene.setIsSkybox(true);
                 return scene;
             }).filter((s) => !!s);

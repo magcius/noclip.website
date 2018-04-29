@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray, BRK } from './j3d';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
@@ -167,6 +167,7 @@ export class Command_Material {
     private static textureScratch = new Int32Array(8);
 
     public bmd: BMD;
+    public brk: BRK;
     public btk: BTK;
     public bmt: BMT;
     public material: MaterialEntry;
@@ -184,6 +185,7 @@ export class Command_Material {
         this.name = material.name;
         this.scene = scene;
         this.bmd = scene.bmd;
+        this.brk = scene.brk;
         this.btk = scene.btk;
         this.bmt = scene.bmt;
         this.material = material;
@@ -199,6 +201,8 @@ export class Command_Material {
 
         if (!this.scene.currentMaterialCommand.visible)
             return;
+
+        const animationFrame = this.scene.getTimeInFrames(state.time);
 
         const gl = state.gl;
 
@@ -237,6 +241,11 @@ export class Command_Material {
             materialParamsData[offs + i*4 + 2] = color.b;
             materialParamsData[offs + i*4 + 3] = alpha;
         }
+
+        if (this.brk !== null) {
+            this.brk.calcColorOverrides(materialParamsData, 4*2 + 4*2, this.material.name, animationFrame);
+        }
+
         offs += 4*12;
 
         // Bind our texture matrices.
@@ -247,11 +256,10 @@ export class Command_Material {
                 continue;
 
             let finalMatrix = matrixScratch;
-            if (this.btk && this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, this.scene.getTimeInFrames(state.time))) {
-                ;
-            } else {
-                mat4.copy(finalMatrix, texMtx.matrix);
-            }
+            mat4.copy(finalMatrix, texMtx.matrix);
+
+            if (this.btk !== null)
+                this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, animationFrame);
 
             switch(texMtx.type) {
             case 0x00: // Normal. Does nothing.
@@ -455,10 +463,12 @@ export class Scene implements Viewer.Scene {
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
 
+    // TODO(jstpierre): SceneLoader. This constructor is getting unwieldy.
     constructor(
         gl: WebGL2RenderingContext,
         public bmd: BMD,
         public btk: BTK,
+        public brk: BRK,
         public bmt: BMT,
         public extraTextures: TEX1_TextureData[] = [],
     ) {
