@@ -32,26 +32,29 @@ class SeaPlaneScene implements Scene {
     public bmd: BMD;
     public btk: BTK;
 
+    public sceneParamsBuffer: WebGLBuffer;
+
     public animationScale: number = 5;
 
     // Play make-believe for Command_Material.
+    public brk: BRK = null;
+    public colorOverrides: GX_Material.Color[] = [];
+    public alphaOverrides: number[] = [];
+    public currentMaterialCommand: Command_Material;
+
+    // Play make-believe for translateTextures
+    public bmt: BMT = null;
+
     private tex1TextureDatas: TEX1_TextureData[];
     private tex1Samplers: TEX1_Sampler[];
     private glSamplers: WebGLSampler[];
     private glTextures: WebGLTexture[];
 
-    public bmt: BMT = null;
-    public brk: BRK = null;
-    public isSkybox: boolean = false;
-    public useMaterialTexMtx: boolean = false;
     public fps: number = 30;
     public attrScaleData: Float32Array;
-    public colorOverrides: GX_Material.Color[] = [];
-    public alphaOverrides: number[] = [];
 
     private seaCmd: Command_Material;
     private plane: PlaneShape;
-    private sceneParamsBuffer: WebGLBuffer;
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, configName: string) {
         this.bmd = bmd;
@@ -106,8 +109,7 @@ class SeaPlaneScene implements Scene {
             }
         }
 
-        const scene = this as any; // Play make-believe.
-        const cmd = new Command_Material(gl, scene, material);
+        const cmd = new Command_Material(gl, this, material);
 
         if (configName.includes('nomip')) {
             for (const sampler of this.glSamplers) {
@@ -146,6 +148,7 @@ class SeaPlaneScene implements Scene {
     public getTimeInFrames(milliseconds: number) {
         return (milliseconds / 1000) * this.fps * this.animationScale;
     }
+
     public getTextureBindData(texIndex: number): TextureBindData {
         const tex1Sampler = this.tex1Samplers[texIndex];
 
@@ -163,7 +166,6 @@ class SeaPlaneScene implements Scene {
             lodBias: tex1Sampler.lodBias,
         };
     }
-
 }
 
 class PlaneShape {

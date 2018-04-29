@@ -6492,7 +6492,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.bmd = scene.bmd;
                     this.brk = scene.brk;
                     this.btk = scene.btk;
-                    this.bmt = scene.bmt;
                     this.material = material;
                     this.program = new GX_Material.GX_Program(material.gxMaterial);
                     this.program.name = this.name;
@@ -15970,13 +15969,13 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             SeaPlaneScene = /** @class */ (function () {
                 function SeaPlaneScene(gl, bmd, btk, configName) {
                     this.animationScale = 5;
-                    this.bmt = null;
+                    // Play make-believe for Command_Material.
                     this.brk = null;
-                    this.isSkybox = false;
-                    this.useMaterialTexMtx = false;
-                    this.fps = 30;
                     this.colorOverrides = [];
                     this.alphaOverrides = [];
+                    // Play make-believe for translateTextures
+                    this.bmt = null;
+                    this.fps = 30;
                     this.bmd = bmd;
                     this.btk = btk;
                     this.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(function () { return 1; }));
@@ -16020,8 +16019,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                             gxMaterial.tevStages.length = 1;
                         }
                     }
-                    var scene = this; // Play make-believe.
-                    var cmd = new render_25.Command_Material(gl, scene, material);
+                    var cmd = new render_25.Command_Material(gl, this, material);
                     if (configName.includes('nomip')) {
                         try {
                             for (var _a = __values(this.glSamplers), _b = _a.next(); !_b.done; _b = _a.next()) {

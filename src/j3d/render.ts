@@ -153,6 +153,19 @@ class Command_Shape {
 }
 
 const materialParamsData = new Float32Array(4*2 + 4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8);
+
+interface Command_MaterialScene {
+    bmd: BMD;
+    btk: BTK;
+    brk: BRK;
+    currentMaterialCommand: Command_Material;
+    getTimeInFrames(milliseconds: number): number;
+    colorOverrides: GX_Material.Color[];
+    alphaOverrides: number[];
+    getTextureBindData(i: number): TextureBindData;
+    sceneParamsBuffer: WebGLBuffer;
+}
+
 export class Command_Material {
     private static matrixScratch = mat4.create();
     private static textureScratch = new Int32Array(8);
@@ -160,25 +173,23 @@ export class Command_Material {
     public bmd: BMD;
     public brk: BRK;
     public btk: BTK;
-    public bmt: BMT;
     public material: MaterialEntry;
 
     public name: string;
     public visible: boolean = true;
 
-    private scene: Scene;
+    private scene: Command_MaterialScene;
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
 
     private materialParamsBuffer: WebGLBuffer;
 
-    constructor(gl: WebGL2RenderingContext, scene: Scene, material: MaterialEntry) {
+    constructor(gl: WebGL2RenderingContext, scene: Command_MaterialScene, material: MaterialEntry) {
         this.name = material.name;
         this.scene = scene;
         this.bmd = scene.bmd;
         this.brk = scene.brk;
         this.btk = scene.btk;
-        this.bmt = scene.bmt;
         this.material = material;
         this.program = new GX_Material.GX_Program(material.gxMaterial);
         this.program.name = this.name;
