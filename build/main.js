@@ -4707,8 +4707,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         }
         return strings;
     }
-    function readINF1Chunk(bmd, buffer, chunkStart, chunkSize) {
-        var view = buffer.createDataView(chunkStart, chunkSize);
+    function readINF1Chunk(buffer) {
+        var view = buffer.createDataView();
         // unk
         var packetCount = view.getUint32(0x0C);
         var vertexCount = view.getUint32(0x10);
@@ -4744,10 +4744,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             }
         }
         util_7.assert(parentStack.length === 1);
-        bmd.inf1 = { sceneGraph: parentStack.pop() };
+        return { sceneGraph: parentStack.pop() };
     }
-    function readVTX1Chunk(bmd, buffer, chunkStart, chunkSize) {
-        var view = buffer.createDataView(chunkStart, chunkSize);
+    function readVTX1Chunk(buffer) {
+        var view = buffer.createDataView();
         var formatOffs = view.getUint32(0x08);
         var dataOffsLookupTable = 0x0C;
         // Data tables are stored in this order. Assumed to be hardcoded in a
@@ -4790,7 +4790,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var dataOffsLookupTableEnd = dataOffsLookupTable + dataTables.length * 0x04;
             var dataStart = view.getUint32(dataOffsLookupTableEntry);
             var dataEnd = getDataEnd(dataOffsLookupTableEntry, dataOffsLookupTableEnd);
-            var dataOffs = chunkStart + dataStart;
+            var dataOffs = dataStart;
             var dataSize = dataEnd - dataStart;
             var compSize = gx_displaylist_1.getComponentSize(compType);
             var compCount = gx_displaylist_1.getNumComponents(vtxAttrib, compCnt);
@@ -4798,7 +4798,6 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var vertexArray = { vtxAttrib: vtxAttrib, compType: compType, compCount: compCount, compCnt: compCnt, scale: scale, dataOffs: dataOffs, dataSize: dataSize, buffer: vtxDataBuffer };
             vertexArrays.set(vtxAttrib, vertexArray);
         }
-        bmd.vtx1 = { vertexArrays: vertexArrays };
         function getDataEnd(dataOffsLookupTableEntry, dataOffsLookupTableEnd) {
             var offs = dataOffsLookupTableEntry + 0x04;
             while (offs < dataOffsLookupTableEnd) {
@@ -4807,12 +4806,12 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     return dataOffs;
                 offs += 0x04;
             }
-            // If we can't find anything in the array, the chunks end at the chunk size.
-            return chunkSize;
+            return buffer.byteLength;
         }
+        return { vertexArrays: vertexArrays };
     }
-    function readDRW1Chunk(bmd, buffer, chunkStart, chunkSize) {
-        var view = buffer.createDataView(chunkStart, chunkSize);
+    function readDRW1Chunk(buffer) {
+        var view = buffer.createDataView();
         var weightedJointCount = view.getUint16(0x08);
         var isWeightedTableOffs = view.getUint32(0x0C);
         var jointIndexTableOffs = view.getUint32(0x10);
@@ -4825,10 +4824,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var jointIndex = view.getUint16(jointIndexTableOffs + i * 0x02);
             weightedJoints.push({ isWeighted: isWeighted, jointIndex: jointIndex });
         }
-        bmd.drw1 = { weightedJoints: weightedJoints, isAnyWeighted: isAnyWeighted };
+        return { weightedJoints: weightedJoints, isAnyWeighted: isAnyWeighted };
     }
-    function readJNT1Chunk(bmd, buffer, chunkStart, chunkSize) {
-        var view = buffer.createDataView(chunkStart, chunkSize);
+    function readJNT1Chunk(buffer) {
+        var view = buffer.createDataView();
         var boneDataCount = view.getUint16(0x08);
         util_7.assert(view.getUint16(0x0A) === 0xFFFF);
         var boneDataTableOffs = view.getUint32(0x0C);
@@ -4837,7 +4836,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         for (var i = 0; i < boneDataCount; i++)
             remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
         var nameTableOffs = view.getUint32(0x14);
-        var nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
+        var nameTable = readStringTable(buffer, nameTableOffs);
         var q = gl_matrix_4.quat.create();
         var bones = [];
         var boneDataTableIdx = boneDataTableOffs;
@@ -4859,7 +4858,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             bones.push({ name: name_1, matrix: matrix });
             boneDataTableIdx += 0x40;
         }
-        bmd.jnt1 = { remapTable: remapTable, bones: bones };
+        return { remapTable: remapTable, bones: bones };
     }
     function readIndex(view, offs, type) {
         switch (type) {
@@ -4871,8 +4870,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 throw new Error("Unknown index data type " + type + "!");
         }
     }
-    function readSHP1Chunk(bmd, buffer, chunkStart, chunkSize) {
-        var view = buffer.createDataView(chunkStart, chunkSize);
+    function readSHP1Chunk(buffer, bmd) {
+        var view = buffer.createDataView();
         var shapeCount = view.getUint16(0x08);
         var shapeTableOffs = view.getUint32(0x0C);
         var attribTableOffs = view.getUint32(0x18);
@@ -4955,10 +4954,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 var packetMatrixDataOffs = matrixDataOffs + (firstMatrix + j) * 0x08;
                 var matrixCount = view.getUint16(packetMatrixDataOffs + 0x02);
                 var matrixFirstIndex = view.getUint32(packetMatrixDataOffs + 0x04);
-                var packetMatrixTableOffs = chunkStart + matrixTableOffs + matrixFirstIndex * 0x02;
+                var packetMatrixTableOffs = matrixTableOffs + matrixFirstIndex * 0x02;
                 var packetMatrixTableSize = matrixCount * 0x02;
                 var weightedJointTable = endian_1.betoh(buffer.subarray(packetMatrixTableOffs, packetMatrixTableSize), 2).createTypedArray(Uint16Array);
-                var srcOffs = chunkStart + packetStart;
+                var srcOffs = packetStart;
                 var subBuffer = buffer.subarray(srcOffs, packetSize);
                 var loadedSubData = vtxLoader.runVertices(vtxArrays, subBuffer);
                 loadedDatas.push(loadedSubData);
@@ -4976,8 +4975,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             shapes.push({ displayFlags: displayFlags, indexData: indexData, packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, packets: packets });
             shapeIdx += 0x28;
         }
-        var shp1 = { shapes: shapes };
-        bmd.shp1 = shp1;
+        return { shapes: shapes };
         var e_17, _d;
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
@@ -5006,8 +5004,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var a = view.getInt16(srcOffs + 0x06) / 255;
         return new GX_Material.Color(r, g, b, a);
     }
-    function readMAT3Chunk(bmd, buffer, chunkStart, chunkSize) {
-        var view = buffer.createDataView(chunkStart, chunkSize);
+    function readMAT3Chunk(buffer) {
+        var view = buffer.createDataView();
         var materialCount = view.getUint16(0x08);
         var remapTableOffs = view.getUint32(0x10);
         var remapTable = [];
@@ -5015,7 +5013,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
         var maxIndex = Math.max.apply(null, remapTable);
         var nameTableOffs = view.getUint32(0x14);
-        var nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
+        var nameTable = readStringTable(buffer, nameTableOffs);
         var indirectTableOffset = view.getUint32(0x18);
         var cullModeTableOffs = view.getUint32(0x1C);
         var materialColorTableOffs = view.getUint32(0x20);
@@ -5280,7 +5278,6 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             });
             materialEntryIdx += 0x014C;
         }
-        bmd.mat3 = { remapTable: remapTable, materialEntries: materialEntries };
         function readColorChannel(tableOffs, colorChanIndex) {
             var colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
             var lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
@@ -5332,6 +5329,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var texMtx = { type: type, projection: projection, projectionMatrix: projectionMatrix, matrix: matrix };
             return texMtx;
         }
+        return { remapTable: remapTable, materialEntries: materialEntries };
     }
     function readBTI_Texture(buffer, name) {
         var view = buffer.createDataView();
@@ -5356,18 +5354,18 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             data = buffer.slice(dataOffs);
         return { name: name, format: format, width: width, height: height, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter, minLOD: minLOD, maxLOD: maxLOD, mipCount: mipCount, lodBias: lodBias, data: data };
     }
-    function readTEX1Chunk(bmd, buffer, chunkStart, chunkSize) {
-        var view = buffer.createDataView(chunkStart, chunkSize);
+    function readTEX1Chunk(buffer) {
+        var view = buffer.createDataView();
         var textureCount = view.getUint16(0x08);
         var textureHeaderOffs = view.getUint32(0x0C);
         var nameTableOffs = view.getUint32(0x10);
-        var nameTable = readStringTable(buffer, chunkStart + nameTableOffs);
+        var nameTable = readStringTable(buffer, nameTableOffs);
         var samplers = [];
         var textureDatas = [];
         var _loop_3 = function (i) {
             var textureIdx = textureHeaderOffs + i * 0x20;
             var name_3 = nameTable[i];
-            var btiTexture = readBTI_Texture(buffer.slice(chunkStart + textureIdx), name_3);
+            var btiTexture = readBTI_Texture(buffer.slice(textureIdx), name_3);
             var textureDataIndex = -1;
             // Try to find existing texture data.
             if (btiTexture.data !== null) {
@@ -5403,10 +5401,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         for (var i = 0; i < textureCount; i++) {
             _loop_3(i);
         }
-        bmd.tex1 = { textureDatas: textureDatas, samplers: samplers };
+        return { textureDatas: textureDatas, samplers: samplers };
     }
-    function readTTK1Chunk(btk, buffer, chunkStart, chunkSize) {
-        var view = buffer.createDataView(chunkStart, chunkSize);
+    function readTTK1Chunk(buffer) {
+        var view = buffer.createDataView();
         var loopMode = view.getUint8(0x08);
         var rotationDecimal = view.getUint8(0x09);
         var duration = view.getUint16(0x0A);
@@ -5419,9 +5417,9 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var materialNameTableOffs = view.getUint32(0x1C);
         var texMtxIndexTableOffs = view.getUint32(0x20);
         var textureCenterTableOffs = view.getUint32(0x24);
-        var sTableOffs = chunkStart + view.getUint32(0x28);
-        var rTableOffs = chunkStart + view.getUint32(0x2C);
-        var tTableOffs = chunkStart + view.getUint32(0x30);
+        var sTableOffs = view.getUint32(0x28);
+        var rTableOffs = view.getUint32(0x2C);
+        var tTableOffs = view.getUint32(0x30);
         var rotationScale = Math.pow(2, rotationDecimal) / 32767;
         function convertRotationTable(table) {
             var v = new Float32Array(table.length);
@@ -5432,7 +5430,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var sTable = endian_1.betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
         var rTable = convertRotationTable(endian_1.betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array));
         var tTable = endian_1.betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
-        var materialNameTable = readStringTable(buffer, chunkStart + materialNameTableOffs);
+        var materialNameTable = readStringTable(buffer, materialNameTableOffs);
         var animationTableIdx = animationTableOffs;
         function readAnimationTrack(data) {
             var count = view.getUint16(animationTableIdx + 0x00);
@@ -5481,7 +5479,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var q = readAnimationComponent();
             materialAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, texMtxIndex: texMtxIndex, centerS: centerS, centerT: centerT, centerQ: centerQ, s: s, t: t_1, q: q });
         }
-        btk.ttk1 = { duration: duration, loopMode: loopMode, materialAnimationEntries: materialAnimationEntries };
+        return { duration: duration, loopMode: loopMode, materialAnimationEntries: materialAnimationEntries };
     }
     function applyLoopMode(t, loopMode) {
         switch (loopMode) {
@@ -5533,7 +5531,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var t = (frame - k0.time) / (k1.time - k0.time);
         return hermiteInterpolate(k0, k1, t);
     }
-    var gl_matrix_4, ArrayBufferSlice_5, endian_1, util_7, gx_displaylist_1, GX_Material, HierarchyType, t, c, ci, BMD, BTK, BMT, BTI;
+    var gl_matrix_4, ArrayBufferSlice_5, endian_1, util_7, gx_displaylist_1, GX_Material, HierarchyType, t, c, ci, J3DFileReaderHelper, BMD, BTK, BMT, BTI;
     return {
         setters: [
             function (gl_matrix_4_1) {
@@ -5567,39 +5565,45 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             exports_17("HierarchyType", HierarchyType);
             // temp, center, center inverse
             t = gl_matrix_4.mat4.create(), c = gl_matrix_4.mat4.create(), ci = gl_matrix_4.mat4.create();
+            J3DFileReaderHelper = /** @class */ (function () {
+                function J3DFileReaderHelper(buffer) {
+                    this.buffer = buffer;
+                    this.offs = 0x20;
+                    this.view = this.buffer.createDataView();
+                    this.magic = util_7.readString(this.buffer, 0, 8);
+                    this.size = this.view.getUint32(0x08);
+                    this.numChunks = this.view.getUint32(0x0C);
+                    // Serialized VeRsion N?
+                    var svr = util_7.readString(buffer, 0x10, 0x10);
+                    var version = this.magic.charAt(7);
+                    util_7.assert(svr === "SVR" + version + "\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF\u00FF");
+                    this.offs = 0x20;
+                }
+                J3DFileReaderHelper.prototype.nextChunk = function (expectedChunkId) {
+                    var chunkStart = this.offs;
+                    var chunkId = util_7.readString(this.buffer, chunkStart + 0x00, 4);
+                    var chunkSize = this.view.getUint32(chunkStart + 0x04);
+                    util_7.assert(chunkId === expectedChunkId);
+                    this.offs += chunkSize;
+                    return this.buffer.subarray(chunkStart, chunkSize);
+                };
+                return J3DFileReaderHelper;
+            }());
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
                 BMD.parse = function (buffer) {
                     var bmd = new BMD();
-                    var view = buffer.createDataView();
-                    var magic = util_7.readString(buffer, 0, 8);
-                    util_7.assert(magic === 'J3D2bmd3' || magic === 'J3D2bdl4');
-                    var size = view.getUint32(0x08);
-                    var numChunks = view.getUint32(0x0C);
-                    var offs = 0x20;
-                    var parseFuncs = {
-                        INF1: readINF1Chunk,
-                        VTX1: readVTX1Chunk,
-                        EVP1: null,
-                        DRW1: readDRW1Chunk,
-                        JNT1: readJNT1Chunk,
-                        SHP1: readSHP1Chunk,
-                        MAT3: readMAT3Chunk,
-                        TEX1: readTEX1Chunk,
-                        MDL3: null,
-                    };
-                    for (var i = 0; i < numChunks; i++) {
-                        var chunkStart = offs;
-                        var chunkId = util_7.readString(buffer, chunkStart + 0x00, 4);
-                        var chunkSize = view.getUint32(chunkStart + 0x04);
-                        var parseFunc = parseFuncs[chunkId];
-                        if (parseFunc === undefined)
-                            throw new Error("Unknown chunk " + chunkId + "!");
-                        if (parseFunc !== null)
-                            parseFunc(bmd, buffer, chunkStart, chunkSize);
-                        offs += chunkSize;
-                    }
+                    var j3d = new J3DFileReaderHelper(buffer);
+                    util_7.assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
+                    bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
+                    bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
+                    j3d.nextChunk('EVP1'); // TODO: implement
+                    bmd.drw1 = readDRW1Chunk(j3d.nextChunk('DRW1'));
+                    bmd.jnt1 = readJNT1Chunk(j3d.nextChunk('JNT1'));
+                    bmd.shp1 = readSHP1Chunk(j3d.nextChunk('SHP1'), bmd);
+                    bmd.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+                    bmd.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
                     return bmd;
                 };
                 return BMD;
@@ -5610,26 +5614,9 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 }
                 BTK.parse = function (buffer) {
                     var btk = new BTK();
-                    var view = buffer.createDataView();
-                    var magic = util_7.readString(buffer, 0, 8);
-                    util_7.assert(magic === 'J3D1btk1');
-                    var size = view.getUint32(0x08);
-                    var numChunks = view.getUint32(0x0C);
-                    var offs = 0x20;
-                    var parseFuncs = {
-                        TTK1: readTTK1Chunk,
-                    };
-                    for (var i = 0; i < numChunks; i++) {
-                        var chunkStart = offs;
-                        var chunkId = util_7.readString(buffer, chunkStart + 0x00, 4);
-                        var chunkSize = view.getUint32(chunkStart + 0x04);
-                        var parseFunc = parseFuncs[chunkId];
-                        if (parseFunc === undefined)
-                            throw new Error("Unknown chunk " + chunkId + "!");
-                        if (parseFunc !== null)
-                            parseFunc(btk, buffer, chunkStart, chunkSize - 0x04);
-                        offs += chunkSize;
-                    }
+                    var j3d = new J3DFileReaderHelper(buffer);
+                    util_7.assert(j3d.magic === 'J3D1btk1');
+                    btk.ttk1 = readTTK1Chunk(j3d.nextChunk('TTK1'));
                     return btk;
                 };
                 BTK.prototype.findAnimationEntry = function (materialName, texMtxIndex) {
@@ -5661,28 +5648,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 }
                 BMT.parse = function (buffer) {
                     var bmt = new BMT();
-                    var view = buffer.createDataView();
-                    var magic = util_7.readString(buffer, 0, 8);
-                    util_7.assert(magic === 'J3D2bmt3');
-                    var size = view.getUint32(0x08);
-                    var numChunks = view.getUint32(0x0C);
-                    var offs = 0x20;
-                    var parseFuncs = {
-                        MAT3: readMAT3Chunk,
-                        TEX1: readTEX1Chunk,
-                        MDL3: null,
-                    };
-                    for (var i = 0; i < numChunks; i++) {
-                        var chunkStart = offs;
-                        var chunkId = util_7.readString(buffer, chunkStart + 0x00, 4);
-                        var chunkSize = view.getUint32(chunkStart + 0x04);
-                        var parseFunc = parseFuncs[chunkId];
-                        if (parseFunc === undefined)
-                            throw new Error("Unknown chunk " + chunkId + "!");
-                        if (parseFunc !== null)
-                            parseFunc(bmt, buffer, chunkStart, chunkSize);
-                        offs += chunkSize;
-                    }
+                    var j3d = new J3DFileReaderHelper(buffer);
+                    util_7.assert(j3d.magic === 'J3D2bmt3');
+                    bmt.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+                    bmt.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
                     return bmt;
                 };
                 return BMT;
