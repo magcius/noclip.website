@@ -5715,8 +5715,13 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     var chunkStart = this.offs;
                     var chunkId = util_7.readString(this.buffer, chunkStart + 0x00, 4);
                     var chunkSize = this.view.getUint32(chunkStart + 0x04);
-                    if (chunkId === maybeChunkId)
+                    if (chunkId === maybeChunkId) {
                         this.offs += chunkSize;
+                        return this.buffer.subarray(chunkStart, chunkSize);
+                    }
+                    else {
+                        return null;
+                    }
                 };
                 J3DFileReaderHelper.prototype.nextChunk = function (expectedChunkId) {
                     var chunkStart = this.offs;
@@ -5760,7 +5765,11 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     var bmt = new BMT();
                     var j3d = new J3DFileReaderHelper(buffer);
                     util_7.assert(j3d.magic === 'J3D2bmt3');
-                    bmt.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+                    var mat3Chunk = j3d.maybeNextChunk('MAT3');
+                    if (mat3Chunk !== null)
+                        bmt.mat3 = readMAT3Chunk(mat3Chunk);
+                    else
+                        bmt.mat3 = null;
                     bmt.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
                     return bmt;
                 };
@@ -6982,7 +6991,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         finally { if (e_24) throw e_24.error; }
                     }
                     this.translateTextures(gl);
-                    var mat3 = this.bmt !== null ? this.bmt.mat3 : this.bmd.mat3;
+                    var mat3 = (this.bmt !== null && this.bmt.mat3 !== null) ? this.bmt.mat3 : this.bmd.mat3;
                     this.materialCommands = mat3.materialEntries.map(function (material) {
                         return new Command_Material(gl, _this, material);
                     });
@@ -6995,7 +7004,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     var e_23, _c, e_24, _f;
                 };
                 Scene.prototype.translateSceneGraph = function (node, commandList) {
-                    var mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
+                    var mat3 = (this.bmt !== null && this.bmt.mat3 !== null) ? this.bmt.mat3 : this.bmd.mat3;
                     switch (node.type) {
                         case j3d_1.HierarchyType.Shape:
                             commandList.push(this.shapeCommands[node.shapeIdx]);
@@ -7749,7 +7758,7 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
         }
     };
 });
-System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/scenes", "gx/gx_material"], function (exports_25, context_25) {
+System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/scenes", "gx/gx_material", "gl-matrix"], function (exports_25, context_25) {
     "use strict";
     var __moduleName = context_25 && context_25.id;
     function collectTextures(scenes) {
@@ -7771,7 +7780,165 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
         return textures;
         var e_30, _a;
     }
-    var util_14, render_8, Yaz0, RARC, scenes_5, gx_material_2, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
+    function unpack(buffer, sig) {
+        var view = buffer.createDataView();
+        var result = [];
+        var offs = 0;
+        var allowExtra = false;
+        for (var i = 0; i < sig.length; i++) {
+            switch (sig[i]) {
+                case 'B':
+                    result.push(view.getUint8(offs));
+                    offs += 0x01;
+                    break;
+                case 'I':
+                    result.push(view.getUint32(offs));
+                    offs += 0x04;
+                    break;
+                case 'i':
+                    result.push(view.getInt32(offs));
+                    offs += 0x04;
+                    break;
+                case 'f':
+                    result.push(view.getFloat32(offs));
+                    offs += 0x04;
+                    break;
+                case 's':
+                    var size = view.getUint16(offs);
+                    offs += 0x02;
+                    result.push(util_14.readString(buffer, offs, size, false));
+                    offs += size;
+                    break;
+                case '.':
+                    allowExtra = true;
+                    break;
+                case ' ':
+                    break;
+                default:
+                    util_14.assert(false);
+            }
+        }
+        if (!allowExtra) {
+            util_14.assert(buffer.byteLength === offs);
+        }
+        return __spread([offs], result);
+    }
+    function readSceneBin(buffer) {
+        var offs = 0x00;
+        var view_ = buffer.createDataView();
+        var size = view_.getUint32(offs + 0x00);
+        var view = buffer.createDataView(0x00, size);
+        offs += 0x04;
+        var klassHash = view.getUint16(offs + 0x00);
+        var klassSize = view.getUint16(offs + 0x02);
+        offs += 0x04;
+        var klass = util_14.readString(buffer, offs, klassSize, false);
+        offs += klassSize;
+        var nameHash = view.getUint16(offs + 0x00);
+        var nameSize = view.getUint16(offs + 0x02);
+        offs += 0x04;
+        var name = sjisDecoder.decode(buffer.copyToBuffer(offs, nameSize));
+        offs += nameSize;
+        function readChildren(numChildren) {
+            var children = [];
+            while (numChildren--) {
+                var child = readSceneBin(buffer.slice(offs));
+                children.push(child);
+                offs += child.size;
+            }
+            return children;
+        }
+        var params = buffer.slice(offs, size);
+        switch (klass) {
+            case 'GroupObj':
+            case 'LightAry':
+            case 'Strategy':
+            case 'AmbAry':
+                {
+                    var _a = __read(unpack(params, 'I.'), 2), paramsSize = _a[0], numChildren = _a[1];
+                    offs += paramsSize;
+                    var children = readChildren(numChildren);
+                    return { type: 'Group', klass: klass, name: name, size: size, children: children };
+                }
+            case 'IdxGroup':
+            case 'MarScene':
+                {
+                    var _b = __read(unpack(params, 'II.'), 3), paramsSize = _b[0], flags = _b[1], numChildren = _b[2];
+                    offs += paramsSize;
+                    var children = readChildren(numChildren);
+                    return { type: 'Group', klass: klass, name: name, size: size, children: children };
+                }
+            case 'AmbColor':
+                {
+                    var _c = __read(unpack(params, 'BBBB'), 4), r = _c[0], g = _c[1], b = _c[2], a = _c[3];
+                    return { type: 'AmbColor', klass: klass, name: name, size: size, r: r, g: g, b: b, a: a };
+                }
+            case 'Light':
+                {
+                    var _d = __read(unpack(params, 'fffBBBBf'), 8), x = _d[0], y = _d[1], z = _d[2], r = _d[3], g = _d[4], b = _d[5], a = _d[6], intensity = _d[7];
+                    return { type: 'Light', klass: klass, name: name, size: size, x: x, y: y, z: z, r: r, g: g, b: b, a: a, intensity: intensity };
+                }
+            // Models
+            case 'Coin':
+            case 'CoinRed':
+            case 'Palm':
+            case 'PalmOugi':
+            case 'Manhole':
+            case 'MapObjBase':
+            case 'MapStaticObj':
+            case 'WoodBarrel':
+            case 'WoodBlock':
+                {
+                    var _e = __read(unpack(params, 'ffffff fffsi s'), 13), paramsSize = _e[0], x = _e[1], y = _e[2], z = _e[3], rotationX = _e[4], rotationY = _e[5], rotationZ = _e[6], scaleX = _e[7], scaleY = _e[8], scaleZ = _e[9], manager = _e[10], flags = _e[11], model = _e[12];
+                    return { type: 'Model', klass: klass, name: name, size: size, x: x, y: y, z: z, rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ, manager: manager, model: model };
+                }
+            // Extra unk junk
+            case 'CoinBlue':
+                {
+                    var _f = __read(unpack(params, 'ffffff fffsi s i'), 13), paramsSize = _f[0], x = _f[1], y = _f[2], z = _f[3], rotationX = _f[4], rotationY = _f[5], rotationZ = _f[6], scaleX = _f[7], scaleY = _f[8], scaleZ = _f[9], manager = _f[10], flags = _f[11], model = _f[12];
+                    return { type: 'Model', klass: klass, name: name, size: size, x: x, y: y, z: z, rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ, manager: manager, model: model };
+                }
+            case 'NozzleBox':
+                {
+                    var _g = __read(unpack(params, 'ffffff fffsi s ssff'), 13), paramsSize = _g[0], x = _g[1], y = _g[2], z = _g[3], rotationX = _g[4], rotationY = _g[5], rotationZ = _g[6], scaleX = _g[7], scaleY = _g[8], scaleZ = _g[9], manager = _g[10], flags = _g[11], model = _g[12];
+                    return { type: 'Model', klass: klass, name: name, size: size, x: x, y: y, z: z, rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ, manager: manager, model: model };
+                }
+            case 'Shine':
+                {
+                    var _h = __read(unpack(params, 'ffffff fffsi s sii'), 13), paramsSize = _h[0], x = _h[1], y = _h[2], z = _h[3], rotationX = _h[4], rotationY = _h[5], rotationZ = _h[6], scaleX = _h[7], scaleY = _h[8], scaleZ = _h[9], manager = _h[10], flags = _h[11], model = _h[12];
+                    return { type: 'Model', klass: klass, name: name, size: size, x: x, y: y, z: z, rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ, manager: manager, model: model };
+                }
+            case 'FruitsBoat':
+                {
+                    var _j = __read(unpack(params, 'ffffff fffsi s s'), 13), paramsSize = _j[0], x = _j[1], y = _j[2], z = _j[3], rotationX = _j[4], rotationY = _j[5], rotationZ = _j[6], scaleX = _j[7], scaleY = _j[8], scaleZ = _j[9], manager = _j[10], flags = _j[11], model = _j[12];
+                    return { type: 'Model', klass: klass, name: name, size: size, x: x, y: y, z: z, rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ, manager: manager, model: model };
+                }
+            case 'Billboard':
+            case 'DolWeathercock':
+            case 'WoodBox':
+                {
+                    var _k = __read(unpack(params, 'ffffff fffsI s IffI'), 13), paramsSize = _k[0], x = _k[1], y = _k[2], z = _k[3], rotationX = _k[4], rotationY = _k[5], rotationZ = _k[6], scaleX = _k[7], scaleY = _k[8], scaleZ = _k[9], manager = _k[10], flags = _k[11], model = _k[12];
+                    return { type: 'Model', klass: klass, name: name, size: size, x: x, y: y, z: z, rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ, manager: manager, model: model };
+                }
+            case 'MapObjWaterSpray':
+                {
+                    var _l = __read(unpack(params, 'ffffff fffsI s IIIIII'), 13), paramsSize = _l[0], x = _l[1], y = _l[2], z = _l[3], rotationX = _l[4], rotationY = _l[5], rotationZ = _l[6], scaleX = _l[7], scaleY = _l[8], scaleZ = _l[9], manager = _l[10], flags = _l[11], model = _l[12];
+                    return { type: 'Model', klass: klass, name: name, size: size, x: x, y: y, z: z, rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ, manager: manager, model: model };
+                }
+            default:
+                var warnUnknown = true;
+                // Managers are internal.
+                if (klass.endsWith('Manager') || klass.endsWith('Mgr'))
+                    warnUnknown = false;
+                // Cube maps...
+                if (klass.startsWith('Cube'))
+                    warnUnknown = false;
+                if (warnUnknown)
+                    console.warn("Unknown object class " + klassHash + " " + klass + ", size " + size);
+                return { type: 'Unknown', klass: klass, name: name, size: size };
+        }
+    }
+    var util_14, render_8, Yaz0, RARC, scenes_5, gx_material_2, gl_matrix_7, sjisDecoder, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (util_14_1) {
@@ -7791,9 +7958,13 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
             },
             function (gx_material_2_1) {
                 gx_material_2 = gx_material_2_1;
+            },
+            function (gl_matrix_7_1) {
+                gl_matrix_7 = gl_matrix_7_1;
             }
         ],
         execute: function () {
+            sjisDecoder = new TextDecoder('sjis');
             SunshineRenderer = /** @class */ (function () {
                 function SunshineRenderer(skyScene, mapScene, seaScene, seaIndirectScene, extraScenes, rarc) {
                     if (rarc === void 0) { rarc = null; }
@@ -7871,51 +8042,122 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                     this.id = this.name;
                 }
                 SunshineSceneDesc.createSunshineSceneForBasename = function (gl, rarc, basename, isSkybox) {
-                    var bmdFile = rarc.findFile("map/map/" + basename + ".bmd");
+                    var bmdFile = rarc.findFile(basename + ".bmd");
                     if (!bmdFile)
                         return null;
-                    var btkFile = rarc.findFile("map/map/" + basename + ".btk");
-                    var brkFile = rarc.findFile("map/map/" + basename + ".brk");
-                    var bmtFile = rarc.findFile("map/map/" + basename + ".bmt");
+                    var btkFile = rarc.findFile(basename + ".btk");
+                    var brkFile = rarc.findFile(basename + ".brk");
+                    var bmtFile = rarc.findFile(basename + ".bmt");
                     var scene = scenes_5.createScene(gl, bmdFile, btkFile, brkFile, bmtFile);
                     scene.name = basename;
                     scene.setIsSkybox(isSkybox);
                     return scene;
                 };
                 SunshineSceneDesc.prototype.createScene = function (gl) {
+                    var _this = this;
                     return util_14.fetch(this.path).then(function (result) {
                         var rarc = RARC.parse(Yaz0.decompress(result));
-                        // For those curious, the "actual" way the engine loads files is done through
-                        // the scene description in scene.bin, with the "map/map" paths hardcoded in
-                        // the binary, and for a lot of objects, too. My heuristics below are a cheap
-                        // approximation of the actual scene data...
-                        var skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
-                        var mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map', false);
-                        var seaScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sea', false);
-                        var seaIndirectScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'seaindirect', false);
-                        var extraScenes = [];
+                        var sceneBin = rarc.findFile('map/scene.bin');
+                        var sceneBinObj = readSceneBin(sceneBin.buffer);
+                        var skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
+                        var mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/map', false);
+                        var seaScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sea', false);
+                        var seaIndirectScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/seaindirect', false);
+                        var extraScenes = _this.createSceneBinObjects(gl, rarc, sceneBinObj);
+                        return new SunshineRenderer(skyScene, mapScene, seaScene, seaIndirectScene, extraScenes, rarc);
+                    });
+                };
+                SunshineSceneDesc.prototype.createSceneBinObjects = function (gl, rarc, obj) {
+                    var _this = this;
+                    function flatten(L) {
+                        var R = [];
                         try {
-                            for (var _a = __values(rarc.findDir('map/map').files), _b = _a.next(); !_b.done; _b = _a.next()) {
-                                var file = _b.value;
-                                var _c = __read(file.name.split('.'), 2), basename = _c[0], extension = _c[1];
-                                if (extension !== 'bmd')
-                                    continue;
-                                if (['sky', 'map', 'sea', 'seaindirect'].includes(basename))
-                                    continue;
-                                var scene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, basename, false);
-                                extraScenes.push(scene);
+                            for (var L_1 = __values(L), L_1_1 = L_1.next(); !L_1_1.done; L_1_1 = L_1.next()) {
+                                var Ts = L_1_1.value;
+                                R.push.apply(R, Ts);
                             }
                         }
                         catch (e_32_1) { e_32 = { error: e_32_1 }; }
                         finally {
                             try {
-                                if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
+                                if (L_1_1 && !L_1_1.done && (_a = L_1.return)) _a.call(L_1);
                             }
                             finally { if (e_32) throw e_32.error; }
                         }
-                        return new SunshineRenderer(skyScene, mapScene, seaScene, seaIndirectScene, extraScenes, rarc);
-                        var e_32, _d;
-                    });
+                        return R;
+                        var e_32, _a;
+                    }
+                    switch (obj.type) {
+                        case 'Group':
+                            var childTs = obj.children.map(function (c) { return _this.createSceneBinObjects(gl, rarc, c); });
+                            var flattened = flatten(childTs).filter(function (o) { return !!o; });
+                            return flattened;
+                        case 'Model':
+                            return [this.createSceneForSceneBinModel(gl, rarc, obj)];
+                        default:
+                            // Don't care.
+                            return undefined;
+                    }
+                };
+                SunshineSceneDesc.prototype.createSceneForSceneBinModel = function (gl, rarc, obj) {
+                    ;
+                    function bmtm(bmd, bmt) {
+                        var bmdFile = rarc.findFile(bmd);
+                        var bmtFile = rarc.findFile(bmt);
+                        return scenes_5.createScene(gl, bmdFile, null, null, bmtFile);
+                    }
+                    var modelLookup = [
+                        { k: 'Coin', m: 'coin', p: 'mapobj/coin' },
+                        { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
+                        { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
+                        { k: 'CoinBlue', m: 'coin_blue', p: 'mapobj/coin_blue' },
+                        { k: 'DolWeathercock', m: 'dptWeathercock', p: 'mapobj/dptweathercock' },
+                        { k: 'Manhole', m: 'manhole', p: 'mapobj/manhole' },
+                        { k: 'MapObjBase', m: 'DokanGate', p: 'mapobj/efdokangate' },
+                        { k: 'MapObjBase', m: 'ArrowBoardLR', s: function () { return bmtm('mapobj/arrowboardlr.bmd', 'mapobj/arrowboard.bmt'); } },
+                        { k: 'MapObjBase', m: 'ArrowBoardUp', s: function () { return bmtm('mapobj/arrowboardup.bmd', 'mapobj/arrowboard.bmt'); } },
+                        { k: 'MapObjBase', m: 'ArrowBoardDown', s: function () { return bmtm('mapobj/arrowboarddown.bmd', 'mapobj/arrowboard.bmt'); } },
+                        { k: 'MapObjBase', m: 'monte_chair', p: 'mapobj/monte_chair_model' },
+                        { k: 'MapStaticObj', m: 'ReflectSky', s: function () { return bmtm('map/map/reflectsky.bmd', 'map/map/sky.bmt'); } },
+                        { k: 'NozzleBox', m: 'NozzleBox', p: 'mapobj/nozzlebox' },
+                        { k: 'Palm', m: 'palmNormal', p: 'mapobj/palmnormal' },
+                        { k: 'Palm', m: 'palmLeaf', p: 'mapobj/palmleaf' },
+                        { k: 'PalmOugi', m: 'palmOugi', p: 'mapobj/palmougi' },
+                        { k: 'Shine', m: 'shine', p: 'mapobj/shine' },
+                        { k: 'WoodBox', m: 'WoodBox', p: 'mapobj/kibako' },
+                        { k: 'WoodBarrel', m: 'wood_barrel', s: function () { return bmtm('mapobj/barrel_normal.bmd', 'mapobj/barrel.bmt'); } },
+                    ];
+                    var modelEntry = modelLookup.find(function (lt) { return obj.klass === lt.k && obj.model === lt.m; });
+                    if (modelEntry === undefined) {
+                        // Load heuristics -- maybe should be explicit...
+                        var prefix = void 0;
+                        if (obj.klass === 'MapStaticObj') {
+                            prefix = "map/map/" + obj.model.toLowerCase();
+                        }
+                        else if (obj.klass === 'MapObjBase') {
+                            prefix = "mapobj/" + obj.model.toLowerCase();
+                        }
+                        if (prefix) {
+                            var file = rarc.findFile(prefix + ".bmd");
+                            if (file)
+                                modelEntry = { k: obj.klass, m: obj.model, p: prefix };
+                        }
+                    }
+                    if (modelEntry === undefined) {
+                        console.warn("No model for " + obj.klass + " " + obj.model);
+                        return null;
+                    }
+                    var scene = null;
+                    if (modelEntry.p !== undefined) {
+                        scene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, modelEntry.p, false);
+                    }
+                    else if (modelEntry.s !== undefined) {
+                        scene = modelEntry.s();
+                    }
+                    var q = gl_matrix_7.quat.create();
+                    gl_matrix_7.quat.fromEuler(q, obj.rotationX, obj.rotationY, obj.rotationZ);
+                    gl_matrix_7.mat4.fromRotationTranslationScale(scene.modelMatrix, q, [obj.x, obj.y, obj.z], [obj.scaleX, obj.scaleY, obj.scaleZ]);
+                    return scene;
                 };
                 return SunshineSceneDesc;
             }());
@@ -7923,12 +8165,18 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
             id = "sms";
             name = "Super Mario Sunshine";
             sceneDescs = [
-                new SunshineSceneDesc("data/j3d/dolpic0.szs", "Delfino Plaza"),
-                new SunshineSceneDesc("data/j3d/mare0.szs", "Noki Bay"),
-                new SunshineSceneDesc("data/j3d/sirena0.szs", "Sirena Beach"),
-                new SunshineSceneDesc("data/j3d/ricco0.szs", "Ricco Harbor"),
-                new SunshineSceneDesc("data/j3d/delfino0.szs", "Delfino Hotel"),
-                new SunshineSceneDesc("data/j3d/monte3.szs", "Pianta Village"),
+                new SunshineSceneDesc("data/j3d/sms/dolpic0.szs", "Delfino Plaza"),
+                new SunshineSceneDesc("data/j3d/sms/airport0.szs", "Delfino Airport"),
+                new SunshineSceneDesc("data/j3d/sms/bianco0.szs", "Bianco Hills"),
+                new SunshineSceneDesc("data/j3d/sms/ricco0.szs", "Ricco Harbor"),
+                new SunshineSceneDesc("data/j3d/sms/mamma0.szs", "Gelato Beach"),
+                new SunshineSceneDesc("data/j3d/sms/pinnaBeach0.szs", "Pinna Park Beach"),
+                new SunshineSceneDesc("data/j3d/sms/pinnaParco0.szs", "Pinna Park"),
+                new SunshineSceneDesc("data/j3d/sms/sirena0.szs", "Sirena Beach"),
+                new SunshineSceneDesc("data/j3d/sms/delfino0.szs", "Delfino Hotel"),
+                new SunshineSceneDesc("data/j3d/sms/mare0.szs", "Noki Bay"),
+                new SunshineSceneDesc("data/j3d/sms/monte3.szs", "Pianta Village"),
+                new SunshineSceneDesc("data/j3d/sms/dolpic_ex0.szs", "Dolpic Ex0"),
             ];
             exports_25("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
@@ -8271,11 +8519,11 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
         return textures;
         var e_34, _a;
     }
-    var gl_matrix_7, CRG0, LZ77, NITRO_BMD, render_10, util_18, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, BMDRenderer, SM64DSRenderer, SceneDesc;
+    var gl_matrix_8, CRG0, LZ77, NITRO_BMD, render_10, util_18, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, BMDRenderer, SM64DSRenderer, SceneDesc;
     return {
         setters: [
-            function (gl_matrix_7_1) {
-                gl_matrix_7 = gl_matrix_7_1;
+            function (gl_matrix_8_1) {
+                gl_matrix_8 = gl_matrix_8_1;
             },
             function (CRG0_1) {
                 CRG0 = CRG0_1;
@@ -8328,8 +8576,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     });
                     this.translateBMD(gl, this.bmd);
                     var scaleFactor = this.bmd.scaleFactor * this.localScale;
-                    this.localMatrix = gl_matrix_7.mat4.create();
-                    gl_matrix_7.mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+                    this.localMatrix = gl_matrix_8.mat4.create();
+                    gl_matrix_8.mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
                 }
                 BMDRenderer.prototype.translatePacket = function (gl, packet) {
                     var vertBuffer = this.arena.createBuffer(gl);
@@ -8401,8 +8649,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     }
                     // Find any possible material animations.
                     var crg0mat = this.crg0Level.materials.find(function (c) { return c.name === material.name; });
-                    var texCoordMat = gl_matrix_7.mat3.create();
-                    gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
+                    var texCoordMat = gl_matrix_8.mat3.create();
+                    gl_matrix_8.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                     var renderFlags = new render_10.RenderFlags();
                     renderFlags.blendMode = render_10.BlendMode.ADD;
                     renderFlags.depthTest = true;
@@ -8410,20 +8658,20 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
                     return function (state) {
                         if (crg0mat !== undefined) {
-                            var texAnimMat = gl_matrix_7.mat3.create();
+                            var texAnimMat = gl_matrix_8.mat3.create();
                             try {
                                 for (var _a = __values(crg0mat.animations), _b = _a.next(); !_b.done; _b = _a.next()) {
                                     var anim = _b.value;
                                     var time = state.time / 30;
                                     var value = anim.values[(time | 0) % anim.values.length];
                                     if (anim.property === 'x')
-                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [-value, 0]);
+                                        gl_matrix_8.mat3.translate(texAnimMat, texAnimMat, [-value, 0]);
                                     else if (anim.property === 'y')
-                                        gl_matrix_7.mat3.translate(texAnimMat, texAnimMat, [0, value]);
+                                        gl_matrix_8.mat3.translate(texAnimMat, texAnimMat, [0, value]);
                                     else if (anim.property === 'scale')
-                                        gl_matrix_7.mat3.scale(texAnimMat, texAnimMat, [value, value]);
+                                        gl_matrix_8.mat3.scale(texAnimMat, texAnimMat, [value, value]);
                                     else if (anim.property === 'rotation')
-                                        gl_matrix_7.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
+                                        gl_matrix_8.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
                             catch (e_35_1) { e_35 = { error: e_35_1 }; }
@@ -8433,8 +8681,8 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                 }
                                 finally { if (e_35) throw e_35.error; }
                             }
-                            gl_matrix_7.mat3.fromMat2d(texCoordMat, material.texCoordMat);
-                            gl_matrix_7.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
+                            gl_matrix_8.mat3.fromMat2d(texCoordMat, material.texCoordMat);
+                            gl_matrix_8.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
                         }
                         if (texture !== null) {
                             var prog = state.currentProgram;
@@ -9050,11 +9298,11 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                 var b = rom.view.getUint16(offs + 0x08, false) / 0xFFFF * (Math.PI * 2) + Math.PI;
                 var c = rom.view.getUint16(offs + 0x0A, false) / 0xFFFF * (Math.PI * 2);
                 var d = rom.view.getUint16(offs + 0x0C, false);
-                var mtx = gl_matrix_8.mat4.create();
-                gl_matrix_8.mat4.translate(mtx, mtx, [x, y, z]);
-                gl_matrix_8.mat4.rotateZ(mtx, mtx, c);
-                gl_matrix_8.mat4.rotateY(mtx, mtx, b);
-                gl_matrix_8.mat4.rotateX(mtx, mtx, -a);
+                var mtx = gl_matrix_9.mat4.create();
+                gl_matrix_9.mat4.translate(mtx, mtx, [x, y, z]);
+                gl_matrix_9.mat4.rotateZ(mtx, mtx, c);
+                gl_matrix_9.mat4.rotateY(mtx, mtx, b);
+                gl_matrix_9.mat4.rotateX(mtx, mtx, -a);
                 return mtx;
             }
             var cameraAddr = rom.view.getUint32(offs + 0x20, false);
@@ -9210,11 +9458,11 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         var banks = { scene: file };
         return readHeaders(gl, zelview0, file.vStart, banks);
     }
-    var gl_matrix_8, F3DEX2, util_21, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
+    var gl_matrix_9, F3DEX2, util_21, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
     return {
         setters: [
-            function (gl_matrix_8_1) {
-                gl_matrix_8 = gl_matrix_8_1;
+            function (gl_matrix_9_1) {
+                gl_matrix_9 = gl_matrix_9_1;
             },
             function (F3DEX2_1) {
                 F3DEX2 = F3DEX2_1;
@@ -9330,8 +9578,8 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         var posX = rom.view.getInt16(offs + 0, false);
         var posY = rom.view.getInt16(offs + 2, false);
         var posZ = rom.view.getInt16(offs + 4, false);
-        var pos = gl_matrix_9.vec3.clone([posX, posY, posZ]);
-        gl_matrix_9.vec3.transformMat4(pos, pos, state.mtx);
+        var pos = gl_matrix_10.vec3.clone([posX, posY, posZ]);
+        gl_matrix_10.vec3.transformMat4(pos, pos, state.mtx);
         var txU = rom.view.getInt16(offs + 8, false) * (1 / 32);
         var txV = rom.view.getInt16(offs + 10, false) * (1 / 32);
         var vtxArray = new Float32Array(state.vertexBuffer.buffer, which * VERTEX_BYTES, VERTEX_SIZE);
@@ -9465,10 +9713,10 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         state.geometryMode = 0;
         state.otherModeL = 0;
         state.mtxStack.push(state.mtx);
-        state.mtx = gl_matrix_9.mat4.clone(state.mtx);
+        state.mtx = gl_matrix_10.mat4.clone(state.mtx);
         var rom = state.rom;
         var offs = state.lookupAddress(w1);
-        var mtx = gl_matrix_9.mat4.create();
+        var mtx = gl_matrix_10.mat4.create();
         for (var x = 0; x < 4; x++) {
             for (var y = 0; y < 4; y++) {
                 var mt1 = rom.view.getUint16(offs, false);
@@ -9477,7 +9725,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
                 offs += 2;
             }
         }
-        gl_matrix_9.mat4.multiply(state.mtx, state.mtx, mtx);
+        gl_matrix_10.mat4.multiply(state.mtx, state.mtx, mtx);
     }
     function cmd_POPMTX(state, w0, w1) {
         state.mtx = state.mtxStack.pop();
@@ -9977,7 +10225,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         state.gl = gl;
         state.cmds = [];
         state.textures = [];
-        state.mtx = gl_matrix_9.mat4.create();
+        state.mtx = gl_matrix_10.mat4.create();
         state.mtxStack = [state.mtx];
         state.vertexBuffer = new Float32Array(32 * VERTEX_SIZE);
         state.vertexData = [];
@@ -10000,11 +10248,11 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         return new DL(vao, state.cmds, state.textures);
     }
     exports_35("readDL", readDL);
-    var gl_matrix_9, Render, render_14, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
+    var gl_matrix_10, Render, render_14, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
-            function (gl_matrix_9_1) {
-                gl_matrix_9 = gl_matrix_9_1;
+            function (gl_matrix_10_1) {
+                gl_matrix_10 = gl_matrix_10_1;
             },
             function (Render_1) {
                 Render = Render_1;
@@ -13878,11 +14126,11 @@ System.register("dksiv/iv", [], function (exports_51, context_51) {
 System.register("dksiv/render", ["gl-matrix", "render"], function (exports_52, context_52) {
     "use strict";
     var __moduleName = context_52 && context_52.id;
-    var gl_matrix_10, render_21, IVProgram, Chunk, Scene;
+    var gl_matrix_11, render_21, IVProgram, Chunk, Scene;
     return {
         setters: [
-            function (gl_matrix_10_1) {
-                gl_matrix_10 = gl_matrix_10_1;
+            function (gl_matrix_11_1) {
+                gl_matrix_11 = gl_matrix_11_1;
             },
             function (render_21_1) {
                 render_21 = render_21_1;
@@ -13912,7 +14160,7 @@ System.register("dksiv/render", ["gl-matrix", "render"], function (exports_52, c
                 }
                 Chunk.prototype.createTopology = function (gl, chunk) {
                     // Run through our data, calculate normals and such.
-                    var t = gl_matrix_10.vec3.create();
+                    var t = gl_matrix_11.vec3.create();
                     var posData = new Float32Array(chunk.indexData.length * 3);
                     var nrmData = new Float32Array(chunk.indexData.length * 3);
                     for (var i = 0; i < chunk.indexData.length; i += 3) {
@@ -13928,8 +14176,8 @@ System.register("dksiv/render", ["gl-matrix", "render"], function (exports_52, c
                         var t2x = chunk.positionData[i2 * 3 + 0];
                         var t2y = chunk.positionData[i2 * 3 + 1];
                         var t2z = chunk.positionData[i2 * 3 + 2];
-                        gl_matrix_10.vec3.cross(t, [t0x - t1x, t0y - t1y, t0z - t1z], [t0x - t2x, t0y - t2y, t0z - t2z]);
-                        gl_matrix_10.vec3.normalize(t, t);
+                        gl_matrix_11.vec3.cross(t, [t0x - t1x, t0y - t1y, t0z - t1z], [t0x - t2x, t0y - t2y, t0z - t2z]);
+                        gl_matrix_11.vec3.normalize(t, t);
                         posData[(i + 0) * 3 + 0] = t0x;
                         posData[(i + 0) * 3 + 1] = t0y;
                         posData[(i + 0) * 3 + 2] = t0z;
@@ -15091,11 +15339,11 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_59, context_59
 System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/gx_texture", "gx/gx_material", "render", "util", "ArrayBufferSlice"], function (exports_60, context_60) {
     "use strict";
     var __moduleName = context_60 && context_60.id;
-    var gl_matrix_11, mrea_1, GX_Texture, GX_Material, render_23, util_37, ArrayBufferSlice_7, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
+    var gl_matrix_12, mrea_1, GX_Texture, GX_Material, render_23, util_37, ArrayBufferSlice_7, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
     return {
         setters: [
-            function (gl_matrix_11_1) {
-                gl_matrix_11 = gl_matrix_11_1;
+            function (gl_matrix_12_1) {
+                gl_matrix_12 = gl_matrix_12_1;
             },
             function (mrea_1_1) {
                 mrea_1 = mrea_1_1;
@@ -15330,7 +15578,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                 };
                 return Command_Surface;
             }());
-            fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_11.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+            fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_12.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
             materialParamsSize = 4 * 2 + 4 * 2 + 4 * 8 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 4 * 8;
             packetParamsOffs = util_37.align(materialParamsSize, 64);
             packetParamsSize = 11 * 16;
@@ -15422,7 +15670,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     gl.deleteBuffer(this.paramsBuffer);
                 };
                 Command_Material.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(function () { return 1; }));
-                Command_Material.matrixScratch = gl_matrix_11.mat3.create();
+                Command_Material.matrixScratch = gl_matrix_12.mat3.create();
                 Command_Material.colorScratch = new Float32Array(4 * 8);
                 return Command_Material;
             }());
@@ -15914,10 +16162,10 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
     "use strict";
     var __moduleName = context_64 && context_64.id;
     function createScene(gl, name) {
-        return util_39.fetch("data/j3d/dolpic0.szs").then(function (buffer) {
+        return util_39.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
             var bufferSlice = Yaz0.decompress(buffer);
             var rarc = RARC.parse(bufferSlice);
-            var skyScene = sms_scenes_1.SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'sky', true);
+            var skyScene = sms_scenes_1.SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
             var bmdFile = rarc.findFile('map/map/sea.bmd');
             var btkFile = rarc.findFile('map/map/sea.btk');
             var bmd = j3d_5.BMD.parse(bmdFile.buffer);
@@ -15929,11 +16177,11 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         });
     }
     exports_64("createScene", createScene);
-    var gl_matrix_12, util_39, GX_Material, j3d_5, RARC, render_25, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
+    var gl_matrix_13, util_39, GX_Material, j3d_5, RARC, render_25, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
     return {
         setters: [
-            function (gl_matrix_12_1) {
-                gl_matrix_12 = gl_matrix_12_1;
+            function (gl_matrix_13_1) {
+                gl_matrix_13 = gl_matrix_13_1;
             },
             function (util_39_1) {
                 util_39 = util_39_1;
@@ -15959,8 +16207,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         ],
         execute: function () {
             scale = 200;
-            posMtx = gl_matrix_12.mat4.create();
-            gl_matrix_12.mat4.fromScaling(posMtx, [scale, scale, scale]);
+            posMtx = gl_matrix_13.mat4.create();
+            gl_matrix_13.mat4.fromScaling(posMtx, [scale, scale, scale]);
             packetParamsData = new Float32Array(11 * 16);
             for (var i = 0; i < 11; i++) {
                 packetParamsData.set(posMtx, i * 16);

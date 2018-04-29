@@ -758,7 +758,7 @@ export class Scene implements Viewer.Scene {
 
         this.translateTextures(gl);
 
-        const mat3 = this.bmt !== null ? this.bmt.mat3 : this.bmd.mat3;
+        const mat3 = (this.bmt !== null && this.bmt.mat3 !== null) ? this.bmt.mat3 : this.bmd.mat3;
         this.materialCommands = mat3.materialEntries.map((material) => {
             return new Command_Material(gl, this, material);
         });
@@ -777,7 +777,7 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateSceneGraph(node: HierarchyNode, commandList: Command[]) {
-        const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
+        const mat3 = (this.bmt !== null && this.bmt.mat3 !== null) ? this.bmt.mat3 : this.bmd.mat3;
 
         switch (node.type) {
         case HierarchyType.Shape:
