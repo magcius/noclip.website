@@ -27,6 +27,7 @@ function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     return strings;
 }
 
+//#region INF1
 export enum HierarchyType {
     End = 0x00,
     Open = 0x01,
@@ -109,7 +110,9 @@ function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     assert(parentStack.length === 1);
     return { sceneGraph: parentStack.pop() };
 }
+//#endregion
 
+//#region VTX1
 export interface VertexArray {
     vtxAttrib: GX.VertexAttribute;
     compType: GX.CompType;
@@ -197,7 +200,9 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
 
     return { vertexArrays };
 }
+//#endregion
 
+//#region EVP1
 interface WeightedBone {
     weight: number;
     index: number;
@@ -266,7 +271,9 @@ function readEVP1Chunk(buffer: ArrayBufferSlice): EVP1 {
 
     return { envelopes, inverseBinds };
 }
+//#endregion
 
+//#region DRW1
 export enum DRW1JointKind {
     NormalJoint = 0x00,
     WeightedJoint = 0x01,
@@ -307,7 +314,9 @@ function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
 
     return { drw1Joints };
 }
+//#endregion
 
+//#region JNT1
 export interface Bone {
     name: string;
     matrix: mat4;
@@ -363,7 +372,9 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
 
     return { remapTable, bones };
 }
+//#endregion
 
+//#region SHP1
 // Describes an individual vertex attribute in the packed data.
 export interface PackedVertexAttribute {
     vtxAttrib: GX.VertexAttribute;
@@ -529,7 +540,9 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 
     return { shapes };
 }
+//#endregion
 
+//#region MAT3
 export const enum TexMtxProjection {
     ST = 0,
     STQ = 1,
@@ -961,7 +974,9 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
 
     return { remapTable, materialEntries };
 }
+//#endregion
 
+//#region BTI_Texture
 export interface BTI_Texture {
     name: string;
     format: GX.TexFormat;
@@ -1005,7 +1020,9 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
 
     return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data };
 }
+//#endregion
 
+//#region TEX1
 // The way this works is a bit complicated. Basically, textures can have different
 // LOD or wrap modes but share the same literal texture data. As such, we do a bit
 // of remapping here. TEX1_TextureData contains the texture data parameters, and
@@ -1132,7 +1149,9 @@ class J3DFileReaderHelper {
         return this.buffer.subarray(chunkStart, chunkSize);
     }
 }
+//#endregion
 
+//#region BMD
 export class BMD {
     public static parse(buffer: ArrayBufferSlice): BMD {
         const bmd = new BMD();
@@ -1162,46 +1181,61 @@ export class BMD {
     public mat3: MAT3;
     public tex1: TEX1;
 }
+//#endregion
 
-export const enum LoopMode {
+//#region BMT
+export class BMT {
+    public static parse(buffer: ArrayBufferSlice): BMT {
+        const bmt = new BMT();
+
+        const j3d = new J3DFileReaderHelper(buffer);
+        assert(j3d.magic === 'J3D2bmt3');
+
+        bmt.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+        bmt.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
+
+        return bmt;
+    }
+
+    public mat3: MAT3;
+    public tex1: TEX1;
+}
+//#endregion
+
+//#region BTI
+export class BTI {
+    texture: BTI_Texture;
+
+    public static parse(buffer: ArrayBufferSlice, name: string = null): BTI {
+        const bti = new BTI();
+        bti.texture = readBTI_Texture(buffer, name);
+        return bti;
+    }
+}
+//#endregion
+
+//#region Animation
+const enum LoopMode {
     ONCE = 0,
     REPEAT = 2,
     MIRRORED_ONCE = 3,
     MIRRORED_REPEAT = 4,
 }
 
-export const enum TangentType {
+const enum TangentType {
     IN = 0,
     IN_OUT = 1,
 }
 
-export interface AnimationKeyframe {
+interface AnimationKeyframe {
     time: number;
     value: number;
     tangentIn: number;
     tangentOut: number;
 }
 
-export interface AnimationTrack {
+interface AnimationTrack {
     frames: AnimationKeyframe[];
-}
-
-export interface UVAnimationComponent {
-    scale: AnimationTrack;
-    rotation: AnimationTrack;
-    translation: AnimationTrack;
-}
-
-export interface UVAnimationEntry {
-    materialName: string;
-    remapIndex: number;
-    texMtxIndex: number;
-    centerS: number;
-    centerT: number;
-    centerQ: number;
-    s: UVAnimationComponent;
-    t: UVAnimationComponent;
-    q: UVAnimationComponent;
 }
 
 interface AnimationBase {
@@ -1300,6 +1334,26 @@ function translateAnimationTrack(data: Float32Array | Int16Array, scale: number,
         return { frames };
     }
 }
+//#endregion
+
+//#region TTK1
+interface UVAnimationEntry {
+    materialName: string;
+    remapIndex: number;
+    texMtxIndex: number;
+    centerS: number;
+    centerT: number;
+    centerQ: number;
+    scaleS: AnimationTrack;
+    scaleT: AnimationTrack;
+    scaleQ: AnimationTrack;
+    rotationS: AnimationTrack;
+    rotationT: AnimationTrack;
+    rotationQ: AnimationTrack;
+    translationS: AnimationTrack;
+    translationT: AnimationTrack;
+    translationQ: AnimationTrack;
+}
 
 export interface TTK1 extends AnimationBase {
     uvAnimationEntries: UVAnimationEntry[];
@@ -1341,13 +1395,6 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
         return translateAnimationTrack(data, scale, count, index, tangent);
     }
 
-    function readAnimationComponent(): UVAnimationComponent {
-        const scale = readAnimationTrack(sTable, 1);
-        const rotation = readAnimationTrack(rTable, rotationScale);
-        const translation = readAnimationTrack(tTable, 1);
-        return { scale, rotation, translation };
-    }
-
     const uvAnimationEntries: UVAnimationEntry[] = [];
     for (let i = 0; i < animationCount; i++) {
         const materialName = materialNameTable[i];
@@ -1356,15 +1403,29 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
         const centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
         const centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
         const centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
-        const s = readAnimationComponent();
-        const t = readAnimationComponent();
-        const q = readAnimationComponent();
-        uvAnimationEntries.push({ materialName, remapIndex, texMtxIndex, centerS, centerT, centerQ, s, t, q });
+        const scaleS = readAnimationTrack(sTable, 1);
+        const rotationS = readAnimationTrack(rTable, rotationScale);
+        const translationS = readAnimationTrack(tTable, 1);
+        const scaleT = readAnimationTrack(sTable, 1);
+        const rotationT = readAnimationTrack(rTable, rotationScale);
+        const translationT = readAnimationTrack(tTable, 1);
+        const scaleQ = readAnimationTrack(sTable, 1);
+        const rotationQ = readAnimationTrack(rTable, rotationScale);
+        const translationQ = readAnimationTrack(tTable, 1);
+        uvAnimationEntries.push({
+            materialName, remapIndex, texMtxIndex,
+            centerS, centerT, centerQ,
+            scaleS, rotationS, translationS,
+            scaleT, rotationT, translationT,
+            scaleQ, rotationQ, translationQ,
+         });
     }
 
     return { duration, loopMode, uvAnimationEntries };
 }
+//#endregion
 
+//#region BTK
 export class BTK {
     public static parse(buffer: ArrayBufferSlice): BTK {
         const btk = new BTK();
@@ -1389,11 +1450,11 @@ export class BTK {
         const centerS = animationEntry.centerS;
         const centerT = animationEntry.centerT;
         const centerQ = animationEntry.centerQ;
-        const scaleS = sampleAnimationData(animationEntry.s.scale, animFrame);
-        const scaleT = sampleAnimationData(animationEntry.t.scale, animFrame);
-        const rotation = sampleAnimationData(animationEntry.q.rotation, animFrame);
-        const translationS = sampleAnimationData(animationEntry.s.translation, animFrame);
-        const translationT = sampleAnimationData(animationEntry.t.translation, animFrame);
+        const scaleS = sampleAnimationData(animationEntry.scaleS, animFrame);
+        const scaleT = sampleAnimationData(animationEntry.scaleT, animFrame);
+        const rotation = sampleAnimationData(animationEntry.rotationQ, animFrame);
+        const translationS = sampleAnimationData(animationEntry.translationS, animFrame);
+        const translationT = sampleAnimationData(animationEntry.translationT, animFrame);
         createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
         return true;
     }
@@ -1402,7 +1463,9 @@ export class BTK {
         return this.ttk1.uvAnimationEntries.find((e) => e.materialName === materialName && e.texMtxIndex === texMtxIndex);
     }
 }
+//#endregion
 
+//#region TRK1
 interface PaletteAnimationEntry {
     materialName: string;
     remapIndex: number;
@@ -1501,7 +1564,9 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 
     return { duration, loopMode, registerAnimationEntries, konstantAnimationEntries };
 }
+//#endregion
 
+//#region BRK
 export class BRK {
     public static parse(buffer: ArrayBufferSlice): BRK {
         const brk = new BRK();
@@ -1544,30 +1609,4 @@ export class BRK {
 
     public trk1: TRK1;
 }
-
-export class BMT {
-    public static parse(buffer: ArrayBufferSlice): BMT {
-        const bmt = new BMT();
-
-        const j3d = new J3DFileReaderHelper(buffer);
-        assert(j3d.magic === 'J3D2bmt3');
-
-        bmt.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
-        bmt.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
-
-        return bmt;
-    }
-
-    public mat3: MAT3;
-    public tex1: TEX1;
-}
-
-export class BTI {
-    texture: BTI_Texture;
-
-    public static parse(buffer: ArrayBufferSlice, name: string = null): BTI {
-        const bti = new BTI();
-        bti.texture = readBTI_Texture(buffer, name);
-        return bti;
-    }
-}
+//#endregion

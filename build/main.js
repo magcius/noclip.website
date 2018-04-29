@@ -5557,12 +5557,6 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             animationTableIdx += 0x06;
             return translateAnimationTrack(data, scale, count, index, tangent);
         }
-        function readAnimationComponent() {
-            var scale = readAnimationTrack(sTable, 1);
-            var rotation = readAnimationTrack(rTable, rotationScale);
-            var translation = readAnimationTrack(tTable, 1);
-            return { scale: scale, rotation: rotation, translation: translation };
-        }
         var uvAnimationEntries = [];
         for (var i = 0; i < animationCount; i++) {
             var materialName = materialNameTable[i];
@@ -5571,10 +5565,22 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
             var centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
             var centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
-            var s = readAnimationComponent();
-            var t_1 = readAnimationComponent();
-            var q = readAnimationComponent();
-            uvAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, texMtxIndex: texMtxIndex, centerS: centerS, centerT: centerT, centerQ: centerQ, s: s, t: t_1, q: q });
+            var scaleS = readAnimationTrack(sTable, 1);
+            var rotationS = readAnimationTrack(rTable, rotationScale);
+            var translationS = readAnimationTrack(tTable, 1);
+            var scaleT = readAnimationTrack(sTable, 1);
+            var rotationT = readAnimationTrack(rTable, rotationScale);
+            var translationT = readAnimationTrack(tTable, 1);
+            var scaleQ = readAnimationTrack(sTable, 1);
+            var rotationQ = readAnimationTrack(rTable, rotationScale);
+            var translationQ = readAnimationTrack(tTable, 1);
+            uvAnimationEntries.push({
+                materialName: materialName, remapIndex: remapIndex, texMtxIndex: texMtxIndex,
+                centerS: centerS, centerT: centerT, centerQ: centerQ,
+                scaleS: scaleS, rotationS: rotationS, translationS: translationS,
+                scaleT: scaleT, rotationT: rotationT, translationT: translationT,
+                scaleQ: scaleQ, rotationQ: rotationQ, translationQ: translationQ,
+            });
         }
         return { duration: duration, loopMode: loopMode, uvAnimationEntries: uvAnimationEntries };
     }
@@ -5652,7 +5658,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         }
         return { duration: duration, loopMode: loopMode, registerAnimationEntries: registerAnimationEntries, konstantAnimationEntries: konstantAnimationEntries };
     }
-    var gl_matrix_4, ArrayBufferSlice_5, endian_1, util_7, gx_displaylist_1, GX_Material, HierarchyType, DRW1JointKind, quatScratch, t, c, ci, J3DFileReaderHelper, BMD, BTK, BRK, BMT, BTI;
+    var gl_matrix_4, ArrayBufferSlice_5, endian_1, util_7, gx_displaylist_1, GX_Material, HierarchyType, DRW1JointKind, quatScratch, t, c, ci, J3DFileReaderHelper, BMD, BMT, BTI, BTK, BRK;
     return {
         setters: [
             function (gl_matrix_4_1) {
@@ -5675,6 +5681,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             }
         ],
         execute: function () {
+            //#region INF1
             (function (HierarchyType) {
                 HierarchyType[HierarchyType["End"] = 0] = "End";
                 HierarchyType[HierarchyType["Open"] = 1] = "Open";
@@ -5684,6 +5691,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 HierarchyType[HierarchyType["Shape"] = 18] = "Shape";
             })(HierarchyType || (HierarchyType = {}));
             exports_17("HierarchyType", HierarchyType);
+            //#endregion
+            //#region DRW1
             (function (DRW1JointKind) {
                 DRW1JointKind[DRW1JointKind["NormalJoint"] = 0] = "NormalJoint";
                 DRW1JointKind[DRW1JointKind["WeightedJoint"] = 1] = "WeightedJoint";
@@ -5722,6 +5731,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return J3DFileReaderHelper;
             }());
+            //#endregion
+            //#region BMD
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
@@ -5743,6 +5754,38 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 return BMD;
             }());
             exports_17("BMD", BMD);
+            //#endregion
+            //#region BMT
+            BMT = /** @class */ (function () {
+                function BMT() {
+                }
+                BMT.parse = function (buffer) {
+                    var bmt = new BMT();
+                    var j3d = new J3DFileReaderHelper(buffer);
+                    util_7.assert(j3d.magic === 'J3D2bmt3');
+                    bmt.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
+                    bmt.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
+                    return bmt;
+                };
+                return BMT;
+            }());
+            exports_17("BMT", BMT);
+            //#endregion
+            //#region BTI
+            BTI = /** @class */ (function () {
+                function BTI() {
+                }
+                BTI.parse = function (buffer, name) {
+                    if (name === void 0) { name = null; }
+                    var bti = new BTI();
+                    bti.texture = readBTI_Texture(buffer, name);
+                    return bti;
+                };
+                return BTI;
+            }());
+            exports_17("BTI", BTI);
+            //#endregion
+            //#region BTK
             BTK = /** @class */ (function () {
                 function BTK() {
                 }
@@ -5761,11 +5804,11 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                     var centerS = animationEntry.centerS;
                     var centerT = animationEntry.centerT;
                     var centerQ = animationEntry.centerQ;
-                    var scaleS = sampleAnimationData(animationEntry.s.scale, animFrame);
-                    var scaleT = sampleAnimationData(animationEntry.t.scale, animFrame);
-                    var rotation = sampleAnimationData(animationEntry.q.rotation, animFrame);
-                    var translationS = sampleAnimationData(animationEntry.s.translation, animFrame);
-                    var translationT = sampleAnimationData(animationEntry.t.translation, animFrame);
+                    var scaleS = sampleAnimationData(animationEntry.scaleS, animFrame);
+                    var scaleT = sampleAnimationData(animationEntry.scaleT, animFrame);
+                    var rotation = sampleAnimationData(animationEntry.rotationQ, animFrame);
+                    var translationS = sampleAnimationData(animationEntry.translationS, animFrame);
+                    var translationT = sampleAnimationData(animationEntry.translationT, animFrame);
                     createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
                     return true;
                 };
@@ -5775,6 +5818,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 return BTK;
             }());
             exports_17("BTK", BTK);
+            //#endregion
+            //#region BRK
             BRK = /** @class */ (function () {
                 function BRK() {
                 }
@@ -5819,32 +5864,6 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 return BRK;
             }());
             exports_17("BRK", BRK);
-            BMT = /** @class */ (function () {
-                function BMT() {
-                }
-                BMT.parse = function (buffer) {
-                    var bmt = new BMT();
-                    var j3d = new J3DFileReaderHelper(buffer);
-                    util_7.assert(j3d.magic === 'J3D2bmt3');
-                    bmt.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
-                    bmt.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
-                    return bmt;
-                };
-                return BMT;
-            }());
-            exports_17("BMT", BMT);
-            BTI = /** @class */ (function () {
-                function BTI() {
-                }
-                BTI.parse = function (buffer, name) {
-                    if (name === void 0) { name = null; }
-                    var bti = new BTI();
-                    bti.texture = readBTI_Texture(buffer, name);
-                    return bti;
-                };
-                return BTI;
-            }());
-            exports_17("BTI", BTI);
         }
     };
 });
