@@ -15971,6 +15971,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                 function SeaPlaneScene(gl, bmd, btk, configName) {
                     this.animationScale = 5;
                     this.bmt = null;
+                    this.brk = null;
                     this.isSkybox = false;
                     this.useMaterialTexMtx = false;
                     this.fps = 30;
