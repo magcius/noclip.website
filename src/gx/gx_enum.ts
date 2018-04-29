@@ -292,10 +292,10 @@ export const enum TexGenSrc {
     TEXCOORD2 = 14,
     TEXCOORD3 = 15,
     TEXCOORD4 = 16,
-    TEXCOORD5 = 18,
-    TEXCOORD6 = 19,
-    COLOR0 = 20,
-    COLOR1 = 21,
+    TEXCOORD5 = 17,
+    TEXCOORD6 = 18,
+    COLOR0 = 19,
+    COLOR1 = 20,
 }
 
 export const enum TexGenType {
