@@ -198,14 +198,94 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
     return { vertexArrays };
 }
 
-interface WeightedJoint {
-    isWeighted: boolean;
+interface WeightedBone {
+    weight: number;
+    index: number;
+}
+
+interface Envelope {
+    weightedBones: WeightedBone[];
+}
+
+export interface EVP1 {
+    envelopes: Envelope[];
+    inverseBinds: mat4[];
+}
+
+function readEVP1Chunk(buffer: ArrayBufferSlice): EVP1 {
+    const view = buffer.createDataView();
+
+    const envelopeTableCount = view.getUint16(0x08);
+    const weightedBoneCountTableOffs = view.getUint32(0x0C);
+    const weightedBoneIndexTableOffs = view.getUint32(0x10);
+    const weightedBoneWeightTableOffs = view.getUint32(0x14);
+    const inverseBindPoseTableOffs = view.getUint32(0x18);
+
+    let weightedBoneId = 0;
+    let maxBoneIndex = -1;
+    const envelopes: Envelope[] = [];
+    for (let i = 0; i < envelopeTableCount; i++) {
+        const numWeightedBones = view.getUint8(weightedBoneCountTableOffs + i);
+        const weightedBones: WeightedBone[] = [];
+
+        for (let j = 0; j < numWeightedBones; j++) {
+            const index = view.getUint16(weightedBoneIndexTableOffs + weightedBoneId * 0x02);
+            const weight = view.getFloat32(weightedBoneWeightTableOffs + weightedBoneId * 0x04);
+            weightedBones.push({ index, weight });
+            maxBoneIndex = Math.max(maxBoneIndex, index);
+            weightedBoneId++;
+        }
+
+        envelopes.push({ weightedBones });
+    }
+
+    const inverseBinds: mat4[] = [];
+    for (let i = 0; i < maxBoneIndex + 1; i++) {
+        const offs = inverseBindPoseTableOffs + (i * 0x30);
+
+        const m00 = view.getFloat32(offs + 0x00);
+        const m10 = view.getFloat32(offs + 0x04);
+        const m20 = view.getFloat32(offs + 0x08);
+        const m30 = view.getFloat32(offs + 0x0C);
+        const m01 = view.getFloat32(offs + 0x10);
+        const m11 = view.getFloat32(offs + 0x14);
+        const m21 = view.getFloat32(offs + 0x18);
+        const m31 = view.getFloat32(offs + 0x1C);
+        const m02 = view.getFloat32(offs + 0x20);
+        const m12 = view.getFloat32(offs + 0x24);
+        const m22 = view.getFloat32(offs + 0x28);
+        const m32 = view.getFloat32(offs + 0x2C);
+
+        inverseBinds.push(mat4.fromValues(
+            m00, m01, m02, 0,
+            m10, m11, m12, 0,
+            m20, m21, m22, 0,
+            m30, m31, m32, 1,
+        ));
+    }
+
+    return { envelopes, inverseBinds };
+}
+
+export enum DRW1JointKind {
+    NormalJoint = 0x00,
+    WeightedJoint = 0x01,
+}
+
+interface DRW1NormalJoint {
+    kind: DRW1JointKind.NormalJoint;
     jointIndex: number;
 }
 
+interface DRW1WeightedJoint {
+    kind: DRW1JointKind.WeightedJoint;
+    envelopeIndex: number;
+}
+
+type DRW1Joint = DRW1NormalJoint | DRW1WeightedJoint;
+
 export interface DRW1 {
-    weightedJoints: WeightedJoint[];
-    isAnyWeighted: boolean;
+    drw1Joints: DRW1Joint[];
 }
 
 function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
@@ -214,17 +294,18 @@ function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
     const isWeightedTableOffs = view.getUint32(0x0C);
     const jointIndexTableOffs = view.getUint32(0x10);
 
-    let isAnyWeighted = false;
-    const weightedJoints: WeightedJoint[] = [];
+    const drw1Joints: DRW1Joint[] = [];
     for (let i = 0; i < weightedJointCount; i++) {
-        const isWeighted = !!view.getUint8(isWeightedTableOffs + i);
-        if (isWeighted)
-            isAnyWeighted = true;
-        const jointIndex = view.getUint16(jointIndexTableOffs + i * 0x02);
-        weightedJoints.push({ isWeighted, jointIndex });
+        const kind: DRW1JointKind = view.getUint8(isWeightedTableOffs + i);
+        const param = view.getUint16(jointIndexTableOffs + i * 0x02);
+        if (kind === DRW1JointKind.NormalJoint) {
+            drw1Joints.push({ kind, jointIndex: param });
+        } else if (kind === DRW1JointKind.WeightedJoint) {
+            drw1Joints.push({ kind, envelopeIndex: param })
+        }
     }
 
-    return { weightedJoints, isAnyWeighted };
+    return { drw1Joints };
 }
 
 export interface Bone {
@@ -235,6 +316,12 @@ export interface Bone {
 export interface JNT1 {
     remapTable: number[];
     bones: Bone[];
+}
+
+const quatScratch = quat.create();
+function createJointMatrix(m: mat4, sx: number, sy: number, sz: number, rx: number, ry: number, rz: number, tx: number, ty: number, tz: number): void {
+    quat.fromEuler(quatScratch, rx, ry, rz);
+    mat4.fromRotationTranslationScale(m, quatScratch, [tx, ty, tz], [sx, sy, sz]);
 }
 
 function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
@@ -253,8 +340,6 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
     const nameTableOffs = view.getUint32(0x14);
     const nameTable = readStringTable(buffer, nameTableOffs);
 
-    const q = quat.create();
-
     const bones: Bone[] = [];
     let boneDataTableIdx = boneDataTableOffs;
     for (let i = 0; i < boneDataCount; i++) {
@@ -262,18 +347,16 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const scaleX = view.getFloat32(boneDataTableIdx + 0x04);
         const scaleY = view.getFloat32(boneDataTableIdx + 0x08);
         const scaleZ = view.getFloat32(boneDataTableIdx + 0x0C);
-        const rotationX = view.getUint16(boneDataTableIdx + 0x10) / 0x7FFF;
-        const rotationY = view.getUint16(boneDataTableIdx + 0x12) / 0x7FFF;
-        const rotationZ = view.getUint16(boneDataTableIdx + 0x14) / 0x7FFF;
+        const rotationX = view.getUint16(boneDataTableIdx + 0x10) / 0x7FFF * 180;
+        const rotationY = view.getUint16(boneDataTableIdx + 0x12) / 0x7FFF * 180;
+        const rotationZ = view.getUint16(boneDataTableIdx + 0x14) / 0x7FFF * 180;
         const translationX = view.getFloat32(boneDataTableIdx + 0x18);
         const translationY = view.getFloat32(boneDataTableIdx + 0x1C);
         const translationZ = view.getFloat32(boneDataTableIdx + 0x20);
         // Skipping bounding box data for now.
 
-        quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
         const matrix = mat4.create();
-        mat4.fromRotationTranslationScale(matrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
-
+        createJointMatrix(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         bones.push({ name, matrix });
         boneDataTableIdx += 0x40;
     }
@@ -1059,7 +1142,7 @@ export class BMD {
 
         bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
         bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
-        const evp1 = j3d.nextChunk('EVP1'); // TODO: implement
+        bmd.evp1 = readEVP1Chunk(j3d.nextChunk('EVP1'));
         bmd.drw1 = readDRW1Chunk(j3d.nextChunk('DRW1'));
         bmd.jnt1 = readJNT1Chunk(j3d.nextChunk('JNT1'));
         bmd.shp1 = readSHP1Chunk(j3d.nextChunk('SHP1'), bmd);
@@ -1072,6 +1155,7 @@ export class BMD {
 
     public inf1: INF1;
     public vtx1: VTX1;
+    public evp1: EVP1;
     public drw1: DRW1;
     public jnt1: JNT1;
     public shp1: SHP1;

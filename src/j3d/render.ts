@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray, BRK } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray, BRK, DRW1JointKind } from './j3d';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
@@ -37,16 +37,14 @@ class Command_Shape {
     private bmd: BMD;
     private shape: Shape;
     private vao: WebGLVertexArrayObject;
-    private jointMatrices: mat4[];
     private coalescedBuffers: CoalescedBuffers;
     private packetParamsBuffer: WebGLBuffer;
 
-    constructor(gl: WebGL2RenderingContext, scene: Scene, shape: Shape, coalescedBuffers: CoalescedBuffers, jointMatrices: mat4[]) {
+    constructor(gl: WebGL2RenderingContext, scene: Scene, shape: Shape, coalescedBuffers: CoalescedBuffers) {
         this.scene = scene;
         this.bmd = this.scene.bmd;
         this.shape = shape;
         this.coalescedBuffers = coalescedBuffers;
-        this.jointMatrices = jointMatrices;
 
         this.packetParamsBuffer = gl.createBuffer();
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
@@ -138,11 +136,7 @@ class Command_Shape {
                 // Leave existing joint.
                 if (weightedJointIndex === 0xFFFF)
                     continue;
-                const weightedJoint = this.bmd.drw1.weightedJoints[weightedJointIndex];
-                if (weightedJoint.isWeighted)
-                    throw new Error("whoops");
-
-                const posMtx = this.jointMatrices[weightedJoint.jointIndex];
+                const posMtx = this.scene.weightedJointMatrices[weightedJointIndex];
                 packetParamsData.set(posMtx, offs + i * 16);
                 updated = true;
             }
@@ -402,11 +396,6 @@ export class Command_Material {
 
 type Command = Command_Shape | Command_Material;
 
-interface HierarchyTraverseContext {
-    commandList: Command[];
-    parentJointMatrix: mat4;
-}
-
 export enum ColorOverride {
     MAT0, MAT1, AMB0, AMB1,
     K0, K1, K2, K3,
@@ -428,7 +417,13 @@ export interface TextureOverride {
     height?: number;
 }
 
+interface HierarchyTraverseContext {
+    commandList: Command[];
+    parentJointMatrix: mat4;
+}
+
 const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
+const matrixScratch = mat4.create();
 export class Scene implements Viewer.Scene {
     public textures: Viewer.Texture[];
 
@@ -457,6 +452,7 @@ export class Scene implements Viewer.Scene {
     public materialCommands: Command_Material[];
     private shapeCommands: Command_Shape[];
     private jointMatrices: mat4[];
+    public weightedJointMatrices: mat4[];
 
     private bufferCoalescer: BufferCoalescer;
 
@@ -476,10 +472,6 @@ export class Scene implements Viewer.Scene {
 
         this.sceneParamsBuffer = gl.createBuffer();
         this.modelMatrix = mat4.create();
-
-        // TODO(jstpierre): Support weighted joints.
-        if (this.bmd.drw1.isAnyWeighted)
-            this.visible = false;
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -558,6 +550,9 @@ export class Scene implements Viewer.Scene {
         const gl = state.gl;
 
         state.setClipPlanes(10, 500000);
+
+        // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
+        this.updateJointMatrices();
 
         // Update our SceneParams UBO.
         let offs = 0;
@@ -743,7 +738,15 @@ export class Scene implements Viewer.Scene {
 
         this.opaqueCommands = [];
         this.transparentCommands = [];
+
         this.jointMatrices = [];
+        for (const index of this.bmd.jnt1.remapTable)
+            if (this.jointMatrices[index] === undefined)
+                this.jointMatrices[index] = mat4.create();
+
+        this.weightedJointMatrices = [];
+        for (const drw1Joint of this.bmd.drw1.drw1Joints)
+            this.weightedJointMatrices.push(mat4.create());
 
         this.translateTextures(gl);
 
@@ -758,33 +761,19 @@ export class Scene implements Viewer.Scene {
         );
 
         this.shapeCommands = this.bmd.shp1.shapes.map((shape, i) => {
-            return new Command_Shape(gl, this, shape, this.bufferCoalescer.coalescedBuffers[i], this.jointMatrices);
+            return new Command_Shape(gl, this, shape, this.bufferCoalescer.coalescedBuffers[i]);
         });
 
         // Iterate through scene graph.
-        const context: HierarchyTraverseContext = {
-            commandList: null,
-            parentJointMatrix: mat4.create(),
-        };
-        this.translateSceneGraph(this.bmd.inf1.sceneGraph, context);
+        this.translateSceneGraph(this.bmd.inf1.sceneGraph, null);
     }
 
-    private translateSceneGraph(node: HierarchyNode, context: HierarchyTraverseContext) {
+    private translateSceneGraph(node: HierarchyNode, commandList: Command[]) {
         const mat3 = this.bmt ? this.bmt.mat3 : this.bmd.mat3;
-        const jnt1 = this.bmd.jnt1;
 
-        let commandList = context.commandList;
-        let parentJointMatrix = context.parentJointMatrix;
         switch (node.type) {
         case HierarchyType.Shape:
             commandList.push(this.shapeCommands[node.shapeIdx]);
-            break;
-        case HierarchyType.Joint:
-            const boneMatrix = jnt1.bones[jnt1.remapTable[node.jointIdx]].matrix;
-            const jointMatrix = mat4.create();
-            mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
-            this.jointMatrices[node.jointIdx] = jointMatrix;
-            parentJointMatrix = jointMatrix;
             break;
         case HierarchyType.Material:
             const materialIdx = mat3.remapTable[node.materialIdx];
@@ -794,9 +783,50 @@ export class Scene implements Viewer.Scene {
             break;
         }
 
-        const childContext = { commandList, parentJointMatrix };
+        for (const child of node.children)
+            this.translateSceneGraph(child, commandList);
+    }
+
+    private updateJointMatrixHierarchy(node: HierarchyNode, parentJointMatrix: mat4) {
+        // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
+        const jnt1 = this.bmd.jnt1;
+
+        switch (node.type) {
+        case HierarchyType.Joint:
+            const jointIndex = jnt1.remapTable[node.jointIdx];
+            // TODO(jstpierre): Bone animation.
+            const boneMatrix = jnt1.bones[jointIndex].matrix;
+            const jointMatrix = this.jointMatrices[jointIndex];
+            mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
+            parentJointMatrix = jointMatrix;
+            break;
+        }
 
         for (const child of node.children)
-            this.translateSceneGraph(child, childContext);
+            this.updateJointMatrixHierarchy(child, parentJointMatrix);
+    }
+
+    private updateJointMatrices() {
+        // First, update joint matrices from hierarchy.
+        mat4.identity(matrixScratch);
+        this.updateJointMatrixHierarchy(this.bmd.inf1.sceneGraph, matrixScratch);
+
+        // Update weighted joint matrices.
+        for (let i = 0; i < this.bmd.drw1.drw1Joints.length; i++) {
+            const joint = this.bmd.drw1.drw1Joints[i];
+            const destMtx = this.weightedJointMatrices[i];
+            if (joint.kind === DRW1JointKind.NormalJoint) {
+                mat4.copy(destMtx, this.jointMatrices[joint.jointIndex]);
+            } else if (joint.kind === DRW1JointKind.WeightedJoint) {
+                mat4.identity(destMtx);
+                const envelope = this.bmd.evp1.envelopes[joint.envelopeIndex];
+                for (let i = 0; i < envelope.weightedBones.length; i++) {
+                    const weightedBone = envelope.weightedBones[i];
+                    const inverseBindPose = this.bmd.evp1.inverseBinds[weightedBone.index];
+                    mat4.mul(matrixScratch, inverseBindPose, this.jointMatrices[weightedBone.index]);
+                    mat4.multiplyScalarAndAdd(destMtx, destMtx, matrixScratch, weightedBone.weight);
+                }
+            }
+        }
     }
 }
