@@ -4669,7 +4669,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_16, cont
                 };
                 GX_Program.prototype.generateUBO = function () {
                     var scaledVecCount = scaledVtxAttributes.length >> 2;
-                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_ColorAmbReg[2];\n    vec4 u_KonstColor[8];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    mat4x2 u_IndTexMtx[3];\n    // SizeX, SizeY, 0, Bias\n    vec4 u_TextureParams[8];\n};\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_ModelView;\n    mat4 u_PosMtx[10];\n};\n";
+                    return "\n// Expected to be constant across the entire scene.\nlayout(std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_AttrScale[" + scaledVecCount + "];\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_ColorAmbReg[2];\n    vec4 u_KonstColor[4];\n    vec4 u_Color[4];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    mat4x2 u_IndTexMtx[3];\n    // SizeX, SizeY, 0, Bias\n    vec4 u_TextureParams[8];\n};\n\n// Expected to change with each shape packet.\nlayout(std140) uniform ub_PacketParams {\n    mat4 u_ModelView;\n    mat4 u_PosMtx[10];\n};\n";
                 };
                 GX_Program.prototype.generateShaders = function () {
                     var ubo = this.generateUBO();
@@ -4679,7 +4679,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_16, cont
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n" + this.generateTexCoordGetters() + "\n\nfloat TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }\nvec2 TextureSize(int index) { return u_TextureParams[index].xy; }\nvec4 TextureSample(int index, vec2 coord) { return texture(u_Texture[index], coord, TextureLODBias(index)); }\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nfloat TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_KonstColor[4]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_KonstColor[5]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_KonstColor[6]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_KonstColor[7]; // " + this.generateColorConstant(rColors[3]) + "\n\n    vec2 t_TexCoord = vec2(0.0, 0.0);\n" + this.generateIndTexStages(indTexStages) + "\n" + this.generateTevStages(tevStages) + "\n\n    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);\n    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n" + this.generateTexCoordGetters() + "\n\nfloat TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }\nvec2 TextureSize(int index) { return u_TextureParams[index].xy; }\nvec4 TextureSample(int index, vec2 coord) { return texture(u_Texture[index], coord, TextureLODBias(index)); }\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nvec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }\nfloat TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }\nvec3 TevCompR8GT(vec3 a, vec3 b, vec3 c) { return (a.r > b.r) ? c : vec3(0); }\nfloat TevCompR8GT(float a, float b, float c) { return (a > b) ? c : 0.0; }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_Color[0]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_Color[1]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_Color[2]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_Color[3]; // " + this.generateColorConstant(rColors[3]) + "\n\n    vec2 t_TexCoord = vec2(0.0, 0.0);\n" + this.generateIndTexStages(indTexStages) + "\n" + this.generateTevStages(tevStages) + "\n\n    t_ColorPrev.rgb = TevOverflow(t_ColorPrev.rgb);\n    t_ColorPrev.a = TevOverflow(t_ColorPrev.a);\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 GX_Program.ub_SceneParams = 0;
                 GX_Program.ub_MaterialParams = 1;
@@ -6350,32 +6350,16 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     state.useProgram(this.program);
                     state.useFlags(this.renderFlags);
                     var offs = 0;
-                    for (var i = 0; i < 2; i++) {
-                        var color = this.material.colorMatRegs[i];
-                        if (color !== null) {
-                            materialParamsData[offs + i * 4 + 0] = color.r;
-                            materialParamsData[offs + i * 4 + 1] = color.g;
-                            materialParamsData[offs + i * 4 + 2] = color.b;
-                            materialParamsData[offs + i * 4 + 3] = color.a;
-                        }
-                    }
-                    offs += 4 * 2;
-                    for (var i = 0; i < 2; i++) {
-                        var color = this.material.colorAmbRegs[i];
-                        if (color !== null) {
-                            materialParamsData[offs + i * 4 + 0] = color.r;
-                            materialParamsData[offs + i * 4 + 1] = color.g;
-                            materialParamsData[offs + i * 4 + 2] = color.b;
-                            materialParamsData[offs + i * 4 + 3] = color.a;
-                        }
-                    }
-                    offs += 4 * 2;
-                    for (var i = 0; i < 8; i++) {
+                    for (var i = 0; i < 12; i++) {
                         var fallbackColor = void 0;
-                        if (i >= 4)
-                            fallbackColor = this.material.gxMaterial.colorRegisters[i - 4];
+                        if (i < 2)
+                            fallbackColor = this.material.colorMatRegs[i];
+                        else if (i < 4)
+                            fallbackColor = this.material.colorAmbRegs[i - 2];
+                        else if (i < 8)
+                            fallbackColor = this.material.gxMaterial.colorConstants[i - 4];
                         else
-                            fallbackColor = this.material.gxMaterial.colorConstants[i];
+                            fallbackColor = this.material.gxMaterial.colorRegisters[i - 8];
                         var color = void 0;
                         if (this.scene.colorOverrides[i]) {
                             color = this.scene.colorOverrides[i];
@@ -6395,7 +6379,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         materialParamsData[offs + i * 4 + 2] = color.b;
                         materialParamsData[offs + i * 4 + 3] = alpha;
                     }
-                    offs += 4 * 8;
+                    offs += 4 * 12;
                     // Bind our texture matrices.
                     var matrixScratch = Command_Material.matrixScratch;
                     for (var i = 0; i < this.material.texMatrices.length; i++) {
@@ -6522,14 +6506,18 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
             }());
             exports_20("Command_Material", Command_Material);
             (function (ColorOverride) {
-                ColorOverride[ColorOverride["K0"] = 0] = "K0";
-                ColorOverride[ColorOverride["K1"] = 1] = "K1";
-                ColorOverride[ColorOverride["K2"] = 2] = "K2";
-                ColorOverride[ColorOverride["K3"] = 3] = "K3";
-                ColorOverride[ColorOverride["CPREV"] = 4] = "CPREV";
-                ColorOverride[ColorOverride["C0"] = 5] = "C0";
-                ColorOverride[ColorOverride["C1"] = 6] = "C1";
-                ColorOverride[ColorOverride["C2"] = 7] = "C2";
+                ColorOverride[ColorOverride["MAT0"] = 0] = "MAT0";
+                ColorOverride[ColorOverride["MAT1"] = 1] = "MAT1";
+                ColorOverride[ColorOverride["AMB0"] = 2] = "AMB0";
+                ColorOverride[ColorOverride["AMB1"] = 3] = "AMB1";
+                ColorOverride[ColorOverride["K0"] = 4] = "K0";
+                ColorOverride[ColorOverride["K1"] = 5] = "K1";
+                ColorOverride[ColorOverride["K2"] = 6] = "K2";
+                ColorOverride[ColorOverride["K3"] = 7] = "K3";
+                ColorOverride[ColorOverride["CPREV"] = 8] = "CPREV";
+                ColorOverride[ColorOverride["C0"] = 9] = "C0";
+                ColorOverride[ColorOverride["C1"] = 10] = "C1";
+                ColorOverride[ColorOverride["C2"] = 11] = "C2";
             })(ColorOverride || (ColorOverride = {}));
             exports_20("ColorOverride", ColorOverride);
             sceneParamsData = new Float32Array(4 * 4 + GX_Material.scaledVtxAttributes.length + 4);
