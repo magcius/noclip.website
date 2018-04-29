@@ -4979,9 +4979,6 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             for (var vtxAttrib = 0; vtxAttrib < vtxLoader.vattrLayout.dstAttrOffsets.length; vtxAttrib++) {
                 if (!vtxDescs[vtxAttrib])
                     continue;
-                // TODO(jstpierre): Support DIRECT attributes.
-                if (vtxArrays[vtxAttrib] === undefined)
-                    continue;
                 var indexDataType = vtxDescs[vtxAttrib].type;
                 var offset = vtxLoader.vattrLayout.dstAttrOffsets[vtxAttrib];
                 packedVertexAttributes.push({ vtxAttrib: vtxAttrib, indexDataType: indexDataType, offset: offset });
@@ -5019,7 +5016,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             shapes.push({ displayFlags: displayFlags, indexData: indexData, packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, packets: packets });
             shapeIdx += 0x28;
         }
-        return { shapes: shapes };
+        return { vattrs: vattrs, shapes: shapes };
         var e_17, _d;
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
@@ -6341,7 +6338,7 @@ System.register("gx/gx_texture", [], function (exports_19, context_19) {
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "render", "util"], function (exports_20, context_20) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "render", "util", "gx/gx_displaylist"], function (exports_20, context_20) {
     "use strict";
     var __moduleName = context_20 && context_20.id;
     function translateCompType(gl, compType) {
@@ -6362,7 +6359,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 throw new Error("Unknown CompType " + compType);
         }
     }
-    var gl_matrix_5, j3d_1, GX_Material, GX_Texture, render_3, util_9, packetParamsData, modelViewScratch, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, matrixScratch, Scene;
+    var gl_matrix_5, j3d_1, GX_Material, GX_Texture, render_3, util_9, gx_displaylist_2, packetParamsData, modelViewScratch, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, matrixScratch, Scene;
     return {
         setters: [
             function (gl_matrix_5_1) {
@@ -6382,6 +6379,9 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
             },
             function (util_9_1) {
                 util_9 = util_9_1;
+            },
+            function (gx_displaylist_2_1) {
+                gx_displaylist_2 = gx_displaylist_2_1;
             }
         ],
         execute: function () {
@@ -6403,15 +6403,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     try {
                         for (var _a = __values(this.shape.packedVertexAttributes), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var attrib = _b.value;
-                            var vertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
-                            var compType = vertexArray.compType;
-                            var compCount = vertexArray.compCount;
+                            var vattr = this.bmd.shp1.vattrs[attrib.vtxAttrib];
                             var attribLocation = GX_Material.getVertexAttribLocation(attrib.vtxAttrib);
                             gl.enableVertexAttribArray(attribLocation);
-                            var _c = translateCompType(gl, compType), type = _c.type, normalized = _c.normalized;
-                            gl.vertexAttribPointer(attribLocation, compCount, type, normalized, this.shape.packedVertexSize, coalescedBuffers.vertexBuffer.offset + attrib.offset);
-                            if (gl.getError() !== gl.NO_ERROR)
-                                throw new Error();
+                            var _c = translateCompType(gl, vattr.compType), type = _c.type, normalized = _c.normalized;
+                            gl.vertexAttribPointer(attribLocation, gx_displaylist_2.getNumComponents(attrib.vtxAttrib, vattr.compCnt), type, normalized, this.shape.packedVertexSize, coalescedBuffers.vertexBuffer.offset + attrib.offset);
                         }
                     }
                     catch (e_19_1) { e_19 = { error: e_19_1 }; }

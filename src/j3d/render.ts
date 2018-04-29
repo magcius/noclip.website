@@ -10,6 +10,7 @@ import * as Viewer from 'viewer';
 
 import { BufferCoalescer, CoalescedBuffers, CompareMode, RenderFlags, RenderState } from '../render';
 import { align, assert } from '../util';
+import { getNumComponents } from '../gx/gx_displaylist';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
@@ -57,24 +58,20 @@ class Command_Shape {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, coalescedBuffers.indexBuffer.buffer);
 
         for (const attrib of this.shape.packedVertexAttributes) {
-            const vertexArray: VertexArray = this.bmd.vtx1.vertexArrays.get(attrib.vtxAttrib);
-            const compType = vertexArray.compType;
-            const compCount = vertexArray.compCount;
+            const vattr = this.bmd.shp1.vattrs[attrib.vtxAttrib];
 
             const attribLocation = GX_Material.getVertexAttribLocation(attrib.vtxAttrib);
             gl.enableVertexAttribArray(attribLocation);
 
-            const { type, normalized } = translateCompType(gl, compType);
+            const { type, normalized } = translateCompType(gl, vattr.compType);
 
             gl.vertexAttribPointer(
                 attribLocation,
-                compCount,
+                getNumComponents(attrib.vtxAttrib, vattr.compCnt),
                 type, normalized,
                 this.shape.packedVertexSize,
                 coalescedBuffers.vertexBuffer.offset + attrib.offset,
             );
-            if (gl.getError() !== gl.NO_ERROR)
-                throw new Error();
         }
 
         gl.bindVertexArray(null);

@@ -38,9 +38,6 @@ export enum HierarchyType {
 }
 
 // Build the scene graph.
-// XXX: Nintendo doesn't seem to actually use this as a tree,
-// because they make some super deep stuff... we should linearize this...
-
 export interface HierarchyRootNode {
     type: HierarchyType.End;
     children: HierarchyNode[];
@@ -408,6 +405,7 @@ export interface Shape {
 }
 
 export interface SHP1 {
+    vattrs: GX_VtxAttrFmt[];
     shapes: Shape[];
 }
 
@@ -486,9 +484,6 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vtxLoader.vattrLayout.dstAttrOffsets.length; vtxAttrib++) {
             if (!vtxDescs[vtxAttrib])
                 continue;
-            // TODO(jstpierre): Support DIRECT attributes.
-            if (vtxArrays[vtxAttrib] === undefined)
-                continue;
             const indexDataType = vtxDescs[vtxAttrib].type;
             const offset = vtxLoader.vattrLayout.dstAttrOffsets[vtxAttrib];
             packedVertexAttributes.push({ vtxAttrib, indexDataType, offset });
@@ -538,7 +533,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         shapeIdx += 0x28;
     }
 
-    return { shapes };
+    return { vattrs, shapes };
 }
 //#endregion
 
