@@ -349,6 +349,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
             const sceneBin = rarc.findFile('map/scene.bin');
             const sceneBinObj = readSceneBin(sceneBin.buffer);
+            console.log(sceneBinObj);
 
             const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
             const mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/map', false);
@@ -427,6 +428,8 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             { k: 'MapObjBase', m: 'ArrowBoardDown', s: () => bmtm('mapobj/arrowboarddown.bmd', 'mapobj/arrowboard.bmt') },
             { k: 'MapObjBase', m: 'monte_chair', p: 'mapobj/monte_chair_model' },
             { k: 'MapStaticObj', m: 'ReflectSky', s: () => bmtm('map/map/reflectsky.bmd', 'map/map/sky.bmt') },
+            // Disable SeaIndirect loading...
+            { k: 'MapStaticObj', m: 'SeaIndirect', s: () => null },
             { k: 'Merrygoround', m: 'merry', p: 'mapobj/merry' },
             { k: 'NozzleBox', m: 'NozzleBox', p: 'mapobj/nozzlebox' },
             { k: 'Palm', m: 'palmNormal', p: 'mapobj/palmnormal' },
@@ -469,6 +472,9 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         } else if (modelEntry.s !== undefined) {
             scene = modelEntry.s();
         }
+
+        if (scene === null)
+            return null;
 
         const q = quat.create();
         quat.fromEuler(q, obj.rotationX, obj.rotationY, obj.rotationZ);

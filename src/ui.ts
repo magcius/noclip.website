@@ -631,7 +631,7 @@ class ViewerSettings extends Panel {
     }
 
     private setCameraControllerClass(cameraControllerClass: Viewer.CameraControllerClass) {
-        this.viewer.setCameraControllerClass(cameraControllerClass);
+        this.viewer.setCameraController(new cameraControllerClass());
         this.cameraControllerSelected(cameraControllerClass);
     }
 

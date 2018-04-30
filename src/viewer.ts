@@ -1,7 +1,7 @@
 
 // tslint:disable:no-console
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 
 import { RenderState, RenderFlags, Program, ColorTarget, DepthTarget } from './render';
 import * as UI from './ui';
@@ -9,8 +9,10 @@ import * as UI from './ui';
 import Progressable from 'Progressable';
 
 export interface CameraController {
+    serialize(): string;
+    deserialize(state: string): void;
     setInitialCamera(camera: mat4): void;
-    update(camera: mat4, inputManager: InputManager, dt: number): void;
+    update(camera: mat4, inputManager: InputManager, dt: number): boolean;
 }
 
 // XXX: Is there any way to do this properly and reference the interface?
@@ -121,6 +123,7 @@ class InputManager {
     }
 }
 
+const vec4Scratch = vec4.create();
 export class FPSCameraController implements CameraController {
     private tmp: mat4;
     private camera: mat4;
@@ -132,14 +135,27 @@ export class FPSCameraController implements CameraController {
         this.speed = 10;
     }
 
+    public serialize(): string {
+        const x = this.camera[12], y = this.camera[13], z = this.camera[14];
+        return `${x.toFixed(2)},${y.toFixed(2)},${z.toFixed(2)}`;
+    }
+
+    public deserialize(state: string) {
+        const [x, y, z] = state.split(',');
+        this.camera[12] = +x;
+        this.camera[13] = +y;
+        this.camera[14] = +z;
+    }
+
     public setInitialCamera(camera: mat4) {
         mat4.invert(this.camera, camera);
     }
 
-    public update(outCamera: mat4, inputManager: InputManager, dt: number): void {
+    public update(outCamera: mat4, inputManager: InputManager, dt: number): boolean {
         const SHIFT = 16;
         const tmp = this.tmp;
         const camera = this.camera;
+        let updated = false;
 
         this.speed += inputManager.dz;
         this.speed = Math.max(this.speed, 1);
@@ -156,6 +172,7 @@ export class FPSCameraController implements CameraController {
         } else if (inputManager.isKeyDown('S')) {
             amt = mult;
         }
+        updated = updated || (amt !== 0);
         tmp[14] = amt;
 
         amt = 0;
@@ -164,6 +181,7 @@ export class FPSCameraController implements CameraController {
         } else if (inputManager.isKeyDown('D')) {
             amt = mult;
         }
+        updated = updated || (amt !== 0);
         tmp[12] = amt;
 
         amt = 0;
@@ -172,23 +190,33 @@ export class FPSCameraController implements CameraController {
         } else if (inputManager.isKeyDown('E')) {
             amt = mult;
         }
+        updated = updated || (amt !== 0);
         tmp[13] = amt;
 
         if (inputManager.isKeyDown('B')) {
             mat4.identity(camera);
+            updated = true;
         }
         if (inputManager.isKeyDown('C')) {
             console.log(camera);
         }
 
-        const cu = vec3.fromValues(camera[1], camera[5], camera[9]);
-        vec3.normalize(cu, cu);
-        mat4.rotate(camera, camera, -inputManager.dx / 500, cu);
-        mat4.rotate(camera, camera, -inputManager.dy / 500, [1, 0, 0]);
+        updated = updated || (inputManager.dx !== 0);
+        updated = updated || (inputManager.dy !== 0);
 
-        mat4.multiply(camera, camera, tmp);
+        if (updated) {
+            const cu = vec3.fromValues(camera[1], camera[5], camera[9]);
+            vec3.normalize(cu, cu);
+            mat4.rotate(camera, camera, -inputManager.dx / 500, cu);
+            mat4.rotate(camera, camera, -inputManager.dy / 500, [1, 0, 0]);
+    
+            mat4.multiply(camera, camera, tmp);
+        }
+
         // XXX: Is there any way to do this without the expensive inverse?
         mat4.invert(outCamera, camera);
+
+        return updated;
     }
 }
 
@@ -216,11 +244,18 @@ export class OrbitCameraController implements CameraController {
     constructor() {
     }
 
+    public serialize(): string {
+        return '';
+    }
+
+    public deserialize(state: string): void {
+    }
+
     public setInitialCamera(camera: mat4) {
         // TODO(jstpierre)
     }
 
-    public update(camera: mat4, inputManager: InputManager, dt: number): void {
+    public update(camera: mat4, inputManager: InputManager, dt: number): boolean {
         // Get new velocities from inputs.
         if (inputManager.button === 1) {
             this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) /  5000;
@@ -242,38 +277,41 @@ export class OrbitCameraController implements CameraController {
         if (inputManager.isKeyDown('S')) {
             this.yVel -= 0.05;
         }
-
-        // Apply velocities.
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
-        const drag = inputManager.isDragging() ? 0.92 : 0.96;
 
-        this.x += this.xVel / 10;
-        this.xVel *= drag;
+        const updated = this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0;
+        if (updated) {
+            // Apply velocities.
+            const drag = inputManager.isDragging() ? 0.92 : 0.96;
 
-        this.y += this.yVel / 10;
-        this.yVel *= drag;
+            this.x += this.xVel / 10;
+            this.xVel *= drag;
 
-        this.tx += this.txVel;
-        this.txVel *= drag;
+            this.y += this.yVel / 10;
+            this.yVel *= drag;
 
-        this.ty += this.tyVel;
-        this.tyVel *= drag;
+            this.tx += this.txVel;
+            this.txVel *= drag;
 
-        if (this.y < 0.04) {
-            this.y = 0.04;
-            this.yVel = 0;
-        }
-        if (this.y > 1.50) {
-            this.y = 1.50;
-            this.yVel = 0;
-        }
+            this.ty += this.tyVel;
+            this.tyVel *= drag;
 
-        this.z += this.zVel;
-        this.zVel *= 0.8;
-        if (this.z > -10) {
-            this.z = -10;
-            this.zVel = 0;
+            if (this.y < 0.04) {
+                this.y = 0.04;
+                this.yVel = 0;
+            }
+            if (this.y > 1.50) {
+                this.y = 1.50;
+                this.yVel = 0;
+            }
+
+            this.z += this.zVel;
+            this.zVel *= 0.8;
+            if (this.z > -10) {
+                this.z = -10;
+                this.zVel = 0;
+            }
         }
 
         // Calculate new camera from new x/y/z.
@@ -287,6 +325,8 @@ export class OrbitCameraController implements CameraController {
             sinX, -sinY * cosX, cosY * cosX, 0,
             this.tx, this.ty, this.z, 1,
         ));
+
+        return updated;
     }
 }
 
@@ -296,9 +336,11 @@ export class Viewer {
     public cameraController: CameraController;
 
     public renderState: RenderState;
-    public onscreenColorTarget: ColorTarget = new ColorTarget();
-    public onscreenDepthTarget: DepthTarget = new DepthTarget();
+    private onscreenColorTarget: ColorTarget = new ColorTarget();
+    private onscreenDepthTarget: DepthTarget = new DepthTarget();
     public scene: MainScene;
+    
+    public oncamerachanged: () => void;
 
     constructor(public canvas: HTMLCanvasElement) {
         const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
@@ -342,8 +384,8 @@ export class Viewer {
         // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
     }
 
-    public setCameraControllerClass(cameraController: CameraControllerClass) {
-        this.cameraController = new cameraController();
+    public setCameraController(cameraController: CameraController) {
+        this.cameraController = cameraController;
     }
 
     public setScene(scene: MainScene) {
@@ -357,13 +399,7 @@ export class Viewer {
 
         if (scene) {
             this.scene = scene;
-            if (this.scene.resetCamera) {
-                this.scene.resetCamera(this.camera);
-            } else {
-                mat4.identity(this.camera);
-            }
-
-            this.cameraController.setInitialCamera(this.camera);
+            this.oncamerachanged();
         } else {
             this.scene = null;
         }
@@ -379,7 +415,9 @@ export class Viewer {
             t = nt;
 
             if (this.cameraController) {
-                this.cameraController.update(camera, this.inputManager, dt);
+                const updated = this.cameraController.update(camera, this.inputManager, dt);
+                if (updated)
+                    this.oncamerachanged();
             }
 
             this.inputManager.resetMouse();
@@ -395,7 +433,7 @@ export class Viewer {
 }
 
 export interface MainScene extends Scene {
-    resetCamera?(m: mat4): void;
+    resetCamera?(cameraController: CameraController): void;
     createPanels?(): UI.Panel[];
 }
 

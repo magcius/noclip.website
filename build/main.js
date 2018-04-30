@@ -2624,7 +2624,7 @@ System.register("ui", ["viewer"], function (exports_8, context_8) {
                     this.viewer.renderState.fov = value * (Math.PI * 0.995);
                 };
                 ViewerSettings.prototype.setCameraControllerClass = function (cameraControllerClass) {
-                    this.viewer.setCameraControllerClass(cameraControllerClass);
+                    this.viewer.setCameraController(new cameraControllerClass());
                     this.cameraControllerSelected(cameraControllerClass);
                 };
                 ViewerSettings.prototype.cameraControllerSelected = function (cameraControllerClass) {
@@ -2728,7 +2728,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
     function clampRange(v, lim) {
         return clamp(v, -lim, lim);
     }
-    var gl_matrix_2, render_1, InputManager, FPSCameraController, OrbitCameraController, Viewer;
+    var gl_matrix_2, render_1, InputManager, vec4Scratch, FPSCameraController, OrbitCameraController, Viewer;
     return {
         setters: [
             function (gl_matrix_2_1) {
@@ -2817,12 +2817,23 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                 };
                 return InputManager;
             }());
+            vec4Scratch = gl_matrix_2.vec4.create();
             FPSCameraController = /** @class */ (function () {
                 function FPSCameraController() {
                     this.tmp = gl_matrix_2.mat4.create();
                     this.camera = gl_matrix_2.mat4.create();
                     this.speed = 10;
                 }
+                FPSCameraController.prototype.serialize = function () {
+                    var x = this.camera[12], y = this.camera[13], z = this.camera[14];
+                    return x.toFixed(2) + "," + y.toFixed(2) + "," + z.toFixed(2);
+                };
+                FPSCameraController.prototype.deserialize = function (state) {
+                    var _a = __read(state.split(','), 3), x = _a[0], y = _a[1], z = _a[2];
+                    this.camera[12] = +x;
+                    this.camera[13] = +y;
+                    this.camera[14] = +z;
+                };
                 FPSCameraController.prototype.setInitialCamera = function (camera) {
                     gl_matrix_2.mat4.invert(this.camera, camera);
                 };
@@ -2830,6 +2841,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     var SHIFT = 16;
                     var tmp = this.tmp;
                     var camera = this.camera;
+                    var updated = false;
                     this.speed += inputManager.dz;
                     this.speed = Math.max(this.speed, 1);
                     var mult = this.speed;
@@ -2844,6 +2856,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     else if (inputManager.isKeyDown('S')) {
                         amt = mult;
                     }
+                    updated = updated || (amt !== 0);
                     tmp[14] = amt;
                     amt = 0;
                     if (inputManager.isKeyDown('A')) {
@@ -2852,6 +2865,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     else if (inputManager.isKeyDown('D')) {
                         amt = mult;
                     }
+                    updated = updated || (amt !== 0);
                     tmp[12] = amt;
                     amt = 0;
                     if (inputManager.isKeyDown('Q')) {
@@ -2860,20 +2874,27 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     else if (inputManager.isKeyDown('E')) {
                         amt = mult;
                     }
+                    updated = updated || (amt !== 0);
                     tmp[13] = amt;
                     if (inputManager.isKeyDown('B')) {
                         gl_matrix_2.mat4.identity(camera);
+                        updated = true;
                     }
                     if (inputManager.isKeyDown('C')) {
                         console.log(camera);
                     }
-                    var cu = gl_matrix_2.vec3.fromValues(camera[1], camera[5], camera[9]);
-                    gl_matrix_2.vec3.normalize(cu, cu);
-                    gl_matrix_2.mat4.rotate(camera, camera, -inputManager.dx / 500, cu);
-                    gl_matrix_2.mat4.rotate(camera, camera, -inputManager.dy / 500, [1, 0, 0]);
-                    gl_matrix_2.mat4.multiply(camera, camera, tmp);
+                    updated = updated || (inputManager.dx !== 0);
+                    updated = updated || (inputManager.dy !== 0);
+                    if (updated) {
+                        var cu = gl_matrix_2.vec3.fromValues(camera[1], camera[5], camera[9]);
+                        gl_matrix_2.vec3.normalize(cu, cu);
+                        gl_matrix_2.mat4.rotate(camera, camera, -inputManager.dx / 500, cu);
+                        gl_matrix_2.mat4.rotate(camera, camera, -inputManager.dy / 500, [1, 0, 0]);
+                        gl_matrix_2.mat4.multiply(camera, camera, tmp);
+                    }
                     // XXX: Is there any way to do this without the expensive inverse?
                     gl_matrix_2.mat4.invert(outCamera, camera);
+                    return updated;
                 };
                 return FPSCameraController;
             }());
@@ -2891,6 +2912,11 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     this.txVel = 0;
                     this.tyVel = 0;
                 }
+                OrbitCameraController.prototype.serialize = function () {
+                    return '';
+                };
+                OrbitCameraController.prototype.deserialize = function (state) {
+                };
                 OrbitCameraController.prototype.setInitialCamera = function (camera) {
                     // TODO(jstpierre)
                 };
@@ -2917,31 +2943,34 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     if (inputManager.isKeyDown('S')) {
                         this.yVel -= 0.05;
                     }
-                    // Apply velocities.
                     this.xVel = clampRange(this.xVel, 2);
                     this.yVel = clampRange(this.yVel, 2);
-                    var drag = inputManager.isDragging() ? 0.92 : 0.96;
-                    this.x += this.xVel / 10;
-                    this.xVel *= drag;
-                    this.y += this.yVel / 10;
-                    this.yVel *= drag;
-                    this.tx += this.txVel;
-                    this.txVel *= drag;
-                    this.ty += this.tyVel;
-                    this.tyVel *= drag;
-                    if (this.y < 0.04) {
-                        this.y = 0.04;
-                        this.yVel = 0;
-                    }
-                    if (this.y > 1.50) {
-                        this.y = 1.50;
-                        this.yVel = 0;
-                    }
-                    this.z += this.zVel;
-                    this.zVel *= 0.8;
-                    if (this.z > -10) {
-                        this.z = -10;
-                        this.zVel = 0;
+                    var updated = this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0;
+                    if (updated) {
+                        // Apply velocities.
+                        var drag = inputManager.isDragging() ? 0.92 : 0.96;
+                        this.x += this.xVel / 10;
+                        this.xVel *= drag;
+                        this.y += this.yVel / 10;
+                        this.yVel *= drag;
+                        this.tx += this.txVel;
+                        this.txVel *= drag;
+                        this.ty += this.tyVel;
+                        this.tyVel *= drag;
+                        if (this.y < 0.04) {
+                            this.y = 0.04;
+                            this.yVel = 0;
+                        }
+                        if (this.y > 1.50) {
+                            this.y = 1.50;
+                            this.yVel = 0;
+                        }
+                        this.z += this.zVel;
+                        this.zVel *= 0.8;
+                        if (this.z > -10) {
+                            this.z = -10;
+                            this.zVel = 0;
+                        }
                     }
                     // Calculate new camera from new x/y/z.
                     var sinX = Math.sin(this.x);
@@ -2949,6 +2978,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     var sinY = Math.sin(this.y);
                     var cosY = Math.cos(this.y);
                     gl_matrix_2.mat4.copy(camera, gl_matrix_2.mat4.fromValues(cosX, sinY * sinX, -cosY * sinX, 0, 0, cosY, sinY, 0, sinX, -sinY * cosX, cosY * cosX, 0, this.tx, this.ty, this.z, 1));
+                    return updated;
                 };
                 return OrbitCameraController;
             }());
@@ -2988,8 +3018,8 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     var diff = frameEndTime - this.renderState.frameStartTime;
                     // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
                 };
-                Viewer.prototype.setCameraControllerClass = function (cameraController) {
-                    this.cameraController = new cameraController();
+                Viewer.prototype.setCameraController = function (cameraController) {
+                    this.cameraController = cameraController;
                 };
                 Viewer.prototype.setScene = function (scene) {
                     var gl = this.renderState.gl;
@@ -2999,13 +3029,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     }
                     if (scene) {
                         this.scene = scene;
-                        if (this.scene.resetCamera) {
-                            this.scene.resetCamera(this.camera);
-                        }
-                        else {
-                            gl_matrix_2.mat4.identity(this.camera);
-                        }
-                        this.cameraController.setInitialCamera(this.camera);
+                        this.oncamerachanged();
                     }
                     else {
                         this.scene = null;
@@ -3020,7 +3044,9 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                         var dt = nt - t;
                         t = nt;
                         if (_this.cameraController) {
-                            _this.cameraController.update(camera, _this.inputManager, dt);
+                            var updated = _this.cameraController.update(camera, _this.inputManager, dt);
+                            if (updated)
+                                _this.oncamerachanged();
                         }
                         _this.inputManager.resetMouse();
                         _this.renderState.setView(camera);
@@ -7119,20 +7145,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             parentJointMatrix = jointMatrix;
                             break;
                     }
-                    try {
-                        for (var _a = __values(node.children), _b = _a.next(); !_b.done; _b = _a.next()) {
-                            var child = _b.value;
-                            this.updateJointMatrixHierarchy(state, child, parentJointMatrix);
-                        }
-                    }
-                    catch (e_26_1) { e_26 = { error: e_26_1 }; }
-                    finally {
-                        try {
-                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                        }
-                        finally { if (e_26) throw e_26.error; }
-                    }
-                    var e_26, _c;
+                    for (var i = 0; i < node.children.length; i++)
+                        this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix);
                 };
                 Scene.prototype.updateJointMatrices = function (state) {
                     // First, update joint matrices from hierarchy.
@@ -7175,15 +7189,15 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_27_1) { e_27 = { error: e_27_1 }; }
+        catch (e_26_1) { e_26 = { error: e_26_1 }; }
         finally {
             try {
                 if (scenes_1_1 && !scenes_1_1.done && (_a = scenes_1.return)) _a.call(scenes_1);
             }
-            finally { if (e_27) throw e_27.error; }
+            finally { if (e_26) throw e_26.error; }
         }
         return textures;
-        var e_27, _a;
+        var e_26, _a;
     }
     function createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile, extraTextures) {
         var bmd = j3d_2.BMD.parse(bmdFile.buffer);
@@ -7486,14 +7500,14 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_28_1) { e_28 = { error: e_28_1 }; }
+                    catch (e_27_1) { e_27 = { error: e_27_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_28) throw e_28.error; }
+                        finally { if (e_27) throw e_27.error; }
                     }
-                    var e_28, _c;
+                    var e_27, _c;
                 };
                 return MultiScene;
             }());
@@ -7570,15 +7584,15 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_29_1) { e_29 = { error: e_29_1 }; }
+        catch (e_28_1) { e_28 = { error: e_28_1 }; }
         finally {
             try {
                 if (scenes_3_1 && !scenes_3_1.done && (_a = scenes_3.return)) _a.call(scenes_3);
             }
-            finally { if (e_29) throw e_29.error; }
+            finally { if (e_28) throw e_28.error; }
         }
         return textures;
-        var e_29, _a;
+        var e_28, _a;
     }
     var gl_matrix_6, Progressable_3, util_13, Yaz0, UI, GX_Material, j3d_4, RARC, render_7, CameraPos, TIME_OF_DAY_ICON, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
@@ -7761,8 +7775,10 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     timeOfDayPanel.contents.appendChild(selector.elem);
                     return [timeOfDayPanel];
                 };
-                WindWakerRenderer.prototype.resetCamera = function (m) {
+                WindWakerRenderer.prototype.resetCamera = function (cameraController) {
+                    var m = gl_matrix_6.mat4.create();
                     this.cameraPos.set(m);
+                    cameraController.setInitialCamera(m);
                 };
                 WindWakerRenderer.prototype.render = function (state) {
                     var gl = state.gl;
@@ -7852,15 +7868,15 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_30_1) { e_30 = { error: e_30_1 }; }
+        catch (e_29_1) { e_29 = { error: e_29_1 }; }
         finally {
             try {
                 if (scenes_4_1 && !scenes_4_1.done && (_a = scenes_4.return)) _a.call(scenes_4);
             }
-            finally { if (e_30) throw e_30.error; }
+            finally { if (e_29) throw e_29.error; }
         }
         return textures;
-        var e_30, _a;
+        var e_29, _a;
     }
     function unpack(buffer, sig) {
         var view = buffer.createDataView();
@@ -8102,12 +8118,12 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                             scene.render(state);
                         }
                     }
-                    catch (e_31_1) { e_31 = { error: e_31_1 }; }
+                    catch (e_30_1) { e_30 = { error: e_30_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_31) throw e_31.error; }
+                        finally { if (e_30) throw e_30.error; }
                     }
                     // Copy to main render target.
                     state.useRenderTarget(state.onscreenColorTarget);
@@ -8123,7 +8139,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                         indirectScene.setTextureOverride("indirectdummy", textureOverride);
                         indirectScene.render(state);
                     }
-                    var e_31, _c;
+                    var e_30, _c;
                 };
                 SunshineRenderer.prototype.destroy = function (gl) {
                     if (this.skyScene)
@@ -8164,6 +8180,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                         var rarc = RARC.parse(Yaz0.decompress(result));
                         var sceneBin = rarc.findFile('map/scene.bin');
                         var sceneBinObj = readSceneBin(sceneBin.buffer);
+                        console.log(sceneBinObj);
                         var skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
                         var mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/map', false);
                         var seaScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sea', false);
@@ -8182,15 +8199,15 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                                 R.push.apply(R, Ts);
                             }
                         }
-                        catch (e_32_1) { e_32 = { error: e_32_1 }; }
+                        catch (e_31_1) { e_31 = { error: e_31_1 }; }
                         finally {
                             try {
                                 if (L_1_1 && !L_1_1.done && (_a = L_1.return)) _a.call(L_1);
                             }
-                            finally { if (e_32) throw e_32.error; }
+                            finally { if (e_31) throw e_31.error; }
                         }
                         return R;
-                        var e_32, _a;
+                        var e_31, _a;
                     }
                     switch (obj.type) {
                         case 'Group':
@@ -8242,6 +8259,8 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                         { k: 'MapObjBase', m: 'ArrowBoardDown', s: function () { return bmtm('mapobj/arrowboarddown.bmd', 'mapobj/arrowboard.bmt'); } },
                         { k: 'MapObjBase', m: 'monte_chair', p: 'mapobj/monte_chair_model' },
                         { k: 'MapStaticObj', m: 'ReflectSky', s: function () { return bmtm('map/map/reflectsky.bmd', 'map/map/sky.bmt'); } },
+                        // Disable SeaIndirect loading...
+                        { k: 'MapStaticObj', m: 'SeaIndirect', s: function () { return null; } },
                         { k: 'Merrygoround', m: 'merry', p: 'mapobj/merry' },
                         { k: 'NozzleBox', m: 'NozzleBox', p: 'mapobj/nozzlebox' },
                         { k: 'Palm', m: 'palmNormal', p: 'mapobj/palmnormal' },
@@ -8282,6 +8301,8 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                     else if (modelEntry.s !== undefined) {
                         scene = modelEntry.s();
                     }
+                    if (scene === null)
+                        return null;
                     var q = gl_matrix_7.quat.create();
                     gl_matrix_7.quat.fromEuler(q, obj.rotationX, obj.rotationY, obj.rotationZ);
                     gl_matrix_7.mat4.fromRotationTranslationScale(scene.modelMatrix, q, [obj.x, obj.y, obj.z], [obj.scaleX, obj.scaleY, obj.scaleZ]);
@@ -8321,15 +8342,15 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_33_1) { e_33 = { error: e_33_1 }; }
+        catch (e_32_1) { e_32 = { error: e_32_1 }; }
         finally {
             try {
                 if (scenes_6_1 && !scenes_6_1.done && (_a = scenes_6.return)) _a.call(scenes_6);
             }
-            finally { if (e_33) throw e_33.error; }
+            finally { if (e_32) throw e_32.error; }
         }
         return textures;
-        var e_33, _a;
+        var e_32, _a;
     }
     var Progressable_4, util_15, render_10, scenes_7, gx_material_3, BloomPassBlurProgram, BloomPassBokehProgram, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
@@ -8636,15 +8657,15 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_34_1) { e_34 = { error: e_34_1 }; }
+        catch (e_33_1) { e_33 = { error: e_33_1 }; }
         finally {
             try {
                 if (scenes_8_1 && !scenes_8_1.done && (_a = scenes_8.return)) _a.call(scenes_8);
             }
-            finally { if (e_34) throw e_34.error; }
+            finally { if (e_33) throw e_33.error; }
         }
         return textures;
-        var e_34, _a;
+        var e_33, _a;
     }
     var gl_matrix_8, CRG0, LZ77, NITRO_BMD, render_11, util_18, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, BMDRenderer, SM64DSRenderer, SceneDesc;
     return {
@@ -8801,12 +8822,12 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                         gl_matrix_8.mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
                                 }
                             }
-                            catch (e_35_1) { e_35 = { error: e_35_1 }; }
+                            catch (e_34_1) { e_34 = { error: e_34_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_35) throw e_35.error; }
+                                finally { if (e_34) throw e_34.error; }
                             }
                             gl_matrix_8.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                             gl_matrix_8.mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
@@ -8817,7 +8838,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                             gl.bindTexture(gl.TEXTURE_2D, texId);
                         }
                         state.useFlags(renderFlags);
-                        var e_35, _c;
+                        var e_34, _c;
                     };
                 };
                 BMDRenderer.prototype.translateBatch = function (gl, batch) {
@@ -8842,23 +8863,23 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                                     this.translateBatch(gl, batch);
                                 }
                             }
-                            catch (e_36_1) { e_36 = { error: e_36_1 }; }
+                            catch (e_35_1) { e_35 = { error: e_35_1 }; }
                             finally {
                                 try {
                                     if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
                                 }
-                                finally { if (e_36) throw e_36.error; }
+                                finally { if (e_35) throw e_35.error; }
                             }
                         }
                     }
-                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
+                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
                         }
-                        finally { if (e_37) throw e_37.error; }
+                        finally { if (e_36) throw e_36.error; }
                     }
-                    var e_37, _f, e_36, _e;
+                    var e_36, _f, e_35, _e;
                 };
                 BMDRenderer.prototype.destroy = function (gl) {
                     this.arena.destroy(gl);
@@ -9616,15 +9637,15 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                                 return entry;
                         }
                     }
-                    catch (e_38_1) { e_38 = { error: e_38_1 }; }
+                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_38) throw e_38.error; }
+                        finally { if (e_37) throw e_37.error; }
                     }
                     return null;
-                    var e_38, _c;
+                    var e_37, _c;
                 };
                 ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
                     var bankIdx = addr >>> 24;
@@ -11899,15 +11920,15 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 gl.drawElements(gl.TRIANGLES, prm.count, _this.translateDataType(gl, prm.indexType), prm.offset * _this.dataTypeSize(prm.indexType));
                             }
                         }
-                        catch (e_39_1) { e_39 = { error: e_39_1 }; }
+                        catch (e_38_1) { e_38 = { error: e_38_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_39) throw e_39.error; }
+                            finally { if (e_38) throw e_38.error; }
                         }
                         gl.bindVertexArray(null);
-                        var e_39, _c;
+                        var e_38, _c;
                     };
                 };
                 Scene.prototype.translateTexture = function (gl, texture) {
@@ -12000,14 +12021,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 func();
                             }
                         }
-                        catch (e_40_1) { e_40 = { error: e_40_1 }; }
+                        catch (e_39_1) { e_39 = { error: e_39_1 }; }
                         finally {
                             try {
                                 if (meshFuncs_1_1 && !meshFuncs_1_1.done && (_a = meshFuncs_1.return)) _a.call(meshFuncs_1);
                             }
-                            finally { if (e_40) throw e_40.error; }
+                            finally { if (e_39) throw e_39.error; }
                         }
-                        var e_40, _a;
+                        var e_39, _a;
                     };
                 };
                 Scene.prototype.translateModel = function (gl, mesh) {
@@ -12038,14 +12059,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
+                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_41) throw e_41.error; }
+                        finally { if (e_40) throw e_40.error; }
                     }
-                    var e_41, _c;
+                    var e_40, _c;
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -12318,15 +12339,15 @@ System.register("worker_util", [], function (exports_44, context_44) {
                             worker.terminate();
                         }
                     }
-                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
+                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_42) throw e_42.error; }
+                        finally { if (e_41) throw e_41.error; }
                     }
                     this.workers = [];
-                    var e_42, _c;
+                    var e_41, _c;
                 };
                 WorkerPool.prototype.build = function () {
                     if (this.workers.length > 0)
@@ -12369,14 +12390,14 @@ System.register("worker_util", [], function (exports_44, context_44) {
                             }
                         }
                     }
-                    catch (e_43_1) { e_43 = { error: e_43_1 }; }
+                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_43) throw e_43.error; }
+                        finally { if (e_42) throw e_42.error; }
                     }
-                    var e_43, _c;
+                    var e_42, _c;
                 };
                 WorkerPool.prototype._onWorkerDone = function () {
                     this.pumpQueue();
@@ -13154,15 +13175,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                     entries.push({ key: key, value: value });
                 }
             }
-            catch (e_44_1) { e_44 = { error: e_44_1 }; }
+            catch (e_43_1) { e_43 = { error: e_43_1 }; }
             finally {
                 try {
                     if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
                 }
-                finally { if (e_44) throw e_44.error; }
+                finally { if (e_43) throw e_43.error; }
             }
             return entries;
-            var e_44, _a;
+            var e_43, _a;
         }
         // Vertex buffers.
         var fvtxIdx = fvtxOffs;
@@ -13234,12 +13255,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                 fshp.push({ name: name_10, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
             }
         }
-        catch (e_45_1) { e_45 = { error: e_45_1 }; }
+        catch (e_44_1) { e_44 = { error: e_44_1 }; }
         finally {
             try {
                 if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
             }
-            finally { if (e_45) throw e_45.error; }
+            finally { if (e_44) throw e_44.error; }
         }
         // Materials.
         var fmat = [];
@@ -13302,12 +13323,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                         }
                     }
                 }
-                catch (e_46_1) { e_46 = { error: e_46_1 }; }
+                catch (e_45_1) { e_45 = { error: e_45_1 }; }
                 finally {
                     try {
                         if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
                     }
-                    finally { if (e_46) throw e_46.error; }
+                    finally { if (e_45) throw e_45.error; }
                 }
                 util_27.assert(textureSamplerCount === textureReferenceCount);
                 var textureSamplerArrayIdx = textureSamplerArrayOffs;
@@ -13376,15 +13397,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                 fmat.push({ name: name_11, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
             }
         }
-        catch (e_47_1) { e_47 = { error: e_47_1 }; }
+        catch (e_46_1) { e_46 = { error: e_46_1 }; }
         finally {
             try {
                 if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
             }
-            finally { if (e_47) throw e_47.error; }
+            finally { if (e_46) throw e_46.error; }
         }
         return { fvtx: fvtx, fshp: fshp, fmat: fmat };
-        var e_45, _a, e_47, _c, e_46, _b;
+        var e_44, _a, e_46, _c, e_45, _b;
     }
     function parse(buffer) {
         var view = buffer.createDataView();
@@ -13425,12 +13446,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                 textures.push({ entry: entry, texture: texture });
             }
         }
-        catch (e_48_1) { e_48 = { error: e_48_1 }; }
+        catch (e_47_1) { e_47 = { error: e_47_1 }; }
         finally {
             try {
                 if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
             }
-            finally { if (e_48) throw e_48.error; }
+            finally { if (e_47) throw e_47.error; }
         }
         var models = [];
         try {
@@ -13440,15 +13461,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_47
                 models.push({ entry: entry, fmdl: fmdl });
             }
         }
-        catch (e_49_1) { e_49 = { error: e_49_1 }; }
+        catch (e_48_1) { e_48 = { error: e_48_1 }; }
         finally {
             try {
                 if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
             }
-            finally { if (e_49) throw e_49.error; }
+            finally { if (e_48) throw e_48.error; }
         }
         return { textures: textures, models: models };
-        var e_48, _a, e_49, _b;
+        var e_47, _a, e_48, _b;
     }
     exports_47("parse", parse);
     var gx2_surface_1, util_27, UBOParameterType, RenderInfoParameterType;
@@ -13777,12 +13798,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             samplers.push(sampler);
                         }
                     }
-                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
+                    catch (e_49_1) { e_49 = { error: e_49_1 }; }
                     finally {
                         try {
                             if (textureAssigns_1_1 && !textureAssigns_1_1.done && (_a = textureAssigns_1.return)) _a.call(textureAssigns_1);
                         }
-                        finally { if (e_50) throw e_50.error; }
+                        finally { if (e_49) throw e_49.error; }
                     }
                     var prog = new ProgramGambit_UBER();
                     this.arena.trackProgram(prog);
@@ -13823,7 +13844,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             _loop_7(i);
                         }
                     };
-                    var e_50, _a;
+                    var e_49, _a;
                 };
                 Scene.prototype.translateIndexBuffer = function (indexFormat, indexBufferData) {
                     switch (indexFormat) {
@@ -13845,14 +13866,14 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             indexDatas.push(indexData);
                         }
                     }
-                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
+                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_51) throw e_51.error; }
+                        finally { if (e_50) throw e_50.error; }
                     }
-                    var e_51, _c;
+                    var e_50, _c;
                 };
                 Scene.prototype.translateIndexFormat = function (gl, indexFormat) {
                     // Little-endian translation was done above.
@@ -13884,12 +13905,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             glIndexBuffers.push(coalescedIndex.shift());
                         }
                     }
-                    catch (e_52_1) { e_52 = { error: e_52_1 }; }
+                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_52) throw e_52.error; }
+                        finally { if (e_51) throw e_51.error; }
                     }
                     return function (state) {
                         var lod = 0;
@@ -13902,16 +13923,16 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 gl.drawElements(_this.translatePrimType(gl, mesh.primType), submesh.indexBufferCount, _this.translateIndexFormat(gl, mesh.indexFormat), glIndexBuffer.offset + submesh.indexBufferOffset);
                             }
                         }
-                        catch (e_53_1) { e_53 = { error: e_53_1 }; }
+                        catch (e_52_1) { e_52 = { error: e_52_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_53) throw e_53.error; }
+                            finally { if (e_52) throw e_52.error; }
                         }
-                        var e_53, _c;
+                        var e_52, _c;
                     };
-                    var e_52, _c;
+                    var e_51, _c;
                 };
                 Scene.prototype.translateModel = function (gl, model, coalescedVertex, coalescedIndex) {
                     var _this = this;
@@ -14094,15 +14115,15 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_54_1) { e_54 = { error: e_54_1 }; }
+        catch (e_53_1) { e_53 = { error: e_53_1 }; }
         finally {
             try {
                 if (scenes_9_1 && !scenes_9_1.done && (_a = scenes_9.return)) _a.call(scenes_9);
             }
-            finally { if (e_54) throw e_54.error; }
+            finally { if (e_53) throw e_53.error; }
         }
         return textures;
-        var e_54, _a;
+        var e_53, _a;
     }
     function createSceneFromFRESBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
@@ -14468,14 +14489,14 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_55_1) { e_55 = { error: e_55_1 }; }
+                    catch (e_54_1) { e_54 = { error: e_54_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_55) throw e_55.error; }
+                        finally { if (e_54) throw e_54.error; }
                     }
-                    var e_55, _c;
+                    var e_54, _c;
                 }
                 MultiScene.prototype.createPanels = function () {
                     var layers = new UI.LayerPanel();
@@ -14968,12 +14989,12 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                     vertexIndexSize += 0x02;
                 }
             }
-            catch (e_56_1) { e_56 = { error: e_56_1 }; }
+            catch (e_55_1) { e_55 = { error: e_55_1 }; }
             finally {
                 try {
                     if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
                 }
-                finally { if (e_56) throw e_56.error; }
+                finally { if (e_55) throw e_55.error; }
             }
             var totalVertexCount = 0;
             var totalTriangleCount = 0;
@@ -15130,7 +15151,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             };
             surfaces.push(surface);
             sectionIndex++;
-            var e_56, _a;
+            var e_55, _a;
         };
         for (var i = 0; i < surfaceCount; i++) {
             _loop_10(i);
@@ -15336,15 +15357,15 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                                 return resource;
                         }
                     }
-                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
+                    catch (e_56_1) { e_56 = { error: e_56_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_57) throw e_57.error; }
+                        finally { if (e_56) throw e_56.error; }
                     }
                     return null;
-                    var e_57, _c;
+                    var e_56, _c;
                 };
                 ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
                     var cached = this._cache.get(assetID);
@@ -15683,15 +15704,15 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                             offset += 4 * attrib.compCount;
                         }
                     }
-                    catch (e_58_1) { e_58 = { error: e_58_1 }; }
+                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
                     finally {
                         try {
                             if (vtxAttrFormats_2_1 && !vtxAttrFormats_2_1.done && (_a = vtxAttrFormats_2.return)) _a.call(vtxAttrFormats_2);
                         }
-                        finally { if (e_58) throw e_58.error; }
+                        finally { if (e_57) throw e_57.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_58, _a;
+                    var e_57, _a;
                 }
                 Command_Surface.prototype.exec = function (state) {
                     var gl = state.gl;
@@ -15850,14 +15871,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_59_1) { e_59 = { error: e_59_1 }; }
+                    catch (e_58_1) { e_58 = { error: e_58_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_59) throw e_59.error; }
+                        finally { if (e_58) throw e_58.error; }
                     }
-                    var e_59, _c;
+                    var e_58, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -15901,15 +15922,15 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                                 return new MultiScene(scenes);
                             }
                         }
-                        catch (e_60_1) { e_60 = { error: e_60_1 }; }
+                        catch (e_59_1) { e_59 = { error: e_59_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_60) throw e_60.error; }
+                            finally { if (e_59) throw e_59.error; }
                         }
                         return null;
-                        var e_60, _c;
+                        var e_59, _c;
                     });
                 };
                 return MP1SceneDesc;
@@ -16044,25 +16065,32 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                 function SceneLoader(viewer) {
                     this.viewer = viewer;
                 }
-                SceneLoader.prototype.setScene = function (scene, sceneDesc) {
+                SceneLoader.prototype.setScene = function (scene, sceneDesc, cameraState) {
                     this.currentScene = scene;
                     var cameraControllerClass;
-                    if (sceneDesc !== undefined)
+                    if (sceneDesc !== null)
                         cameraControllerClass = sceneDesc.defaultCameraController;
                     if (cameraControllerClass === undefined)
                         cameraControllerClass = viewer_1.FPSCameraController;
+                    var cameraController = new cameraControllerClass();
+                    if (cameraState !== null) {
+                        cameraController.deserialize(cameraState);
+                    }
+                    else if (scene !== null && scene.resetCamera) {
+                        scene.resetCamera(cameraController);
+                    }
                     var viewer = this.viewer;
-                    viewer.setCameraControllerClass(cameraControllerClass);
+                    viewer.setCameraController(cameraController);
                     viewer.setScene(scene);
                     this.onscenechanged();
                 };
-                SceneLoader.prototype.loadSceneDesc = function (sceneDesc) {
+                SceneLoader.prototype.loadSceneDesc = function (sceneDesc, cameraState) {
                     var _this = this;
-                    this.setScene(null);
+                    this.setScene(null, null, null);
                     var gl = this.viewer.renderState.gl;
                     var progressable = sceneDesc.createScene(gl);
                     progressable.then(function (scene) {
-                        _this.setScene(scene, sceneDesc);
+                        _this.setScene(scene, sceneDesc, cameraState);
                     });
                     return progressable;
                 };
@@ -16089,6 +16117,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     this._onResize();
                     window.addEventListener('keydown', this._onKeyDown.bind(this));
                     this.viewer = new viewer_1.Viewer(this.canvas);
+                    this.viewer.oncamerachanged = function () {
+                        _this._queueSaveState();
+                    };
                     this.viewer.start();
                     this.sceneLoader = new SceneLoader(this.viewer);
                     this.sceneLoader.onscenechanged = this._onSceneChanged.bind(this);
@@ -16121,19 +16152,42 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     this.canvas.height = window.innerHeight;
                 };
                 Main.prototype._loadState = function (state) {
-                    var _a = __read(state.split('/')), groupId = _a[0], sceneRest = _a.slice(1);
+                    var parts = state.split(';');
+                    var _a = __read(parts, 2), sceneState = _a[0], cameraState = _a[1];
+                    var _b = __read(sceneState.split('/')), groupId = _b[0], sceneRest = _b.slice(1);
                     var sceneId = decodeURIComponent(sceneRest.join('/'));
                     var group = this.groups.find(function (g) { return g.id === groupId; });
                     if (!group)
                         return;
                     var desc = group.sceneDescs.find(function (d) { return d.id === sceneId; });
                     var hasDesc = desc !== undefined;
-                    this._loadSceneDesc(group, desc);
+                    this.lastSavedState = state;
+                    this._loadSceneDesc(group, desc, cameraState);
                 };
-                Main.prototype._saveState = function () {
+                Main.prototype._getState = function () {
                     var groupId = this.currentSceneGroup.id;
                     var sceneId = this.currentSceneDesc.id;
-                    return groupId + "/" + sceneId;
+                    var camera = this.viewer.cameraController.serialize();
+                    return groupId + "/" + sceneId + ";" + camera;
+                };
+                Main.prototype._saveState = function () {
+                    // If we're currently loading a scene, don't save out...
+                    if (this.sceneLoader.currentScene === null)
+                        return;
+                    var newState = this._getState();
+                    if (this.lastSavedState !== newState) {
+                        window.history.replaceState('', '', '#' + newState);
+                        this.lastSavedState = newState;
+                    }
+                };
+                Main.prototype._queueSaveState = function () {
+                    var _this = this;
+                    if (this.saveTimeout !== 0)
+                        clearTimeout(this.saveTimeout);
+                    this.saveTimeout = setTimeout(function () {
+                        _this._saveState();
+                        _this.saveTimeout = 0;
+                    }, 500);
                 };
                 Main.prototype._onSceneChanged = function () {
                     var scene = this.viewer.scene;
@@ -16146,16 +16200,17 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                 Main.prototype._onSceneDescSelected = function (sceneGroup, sceneDesc) {
                     this._loadSceneDesc(sceneGroup, sceneDesc);
                 };
-                Main.prototype._loadSceneDesc = function (sceneGroup, sceneDesc) {
+                Main.prototype._loadSceneDesc = function (sceneGroup, sceneDesc, cameraState) {
+                    if (cameraState === void 0) { cameraState = null; }
                     if (this.currentSceneDesc === sceneDesc)
                         return;
                     this.currentSceneGroup = sceneGroup;
                     this.currentSceneDesc = sceneDesc;
                     this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
-                    var progressable = this.sceneLoader.loadSceneDesc(sceneDesc);
+                    var progressable = this.sceneLoader.loadSceneDesc(sceneDesc, cameraState);
                     this.ui.sceneSelect.setProgressable(progressable);
                     this._deselectUI();
-                    window.history.replaceState('', '', '#' + this._saveState());
+                    this._saveState();
                 };
                 Main.prototype._loadSceneGroups = function () {
                     this.ui.sceneSelect.setSceneGroups(this.groups);
@@ -16270,7 +16325,7 @@ System.register("embeds/main", ["viewer"], function (exports_63, context_63) {
                     System.import("embeds/" + file).then(function (embedModule) {
                         var gl = _this.viewer.renderState.gl;
                         embedModule.createScene(gl, name).then(function (scene) {
-                            _this.viewer.setCameraControllerClass(Viewer.OrbitCameraController);
+                            _this.viewer.setCameraController(new Viewer.OrbitCameraController());
                             _this.viewer.setScene(scene);
                         });
                     });
@@ -16403,16 +16458,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_61_1) { e_61 = { error: e_61_1 }; }
+                        catch (e_60_1) { e_60 = { error: e_60_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_61) throw e_61.error; }
+                            finally { if (e_60) throw e_60.error; }
                         }
                     }
                     return cmd;
-                    var e_61, _c;
+                    var e_60, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
