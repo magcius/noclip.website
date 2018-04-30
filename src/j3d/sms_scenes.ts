@@ -12,6 +12,7 @@ import { ColorOverride, Scene, TextureOverride } from './render';
 import { createScene } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
+import { BMD, BCK, LoopMode } from './j3d';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
@@ -326,8 +327,9 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             return null;
         const btkFile = rarc.findFile(`${basename}.btk`);
         const brkFile = rarc.findFile(`${basename}.brk`);
+        const bckFile = rarc.findFile(`${basename}.bck`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const scene = createScene(gl, bmdFile, btkFile, brkFile, bmtFile);
+        const scene = createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile);
         scene.name = basename;
         scene.setIsSkybox(isSkybox);
         return scene;
@@ -391,7 +393,14 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         function bmtm(bmd: string, bmt: string) {
             const bmdFile = rarc.findFile(bmd);
             const bmtFile = rarc.findFile(bmt);
-            return createScene(gl, bmdFile, null, null, bmtFile);
+            return createScene(gl, bmdFile, null, null, null, bmtFile);
+        }
+
+        function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT) {
+            const bmd = BMD.parse(rarc.findFile(bmdFilename).buffer);
+            const bck = BCK.parse(rarc.findFile(bckFilename).buffer);
+            bck.ank1.loopMode = loopMode;
+            return new Scene(gl, bmd, null, null, bck, null);
         }
 
         const modelLookup: ModelLookup[] = [
@@ -426,7 +435,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             { k: 'PalmOugi', m: 'palmOugi', p: 'mapobj/palmougi' },
             { k: 'PinnaDoor', m: 'PinnaDoor', p: 'mapobj/pinnadoor' },
             { k: 'ShellCup', m: 'ShellCup', p: 'mapobj/shellcup' },
-            { k: 'Shine', m: 'shine', p: 'mapobj/shine' },
+            { k: 'Shine', m: 'shine', s: () => bckm('mapobj/shine.bmd', 'mapobj/shine_float.bck') },
             { k: 'Viking', m: 'viking', p: 'mapobj/viking' },
             { k: 'WoodBox', m: 'WoodBox', p: 'mapobj/kibako' },
             { k: 'WoodBarrel', m: 'wood_barrel', s: () => bmtm('mapobj/barrel_normal.bmd', 'mapobj/barrel.bmt') },

@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray, BRK, DRW1JointKind } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray, BRK, DRW1JointKind, BCK } from './j3d';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
@@ -431,7 +431,7 @@ interface HierarchyTraverseContext {
 }
 
 const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
-const matrixScratch = mat4.create();
+const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
 export class Scene implements Viewer.Scene {
     public textures: Viewer.Texture[];
 
@@ -473,6 +473,7 @@ export class Scene implements Viewer.Scene {
         public bmd: BMD,
         public btk: BTK,
         public brk: BRK,
+        public bck: BCK,
         public bmt: BMT,
         public extraTextures: TEX1_TextureData[] = [],
     ) {
@@ -560,7 +561,7 @@ export class Scene implements Viewer.Scene {
         state.setClipPlanes(10, 500000);
 
         // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
-        this.updateJointMatrices();
+        this.updateJointMatrices(state);
 
         // Update our SceneParams UBO.
         let offs = 0;
@@ -795,15 +796,18 @@ export class Scene implements Viewer.Scene {
             this.translateSceneGraph(child, commandList);
     }
 
-    private updateJointMatrixHierarchy(node: HierarchyNode, parentJointMatrix: mat4) {
+    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4) {
         // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
         const jnt1 = this.bmd.jnt1;
 
         switch (node.type) {
         case HierarchyType.Joint:
             const jointIndex = jnt1.remapTable[node.jointIdx];
-            // TODO(jstpierre): Bone animation.
-            const boneMatrix = jnt1.bones[jointIndex].matrix;
+            let boneMatrix = jnt1.bones[jointIndex].matrix;
+            if (this.bck !== null) {
+                boneMatrix = matrixScratch2;
+                this.bck.calcJointMatrix(boneMatrix, jointIndex, this.getTimeInFrames(state.time));
+            }
             const jointMatrix = this.jointMatrices[jointIndex];
             mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
             parentJointMatrix = jointMatrix;
@@ -811,13 +815,13 @@ export class Scene implements Viewer.Scene {
         }
 
         for (const child of node.children)
-            this.updateJointMatrixHierarchy(child, parentJointMatrix);
+            this.updateJointMatrixHierarchy(state, child, parentJointMatrix);
     }
 
-    private updateJointMatrices() {
+    private updateJointMatrices(state: RenderState) {
         // First, update joint matrices from hierarchy.
         mat4.identity(matrixScratch);
-        this.updateJointMatrixHierarchy(this.bmd.inf1.sceneGraph, matrixScratch);
+        this.updateJointMatrixHierarchy(state, this.bmd.inf1.sceneGraph, matrixScratch);
 
         // Update weighted joint matrices.
         for (let i = 0; i < this.bmd.drw1.drw1Joints.length; i++) {
