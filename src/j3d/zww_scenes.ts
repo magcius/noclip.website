@@ -12,7 +12,7 @@ import * as UI from '../ui';
 
 import * as GX_Material from 'gx/gx_material';
 
-import { BMD, BTK, BRK } from './j3d';
+import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { ColorOverride, Scene } from './render';
 
@@ -251,10 +251,12 @@ class WindWakerRenderer implements Viewer.MainScene {
             return null;
         const btkFile = rarc.findFile(`btk/${name}.btk`);
         const brkFile = rarc.findFile(`brk/${name}.brk`);
+        const bckFile = rarc.findFile(`bck/${name}.bck`);
         const bdl = BMD.parse(bdlFile.buffer);
         const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
         const brk = brkFile ? BRK.parse(brkFile.buffer) : null;
-        const scene = new Scene(gl, bdl, btk, brk, null);
+        const bck = bckFile ? BCK.parse(bckFile.buffer) : null;
+        const scene = new Scene(gl, bdl, btk, brk, bck, null);
         scene.setIsSkybox(isSkybox);
         return scene;
     }

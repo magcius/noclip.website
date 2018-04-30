@@ -1119,11 +1119,6 @@ class J3DFileReaderHelper {
         this.magic = readString(this.buffer, 0, 8);
         this.size = this.view.getUint32(0x08);
         this.numChunks = this.view.getUint32(0x0C);
-
-        // Serialized VeRsion N?
-        const svr = readString(buffer, 0x10, 0x10);
-        assert(svr.slice(0, 3) === 'SVR' && svr.slice(4) == '\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF');
-
         this.offs = 0x20;
     }
 
@@ -1218,7 +1213,7 @@ export class BTI {
 //#endregion
 
 //#region Animation
-const enum LoopMode {
+export const enum LoopMode {
     ONCE = 0,
     REPEAT = 2,
     MIRRORED_ONCE = 3,
@@ -1611,5 +1606,108 @@ export class BRK {
     }
 
     public trk1: TRK1;
+}
+//#endregion
+
+//#region ANK1
+interface JointAnimationEntry {
+    index: number;
+    scaleX: AnimationTrack;
+    rotationX: AnimationTrack;
+    translationX: AnimationTrack;
+    scaleY: AnimationTrack;
+    rotationY: AnimationTrack;
+    translationY: AnimationTrack;
+    scaleZ: AnimationTrack;
+    rotationZ: AnimationTrack;
+    translationZ: AnimationTrack;
+}
+
+interface ANK1 extends AnimationBase {
+    jointAnimationEntries: JointAnimationEntry[];
+}
+
+function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
+    const view = buffer.createDataView();
+    const loopMode: LoopMode = view.getUint8(0x08);
+    const rotationDecimal = view.getUint8(0x09);
+    const duration = view.getUint16(0x0A);
+    const jointAnimationTableCount = view.getUint16(0x0C);
+    const sCount = view.getUint16(0x0E);
+    const rCount = view.getUint16(0x10);
+    const tCount = view.getUint16(0x12);
+    const jointAnimationTableOffs = view.getUint32(0x14);
+    const sTableOffs = view.getUint32(0x18);
+    const rTableOffs = view.getUint32(0x1C);
+    const tTableOffs = view.getUint32(0x20);
+
+    const rotationScale = Math.pow(2, rotationDecimal) / 32767;
+
+    const sTable = betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
+    const rTable = betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array);
+    const tTable = betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
+
+    let animationTableIdx = jointAnimationTableOffs;
+    function readAnimationTrack(data: Int16Array | Float32Array, scale: number) {
+        const count = view.getUint16(animationTableIdx + 0x00);
+        const index = view.getUint16(animationTableIdx + 0x02);
+        const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
+        animationTableIdx += 0x06;
+        return translateAnimationTrack(data, scale, count, index, tangent);
+    }
+
+    const jointAnimationEntries: JointAnimationEntry[] = [];
+    for (let i = 0; i < jointAnimationTableCount; i++) {
+        const scaleX = readAnimationTrack(sTable, 1);
+        const rotationX = readAnimationTrack(rTable, rotationScale);
+        const translationX = readAnimationTrack(tTable, 1);
+        const scaleY = readAnimationTrack(sTable, 1);
+        const rotationY = readAnimationTrack(rTable, rotationScale);
+        const translationY = readAnimationTrack(tTable, 1);
+        const scaleZ = readAnimationTrack(sTable, 1);
+        const rotationZ = readAnimationTrack(rTable, rotationScale);
+        const translationZ = readAnimationTrack(tTable, 1);
+        jointAnimationEntries.push({ 
+            index: i,
+            scaleX, rotationX, translationX,
+            scaleY, rotationY, translationY,
+            scaleZ, rotationZ, translationZ,
+        });
+    }
+
+    return { loopMode, duration, jointAnimationEntries };
+}
+//#endregion
+
+//#region BCK
+export class BCK {
+    public static parse(buffer: ArrayBufferSlice): BCK {
+        const bck = new BCK();
+
+        const j3d = new J3DFileReaderHelper(buffer);
+        assert(j3d.magic === 'J3D1bck1');
+
+        bck.ank1 = readANK1Chunk(j3d.nextChunk('ANK1'));
+
+        return bck;
+    }
+
+    public calcJointMatrix(dst: mat4, jointIndex: number, frame: number): void {
+        const animFrame = getAnimFrame(this.ank1, frame);
+
+        const entry = this.ank1.jointAnimationEntries[jointIndex];
+        const scaleX = sampleAnimationData(entry.scaleX, animFrame);
+        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * 180;
+        const translationX = sampleAnimationData(entry.translationX, animFrame);
+        const scaleY = sampleAnimationData(entry.scaleY, animFrame);
+        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * 180;
+        const translationY = sampleAnimationData(entry.translationY, animFrame);
+        const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * 180;
+        const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+        createJointMatrix(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    }
+
+    public ank1: ANK1;
 }
 //#endregion
