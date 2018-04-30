@@ -814,8 +814,8 @@ export class Scene implements Viewer.Scene {
             break;
         }
 
-        for (const child of node.children)
-            this.updateJointMatrixHierarchy(state, child, parentJointMatrix);
+        for (let i = 0; i < node.children.length; i++)
+            this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix);
     }
 
     private updateJointMatrices(state: RenderState) {

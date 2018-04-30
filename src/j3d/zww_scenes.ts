@@ -211,8 +211,10 @@ class WindWakerRenderer implements Viewer.MainScene {
         return [timeOfDayPanel];
     }
 
-    public resetCamera(m: mat4) {
+    public resetCamera(cameraController: Viewer.CameraController) {
+        const m = mat4.create();
         this.cameraPos.set(m);
+        cameraController.setInitialCamera(m);
     }
 
     public render(state: RenderState) {
