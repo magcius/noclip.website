@@ -317,6 +317,9 @@ function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
 export interface Bone {
     name: string;
     matrix: mat4;
+    scaleX: number;
+    scaleY: number;
+    scaleZ: number;
 }
 
 export interface JNT1 {
@@ -353,9 +356,9 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const scaleX = view.getFloat32(boneDataTableIdx + 0x04);
         const scaleY = view.getFloat32(boneDataTableIdx + 0x08);
         const scaleZ = view.getFloat32(boneDataTableIdx + 0x0C);
-        const rotationX = view.getUint16(boneDataTableIdx + 0x10) / 0x7FFF * 180;
-        const rotationY = view.getUint16(boneDataTableIdx + 0x12) / 0x7FFF * 180;
-        const rotationZ = view.getUint16(boneDataTableIdx + 0x14) / 0x7FFF * 180;
+        const rotationX = view.getInt16(boneDataTableIdx + 0x10) / 0x7FFF * 180;
+        const rotationY = view.getInt16(boneDataTableIdx + 0x12) / 0x7FFF * 180;
+        const rotationZ = view.getInt16(boneDataTableIdx + 0x14) / 0x7FFF * 180;
         const translationX = view.getFloat32(boneDataTableIdx + 0x18);
         const translationY = view.getFloat32(boneDataTableIdx + 0x1C);
         const translationZ = view.getFloat32(boneDataTableIdx + 0x20);
@@ -363,7 +366,7 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
 
         const matrix = mat4.create();
         createJointMatrix(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        bones.push({ name, matrix });
+        bones.push({ name, matrix, scaleX, scaleY, scaleZ });
         boneDataTableIdx += 0x40;
     }
 

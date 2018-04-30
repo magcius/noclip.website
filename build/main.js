@@ -4890,16 +4890,16 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var scaleX = view.getFloat32(boneDataTableIdx + 0x04);
             var scaleY = view.getFloat32(boneDataTableIdx + 0x08);
             var scaleZ = view.getFloat32(boneDataTableIdx + 0x0C);
-            var rotationX = view.getUint16(boneDataTableIdx + 0x10) / 0x7FFF * 180;
-            var rotationY = view.getUint16(boneDataTableIdx + 0x12) / 0x7FFF * 180;
-            var rotationZ = view.getUint16(boneDataTableIdx + 0x14) / 0x7FFF * 180;
+            var rotationX = view.getInt16(boneDataTableIdx + 0x10) / 0x7FFF * 180;
+            var rotationY = view.getInt16(boneDataTableIdx + 0x12) / 0x7FFF * 180;
+            var rotationZ = view.getInt16(boneDataTableIdx + 0x14) / 0x7FFF * 180;
             var translationX = view.getFloat32(boneDataTableIdx + 0x18);
             var translationY = view.getFloat32(boneDataTableIdx + 0x1C);
             var translationZ = view.getFloat32(boneDataTableIdx + 0x20);
             // Skipping bounding box data for now.
             var matrix = gl_matrix_4.mat4.create();
             createJointMatrix(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-            bones.push({ name: name_1, matrix: matrix });
+            bones.push({ name: name_1, matrix: matrix, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ });
             boneDataTableIdx += 0x40;
         }
         return { remapTable: remapTable, bones: bones };
@@ -7115,7 +7115,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                                 this.bck.calcJointMatrix(boneMatrix, jointIndex, this.getTimeInFrames(state.time));
                             }
                             var jointMatrix = this.jointMatrices[jointIndex];
-                            gl_matrix_5.mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
+                            gl_matrix_5.mat4.mul(jointMatrix, parentJointMatrix, boneMatrix);
                             parentJointMatrix = jointMatrix;
                             break;
                     }
@@ -7146,12 +7146,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             gl_matrix_5.mat4.copy(destMtx, this.jointMatrices[joint.jointIndex]);
                         }
                         else if (joint.kind === j3d_1.DRW1JointKind.WeightedJoint) {
-                            gl_matrix_5.mat4.identity(destMtx);
+                            destMtx.fill(0);
                             var envelope = this.bmd.evp1.envelopes[joint.envelopeIndex];
                             for (var i_2 = 0; i_2 < envelope.weightedBones.length; i_2++) {
                                 var weightedBone = envelope.weightedBones[i_2];
                                 var inverseBindPose = this.bmd.evp1.inverseBinds[weightedBone.index];
-                                gl_matrix_5.mat4.mul(matrixScratch, inverseBindPose, this.jointMatrices[weightedBone.index]);
+                                gl_matrix_5.mat4.mul(matrixScratch, this.jointMatrices[weightedBone.index], inverseBindPose);
                                 gl_matrix_5.mat4.multiplyScalarAndAdd(destMtx, destMtx, matrixScratch, weightedBone.weight);
                             }
                         }

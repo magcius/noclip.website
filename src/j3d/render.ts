@@ -809,7 +809,7 @@ export class Scene implements Viewer.Scene {
                 this.bck.calcJointMatrix(boneMatrix, jointIndex, this.getTimeInFrames(state.time));
             }
             const jointMatrix = this.jointMatrices[jointIndex];
-            mat4.mul(jointMatrix, boneMatrix, parentJointMatrix);
+            mat4.mul(jointMatrix, parentJointMatrix, boneMatrix);
             parentJointMatrix = jointMatrix;
             break;
         }
@@ -830,12 +830,12 @@ export class Scene implements Viewer.Scene {
             if (joint.kind === DRW1JointKind.NormalJoint) {
                 mat4.copy(destMtx, this.jointMatrices[joint.jointIndex]);
             } else if (joint.kind === DRW1JointKind.WeightedJoint) {
-                mat4.identity(destMtx);
+                destMtx.fill(0);
                 const envelope = this.bmd.evp1.envelopes[joint.envelopeIndex];
                 for (let i = 0; i < envelope.weightedBones.length; i++) {
                     const weightedBone = envelope.weightedBones[i];
                     const inverseBindPose = this.bmd.evp1.inverseBinds[weightedBone.index];
-                    mat4.mul(matrixScratch, inverseBindPose, this.jointMatrices[weightedBone.index]);
+                    mat4.mul(matrixScratch, this.jointMatrices[weightedBone.index], inverseBindPose);
                     mat4.multiplyScalarAndAdd(destMtx, destMtx, matrixScratch, weightedBone.weight);
                 }
             }
