@@ -136,15 +136,29 @@ export class FPSCameraController implements CameraController {
     }
 
     public serialize(): string {
-        const x = this.camera[12], y = this.camera[13], z = this.camera[14];
-        return `${x.toFixed(2)},${y.toFixed(2)},${z.toFixed(2)}`;
+        const tx = this.camera[12], ty = this.camera[13], tz = this.camera[14];
+        const rx = this.camera[0], ry = this.camera[4], rz = this.camera[8];
+        const fx = this.camera[2], fy = this.camera[6], fz = this.camera[10];
+        return `${tx.toFixed(2)},${ty.toFixed(2)},${tz.toFixed(2)},${fx.toFixed(2)},${fy.toFixed(2)},${fz.toFixed(2)},${rx.toFixed(2)},${ry.toFixed(2)},${rz.toFixed(2)}`;
     }
 
     public deserialize(state: string) {
-        const [x, y, z] = state.split(',');
-        this.camera[12] = +x;
-        this.camera[13] = +y;
-        this.camera[14] = +z;
+        const [tx, ty, tz, fx, fy, fz, rx, ry, rz] = state.split(',');
+        this.camera[12] = +tx;
+        this.camera[13] = +ty;
+        this.camera[14] = +tz;
+        this.camera[2] = +fx;
+        this.camera[6] = +fy;
+        this.camera[10] = +fz;
+        this.camera[0] = +rx;
+        this.camera[4] = +ry;
+        this.camera[8] = +rz;
+        const u = vec3.create();
+        vec3.cross(u, [this.camera[2], this.camera[6], this.camera[10]], [this.camera[0], this.camera[4], this.camera[8]]);
+        vec3.normalize(u, u);
+        this.camera[1] = u[0];
+        this.camera[5] = u[1];
+        this.camera[9] = u[2];
     }
 
     public setInitialCamera(camera: mat4) {
@@ -209,7 +223,7 @@ export class FPSCameraController implements CameraController {
             vec3.normalize(cu, cu);
             mat4.rotate(camera, camera, -inputManager.dx / 500, cu);
             mat4.rotate(camera, camera, -inputManager.dy / 500, [1, 0, 0]);
-    
+
             mat4.multiply(camera, camera, tmp);
         }
 
