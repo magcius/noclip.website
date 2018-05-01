@@ -263,7 +263,7 @@ class Main {
         this.saveTimeout = setTimeout(() => {
             this._saveState();
             this.saveTimeout = 0;
-        }, 500);
+        }, 100);
     }
 
     private _onSceneChanged(): void {

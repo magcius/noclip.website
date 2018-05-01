@@ -2825,14 +2825,28 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     this.speed = 10;
                 }
                 FPSCameraController.prototype.serialize = function () {
-                    var x = this.camera[12], y = this.camera[13], z = this.camera[14];
-                    return x.toFixed(2) + "," + y.toFixed(2) + "," + z.toFixed(2);
+                    var tx = this.camera[12], ty = this.camera[13], tz = this.camera[14];
+                    var rx = this.camera[0], ry = this.camera[4], rz = this.camera[8];
+                    var fx = this.camera[2], fy = this.camera[6], fz = this.camera[10];
+                    return tx.toFixed(2) + "," + ty.toFixed(2) + "," + tz.toFixed(2) + "," + fx.toFixed(2) + "," + fy.toFixed(2) + "," + fz.toFixed(2) + "," + rx.toFixed(2) + "," + ry.toFixed(2) + "," + rz.toFixed(2);
                 };
                 FPSCameraController.prototype.deserialize = function (state) {
-                    var _a = __read(state.split(','), 3), x = _a[0], y = _a[1], z = _a[2];
-                    this.camera[12] = +x;
-                    this.camera[13] = +y;
-                    this.camera[14] = +z;
+                    var _a = __read(state.split(','), 9), tx = _a[0], ty = _a[1], tz = _a[2], fx = _a[3], fy = _a[4], fz = _a[5], rx = _a[6], ry = _a[7], rz = _a[8];
+                    this.camera[12] = +tx;
+                    this.camera[13] = +ty;
+                    this.camera[14] = +tz;
+                    this.camera[2] = +fx;
+                    this.camera[6] = +fy;
+                    this.camera[10] = +fz;
+                    this.camera[0] = +rx;
+                    this.camera[4] = +ry;
+                    this.camera[8] = +rz;
+                    var u = gl_matrix_2.vec3.create();
+                    gl_matrix_2.vec3.cross(u, [this.camera[2], this.camera[6], this.camera[10]], [this.camera[0], this.camera[4], this.camera[8]]);
+                    gl_matrix_2.vec3.normalize(u, u);
+                    this.camera[1] = u[0];
+                    this.camera[5] = u[1];
+                    this.camera[9] = u[2];
                 };
                 FPSCameraController.prototype.setInitialCamera = function (camera) {
                     gl_matrix_2.mat4.invert(this.camera, camera);
@@ -16187,7 +16201,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     this.saveTimeout = setTimeout(function () {
                         _this._saveState();
                         _this.saveTimeout = 0;
-                    }, 500);
+                    }, 100);
                 };
                 Main.prototype._onSceneChanged = function () {
                     var scene = this.viewer.scene;
