@@ -3002,6 +3002,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_9, context_
                     this.canvas = canvas;
                     this.onscreenColorTarget = new render_1.ColorTarget();
                     this.onscreenDepthTarget = new render_1.DepthTarget();
+                    this.oncamerachanged = (function () { });
                     var gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
                     this.renderState = new render_1.RenderState(gl);
                     this.inputManager = new InputManager(this.canvas);

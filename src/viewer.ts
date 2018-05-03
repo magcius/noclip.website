@@ -354,7 +354,7 @@ export class Viewer {
     private onscreenDepthTarget: DepthTarget = new DepthTarget();
     public scene: MainScene;
     
-    public oncamerachanged: () => void;
+    public oncamerachanged: () => void = (() => {});
 
     constructor(public canvas: HTMLCanvasElement) {
         const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
