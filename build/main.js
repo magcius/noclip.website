@@ -251,10 +251,6 @@ System.register("ArrayBufferSlice", ["util"], function (exports_3, context_3) {
                     var end = length !== undefined ? start + length : this.byteOffset + this.byteLength;
                     return ArrayBuffer_slice.call(this.arrayBuffer, start, end);
                 };
-                ArrayBufferSlice.prototype.copyToNewSlice = function (offs, length) {
-                    if (offs === void 0) { offs = 0; }
-                    return new ArrayBufferSlice(this.copyToBuffer(offs, length));
-                };
                 ArrayBufferSlice.prototype.castToBuffer = function () {
                     if (this.byteOffset === 0 && this.byteLength === this.arrayBuffer.byteLength) {
                         return this.arrayBuffer;
@@ -287,7 +283,7 @@ System.register("ArrayBufferSlice", ["util"], function (exports_3, context_3) {
                         util_1.assert(isAligned(end, clazz.BYTES_PER_ELEMENT));
                         count = byteLength / clazz.BYTES_PER_ELEMENT;
                     }
-                    // Typed arrays require proper alignment -- copy in the case we don't have it.
+                    // Typed arrays require 
                     if (isAligned(begin, clazz.BYTES_PER_ELEMENT))
                         return new clazz(this.arrayBuffer, begin, count);
                     else
@@ -3150,7 +3146,7 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice"], function (e
         heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10));
         var wasmInstance = new WebAssembly.Instance(wat_modules_1.yaz0Module, { env: { mem: mem } });
         wasmInstance.exports.decompress(dstHeapOffs, 0x00, uncompressedSize);
-        return new ArrayBufferSlice_4.default(heap.buffer).copyToNewSlice(dstHeapOffs, uncompressedSize);
+        return new ArrayBufferSlice_4.default(heap.buffer, dstHeapOffs, uncompressedSize);
     }
     function decompressJs(srcBuffer) {
         var srcView = srcBuffer.createDataView();
