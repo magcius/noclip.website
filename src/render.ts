@@ -2,6 +2,7 @@
 import { mat4 } from 'gl-matrix';
 import { assert, align } from './util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import MemoizeCache from 'MemoizeCache';
 import CodeEditor from 'CodeEditor';
 
 export enum CompareMode {
@@ -279,14 +280,20 @@ ${rest}
     }
 }
 
-class ProgramCache {
-    constructor(private gl: WebGL2RenderingContext) {}
-    private _cache = new Map<string, WebGLProgram>();
+interface ProgramKey {
+    vert: string;
+    frag: string;
+}
 
-    private _compileProgram(vert: string, frag: string): WebGLProgram {
+class ProgramCache extends MemoizeCache<ProgramKey, WebGLProgram> {
+    constructor(private gl: WebGL2RenderingContext) {
+        super();
+    }
+
+    protected make(key: ProgramKey): WebGLProgram {
         const gl = this.gl;
-        const vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
-        const fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
+        const vertShader = compileShader(gl, key.vert, gl.VERTEX_SHADER);
+        const fragShader = compileShader(gl, key.frag, gl.FRAGMENT_SHADER);
         if (!vertShader || !fragShader)
             return null;
         const prog = gl.createProgram();
@@ -296,8 +303,8 @@ class ProgramCache {
         gl.deleteShader(vertShader);
         gl.deleteShader(fragShader);
         if (DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error(vert);
-            console.error(frag);
+            console.error(key.vert);
+            console.error(key.frag);
             console.error(gl.getProgramInfoLog(prog));
             gl.deleteProgram(prog);
             return null;
@@ -305,11 +312,12 @@ class ProgramCache {
         return prog;
     }
 
+    protected makeKey(key: ProgramKey): string {
+        return `${key.vert}$${key.frag}`;
+    }
+
     public compileProgram(vert: string, frag: string) {
-        const key = vert + '$' + frag;
-        if (!this._cache.has(key))
-            this._cache.set(key, this._compileProgram(vert, frag));
-        return this._cache.get(key);
+        return this.get({ vert, frag });
     }
 }
 

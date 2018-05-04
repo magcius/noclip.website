@@ -10,6 +10,7 @@
 // TODO(jtpierre): Actually support multiple VATs, which Metroid Prime uses.
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import MemoizeCache from '../MemoizeCache';
 import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
@@ -354,18 +355,22 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
     return { indexData, packedVertexData, totalTriangleCount, totalVertexCount };
 }
 
-class VtxLoaderCache {
-    private cache = new Map<string, VtxLoader>();
+interface VtxLoaderDesc {
+    vat: GX_VtxAttrFmt[];
+    vtxDescs: GX_VtxDesc[];
+}
 
-    public compileVtxLoader = (vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoader => {
-        const key = this.makeKey(vat, vtxDescs);
-        if (!this.cache.has(key))
-            this.cache.set(key, _compileVtxLoader(vat, vtxDescs));
-        return this.cache.get(key);
+class VtxLoaderCache extends MemoizeCache<VtxLoaderDesc, VtxLoader> {
+    protected make(key: VtxLoaderDesc): VtxLoader {
+        return _compileVtxLoader(key.vat, key.vtxDescs);
     }
 
-    private makeKey(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): string {
-        return JSON.stringify({ vat, vtxDescs });
+    protected makeKey(key: VtxLoaderDesc): string {
+        return JSON.stringify(key);
+    }
+
+    public compileVtxLoader = (vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoader => {
+        return this.get({ vat, vtxDescs });
     }
 }
 
