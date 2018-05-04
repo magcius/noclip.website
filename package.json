@@ -3,13 +3,14 @@
   "private": true,
   "devDependencies": {
     "gl-matrix": "^2.4.0",
-    "pako": "^1.0.6"
+    "pako": "^1.0.6",
+    "wabt": "^1.0.0-nightly.20180421"
   },
   "dependencies": {
     "@types/gl-matrix": "^2.4.0",
     "@types/pako": "^1.0.0",
     "@types/systemjs": "^0.20.6",
-    "@types/text-encoding": "0.0.32",
+    "@types/webassembly-js-api": "0.0.1",
     "@types/webgl2": "0.0.2"
   }
 }
