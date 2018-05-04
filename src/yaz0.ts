@@ -15,10 +15,34 @@
 //         Offset: bits 5-15
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
-import { assert, readString } from './util';
+import { assert, readString, align } from './util';
+import { yaz0Module } from './wat_modules';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
-export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
+function decompressWasm(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
+    const srcView = srcBuffer.createDataView();
+    assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
+
+    let uncompressedSize = srcView.getUint32(0x04, false);
+
+    const dstHeapOffs = align(srcBuffer.byteLength, 0x10);
+    const heapSize = dstHeapOffs + align(uncompressedSize, 0x10);
+
+    const pageSize = (64 * 1024); // Pages in WASM are 64k
+    const numPages = Math.ceil(heapSize / pageSize) + 1;
+    const mem = new WebAssembly.Memory({ initial: numPages });
+    const heap = new Uint8Array(mem.buffer);
+
+    // Copy source buffer.
+    heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10));
+
+    const wasmInstance = new WebAssembly.Instance(yaz0Module, { env: { mem }});
+    wasmInstance.exports.decompress(dstHeapOffs, 0x00, uncompressedSize);
+
+    return new ArrayBufferSlice(heap.buffer, dstHeapOffs, uncompressedSize);
+}
+
+function decompressJs(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     const srcView = srcBuffer.createDataView();
     assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
 
@@ -60,3 +84,6 @@ export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
         }
     }
 }
+
+// TODO(jstpierre): Investigate why WASM is so slow.
+export const decompress = decompressJs;
