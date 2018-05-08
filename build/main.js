@@ -3159,7 +3159,7 @@ System.register("wat_modules", [], function (exports_12, context_12) {
         setters: [],
         execute: function () {
             // yaz0.wat
-            yaz0Code = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 7, 1, 96, 3, 127, 127, 127, 0, 2, 12, 1, 3, 101, 110, 118, 3, 109, 101, 109, 2, 0, 1, 3, 2, 1, 0, 7, 14, 1, 10, 100, 101, 99, 111, 109, 112, 114, 101, 115, 115, 0, 0, 10, 167, 2, 1, 164, 2, 1, 7, 127, 3, 64, 32, 1, 65, 1, 106, 33, 9, 32, 1, 44, 0, 0, 33, 3, 65, 8, 33, 7, 2, 64, 2, 64, 3, 64, 32, 7, 34, 1, 65, 127, 106, 33, 7, 32, 1, 69, 13, 1, 32, 9, 45, 0, 0, 33, 6, 2, 64, 65, 1, 32, 7, 116, 32, 3, 113, 69, 13, 0, 32, 0, 32, 6, 58, 0, 0, 32, 0, 65, 1, 106, 33, 0, 32, 9, 65, 1, 106, 33, 9, 32, 2, 65, 127, 106, 34, 2, 65, 0, 74, 13, 1, 12, 3, 11, 32, 9, 45, 0, 1, 33, 5, 2, 64, 2, 64, 32, 6, 65, 4, 118, 34, 1, 69, 13, 0, 32, 9, 65, 2, 106, 33, 8, 32, 1, 65, 2, 106, 33, 1, 12, 1, 11, 32, 9, 65, 3, 106, 33, 8, 32, 9, 65, 2, 106, 45, 0, 0, 65, 18, 106, 33, 1, 11, 32, 2, 32, 1, 65, 255, 255, 3, 113, 107, 33, 2, 2, 64, 32, 1, 69, 13, 0, 32, 0, 65, 127, 106, 33, 9, 32, 6, 65, 8, 116, 65, 128, 30, 113, 32, 5, 114, 65, 127, 115, 65, 1, 106, 33, 5, 32, 1, 65, 255, 255, 3, 106, 65, 255, 255, 3, 113, 33, 4, 3, 64, 32, 9, 65, 1, 106, 34, 6, 32, 9, 32, 5, 106, 45, 0, 0, 58, 0, 0, 32, 6, 33, 9, 32, 1, 65, 127, 106, 34, 1, 65, 255, 255, 3, 113, 13, 0, 11, 32, 0, 32, 4, 106, 65, 1, 106, 33, 0, 11, 32, 8, 33, 9, 32, 2, 65, 0, 74, 13, 0, 12, 2, 11, 11, 32, 9, 33, 1, 12, 1, 11, 11, 11]);
+            yaz0Code = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 10, 2, 96, 0, 0, 96, 3, 127, 127, 127, 0, 3, 4, 3, 0, 1, 0, 4, 5, 1, 112, 1, 1, 1, 5, 3, 1, 0, 2, 6, 21, 3, 127, 1, 65, 128, 136, 4, 11, 127, 0, 65, 128, 136, 4, 11, 127, 0, 65, 128, 8, 11, 7, 59, 5, 6, 95, 115, 116, 97, 114, 116, 0, 0, 10, 100, 101, 99, 111, 109, 112, 114, 101, 115, 115, 0, 1, 6, 109, 101, 109, 111, 114, 121, 2, 0, 11, 95, 95, 104, 101, 97, 112, 95, 98, 97, 115, 101, 3, 1, 10, 95, 95, 100, 97, 116, 97, 95, 101, 110, 100, 3, 2, 10, 183, 2, 3, 2, 0, 11, 174, 2, 1, 8, 127, 3, 64, 32, 1, 45, 0, 0, 33, 3, 65, 8, 33, 4, 32, 1, 65, 1, 106, 33, 1, 2, 64, 2, 64, 3, 64, 32, 4, 69, 13, 1, 2, 64, 2, 64, 65, 1, 32, 4, 65, 127, 106, 34, 4, 116, 32, 3, 113, 69, 13, 0, 32, 0, 32, 1, 45, 0, 0, 58, 0, 0, 32, 0, 65, 1, 106, 33, 0, 32, 1, 65, 1, 106, 33, 1, 65, 0, 33, 5, 32, 2, 65, 127, 106, 34, 2, 65, 0, 74, 13, 2, 12, 1, 11, 32, 1, 45, 0, 0, 34, 5, 65, 8, 116, 65, 128, 30, 113, 32, 1, 65, 1, 106, 45, 0, 0, 114, 65, 1, 106, 33, 6, 2, 64, 2, 64, 32, 5, 65, 4, 118, 34, 5, 69, 13, 0, 32, 1, 65, 2, 106, 33, 7, 32, 5, 65, 2, 106, 33, 5, 12, 1, 11, 32, 1, 65, 3, 106, 33, 7, 32, 1, 65, 2, 106, 45, 0, 0, 65, 18, 106, 33, 5, 11, 32, 0, 65, 127, 106, 33, 1, 32, 5, 65, 255, 255, 3, 113, 33, 8, 65, 1, 32, 6, 65, 255, 255, 3, 113, 107, 33, 9, 32, 5, 65, 127, 106, 65, 255, 255, 3, 113, 33, 10, 3, 64, 32, 1, 65, 1, 106, 34, 6, 32, 1, 32, 9, 106, 45, 0, 0, 58, 0, 0, 32, 6, 33, 1, 32, 5, 65, 127, 106, 34, 5, 65, 255, 255, 3, 113, 13, 0, 11, 32, 0, 32, 10, 106, 65, 1, 106, 33, 0, 32, 7, 33, 1, 65, 0, 33, 5, 32, 2, 32, 8, 107, 34, 2, 65, 0, 74, 13, 1, 11, 11, 32, 5, 13, 2, 12, 1, 11, 65, 1, 13, 1, 11, 11, 11, 2, 0, 11]);
             ;
             exports_12("yaz0", yaz0 = new WebAssembly.Module(yaz0Code));
             // gx/gx_texture.wat
@@ -3176,18 +3176,23 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
     function decompressWasm(srcBuffer) {
         var srcView = srcBuffer.createDataView();
         util_3.assert(util_3.readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
-        var uncompressedSize = srcView.getUint32(0x04, false);
-        var dstHeapOffs = util_3.align(srcBuffer.byteLength, 0x10);
-        var heapSize = dstHeapOffs + util_3.align(uncompressedSize, 0x10);
-        wasmMemory.resize(heapSize);
+        var dstSize = srcView.getUint32(0x04, false);
+        var srcSize = srcBuffer.byteLength;
+        var pDstOffs = 0;
+        var pSrcOffs = util_3.align(dstSize, 0x10);
+        var heapSize = pSrcOffs + util_3.align(srcSize, 0x10);
+        var heapBase = wasmInstance.exports.__heap_base.value;
+        var wasmMemory = new WasmMemoryManager_1.default(wasmInstance.exports.memory);
+        wasmMemory.resize(heapBase + heapSize);
         var mem = wasmMemory.mem;
         var heap = wasmMemory.heap;
-        // memcpy source buffer.
-        heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10));
-        var wasmInstance = new WebAssembly.Instance(wat_modules_1.yaz0, { env: { mem: mem } });
-        wasmInstance.exports.decompress(dstHeapOffs, 0x00, uncompressedSize);
+        var pDst = heapBase + pDstOffs;
+        var pSrc = heapBase + pSrcOffs;
+        // Copy src buffer.
+        heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
+        wasmInstance.exports.decompress(pDst, pSrc, dstSize);
         // Copy the result buffer to a new buffer for memory usage purposes.
-        var result = new ArrayBufferSlice_4.default(heap.buffer).copySlice(dstHeapOffs, uncompressedSize);
+        var result = new ArrayBufferSlice_4.default(heap.buffer).copySlice(pDst, dstSize);
         return result;
     }
     function decompressJs(srcBuffer) {
@@ -3225,7 +3230,7 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
             }
         }
     }
-    var util_3, wat_modules_1, ArrayBufferSlice_4, WasmMemoryManager_1, wasmMemory, decompress;
+    var util_3, wat_modules_1, ArrayBufferSlice_4, WasmMemoryManager_1, wasmInstance, decompress;
     return {
         setters: [
             function (util_3_1) {
@@ -3245,7 +3250,7 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
             // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
             // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
             // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-            wasmMemory = new WasmMemoryManager_1.default();
+            wasmInstance = new WebAssembly.Instance(wat_modules_1.yaz0);
             exports_13("decompress", decompress = decompressWasm);
         }
     };

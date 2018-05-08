@@ -16,37 +16,44 @@
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
 import { assert, readString, align } from './util';
-import { yaz0 as yaz0Module } from './wat_modules';
+import { yaz0 as yaz0Module, yaz0 } from './wat_modules';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import WasmMemoryManager from './WasmMemoryManager';
 
 // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
 // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
 // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-const wasmMemory = new WasmMemoryManager();
+const wasmInstance = new WebAssembly.Instance(yaz0Module);
 
 function decompressWasm(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     const srcView = srcBuffer.createDataView();
     assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
 
-    let uncompressedSize = srcView.getUint32(0x04, false);
+    const dstSize = srcView.getUint32(0x04, false);
+    const srcSize = srcBuffer.byteLength;
 
-    const dstHeapOffs = align(srcBuffer.byteLength, 0x10);
-    const heapSize = dstHeapOffs + align(uncompressedSize, 0x10);
+    const pDstOffs = 0;
+    const pSrcOffs = align(dstSize, 0x10);
 
-    wasmMemory.resize(heapSize);
+    const heapSize = pSrcOffs + align(srcSize, 0x10);
+
+    const heapBase = wasmInstance.exports.__heap_base.value;
+
+    const wasmMemory = new WasmMemoryManager(wasmInstance.exports.memory);
+    wasmMemory.resize(heapBase + heapSize);
     const mem = wasmMemory.mem;
     const heap = wasmMemory.heap;
 
-    // memcpy source buffer.
-    heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10));
+    const pDst = heapBase + pDstOffs;
+    const pSrc = heapBase + pSrcOffs;
 
-    const wasmInstance = new WebAssembly.Instance(yaz0Module, { env: { mem }});
+    // Copy src buffer.
+    heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
 
-    wasmInstance.exports.decompress(dstHeapOffs, 0x00, uncompressedSize);
+    wasmInstance.exports.decompress(pDst, pSrc, dstSize);
 
     // Copy the result buffer to a new buffer for memory usage purposes.
-    const result = new ArrayBufferSlice(heap.buffer).copySlice(dstHeapOffs, uncompressedSize);
+    const result = new ArrayBufferSlice(heap.buffer).copySlice(pDst, dstSize);
 
     return result;
 }

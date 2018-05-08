@@ -1,5 +1,12 @@
 
-void decompress(unsigned char*pDst, unsigned char*pSrc, int dstSize) {
+#include <stdint.h>
+
+static uint16_t read16be(uint8_t*b) {
+    return (b[0] << 8 | b[1]);
+}
+
+__attribute__((visibility("default")))
+void decompress(uint8_t*pDst, uint8_t*pSrc, int dstSize) {
   while(1) {
     int i = 8;
     char cmd = *pSrc++;
@@ -8,10 +15,10 @@ void decompress(unsigned char*pDst, unsigned char*pSrc, int dstSize) {
         dstSize--;
         *pDst++ = *pSrc++;
       } else {
-        unsigned short t = (pSrc[0] << 8) | (pSrc[1]);
+        uint16_t t = read16be(pSrc);
         pSrc += 2;
-        unsigned short w = (t & 0x0FFF) + 1;
-        unsigned short n = (t >> 12) + 2;
+        uint16_t w = (t & 0x0FFF) + 1;
+        uint16_t n = (t >> 12) + 2;
         if(n == 2)
           n += *pSrc++ + 0x10;
         dstSize -= n;
