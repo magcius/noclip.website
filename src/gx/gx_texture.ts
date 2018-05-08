@@ -8,9 +8,12 @@ import { align } from '../util';
 import { gx_textureInstance } from '../wat_modules';
 import WasmMemoryManager from '../WasmMemoryManager';
 
+type TextureDecoder = (pDst: number, pSrc: number, width: number, height: number) => void;
+
 declare module "../wat_modules" {
     interface gx_textureExports {
-        decode_CMPR(pDst: number, pSrc: number, width: number, height: number): void;
+        decode_CMPR: TextureDecoder;
+        decode_I8: TextureDecoder;
     }
 }
 
@@ -113,7 +116,7 @@ export function calcFullTextureSize(format: GX.TexFormat, width: number, height:
 // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
 const wasmInstance = gx_textureInstance();
 
-function decode_CMPR_Wasm(texture: Texture): DecodedTexture {
+function decode_Wasm(texture: Texture, decoder: TextureDecoder): DecodedTexture {
     const dstSize = texture.width * texture.height * 4;
     const srcSize = texture.data.byteLength;
 
@@ -135,7 +138,7 @@ function decode_CMPR_Wasm(texture: Texture): DecodedTexture {
     // Copy src buffer.
     heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
 
-    wasmInstance.decode_CMPR(pDst, pSrc, texture.width, texture.height);
+    decoder(pDst, pSrc, texture.width, texture.height);
 
     // Copy the result buffer to a new buffer for memory usage purposes.
     const pixelsBuffer = new ArrayBufferSlice(heap.buffer).copyToBuffer(pDst, dstSize);
@@ -143,7 +146,7 @@ function decode_CMPR_Wasm(texture: Texture): DecodedTexture {
     return { type: "RGBA", pixels, width: texture.width, height: texture.height };
 }
 
-function decode_CMPR_JS(texture: Texture): DecodedTexture {
+function decode_CMPR(texture: Texture): DecodedTexture {
     // GX's CMPR format is S3TC but using GX's tiled addressing.
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     const view = texture.data.createDataView();
@@ -216,8 +219,6 @@ function decode_CMPR_JS(texture: Texture): DecodedTexture {
     }
     return { type: "RGBA", pixels, width: texture.width, height: texture.height };
 }
-
-const decode_CMPR = decode_CMPR_Wasm;
 
 function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels: Uint8Array, dstOffs: number) => void): DecodedTexture {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
@@ -372,7 +373,7 @@ export function decodeTexture(texture: Texture): DecodedTexture {
 
     switch (texture.format) {
     case GX.TexFormat.CMPR:
-        return decode_CMPR(texture);
+        return decode_Wasm(texture, wasmInstance.decode_CMPR);
     case GX.TexFormat.RGB565:
         return decode_RGB565(texture);
     case GX.TexFormat.RGB5A3:
@@ -382,7 +383,7 @@ export function decodeTexture(texture: Texture): DecodedTexture {
     case GX.TexFormat.I4:
         return decode_I4(texture);
     case GX.TexFormat.I8:
-        return decode_I8(texture);
+        return decode_Wasm(texture, wasmInstance.decode_I8);
     case GX.TexFormat.IA4:
         return decode_IA4(texture);
     case GX.TexFormat.IA8:
