@@ -27,7 +27,8 @@ export interface DecodedTextureRGBA {
     height: number;
 }
 
-export type DecodedTexture = DecodedTextureS3TC | DecodedTextureRGBA;
+// We only return RGBA textures externally.
+export type DecodedTexture = DecodedTextureRGBA;
 
 function expand3to8(n: number): number {
     return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
@@ -363,17 +364,14 @@ function decode_Dummy(texture: Texture): DecodedTexture {
     return { type: "RGBA", width: texture.width, height: texture.height, pixels };
 }
 
-export function decodeTexture(texture: Texture, supportsS3TC: boolean): DecodedTexture {
+export function decodeTexture(texture: Texture): DecodedTexture {
     if (texture.data === null)
         return decode_Dummy(texture);
 
     switch (texture.format) {
     case GX.TexFormat.CMPR:
         const s3tc = decode_CMPR_to_S3TC(texture);
-        if (supportsS3TC)
-            return s3tc;
-        else
-            return decode_S3TC(s3tc);
+        return decode_S3TC(s3tc);
     case GX.TexFormat.RGB565:
         return decode_RGB565(texture);
     case GX.TexFormat.RGB5A3:
