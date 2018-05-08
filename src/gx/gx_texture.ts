@@ -13,22 +13,12 @@ export interface Texture {
     data: ArrayBufferSlice;
 }
 
-export interface DecodedTextureS3TC {
-    type: "S3TC";
-    pixels: ArrayBufferView;
-    width: number;
-    height: number;
-}
-
-export interface DecodedTextureRGBA {
+export interface DecodedTexture {
     type: "RGBA";
     pixels: ArrayBufferView;
     width: number;
     height: number;
 }
-
-// We only return RGBA textures externally.
-export type DecodedTexture = DecodedTextureRGBA;
 
 function expand3to8(n: number): number {
     return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
@@ -109,109 +99,75 @@ export function calcFullTextureSize(format: GX.TexFormat, width: number, height:
     return textureSize;
 }
 
-// GX's CMPR format is S3TC but using GX's tiled addressing.
-function decode_CMPR_to_S3TC(texture: Texture): DecodedTextureS3TC {
-    // CMPR goes in 2x2 "macro-blocks" of four S3TC normal blocks.
-
-    function reverseByte(v: number): number {
-        // Reverse the order of the four half-nibbles.
-        return ((v & 0x03) << 6) | ((v & 0x0c) << 2) | ((v & 0x30) >>> 2) | ((v & 0xc0) >>> 6);
-    }
-
-    const pixels = new Uint8Array(texture.width * texture.height / 2);
+function decode_CMPR(texture: Texture): DecodedTexture {
+    // GX's CMPR format is S3TC but using GX's tiled addressing.
+    const pixels = new Uint8Array(texture.width * texture.height * 4);
     const view = texture.data.createDataView();
+    const colorTable = new Uint8Array(16);
 
-    // "Macroblocks"
-    const w4 = texture.width >>> 2;
-    const h4 = texture.height >>> 2;
+    // CMPR swizzles macroblocks to be in a 2x2 grid of UL, UR, BL, BR.
 
     let srcOffs = 0;
-    for (let yy = 0; yy < h4; yy += 2) {
-        for (let xx = 0; xx < w4; xx += 2) {
-            // S3TC blocks.
-            for (let y = 0; y < 2; y++) {
-                for (let x = 0; x < 2; x++) {
-                    const dstBlock = (yy + y) * w4 + xx + x;
-                    const dstOffs = dstBlock * 8;
+    for (let yy = 0; yy < texture.height; yy += 8) {
+        for (let xx = 0; xx < texture.width; xx += 8) {
+            for (let yb = 0; yb < 8; yb += 4) {
+                for (let xb = 0; xb < 8; xb += 4) {
+                    // CMPR difference: Big-endian color1/2
+                    const color1 = view.getUint16(srcOffs + 0x00, false);
+                    const color2 = view.getUint16(srcOffs + 0x02, false);
 
-                    pixels[dstOffs + 0] = view.getUint8(srcOffs + 1);
-                    pixels[dstOffs + 1] = view.getUint8(srcOffs + 0);
-                    pixels[dstOffs + 2] = view.getUint8(srcOffs + 3);
-                    pixels[dstOffs + 3] = view.getUint8(srcOffs + 2);
-                    pixels[dstOffs + 4] = reverseByte(view.getUint8(srcOffs + 4));
-                    pixels[dstOffs + 5] = reverseByte(view.getUint8(srcOffs + 5));
-                    pixels[dstOffs + 6] = reverseByte(view.getUint8(srcOffs + 6));
-                    pixels[dstOffs + 7] = reverseByte(view.getUint8(srcOffs + 7));
+                    // Fill in first two colors in color table.
+                    colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
+                    colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
+                    colorTable[2] = expand5to8(color1 & 0x1F);
+                    colorTable[3] = 0xFF;
+
+                    colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
+                    colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
+                    colorTable[6] = expand5to8(color2 & 0x1F);
+                    colorTable[7] = 0xFF;
+
+                    if (color1 > color2) {
+                        // Predict gradients.
+                        colorTable[8]  = s3tcblend(colorTable[4], colorTable[0]);
+                        colorTable[9]  = s3tcblend(colorTable[5], colorTable[1]);
+                        colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
+                        colorTable[11] = 0xFF;
+
+                        colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
+                        colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
+                        colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
+                        colorTable[15] = 0xFF;
+                    } else {
+                        colorTable[8]  = (colorTable[0] + colorTable[4]) >>> 1;
+                        colorTable[9]  = (colorTable[1] + colorTable[5]) >>> 1;
+                        colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
+                        colorTable[11] = 0xFF;
+
+                        // CMPR difference: GX fills with an alpha 0 midway point here.
+                        colorTable[12] = colorTable[8];
+                        colorTable[13] = colorTable[9];
+                        colorTable[14] = colorTable[10];
+                        colorTable[15] = 0x00;
+                    }
+
+                    for (let y = 0; y < 4; y++) {
+                        let bits = view.getUint8(srcOffs + 0x04 + y);
+                        for (let x = 0; x < 4; x++) {
+                            const dstPx = (yy + yb + y) * texture.width + xx + xb + x;
+                            const dstOffs = dstPx * 4;
+                            const colorIdx = (bits >>> 6) & 0x03;
+                            pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
+                            pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
+                            pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
+                            pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
+                            bits <<= 2;
+                        }
+                    }
+
                     srcOffs += 8;
                 }
             }
-        }
-    }
-    return { type: "S3TC", pixels, width: texture.width, height: texture.height };
-}
-
-// Software decodes from standard S3TC (not CMPR!) to RGBA.
-function decode_S3TC(texture: DecodedTextureS3TC): DecodedTextureRGBA {
-    const pixels = new Uint8Array(texture.width * texture.height * 4);
-    const view = new DataView(texture.pixels.buffer);
-    const colorTable = new Uint8Array(16);
-
-    let srcOffs = 0;
-    for (let yy = 0; yy < texture.height; yy += 4) {
-        for (let xx = 0; xx < texture.width; xx += 4) {
-            const color1 = view.getUint16(srcOffs + 0x00, true);
-            const color2 = view.getUint16(srcOffs + 0x02, true);
-
-            // Fill in first two colors in color table.
-            colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
-            colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
-            colorTable[2] = expand5to8(color1 & 0x1F);
-            colorTable[3] = 0xFF;
-
-            colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
-            colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
-            colorTable[6] = expand5to8(color2 & 0x1F);
-            colorTable[7] = 0xFF;
-
-            if (color1 > color2) {
-                // Predict gradients.
-                colorTable[8]  = s3tcblend(colorTable[4], colorTable[0]);
-                colorTable[9]  = s3tcblend(colorTable[5], colorTable[1]);
-                colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
-                colorTable[11] = 0xFF;
-
-                colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
-                colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
-                colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
-                colorTable[15] = 0xFF;
-            } else {
-                colorTable[8]  = (colorTable[0] + colorTable[4]) >>> 1;
-                colorTable[9]  = (colorTable[1] + colorTable[5]) >>> 1;
-                colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
-                colorTable[11] = 0xFF;
-
-                // GX difference: GX fills with an alpha 0 midway point here.
-                colorTable[12] = colorTable[8];
-                colorTable[13] = colorTable[9];
-                colorTable[14] = colorTable[10];
-                colorTable[15] = 0x00;
-            }
-
-            let bits = view.getUint32(srcOffs + 0x04, true);
-            for (let y = 0; y < 4; y++) {
-                for (let x = 0; x < 4; x++) {
-                    const dstPx = (yy + y) * texture.width + xx + x;
-                    const dstOffs = dstPx * 4;
-                    const colorIdx = bits & 0x03;
-                    pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
-                    pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
-                    pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
-                    pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
-                    bits >>= 2;
-                }
-            }
-
-            srcOffs += 8;
         }
     }
     return { type: "RGBA", pixels, width: texture.width, height: texture.height };
@@ -370,8 +326,7 @@ export function decodeTexture(texture: Texture): DecodedTexture {
 
     switch (texture.format) {
     case GX.TexFormat.CMPR:
-        const s3tc = decode_CMPR_to_S3TC(texture);
-        return decode_S3TC(s3tc);
+        return decode_CMPR(texture);
     case GX.TexFormat.RGB565:
         return decode_RGB565(texture);
     case GX.TexFormat.RGB5A3:
