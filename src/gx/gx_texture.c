@@ -27,8 +27,14 @@ static uint16_t read16be(uint8_t*b) {
     return (b[0] << 8 | b[1]);
 }
 
-__attribute__((visibility("default")))
-void decode_CMPR(uint8_t*pDst, uint8_t*pSrc, uint32_t w, uint32_t h) {
+// XXX(jstpierre): VS Code Intellisense seems to hate this attribute declaration...
+#ifdef __INTELLISENSE__
+#define EXPORT
+#else
+#define EXPORT __attribute__((visibility("default")))
+#endif
+
+EXPORT void decode_CMPR(uint8_t*pDst, uint8_t*pSrc, uint32_t w, uint32_t h) {
     for (uint32_t yy = 0; yy < h; yy += 8) {
         for (uint32_t xx = 0; xx < w; xx += 8) {
             for (uint32_t yb = 0; yb < 8; yb += 4) {
@@ -93,4 +99,45 @@ void decode_CMPR(uint8_t*pDst, uint8_t*pSrc, uint32_t w, uint32_t h) {
             }
         }
     }
+}
+
+#define DECODE_TILED_BEGIN(bw, bh) \
+    for (uint32_t yy = 0; yy < h; yy += bh) { \
+        for (uint32_t xx = 0; xx < w; xx += bw) { \
+            for (uint32_t y = 0; y < bh; y++) { \
+                for (uint32_t x = 0; x < bw; x++) { \
+                    uint32_t dstPixel = (w * (yy + y)) + xx + x; \
+                    uint32_t dstOffs = dstPixel * 4; \
+
+#define DECODE_TILED_END() \
+                } \
+            } \
+        } \
+    }
+
+EXPORT void decode_I8(uint8_t*pDst, uint8_t*pSrc, uint32_t w, uint32_t h) {
+    DECODE_TILED_BEGIN(8, 4)
+        uint8_t i = *pSrc++;
+        pDst[dstOffs + 0] = i;
+        pDst[dstOffs + 1] = i;
+        pDst[dstOffs + 2] = i;
+        pDst[dstOffs + 3] = i;
+    DECODE_TILED_END()
+}
+
+EXPORT void decode_I4(uint8_t*pDst, uint8_t*pSrc, uint32_t w, uint32_t h) {
+    uint8_t b = 0;
+
+    DECODE_TILED_BEGIN(8, 8)
+        uint8_t ii = *pSrc;
+        uint8_t i4 = (b == 1 ? (ii >> 4) : ii) & 0x0F;
+        uint8_t i = expand4to8(i4);
+        pDst[dstOffs + 0] = i;
+        pDst[dstOffs + 1] = i;
+        pDst[dstOffs + 2] = i;
+        pDst[dstOffs + 3] = i;
+        if (b == 1)
+            pSrc++;
+        b = (b + 1) % 2;
+    DECODE_TILED_END()
 }
