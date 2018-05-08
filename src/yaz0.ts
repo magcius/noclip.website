@@ -18,6 +18,12 @@
 import { assert, readString, align } from './util';
 import { yaz0Module } from './wat_modules';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import WasmMemoryManager from './WasmMemoryManager';
+
+// XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
+// on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
+// bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
+const wasmMemory = new WasmMemoryManager();
 
 function decompressWasm(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     const srcView = srcBuffer.createDataView();
@@ -28,18 +34,21 @@ function decompressWasm(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     const dstHeapOffs = align(srcBuffer.byteLength, 0x10);
     const heapSize = dstHeapOffs + align(uncompressedSize, 0x10);
 
-    const pageSize = (64 * 1024); // Pages in WASM are 64k
-    const numPages = Math.ceil(heapSize / pageSize) + 1;
-    const mem = new WebAssembly.Memory({ initial: numPages });
-    const heap = new Uint8Array(mem.buffer);
+    wasmMemory.resize(heapSize);
+    const mem = wasmMemory.mem;
+    const heap = wasmMemory.heap;
 
-    // Copy source buffer.
+    // memcpy source buffer.
     heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10));
 
     const wasmInstance = new WebAssembly.Instance(yaz0Module, { env: { mem }});
+
     wasmInstance.exports.decompress(dstHeapOffs, 0x00, uncompressedSize);
 
-    return new ArrayBufferSlice(heap.buffer, dstHeapOffs, uncompressedSize);
+    // Copy the result buffer to a new buffer for memory usage purposes.
+    const result = new ArrayBufferSlice(heap.buffer).copySlice(dstHeapOffs, uncompressedSize);
+
+    return result;
 }
 
 function decompressJs(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
@@ -85,5 +94,4 @@ function decompressJs(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     }
 }
 
-// TODO(jstpierre): Investigate why WASM is so slow.
-export const decompress = decompressJs;
+export const decompress = decompressWasm;
