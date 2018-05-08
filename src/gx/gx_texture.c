@@ -27,9 +27,7 @@ static uint16_t read16be(uint8_t*b) {
     return (b[0] << 8 | b[1]);
 }
 
-// XXX(jstpierre): VS Code does *not* like this attribute one bit...
-
-// __attribute__((visibility("default")))
+__attribute__((visibility("default")))
 void decode_CMPR(uint8_t*pDst, uint8_t*pSrc, uint32_t w, uint32_t h) {
     for (uint32_t yy = 0; yy < h; yy += 8) {
         for (uint32_t xx = 0; xx < w; xx += 8) {
