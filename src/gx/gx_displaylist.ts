@@ -190,6 +190,38 @@ export interface VtxLoader {
 function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoader {
     const vattrLayout: VattrLayout = translateVattrLayout(vat, vtxDescs);
 
+    function makeLoaderName(): string {
+        let name = 'VtxLoader';
+        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vat.length; vtxAttrib++) {
+            if (!vtxDescs[vtxAttrib] || vtxDescs[vtxAttrib].type === GX.AttrType.NONE)
+                continue;
+
+            const attrName = getAttrName(vtxAttrib);
+
+            const compSizeSuffix = getComponentSize(vat[vtxAttrib].compType);
+            const compCntSuffix = getNumComponents(vtxAttrib, vat[vtxAttrib].compCnt);
+
+            const attrTypeSuffixes = ['', 'D', 'I8', 'I16'];
+            const attrTypeSuffix = attrTypeSuffixes[vtxDescs[vtxAttrib].type];
+            name += `_${attrName}$${attrTypeSuffix}$${compSizeSuffix}x${compCntSuffix}`;
+        }
+        return name;
+    }
+
+    function compileVtxTypedArrays(): string {
+        const sources = [];
+        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vat.length; vtxAttrib++) {
+            if (!vtxDescs[vtxAttrib])
+                continue;
+
+            const attrType = vtxDescs[vtxAttrib].type;
+            if (attrType === GX.AttrType.INDEX16 || attrType === GX.AttrType.INDEX8) {
+                sources.push(`const vtxArrayData${vtxAttrib} = vtxArrays[${vtxAttrib}].buffer.createTypedArray(Uint8Array, vtxArrays[${vtxAttrib}].offs);`);
+            }
+        }
+        return sources.join('\n');
+    }
+
     function compileVattr(vtxAttrib: GX.VertexAttribute): string {
         if (!vtxDescs[vtxAttrib])
             return '';
@@ -199,9 +231,9 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
             return '';
 
         function readIndexTemplate(readIndex: string, drawCallIdxIncr: number): string {
-            const attrOffs = `vtxArrays[${vtxAttrib}].offs + (${srcAttrSize} * ${readIndex})`;
+            const attrOffs = `(${srcAttrSize} * ${readIndex})`;
             return `
-        dstVertexData.set(vtxArrays[${vtxAttrib}].buffer.createTypedArray(Uint8Array, ${attrOffs}, ${srcAttrSize}), ${dstOffs});
+        memcpy(dstVertexData, ${dstOffs}, vtxArrayData${vtxAttrib}, ${attrOffs}, ${srcAttrSize});
         drawCallIdx += ${drawCallIdxIncr};`.trim();
         }
 
@@ -218,7 +250,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
             break;
         case GX.AttrType.DIRECT:
             readVertex = `
-        dstVertexData.set(srcBuffer.createTypedArray(Uint8Array, drawCallIdx, ${srcAttrSize}), ${dstOffs});
+        memcpy(dstVertexData, ${dstOffs}, srcBuffer, drawCallIdx, ${srcAttrSize});
         drawCallIdx += ${srcAttrSize};
         `.trim();
             break;
@@ -226,9 +258,9 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
             throw new Error("whoops");
         }
 
-        return `
-        // ${getAttrName(vtxAttrib)}
-        ${readVertex}`.trim() ;
+        return `        // ${getAttrName(vtxAttrib)}
+        ${readVertex}
+`;
     }
 
     function compileVattrs(): string {
@@ -239,9 +271,12 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
         return sources.join('');
     }
 
+    const loaderName = makeLoaderName();
+
     const source = `
 "use strict";
 
+return function ${loaderName}(vtxArrays, srcBuffer) {
 // Parse display list.
 const view = srcBuffer.createDataView();
 const drawCalls = [];
@@ -287,6 +322,14 @@ let vertexId = 0;
 const dstVertexDataSize = ${vattrLayout.dstVertexSize} * totalVertexCount;
 const dstVertexData = new Uint8Array(dstVertexDataSize);
 let dstVertexDataOffs = 0;
+
+function memcpy(dst, dstOffs, src, srcOffs, size) {
+    while (size--)
+        dst[dstOffs++] = src[srcOffs++];
+}
+
+${compileVtxTypedArrays()}
+
 for (let z = 0; z < drawCalls.length; z++) {
     const drawCall = drawCalls[z];
 
@@ -315,15 +358,17 @@ for (let z = 0; z < drawCalls.length; z++) {
     }
 
     let drawCallIdx = drawCall.srcOffs;
-    // Scratch.
     for (let j = 0; j < drawCall.vertexCount; j++) {
 ${compileVattrs()}
         dstVertexDataOffs += ${vattrLayout.dstVertexSize};
     }
 }
 return { indexData: dstIndexData, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };
+
+};
 `;
-    const runVertices: VtxLoaderFunc = (<VtxLoaderFunc> new Function('vtxArrays', 'srcBuffer', source));
+    const runVerticesGenerator = new Function(source);
+    const runVertices: VtxLoaderFunc = runVerticesGenerator();
     return { vattrLayout, runVertices };
 }
 

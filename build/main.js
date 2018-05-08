@@ -3395,6 +3395,32 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports
     }
     function _compileVtxLoader(vat, vtxDescs) {
         var vattrLayout = translateVattrLayout(vat, vtxDescs);
+        function makeLoaderName() {
+            var name = 'VtxLoader';
+            for (var vtxAttrib = 0; vtxAttrib < vat.length; vtxAttrib++) {
+                if (!vtxDescs[vtxAttrib] || vtxDescs[vtxAttrib].type === 0 /* NONE */)
+                    continue;
+                var attrName = getAttrName(vtxAttrib);
+                var compSizeSuffix = getComponentSize(vat[vtxAttrib].compType);
+                var compCntSuffix = getNumComponents(vtxAttrib, vat[vtxAttrib].compCnt);
+                var attrTypeSuffixes = ['', 'D', 'I8', 'I16'];
+                var attrTypeSuffix = attrTypeSuffixes[vtxDescs[vtxAttrib].type];
+                name += "_" + attrName + "$" + attrTypeSuffix + "$" + compSizeSuffix + "x" + compCntSuffix;
+            }
+            return name;
+        }
+        function compileVtxTypedArrays() {
+            var sources = [];
+            for (var vtxAttrib = 0; vtxAttrib < vat.length; vtxAttrib++) {
+                if (!vtxDescs[vtxAttrib])
+                    continue;
+                var attrType = vtxDescs[vtxAttrib].type;
+                if (attrType === 3 /* INDEX16 */ || attrType === 2 /* INDEX8 */) {
+                    sources.push("const vtxArrayData" + vtxAttrib + " = vtxArrays[" + vtxAttrib + "].buffer.createTypedArray(Uint8Array, vtxArrays[" + vtxAttrib + "].offs);");
+                }
+            }
+            return sources.join('\n');
+        }
         function compileVattr(vtxAttrib) {
             if (!vtxDescs[vtxAttrib])
                 return '';
@@ -3402,8 +3428,8 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports
             if (srcAttrSize === undefined)
                 return '';
             function readIndexTemplate(readIndex, drawCallIdxIncr) {
-                var attrOffs = "vtxArrays[" + vtxAttrib + "].offs + (" + srcAttrSize + " * " + readIndex + ")";
-                return ("\n        dstVertexData.set(vtxArrays[" + vtxAttrib + "].buffer.createTypedArray(Uint8Array, " + attrOffs + ", " + srcAttrSize + "), " + dstOffs + ");\n        drawCallIdx += " + drawCallIdxIncr + ";").trim();
+                var attrOffs = "(" + srcAttrSize + " * " + readIndex + ")";
+                return ("\n        memcpy(dstVertexData, " + dstOffs + ", vtxArrayData" + vtxAttrib + ", " + attrOffs + ", " + srcAttrSize + ");\n        drawCallIdx += " + drawCallIdxIncr + ";").trim();
             }
             var dstOffs = "dstVertexDataOffs + " + vattrLayout.dstAttrOffsets[vtxAttrib];
             var readVertex = '';
@@ -3417,12 +3443,12 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports
                     readVertex = readIndexTemplate("view.getUint16(drawCallIdx)", 2);
                     break;
                 case 1 /* DIRECT */:
-                    readVertex = ("\n        dstVertexData.set(srcBuffer.createTypedArray(Uint8Array, drawCallIdx, " + srcAttrSize + "), " + dstOffs + ");\n        drawCallIdx += " + srcAttrSize + ";\n        ").trim();
+                    readVertex = ("\n        memcpy(dstVertexData, " + dstOffs + ", srcBuffer, drawCallIdx, " + srcAttrSize + ");\n        drawCallIdx += " + srcAttrSize + ";\n        ").trim();
                     break;
                 default:
                     throw new Error("whoops");
             }
-            return ("\n        // " + getAttrName(vtxAttrib) + "\n        " + readVertex).trim();
+            return "        // " + getAttrName(vtxAttrib) + "\n        " + readVertex + "\n";
         }
         function compileVattrs() {
             var sources = [];
@@ -3431,8 +3457,10 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports
             }
             return sources.join('');
         }
-        var source = "\n\"use strict\";\n\n// Parse display list.\nconst view = srcBuffer.createDataView();\nconst drawCalls = [];\nlet totalVertexCount = 0;\nlet totalTriangleCount = 0;\nlet drawCallIdx = 0;\nwhile (true) {\n    if (drawCallIdx >= srcBuffer.byteLength)\n        break;\n    const cmd = view.getUint8(drawCallIdx);\n    if (cmd === 0)\n        break;\n\n    const primType = cmd & 0xF8;\n    const vertexFormat = cmd & 0x07;\n\n    const vertexCount = view.getUint16(drawCallIdx + 0x01);\n    drawCallIdx += 0x03;\n    const srcOffs = drawCallIdx;\n    const first = totalVertexCount;\n    totalVertexCount += vertexCount;\n\n    switch (primType) {\n    case " + 160 /* TRIANGLEFAN */ + ":\n    case " + 152 /* TRIANGLESTRIP */ + ":\n        totalTriangleCount += (vertexCount - 2);\n        break;\n    default:\n        throw \"whoops\";\n    }\n\n    drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });\n\n    // Skip over the index data.\n    drawCallIdx += " + vattrLayout.srcVertexSize + " * vertexCount;\n}\n\n// Now make the data.\nlet indexDataIdx = 0;\nconst dstIndexData = new Uint16Array(totalTriangleCount * 3);\nlet vertexId = 0;\n\nconst dstVertexDataSize = " + vattrLayout.dstVertexSize + " * totalVertexCount;\nconst dstVertexData = new Uint8Array(dstVertexDataSize);\nlet dstVertexDataOffs = 0;\nfor (let z = 0; z < drawCalls.length; z++) {\n    const drawCall = drawCalls[z];\n\n    // Convert topology to triangles.\n    const firstVertex = vertexId;\n\n    // First triangle is the same for all topo.\n    for (let i = 0; i < 3; i++)\n        dstIndexData[indexDataIdx++] = vertexId++;\n\n    switch (drawCall.primType) {\n    case " + 152 /* TRIANGLESTRIP */ + ":\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 160 /* TRIANGLEFAN */ + ":\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = firstVertex;\n            dstIndexData[indexDataIdx++] = vertexId - 1;\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    }\n\n    let drawCallIdx = drawCall.srcOffs;\n    // Scratch.\n    for (let j = 0; j < drawCall.vertexCount; j++) {\n" + compileVattrs() + "\n        dstVertexDataOffs += " + vattrLayout.dstVertexSize + ";\n    }\n}\nreturn { indexData: dstIndexData, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };\n";
-        var runVertices = new Function('vtxArrays', 'srcBuffer', source);
+        var loaderName = makeLoaderName();
+        var source = "\n\"use strict\";\n\nreturn function " + loaderName + "(vtxArrays, srcBuffer) {\n// Parse display list.\nconst view = srcBuffer.createDataView();\nconst drawCalls = [];\nlet totalVertexCount = 0;\nlet totalTriangleCount = 0;\nlet drawCallIdx = 0;\nwhile (true) {\n    if (drawCallIdx >= srcBuffer.byteLength)\n        break;\n    const cmd = view.getUint8(drawCallIdx);\n    if (cmd === 0)\n        break;\n\n    const primType = cmd & 0xF8;\n    const vertexFormat = cmd & 0x07;\n\n    const vertexCount = view.getUint16(drawCallIdx + 0x01);\n    drawCallIdx += 0x03;\n    const srcOffs = drawCallIdx;\n    const first = totalVertexCount;\n    totalVertexCount += vertexCount;\n\n    switch (primType) {\n    case " + 160 /* TRIANGLEFAN */ + ":\n    case " + 152 /* TRIANGLESTRIP */ + ":\n        totalTriangleCount += (vertexCount - 2);\n        break;\n    default:\n        throw \"whoops\";\n    }\n\n    drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });\n\n    // Skip over the index data.\n    drawCallIdx += " + vattrLayout.srcVertexSize + " * vertexCount;\n}\n\n// Now make the data.\nlet indexDataIdx = 0;\nconst dstIndexData = new Uint16Array(totalTriangleCount * 3);\nlet vertexId = 0;\n\nconst dstVertexDataSize = " + vattrLayout.dstVertexSize + " * totalVertexCount;\nconst dstVertexData = new Uint8Array(dstVertexDataSize);\nlet dstVertexDataOffs = 0;\n\nfunction memcpy(dst, dstOffs, src, srcOffs, size) {\n    while (size--)\n        dst[dstOffs++] = src[srcOffs++];\n}\n\n" + compileVtxTypedArrays() + "\n\nfor (let z = 0; z < drawCalls.length; z++) {\n    const drawCall = drawCalls[z];\n\n    // Convert topology to triangles.\n    const firstVertex = vertexId;\n\n    // First triangle is the same for all topo.\n    for (let i = 0; i < 3; i++)\n        dstIndexData[indexDataIdx++] = vertexId++;\n\n    switch (drawCall.primType) {\n    case " + 152 /* TRIANGLESTRIP */ + ":\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 160 /* TRIANGLEFAN */ + ":\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = firstVertex;\n            dstIndexData[indexDataIdx++] = vertexId - 1;\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    }\n\n    let drawCallIdx = drawCall.srcOffs;\n    for (let j = 0; j < drawCall.vertexCount; j++) {\n" + compileVattrs() + "\n        dstVertexDataOffs += " + vattrLayout.dstVertexSize + ";\n    }\n}\nreturn { indexData: dstIndexData, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };\n\n};\n";
+        var runVerticesGenerator = new Function(source);
+        var runVertices = runVerticesGenerator();
         return { vattrLayout: vattrLayout, runVertices: runVertices };
     }
     function coalesceLoadedDatas(loadedDatas) {
