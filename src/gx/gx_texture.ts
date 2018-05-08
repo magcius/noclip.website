@@ -26,7 +26,6 @@ export interface Texture {
 }
 
 export interface DecodedTexture {
-    type: "RGBA";
     pixels: ArrayBufferView;
     width: number;
     height: number;
@@ -143,7 +142,7 @@ function decode_Wasm(texture: Texture, decoder: TextureDecoder): DecodedTexture 
     // Copy the result buffer to a new buffer for memory usage purposes.
     const pixelsBuffer = new ArrayBufferSlice(heap.buffer).copyToBuffer(pDst, dstSize);
     const pixels = new Uint8Array(pixelsBuffer);
-    return { type: "RGBA", pixels, width: texture.width, height: texture.height };
+    return { pixels, width: texture.width, height: texture.height };
 }
 
 function decode_CMPR(texture: Texture): DecodedTexture {
@@ -217,7 +216,7 @@ function decode_CMPR(texture: Texture): DecodedTexture {
             }
         }
     }
-    return { type: "RGBA", pixels, width: texture.width, height: texture.height };
+    return { pixels, width: texture.width, height: texture.height };
 }
 
 function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels: Uint8Array, dstOffs: number) => void): DecodedTexture {
@@ -233,7 +232,7 @@ function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels
             }
         }
     }
-    return { type: "RGBA", pixels, width: texture.width, height: texture.height };
+    return { pixels, width: texture.width, height: texture.height };
 }
 
 function decode_RGB565(texture: Texture): DecodedTexture {
@@ -300,7 +299,7 @@ function decode_RGBA8(texture: Texture): DecodedTexture {
             }
         }
     }
-    return { type: "RGBA", pixels, width: texture.width, height: texture.height };
+    return { pixels, width: texture.width, height: texture.height };
 }
 
 function decode_I4(texture: Texture): DecodedTexture {
@@ -364,7 +363,7 @@ function decode_IA8(texture: Texture): DecodedTexture {
 function decode_Dummy(texture: Texture): DecodedTexture {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     pixels.fill(0xFF);
-    return { type: "RGBA", width: texture.width, height: texture.height, pixels };
+    return { pixels, width: texture.width, height: texture.height };
 }
 
 export function decodeTexture(texture: Texture): DecodedTexture {
