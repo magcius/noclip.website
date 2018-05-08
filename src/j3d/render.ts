@@ -662,14 +662,8 @@ export class Scene implements Viewer.Scene {
             const size = GX_Texture.calcTextureSize(format, width, height);
             const data = texture.data !== null ? texture.data.subarray(offs, size) : null;
             const surface = { name, format, width, height, data };
-            const decodedTexture = GX_Texture.decodeTexture(surface, false);
-
-            if (decodedTexture.type === 'RGBA') {
-                gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
-            } else {
-                assert(false);
-            }
-
+            const decodedTexture = GX_Texture.decodeTexture(surface);
+            gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
             offs += size;
             width /= 2;
             height /= 2;
@@ -688,11 +682,7 @@ export class Scene implements Viewer.Scene {
             const size = GX_Texture.calcTextureSize(format, width, height);
             const data = texture.data !== null ? texture.data.subarray(offs, size) : null;
             const surface = { name, format, width, height, data };
-            const rgbaTexture = GX_Texture.decodeTexture(surface, false);
-            // Should never happen.
-            if (rgbaTexture.type === 'S3TC')
-                throw new Error("whoops");
-
+            const rgbaTexture = GX_Texture.decodeTexture(surface);
             const canvas = document.createElement('canvas');
             canvas.width = rgbaTexture.width;
             canvas.height = rgbaTexture.height;

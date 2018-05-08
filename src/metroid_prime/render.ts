@@ -48,7 +48,6 @@ export class Scene implements Viewer.MainScene {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
 
-        const ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         const format = texture.format;
 
         let offs = 0, width = texture.width, height = texture.height;
@@ -57,14 +56,8 @@ export class Scene implements Viewer.MainScene {
             const size = GX_Texture.calcTextureSize(format, width, height);
             const data = texture.data.subarray(offs, size);
             const surface = { name, format, width, height, data };
-            const decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
-
-            if (decodedTexture.type === 'RGBA') {
-                gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
-            } else if (decodedTexture.type === 'S3TC') {
-                gl.compressedTexImage2D(gl.TEXTURE_2D, i, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
-            }
-
+            const decodedTexture = GX_Texture.decodeTexture(surface);
+            gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
             offs += size;
             width /= 2;
             height /= 2;
@@ -127,11 +120,7 @@ export class Scene implements Viewer.MainScene {
             const size = GX_Texture.calcTextureSize(format, width, height);
             const data = texture.data.subarray(offs, size);
             const surface = { name, format, width, height, data };
-            const rgbaTexture = GX_Texture.decodeTexture(surface, false);
-            // Should never happen.
-            if (rgbaTexture.type === 'S3TC')
-                throw "whoops";
-
+            const rgbaTexture = GX_Texture.decodeTexture(surface);
             const canvas = document.createElement('canvas');
             canvas.width = rgbaTexture.width;
             canvas.height = rgbaTexture.height;
