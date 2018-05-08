@@ -13,6 +13,7 @@ type TextureDecoder = (pDst: number, pSrc: number, width: number, height: number
 declare module "../wat_modules" {
     interface gx_textureExports {
         decode_CMPR: TextureDecoder;
+        decode_I4: TextureDecoder;
         decode_I8: TextureDecoder;
     }
 }
@@ -380,7 +381,7 @@ export function decodeTexture(texture: Texture): DecodedTexture {
     case GX.TexFormat.RGBA8:
         return decode_RGBA8(texture);
     case GX.TexFormat.I4:
-        return decode_I4(texture);
+        return decode_Wasm(texture, wasmInstance.decode_I4);
     case GX.TexFormat.I8:
         return decode_Wasm(texture, wasmInstance.decode_I8);
     case GX.TexFormat.IA4:
