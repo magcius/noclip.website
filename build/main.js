@@ -3154,18 +3154,26 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_11, context
 System.register("wat_modules", [], function (exports_12, context_12) {
     "use strict";
     var __moduleName = context_12 && context_12.id;
-    var yaz0Code, yaz0, gx_textureCode, gx_texture;
+    function yaz0Instance() {
+        var instance = new WebAssembly.Instance(yaz0Module);
+        return instance.exports;
+    }
+    exports_12("yaz0Instance", yaz0Instance);
+    function gx_textureInstance() {
+        var instance = new WebAssembly.Instance(gx_textureModule);
+        return instance.exports;
+    }
+    exports_12("gx_textureInstance", gx_textureInstance);
+    var yaz0Code, yaz0Module, gx_textureCode, gx_textureModule;
     return {
         setters: [],
         execute: function () {
-            // yaz0.wat
             yaz0Code = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 10, 2, 96, 0, 0, 96, 3, 127, 127, 127, 0, 3, 4, 3, 0, 1, 0, 4, 5, 1, 112, 1, 1, 1, 5, 3, 1, 0, 2, 6, 21, 3, 127, 1, 65, 128, 136, 4, 11, 127, 0, 65, 128, 136, 4, 11, 127, 0, 65, 128, 8, 11, 7, 59, 5, 6, 95, 115, 116, 97, 114, 116, 0, 0, 10, 100, 101, 99, 111, 109, 112, 114, 101, 115, 115, 0, 1, 6, 109, 101, 109, 111, 114, 121, 2, 0, 11, 95, 95, 104, 101, 97, 112, 95, 98, 97, 115, 101, 3, 1, 10, 95, 95, 100, 97, 116, 97, 95, 101, 110, 100, 3, 2, 10, 183, 2, 3, 2, 0, 11, 174, 2, 1, 8, 127, 3, 64, 32, 1, 45, 0, 0, 33, 3, 65, 8, 33, 4, 32, 1, 65, 1, 106, 33, 1, 2, 64, 2, 64, 3, 64, 32, 4, 69, 13, 1, 2, 64, 2, 64, 65, 1, 32, 4, 65, 127, 106, 34, 4, 116, 32, 3, 113, 69, 13, 0, 32, 0, 32, 1, 45, 0, 0, 58, 0, 0, 32, 0, 65, 1, 106, 33, 0, 32, 1, 65, 1, 106, 33, 1, 65, 0, 33, 5, 32, 2, 65, 127, 106, 34, 2, 65, 0, 74, 13, 2, 12, 1, 11, 32, 1, 45, 0, 0, 34, 5, 65, 8, 116, 65, 128, 30, 113, 32, 1, 65, 1, 106, 45, 0, 0, 114, 65, 1, 106, 33, 6, 2, 64, 2, 64, 32, 5, 65, 4, 118, 34, 5, 69, 13, 0, 32, 1, 65, 2, 106, 33, 7, 32, 5, 65, 2, 106, 33, 5, 12, 1, 11, 32, 1, 65, 3, 106, 33, 7, 32, 1, 65, 2, 106, 45, 0, 0, 65, 18, 106, 33, 5, 11, 32, 0, 65, 127, 106, 33, 1, 32, 5, 65, 255, 255, 3, 113, 33, 8, 65, 1, 32, 6, 65, 255, 255, 3, 113, 107, 33, 9, 32, 5, 65, 127, 106, 65, 255, 255, 3, 113, 33, 10, 3, 64, 32, 1, 65, 1, 106, 34, 6, 32, 1, 32, 9, 106, 45, 0, 0, 58, 0, 0, 32, 6, 33, 1, 32, 5, 65, 127, 106, 34, 5, 65, 255, 255, 3, 113, 13, 0, 11, 32, 0, 32, 10, 106, 65, 1, 106, 33, 0, 32, 7, 33, 1, 65, 0, 33, 5, 32, 2, 32, 8, 107, 34, 2, 65, 0, 74, 13, 1, 11, 11, 32, 5, 13, 2, 12, 1, 11, 65, 1, 13, 1, 11, 11, 11, 2, 0, 11]);
             ;
-            exports_12("yaz0", yaz0 = new WebAssembly.Module(yaz0Code));
-            // gx/gx_texture.wat
+            yaz0Module = new WebAssembly.Module(yaz0Code);
             gx_textureCode = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 11, 2, 96, 0, 0, 96, 4, 127, 127, 127, 127, 0, 3, 4, 3, 0, 1, 0, 4, 5, 1, 112, 1, 1, 1, 5, 3, 1, 0, 2, 6, 21, 3, 127, 1, 65, 128, 136, 4, 11, 127, 0, 65, 128, 136, 4, 11, 127, 0, 65, 128, 8, 11, 7, 60, 5, 6, 95, 115, 116, 97, 114, 116, 0, 0, 11, 100, 101, 99, 111, 100, 101, 95, 67, 77, 80, 82, 0, 1, 6, 109, 101, 109, 111, 114, 121, 2, 0, 11, 95, 95, 104, 101, 97, 112, 95, 98, 97, 115, 101, 3, 1, 10, 95, 95, 100, 97, 116, 97, 95, 101, 110, 100, 3, 2, 10, 161, 7, 3, 2, 0, 11, 152, 7, 1, 21, 127, 35, 0, 65, 16, 107, 33, 4, 2, 64, 32, 3, 69, 13, 0, 32, 2, 65, 2, 116, 33, 5, 32, 2, 65, 4, 116, 33, 6, 32, 2, 65, 5, 116, 33, 7, 65, 0, 33, 8, 3, 64, 2, 64, 32, 2, 69, 13, 0, 65, 0, 33, 9, 32, 0, 33, 10, 3, 64, 32, 10, 33, 11, 32, 1, 33, 12, 65, 0, 33, 13, 3, 64, 65, 0, 33, 14, 32, 11, 33, 15, 32, 12, 33, 16, 3, 64, 32, 16, 65, 3, 106, 45, 0, 0, 33, 17, 32, 16, 65, 1, 106, 45, 0, 0, 33, 18, 32, 16, 45, 0, 2, 33, 19, 32, 16, 45, 0, 0, 33, 20, 32, 4, 65, 255, 1, 58, 0, 3, 32, 4, 65, 255, 1, 58, 0, 7, 32, 4, 32, 20, 65, 248, 1, 113, 32, 20, 65, 5, 118, 114, 34, 21, 58, 0, 0, 32, 4, 32, 19, 65, 248, 1, 113, 32, 19, 65, 5, 118, 114, 34, 22, 58, 0, 4, 32, 4, 32, 18, 65, 2, 118, 65, 7, 113, 32, 18, 65, 3, 116, 114, 34, 23, 58, 0, 2, 32, 4, 32, 17, 65, 2, 118, 65, 7, 113, 32, 17, 65, 3, 116, 114, 34, 24, 58, 0, 6, 32, 4, 32, 20, 65, 1, 118, 65, 3, 113, 32, 18, 32, 20, 65, 8, 116, 114, 34, 18, 65, 3, 118, 65, 252, 1, 113, 114, 34, 20, 58, 0, 1, 32, 4, 32, 19, 65, 1, 118, 65, 3, 113, 32, 17, 32, 19, 65, 8, 116, 114, 34, 17, 65, 3, 118, 65, 252, 1, 113, 114, 34, 19, 58, 0, 5, 2, 64, 2, 64, 32, 18, 32, 17, 77, 13, 0, 65, 255, 1, 33, 17, 32, 4, 65, 255, 1, 58, 0, 11, 32, 4, 32, 19, 65, 3, 108, 32, 20, 65, 5, 108, 106, 65, 3, 118, 58, 0, 9, 32, 4, 32, 22, 65, 3, 108, 32, 21, 65, 5, 108, 106, 65, 3, 118, 58, 0, 8, 32, 4, 32, 22, 65, 5, 108, 32, 21, 65, 3, 108, 106, 65, 3, 118, 58, 0, 12, 32, 4, 32, 19, 65, 5, 108, 32, 20, 65, 3, 108, 106, 65, 3, 118, 58, 0, 13, 32, 4, 32, 24, 65, 255, 1, 113, 34, 19, 65, 3, 108, 32, 23, 65, 255, 1, 113, 34, 20, 65, 5, 108, 106, 65, 3, 118, 58, 0, 10, 32, 19, 65, 5, 108, 32, 20, 65, 3, 108, 106, 65, 3, 118, 33, 19, 12, 1, 11, 32, 4, 32, 19, 32, 20, 106, 65, 1, 118, 34, 19, 58, 0, 9, 32, 4, 32, 22, 32, 21, 106, 65, 1, 118, 34, 20, 58, 0, 8, 32, 4, 32, 20, 58, 0, 12, 32, 4, 32, 19, 58, 0, 13, 32, 4, 65, 255, 1, 58, 0, 11, 32, 4, 32, 24, 65, 255, 1, 113, 32, 23, 65, 255, 1, 113, 106, 65, 1, 118, 34, 19, 58, 0, 10, 65, 0, 33, 17, 11, 32, 4, 32, 17, 58, 0, 15, 32, 4, 32, 19, 58, 0, 14, 65, 0, 33, 18, 32, 15, 33, 19, 3, 64, 32, 19, 32, 4, 32, 16, 32, 18, 106, 65, 4, 106, 45, 0, 0, 34, 20, 65, 4, 118, 65, 12, 113, 114, 34, 17, 45, 0, 0, 58, 0, 0, 32, 19, 65, 1, 106, 32, 17, 45, 0, 1, 58, 0, 0, 32, 19, 65, 2, 106, 32, 17, 45, 0, 2, 58, 0, 0, 32, 19, 65, 3, 106, 32, 17, 45, 0, 3, 58, 0, 0, 32, 19, 65, 4, 106, 32, 4, 32, 20, 65, 2, 118, 65, 12, 113, 114, 34, 17, 45, 0, 0, 58, 0, 0, 32, 19, 65, 5, 106, 32, 17, 45, 0, 1, 58, 0, 0, 32, 19, 65, 6, 106, 32, 17, 45, 0, 2, 58, 0, 0, 32, 19, 65, 7, 106, 32, 17, 45, 0, 3, 58, 0, 0, 32, 19, 65, 8, 106, 32, 4, 32, 20, 65, 12, 113, 114, 34, 17, 45, 0, 0, 58, 0, 0, 32, 19, 65, 9, 106, 32, 17, 45, 0, 1, 58, 0, 0, 32, 19, 65, 10, 106, 32, 17, 45, 0, 2, 58, 0, 0, 32, 19, 65, 11, 106, 32, 17, 45, 0, 3, 58, 0, 0, 32, 19, 65, 12, 106, 32, 4, 32, 20, 65, 2, 116, 65, 12, 113, 114, 34, 20, 45, 0, 0, 58, 0, 0, 32, 19, 65, 13, 106, 32, 20, 45, 0, 1, 58, 0, 0, 32, 19, 65, 14, 106, 32, 20, 45, 0, 2, 58, 0, 0, 32, 19, 65, 15, 106, 32, 20, 45, 0, 3, 58, 0, 0, 32, 19, 32, 5, 106, 33, 19, 32, 18, 65, 1, 106, 34, 18, 65, 4, 71, 13, 0, 11, 32, 15, 65, 16, 106, 33, 15, 32, 16, 65, 8, 106, 33, 16, 32, 14, 65, 4, 106, 34, 14, 65, 8, 73, 13, 0, 11, 32, 11, 32, 6, 106, 33, 11, 32, 12, 65, 16, 106, 33, 12, 32, 13, 65, 4, 106, 34, 13, 65, 8, 73, 13, 0, 11, 32, 10, 65, 32, 106, 33, 10, 32, 1, 65, 32, 106, 33, 1, 32, 9, 65, 8, 106, 34, 9, 32, 2, 73, 13, 0, 11, 11, 32, 0, 32, 7, 106, 33, 0, 32, 8, 65, 8, 106, 34, 8, 32, 3, 73, 13, 0, 11, 11, 11, 2, 0, 11]);
             ;
-            exports_12("gx_texture", gx_texture = new WebAssembly.Module(gx_textureCode));
+            gx_textureModule = new WebAssembly.Module(gx_textureCode);
         }
     };
 });
@@ -3181,8 +3189,8 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
         var pDstOffs = 0;
         var pSrcOffs = util_3.align(dstSize, 0x10);
         var heapSize = pSrcOffs + util_3.align(srcSize, 0x10);
-        var heapBase = wasmInstance.exports.__heap_base.value;
-        var wasmMemory = new WasmMemoryManager_1.default(wasmInstance.exports.memory);
+        var heapBase = wasmInstance.__heap_base;
+        var wasmMemory = new WasmMemoryManager_1.default(wasmInstance.memory);
         wasmMemory.resize(heapBase + heapSize);
         var mem = wasmMemory.mem;
         var heap = wasmMemory.heap;
@@ -3190,7 +3198,7 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
         var pSrc = heapBase + pSrcOffs;
         // Copy src buffer.
         heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
-        wasmInstance.exports.decompress(pDst, pSrc, dstSize);
+        wasmInstance.decompress(pDst, pSrc, dstSize);
         // Copy the result buffer to a new buffer for memory usage purposes.
         var result = new ArrayBufferSlice_4.default(heap.buffer).copySlice(pDst, dstSize);
         return result;
@@ -3250,7 +3258,7 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
             // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
             // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
             // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-            wasmInstance = new WebAssembly.Instance(wat_modules_1.yaz0);
+            wasmInstance = wat_modules_1.yaz0Instance();
             exports_13("decompress", decompress = decompressWasm);
         }
     };
@@ -6350,8 +6358,8 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         var pDstOffs = 0;
         var pSrcOffs = util_9.align(dstSize, 0x10);
         var heapSize = pSrcOffs + util_9.align(srcSize, 0x10);
-        var heapBase = wasmInstance.exports.__heap_base.value;
-        var wasmMemory = new WasmMemoryManager_2.default(wasmInstance.exports.memory);
+        var heapBase = wasmInstance.__heap_base;
+        var wasmMemory = new WasmMemoryManager_2.default(wasmInstance.memory);
         wasmMemory.resize(heapBase + heapSize);
         var mem = wasmMemory.mem;
         var heap = wasmMemory.heap;
@@ -6359,7 +6367,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         var pSrc = heapBase + pSrcOffs;
         // Copy src buffer.
         heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
-        wasmInstance.exports.decode_CMPR(pDst, pSrc, texture.width, texture.height);
+        wasmInstance.decode_CMPR(pDst, pSrc, texture.width, texture.height);
         // Copy the result buffer to a new buffer for memory usage purposes.
         var pixelsBuffer = new ArrayBufferSlice_6.default(heap.buffer).copyToBuffer(pDst, dstSize);
         var pixels = new Uint8Array(pixelsBuffer);
@@ -6617,7 +6625,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
             // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
             // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
             // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-            wasmInstance = new WebAssembly.Instance(wat_modules_2.gx_texture);
+            wasmInstance = wat_modules_2.gx_textureInstance();
             decode_CMPR = decode_CMPR_Wasm;
         }
     };

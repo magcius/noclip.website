@@ -16,14 +16,20 @@
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
 import { assert, readString, align } from './util';
-import { yaz0 as yaz0Module, yaz0 } from './wat_modules';
+import { yaz0Instance, yaz0Exports } from './wat_modules';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import WasmMemoryManager from './WasmMemoryManager';
+
+declare module "./wat_modules" {
+    interface yaz0Exports {
+        decompress(pDst: number, pSrc: number, dstSize: number): void;
+    }
+}
 
 // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
 // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
 // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-const wasmInstance = new WebAssembly.Instance(yaz0Module);
+const wasmInstance = yaz0Instance();
 
 function decompressWasm(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     const srcView = srcBuffer.createDataView();
@@ -37,9 +43,9 @@ function decompressWasm(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
 
     const heapSize = pSrcOffs + align(srcSize, 0x10);
 
-    const heapBase = wasmInstance.exports.__heap_base.value;
+    const heapBase = wasmInstance.__heap_base;
 
-    const wasmMemory = new WasmMemoryManager(wasmInstance.exports.memory);
+    const wasmMemory = new WasmMemoryManager(wasmInstance.memory);
     wasmMemory.resize(heapBase + heapSize);
     const mem = wasmMemory.mem;
     const heap = wasmMemory.heap;
@@ -50,7 +56,7 @@ function decompressWasm(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     // Copy src buffer.
     heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
 
-    wasmInstance.exports.decompress(pDst, pSrc, dstSize);
+    wasmInstance.decompress(pDst, pSrc, dstSize);
 
     // Copy the result buffer to a new buffer for memory usage purposes.
     const result = new ArrayBufferSlice(heap.buffer).copySlice(pDst, dstSize);

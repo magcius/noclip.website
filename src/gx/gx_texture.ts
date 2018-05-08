@@ -5,8 +5,14 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 
 import * as GX from './gx_enum';
 import { align } from '../util';
-import { gx_texture as gx_textureModule } from '../wat_modules';
+import { gx_textureInstance } from '../wat_modules';
 import WasmMemoryManager from '../WasmMemoryManager';
+
+declare module "../wat_modules" {
+    interface gx_textureExports {
+        decode_CMPR(pDst: number, pSrc: number, width: number, height: number): void;
+    }
+}
 
 export interface Texture {
     name: string;
@@ -105,7 +111,7 @@ export function calcFullTextureSize(format: GX.TexFormat, width: number, height:
 // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
 // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
 // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-const wasmInstance = new WebAssembly.Instance(gx_textureModule);
+const wasmInstance = gx_textureInstance();
 
 function decode_CMPR_Wasm(texture: Texture): DecodedTexture {
     const dstSize = texture.width * texture.height * 4;
@@ -116,9 +122,9 @@ function decode_CMPR_Wasm(texture: Texture): DecodedTexture {
 
     const heapSize = pSrcOffs + align(srcSize, 0x10);
 
-    const heapBase = wasmInstance.exports.__heap_base.value;
+    const heapBase = wasmInstance.__heap_base;
 
-    const wasmMemory = new WasmMemoryManager(wasmInstance.exports.memory);
+    const wasmMemory = new WasmMemoryManager(wasmInstance.memory);
     wasmMemory.resize(heapBase + heapSize);
     const mem = wasmMemory.mem;
     const heap = wasmMemory.heap;
@@ -129,7 +135,7 @@ function decode_CMPR_Wasm(texture: Texture): DecodedTexture {
     // Copy src buffer.
     heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
 
-    wasmInstance.exports.decode_CMPR(pDst, pSrc, texture.width, texture.height);
+    wasmInstance.decode_CMPR(pDst, pSrc, texture.width, texture.height);
 
     // Copy the result buffer to a new buffer for memory usage purposes.
     const pixelsBuffer = new ArrayBufferSlice(heap.buffer).copyToBuffer(pDst, dstSize);

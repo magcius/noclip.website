@@ -4,27 +4,64 @@
 const wabt = require('wabt');
 const fs = require('fs');
 
-function buildModuleArray(filename) {
-    const wat = fs.readFileSync(filename);
-    const wasmModule = wabt.parseWat(filename, wat);
-    wasmModule.resolveNames();
-    wasmModule.validate();
-    const binary = wasmModule.toBinary({});
+function buildBinaryArray(binary) {
     const binData = new Uint8Array(binary.buffer);
     const binStr = binData.join(',');
     const src = `new Uint8Array([${binStr}]);`;
     return src;
 }
 
+function buildModuleExportsInterface(exportName, wasmModule) {
+    const modExports = WebAssembly.Module.exports(wasmModule);
+
+    function getModuleExportType(exp) {
+        switch (exp.kind) {
+        case 'global':
+            return `number`;
+        case 'memory':
+            return `WebAssembly.Memory`;
+        default:
+            throw "whoops";
+        }
+    }
+
+    const lines = [];
+    lines.push(`export interface ${exportName}Exports {`);
+    for (const exp of modExports) {
+        // For now, consumers are expected to provide signatures,
+        // until this information is available through the toolchain...
+        if (exp.kind === 'function')
+            continue;
+        lines.push(`    ${exp.name}: ${getModuleExportType(exp)};`);
+    }
+    lines.push('}');
+    return lines.join('\n');
+}
+
 function buildModuleCode(module) {
     const exportName = module.exportName;
     const filename = module.filename;
-    const binArrayStr = buildModuleArray(filename);
+
+    const wat = fs.readFileSync(filename);
+    const wabtModule = wabt.parseWat(filename, wat);
+    wabtModule.resolveNames();
+    wabtModule.validate();
+    const binary = wabtModule.toBinary({});
+
+    const wasmModule = new WebAssembly.Module(binary.buffer);
+    buildModuleExportsInterface(exportName, wasmModule);
+
+    const binArrayStr = buildBinaryArray(binary);
 
     return `
 // ${filename}
+${buildModuleExportsInterface(exportName, wasmModule)}
 const ${exportName}Code = ${binArrayStr};
-export const ${exportName} = new WebAssembly.Module(${exportName}Code);
+const ${exportName}Module = new WebAssembly.Module(${exportName}Code);
+export function ${exportName}Instance(): ${exportName}Exports {
+    const instance = new WebAssembly.Instance(${exportName}Module);
+    return (<${exportName}Exports> instance.exports);
+}
 `;
 }
 
