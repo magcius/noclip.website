@@ -1,6 +1,7 @@
 
 // Build our WAT WebAssembly modules.
 
+const path = require('path');
 const wabt = require('wabt');
 const fs = require('fs');
 
@@ -42,7 +43,7 @@ function buildModuleCode(module) {
     const exportName = module.exportName;
     const filename = module.filename;
 
-    const wat = fs.readFileSync(filename);
+    const wat = fs.readFileSync(path.join(__dirname, filename));
     const wabtModule = wabt.parseWat(filename, wat);
     wabtModule.resolveNames();
     wabtModule.validate();
@@ -76,9 +77,10 @@ function buildModulesFile(modules) {
 function main() {
     const out = buildModulesFile([
         { exportName: 'yaz0', filename: 'yaz0.wat' },
+        { exportName: 'yaz0_as', filename: 'yaz0_as.wat' },
         { exportName: 'gx_texture', filename: 'gx/gx_texture.wat' },
     ]);
-    fs.writeFileSync('wat_modules.ts', out);
+    fs.writeFileSync(path.join(__dirname, 'wat_modules.ts'), out);
 }
 
 main();

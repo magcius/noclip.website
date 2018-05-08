@@ -16,7 +16,7 @@
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
 import { assert, readString, align } from './util';
-import { yaz0Instance, yaz0Exports } from './wat_modules';
+import { yaz0Instance, yaz0Exports, yaz0_asInstance, yaz0_asExports } from './wat_modules';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import WasmMemoryManager from './WasmMemoryManager';
 
@@ -24,6 +24,44 @@ declare module "./wat_modules" {
     interface yaz0Exports {
         decompress(pDst: number, pSrc: number, dstSize: number): void;
     }
+    interface yaz0_asExports {
+        decompress(pDst: number, pSrc: number, dstSize: number): void;
+    }
+}
+
+const wasmAsInstance = yaz0_asInstance();
+
+function decompressWasmAS(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
+    const srcView = srcBuffer.createDataView();
+    assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
+
+    const dstSize = srcView.getUint32(0x04, false);
+    const srcSize = srcBuffer.byteLength;
+
+    const pDstOffs = 0;
+    const pSrcOffs = align(dstSize, 0x10);
+
+    const heapSize = pSrcOffs + align(srcSize, 0x10);
+
+    const heapBase = 0;
+
+    const wasmMemory = new WasmMemoryManager(wasmAsInstance.memory);
+    wasmMemory.resize(heapBase + heapSize);
+    const mem = wasmMemory.mem;
+    const heap = wasmMemory.heap;
+
+    const pDst = heapBase + pDstOffs;
+    const pSrc = heapBase + pSrcOffs;
+
+    // Copy src buffer.
+    heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
+
+    wasmAsInstance.decompress(pDst, pSrc, dstSize);
+
+    // Copy the result buffer to a new buffer for memory usage purposes.
+    const result = new ArrayBufferSlice(heap.buffer).copySlice(pDst, dstSize);
+
+    return result;
 }
 
 // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
