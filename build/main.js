@@ -251,6 +251,10 @@ System.register("ArrayBufferSlice", ["util"], function (exports_3, context_3) {
                     var end = length !== undefined ? start + length : this.byteOffset + this.byteLength;
                     return ArrayBuffer_slice.call(this.arrayBuffer, start, end);
                 };
+                ArrayBufferSlice.prototype.copySlice = function (offs, length) {
+                    if (offs === void 0) { offs = 0; }
+                    return new ArrayBufferSlice(this.copyToBuffer(offs, length));
+                };
                 ArrayBufferSlice.prototype.castToBuffer = function () {
                     if (this.byteOffset === 0 && this.byteLength === this.arrayBuffer.byteLength) {
                         return this.arrayBuffer;
@@ -277,13 +281,11 @@ System.register("ArrayBufferSlice", ["util"], function (exports_3, context_3) {
                     }
                     else {
                         byteLength = this.byteLength - offs;
-                        // Ensure it's aligned if we're relying on implicit length as a safety net
-                        // so we don't try to silently copy the rest of the ArrayBuffer.
-                        var end = begin + byteLength;
-                        util_1.assert(isAligned(end, clazz.BYTES_PER_ELEMENT));
+                        util_1.assert(isAligned(begin, clazz.BYTES_PER_ELEMENT));
                         count = byteLength / clazz.BYTES_PER_ELEMENT;
+                        util_1.assert((count | 0) === count);
                     }
-                    // Typed arrays require 
+                    // Typed arrays require alignment.
                     if (isAligned(begin, clazz.BYTES_PER_ELEMENT))
                         return new clazz(this.arrayBuffer, begin, count);
                     else
@@ -1290,13 +1292,45 @@ System.register("MemoizeCache", [], function (exports_5, context_5) {
         }
     };
 });
-System.register("endian", ["ArrayBufferSlice"], function (exports_6, context_6) {
+System.register("WasmMemoryManager", [], function (exports_6, context_6) {
     "use strict";
     var __moduleName = context_6 && context_6.id;
+    var WasmMemoryManager;
+    return {
+        setters: [],
+        execute: function () {
+            WasmMemoryManager = /** @class */ (function () {
+                function WasmMemoryManager() {
+                    // WebAssembly pages are 64k.
+                    this.PAGE_SIZE = 64 * 1024;
+                    this.mem = new WebAssembly.Memory({ initial: 1 });
+                    this.currentNumPages = 1;
+                    // resize must be called before use.
+                    this.heap = null;
+                }
+                WasmMemoryManager.prototype.resize = function (newSize) {
+                    var newNumPages = Math.ceil(newSize / this.PAGE_SIZE);
+                    if (newNumPages > this.currentNumPages) {
+                        this.mem.grow(newNumPages - this.currentNumPages);
+                        this.currentNumPages = newNumPages;
+                        this.heap = null;
+                    }
+                    if (this.heap === null)
+                        this.heap = new Uint8Array(this.mem.buffer);
+                };
+                return WasmMemoryManager;
+            }());
+            exports_6("default", WasmMemoryManager);
+        }
+    };
+});
+System.register("endian", ["ArrayBufferSlice"], function (exports_7, context_7) {
+    "use strict";
+    var __moduleName = context_7 && context_7.id;
     function isLittleEndian() {
         return _isLittle;
     }
-    exports_6("isLittleEndian", isLittleEndian);
+    exports_7("isLittleEndian", isLittleEndian);
     function bswap16(m) {
         var a = m.createTypedArray(Uint8Array);
         var o = new Uint8Array(a.byteLength);
@@ -1351,7 +1385,7 @@ System.register("endian", ["ArrayBufferSlice"], function (exports_6, context_6) 
                 return be32toh(m);
         }
     }
-    exports_6("betoh", betoh);
+    exports_7("betoh", betoh);
     var ArrayBufferSlice_2, _test, _testView, _isLittle;
     return {
         setters: [
@@ -1366,9 +1400,9 @@ System.register("endian", ["ArrayBufferSlice"], function (exports_6, context_6) 
         }
     };
 });
-System.register("lz77", ["ArrayBufferSlice"], function (exports_7, context_7) {
+System.register("lz77", ["ArrayBufferSlice"], function (exports_8, context_8) {
     "use strict";
-    var __moduleName = context_7 && context_7.id;
+    var __moduleName = context_8 && context_8.id;
     // Nintendo DS LZ77 format.
     // LZ10:
     // Header (4 bytes):
@@ -1413,7 +1447,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_7, context_7) {
             }
         }
     }
-    exports_7("decompressLZ10", decompressLZ10);
+    exports_8("decompressLZ10", decompressLZ10);
     // LZ11:
     // Header (4 bytes):
     //   Magic: "\x11" (1 byte)
@@ -1477,7 +1511,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_7, context_7) {
             }
         }
     }
-    exports_7("decompressLZ11", decompressLZ11);
+    exports_8("decompressLZ11", decompressLZ11);
     function decompress(srcBuffer) {
         var srcView = srcBuffer.createDataView();
         var magic = srcView.getUint8(0x00);
@@ -1488,7 +1522,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_7, context_7) {
         else
             throw new Error("Not Nintendo LZ77");
     }
-    exports_7("decompress", decompress);
+    exports_8("decompress", decompress);
     var ArrayBufferSlice_3;
     return {
         setters: [
@@ -1500,9 +1534,9 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_7, context_7) {
         }
     };
 });
-System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], function (exports_8, context_8) {
+System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], function (exports_9, context_9) {
     "use strict";
-    var __moduleName = context_8 && context_8.id;
+    var __moduleName = context_9 && context_9.id;
     function compileShader(gl, str, type) {
         var shader = gl.createShader(type);
         gl.shaderSource(shader, str);
@@ -1562,7 +1596,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
         return coalescedBuffers;
         var e_7, _a, e_8, _b;
     }
-    exports_8("coalesceBuffer", coalesceBuffer);
+    exports_9("coalesceBuffer", coalesceBuffer);
     var gl_matrix_1, util_2, MemoizeCache_1, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer, FullscreenProgram, FullscreenCopyProgram, RENDER_SAMPLES, ColorTarget, DepthTarget, RenderState;
     return {
         setters: [
@@ -1590,19 +1624,19 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 CompareMode[CompareMode["GEQUAL"] = WebGLRenderingContext.GEQUAL] = "GEQUAL";
                 CompareMode[CompareMode["ALWAYS"] = WebGLRenderingContext.ALWAYS] = "ALWAYS";
             })(CompareMode || (CompareMode = {}));
-            exports_8("CompareMode", CompareMode);
+            exports_9("CompareMode", CompareMode);
             (function (FrontFaceMode) {
                 FrontFaceMode[FrontFaceMode["CCW"] = WebGLRenderingContext.CCW] = "CCW";
                 FrontFaceMode[FrontFaceMode["CW"] = WebGLRenderingContext.CW] = "CW";
             })(FrontFaceMode || (FrontFaceMode = {}));
-            exports_8("FrontFaceMode", FrontFaceMode);
+            exports_9("FrontFaceMode", FrontFaceMode);
             (function (CullMode) {
                 CullMode[CullMode["NONE"] = 0] = "NONE";
                 CullMode[CullMode["FRONT"] = 1] = "FRONT";
                 CullMode[CullMode["BACK"] = 2] = "BACK";
                 CullMode[CullMode["FRONT_AND_BACK"] = 3] = "FRONT_AND_BACK";
             })(CullMode || (CullMode = {}));
-            exports_8("CullMode", CullMode);
+            exports_9("CullMode", CullMode);
             (function (BlendFactor) {
                 BlendFactor[BlendFactor["ZERO"] = WebGLRenderingContext.ZERO] = "ZERO";
                 BlendFactor[BlendFactor["ONE"] = WebGLRenderingContext.ONE] = "ONE";
@@ -1615,14 +1649,14 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 BlendFactor[BlendFactor["DST_ALPHA"] = WebGLRenderingContext.DST_ALPHA] = "DST_ALPHA";
                 BlendFactor[BlendFactor["ONE_MINUS_DST_ALPHA"] = WebGLRenderingContext.ONE_MINUS_DST_ALPHA] = "ONE_MINUS_DST_ALPHA";
             })(BlendFactor || (BlendFactor = {}));
-            exports_8("BlendFactor", BlendFactor);
+            exports_9("BlendFactor", BlendFactor);
             (function (BlendMode) {
                 BlendMode[BlendMode["NONE"] = 0] = "NONE";
                 BlendMode[BlendMode["ADD"] = WebGLRenderingContext.FUNC_ADD] = "ADD";
                 BlendMode[BlendMode["SUBTRACT"] = WebGLRenderingContext.FUNC_SUBTRACT] = "SUBTRACT";
                 BlendMode[BlendMode["REVERSE_SUBTRACT"] = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT] = "REVERSE_SUBTRACT";
             })(BlendMode || (BlendMode = {}));
-            exports_8("BlendMode", BlendMode);
+            exports_9("BlendMode", BlendMode);
             RenderFlags = /** @class */ (function () {
                 function RenderFlags() {
                     this.depthWrite = undefined;
@@ -1696,7 +1730,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 RenderFlags.default = new RenderFlags();
                 return RenderFlags;
             }());
-            exports_8("RenderFlags", RenderFlags);
+            exports_9("RenderFlags", RenderFlags);
             RenderFlags.default.blendMode = BlendMode.NONE;
             RenderFlags.default.blendSrc = BlendFactor.SRC_ALPHA;
             RenderFlags.default.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
@@ -1801,7 +1835,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 };
                 return Program;
             }());
-            exports_8("Program", Program);
+            exports_9("Program", Program);
             ProgramCache = /** @class */ (function (_super) {
                 __extends(ProgramCache, _super);
                 function ProgramCache(gl) {
@@ -1937,7 +1971,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 };
                 return RenderArena;
             }());
-            exports_8("RenderArena", RenderArena);
+            exports_9("RenderArena", RenderArena);
             BufferCoalescer = /** @class */ (function () {
                 function BufferCoalescer(gl, vertexDatas, indexDatas) {
                     util_2.assert(vertexDatas.length === indexDatas.length);
@@ -1959,7 +1993,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 };
                 return BufferCoalescer;
             }());
-            exports_8("BufferCoalescer", BufferCoalescer);
+            exports_9("BufferCoalescer", BufferCoalescer);
             FullscreenProgram = /** @class */ (function (_super) {
                 __extends(FullscreenProgram, _super);
                 function FullscreenProgram() {
@@ -1969,7 +2003,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 }
                 return FullscreenProgram;
             }(Program));
-            exports_8("FullscreenProgram", FullscreenProgram);
+            exports_9("FullscreenProgram", FullscreenProgram);
             FullscreenCopyProgram = /** @class */ (function (_super) {
                 __extends(FullscreenCopyProgram, _super);
                 function FullscreenCopyProgram() {
@@ -2024,7 +2058,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 };
                 return ColorTarget;
             }());
-            exports_8("ColorTarget", ColorTarget);
+            exports_9("ColorTarget", ColorTarget);
             DepthTarget = /** @class */ (function () {
                 function DepthTarget() {
                 }
@@ -2046,7 +2080,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 };
                 return DepthTarget;
             }());
-            exports_8("DepthTarget", DepthTarget);
+            exports_9("DepthTarget", DepthTarget);
             // XXX(jstpierre): This is becoming a lot more than just some render state.
             // Rename to "SceneRenderer" at some point?
             RenderState = /** @class */ (function () {
@@ -2189,14 +2223,14 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 };
                 return RenderState;
             }());
-            exports_8("RenderState", RenderState);
+            exports_9("RenderState", RenderState);
         }
     };
 });
 // New UI system
-System.register("ui", ["viewer"], function (exports_9, context_9) {
+System.register("ui", ["viewer"], function (exports_10, context_10) {
     "use strict";
-    var __moduleName = context_9 && context_9.id;
+    var __moduleName = context_10 && context_10.id;
     function createDOMFromString(s) {
         return document.createRange().createContextualFragment(s);
     }
@@ -2293,7 +2327,7 @@ System.register("ui", ["viewer"], function (exports_9, context_9) {
                 };
                 return ScrollSelect;
             }());
-            exports_9("ScrollSelect", ScrollSelect);
+            exports_10("ScrollSelect", ScrollSelect);
             SingleSelect = /** @class */ (function (_super) {
                 __extends(SingleSelect, _super);
                 function SingleSelect() {
@@ -2310,7 +2344,7 @@ System.register("ui", ["viewer"], function (exports_9, context_9) {
                 };
                 return SingleSelect;
             }(ScrollSelect));
-            exports_9("SingleSelect", SingleSelect);
+            exports_10("SingleSelect", SingleSelect);
             SimpleSingleSelect = /** @class */ (function (_super) {
                 __extends(SimpleSingleSelect, _super);
                 function SimpleSingleSelect() {
@@ -2322,7 +2356,7 @@ System.register("ui", ["viewer"], function (exports_9, context_9) {
                 };
                 return SimpleSingleSelect;
             }(SingleSelect));
-            exports_9("SimpleSingleSelect", SimpleSingleSelect);
+            exports_10("SimpleSingleSelect", SimpleSingleSelect);
             MultiSelect = /** @class */ (function (_super) {
                 __extends(MultiSelect, _super);
                 function MultiSelect() {
@@ -2371,7 +2405,7 @@ System.register("ui", ["viewer"], function (exports_9, context_9) {
                 };
                 return MultiSelect;
             }(ScrollSelect));
-            exports_9("MultiSelect", MultiSelect);
+            exports_10("MultiSelect", MultiSelect);
             Panel = /** @class */ (function () {
                 function Panel() {
                     var _this = this;
@@ -2463,7 +2497,7 @@ System.register("ui", ["viewer"], function (exports_9, context_9) {
                 };
                 return Panel;
             }());
-            exports_9("Panel", Panel);
+            exports_10("Panel", Panel);
             OPEN_ICON = "<svg viewBox=\"0 0 100 100\" height=\"20\" fill=\"white\"><path d=\"M84.3765045,45.2316481 L77.2336539,75.2316205 L77.2336539,75.2316205 C77.1263996,75.6820886 76.7239081,76 76.2608477,76 L17.8061496,76 C17.2538649,76 16.8061496,75.5522847 16.8061496,75 C16.8061496,74.9118841 16.817796,74.8241548 16.8407862,74.739091 L24.7487983,45.4794461 C24.9845522,44.607157 25.7758952,44.0012839 26.6794815,44.0012642 L83.4036764,44.0000276 L83.4036764,44.0000276 C83.9559612,44.0000156 84.4036862,44.4477211 84.4036982,45.0000058 C84.4036999,45.0780163 84.3945733,45.155759 84.3765045,45.2316481 L84.3765045,45.2316481 Z M15,24 L26.8277004,24 L26.8277004,24 C27.0616369,24 27.2881698,24.0820162 27.4678848,24.2317787 L31.799078,27.8411064 L31.799078,27.8411064 C32.697653,28.5899189 33.8303175,29 35,29 L75,29 C75.5522847,29 76,29.4477153 76,30 L76,38 L76,38 C76,38.5522847 75.5522847,39 75,39 L25.3280454,39 L25.3280454,39 C23.0690391,39 21.0906235,40.5146929 20.5012284,42.6954549 L14.7844016,63.8477139 L14.7844016,63.8477139 C14.7267632,64.0609761 14.5071549,64.1871341 14.2938927,64.1294957 C14.1194254,64.0823423 13.9982484,63.9240598 13.9982563,63.7433327 L13.9999561,25 L14,25 C14.0000242,24.4477324 14.4477324,24.0000439 15,24.0000439 L15,24 Z\"/></svg>";
             SceneSelect = /** @class */ (function (_super) {
                 __extends(SceneSelect, _super);
@@ -2629,7 +2663,7 @@ System.register("ui", ["viewer"], function (exports_9, context_9) {
                 };
                 return TextureViewer;
             }(Panel));
-            exports_9("TextureViewer", TextureViewer);
+            exports_10("TextureViewer", TextureViewer);
             FRUSTUM_ICON = "<svg viewBox=\"0 0 100 100\" height=\"20\" fill=\"white\"><polygon points=\"48.2573,19.8589 33.8981,15.0724 5,67.8384 48.2573,90.3684\" /><polygon points=\"51.5652,19.8738 51.5652,90.3734 95,67.8392 65.9366,15.2701\" /><polygon points=\"61.3189,13.2756 49.9911,9.6265 38.5411,13.1331 49.9213,16.9268\" /></svg>";
             ViewerSettings = /** @class */ (function (_super) {
                 __extends(ViewerSettings, _super);
@@ -2704,7 +2738,7 @@ System.register("ui", ["viewer"], function (exports_9, context_9) {
                 };
                 return LayerPanel;
             }(Panel));
-            exports_9("LayerPanel", LayerPanel);
+            exports_10("LayerPanel", LayerPanel);
             UI = /** @class */ (function () {
                 function UI(viewer) {
                     this.viewer = viewer;
@@ -2750,14 +2784,14 @@ System.register("ui", ["viewer"], function (exports_9, context_9) {
                 };
                 return UI;
             }());
-            exports_9("UI", UI);
+            exports_10("UI", UI);
         }
     };
 });
 // tslint:disable:no-console
-System.register("viewer", ["gl-matrix", "render"], function (exports_10, context_10) {
+System.register("viewer", ["gl-matrix", "render"], function (exports_11, context_11) {
     "use strict";
-    var __moduleName = context_10 && context_10.id;
+    var __moduleName = context_11 && context_11.id;
     function clamp(v, min, max) {
         return Math.max(min, Math.min(v, max));
     }
@@ -2948,7 +2982,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_10, context
                 };
                 return FPSCameraController;
             }());
-            exports_10("FPSCameraController", FPSCameraController);
+            exports_11("FPSCameraController", FPSCameraController);
             OrbitCameraController = /** @class */ (function () {
                 function OrbitCameraController() {
                     this.x = 0.15;
@@ -3032,7 +3066,7 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_10, context
                 };
                 return OrbitCameraController;
             }());
-            exports_10("OrbitCameraController", OrbitCameraController);
+            exports_11("OrbitCameraController", OrbitCameraController);
             Viewer = /** @class */ (function () {
                 function Viewer(canvas) {
                     this.canvas = canvas;
@@ -3109,14 +3143,14 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_10, context
                 };
                 return Viewer;
             }());
-            exports_10("Viewer", Viewer);
+            exports_11("Viewer", Viewer);
         }
     };
 });
 // Generated by build_wat.js
-System.register("wat_modules", [], function (exports_11, context_11) {
+System.register("wat_modules", [], function (exports_12, context_12) {
     "use strict";
-    var __moduleName = context_11 && context_11.id;
+    var __moduleName = context_12 && context_12.id;
     var yaz0ModuleCode, yaz0Module;
     return {
         setters: [],
@@ -3124,29 +3158,30 @@ System.register("wat_modules", [], function (exports_11, context_11) {
             // yaz0.wat
             yaz0ModuleCode = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 7, 1, 96, 3, 127, 127, 127, 0, 2, 12, 1, 3, 101, 110, 118, 3, 109, 101, 109, 2, 0, 1, 3, 2, 1, 0, 7, 14, 1, 10, 100, 101, 99, 111, 109, 112, 114, 101, 115, 115, 0, 0, 10, 167, 2, 1, 164, 2, 1, 7, 127, 3, 64, 32, 1, 65, 1, 106, 33, 9, 32, 1, 44, 0, 0, 33, 3, 65, 8, 33, 7, 2, 64, 2, 64, 3, 64, 32, 7, 34, 1, 65, 127, 106, 33, 7, 32, 1, 69, 13, 1, 32, 9, 45, 0, 0, 33, 6, 2, 64, 65, 1, 32, 7, 116, 32, 3, 113, 69, 13, 0, 32, 0, 32, 6, 58, 0, 0, 32, 0, 65, 1, 106, 33, 0, 32, 9, 65, 1, 106, 33, 9, 32, 2, 65, 127, 106, 34, 2, 65, 0, 74, 13, 1, 12, 3, 11, 32, 9, 45, 0, 1, 33, 5, 2, 64, 2, 64, 32, 6, 65, 4, 118, 34, 1, 69, 13, 0, 32, 9, 65, 2, 106, 33, 8, 32, 1, 65, 2, 106, 33, 1, 12, 1, 11, 32, 9, 65, 3, 106, 33, 8, 32, 9, 65, 2, 106, 45, 0, 0, 65, 18, 106, 33, 1, 11, 32, 2, 32, 1, 65, 255, 255, 3, 113, 107, 33, 2, 2, 64, 32, 1, 69, 13, 0, 32, 0, 65, 127, 106, 33, 9, 32, 6, 65, 8, 116, 65, 128, 30, 113, 32, 5, 114, 65, 127, 115, 65, 1, 106, 33, 5, 32, 1, 65, 255, 255, 3, 106, 65, 255, 255, 3, 113, 33, 4, 3, 64, 32, 9, 65, 1, 106, 34, 6, 32, 9, 32, 5, 106, 45, 0, 0, 58, 0, 0, 32, 6, 33, 9, 32, 1, 65, 127, 106, 34, 1, 65, 255, 255, 3, 113, 13, 0, 11, 32, 0, 32, 4, 106, 65, 1, 106, 33, 0, 11, 32, 8, 33, 9, 32, 2, 65, 0, 74, 13, 0, 12, 2, 11, 11, 32, 9, 33, 1, 12, 1, 11, 11, 11]);
             ;
-            exports_11("yaz0Module", yaz0Module = new WebAssembly.Module(yaz0ModuleCode));
+            exports_12("yaz0Module", yaz0Module = new WebAssembly.Module(yaz0ModuleCode));
         }
     };
 });
 // Nintendo Yaz0 format.
-System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice"], function (exports_12, context_12) {
+System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryManager"], function (exports_13, context_13) {
     "use strict";
-    var __moduleName = context_12 && context_12.id;
+    var __moduleName = context_13 && context_13.id;
     function decompressWasm(srcBuffer) {
         var srcView = srcBuffer.createDataView();
         util_3.assert(util_3.readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
         var uncompressedSize = srcView.getUint32(0x04, false);
         var dstHeapOffs = util_3.align(srcBuffer.byteLength, 0x10);
         var heapSize = dstHeapOffs + util_3.align(uncompressedSize, 0x10);
-        var pageSize = (64 * 1024); // Pages in WASM are 64k
-        var numPages = Math.ceil(heapSize / pageSize) + 1;
-        var mem = new WebAssembly.Memory({ initial: numPages });
-        var heap = new Uint8Array(mem.buffer);
-        // Copy source buffer.
+        wasmMemory.resize(heapSize);
+        var mem = wasmMemory.mem;
+        var heap = wasmMemory.heap;
+        // memcpy source buffer.
         heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10));
         var wasmInstance = new WebAssembly.Instance(wat_modules_1.yaz0Module, { env: { mem: mem } });
         wasmInstance.exports.decompress(dstHeapOffs, 0x00, uncompressedSize);
-        return new ArrayBufferSlice_4.default(heap.buffer, dstHeapOffs, uncompressedSize);
+        // Copy the result buffer to a new buffer for memory usage purposes.
+        var result = new ArrayBufferSlice_4.default(heap.buffer).copySlice(dstHeapOffs, uncompressedSize);
+        return result;
     }
     function decompressJs(srcBuffer) {
         var srcView = srcBuffer.createDataView();
@@ -3183,7 +3218,7 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice"], function (e
             }
         }
     }
-    var util_3, wat_modules_1, ArrayBufferSlice_4, decompress;
+    var util_3, wat_modules_1, ArrayBufferSlice_4, WasmMemoryManager_1, wasmMemory, decompress;
     return {
         setters: [
             function (util_3_1) {
@@ -3194,18 +3229,24 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice"], function (e
             },
             function (ArrayBufferSlice_4_1) {
                 ArrayBufferSlice_4 = ArrayBufferSlice_4_1;
+            },
+            function (WasmMemoryManager_1_1) {
+                WasmMemoryManager_1 = WasmMemoryManager_1_1;
             }
         ],
         execute: function () {
-            // TODO(jstpierre): Investigate why WASM is so slow.
-            exports_12("decompress", decompress = decompressJs);
+            // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
+            // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
+            // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
+            wasmMemory = new WasmMemoryManager_1.default();
+            exports_13("decompress", decompress = decompressWasm);
         }
     };
 });
 // GX constants. Mostly taken from libogc.
-System.register("gx/gx_enum", [], function (exports_13, context_13) {
+System.register("gx/gx_enum", [], function (exports_14, context_14) {
     "use strict";
-    var __moduleName = context_13 && context_13.id;
+    var __moduleName = context_14 && context_14.id;
     return {
         setters: [],
         execute: function () {
@@ -3213,9 +3254,9 @@ System.register("gx/gx_enum", [], function (exports_13, context_13) {
     };
 });
 // GX display list parsing.
-System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports_14, context_14) {
+System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports_15, context_15) {
     "use strict";
-    var __moduleName = context_14 && context_14.id;
+    var __moduleName = context_15 && context_15.id;
     function getComponentSize(dataType) {
         switch (dataType) {
             case 0 /* U8 */:
@@ -3229,7 +3270,7 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports
                 return 4;
         }
     }
-    exports_14("getComponentSize", getComponentSize);
+    exports_15("getComponentSize", getComponentSize);
     function getNumComponents(vtxAttrib, componentCount) {
         switch (vtxAttrib) {
             case 0 /* PNMTXIDX */:
@@ -3276,7 +3317,7 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports
                 throw new Error("whoops");
         }
     }
-    exports_14("getNumComponents", getNumComponents);
+    exports_15("getNumComponents", getNumComponents);
     function getAttrName(vtxAttrib) {
         switch (vtxAttrib) {
             case 0 /* PNMTXIDX */: return "PNMTXIDX";
@@ -3426,7 +3467,7 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports
         return { indexData: indexData, packedVertexData: packedVertexData, totalTriangleCount: totalTriangleCount, totalVertexCount: totalVertexCount };
         var e_15, _a, e_16, _b;
     }
-    exports_14("coalesceLoadedDatas", coalesceLoadedDatas);
+    exports_15("coalesceLoadedDatas", coalesceLoadedDatas);
     var MemoizeCache_2, util_4, VtxLoaderCache, cache, compileVtxLoader;
     return {
         setters: [
@@ -3456,13 +3497,13 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util"], function (exports
                 return VtxLoaderCache;
             }(MemoizeCache_2.default));
             cache = new VtxLoaderCache();
-            exports_14("compileVtxLoader", compileVtxLoader = cache.compileVtxLoader);
+            exports_15("compileVtxLoader", compileVtxLoader = cache.compileVtxLoader);
         }
     };
 });
-System.register("sm64ds/nitro_tex", [], function (exports_15, context_15) {
+System.register("sm64ds/nitro_tex", [], function (exports_16, context_16) {
     "use strict";
-    var __moduleName = context_15 && context_15.id;
+    var __moduleName = context_16 && context_16.id;
     function expand3to8(n) {
         return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
     }
@@ -3478,7 +3519,7 @@ System.register("sm64ds/nitro_tex", [], function (exports_15, context_15) {
         pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
         pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
     }
-    exports_15("bgr5", bgr5);
+    exports_16("bgr5", bgr5);
     function readTexture_A3I5(width, height, texData, palData) {
         var pixels = new Uint8Array(width * height * 4);
         var texView = texData.createDataView();
@@ -3662,7 +3703,7 @@ System.register("sm64ds/nitro_tex", [], function (exports_15, context_15) {
                 throw new Error("Unsupported texture type! " + format);
         }
     }
-    exports_15("readTexture", readTexture);
+    exports_16("readTexture", readTexture);
     var Format;
     return {
         setters: [],
@@ -3678,20 +3719,20 @@ System.register("sm64ds/nitro_tex", [], function (exports_15, context_15) {
                 Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
                 Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
             })(Format || (Format = {}));
-            exports_15("Format", Format);
+            exports_16("Format", Format);
         }
     };
 });
 // Read DS Geometry Engine commands.
-System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_16, context_16) {
+System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_17, context_17) {
     "use strict";
-    var __moduleName = context_16 && context_16.id;
+    var __moduleName = context_17 && context_17.id;
     function bgr5(pixel) {
         nitro_tex_1.bgr5(tmp, 0, pixel);
         var r = tmp[0], g = tmp[1], b = tmp[2];
         return { r: r, g: g, b: b };
     }
-    exports_16("bgr5", bgr5);
+    exports_17("bgr5", bgr5);
     function cmd_MTX_RESTORE(ctx) {
         // XXX: We don't implement the matrix stack yet.
         ctx.readParam();
@@ -3910,7 +3951,7 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_16, c
         }
         return ctx.packets;
     }
-    exports_16("readCmds", readCmds);
+    exports_17("readCmds", readCmds);
     var nitro_tex_1, CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, tmp, Context, ContextInternal;
     return {
         setters: [
@@ -3950,7 +3991,7 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_16, c
                 }
                 return Context;
             }());
-            exports_16("Context", Context);
+            exports_17("Context", Context);
             ContextInternal = /** @class */ (function () {
                 function ContextInternal(buffer, baseCtx) {
                     this.offs = 0;
@@ -3972,9 +4013,9 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_16, c
         }
     };
 });
-System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_17, context_17) {
+System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_18, context_18) {
     "use strict";
-    var __moduleName = context_17 && context_17.id;
+    var __moduleName = context_18 && context_18.id;
     function parseModel(bmd, buffer, idx) {
         var offs = bmd.modelOffsBase + idx * 0x40;
         var view = buffer.createDataView();
@@ -4118,7 +4159,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             bmd.models.push(parseModel(bmd, buffer, i));
         return bmd;
     }
-    exports_17("parse", parse);
+    exports_18("parse", parse);
     var gl_matrix_3, NITRO_GX, NITRO_Tex, util_5, Material, Model, TextureKey, Texture, BMD;
     return {
         setters: [
@@ -4141,13 +4182,13 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 }
                 return Material;
             }());
-            exports_17("Material", Material);
+            exports_18("Material", Material);
             Model = /** @class */ (function () {
                 function Model() {
                 }
                 return Model;
             }());
-            exports_17("Model", Model);
+            exports_18("Model", Model);
             TextureKey = /** @class */ (function () {
                 function TextureKey(texIdx, palIdx) {
                     this.texIdx = texIdx;
@@ -4163,24 +4204,24 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 }
                 return Texture;
             }());
-            exports_17("Texture", Texture);
+            exports_18("Texture", Texture);
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
                 return BMD;
             }());
-            exports_17("BMD", BMD);
+            exports_18("BMD", BMD);
         }
     };
 });
 // GX materials.
-System.register("gx/gx_material", ["render", "util"], function (exports_18, context_18) {
+System.register("gx/gx_material", ["render", "util"], function (exports_19, context_19) {
     "use strict";
-    var __moduleName = context_18 && context_18.id;
+    var __moduleName = context_19 && context_19.id;
     function getVertexAttribLocation(vtxAttrib) {
         return vtxAttributeGenDefs.findIndex(function (genDef) { return genDef.attrib === vtxAttrib; });
     }
-    exports_18("getVertexAttribLocation", getVertexAttribLocation);
+    exports_19("getVertexAttribLocation", getVertexAttribLocation);
     // #endregion
     // #region Material flags generation.
     function translateCullMode(cullMode) {
@@ -4278,7 +4319,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_18, cont
         }
         return renderFlags;
     }
-    exports_18("translateRenderFlags", translateRenderFlags);
+    exports_19("translateRenderFlags", translateRenderFlags);
     // #endregion
     // XXX(jstpierre): Put this somewhere better.
     // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
@@ -4290,7 +4331,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_18, cont
         var textureLODBias = Math.log2(Math.min(viewportWidth / EFB_WIDTH, viewportHeight / EFB_HEIGHT));
         return textureLODBias;
     }
-    exports_18("getTextureLODBias", getTextureLODBias);
+    exports_19("getTextureLODBias", getTextureLODBias);
     var render_2, util_6, EFB_WIDTH, EFB_HEIGHT, Color, vtxAttributeGenDefs, scaledVtxAttributes, GX_Program;
     return {
         setters: [
@@ -4302,8 +4343,8 @@ System.register("gx/gx_material", ["render", "util"], function (exports_18, cont
             }
         ],
         execute: function () {
-            exports_18("EFB_WIDTH", EFB_WIDTH = 640);
-            exports_18("EFB_HEIGHT", EFB_HEIGHT = 528);
+            exports_19("EFB_WIDTH", EFB_WIDTH = 640);
+            exports_19("EFB_HEIGHT", EFB_HEIGHT = 528);
             Color = /** @class */ (function () {
                 function Color(r, g, b, a) {
                     this.r = r;
@@ -4313,7 +4354,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_18, cont
                 }
                 return Color;
             }());
-            exports_18("Color", Color);
+            exports_19("Color", Color);
             vtxAttributeGenDefs = [
                 { attrib: 0 /* PNMTXIDX */, name: "PosMtxIdx", storage: "float", scale: false },
                 { attrib: 9 /* POS */, name: "Position", storage: "vec3", scale: true },
@@ -4329,7 +4370,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_18, cont
                 { attrib: 19 /* TEX6 */, name: "Tex6", storage: "vec2", scale: true },
                 { attrib: 20 /* TEX7 */, name: "Tex7", storage: "vec2", scale: true },
             ];
-            exports_18("scaledVtxAttributes", scaledVtxAttributes = vtxAttributeGenDefs.filter(function (a) { return a.scale; }).map(function (a) { return a.attrib; }));
+            exports_19("scaledVtxAttributes", scaledVtxAttributes = vtxAttributeGenDefs.filter(function (a) { return a.scale; }).map(function (a) { return a.attrib; }));
             while (scaledVtxAttributes.length < util_6.align(scaledVtxAttributes.length, 4))
                 scaledVtxAttributes.push(-1);
             GX_Program = /** @class */ (function (_super) {
@@ -4801,14 +4842,14 @@ System.register("gx/gx_material", ["render", "util"], function (exports_18, cont
                 GX_Program.ub_PacketParams = 2;
                 return GX_Program;
             }(render_2.Program));
-            exports_18("GX_Program", GX_Program);
+            exports_19("GX_Program", GX_Program);
         }
     };
 });
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
-System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "gx/gx_displaylist", "gx/gx_material"], function (exports_19, context_19) {
+System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "gx/gx_displaylist", "gx/gx_material"], function (exports_20, context_20) {
     "use strict";
-    var __moduleName = context_19 && context_19.id;
+    var __moduleName = context_20 && context_20.id;
     function readStringTable(buffer, offs) {
         var view = buffer.createDataView(offs);
         var stringCount = view.getUint16(0x00);
@@ -5848,14 +5889,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 HierarchyType[HierarchyType["Material"] = 17] = "Material";
                 HierarchyType[HierarchyType["Shape"] = 18] = "Shape";
             })(HierarchyType || (HierarchyType = {}));
-            exports_19("HierarchyType", HierarchyType);
+            exports_20("HierarchyType", HierarchyType);
             //#endregion
             //#region DRW1
             (function (DRW1JointKind) {
                 DRW1JointKind[DRW1JointKind["NormalJoint"] = 0] = "NormalJoint";
                 DRW1JointKind[DRW1JointKind["WeightedJoint"] = 1] = "WeightedJoint";
             })(DRW1JointKind || (DRW1JointKind = {}));
-            exports_19("DRW1JointKind", DRW1JointKind);
+            exports_20("DRW1JointKind", DRW1JointKind);
             quatScratch = gl_matrix_4.quat.create();
             // temp, center, center inverse
             t = gl_matrix_4.mat4.create(), c = gl_matrix_4.mat4.create(), ci = gl_matrix_4.mat4.create();
@@ -5913,7 +5954,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BMD;
             }());
-            exports_19("BMD", BMD);
+            exports_20("BMD", BMD);
             //#endregion
             //#region BMT
             BMT = /** @class */ (function () {
@@ -5933,7 +5974,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BMT;
             }());
-            exports_19("BMT", BMT);
+            exports_20("BMT", BMT);
             //#endregion
             //#region BTI
             BTI = /** @class */ (function () {
@@ -5947,7 +5988,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BTI;
             }());
-            exports_19("BTI", BTI);
+            exports_20("BTI", BTI);
             //#endregion
             //#region BTK
             BTK = /** @class */ (function () {
@@ -5981,7 +6022,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BTK;
             }());
-            exports_19("BTK", BTK);
+            exports_20("BTK", BTK);
             //#endregion
             //#region BRK
             BRK = /** @class */ (function () {
@@ -6027,7 +6068,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BRK;
             }());
-            exports_19("BRK", BRK);
+            exports_20("BRK", BRK);
             //#endregion
             //#region BCK
             BCK = /** @class */ (function () {
@@ -6056,14 +6097,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 };
                 return BCK;
             }());
-            exports_19("BCK", BCK);
+            exports_20("BCK", BCK);
         }
     };
 });
 // Nintendo RARC file format.
-System.register("j3d/rarc", ["util"], function (exports_20, context_20) {
+System.register("j3d/rarc", ["util"], function (exports_21, context_21) {
     "use strict";
-    var __moduleName = context_20 && context_20.id;
+    var __moduleName = context_21 && context_21.id;
     function parse(buffer) {
         var view = buffer.createDataView();
         util_8.assert(util_8.readString(buffer, 0x00, 0x04) === 'RARC');
@@ -6133,7 +6174,7 @@ System.register("j3d/rarc", ["util"], function (exports_20, context_20) {
         rarc.root = root;
         return rarc;
     }
-    exports_20("parse", parse);
+    exports_21("parse", parse);
     var util_8, RARC;
     return {
         setters: [
@@ -6183,14 +6224,14 @@ System.register("j3d/rarc", ["util"], function (exports_20, context_20) {
                 };
                 return RARC;
             }());
-            exports_20("RARC", RARC);
+            exports_21("RARC", RARC);
         }
     };
 });
 // GX texture decoding
-System.register("gx/gx_texture", [], function (exports_21, context_21) {
+System.register("gx/gx_texture", [], function (exports_22, context_22) {
     "use strict";
-    var __moduleName = context_21 && context_21.id;
+    var __moduleName = context_22 && context_22.id;
     function expand3to8(n) {
         return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
     }
@@ -6224,7 +6265,7 @@ System.register("gx/gx_texture", [], function (exports_21, context_21) {
         // All palette-formats are 16-bit.
         return paletteSize * 2;
     }
-    exports_21("calcPaletteSize", calcPaletteSize);
+    exports_22("calcPaletteSize", calcPaletteSize);
     function calcTextureSize(format, width, height) {
         var numPixels = width * height;
         switch (format) {
@@ -6252,7 +6293,7 @@ System.register("gx/gx_texture", [], function (exports_21, context_21) {
                 throw new Error("whoops");
         }
     }
-    exports_21("calcTextureSize", calcTextureSize);
+    exports_22("calcTextureSize", calcTextureSize);
     function calcFullTextureSize(format, width, height, mipCount) {
         var textureSize = 0;
         while (mipCount--) {
@@ -6262,7 +6303,7 @@ System.register("gx/gx_texture", [], function (exports_21, context_21) {
         }
         return textureSize;
     }
-    exports_21("calcFullTextureSize", calcFullTextureSize);
+    exports_22("calcFullTextureSize", calcFullTextureSize);
     // GX's CMPR format is S3TC but using GX's tiled addressing.
     function decode_CMPR_to_S3TC(texture) {
         // CMPR goes in 2x2 "macro-blocks" of four S3TC normal blocks.
@@ -6527,16 +6568,16 @@ System.register("gx/gx_texture", [], function (exports_21, context_21) {
                 return decode_Dummy(texture);
         }
     }
-    exports_21("decodeTexture", decodeTexture);
+    exports_22("decodeTexture", decodeTexture);
     return {
         setters: [],
         execute: function () {
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "render", "util", "gx/gx_displaylist"], function (exports_22, context_22) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "render", "util", "gx/gx_displaylist"], function (exports_23, context_23) {
     "use strict";
-    var __moduleName = context_22 && context_22.id;
+    var __moduleName = context_23 && context_23.id;
     function translateCompType(gl, compType) {
         switch (compType) {
             case 4 /* F32 */:
@@ -6857,7 +6898,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 Command_Material.textureScratch = new Int32Array(8);
                 return Command_Material;
             }());
-            exports_22("Command_Material", Command_Material);
+            exports_23("Command_Material", Command_Material);
             (function (ColorOverride) {
                 ColorOverride[ColorOverride["MAT0"] = 0] = "MAT0";
                 ColorOverride[ColorOverride["MAT1"] = 1] = "MAT1";
@@ -6872,7 +6913,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 ColorOverride[ColorOverride["C1"] = 10] = "C1";
                 ColorOverride[ColorOverride["C2"] = 11] = "C2";
             })(ColorOverride || (ColorOverride = {}));
-            exports_22("ColorOverride", ColorOverride);
+            exports_23("ColorOverride", ColorOverride);
             sceneParamsData = new Float32Array(4 * 4 + GX_Material.scaledVtxAttributes.length + 4);
             matrixScratch = gl_matrix_5.mat4.create(), matrixScratch2 = gl_matrix_5.mat4.create();
             Scene = /** @class */ (function () {
@@ -7263,13 +7304,13 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 return Scene;
             }());
-            exports_22("Scene", Scene);
+            exports_23("Scene", Scene);
         }
     };
 });
-System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_23, context_23) {
+System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_24, context_24) {
     "use strict";
-    var __moduleName = context_23 && context_23.id;
+    var __moduleName = context_24 && context_24.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -7489,13 +7530,13 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                 new TwilightPrincessSceneDesc("Hyrule Field", "F_SP102", ["R00_00.arc"]),
                 new TwilightPrincessSceneDesc("Fishing Pond", "F_SP127", ["R00_00.arc"]),
             ];
-            exports_23("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_24("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_24, context_24) {
+System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_25, context_25) {
     "use strict";
-    var __moduleName = context_24 && context_24.id;
+    var __moduleName = context_25 && context_25.id;
     function createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile) {
         var bmd = j3d_3.BMD.parse(bmdFile.buffer);
         var btk = btkFile ? j3d_3.BTK.parse(btkFile.buffer) : null;
@@ -7504,7 +7545,7 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
         var bck = bckFile ? j3d_3.BCK.parse(bckFile.buffer) : null;
         return new render_6.Scene(gl, bmd, btk, brk, bck, bmt);
     }
-    exports_24("createScene", createScene);
+    exports_25("createScene", createScene);
     function boolSort(a, b) {
         if (a && !b)
             return -1;
@@ -7544,11 +7585,11 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
         }
         return null;
     }
-    exports_24("createScenesFromBuffer", createScenesFromBuffer);
+    exports_25("createScenesFromBuffer", createScenesFromBuffer);
     function createMultiSceneFromBuffer(gl, buffer) {
         return new MultiScene(createScenesFromBuffer(gl, buffer));
     }
-    exports_24("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
+    exports_25("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
     var util_11, Yaz0, j3d_3, RARC, render_6, MultiScene;
     return {
         setters: [
@@ -7601,13 +7642,13 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                 };
                 return MultiScene;
             }());
-            exports_24("MultiScene", MultiScene);
+            exports_25("MultiScene", MultiScene);
         }
     };
 });
-System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_25, context_25) {
+System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_26, context_26) {
     "use strict";
-    var __moduleName = context_25 && context_25.id;
+    var __moduleName = context_26 && context_26.id;
     var scenes_2, util_12, id, name, MKDDSceneDesc, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -7658,13 +7699,13 @@ System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_25,
                 new MKDDSceneDesc("Bowser's Castle", 'Koopa.arc'),
                 new MKDDSceneDesc("Rainbow Road", 'Rainbow.arc'),
             ];
-            exports_25("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_26("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", "ui", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_26, context_26) {
+System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", "ui", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_27, context_27) {
     "use strict";
-    var __moduleName = context_26 && context_26.id;
+    var __moduleName = context_27 && context_27.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -7942,13 +7983,13 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
             ];
             id = "zww";
             name = "The Legend of Zelda: The Wind Waker";
-            exports_26("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_27("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/render", "j3d/scenes", "gx/gx_material", "gl-matrix", "j3d/j3d"], function (exports_27, context_27) {
+System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/render", "j3d/scenes", "gx/gx_material", "gl-matrix", "j3d/j3d"], function (exports_28, context_28) {
     "use strict";
-    var __moduleName = context_27 && context_27.id;
+    var __moduleName = context_28 && context_28.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -8242,7 +8283,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                 };
                 return SunshineRenderer;
             }());
-            exports_27("SunshineRenderer", SunshineRenderer);
+            exports_28("SunshineRenderer", SunshineRenderer);
             SunshineSceneDesc = /** @class */ (function () {
                 function SunshineSceneDesc(path, name) {
                     this.path = path;
@@ -8400,7 +8441,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                 };
                 return SunshineSceneDesc;
             }());
-            exports_27("SunshineSceneDesc", SunshineSceneDesc);
+            exports_28("SunshineSceneDesc", SunshineSceneDesc);
             id = "sms";
             name = "Super Mario Sunshine";
             sceneDescs = [
@@ -8416,13 +8457,13 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                 new SunshineSceneDesc("data/j3d/sms/mare0.szs", "Noki Bay"),
                 new SunshineSceneDesc("data/j3d/sms/monte3.szs", "Pianta Village"),
             ];
-            exports_27("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_28("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes", "gx/gx_material"], function (exports_28, context_28) {
+System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes", "gx/gx_material"], function (exports_29, context_29) {
     "use strict";
-    var __moduleName = context_28 && context_28.id;
+    var __moduleName = context_29 && context_29.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -8619,13 +8660,13 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
             sceneDescs = [
                 new SMGSceneDesc("Peach's Castle Garden", "PeachCastleGardenPlanet.arc", "GalaxySky.arc", "PeachCastleGardenPlanetBloom.arc", "PeachCastleGardenPlanetIndirect.arc"),
             ];
-            exports_28("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_29("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("sm64ds/crg0", ["util"], function (exports_29, context_29) {
+System.register("sm64ds/crg0", ["util"], function (exports_30, context_30) {
     "use strict";
-    var __moduleName = context_29 && context_29.id;
+    var __moduleName = context_30 && context_30.id;
     function parse(buffer) {
         var view = buffer.createDataView();
         util_16.assert(util_16.readString(buffer, 0, 0x04) === 'CRG0');
@@ -8682,7 +8723,7 @@ System.register("sm64ds/crg0", ["util"], function (exports_29, context_29) {
         }
         return { levels: levels };
     }
-    exports_29("parse", parse);
+    exports_30("parse", parse);
     var util_16;
     return {
         setters: [
@@ -8695,20 +8736,20 @@ System.register("sm64ds/crg0", ["util"], function (exports_29, context_29) {
     };
 });
 // SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
-System.register("sm64ds/lz77", ["lz77", "util"], function (exports_30, context_30) {
+System.register("sm64ds/lz77", ["lz77", "util"], function (exports_31, context_31) {
     "use strict";
-    var __moduleName = context_30 && context_30.id;
+    var __moduleName = context_31 && context_31.id;
     function isLZ77(srcBuffer) {
         return (util_17.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
     }
-    exports_30("isLZ77", isLZ77);
+    exports_31("isLZ77", isLZ77);
     function maybeDecompress(srcBuffer) {
         if (isLZ77(srcBuffer))
             return lz77_1.decompress(srcBuffer.slice(4));
         else
             return srcBuffer;
     }
-    exports_30("maybeDecompress", maybeDecompress);
+    exports_31("maybeDecompress", maybeDecompress);
     var lz77_1, util_17;
     return {
         setters: [
@@ -8723,9 +8764,9 @@ System.register("sm64ds/lz77", ["lz77", "util"], function (exports_30, context_3
         }
     };
 });
-System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm64ds/nitro_bmd", "render", "util"], function (exports_31, context_31) {
+System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm64ds/nitro_bmd", "render", "util"], function (exports_32, context_32) {
     "use strict";
-    var __moduleName = context_31 && context_31.id;
+    var __moduleName = context_32 && context_32.id;
     function textureToCanvas(bmdTex) {
         var canvas = document.createElement("canvas");
         canvas.width = bmdTex.width;
@@ -9046,13 +9087,13 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg0", "sm64ds/lz77", "sm
                 };
                 return SceneDesc;
             }());
-            exports_31("SceneDesc", SceneDesc);
+            exports_32("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_32, context_32) {
+System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_33, context_33) {
     "use strict";
-    var __moduleName = context_32 && context_32.id;
+    var __moduleName = context_33 && context_33.id;
     var render_12, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -9119,13 +9160,13 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_32, contex
             ].map(function (entry) {
                 return new render_12.SceneDesc(entry.name, entry.id);
             });
-            exports_32("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_33("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("mdl0/mdl0", ["util"], function (exports_33, context_33) {
+System.register("mdl0/mdl0", ["util"], function (exports_34, context_34) {
     "use strict";
-    var __moduleName = context_33 && context_33.id;
+    var __moduleName = context_34 && context_34.id;
     function parse(buffer) {
         ;
         var view = buffer.createDataView();
@@ -9183,7 +9224,7 @@ System.register("mdl0/mdl0", ["util"], function (exports_33, context_33) {
         util_19.assert(offs === buffer.byteLength);
         return { clrData: clrData, idxData: idxData, vtxData: vtxData, animCount: animCount, animSize: animSize, vertCount: vertCount, vertSize: vertSize };
     }
-    exports_33("parse", parse);
+    exports_34("parse", parse);
     var util_19;
     return {
         setters: [
@@ -9195,9 +9236,9 @@ System.register("mdl0/mdl0", ["util"], function (exports_33, context_33) {
         }
     };
 });
-System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], function (exports_34, context_34) {
+System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], function (exports_35, context_35) {
     "use strict";
-    var __moduleName = context_34 && context_34.id;
+    var __moduleName = context_35 && context_35.id;
     var MDL0, Viewer, render_13, util_20, FancyGrid_Program, FancyGrid, MDL0_Program, Scene, SceneDesc;
     return {
         setters: [
@@ -9349,13 +9390,13 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
                 };
                 return SceneDesc;
             }());
-            exports_34("SceneDesc", SceneDesc);
+            exports_35("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("mdl0/scenes", ["mdl0/render"], function (exports_35, context_35) {
+System.register("mdl0/scenes", ["mdl0/render"], function (exports_36, context_36) {
     "use strict";
-    var __moduleName = context_35 && context_35.id;
+    var __moduleName = context_36 && context_36.id;
     var render_14, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -9421,13 +9462,13 @@ System.register("mdl0/scenes", ["mdl0/render"], function (exports_35, context_35
                 var name = filename;
                 return new render_14.SceneDesc(name, path);
             });
-            exports_35("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_36("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], function (exports_36, context_36) {
+System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], function (exports_37, context_37) {
     "use strict";
-    var __moduleName = context_36 && context_36.id;
+    var __moduleName = context_37 && context_37.id;
     function readZELVIEW0(buffer) {
         var view = buffer.createDataView();
         var MAGIC = "ZELVIEW0";
@@ -9459,7 +9500,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         zelview0.buffer = buffer;
         return zelview0;
     }
-    exports_36("readZELVIEW0", readZELVIEW0);
+    exports_37("readZELVIEW0", readZELVIEW0);
     function readHeaders(gl, rom, offs, banks) {
         var headers = new Headers();
         function loadAddress(addr) {
@@ -9767,7 +9808,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                 };
                 return ZELVIEW0;
             }());
-            exports_36("ZELVIEW0", ZELVIEW0);
+            exports_37("ZELVIEW0", ZELVIEW0);
             Mesh = /** @class */ (function () {
                 function Mesh() {
                     this.opaque = [];
@@ -9775,14 +9816,14 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                 }
                 return Mesh;
             }());
-            exports_36("Mesh", Mesh);
+            exports_37("Mesh", Mesh);
             Headers = /** @class */ (function () {
                 function Headers() {
                     this.rooms = [];
                 }
                 return Headers;
             }());
-            exports_36("Headers", Headers);
+            exports_37("Headers", Headers);
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Spawns"] = 0] = "Spawns";
                 HeaderCommands[HeaderCommands["Actors"] = 1] = "Actors";
@@ -9807,9 +9848,9 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         }
     };
 });
-System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_37, context_37) {
+System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_38, context_38) {
     "use strict";
-    var __moduleName = context_37 && context_37.id;
+    var __moduleName = context_38 && context_38.id;
     function readVertex(state, which, addr) {
         var rom = state.rom;
         var offs = state.lookupAddress(addr);
@@ -10485,7 +10526,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         gl.bindVertexArray(null);
         return new DL(vao, state.cmds, state.textures);
     }
-    exports_37("readDL", readDL);
+    exports_38("readDL", readDL);
     var gl_matrix_10, Render, render_15, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
@@ -10557,13 +10598,13 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
                 };
                 return DL;
             }());
-            exports_37("DL", DL);
+            exports_38("DL", DL);
         }
     };
 });
-System.register("zelview/render", ["zelview/zelview0", "render", "util"], function (exports_38, context_38) {
+System.register("zelview/render", ["zelview/zelview0", "render", "util"], function (exports_39, context_39) {
     "use strict";
-    var __moduleName = context_38 && context_38.id;
+    var __moduleName = context_39 && context_39.id;
     var ZELVIEW0, render_16, util_22, BillboardBGProgram, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
     return {
         setters: [
@@ -10593,7 +10634,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util"], functi
                 };
                 return BillboardBGProgram;
             }(render_16.Program));
-            exports_38("BillboardBGProgram", BillboardBGProgram);
+            exports_39("BillboardBGProgram", BillboardBGProgram);
             F3DEX2Program = /** @class */ (function (_super) {
                 __extends(F3DEX2Program, _super);
                 function F3DEX2Program() {
@@ -10613,7 +10654,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util"], functi
                 F3DEX2Program.a_Color = 2;
                 return F3DEX2Program;
             }(render_16.Program));
-            exports_38("F3DEX2Program", F3DEX2Program);
+            exports_39("F3DEX2Program", F3DEX2Program);
             CollisionProgram = /** @class */ (function (_super) {
                 __extends(CollisionProgram, _super);
                 function CollisionProgram() {
@@ -10777,13 +10818,13 @@ System.register("zelview/render", ["zelview/zelview0", "render", "util"], functi
                 };
                 return SceneDesc;
             }());
-            exports_38("SceneDesc", SceneDesc);
+            exports_39("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("zelview/scenes", ["zelview/render"], function (exports_39, context_39) {
+System.register("zelview/scenes", ["zelview/render"], function (exports_40, context_40) {
     "use strict";
-    var __moduleName = context_39 && context_39.id;
+    var __moduleName = context_40 && context_40.id;
     var render_17, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -11239,13 +11280,13 @@ System.register("zelview/scenes", ["zelview/render"], function (exports_39, cont
                 var path = "data/zelview/" + entry.filename + ".zelview0";
                 return new render_17.SceneDesc(entry.label, path);
             });
-            exports_39("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_40("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("oot3d/cmb", ["util"], function (exports_40, context_40) {
+System.register("oot3d/cmb", ["util"], function (exports_41, context_41) {
     "use strict";
-    var __moduleName = context_40 && context_40.id;
+    var __moduleName = context_41 && context_41.id;
     function readMatsChunk(cmb, buffer) {
         var view = buffer.createDataView();
         util_23.assert(util_23.readString(buffer, 0x00, 0x04) === 'mats');
@@ -11659,7 +11700,7 @@ System.register("oot3d/cmb", ["util"], function (exports_40, context_40) {
         cmb.indexBuffer = buffer.slice(idxDataOffs, idxDataOffs + idxDataCount * 2);
         return cmb;
     }
-    exports_40("parse", parse);
+    exports_41("parse", parse);
     var util_23, VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
     return {
         setters: [
@@ -11682,7 +11723,7 @@ System.register("oot3d/cmb", ["util"], function (exports_40, context_40) {
                 }
                 return CMB;
             }());
-            exports_40("CMB", CMB);
+            exports_41("CMB", CMB);
             (function (TextureFilter) {
                 TextureFilter[TextureFilter["NEAREST"] = 9728] = "NEAREST";
                 TextureFilter[TextureFilter["LINEAR"] = 9729] = "LINEAR";
@@ -11691,12 +11732,12 @@ System.register("oot3d/cmb", ["util"], function (exports_40, context_40) {
                 TextureFilter[TextureFilter["NEAREST_MIPMIP_LINEAR"] = 9986] = "NEAREST_MIPMIP_LINEAR";
                 TextureFilter[TextureFilter["LINEAR_MIPMAP_LINEAR"] = 9987] = "LINEAR_MIPMAP_LINEAR";
             })(TextureFilter || (TextureFilter = {}));
-            exports_40("TextureFilter", TextureFilter);
+            exports_41("TextureFilter", TextureFilter);
             (function (TextureWrapMode) {
                 TextureWrapMode[TextureWrapMode["CLAMP"] = 10496] = "CLAMP";
                 TextureWrapMode[TextureWrapMode["REPEAT"] = 10497] = "REPEAT";
             })(TextureWrapMode || (TextureWrapMode = {}));
-            exports_40("TextureWrapMode", TextureWrapMode);
+            exports_41("TextureWrapMode", TextureWrapMode);
             TextureBinding = /** @class */ (function () {
                 function TextureBinding() {
                 }
@@ -11708,7 +11749,7 @@ System.register("oot3d/cmb", ["util"], function (exports_40, context_40) {
                 }
                 return Material;
             }());
-            exports_40("Material", Material);
+            exports_41("Material", Material);
             (function (TextureFormat) {
                 TextureFormat[TextureFormat["ETC1"] = 26458] = "ETC1";
                 TextureFormat[TextureFormat["ETC1A4"] = 26459] = "ETC1A4";
@@ -11723,13 +11764,13 @@ System.register("oot3d/cmb", ["util"], function (exports_40, context_40) {
                 }
                 return Texture;
             }());
-            exports_40("Texture", Texture);
+            exports_41("Texture", Texture);
             Mesh = /** @class */ (function () {
                 function Mesh() {
                 }
                 return Mesh;
             }());
-            exports_40("Mesh", Mesh);
+            exports_41("Mesh", Mesh);
             (function (DataType) {
                 DataType[DataType["Byte"] = 5120] = "Byte";
                 DataType[DataType["UByte"] = 5121] = "UByte";
@@ -11739,26 +11780,26 @@ System.register("oot3d/cmb", ["util"], function (exports_40, context_40) {
                 DataType[DataType["UInt"] = 5125] = "UInt";
                 DataType[DataType["Float"] = 5126] = "Float";
             })(DataType || (DataType = {}));
-            exports_40("DataType", DataType);
+            exports_41("DataType", DataType);
             Prm = /** @class */ (function () {
                 function Prm() {
                 }
                 return Prm;
             }());
-            exports_40("Prm", Prm);
+            exports_41("Prm", Prm);
             Sepd = /** @class */ (function () {
                 function Sepd() {
                     this.prms = [];
                 }
                 return Sepd;
             }());
-            exports_40("Sepd", Sepd);
+            exports_41("Sepd", Sepd);
         }
     };
 });
-System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_41, context_41) {
+System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_42, context_42) {
     "use strict";
-    var __moduleName = context_41 && context_41.id;
+    var __moduleName = context_42 && context_42.id;
     function readRooms(buffer, nRooms, offs) {
         var rooms = [];
         for (var i = 0; i < nRooms; i++) {
@@ -11851,7 +11892,7 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_41, contex
         var headersBuf = buffer.slice(0x10);
         return readHeaders(headersBuf);
     }
-    exports_41("parse", parse);
+    exports_42("parse", parse);
     var CMB, util_24, ZSI, HeaderCommands, Mesh;
     return {
         setters: [
@@ -11868,7 +11909,7 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_41, contex
                 }
                 return ZSI;
             }());
-            exports_41("ZSI", ZSI);
+            exports_42("ZSI", ZSI);
             // Subset of Z64 command types.
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Collision"] = 3] = "Collision";
@@ -11881,13 +11922,13 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_41, contex
                 }
                 return Mesh;
             }());
-            exports_41("Mesh", Mesh);
+            exports_42("Mesh", Mesh);
         }
     };
 });
-System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "render", "util"], function (exports_42, context_42) {
+System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "render", "util"], function (exports_43, context_43) {
     "use strict";
-    var __moduleName = context_42 && context_42.id;
+    var __moduleName = context_43 && context_43.id;
     function textureToCanvas(texture) {
         var canvas = document.createElement("canvas");
         canvas.width = texture.width;
@@ -12202,13 +12243,13 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                 };
                 return SceneDesc;
             }());
-            exports_42("SceneDesc", SceneDesc);
+            exports_43("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("oot3d/scenes", ["oot3d/render"], function (exports_43, context_43) {
+System.register("oot3d/scenes", ["oot3d/render"], function (exports_44, context_44) {
     "use strict";
-    var __moduleName = context_43 && context_43.id;
+    var __moduleName = context_44 && context_44.id;
     var render_19, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -12322,22 +12363,22 @@ System.register("oot3d/scenes", ["oot3d/render"], function (exports_43, context_
                 var name = entry.name || entry.filename;
                 return new render_19.SceneDesc(name, path);
             });
-            exports_43("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_44("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("fres/gx2_enum", [], function (exports_44, context_44) {
+System.register("fres/gx2_enum", [], function (exports_45, context_45) {
     "use strict";
-    var __moduleName = context_44 && context_44.id;
+    var __moduleName = context_45 && context_45.id;
     return {
         setters: [],
         execute: function () {
         }
     };
 });
-System.register("fres/gx2_surface", ["util"], function (exports_45, context_45) {
+System.register("fres/gx2_surface", ["util"], function (exports_46, context_46) {
     "use strict";
-    var __moduleName = context_45 && context_45.id;
+    var __moduleName = context_46 && context_46.id;
     function parseGX2Surface(buffer, gx2SurfaceOffs) {
         var view = buffer.slice(gx2SurfaceOffs, gx2SurfaceOffs + 0x9C).createDataView();
         var dimension = view.getUint32(0x00, false);
@@ -12363,7 +12404,7 @@ System.register("fres/gx2_surface", ["util"], function (exports_45, context_45) 
         var surface = { format: format, tileMode: tileMode, swizzle: swizzle, width: width, height: height, depth: depth, pitch: pitch, numMips: numMips, aaMode: aaMode, texDataSize: texDataSize, mipDataSize: mipDataSize, mipDataOffsets: mipDataOffsets };
         return surface;
     }
-    exports_45("parseGX2Surface", parseGX2Surface);
+    exports_46("parseGX2Surface", parseGX2Surface);
     var util_26;
     return {
         setters: [
@@ -12375,9 +12416,9 @@ System.register("fres/gx2_surface", ["util"], function (exports_45, context_45) 
         }
     };
 });
-System.register("worker_util", [], function (exports_46, context_46) {
+System.register("worker_util", [], function (exports_47, context_47) {
     "use strict";
-    var __moduleName = context_46 && context_46.id;
+    var __moduleName = context_47 && context_47.id;
     function makeWorkerFromSource(sources) {
         var blob = new Blob(sources, { type: 'application/javascript' });
         var url = window.URL.createObjectURL(blob);
@@ -12385,7 +12426,7 @@ System.register("worker_util", [], function (exports_46, context_46) {
         window.URL.revokeObjectURL(url);
         return w;
     }
-    exports_46("makeWorkerFromSource", makeWorkerFromSource);
+    exports_47("makeWorkerFromSource", makeWorkerFromSource);
     var WorkerManager, WorkerPool;
     return {
         setters: [],
@@ -12494,13 +12535,13 @@ System.register("worker_util", [], function (exports_46, context_46) {
                 };
                 return WorkerPool;
             }());
-            exports_46("WorkerPool", WorkerPool);
+            exports_47("WorkerPool", WorkerPool);
         }
     };
 });
-System.register("fres/gx2_swizzle", ["worker_util"], function (exports_47, context_47) {
+System.register("fres/gx2_swizzle", ["worker_util"], function (exports_48, context_48) {
     "use strict";
-    var __moduleName = context_47 && context_47.id;
+    var __moduleName = context_48 && context_48.id;
     // This is all contained in one function in order to make it easier to Worker-ize.
     function _deswizzle(inSurface, srcBuffer, mipLevel) {
         var numPipes = 2;
@@ -12810,13 +12851,13 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_47, conte
                 };
                 return Deswizzler;
             }());
-            exports_47("deswizzler", deswizzler = new Deswizzler());
+            exports_48("deswizzler", deswizzler = new Deswizzler());
         }
     };
 });
-System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_48, context_48) {
+System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_49, context_49) {
     "use strict";
-    var __moduleName = context_48 && context_48.id;
+    var __moduleName = context_49 && context_49.id;
     // #region Texture Decode
     function expand5to8(n) {
         return (n << (8 - 5)) | (n >>> (10 - 8));
@@ -13089,11 +13130,11 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_48, 
                 return decompressBC45Surface(surface);
         }
     }
-    exports_48("decompressBC", decompressBC);
+    exports_49("decompressBC", decompressBC);
     function deswizzleSurface(surface, texData, mipLevel) {
         return gx2_swizzle_1.deswizzler.deswizzle(surface, texData.castToBuffer(), mipLevel);
     }
-    exports_48("deswizzleSurface", deswizzleSurface);
+    exports_49("deswizzleSurface", deswizzleSurface);
     function decodeSurface(surface, texData, mipData, mipLevel) {
         var levelData;
         if (mipLevel === 0) {
@@ -13135,7 +13176,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_48, 
             }
         });
     }
-    exports_48("decodeSurface", decodeSurface);
+    exports_49("decodeSurface", decodeSurface);
     function surfaceToCanvas(canvas, surface) {
         var ctx = canvas.getContext('2d');
         var width = surface.width;
@@ -13164,7 +13205,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_48, 
         }
         ctx.putImageData(imageData, 0, 0);
     }
-    exports_48("surfaceToCanvas", surfaceToCanvas);
+    exports_49("surfaceToCanvas", surfaceToCanvas);
     function decompressSurface(texture) {
         switch (texture.type) {
             case 'RGBA':
@@ -13176,7 +13217,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_48, 
                 return decompressBC(texture);
         }
     }
-    exports_48("decompressSurface", decompressSurface);
+    exports_49("decompressSurface", decompressSurface);
     var gx2_swizzle_1;
     return {
         setters: [
@@ -13188,9 +13229,9 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_48, 
         }
     };
 });
-System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_49, context_49) {
+System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_50, context_50) {
     "use strict";
-    var __moduleName = context_49 && context_49.id;
+    var __moduleName = context_50 && context_50.id;
     function readBinPtrT(view, offs, littleEndian) {
         var offs2 = view.getInt32(offs, littleEndian);
         if (offs2 === 0)
@@ -13561,7 +13602,7 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_49
         return { textures: textures, models: models };
         var e_47, _a, e_48, _b;
     }
-    exports_49("parse", parse);
+    exports_50("parse", parse);
     var gx2_surface_1, util_27, UBOParameterType, RenderInfoParameterType;
     return {
         setters: [
@@ -13616,9 +13657,9 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_49
     };
 });
 // Nintendo SARC archive format.
-System.register("fres/sarc", ["util"], function (exports_50, context_50) {
+System.register("fres/sarc", ["util"], function (exports_51, context_51) {
     "use strict";
-    var __moduleName = context_50 && context_50.id;
+    var __moduleName = context_51 && context_51.id;
     function parse(buffer) {
         var view = buffer.createDataView();
         util_28.assert(util_28.readString(buffer, 0x00, 0x04) === 'SARC');
@@ -13666,7 +13707,7 @@ System.register("fres/sarc", ["util"], function (exports_50, context_50) {
         }
         return { buffer: buffer, files: files };
     }
-    exports_50("parse", parse);
+    exports_51("parse", parse);
     var util_28;
     return {
         setters: [
@@ -13678,9 +13719,9 @@ System.register("fres/sarc", ["util"], function (exports_50, context_50) {
         }
     };
 });
-System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render", "endian", "util"], function (exports_51, context_51) {
+System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render", "endian", "util"], function (exports_52, context_52) {
     "use strict";
-    var __moduleName = context_51 && context_51.id;
+    var __moduleName = context_52 && context_52.id;
     function getAttribFormatInfo(format) {
         switch (format) {
             case 768 /* _8_SINT */:
@@ -14189,13 +14230,13 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                 };
                 return Scene;
             }());
-            exports_51("Scene", Scene);
+            exports_52("Scene", Scene);
         }
     };
 });
-System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "Progressable", "util"], function (exports_52, context_52) {
+System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "Progressable", "util"], function (exports_53, context_53) {
     "use strict";
-    var __moduleName = context_52 && context_52.id;
+    var __moduleName = context_53 && context_53.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -14220,7 +14261,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
         var fres = BFRES.parse(buffer);
         return new SplatoonRenderer(null, new render_21.Scene(gl, fres, isSkybox));
     }
-    exports_52("createSceneFromFRESBuffer", createSceneFromFRESBuffer);
+    exports_53("createSceneFromFRESBuffer", createSceneFromFRESBuffer);
     function createSceneFromSARCBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
         if (util_30.readString(buffer, 0, 4) === 'Yaz0')
@@ -14229,7 +14270,7 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
         var file = sarc.files.find(function (file) { return file.name.endsWith('.bfres'); });
         return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
     }
-    exports_52("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
+    exports_53("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
     var BFRES, SARC, Yaz0, render_21, Progressable_6, util_30, SplatoonRenderer, SplatoonSceneDesc, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -14326,13 +14367,13 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                 new SplatoonSceneDesc('Octo Valley', 'Fld_World00.szs'),
                 new SplatoonSceneDesc('Object: Tree', 'Obj_Tree02.szs'),
             ];
-            exports_52("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_53("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("dksiv/iv", [], function (exports_53, context_53) {
+System.register("dksiv/iv", [], function (exports_54, context_54) {
     "use strict";
-    var __moduleName = context_53 && context_53.id;
+    var __moduleName = context_54 && context_54.id;
     function parseIV(buffer) {
         var view = buffer.createDataView();
         var numChunks = view.getUint32(0x00, true);
@@ -14354,16 +14395,16 @@ System.register("dksiv/iv", [], function (exports_53, context_53) {
         }
         return { color: color, chunks: chunks };
     }
-    exports_53("parseIV", parseIV);
+    exports_54("parseIV", parseIV);
     return {
         setters: [],
         execute: function () {
         }
     };
 });
-System.register("dksiv/render", ["gl-matrix", "render"], function (exports_54, context_54) {
+System.register("dksiv/render", ["gl-matrix", "render"], function (exports_55, context_55) {
     "use strict";
-    var __moduleName = context_54 && context_54.id;
+    var __moduleName = context_55 && context_55.id;
     var gl_matrix_11, render_22, IVProgram, Chunk, Scene;
     return {
         setters: [
@@ -14497,13 +14538,13 @@ System.register("dksiv/render", ["gl-matrix", "render"], function (exports_54, c
                 };
                 return Scene;
             }());
-            exports_54("Scene", Scene);
+            exports_55("Scene", Scene);
         }
     };
 });
-System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable", "util"], function (exports_55, context_55) {
+System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable", "util"], function (exports_56, context_56) {
     "use strict";
-    var __moduleName = context_55 && context_55.id;
+    var __moduleName = context_56 && context_56.id;
     var iv_1, render_23, UI, Progressable_7, util_31, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, name, id, sceneGroup;
     return {
         setters: [
@@ -14632,14 +14673,14 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable
             ];
             name = "Dark Souls Collision Data";
             id = "dksiv";
-            exports_55("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_56("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
 // Implements Retro's PAK format as seen in Metroid Prime 1.
-System.register("metroid_prime/pak", ["util"], function (exports_56, context_56) {
+System.register("metroid_prime/pak", ["util"], function (exports_57, context_57) {
     "use strict";
-    var __moduleName = context_56 && context_56.id;
+    var __moduleName = context_57 && context_57.id;
     function parse(buffer) {
         var view = buffer.createDataView();
         util_32.assert(view.getUint32(0x00) === 0x00030005);
@@ -14699,7 +14740,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_56, context_56)
         }
         return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
     }
-    exports_56("parse", parse);
+    exports_57("parse", parse);
     var util_32;
     return {
         setters: [
@@ -14712,9 +14753,9 @@ System.register("metroid_prime/pak", ["util"], function (exports_56, context_56)
     };
 });
 // Implements Retro's TXTR (texture) format as seen in Metroid Prime 1.
-System.register("metroid_prime/txtr", ["gx/gx_texture"], function (exports_57, context_57) {
+System.register("metroid_prime/txtr", ["gx/gx_texture"], function (exports_58, context_58) {
     "use strict";
-    var __moduleName = context_57 && context_57.id;
+    var __moduleName = context_58 && context_58.id;
     function parse(resourceSystem, buffer) {
         var view = buffer.createDataView();
         var txtrFormat = view.getUint32(0x00);
@@ -14741,7 +14782,7 @@ System.register("metroid_prime/txtr", ["gx/gx_texture"], function (exports_57, c
         var data = buffer.slice(offs);
         return { format: format, width: width, height: height, mipCount: mipCount, data: data, paletteFormat: paletteFormat, paletteData: paletteData };
     }
-    exports_57("parse", parse);
+    exports_58("parse", parse);
     var GX_Texture, txtrFormatRemap;
     return {
         setters: [
@@ -14767,9 +14808,9 @@ System.register("metroid_prime/txtr", ["gx/gx_texture"], function (exports_57, c
     };
 });
 // Implements Retro's MREA format as seen in Metroid Prime 1.
-System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], function (exports_58, context_58) {
+System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], function (exports_59, context_59) {
     "use strict";
-    var __moduleName = context_58 && context_58.id;
+    var __moduleName = context_59 && context_59.id;
     function parseMaterialSet(resourceSystem, buffer, offs) {
         var view = buffer.createDataView();
         var textureCount = view.getUint32(offs + 0x00);
@@ -15296,7 +15337,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
         return { materialSet: materialSet, worldModels: worldModels };
         var _a;
     }
-    exports_58("parse", parse);
+    exports_59("parse", parse);
     var GX_Material, util_33, endian_3, vtxAttrFormats;
     return {
         setters: [
@@ -15311,7 +15352,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             }
         ],
         execute: function () {
-            exports_58("vtxAttrFormats", vtxAttrFormats = [
+            exports_59("vtxAttrFormats", vtxAttrFormats = [
                 { vtxAttrib: 9 /* POS */, mask: 0x00000003, compCount: 3 },
                 { vtxAttrib: 10 /* NRM */, mask: 0x0000000C, compCount: 3 },
                 { vtxAttrib: 11 /* CLR0 */, mask: 0x00000030, compCount: 4 },
@@ -15328,9 +15369,9 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
     };
 });
 // Implements Retro's STRG (string table resource group) format as seen in Metroid Prime 1.
-System.register("metroid_prime/strg", ["util"], function (exports_59, context_59) {
+System.register("metroid_prime/strg", ["util"], function (exports_60, context_60) {
     "use strict";
-    var __moduleName = context_59 && context_59.id;
+    var __moduleName = context_60 && context_60.id;
     function readUTF16String(buffer, offs) {
         var arr = buffer.createTypedArray(Uint8Array, offs, 0xFF);
         var raw = utf16Decoder.decode(arr);
@@ -15373,7 +15414,7 @@ System.register("metroid_prime/strg", ["util"], function (exports_59, context_59
         }
         return { strings: strings };
     }
-    exports_59("parse", parse);
+    exports_60("parse", parse);
     var util_34, utf16Decoder;
     return {
         setters: [
@@ -15387,9 +15428,9 @@ System.register("metroid_prime/strg", ["util"], function (exports_59, context_59
     };
 });
 // Resource System
-System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_60, context_60) {
+System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_61, context_61) {
     "use strict";
-    var __moduleName = context_60 && context_60.id;
+    var __moduleName = context_61 && context_61.id;
     var pako_1, MLVL, MREA, STRG, TXTR, util_35, ArrayBufferSlice_6, FourCCLoaders, ResourceSystem;
     return {
         setters: [
@@ -15473,14 +15514,14 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                 };
                 return ResourceSystem;
             }());
-            exports_60("ResourceSystem", ResourceSystem);
+            exports_61("ResourceSystem", ResourceSystem);
         }
     };
 });
 // Implements Retro's MLVL format as seen in Metroid Prime 1.
-System.register("metroid_prime/mlvl", ["util"], function (exports_61, context_61) {
+System.register("metroid_prime/mlvl", ["util"], function (exports_62, context_62) {
     "use strict";
-    var __moduleName = context_61 && context_61.id;
+    var __moduleName = context_62 && context_62.id;
     function parse(resourceSystem, buffer) {
         var view = buffer.createDataView();
         util_36.assert(view.getUint32(0x00) == 0xDEAFBABE);
@@ -15561,7 +15602,7 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_61, context_61
         }
         return { areaTable: areaTable };
     }
-    exports_61("parse", parse);
+    exports_62("parse", parse);
     var util_36;
     return {
         setters: [
@@ -15574,9 +15615,9 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_61, context_61
     };
 });
 //
-System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/gx_texture", "gx/gx_material", "render", "util", "ArrayBufferSlice"], function (exports_62, context_62) {
+System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/gx_texture", "gx/gx_material", "render", "util", "ArrayBufferSlice"], function (exports_63, context_63) {
     "use strict";
-    var __moduleName = context_62 && context_62.id;
+    var __moduleName = context_63 && context_63.id;
     var gl_matrix_12, mrea_1, GX_Texture, GX_Material, render_24, util_37, ArrayBufferSlice_7, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
     return {
         setters: [
@@ -15773,7 +15814,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                 };
                 return Scene;
             }());
-            exports_62("Scene", Scene);
+            exports_63("Scene", Scene);
             Command_Surface = /** @class */ (function () {
                 function Command_Surface(gl, surface, coalescedBuffers) {
                     this.surface = surface;
@@ -15915,9 +15956,9 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
         }
     };
 });
-System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "util", "Progressable"], function (exports_63, context_63) {
+System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "util", "Progressable"], function (exports_64, context_64) {
     "use strict";
-    var __moduleName = context_63 && context_63.id;
+    var __moduleName = context_64 && context_64.id;
     // Files are too big for GitHub.
     function findPakBase() {
         if (document.location.protocol === 'file:') {
@@ -15980,7 +16021,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 };
                 return MultiScene;
             }());
-            exports_63("MultiScene", MultiScene);
+            exports_64("MultiScene", MultiScene);
             MP1SceneDesc = /** @class */ (function () {
                 function MP1SceneDesc(filename, name) {
                     this.filename = filename;
@@ -16031,13 +16072,13 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 new MP1SceneDesc("Metroid1.pak", "Space Pirate Frigate"),
                 new MP1SceneDesc("Metroid4.pak", "Tallon Overworld"),
             ];
-            exports_63("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_64("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "dksiv/scenes", "metroid_prime/scenes", "j3d/scenes", "ui"], function (exports_64, context_64) {
+System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "dksiv/scenes", "metroid_prime/scenes", "j3d/scenes", "ui"], function (exports_65, context_65) {
     "use strict";
-    var __moduleName = context_64 && context_64.id;
+    var __moduleName = context_65 && context_65.id;
     var viewer_1, ArrayBufferSlice_8, Progressable_9, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, DKSIV, MP1, J3D, ui_1, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
     return {
         setters: [
@@ -16341,9 +16382,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
         }
     };
 });
-System.register("embeds/main", ["viewer"], function (exports_65, context_65) {
+System.register("embeds/main", ["viewer"], function (exports_66, context_66) {
     "use strict";
-    var __moduleName = context_65 && context_65.id;
+    var __moduleName = context_66 && context_66.id;
     var Viewer, FsButton, Main;
     return {
         setters: [
@@ -16430,9 +16471,9 @@ System.register("embeds/main", ["viewer"], function (exports_65, context_65) {
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0"], function (exports_66, context_66) {
+System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0"], function (exports_67, context_67) {
     "use strict";
-    var __moduleName = context_66 && context_66.id;
+    var __moduleName = context_67 && context_67.id;
     function createScene(gl, name) {
         return util_39.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
             var bufferSlice = Yaz0.decompress(buffer);
@@ -16448,7 +16489,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             []);
         });
     }
-    exports_66("createScene", createScene);
+    exports_67("createScene", createScene);
     var gl_matrix_13, util_39, GX_Material, j3d_6, RARC, render_26, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
     return {
         setters: [

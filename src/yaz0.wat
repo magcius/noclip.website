@@ -1,5 +1,3 @@
-;; TODO(jstpierre): Optimize. This seems to be running slower than JS.
-;;
 ;; Roughly compiled from:
 ;;
 ;; void decompress(unsigned char*pDst, unsigned char*pSrc, int dstSize) {

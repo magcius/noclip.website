@@ -59,6 +59,10 @@ export default class ArrayBufferSlice {
         return ArrayBuffer_slice.call(this.arrayBuffer, start, end);
     }
 
+    public copySlice(offs: number = 0, length?: number): ArrayBufferSlice {
+        return new ArrayBufferSlice(this.copyToBuffer(offs, length));
+    }
+
     public castToBuffer(): ArrayBuffer {
         if (this.byteOffset === 0 && this.byteLength === this.arrayBuffer.byteLength) {
             return this.arrayBuffer;
@@ -83,14 +87,12 @@ export default class ArrayBufferSlice {
             byteLength = clazz.BYTES_PER_ELEMENT * count;
         } else {
             byteLength = this.byteLength - offs;
-            // Ensure it's aligned if we're relying on implicit length as a safety net
-            // so we don't try to silently copy the rest of the ArrayBuffer.
-            const end = begin + byteLength;
-            assert(isAligned(end, clazz.BYTES_PER_ELEMENT));
+            assert(isAligned(begin, clazz.BYTES_PER_ELEMENT));
             count = byteLength / clazz.BYTES_PER_ELEMENT;
+            assert((count | 0) === count);
         }
 
-        // Typed arrays require 
+        // Typed arrays require alignment.
         if (isAligned(begin, clazz.BYTES_PER_ELEMENT))
             return new clazz(this.arrayBuffer, begin, count);
         else
