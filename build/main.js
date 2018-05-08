@@ -6371,7 +6371,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         // Copy the result buffer to a new buffer for memory usage purposes.
         var pixelsBuffer = new ArrayBufferSlice_6.default(heap.buffer).copyToBuffer(pDst, dstSize);
         var pixels = new Uint8Array(pixelsBuffer);
-        return { type: "RGBA", pixels: pixels, width: texture.width, height: texture.height };
+        return { pixels: pixels, width: texture.width, height: texture.height };
     }
     function decode_CMPR(texture) {
         // GX's CMPR format is S3TC but using GX's tiled addressing.
@@ -6436,7 +6436,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
                 }
             }
         }
-        return { type: "RGBA", pixels: pixels, width: texture.width, height: texture.height };
+        return { pixels: pixels, width: texture.width, height: texture.height };
     }
     function decode_Tiled(texture, bw, bh, decoder) {
         var pixels = new Uint8Array(texture.width * texture.height * 4);
@@ -6451,7 +6451,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
                 }
             }
         }
-        return { type: "RGBA", pixels: pixels, width: texture.width, height: texture.height };
+        return { pixels: pixels, width: texture.width, height: texture.height };
     }
     function decode_RGB565(texture) {
         var view = texture.data.createDataView();
@@ -6516,7 +6516,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
                 }
             }
         }
-        return { type: "RGBA", pixels: pixels, width: texture.width, height: texture.height };
+        return { pixels: pixels, width: texture.width, height: texture.height };
     }
     function decode_I4(texture) {
         var view = texture.data.createDataView();
@@ -6574,7 +6574,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
     function decode_Dummy(texture) {
         var pixels = new Uint8Array(texture.width * texture.height * 4);
         pixels.fill(0xFF);
-        return { type: "RGBA", width: texture.width, height: texture.height, pixels: pixels };
+        return { pixels: pixels, width: texture.width, height: texture.height };
     }
     function decodeTexture(texture) {
         if (texture.data === null)
