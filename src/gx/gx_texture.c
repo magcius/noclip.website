@@ -130,7 +130,7 @@ EXPORT void decode_I4(uint8_t*pDst, uint8_t*pSrc, uint32_t w, uint32_t h) {
 
     DECODE_TILED_BEGIN(8, 8)
         uint8_t ii = *pSrc;
-        uint8_t i4 = (b == 1 ? (ii >> 4) : ii) & 0x0F;
+        uint8_t i4 = (b == 0 ? (ii >> 4) : ii) & 0x0F;
         uint8_t i = expand4to8(i4);
         pDst[dstOffs + 0] = i;
         pDst[dstOffs + 1] = i;

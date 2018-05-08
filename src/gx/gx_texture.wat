@@ -807,11 +807,11 @@
               tee_local $l7
               i32.load8_u
               tee_local $l8
-              i32.const 4
-              i32.shl
-              get_local $l8
-              i32.const 15
+              i32.const 240
               i32.and
+              get_local $l8
+              i32.const 4
+              i32.shr_u
               i32.or
               tee_local $l8
               i32.store8
@@ -834,11 +834,11 @@
               get_local $l7
               i32.load8_u
               tee_local $l8
-              i32.const 240
-              i32.and
-              get_local $l8
               i32.const 4
-              i32.shr_u
+              i32.shl
+              get_local $l8
+              i32.const 15
+              i32.and
               i32.or
               tee_local $l8
               i32.store8
@@ -866,11 +866,11 @@
               tee_local $l9
               i32.load8_u
               tee_local $l8
-              i32.const 4
-              i32.shl
-              get_local $l8
-              i32.const 15
+              i32.const 240
               i32.and
+              get_local $l8
+              i32.const 4
+              i32.shr_u
               i32.or
               tee_local $l8
               i32.store8
@@ -895,11 +895,11 @@
               get_local $l9
               i32.load8_u
               tee_local $l8
-              i32.const 240
-              i32.and
-              get_local $l8
               i32.const 4
-              i32.shr_u
+              i32.shl
+              get_local $l8
+              i32.const 15
+              i32.and
               i32.or
               tee_local $l8
               i32.store8
@@ -927,11 +927,11 @@
               tee_local $l9
               i32.load8_u
               tee_local $l8
-              i32.const 4
-              i32.shl
-              get_local $l8
-              i32.const 15
+              i32.const 240
               i32.and
+              get_local $l8
+              i32.const 4
+              i32.shr_u
               i32.or
               tee_local $l8
               i32.store8
@@ -956,11 +956,11 @@
               get_local $l9
               i32.load8_u
               tee_local $l8
-              i32.const 240
-              i32.and
-              get_local $l8
               i32.const 4
-              i32.shr_u
+              i32.shl
+              get_local $l8
+              i32.const 15
+              i32.and
               i32.or
               tee_local $l8
               i32.store8
@@ -988,11 +988,11 @@
               tee_local $l8
               i32.load8_u
               tee_local $l7
-              i32.const 4
-              i32.shl
-              get_local $l7
-              i32.const 15
+              i32.const 240
               i32.and
+              get_local $l7
+              i32.const 4
+              i32.shr_u
               i32.or
               tee_local $l7
               i32.store8
@@ -1017,11 +1017,11 @@
               get_local $l8
               i32.load8_u
               tee_local $l7
-              i32.const 240
-              i32.and
-              get_local $l7
               i32.const 4
-              i32.shr_u
+              i32.shl
+              get_local $l7
+              i32.const 15
+              i32.and
               i32.or
               tee_local $l7
               i32.store8
