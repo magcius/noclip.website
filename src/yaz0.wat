@@ -1,31 +1,4 @@
-;; Roughly compiled from:
-;;
-;; void decompress(unsigned char*pDst, unsigned char*pSrc, int dstSize) {
-;;   while(1) {
-;;     int i = 8;
-;;     char cmd = *src++;
-;;     while(i--) {
-;;       if(cmd & (i << i)) {
-;;         dstsize--;
-;;         *dst++ = *src++;
-;;       } else {
-;;         unsigned short t = (src[0] << 8) | (src[1]);
-;;         src += 2;
-;;         unsigned short w = (t & 0x0FFF) + 1;
-;;         unsigned short n = (t >> 12) + 2;
-;;         if(n == 2)
-;;           n += *src++ + 0x10;
-;;         dstsize -= n;
-;;         while(n--) {
-;;           *dst = dst[-w];
-;;           dst++;
-;;         }
-;;       }
-;;       if(dstsize <= 0)
-;;         return;
-;;     }
-;;   }
-;; }
+;; Roughly compiled from the contents of yaz0.c. Not generated automatically.
 
 (module
   (import "env" "mem" (memory $mem 1))

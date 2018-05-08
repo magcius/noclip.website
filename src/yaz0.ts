@@ -16,7 +16,7 @@
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
 import { assert, readString, align } from './util';
-import { yaz0Module } from './wat_modules';
+import { yaz0 as yaz0Module } from './wat_modules';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import WasmMemoryManager from './WasmMemoryManager';
 

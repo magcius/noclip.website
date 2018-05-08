@@ -7,9 +7,13 @@ export default class WasmMemoryManager {
     public heap: Uint8Array;
     public currentNumPages: number;
 
-    constructor() {
-        this.mem = new WebAssembly.Memory({ initial: 1 });
-        this.currentNumPages = 1;
+    constructor(mem?: WebAssembly.Memory) {
+        if (mem !== undefined)
+            this.mem = mem;
+        else
+            this.mem = new WebAssembly.Memory({ initial: 1 });
+
+        this.currentNumPages = this.mem.buffer.byteLength / this.PAGE_SIZE;
         // resize must be called before use.
         this.heap = null;
     }
