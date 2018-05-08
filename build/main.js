@@ -1300,11 +1300,14 @@ System.register("WasmMemoryManager", [], function (exports_6, context_6) {
         setters: [],
         execute: function () {
             WasmMemoryManager = /** @class */ (function () {
-                function WasmMemoryManager() {
+                function WasmMemoryManager(mem) {
                     // WebAssembly pages are 64k.
                     this.PAGE_SIZE = 64 * 1024;
-                    this.mem = new WebAssembly.Memory({ initial: 1 });
-                    this.currentNumPages = 1;
+                    if (mem !== undefined)
+                        this.mem = mem;
+                    else
+                        this.mem = new WebAssembly.Memory({ initial: 1 });
+                    this.currentNumPages = this.mem.buffer.byteLength / this.PAGE_SIZE;
                     // resize must be called before use.
                     this.heap = null;
                 }
@@ -3151,14 +3154,18 @@ System.register("viewer", ["gl-matrix", "render"], function (exports_11, context
 System.register("wat_modules", [], function (exports_12, context_12) {
     "use strict";
     var __moduleName = context_12 && context_12.id;
-    var yaz0ModuleCode, yaz0Module;
+    var yaz0Code, yaz0, gx_textureCode, gx_texture;
     return {
         setters: [],
         execute: function () {
             // yaz0.wat
-            yaz0ModuleCode = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 7, 1, 96, 3, 127, 127, 127, 0, 2, 12, 1, 3, 101, 110, 118, 3, 109, 101, 109, 2, 0, 1, 3, 2, 1, 0, 7, 14, 1, 10, 100, 101, 99, 111, 109, 112, 114, 101, 115, 115, 0, 0, 10, 167, 2, 1, 164, 2, 1, 7, 127, 3, 64, 32, 1, 65, 1, 106, 33, 9, 32, 1, 44, 0, 0, 33, 3, 65, 8, 33, 7, 2, 64, 2, 64, 3, 64, 32, 7, 34, 1, 65, 127, 106, 33, 7, 32, 1, 69, 13, 1, 32, 9, 45, 0, 0, 33, 6, 2, 64, 65, 1, 32, 7, 116, 32, 3, 113, 69, 13, 0, 32, 0, 32, 6, 58, 0, 0, 32, 0, 65, 1, 106, 33, 0, 32, 9, 65, 1, 106, 33, 9, 32, 2, 65, 127, 106, 34, 2, 65, 0, 74, 13, 1, 12, 3, 11, 32, 9, 45, 0, 1, 33, 5, 2, 64, 2, 64, 32, 6, 65, 4, 118, 34, 1, 69, 13, 0, 32, 9, 65, 2, 106, 33, 8, 32, 1, 65, 2, 106, 33, 1, 12, 1, 11, 32, 9, 65, 3, 106, 33, 8, 32, 9, 65, 2, 106, 45, 0, 0, 65, 18, 106, 33, 1, 11, 32, 2, 32, 1, 65, 255, 255, 3, 113, 107, 33, 2, 2, 64, 32, 1, 69, 13, 0, 32, 0, 65, 127, 106, 33, 9, 32, 6, 65, 8, 116, 65, 128, 30, 113, 32, 5, 114, 65, 127, 115, 65, 1, 106, 33, 5, 32, 1, 65, 255, 255, 3, 106, 65, 255, 255, 3, 113, 33, 4, 3, 64, 32, 9, 65, 1, 106, 34, 6, 32, 9, 32, 5, 106, 45, 0, 0, 58, 0, 0, 32, 6, 33, 9, 32, 1, 65, 127, 106, 34, 1, 65, 255, 255, 3, 113, 13, 0, 11, 32, 0, 32, 4, 106, 65, 1, 106, 33, 0, 11, 32, 8, 33, 9, 32, 2, 65, 0, 74, 13, 0, 12, 2, 11, 11, 32, 9, 33, 1, 12, 1, 11, 11, 11]);
+            yaz0Code = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 7, 1, 96, 3, 127, 127, 127, 0, 2, 12, 1, 3, 101, 110, 118, 3, 109, 101, 109, 2, 0, 1, 3, 2, 1, 0, 7, 14, 1, 10, 100, 101, 99, 111, 109, 112, 114, 101, 115, 115, 0, 0, 10, 167, 2, 1, 164, 2, 1, 7, 127, 3, 64, 32, 1, 65, 1, 106, 33, 9, 32, 1, 44, 0, 0, 33, 3, 65, 8, 33, 7, 2, 64, 2, 64, 3, 64, 32, 7, 34, 1, 65, 127, 106, 33, 7, 32, 1, 69, 13, 1, 32, 9, 45, 0, 0, 33, 6, 2, 64, 65, 1, 32, 7, 116, 32, 3, 113, 69, 13, 0, 32, 0, 32, 6, 58, 0, 0, 32, 0, 65, 1, 106, 33, 0, 32, 9, 65, 1, 106, 33, 9, 32, 2, 65, 127, 106, 34, 2, 65, 0, 74, 13, 1, 12, 3, 11, 32, 9, 45, 0, 1, 33, 5, 2, 64, 2, 64, 32, 6, 65, 4, 118, 34, 1, 69, 13, 0, 32, 9, 65, 2, 106, 33, 8, 32, 1, 65, 2, 106, 33, 1, 12, 1, 11, 32, 9, 65, 3, 106, 33, 8, 32, 9, 65, 2, 106, 45, 0, 0, 65, 18, 106, 33, 1, 11, 32, 2, 32, 1, 65, 255, 255, 3, 113, 107, 33, 2, 2, 64, 32, 1, 69, 13, 0, 32, 0, 65, 127, 106, 33, 9, 32, 6, 65, 8, 116, 65, 128, 30, 113, 32, 5, 114, 65, 127, 115, 65, 1, 106, 33, 5, 32, 1, 65, 255, 255, 3, 106, 65, 255, 255, 3, 113, 33, 4, 3, 64, 32, 9, 65, 1, 106, 34, 6, 32, 9, 32, 5, 106, 45, 0, 0, 58, 0, 0, 32, 6, 33, 9, 32, 1, 65, 127, 106, 34, 1, 65, 255, 255, 3, 113, 13, 0, 11, 32, 0, 32, 4, 106, 65, 1, 106, 33, 0, 11, 32, 8, 33, 9, 32, 2, 65, 0, 74, 13, 0, 12, 2, 11, 11, 32, 9, 33, 1, 12, 1, 11, 11, 11]);
             ;
-            exports_12("yaz0Module", yaz0Module = new WebAssembly.Module(yaz0ModuleCode));
+            exports_12("yaz0", yaz0 = new WebAssembly.Module(yaz0Code));
+            // gx/gx_texture.wat
+            gx_textureCode = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 11, 2, 96, 0, 0, 96, 4, 127, 127, 127, 127, 0, 3, 4, 3, 0, 1, 0, 4, 5, 1, 112, 1, 1, 1, 5, 3, 1, 0, 2, 6, 21, 3, 127, 1, 65, 128, 136, 4, 11, 127, 0, 65, 128, 136, 4, 11, 127, 0, 65, 128, 8, 11, 7, 60, 5, 6, 95, 115, 116, 97, 114, 116, 0, 0, 11, 100, 101, 99, 111, 100, 101, 95, 67, 77, 80, 82, 0, 1, 6, 109, 101, 109, 111, 114, 121, 2, 0, 11, 95, 95, 104, 101, 97, 112, 95, 98, 97, 115, 101, 3, 1, 10, 95, 95, 100, 97, 116, 97, 95, 101, 110, 100, 3, 2, 10, 161, 7, 3, 2, 0, 11, 152, 7, 1, 21, 127, 35, 0, 65, 16, 107, 33, 4, 2, 64, 32, 3, 69, 13, 0, 32, 2, 65, 2, 116, 33, 5, 32, 2, 65, 4, 116, 33, 6, 32, 2, 65, 5, 116, 33, 7, 65, 0, 33, 8, 3, 64, 2, 64, 32, 2, 69, 13, 0, 65, 0, 33, 9, 32, 0, 33, 10, 3, 64, 32, 10, 33, 11, 32, 1, 33, 12, 65, 0, 33, 13, 3, 64, 65, 0, 33, 14, 32, 11, 33, 15, 32, 12, 33, 16, 3, 64, 32, 16, 65, 3, 106, 45, 0, 0, 33, 17, 32, 16, 65, 1, 106, 45, 0, 0, 33, 18, 32, 16, 45, 0, 2, 33, 19, 32, 16, 45, 0, 0, 33, 20, 32, 4, 65, 255, 1, 58, 0, 3, 32, 4, 65, 255, 1, 58, 0, 7, 32, 4, 32, 20, 65, 248, 1, 113, 32, 20, 65, 5, 118, 114, 34, 21, 58, 0, 0, 32, 4, 32, 19, 65, 248, 1, 113, 32, 19, 65, 5, 118, 114, 34, 22, 58, 0, 4, 32, 4, 32, 18, 65, 2, 118, 65, 7, 113, 32, 18, 65, 3, 116, 114, 34, 23, 58, 0, 2, 32, 4, 32, 17, 65, 2, 118, 65, 7, 113, 32, 17, 65, 3, 116, 114, 34, 24, 58, 0, 6, 32, 4, 32, 20, 65, 1, 118, 65, 3, 113, 32, 18, 32, 20, 65, 8, 116, 114, 34, 18, 65, 3, 118, 65, 252, 1, 113, 114, 34, 20, 58, 0, 1, 32, 4, 32, 19, 65, 1, 118, 65, 3, 113, 32, 17, 32, 19, 65, 8, 116, 114, 34, 17, 65, 3, 118, 65, 252, 1, 113, 114, 34, 19, 58, 0, 5, 2, 64, 2, 64, 32, 18, 32, 17, 77, 13, 0, 65, 255, 1, 33, 17, 32, 4, 65, 255, 1, 58, 0, 11, 32, 4, 32, 19, 65, 3, 108, 32, 20, 65, 5, 108, 106, 65, 3, 118, 58, 0, 9, 32, 4, 32, 22, 65, 3, 108, 32, 21, 65, 5, 108, 106, 65, 3, 118, 58, 0, 8, 32, 4, 32, 22, 65, 5, 108, 32, 21, 65, 3, 108, 106, 65, 3, 118, 58, 0, 12, 32, 4, 32, 19, 65, 5, 108, 32, 20, 65, 3, 108, 106, 65, 3, 118, 58, 0, 13, 32, 4, 32, 24, 65, 255, 1, 113, 34, 19, 65, 3, 108, 32, 23, 65, 255, 1, 113, 34, 20, 65, 5, 108, 106, 65, 3, 118, 58, 0, 10, 32, 19, 65, 5, 108, 32, 20, 65, 3, 108, 106, 65, 3, 118, 33, 19, 12, 1, 11, 32, 4, 32, 19, 32, 20, 106, 65, 1, 118, 34, 19, 58, 0, 9, 32, 4, 32, 22, 32, 21, 106, 65, 1, 118, 34, 20, 58, 0, 8, 32, 4, 32, 20, 58, 0, 12, 32, 4, 32, 19, 58, 0, 13, 32, 4, 65, 255, 1, 58, 0, 11, 32, 4, 32, 24, 65, 255, 1, 113, 32, 23, 65, 255, 1, 113, 106, 65, 1, 118, 34, 19, 58, 0, 10, 65, 0, 33, 17, 11, 32, 4, 32, 17, 58, 0, 15, 32, 4, 32, 19, 58, 0, 14, 65, 0, 33, 18, 32, 15, 33, 19, 3, 64, 32, 19, 32, 4, 32, 16, 32, 18, 106, 65, 4, 106, 45, 0, 0, 34, 20, 65, 4, 118, 65, 12, 113, 114, 34, 17, 45, 0, 0, 58, 0, 0, 32, 19, 65, 1, 106, 32, 17, 45, 0, 1, 58, 0, 0, 32, 19, 65, 2, 106, 32, 17, 45, 0, 2, 58, 0, 0, 32, 19, 65, 3, 106, 32, 17, 45, 0, 3, 58, 0, 0, 32, 19, 65, 4, 106, 32, 4, 32, 20, 65, 2, 118, 65, 12, 113, 114, 34, 17, 45, 0, 0, 58, 0, 0, 32, 19, 65, 5, 106, 32, 17, 45, 0, 1, 58, 0, 0, 32, 19, 65, 6, 106, 32, 17, 45, 0, 2, 58, 0, 0, 32, 19, 65, 7, 106, 32, 17, 45, 0, 3, 58, 0, 0, 32, 19, 65, 8, 106, 32, 4, 32, 20, 65, 12, 113, 114, 34, 17, 45, 0, 0, 58, 0, 0, 32, 19, 65, 9, 106, 32, 17, 45, 0, 1, 58, 0, 0, 32, 19, 65, 10, 106, 32, 17, 45, 0, 2, 58, 0, 0, 32, 19, 65, 11, 106, 32, 17, 45, 0, 3, 58, 0, 0, 32, 19, 65, 12, 106, 32, 4, 32, 20, 65, 2, 116, 65, 12, 113, 114, 34, 20, 45, 0, 0, 58, 0, 0, 32, 19, 65, 13, 106, 32, 20, 45, 0, 1, 58, 0, 0, 32, 19, 65, 14, 106, 32, 20, 45, 0, 2, 58, 0, 0, 32, 19, 65, 15, 106, 32, 20, 45, 0, 3, 58, 0, 0, 32, 19, 32, 5, 106, 33, 19, 32, 18, 65, 1, 106, 34, 18, 65, 4, 71, 13, 0, 11, 32, 15, 65, 16, 106, 33, 15, 32, 16, 65, 8, 106, 33, 16, 32, 14, 65, 4, 106, 34, 14, 65, 8, 73, 13, 0, 11, 32, 11, 32, 6, 106, 33, 11, 32, 12, 65, 16, 106, 33, 12, 32, 13, 65, 4, 106, 34, 13, 65, 8, 73, 13, 0, 11, 32, 10, 65, 32, 106, 33, 10, 32, 1, 65, 32, 106, 33, 1, 32, 9, 65, 8, 106, 34, 9, 32, 2, 73, 13, 0, 11, 11, 32, 0, 32, 7, 106, 33, 0, 32, 8, 65, 8, 106, 34, 8, 32, 3, 73, 13, 0, 11, 11, 11, 2, 0, 11]);
+            ;
+            exports_12("gx_texture", gx_texture = new WebAssembly.Module(gx_textureCode));
         }
     };
 });
@@ -3177,7 +3184,7 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
         var heap = wasmMemory.heap;
         // memcpy source buffer.
         heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10));
-        var wasmInstance = new WebAssembly.Instance(wat_modules_1.yaz0Module, { env: { mem: mem } });
+        var wasmInstance = new WebAssembly.Instance(wat_modules_1.yaz0, { env: { mem: mem } });
         wasmInstance.exports.decompress(dstHeapOffs, 0x00, uncompressedSize);
         // Copy the result buffer to a new buffer for memory usage purposes.
         var result = new ArrayBufferSlice_4.default(heap.buffer).copySlice(dstHeapOffs, uncompressedSize);
@@ -6229,7 +6236,7 @@ System.register("j3d/rarc", ["util"], function (exports_21, context_21) {
     };
 });
 // GX texture decoding
-System.register("gx/gx_texture", [], function (exports_22, context_22) {
+System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "WasmMemoryManager"], function (exports_22, context_22) {
     "use strict";
     var __moduleName = context_22 && context_22.id;
     function expand3to8(n) {
@@ -6304,96 +6311,88 @@ System.register("gx/gx_texture", [], function (exports_22, context_22) {
         return textureSize;
     }
     exports_22("calcFullTextureSize", calcFullTextureSize);
-    // GX's CMPR format is S3TC but using GX's tiled addressing.
-    function decode_CMPR_to_S3TC(texture) {
-        // CMPR goes in 2x2 "macro-blocks" of four S3TC normal blocks.
-        function reverseByte(v) {
-            // Reverse the order of the four half-nibbles.
-            return ((v & 0x03) << 6) | ((v & 0x0c) << 2) | ((v & 0x30) >>> 2) | ((v & 0xc0) >>> 6);
-        }
-        var pixels = new Uint8Array(texture.width * texture.height / 2);
+    function decode_CMPR_Wasm(texture) {
+        var dstSize = texture.width * texture.height * 4;
+        var srcSize = texture.data.byteLength;
+        var pDstOffs = 0;
+        var pSrcOffs = util_9.align(dstSize, 0x10);
+        var heapSize = pSrcOffs + util_9.align(srcSize, 0x10);
+        var heapBase = wasmInstance.exports.__heap_base.value;
+        var wasmMemory = new WasmMemoryManager_2.default(wasmInstance.exports.memory);
+        wasmMemory.resize(heapBase + heapSize);
+        var mem = wasmMemory.mem;
+        var heap = wasmMemory.heap;
+        var pDst = heapBase + pDstOffs;
+        var pSrc = heapBase + pSrcOffs;
+        // Copy src buffer.
+        heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
+        wasmInstance.exports.decode_CMPR(pDst, pSrc, texture.width, texture.height);
+        // Copy the result buffer to a new buffer for memory usage purposes.
+        var pixelsBuffer = new ArrayBufferSlice_6.default(heap.buffer).copyToBuffer(pDst, dstSize);
+        var pixels = new Uint8Array(pixelsBuffer);
+        return { type: "RGBA", pixels: pixels, width: texture.width, height: texture.height };
+    }
+    function decode_CMPR_JS(texture) {
+        // GX's CMPR format is S3TC but using GX's tiled addressing.
+        var pixels = new Uint8Array(texture.width * texture.height * 4);
         var view = texture.data.createDataView();
-        // "Macroblocks"
-        var w4 = texture.width >>> 2;
-        var h4 = texture.height >>> 2;
+        var colorTable = new Uint8Array(16);
+        // CMPR swizzles macroblocks to be in a 2x2 grid of UL, UR, BL, BR.
         var srcOffs = 0;
-        for (var yy = 0; yy < h4; yy += 2) {
-            for (var xx = 0; xx < w4; xx += 2) {
-                // S3TC blocks.
-                for (var y = 0; y < 2; y++) {
-                    for (var x = 0; x < 2; x++) {
-                        var dstBlock = (yy + y) * w4 + xx + x;
-                        var dstOffs = dstBlock * 8;
-                        pixels[dstOffs + 0] = view.getUint8(srcOffs + 1);
-                        pixels[dstOffs + 1] = view.getUint8(srcOffs + 0);
-                        pixels[dstOffs + 2] = view.getUint8(srcOffs + 3);
-                        pixels[dstOffs + 3] = view.getUint8(srcOffs + 2);
-                        pixels[dstOffs + 4] = reverseByte(view.getUint8(srcOffs + 4));
-                        pixels[dstOffs + 5] = reverseByte(view.getUint8(srcOffs + 5));
-                        pixels[dstOffs + 6] = reverseByte(view.getUint8(srcOffs + 6));
-                        pixels[dstOffs + 7] = reverseByte(view.getUint8(srcOffs + 7));
+        for (var yy = 0; yy < texture.height; yy += 8) {
+            for (var xx = 0; xx < texture.width; xx += 8) {
+                for (var yb = 0; yb < 8; yb += 4) {
+                    for (var xb = 0; xb < 8; xb += 4) {
+                        // CMPR difference: Big-endian color1/2
+                        var color1 = view.getUint16(srcOffs + 0x00, false);
+                        var color2 = view.getUint16(srcOffs + 0x02, false);
+                        // Fill in first two colors in color table.
+                        colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
+                        colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
+                        colorTable[2] = expand5to8(color1 & 0x1F);
+                        colorTable[3] = 0xFF;
+                        colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
+                        colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
+                        colorTable[6] = expand5to8(color2 & 0x1F);
+                        colorTable[7] = 0xFF;
+                        if (color1 > color2) {
+                            // Predict gradients.
+                            colorTable[8] = s3tcblend(colorTable[4], colorTable[0]);
+                            colorTable[9] = s3tcblend(colorTable[5], colorTable[1]);
+                            colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
+                            colorTable[11] = 0xFF;
+                            colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
+                            colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
+                            colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
+                            colorTable[15] = 0xFF;
+                        }
+                        else {
+                            colorTable[8] = (colorTable[0] + colorTable[4]) >>> 1;
+                            colorTable[9] = (colorTable[1] + colorTable[5]) >>> 1;
+                            colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
+                            colorTable[11] = 0xFF;
+                            // CMPR difference: GX fills with an alpha 0 midway point here.
+                            colorTable[12] = colorTable[8];
+                            colorTable[13] = colorTable[9];
+                            colorTable[14] = colorTable[10];
+                            colorTable[15] = 0x00;
+                        }
+                        for (var y = 0; y < 4; y++) {
+                            var bits = view.getUint8(srcOffs + 0x04 + y);
+                            for (var x = 0; x < 4; x++) {
+                                var dstPx = (yy + yb + y) * texture.width + xx + xb + x;
+                                var dstOffs = dstPx * 4;
+                                var colorIdx = (bits >>> 6) & 0x03;
+                                pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
+                                pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
+                                pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
+                                pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
+                                bits <<= 2;
+                            }
+                        }
                         srcOffs += 8;
                     }
                 }
-            }
-        }
-        return { type: "S3TC", pixels: pixels, width: texture.width, height: texture.height };
-    }
-    // Software decodes from standard S3TC (not CMPR!) to RGBA.
-    function decode_S3TC(texture) {
-        var pixels = new Uint8Array(texture.width * texture.height * 4);
-        var view = new DataView(texture.pixels.buffer);
-        var colorTable = new Uint8Array(16);
-        var srcOffs = 0;
-        for (var yy = 0; yy < texture.height; yy += 4) {
-            for (var xx = 0; xx < texture.width; xx += 4) {
-                var color1 = view.getUint16(srcOffs + 0x00, true);
-                var color2 = view.getUint16(srcOffs + 0x02, true);
-                // Fill in first two colors in color table.
-                colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
-                colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
-                colorTable[2] = expand5to8(color1 & 0x1F);
-                colorTable[3] = 0xFF;
-                colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
-                colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
-                colorTable[6] = expand5to8(color2 & 0x1F);
-                colorTable[7] = 0xFF;
-                if (color1 > color2) {
-                    // Predict gradients.
-                    colorTable[8] = s3tcblend(colorTable[4], colorTable[0]);
-                    colorTable[9] = s3tcblend(colorTable[5], colorTable[1]);
-                    colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
-                    colorTable[11] = 0xFF;
-                    colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
-                    colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
-                    colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
-                    colorTable[15] = 0xFF;
-                }
-                else {
-                    colorTable[8] = (colorTable[0] + colorTable[4]) >>> 1;
-                    colorTable[9] = (colorTable[1] + colorTable[5]) >>> 1;
-                    colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
-                    colorTable[11] = 0xFF;
-                    // GX difference: GX fills with an alpha 0 midway point here.
-                    colorTable[12] = colorTable[8];
-                    colorTable[13] = colorTable[9];
-                    colorTable[14] = colorTable[10];
-                    colorTable[15] = 0x00;
-                }
-                var bits = view.getUint32(srcOffs + 0x04, true);
-                for (var y = 0; y < 4; y++) {
-                    for (var x = 0; x < 4; x++) {
-                        var dstPx = (yy + y) * texture.width + xx + x;
-                        var dstOffs = dstPx * 4;
-                        var colorIdx = bits & 0x03;
-                        pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
-                        pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
-                        pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
-                        pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
-                        bits >>= 2;
-                    }
-                }
-                srcOffs += 8;
             }
         }
         return { type: "RGBA", pixels: pixels, width: texture.width, height: texture.height };
@@ -6536,16 +6535,12 @@ System.register("gx/gx_texture", [], function (exports_22, context_22) {
         pixels.fill(0xFF);
         return { type: "RGBA", width: texture.width, height: texture.height, pixels: pixels };
     }
-    function decodeTexture(texture, supportsS3TC) {
+    function decodeTexture(texture) {
         if (texture.data === null)
             return decode_Dummy(texture);
         switch (texture.format) {
             case 14 /* CMPR */:
-                var s3tc = decode_CMPR_to_S3TC(texture);
-                if (supportsS3TC)
-                    return s3tc;
-                else
-                    return decode_S3TC(s3tc);
+                return decode_CMPR(texture);
             case 4 /* RGB565 */:
                 return decode_RGB565(texture);
             case 5 /* RGB5A3 */:
@@ -6569,13 +6564,32 @@ System.register("gx/gx_texture", [], function (exports_22, context_22) {
         }
     }
     exports_22("decodeTexture", decodeTexture);
+    var ArrayBufferSlice_6, util_9, wat_modules_2, WasmMemoryManager_2, wasmInstance, decode_CMPR;
     return {
-        setters: [],
+        setters: [
+            function (ArrayBufferSlice_6_1) {
+                ArrayBufferSlice_6 = ArrayBufferSlice_6_1;
+            },
+            function (util_9_1) {
+                util_9 = util_9_1;
+            },
+            function (wat_modules_2_1) {
+                wat_modules_2 = wat_modules_2_1;
+            },
+            function (WasmMemoryManager_2_1) {
+                WasmMemoryManager_2 = WasmMemoryManager_2_1;
+            }
+        ],
         execute: function () {
+            // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
+            // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
+            // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
+            wasmInstance = new WebAssembly.Instance(wat_modules_2.gx_texture);
+            decode_CMPR = decode_CMPR_Wasm;
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "render", "util", "gx/gx_displaylist"], function (exports_23, context_23) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "render", "gx/gx_displaylist"], function (exports_23, context_23) {
     "use strict";
     var __moduleName = context_23 && context_23.id;
     function translateCompType(gl, compType) {
@@ -6596,7 +6610,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 throw new Error("Unknown CompType " + compType);
         }
     }
-    var gl_matrix_5, j3d_1, GX_Material, GX_Texture, render_3, util_9, gx_displaylist_2, packetParamsData, modelViewScratch, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, matrixScratch, matrixScratch2, Scene;
+    var gl_matrix_5, j3d_1, GX_Material, GX_Texture, render_3, gx_displaylist_2, packetParamsData, modelViewScratch, Command_Shape, materialParamsData, Command_Material, ColorOverride, sceneParamsData, matrixScratch, matrixScratch2, Scene;
     return {
         setters: [
             function (gl_matrix_5_1) {
@@ -6613,9 +6627,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
             },
             function (render_3_1) {
                 render_3 = render_3_1;
-            },
-            function (util_9_1) {
-                util_9 = util_9_1;
             },
             function (gx_displaylist_2_1) {
                 gx_displaylist_2 = gx_displaylist_2_1;
@@ -7097,13 +7108,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data !== null ? texture.data.subarray(offs, size) : null;
                         var surface = { name: name_6, format: format, width: width, height: height, data: data };
-                        var decodedTexture = GX_Texture.decodeTexture(surface, false);
-                        if (decodedTexture.type === 'RGBA') {
-                            gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
-                        }
-                        else {
-                            util_9.assert(false);
-                        }
+                        var decodedTexture = GX_Texture.decodeTexture(surface);
+                        gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
                         offs += size;
                         width /= 2;
                         height /= 2;
@@ -7119,10 +7125,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data !== null ? texture.data.subarray(offs, size) : null;
                         var surface = { name: name_7, format: format, width: width, height: height, data: data };
-                        var rgbaTexture = GX_Texture.decodeTexture(surface, false);
-                        // Should never happen.
-                        if (rgbaTexture.type === 'S3TC')
-                            throw new Error("whoops");
+                        var rgbaTexture = GX_Texture.decodeTexture(surface);
                         var canvas = document.createElement('canvas');
                         canvas.width = rgbaTexture.width;
                         canvas.height = rgbaTexture.height;
@@ -15431,7 +15434,7 @@ System.register("metroid_prime/strg", ["util"], function (exports_60, context_60
 System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_61, context_61) {
     "use strict";
     var __moduleName = context_61 && context_61.id;
-    var pako_1, MLVL, MREA, STRG, TXTR, util_35, ArrayBufferSlice_6, FourCCLoaders, ResourceSystem;
+    var pako_1, MLVL, MREA, STRG, TXTR, util_35, ArrayBufferSlice_7, FourCCLoaders, ResourceSystem;
     return {
         setters: [
             function (pako_1_1) {
@@ -15452,8 +15455,8 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
             function (util_35_1) {
                 util_35 = util_35_1;
             },
-            function (ArrayBufferSlice_6_1) {
-                ArrayBufferSlice_6 = ArrayBufferSlice_6_1;
+            function (ArrayBufferSlice_7_1) {
+                ArrayBufferSlice_7 = ArrayBufferSlice_7_1;
             }
         ],
         execute: function () {
@@ -15472,7 +15475,7 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                     if (resource.isCompressed) {
                         var deflated = resource.buffer.createTypedArray(Uint8Array);
                         var inflated = pako_1.default.inflate(deflated);
-                        return new ArrayBufferSlice_6.default(inflated.buffer);
+                        return new ArrayBufferSlice_7.default(inflated.buffer);
                     }
                     else {
                         return resource.buffer;
@@ -15618,7 +15621,7 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_62, context_62
 System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/gx_texture", "gx/gx_material", "render", "util", "ArrayBufferSlice"], function (exports_63, context_63) {
     "use strict";
     var __moduleName = context_63 && context_63.id;
-    var gl_matrix_12, mrea_1, GX_Texture, GX_Material, render_24, util_37, ArrayBufferSlice_7, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
+    var gl_matrix_12, mrea_1, GX_Texture, GX_Material, render_24, util_37, ArrayBufferSlice_8, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
     return {
         setters: [
             function (gl_matrix_12_1) {
@@ -15639,8 +15642,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
             function (util_37_1) {
                 util_37 = util_37_1;
             },
-            function (ArrayBufferSlice_7_1) {
-                ArrayBufferSlice_7 = ArrayBufferSlice_7_1;
+            function (ArrayBufferSlice_8_1) {
+                ArrayBufferSlice_8 = ArrayBufferSlice_8_1;
             }
         ],
         execute: function () {
@@ -15671,7 +15674,6 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
-                    var ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
                     var format = texture.format;
                     var offs = 0, width = texture.width, height = texture.height;
                     for (var i = 0; i < texture.mipCount; i++) {
@@ -15679,13 +15681,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data.subarray(offs, size);
                         var surface = { name: name_17, format: format, width: width, height: height, data: data };
-                        var decodedTexture = GX_Texture.decodeTexture(surface, !!ext_compressed_texture_s3tc);
-                        if (decodedTexture.type === 'RGBA') {
-                            gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
-                        }
-                        else if (decodedTexture.type === 'S3TC') {
-                            gl.compressedTexImage2D(gl.TEXTURE_2D, i, ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT, decodedTexture.width, decodedTexture.height, 0, decodedTexture.pixels);
-                        }
+                        var decodedTexture = GX_Texture.decodeTexture(surface);
+                        gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
                         offs += size;
                         width /= 2;
                         height /= 2;
@@ -15719,8 +15716,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     var indexDatas = [];
                     var surfaces = this.coalesceSurfaces();
                     surfaces.forEach(function (surface) {
-                        vertexDatas.push(new ArrayBufferSlice_7.default(surface.packedData.buffer));
-                        indexDatas.push(new ArrayBufferSlice_7.default(surface.indexData.buffer));
+                        vertexDatas.push(new ArrayBufferSlice_8.default(surface.packedData.buffer));
+                        indexDatas.push(new ArrayBufferSlice_8.default(surface.indexData.buffer));
                     });
                     this.bufferCoalescer = new render_24.BufferCoalescer(gl, vertexDatas, indexDatas);
                     var i = 0;
@@ -15738,10 +15735,7 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data.subarray(offs, size);
                         var surface = { name: name_18, format: format, width: width, height: height, data: data };
-                        var rgbaTexture = GX_Texture.decodeTexture(surface, false);
-                        // Should never happen.
-                        if (rgbaTexture.type === 'S3TC')
-                            throw "whoops";
+                        var rgbaTexture = GX_Texture.decodeTexture(surface);
                         var canvas = document.createElement('canvas');
                         canvas.width = rgbaTexture.width;
                         canvas.height = rgbaTexture.height;
@@ -16079,14 +16073,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
 System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "dksiv/scenes", "metroid_prime/scenes", "j3d/scenes", "ui"], function (exports_65, context_65) {
     "use strict";
     var __moduleName = context_65 && context_65.id;
-    var viewer_1, ArrayBufferSlice_8, Progressable_9, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, DKSIV, MP1, J3D, ui_1, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
+    var viewer_1, ArrayBufferSlice_9, Progressable_9, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, DKSIV, MP1, J3D, ui_1, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
     return {
         setters: [
             function (viewer_1_1) {
                 viewer_1 = viewer_1_1;
             },
-            function (ArrayBufferSlice_8_1) {
-                ArrayBufferSlice_8 = ArrayBufferSlice_8_1;
+            function (ArrayBufferSlice_9_1) {
+                ArrayBufferSlice_9 = ArrayBufferSlice_9_1;
             },
             function (Progressable_9_1) {
                 Progressable_9 = Progressable_9_1;
@@ -16161,7 +16155,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     var p = new Promise(function (resolve, reject) {
                         request.onload = function () {
                             var buffer = request.result;
-                            var slice = new ArrayBufferSlice_8.default(buffer);
+                            var slice = new ArrayBufferSlice_9.default(buffer);
                             resolve(slice);
                         };
                         request.onerror = function () {

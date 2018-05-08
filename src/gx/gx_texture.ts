@@ -4,6 +4,9 @@
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 import * as GX from './gx_enum';
+import { align } from '../util';
+import { gx_texture as gx_textureModule } from '../wat_modules';
+import WasmMemoryManager from '../WasmMemoryManager';
 
 export interface Texture {
     name: string;
@@ -99,7 +102,42 @@ export function calcFullTextureSize(format: GX.TexFormat, width: number, height:
     return textureSize;
 }
 
-function decode_CMPR(texture: Texture): DecodedTexture {
+// XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
+// on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
+// bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
+const wasmInstance = new WebAssembly.Instance(gx_textureModule);
+
+function decode_CMPR_Wasm(texture: Texture): DecodedTexture {
+    const dstSize = texture.width * texture.height * 4;
+    const srcSize = texture.data.byteLength;
+
+    const pDstOffs = 0;
+    const pSrcOffs = align(dstSize, 0x10);
+
+    const heapSize = pSrcOffs + align(srcSize, 0x10);
+
+    const heapBase = wasmInstance.exports.__heap_base.value;
+
+    const wasmMemory = new WasmMemoryManager(wasmInstance.exports.memory);
+    wasmMemory.resize(heapBase + heapSize);
+    const mem = wasmMemory.mem;
+    const heap = wasmMemory.heap;
+
+    const pDst = heapBase + pDstOffs;
+    const pSrc = heapBase + pSrcOffs;
+
+    // Copy src buffer.
+    heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
+
+    wasmInstance.exports.decode_CMPR(pDst, pSrc, texture.width, texture.height);
+
+    // Copy the result buffer to a new buffer for memory usage purposes.
+    const pixelsBuffer = new ArrayBufferSlice(heap.buffer).copyToBuffer(pDst, dstSize);
+    const pixels = new Uint8Array(pixelsBuffer);
+    return { type: "RGBA", pixels, width: texture.width, height: texture.height };
+}
+
+function decode_CMPR_JS(texture: Texture): DecodedTexture {
     // GX's CMPR format is S3TC but using GX's tiled addressing.
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     const view = texture.data.createDataView();
@@ -172,6 +210,8 @@ function decode_CMPR(texture: Texture): DecodedTexture {
     }
     return { type: "RGBA", pixels, width: texture.width, height: texture.height };
 }
+
+const decode_CMPR = decode_CMPR_Wasm;
 
 function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels: Uint8Array, dstOffs: number) => void): DecodedTexture {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
