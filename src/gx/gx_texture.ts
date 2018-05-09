@@ -12,11 +12,14 @@ type TextureDecoder = (pScratch: number, pDst: number, pSrc: number, width: numb
 
 declare module "../wat_modules" {
     interface gx_texture_asExports {
-        decode_CMPR: TextureDecoder;
         decode_I4: TextureDecoder;
         decode_I8: TextureDecoder;
         decode_IA4: TextureDecoder;
         decode_IA8: TextureDecoder;
+        decode_RGB565: TextureDecoder;
+        decode_RGB5A3: TextureDecoder;
+        decode_RGBA8: TextureDecoder;
+        decode_CMPR: TextureDecoder;
     }
 }
 
@@ -32,28 +35,6 @@ export interface DecodedTexture {
     pixels: ArrayBufferView;
     width: number;
     height: number;
-}
-
-function expand3to8(n: number): number {
-    return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
-}
-
-function expand4to8(n: number): number {
-    return (n << 4) | n;
-}
-
-function expand5to8(n: number): number {
-    return (n << (8 - 5)) | (n >>> (10 - 8));
-}
-
-function expand6to8(n: number): number {
-    return (n << (8 - 6)) | (n >>> (12 - 8));
-}
-
-// GX uses a HW approximation of 3/8 + 5/8 instead of 1/3 + 2/3.
-function s3tcblend(a: number, b: number): number {
-    // return (a*3 + b*5) / 8;
-    return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
 }
 
 export function calcPaletteSize(format: GX.TexFormat, palette: GX.TexPalette) {
@@ -143,221 +124,6 @@ function decode_Wasm(texture: Texture, decoder: TextureDecoder, scratchSize: num
     return { pixels, width: texture.width, height: texture.height };
 }
 
-function decode_CMPR(texture: Texture): DecodedTexture {
-    // GX's CMPR format is S3TC but using GX's tiled addressing.
-    const pixels = new Uint8Array(texture.width * texture.height * 4);
-    const view = texture.data.createDataView();
-    const colorTable = new Uint8Array(16);
-
-    // CMPR swizzles macroblocks to be in a 2x2 grid of UL, UR, BL, BR.
-
-    let srcOffs = 0;
-    for (let yy = 0; yy < texture.height; yy += 8) {
-        for (let xx = 0; xx < texture.width; xx += 8) {
-            for (let yb = 0; yb < 8; yb += 4) {
-                for (let xb = 0; xb < 8; xb += 4) {
-                    // CMPR difference: Big-endian color1/2
-                    const color1 = view.getUint16(srcOffs + 0x00, false);
-                    const color2 = view.getUint16(srcOffs + 0x02, false);
-
-                    // Fill in first two colors in color table.
-                    colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
-                    colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
-                    colorTable[2] = expand5to8(color1 & 0x1F);
-                    colorTable[3] = 0xFF;
-
-                    colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
-                    colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
-                    colorTable[6] = expand5to8(color2 & 0x1F);
-                    colorTable[7] = 0xFF;
-
-                    if (color1 > color2) {
-                        // Predict gradients.
-                        colorTable[8]  = s3tcblend(colorTable[4], colorTable[0]);
-                        colorTable[9]  = s3tcblend(colorTable[5], colorTable[1]);
-                        colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
-                        colorTable[11] = 0xFF;
-
-                        colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
-                        colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
-                        colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
-                        colorTable[15] = 0xFF;
-                    } else {
-                        colorTable[8]  = (colorTable[0] + colorTable[4]) >>> 1;
-                        colorTable[9]  = (colorTable[1] + colorTable[5]) >>> 1;
-                        colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
-                        colorTable[11] = 0xFF;
-
-                        // CMPR difference: GX fills with an alpha 0 midway point here.
-                        colorTable[12] = colorTable[8];
-                        colorTable[13] = colorTable[9];
-                        colorTable[14] = colorTable[10];
-                        colorTable[15] = 0x00;
-                    }
-
-                    for (let y = 0; y < 4; y++) {
-                        let bits = view.getUint8(srcOffs + 0x04 + y);
-                        for (let x = 0; x < 4; x++) {
-                            const dstPx = (yy + yb + y) * texture.width + xx + xb + x;
-                            const dstOffs = dstPx * 4;
-                            const colorIdx = (bits >>> 6) & 0x03;
-                            pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
-                            pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
-                            pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
-                            pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
-                            bits <<= 2;
-                        }
-                    }
-
-                    srcOffs += 8;
-                }
-            }
-        }
-    }
-    return { pixels, width: texture.width, height: texture.height };
-}
-
-function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels: Uint8Array, dstOffs: number) => void): DecodedTexture {
-    const pixels = new Uint8Array(texture.width * texture.height * 4);
-    for (let yy = 0; yy < texture.height; yy += bh) {
-        for (let xx = 0; xx < texture.width; xx += bw) {
-            for (let y = 0; y < bh; y++) {
-                for (let x = 0; x < bw; x++) {
-                    const dstPixel = (texture.width * (yy + y)) + xx + x;
-                    const dstOffs = dstPixel * 4;
-                    decoder(pixels, dstOffs);
-                }
-            }
-        }
-    }
-    return { pixels, width: texture.width, height: texture.height };
-}
-
-function decode_RGB565(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView();
-    let srcOffs = 0;
-    return decode_Tiled(texture, 4, 4, (pixels: Uint8Array, dstOffs: number): void => {
-        const p = view.getUint16(srcOffs);
-        pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
-        pixels[dstOffs + 1] = expand6to8((p >> 5) & 0x3F);
-        pixels[dstOffs + 2] = expand5to8(p & 0x1F);
-        pixels[dstOffs + 3] = 0xFF;
-        srcOffs += 2;
-    });
-}
-
-function decode_RGB5A3(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView();
-    let srcOffs = 0;
-    return decode_Tiled(texture, 4, 4, (pixels: Uint8Array, dstOffs: number): void => {
-        const p = view.getUint16(srcOffs);
-        if (p & 0x8000) {
-            // RGB5
-            pixels[dstOffs + 0] = expand5to8((p >> 10) & 0x1F);
-            pixels[dstOffs + 1] = expand5to8((p >> 5) & 0x1F);
-            pixels[dstOffs + 2] = expand5to8(p & 0x1F);
-            pixels[dstOffs + 3] = 0xFF;
-        } else {
-            // A3RGB4
-            pixels[dstOffs + 0] = expand4to8((p >> 8) & 0x0F);
-            pixels[dstOffs + 1] = expand4to8((p >> 4) & 0x0F);
-            pixels[dstOffs + 2] = expand4to8(p & 0x0F);
-            pixels[dstOffs + 3] = expand3to8(p >> 12);
-        }
-        srcOffs += 2;
-    });
-}
-
-function decode_RGBA8(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView();
-    let srcOffs = 0;
-    // RGBA8 is a bit special, so we hand-code this one.
-    const bw = 4;
-    const bh = 4;
-    const pixels = new Uint8Array(texture.width * texture.height * 4);
-    for (let yy = 0; yy < texture.height; yy += bh) {
-        for (let xx = 0; xx < texture.width; xx += bw) {
-            for (let y = 0; y < bh; y++) {
-                for (let x = 0; x < bw; x++) {
-                    const dstPixel = (texture.width * (yy + y)) + xx + x;
-                    const dstOffs = dstPixel * 4;
-                    pixels[dstOffs + 3] = view.getUint8(srcOffs + 0);
-                    pixels[dstOffs + 0] = view.getUint8(srcOffs + 1);
-                    srcOffs += 2;
-                }
-            }
-            for (let y = 0; y < bh; y++) {
-                for (let x = 0; x < bw; x++) {
-                    const dstPixel = (texture.width * (yy + y)) + xx + x;
-                    const dstOffs = dstPixel * 4;
-                    pixels[dstOffs + 1] = view.getUint8(srcOffs + 0);
-                    pixels[dstOffs + 2] = view.getUint8(srcOffs + 1);
-                    srcOffs += 2;
-                }
-            }
-        }
-    }
-    return { pixels, width: texture.width, height: texture.height };
-}
-
-function decode_I4(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView();
-    let srcOffs = 0;
-    return decode_Tiled(texture, 8, 8, (pixels: Uint8Array, dstOffs: number): void => {
-        const ii = view.getUint8(srcOffs >> 1);
-        const i4 = ii >>> ((srcOffs & 1) ? 0 : 4) & 0x0F;
-        const i = expand4to8(i4);
-        pixels[dstOffs + 0] = i;
-        pixels[dstOffs + 1] = i;
-        pixels[dstOffs + 2] = i;
-        pixels[dstOffs + 3] = i;
-        srcOffs++;
-    });
-}
-
-function decode_I8(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView();
-    let srcOffs = 0;
-    return decode_Tiled(texture, 8, 4, (pixels: Uint8Array, dstOffs: number): void => {
-        const i = view.getUint8(srcOffs);
-        pixels[dstOffs + 0] = i;
-        pixels[dstOffs + 1] = i;
-        pixels[dstOffs + 2] = i;
-        pixels[dstOffs + 3] = i;
-        srcOffs++;
-    });
-}
-
-function decode_IA4(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView();
-    let srcOffs = 0;
-
-    return decode_Tiled(texture, 8, 4, (pixels: Uint8Array, dstOffs: number): void => {
-        const ia = view.getUint8(srcOffs);
-        const a = expand4to8(ia >>> 4);
-        const i = expand4to8(ia & 0x0F);
-        pixels[dstOffs + 0] = i;
-        pixels[dstOffs + 1] = i;
-        pixels[dstOffs + 2] = i;
-        pixels[dstOffs + 3] = a;
-        srcOffs++;
-    });
-}
-
-function decode_IA8(texture: Texture): DecodedTexture {
-    const view = texture.data.createDataView();
-    let srcOffs = 0;
-    return decode_Tiled(texture, 4, 4, (pixels: Uint8Array, dstOffs: number): void => {
-        const a = view.getUint8(srcOffs + 0);
-        const i = view.getUint8(srcOffs + 1);
-        pixels[dstOffs + 0] = i;
-        pixels[dstOffs + 1] = i;
-        pixels[dstOffs + 2] = i;
-        pixels[dstOffs + 3] = a;
-        srcOffs += 2;
-    });
-}
-
 function decode_Dummy(texture: Texture): DecodedTexture {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     pixels.fill(0xFF);
@@ -369,14 +135,6 @@ export function decodeTexture(texture: Texture): DecodedTexture {
         return decode_Dummy(texture);
 
     switch (texture.format) {
-    case GX.TexFormat.CMPR:
-        return decode_Wasm(texture, wasmInstance.decode_CMPR, 16);
-    case GX.TexFormat.RGB565:
-        return decode_RGB565(texture);
-    case GX.TexFormat.RGB5A3:
-        return decode_RGB5A3(texture);
-    case GX.TexFormat.RGBA8:
-        return decode_RGBA8(texture);
     case GX.TexFormat.I4:
         return decode_Wasm(texture, wasmInstance.decode_I4);
     case GX.TexFormat.I8:
@@ -385,6 +143,14 @@ export function decodeTexture(texture: Texture): DecodedTexture {
         return decode_Wasm(texture, wasmInstance.decode_IA4);
     case GX.TexFormat.IA8:
         return decode_Wasm(texture, wasmInstance.decode_IA8);
+    case GX.TexFormat.RGB565:
+        return decode_Wasm(texture, wasmInstance.decode_RGB565);
+    case GX.TexFormat.RGB5A3:
+        return decode_Wasm(texture, wasmInstance.decode_RGB5A3);
+    case GX.TexFormat.RGBA8:
+        return decode_Wasm(texture, wasmInstance.decode_RGBA8);
+    case GX.TexFormat.CMPR:
+        return decode_Wasm(texture, wasmInstance.decode_CMPR, 16);
     case GX.TexFormat.C4:
     case GX.TexFormat.C8:
     case GX.TexFormat.C14X2:
