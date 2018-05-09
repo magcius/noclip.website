@@ -1,6 +1,35 @@
 
 // GX constants. Mostly taken from libogc.
 
+export const enum TexFormat {
+    I4 = 0x0,
+    I8 = 0x1,
+    IA4 = 0x2,
+    IA8 = 0x3,
+    RGB565 = 0x4,
+    RGB5A3 = 0x5,
+    RGBA8 = 0x6,
+    C4 = 0x8,
+    C8 = 0x9,
+    C14X2 = 0xa,
+    CMPR = 0xE, /*!< Compressed */
+}
+
+export const enum TexPalette {
+    IA8 = 0x00,
+    RGB565 = 0x01,
+    RGB5A3 = 0x02,
+}
+
+export const enum TexFilter {
+    NEAR = 0, /*!< Point sampling, no mipmap */
+    LINEAR = 1, /*!< Bilinear filtering, no mipmap */
+    NEAR_MIP_NEAR = 2, /*!< Point sampling, discrete mipmap */
+    LIN_MIP_NEAR = 3, /*!< Bilinear filtering, discrete mipmap */
+    NEAR_MIP_LIN = 4, /*!< Point sampling, linear mipmap */
+    LIN_MIP_LIN = 5, /*!< Trilinear filtering */
+}
+
 export const enum PrimitiveType {
     TRIANGLES = 0x90,
     TRIANGLESTRIP = 0x98,
@@ -232,35 +261,6 @@ export const enum KonstAlphaSel {
     KASEL_K1_A = 0x1D, /*!< K1[A] register */
     KASEL_K2_A = 0x1E, /*!< K2[A] register */
     KASEL_K3_A = 0x1F, /*!< K3[A] register */
-}
-
-export const enum TexFormat {
-    I4 = 0x0,
-    I8 = 0x1,
-    IA4 = 0x2,
-    IA8 = 0x3,
-    RGB565 = 0x4,
-    RGB5A3 = 0x5,
-    RGBA8 = 0x6,
-    C4 = 0x8,
-    C8 = 0x9,
-    C14X2 = 0xa,
-    CMPR = 0xE, /*!< Compressed */
-}
-
-export const enum TexPalette {
-    IA8 = 0x00,
-    RGB565 = 0x01,
-    RGB5A3 = 0x02,
-}
-
-export const enum TexFilter {
-    NEAR = 0, /*!< Point sampling, no mipmap */
-    LINEAR = 1, /*!< Bilinear filtering, no mipmap */
-    NEAR_MIP_NEAR = 2, /*!< Point sampling, discrete mipmap */
-    LIN_MIP_NEAR = 3, /*!< Bilinear filtering, discrete mipmap */
-    NEAR_MIP_LIN = 4, /*!< Point sampling, linear mipmap */
-    LIN_MIP_LIN = 5, /*!< Trilinear filtering */
 }
 
 export const enum WrapMode {
