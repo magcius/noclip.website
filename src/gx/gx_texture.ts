@@ -5,16 +5,18 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 
 import * as GX from './gx_enum';
 import { align } from '../util';
-import { gx_textureInstance } from '../wat_modules';
+import { gx_texture_asInstance, gx_texture_asExports } from '../wat_modules';
 import WasmMemoryManager from '../WasmMemoryManager';
 
-type TextureDecoder = (pDst: number, pSrc: number, width: number, height: number) => void;
+type TextureDecoder = (pScratch: number, pDst: number, pSrc: number, width: number, height: number) => void;
 
 declare module "../wat_modules" {
-    interface gx_textureExports {
+    interface gx_texture_asExports {
         decode_CMPR: TextureDecoder;
         decode_I4: TextureDecoder;
         decode_I8: TextureDecoder;
+        decode_IA4: TextureDecoder;
+        decode_IA8: TextureDecoder;
     }
 }
 
@@ -114,31 +116,26 @@ export function calcFullTextureSize(format: GX.TexFormat, width: number, height:
 // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
 // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
 // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-const wasmInstance = gx_textureInstance();
+const wasmInstance = gx_texture_asInstance();
 
-function decode_Wasm(texture: Texture, decoder: TextureDecoder): DecodedTexture {
+function decode_Wasm(texture: Texture, decoder: TextureDecoder, scratchSize: number = 0): DecodedTexture {
     const dstSize = texture.width * texture.height * 4;
     const srcSize = texture.data.byteLength;
 
-    const pDstOffs = 0;
-    const pSrcOffs = align(dstSize, 0x10);
-
-    const heapSize = pSrcOffs + align(srcSize, 0x10);
-
-    const heapBase = wasmInstance.__heap_base;
+    const pScratch = 0;
+    const pDst = align(pScratch + scratchSize, 0x10);
+    const pSrc = align(pDst + dstSize, 0x10);
+    const heapSize = align(pSrc + srcSize, 0x10);
 
     const wasmMemory = new WasmMemoryManager(wasmInstance.memory);
-    wasmMemory.resize(heapBase + heapSize);
+    wasmMemory.resize(heapSize);
     const mem = wasmMemory.mem;
     const heap = wasmMemory.heap;
-
-    const pDst = heapBase + pDstOffs;
-    const pSrc = heapBase + pSrcOffs;
 
     // Copy src buffer.
     heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
 
-    decoder(pDst, pSrc, texture.width, texture.height);
+    decoder(pScratch, pDst, pSrc, texture.width, texture.height);
 
     // Copy the result buffer to a new buffer for memory usage purposes.
     const pixelsBuffer = new ArrayBufferSlice(heap.buffer).copyToBuffer(pDst, dstSize);
@@ -373,7 +370,7 @@ export function decodeTexture(texture: Texture): DecodedTexture {
 
     switch (texture.format) {
     case GX.TexFormat.CMPR:
-        return decode_Wasm(texture, wasmInstance.decode_CMPR);
+        return decode_Wasm(texture, wasmInstance.decode_CMPR, 16);
     case GX.TexFormat.RGB565:
         return decode_RGB565(texture);
     case GX.TexFormat.RGB5A3:
@@ -385,9 +382,9 @@ export function decodeTexture(texture: Texture): DecodedTexture {
     case GX.TexFormat.I8:
         return decode_Wasm(texture, wasmInstance.decode_I8);
     case GX.TexFormat.IA4:
-        return decode_IA4(texture);
+        return decode_Wasm(texture, wasmInstance.decode_IA4);
     case GX.TexFormat.IA8:
-        return decode_IA8(texture);
+        return decode_Wasm(texture, wasmInstance.decode_IA8);
     case GX.TexFormat.C4:
     case GX.TexFormat.C8:
     case GX.TexFormat.C14X2:

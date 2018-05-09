@@ -2,7 +2,6 @@
   "name": "@jstpierre/model-viewer",
   "private": true,
   "devDependencies": {
-    "assemblyscript": "^0.3.0",
     "gl-matrix": "^2.4.0",
     "pako": "^1.0.6",
     "wabt": "^1.0.0-nightly.20180421"

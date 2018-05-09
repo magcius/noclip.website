@@ -59,8 +59,8 @@ function buildModuleCode(module) {
 ${buildModuleExportsInterface(exportName, wasmModule)}
 const ${exportName}Code = ${binArrayStr};
 const ${exportName}Module = new WebAssembly.Module(${exportName}Code);
-export function ${exportName}Instance(): ${exportName}Exports {
-    const instance = new WebAssembly.Instance(${exportName}Module);
+export function ${exportName}Instance(imports?: any): ${exportName}Exports {
+    const instance = new WebAssembly.Instance(${exportName}Module, imports);
     return (<${exportName}Exports> instance.exports);
 }
 `;
@@ -76,9 +76,8 @@ function buildModulesFile(modules) {
 
 function main() {
     const out = buildModulesFile([
-        { exportName: 'yaz0', filename: 'yaz0.wat' },
         { exportName: 'yaz0_as', filename: 'yaz0_as.wat' },
-        { exportName: 'gx_texture', filename: 'gx/gx_texture.wat' },
+        { exportName: 'gx_texture_as', filename: 'gx/gx_texture_as.wat' },
     ]);
     fs.writeFileSync(path.join(__dirname, 'wat_modules.ts'), out);
 }
