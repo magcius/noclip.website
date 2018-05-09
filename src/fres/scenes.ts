@@ -52,13 +52,17 @@ export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: Ar
     return new SplatoonRenderer(null, new Scene(gl, fres, isSkybox));
 }
 
-export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false): Viewer.Scene {
-    if (readString(buffer, 0, 4) === 'Yaz0')
-        buffer = Yaz0.decompress(buffer);
-
-    const sarc = SARC.parse(buffer);
-    const file = sarc.files.find((file) => file.name.endsWith('.bfres'));
-    return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
+export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false): Promise<Viewer.Scene> {
+    return Promise.resolve(buffer).then((buffer: ArrayBufferSlice) => {
+        if (readString(buffer, 0, 4) === 'Yaz0')
+            return Yaz0.decompress(buffer);
+        else
+            return buffer;
+    }).then((buffer: ArrayBufferSlice) => {
+        const sarc = SARC.parse(buffer);
+        const file = sarc.files.find((file) => file.name.endsWith('.bfres'));
+        return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
+    });
 }
 
 class SplatoonSceneDesc implements Viewer.SceneDesc {
@@ -83,7 +87,7 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
     }
 
     private _createSceneFromPath(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): Progressable<Viewer.Scene> {
-        return fetch(path).then((result: ArrayBufferSlice): Viewer.Scene => {
+        return fetch(path).then((result: ArrayBufferSlice): Promise<Viewer.Scene> => {
             return createSceneFromSARCBuffer(gl, result, isSkybox);
         });
     }
