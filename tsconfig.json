@@ -17,5 +17,12 @@
         "sourceMap": true,
         "module": "system",
         "outFile": "build/main.js"
-    }
+    },
+    "include": [
+        "src/"
+    ],
+    "exclude": [
+        "src/yaz0_as.ts",
+        "src/gx/gx_texture_as.ts"
+    ]
 }
