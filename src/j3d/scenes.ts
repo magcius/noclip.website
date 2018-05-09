@@ -56,43 +56,49 @@ function boolSort(a: boolean, b: boolean): number {
         return 0;
 }
 
-export function createScenesFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Scene[] {
-    if (readString(buffer, 0, 4) === 'Yaz0')
-        buffer = Yaz0.decompress(buffer);
-
-    if (readString(buffer, 0, 4) === 'RARC') {
-        const rarc = RARC.parse(buffer);
-        const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
-        let scenes = bmdFiles.map((bmdFile) => {
-            // Find the corresponding btk.
-            const basename = bmdFile.name.split('.')[0];
-            const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
-            const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`);
-            const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`);
-            const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
-            const scene = createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile);
-            scene.name = basename;
-            if (basename.includes('_sky'))
-                scene.setIsSkybox(true);
-            return scene;
-        });
-
-        // Sort skyboxen before non-skyboxen.
-        scenes = scenes.sort((a, b) => {
-            return boolSort(a.isSkybox, b.isSkybox);
-        });
-
-        return scenes;
-    }
-
-    if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
-        const bmd = BMD.parse(buffer);
-        return [new Scene(gl, bmd, null, null, null, null)];
-    }
-
-    return null;
+export function createScenesFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Promise<Scene[]> {
+    return Promise.resolve(buffer).then((buffer: ArrayBufferSlice) => {
+        if (readString(buffer, 0, 4) === 'Yaz0')
+            return Yaz0.decompress(buffer);
+        else
+            return buffer;
+    }).then((buffer: ArrayBufferSlice) => {
+        if (readString(buffer, 0, 4) === 'RARC') {
+            const rarc = RARC.parse(buffer);
+            const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
+            let scenes = bmdFiles.map((bmdFile) => {
+                // Find the corresponding btk.
+                const basename = bmdFile.name.split('.')[0];
+                const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
+                const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`);
+                const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`);
+                const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
+                const scene = createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+                scene.name = basename;
+                if (basename.includes('_sky'))
+                    scene.setIsSkybox(true);
+                return scene;
+            });
+    
+            // Sort skyboxen before non-skyboxen.
+            scenes = scenes.sort((a, b) => {
+                return boolSort(a.isSkybox, b.isSkybox);
+            });
+    
+            return scenes;
+        }
+    
+        if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
+            const bmd = BMD.parse(buffer);
+            return [new Scene(gl, bmd, null, null, null, null)];
+        }
+    
+        return null;
+    });
 }
 
-export function createMultiSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): MultiScene {
-    return new MultiScene(createScenesFromBuffer(gl, buffer));
+export function createMultiSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Promise<MultiScene> {
+    return createScenesFromBuffer(gl, buffer).then((scenes) => {
+        return new MultiScene(scenes);
+    });
 }

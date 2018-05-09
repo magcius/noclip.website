@@ -3155,25 +3155,29 @@ System.register("wat_modules", [], function (exports_12, context_12) {
     "use strict";
     var __moduleName = context_12 && context_12.id;
     function yaz0_asInstance(imports) {
-        var instance = new WebAssembly.Instance(yaz0_asModule, imports);
-        return instance.exports;
+        return WebAssembly.compile(yaz0_asCode).then(function (module) {
+            return WebAssembly.instantiate(module, imports);
+        }).then(function (instance) {
+            return instance.exports;
+        });
     }
     exports_12("yaz0_asInstance", yaz0_asInstance);
     function gx_texture_asInstance(imports) {
-        var instance = new WebAssembly.Instance(gx_texture_asModule, imports);
-        return instance.exports;
+        return WebAssembly.compile(gx_texture_asCode).then(function (module) {
+            return WebAssembly.instantiate(module, imports);
+        }).then(function (instance) {
+            return instance.exports;
+        });
     }
     exports_12("gx_texture_asInstance", gx_texture_asInstance);
-    var yaz0_asCode, yaz0_asModule, gx_texture_asCode, gx_texture_asModule;
+    var yaz0_asCode, gx_texture_asCode;
     return {
         setters: [],
         execute: function () {
             yaz0_asCode = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 11, 2, 96, 3, 127, 127, 127, 0, 96, 0, 1, 127, 3, 2, 1, 0, 5, 3, 1, 0, 1, 6, 6, 1, 127, 0, 65, 4, 11, 7, 23, 2, 10, 100, 101, 99, 111, 109, 112, 114, 101, 115, 115, 0, 0, 6, 109, 101, 109, 111, 114, 121, 2, 0, 10, 178, 3, 1, 175, 3, 1, 17, 127, 32, 0, 33, 3, 32, 1, 33, 4, 2, 64, 3, 64, 65, 1, 4, 64, 2, 64, 2, 64, 2, 127, 2, 127, 32, 4, 33, 5, 32, 5, 65, 1, 106, 33, 4, 32, 5, 11, 33, 5, 32, 5, 45, 0, 0, 12, 0, 11, 33, 6, 65, 8, 33, 7, 2, 64, 3, 64, 2, 127, 32, 7, 33, 8, 32, 8, 65, 1, 107, 33, 7, 32, 8, 11, 65, 255, 1, 113, 4, 64, 2, 64, 2, 64, 32, 6, 65, 1, 32, 7, 116, 113, 65, 255, 1, 113, 4, 64, 2, 64, 32, 2, 65, 1, 107, 33, 2, 2, 64, 2, 127, 32, 3, 33, 8, 32, 8, 65, 1, 106, 33, 3, 32, 8, 11, 33, 8, 2, 127, 2, 127, 32, 4, 33, 9, 32, 9, 65, 1, 106, 33, 4, 32, 9, 11, 33, 9, 32, 9, 45, 0, 0, 12, 0, 11, 33, 10, 32, 8, 32, 10, 58, 0, 0, 11, 11, 5, 2, 64, 2, 127, 32, 4, 45, 0, 0, 65, 8, 116, 32, 4, 65, 1, 106, 45, 0, 0, 114, 65, 255, 255, 3, 113, 12, 0, 11, 33, 11, 32, 4, 65, 2, 106, 33, 4, 32, 11, 65, 255, 31, 113, 65, 1, 106, 33, 12, 32, 11, 65, 255, 255, 3, 113, 65, 12, 118, 65, 2, 106, 65, 255, 1, 113, 33, 13, 32, 13, 65, 2, 70, 4, 64, 2, 64, 2, 127, 2, 127, 32, 4, 33, 14, 32, 14, 65, 1, 106, 33, 4, 32, 14, 11, 33, 14, 32, 14, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 15, 32, 13, 32, 15, 65, 16, 106, 106, 33, 13, 11, 11, 32, 3, 32, 12, 65, 255, 255, 3, 113, 107, 33, 16, 32, 2, 32, 13, 107, 33, 2, 2, 64, 3, 64, 2, 127, 32, 13, 33, 17, 32, 17, 65, 1, 107, 33, 13, 32, 17, 11, 65, 255, 255, 3, 113, 4, 64, 2, 64, 2, 64, 2, 127, 32, 3, 33, 17, 32, 17, 65, 1, 106, 33, 3, 32, 17, 11, 33, 17, 2, 127, 2, 127, 32, 16, 33, 18, 32, 18, 65, 1, 106, 33, 16, 32, 18, 11, 33, 18, 32, 18, 45, 0, 0, 12, 0, 11, 33, 19, 32, 17, 32, 19, 58, 0, 0, 11, 12, 2, 11, 11, 11, 11, 11, 11, 32, 2, 65, 0, 76, 4, 64, 15, 11, 11, 12, 2, 11, 11, 11, 11, 11, 12, 2, 11, 11, 11, 11, 11]);
             ;
-            yaz0_asModule = new WebAssembly.Module(yaz0_asCode);
             gx_texture_asCode = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 13, 2, 96, 5, 127, 127, 127, 127, 127, 0, 96, 0, 1, 127, 3, 9, 8, 0, 0, 0, 0, 0, 0, 0, 0, 5, 3, 1, 0, 1, 6, 6, 1, 127, 0, 65, 4, 11, 7, 121, 9, 9, 100, 101, 99, 111, 100, 101, 95, 73, 52, 0, 0, 9, 100, 101, 99, 111, 100, 101, 95, 73, 56, 0, 1, 10, 100, 101, 99, 111, 100, 101, 95, 73, 65, 52, 0, 2, 10, 100, 101, 99, 111, 100, 101, 95, 73, 65, 56, 0, 3, 13, 100, 101, 99, 111, 100, 101, 95, 82, 71, 66, 53, 54, 53, 0, 4, 13, 100, 101, 99, 111, 100, 101, 95, 82, 71, 66, 53, 65, 51, 0, 5, 12, 100, 101, 99, 111, 100, 101, 95, 82, 71, 66, 65, 56, 0, 6, 11, 100, 101, 99, 111, 100, 101, 95, 67, 77, 80, 82, 0, 7, 6, 109, 101, 109, 111, 114, 121, 2, 0, 10, 161, 36, 8, 178, 2, 1, 15, 127, 65, 0, 33, 5, 2, 64, 65, 0, 33, 6, 3, 64, 32, 6, 32, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 7, 3, 64, 32, 7, 32, 3, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 8, 3, 64, 32, 8, 65, 8, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 9, 3, 64, 32, 9, 65, 8, 73, 4, 64, 2, 64, 2, 64, 32, 3, 32, 6, 32, 8, 65, 255, 1, 113, 106, 108, 32, 7, 106, 32, 9, 65, 255, 1, 113, 106, 33, 10, 32, 1, 32, 10, 65, 4, 108, 106, 33, 11, 2, 127, 32, 2, 32, 5, 65, 1, 118, 106, 33, 12, 32, 12, 45, 0, 0, 12, 0, 11, 33, 13, 32, 13, 65, 255, 1, 113, 32, 5, 65, 1, 113, 4, 127, 65, 0, 5, 65, 4, 11, 118, 65, 15, 113, 33, 14, 2, 127, 32, 14, 65, 4, 116, 32, 14, 114, 65, 255, 1, 113, 12, 0, 11, 33, 15, 2, 64, 32, 11, 65, 0, 106, 33, 16, 32, 16, 32, 15, 58, 0, 0, 11, 2, 64, 32, 11, 65, 1, 106, 33, 17, 32, 17, 32, 15, 58, 0, 0, 11, 2, 64, 32, 11, 65, 2, 106, 33, 18, 32, 18, 32, 15, 58, 0, 0, 11, 2, 64, 32, 11, 65, 3, 106, 33, 19, 32, 19, 32, 15, 58, 0, 0, 11, 32, 5, 65, 1, 106, 33, 5, 11, 32, 9, 65, 1, 106, 33, 9, 12, 2, 11, 11, 11, 11, 32, 8, 65, 1, 106, 33, 8, 12, 2, 11, 11, 11, 11, 32, 7, 65, 8, 106, 33, 7, 12, 2, 11, 11, 11, 11, 32, 6, 65, 8, 106, 33, 6, 12, 2, 11, 11, 11, 11, 11, 131, 2, 1, 13, 127, 65, 0, 33, 5, 2, 64, 65, 0, 33, 6, 3, 64, 32, 6, 32, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 7, 3, 64, 32, 7, 32, 3, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 8, 3, 64, 32, 8, 65, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 9, 3, 64, 32, 9, 65, 8, 73, 4, 64, 2, 64, 2, 64, 32, 3, 32, 6, 32, 8, 65, 255, 1, 113, 106, 108, 32, 7, 106, 32, 9, 65, 255, 1, 113, 106, 33, 10, 32, 1, 32, 10, 65, 4, 108, 106, 33, 11, 2, 127, 32, 2, 32, 5, 106, 33, 12, 32, 12, 45, 0, 0, 12, 0, 11, 33, 13, 2, 64, 32, 11, 65, 0, 106, 33, 14, 32, 14, 32, 13, 58, 0, 0, 11, 2, 64, 32, 11, 65, 1, 106, 33, 15, 32, 15, 32, 13, 58, 0, 0, 11, 2, 64, 32, 11, 65, 2, 106, 33, 16, 32, 16, 32, 13, 58, 0, 0, 11, 2, 64, 32, 11, 65, 3, 106, 33, 17, 32, 17, 32, 13, 58, 0, 0, 11, 32, 5, 65, 1, 106, 33, 5, 11, 32, 9, 65, 1, 106, 33, 9, 12, 2, 11, 11, 11, 11, 32, 8, 65, 1, 106, 33, 8, 12, 2, 11, 11, 11, 11, 32, 7, 65, 8, 106, 33, 7, 12, 2, 11, 11, 11, 11, 32, 6, 65, 4, 106, 33, 6, 12, 2, 11, 11, 11, 11, 11, 187, 2, 1, 17, 127, 65, 0, 33, 5, 2, 64, 65, 0, 33, 6, 3, 64, 32, 6, 32, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 7, 3, 64, 32, 7, 32, 3, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 8, 3, 64, 32, 8, 65, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 9, 3, 64, 32, 9, 65, 8, 73, 4, 64, 2, 64, 2, 64, 32, 3, 32, 6, 32, 8, 65, 255, 1, 113, 106, 108, 32, 7, 106, 32, 9, 65, 255, 1, 113, 106, 33, 10, 32, 1, 32, 10, 65, 4, 108, 106, 33, 11, 2, 127, 32, 2, 32, 5, 106, 33, 12, 32, 12, 45, 0, 0, 12, 0, 11, 33, 13, 2, 127, 32, 13, 65, 255, 1, 113, 65, 4, 118, 33, 14, 32, 14, 65, 4, 116, 32, 14, 114, 65, 255, 1, 113, 12, 0, 11, 33, 15, 2, 127, 32, 13, 65, 15, 113, 33, 16, 32, 16, 65, 4, 116, 32, 16, 114, 65, 255, 1, 113, 12, 0, 11, 33, 17, 2, 64, 32, 11, 65, 0, 106, 33, 18, 32, 18, 32, 17, 58, 0, 0, 11, 2, 64, 32, 11, 65, 1, 106, 33, 19, 32, 19, 32, 17, 58, 0, 0, 11, 2, 64, 32, 11, 65, 2, 106, 33, 20, 32, 20, 32, 17, 58, 0, 0, 11, 2, 64, 32, 11, 65, 3, 106, 33, 21, 32, 21, 32, 15, 58, 0, 0, 11, 32, 5, 65, 1, 106, 33, 5, 11, 32, 9, 65, 1, 106, 33, 9, 12, 2, 11, 11, 11, 11, 32, 8, 65, 1, 106, 33, 8, 12, 2, 11, 11, 11, 11, 32, 7, 65, 8, 106, 33, 7, 12, 2, 11, 11, 11, 11, 32, 6, 65, 4, 106, 33, 6, 12, 2, 11, 11, 11, 11, 11, 156, 2, 1, 15, 127, 65, 0, 33, 5, 2, 64, 65, 0, 33, 6, 3, 64, 32, 6, 32, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 7, 3, 64, 32, 7, 32, 3, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 8, 3, 64, 32, 8, 65, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 9, 3, 64, 32, 9, 65, 4, 73, 4, 64, 2, 64, 2, 64, 32, 3, 32, 6, 32, 8, 65, 255, 1, 113, 106, 108, 32, 7, 106, 32, 9, 65, 255, 1, 113, 106, 33, 10, 32, 1, 32, 10, 65, 4, 108, 106, 33, 11, 2, 127, 32, 2, 32, 5, 106, 65, 0, 106, 33, 12, 32, 12, 45, 0, 0, 12, 0, 11, 33, 13, 2, 127, 32, 2, 32, 5, 106, 65, 1, 106, 33, 14, 32, 14, 45, 0, 0, 12, 0, 11, 33, 15, 2, 64, 32, 11, 65, 0, 106, 33, 16, 32, 16, 32, 15, 58, 0, 0, 11, 2, 64, 32, 11, 65, 1, 106, 33, 17, 32, 17, 32, 15, 58, 0, 0, 11, 2, 64, 32, 11, 65, 2, 106, 33, 18, 32, 18, 32, 15, 58, 0, 0, 11, 2, 64, 32, 11, 65, 3, 106, 33, 19, 32, 19, 32, 13, 58, 0, 0, 11, 32, 5, 65, 2, 106, 33, 5, 11, 32, 9, 65, 1, 106, 33, 9, 12, 2, 11, 11, 11, 11, 32, 8, 65, 1, 106, 33, 8, 12, 2, 11, 11, 11, 11, 32, 7, 65, 4, 106, 33, 7, 12, 2, 11, 11, 11, 11, 32, 6, 65, 4, 106, 33, 6, 12, 2, 11, 11, 11, 11, 11, 146, 3, 1, 20, 127, 65, 0, 33, 5, 2, 64, 65, 0, 33, 6, 3, 64, 32, 6, 32, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 7, 3, 64, 32, 7, 32, 3, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 8, 3, 64, 32, 8, 65, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 9, 3, 64, 32, 9, 65, 4, 73, 4, 64, 2, 64, 2, 64, 32, 3, 32, 6, 32, 8, 65, 255, 1, 113, 106, 108, 32, 7, 106, 32, 9, 65, 255, 1, 113, 106, 33, 10, 32, 1, 32, 10, 65, 4, 108, 106, 33, 11, 2, 127, 32, 2, 32, 5, 106, 33, 12, 32, 12, 45, 0, 0, 65, 8, 116, 32, 12, 65, 1, 106, 45, 0, 0, 114, 65, 255, 255, 3, 113, 12, 0, 11, 33, 13, 2, 64, 32, 11, 65, 0, 106, 33, 14, 2, 127, 32, 13, 65, 255, 255, 3, 113, 65, 11, 118, 65, 31, 113, 33, 15, 32, 15, 65, 8, 65, 5, 107, 116, 32, 15, 65, 10, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 16, 32, 14, 32, 16, 58, 0, 0, 11, 2, 64, 32, 11, 65, 1, 106, 33, 17, 2, 127, 32, 13, 65, 255, 255, 3, 113, 65, 5, 118, 65, 63, 113, 33, 18, 32, 18, 65, 8, 65, 6, 107, 116, 32, 18, 65, 12, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 19, 32, 17, 32, 19, 58, 0, 0, 11, 2, 64, 32, 11, 65, 2, 106, 33, 20, 2, 127, 32, 13, 65, 31, 113, 33, 21, 32, 21, 65, 8, 65, 5, 107, 116, 32, 21, 65, 10, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 22, 32, 20, 32, 22, 58, 0, 0, 11, 2, 64, 32, 11, 65, 3, 106, 33, 23, 65, 255, 1, 33, 24, 32, 23, 32, 24, 58, 0, 0, 11, 32, 5, 65, 2, 106, 33, 5, 11, 32, 9, 65, 1, 106, 33, 9, 12, 2, 11, 11, 11, 11, 32, 8, 65, 1, 106, 33, 8, 12, 2, 11, 11, 11, 11, 32, 7, 65, 4, 106, 33, 7, 12, 2, 11, 11, 11, 11, 32, 6, 65, 4, 106, 33, 6, 12, 2, 11, 11, 11, 11, 11, 245, 4, 1, 32, 127, 65, 0, 33, 5, 2, 64, 65, 0, 33, 6, 3, 64, 32, 6, 32, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 7, 3, 64, 32, 7, 32, 3, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 8, 3, 64, 32, 8, 65, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 9, 3, 64, 32, 9, 65, 4, 73, 4, 64, 2, 64, 2, 64, 32, 3, 32, 6, 32, 8, 65, 255, 1, 113, 106, 108, 32, 7, 106, 32, 9, 65, 255, 1, 113, 106, 33, 10, 32, 1, 32, 10, 65, 4, 108, 106, 33, 11, 2, 127, 32, 2, 32, 5, 106, 33, 12, 32, 12, 45, 0, 0, 65, 8, 116, 32, 12, 65, 1, 106, 45, 0, 0, 114, 65, 255, 255, 3, 113, 12, 0, 11, 33, 13, 32, 13, 65, 128, 128, 2, 113, 4, 64, 2, 64, 2, 64, 32, 11, 65, 0, 106, 33, 14, 2, 127, 32, 13, 65, 255, 255, 3, 113, 65, 10, 118, 65, 31, 113, 33, 15, 32, 15, 65, 8, 65, 5, 107, 116, 32, 15, 65, 10, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 16, 32, 14, 32, 16, 58, 0, 0, 11, 2, 64, 32, 11, 65, 1, 106, 33, 17, 2, 127, 32, 13, 65, 255, 255, 3, 113, 65, 5, 118, 65, 31, 113, 33, 18, 32, 18, 65, 8, 65, 5, 107, 116, 32, 18, 65, 10, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 19, 32, 17, 32, 19, 58, 0, 0, 11, 2, 64, 32, 11, 65, 2, 106, 33, 20, 2, 127, 32, 13, 65, 31, 113, 33, 21, 32, 21, 65, 8, 65, 5, 107, 116, 32, 21, 65, 10, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 22, 32, 20, 32, 22, 58, 0, 0, 11, 2, 64, 32, 11, 65, 3, 106, 33, 23, 65, 255, 1, 33, 24, 32, 23, 32, 24, 58, 0, 0, 11, 11, 5, 2, 64, 2, 64, 32, 11, 65, 0, 106, 33, 25, 2, 127, 32, 13, 65, 255, 255, 3, 113, 65, 8, 118, 65, 15, 113, 33, 26, 32, 26, 65, 4, 116, 32, 26, 114, 65, 255, 1, 113, 12, 0, 11, 33, 27, 32, 25, 32, 27, 58, 0, 0, 11, 2, 64, 32, 11, 65, 1, 106, 33, 28, 2, 127, 32, 13, 65, 255, 255, 3, 113, 65, 4, 118, 65, 15, 113, 33, 29, 32, 29, 65, 4, 116, 32, 29, 114, 65, 255, 1, 113, 12, 0, 11, 33, 30, 32, 28, 32, 30, 58, 0, 0, 11, 2, 64, 32, 11, 65, 2, 106, 33, 31, 2, 127, 32, 13, 65, 15, 113, 33, 32, 32, 32, 65, 4, 116, 32, 32, 114, 65, 255, 1, 113, 12, 0, 11, 33, 33, 32, 31, 32, 33, 58, 0, 0, 11, 2, 64, 32, 11, 65, 3, 106, 33, 34, 2, 127, 32, 13, 65, 255, 1, 113, 65, 12, 118, 33, 35, 32, 35, 65, 8, 65, 3, 107, 116, 32, 35, 65, 8, 65, 6, 107, 116, 114, 32, 35, 65, 9, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 36, 32, 34, 32, 36, 58, 0, 0, 11, 11, 11, 32, 5, 65, 2, 106, 33, 5, 11, 32, 9, 65, 1, 106, 33, 9, 12, 2, 11, 11, 11, 11, 32, 8, 65, 1, 106, 33, 8, 12, 2, 11, 11, 11, 11, 32, 7, 65, 4, 106, 33, 7, 12, 2, 11, 11, 11, 11, 32, 6, 65, 4, 106, 33, 6, 12, 2, 11, 11, 11, 11, 11, 163, 3, 1, 23, 127, 65, 0, 33, 5, 2, 64, 65, 0, 33, 6, 3, 64, 32, 6, 32, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 7, 3, 64, 32, 7, 32, 3, 73, 4, 64, 2, 64, 2, 64, 2, 64, 65, 0, 33, 8, 3, 64, 32, 8, 65, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 9, 3, 64, 32, 9, 65, 4, 73, 4, 64, 2, 64, 2, 64, 32, 3, 32, 6, 32, 8, 106, 108, 32, 7, 106, 32, 9, 106, 33, 10, 32, 1, 32, 10, 65, 4, 108, 106, 33, 11, 2, 64, 32, 11, 65, 3, 106, 33, 12, 2, 127, 32, 2, 32, 5, 106, 65, 0, 106, 33, 13, 32, 13, 45, 0, 0, 12, 0, 11, 33, 14, 32, 12, 32, 14, 58, 0, 0, 11, 2, 64, 32, 11, 65, 0, 106, 33, 15, 2, 127, 32, 2, 32, 5, 106, 65, 1, 106, 33, 16, 32, 16, 45, 0, 0, 12, 0, 11, 33, 17, 32, 15, 32, 17, 58, 0, 0, 11, 32, 5, 65, 2, 106, 33, 5, 11, 32, 9, 65, 1, 106, 33, 9, 12, 2, 11, 11, 11, 11, 32, 8, 65, 1, 106, 33, 8, 12, 2, 11, 11, 11, 11, 2, 64, 65, 0, 33, 18, 3, 64, 32, 18, 65, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 19, 3, 64, 32, 19, 65, 4, 73, 4, 64, 2, 64, 2, 64, 32, 3, 32, 6, 32, 18, 106, 108, 32, 7, 106, 32, 19, 106, 33, 20, 32, 1, 32, 20, 65, 4, 108, 106, 33, 21, 2, 64, 32, 21, 65, 1, 106, 33, 22, 2, 127, 32, 2, 32, 5, 106, 65, 0, 106, 33, 23, 32, 23, 45, 0, 0, 12, 0, 11, 33, 24, 32, 22, 32, 24, 58, 0, 0, 11, 2, 64, 32, 21, 65, 2, 106, 33, 25, 2, 127, 32, 2, 32, 5, 106, 65, 1, 106, 33, 26, 32, 26, 45, 0, 0, 12, 0, 11, 33, 27, 32, 25, 32, 27, 58, 0, 0, 11, 32, 5, 65, 2, 106, 33, 5, 11, 32, 19, 65, 1, 106, 33, 19, 12, 2, 11, 11, 11, 11, 32, 18, 65, 1, 106, 33, 18, 12, 2, 11, 11, 11, 11, 11, 32, 7, 65, 4, 106, 33, 7, 12, 2, 11, 11, 11, 11, 32, 6, 65, 4, 106, 33, 6, 12, 2, 11, 11, 11, 11, 11, 218, 15, 1, 131, 1, 127, 32, 0, 33, 5, 32, 2, 33, 6, 2, 64, 65, 0, 33, 7, 3, 64, 32, 7, 32, 4, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 8, 3, 64, 32, 8, 32, 3, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 9, 3, 64, 32, 9, 65, 8, 73, 4, 64, 2, 64, 2, 64, 65, 0, 33, 10, 3, 64, 32, 10, 65, 8, 73, 4, 64, 2, 64, 2, 64, 2, 127, 32, 6, 65, 0, 106, 33, 11, 32, 11, 45, 0, 0, 65, 8, 116, 32, 11, 65, 1, 106, 45, 0, 0, 114, 65, 255, 255, 3, 113, 12, 0, 11, 33, 12, 2, 127, 32, 6, 65, 2, 106, 33, 13, 32, 13, 45, 0, 0, 65, 8, 116, 32, 13, 65, 1, 106, 45, 0, 0, 114, 65, 255, 255, 3, 113, 12, 0, 11, 33, 14, 2, 64, 32, 5, 65, 0, 106, 33, 15, 2, 127, 32, 12, 65, 255, 255, 3, 113, 65, 11, 118, 65, 31, 113, 33, 16, 32, 16, 65, 8, 65, 5, 107, 116, 32, 16, 65, 10, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 17, 32, 15, 32, 17, 58, 0, 0, 11, 2, 64, 32, 5, 65, 1, 106, 33, 18, 2, 127, 32, 12, 65, 255, 255, 3, 113, 65, 5, 118, 65, 63, 113, 33, 19, 32, 19, 65, 8, 65, 6, 107, 116, 32, 19, 65, 12, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 20, 32, 18, 32, 20, 58, 0, 0, 11, 2, 64, 32, 5, 65, 2, 106, 33, 21, 2, 127, 32, 12, 65, 31, 113, 33, 22, 32, 22, 65, 8, 65, 5, 107, 116, 32, 22, 65, 10, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 23, 32, 21, 32, 23, 58, 0, 0, 11, 2, 64, 32, 5, 65, 3, 106, 33, 24, 65, 255, 1, 33, 25, 32, 24, 32, 25, 58, 0, 0, 11, 2, 64, 32, 5, 65, 4, 106, 33, 26, 2, 127, 32, 14, 65, 255, 255, 3, 113, 65, 11, 118, 65, 31, 113, 33, 27, 32, 27, 65, 8, 65, 5, 107, 116, 32, 27, 65, 10, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 28, 32, 26, 32, 28, 58, 0, 0, 11, 2, 64, 32, 5, 65, 5, 106, 33, 29, 2, 127, 32, 14, 65, 255, 255, 3, 113, 65, 5, 118, 65, 63, 113, 33, 30, 32, 30, 65, 8, 65, 6, 107, 116, 32, 30, 65, 12, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 31, 32, 29, 32, 31, 58, 0, 0, 11, 2, 64, 32, 5, 65, 6, 106, 33, 32, 2, 127, 32, 14, 65, 31, 113, 33, 33, 32, 33, 65, 8, 65, 5, 107, 116, 32, 33, 65, 10, 65, 8, 107, 118, 114, 65, 255, 1, 113, 12, 0, 11, 33, 34, 32, 32, 32, 34, 58, 0, 0, 11, 2, 64, 32, 5, 65, 7, 106, 33, 35, 65, 255, 1, 33, 36, 32, 35, 32, 36, 58, 0, 0, 11, 32, 12, 65, 255, 255, 3, 113, 32, 14, 65, 255, 255, 3, 113, 75, 4, 64, 2, 64, 2, 64, 32, 5, 65, 8, 106, 33, 37, 2, 127, 2, 127, 32, 5, 65, 4, 106, 33, 38, 32, 38, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 39, 2, 127, 32, 5, 65, 0, 106, 33, 40, 32, 40, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 41, 32, 39, 65, 1, 116, 32, 39, 106, 32, 41, 65, 2, 116, 32, 41, 106, 106, 65, 3, 118, 33, 42, 32, 42, 65, 255, 1, 113, 12, 0, 11, 33, 43, 32, 37, 32, 43, 58, 0, 0, 11, 2, 64, 32, 5, 65, 9, 106, 33, 44, 2, 127, 2, 127, 32, 5, 65, 5, 106, 33, 45, 32, 45, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 46, 2, 127, 32, 5, 65, 1, 106, 33, 47, 32, 47, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 48, 32, 46, 65, 1, 116, 32, 46, 106, 32, 48, 65, 2, 116, 32, 48, 106, 106, 65, 3, 118, 33, 49, 32, 49, 65, 255, 1, 113, 12, 0, 11, 33, 50, 32, 44, 32, 50, 58, 0, 0, 11, 2, 64, 32, 5, 65, 10, 106, 33, 51, 2, 127, 2, 127, 32, 5, 65, 6, 106, 33, 52, 32, 52, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 53, 2, 127, 32, 5, 65, 2, 106, 33, 54, 32, 54, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 55, 32, 53, 65, 1, 116, 32, 53, 106, 32, 55, 65, 2, 116, 32, 55, 106, 106, 65, 3, 118, 33, 56, 32, 56, 65, 255, 1, 113, 12, 0, 11, 33, 57, 32, 51, 32, 57, 58, 0, 0, 11, 2, 64, 32, 5, 65, 11, 106, 33, 58, 65, 255, 1, 33, 59, 32, 58, 32, 59, 58, 0, 0, 11, 2, 64, 32, 5, 65, 12, 106, 33, 60, 2, 127, 2, 127, 32, 5, 65, 0, 106, 33, 61, 32, 61, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 62, 2, 127, 32, 5, 65, 4, 106, 33, 63, 32, 63, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 64, 32, 62, 65, 1, 116, 32, 62, 106, 32, 64, 65, 2, 116, 32, 64, 106, 106, 65, 3, 118, 33, 65, 32, 65, 65, 255, 1, 113, 12, 0, 11, 33, 66, 32, 60, 32, 66, 58, 0, 0, 11, 2, 64, 32, 5, 65, 13, 106, 33, 67, 2, 127, 2, 127, 32, 5, 65, 1, 106, 33, 68, 32, 68, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 69, 2, 127, 32, 5, 65, 5, 106, 33, 70, 32, 70, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 71, 32, 69, 65, 1, 116, 32, 69, 106, 32, 71, 65, 2, 116, 32, 71, 106, 106, 65, 3, 118, 33, 72, 32, 72, 65, 255, 1, 113, 12, 0, 11, 33, 73, 32, 67, 32, 73, 58, 0, 0, 11, 2, 64, 32, 5, 65, 14, 106, 33, 74, 2, 127, 2, 127, 32, 5, 65, 2, 106, 33, 75, 32, 75, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 76, 2, 127, 32, 5, 65, 6, 106, 33, 77, 32, 77, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 78, 32, 76, 65, 1, 116, 32, 76, 106, 32, 78, 65, 2, 116, 32, 78, 106, 106, 65, 3, 118, 33, 79, 32, 79, 65, 255, 1, 113, 12, 0, 11, 33, 80, 32, 74, 32, 80, 58, 0, 0, 11, 2, 64, 32, 5, 65, 15, 106, 33, 81, 65, 255, 1, 33, 82, 32, 81, 32, 82, 58, 0, 0, 11, 11, 5, 2, 64, 2, 64, 32, 5, 65, 8, 106, 33, 83, 2, 127, 2, 127, 32, 5, 65, 0, 106, 33, 84, 32, 84, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 85, 2, 127, 32, 5, 65, 4, 106, 33, 86, 32, 86, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 87, 32, 85, 32, 87, 106, 65, 1, 118, 33, 88, 32, 88, 65, 255, 1, 113, 12, 0, 11, 33, 89, 32, 83, 32, 89, 58, 0, 0, 11, 2, 64, 32, 5, 65, 9, 106, 33, 90, 2, 127, 2, 127, 32, 5, 65, 1, 106, 33, 91, 32, 91, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 92, 2, 127, 32, 5, 65, 5, 106, 33, 93, 32, 93, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 94, 32, 92, 32, 94, 106, 65, 1, 118, 33, 95, 32, 95, 65, 255, 1, 113, 12, 0, 11, 33, 96, 32, 90, 32, 96, 58, 0, 0, 11, 2, 64, 32, 5, 65, 10, 106, 33, 97, 2, 127, 2, 127, 32, 5, 65, 2, 106, 33, 98, 32, 98, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 99, 2, 127, 32, 5, 65, 6, 106, 33, 100, 32, 100, 45, 0, 0, 12, 0, 11, 65, 255, 1, 113, 33, 101, 32, 99, 32, 101, 106, 65, 1, 118, 33, 102, 32, 102, 65, 255, 1, 113, 12, 0, 11, 33, 103, 32, 97, 32, 103, 58, 0, 0, 11, 2, 64, 32, 5, 65, 11, 106, 33, 104, 65, 255, 1, 33, 105, 32, 104, 32, 105, 58, 0, 0, 11, 2, 64, 32, 5, 65, 12, 106, 33, 106, 2, 127, 32, 5, 65, 8, 106, 33, 107, 32, 107, 45, 0, 0, 12, 0, 11, 33, 108, 32, 106, 32, 108, 58, 0, 0, 11, 2, 64, 32, 5, 65, 13, 106, 33, 109, 2, 127, 32, 5, 65, 9, 106, 33, 110, 32, 110, 45, 0, 0, 12, 0, 11, 33, 111, 32, 109, 32, 111, 58, 0, 0, 11, 2, 64, 32, 5, 65, 14, 106, 33, 112, 2, 127, 32, 5, 65, 10, 106, 33, 113, 32, 113, 45, 0, 0, 12, 0, 11, 33, 114, 32, 112, 32, 114, 58, 0, 0, 11, 2, 64, 32, 5, 65, 15, 106, 33, 115, 65, 0, 33, 116, 32, 115, 32, 116, 58, 0, 0, 11, 11, 11, 2, 64, 65, 0, 33, 117, 3, 64, 32, 117, 65, 4, 72, 4, 64, 2, 64, 2, 64, 2, 127, 32, 6, 65, 4, 106, 32, 117, 106, 33, 118, 32, 118, 45, 0, 0, 12, 0, 11, 33, 119, 2, 64, 65, 0, 33, 120, 3, 64, 32, 120, 65, 4, 72, 4, 64, 2, 64, 2, 64, 32, 7, 32, 9, 106, 32, 117, 106, 32, 3, 108, 32, 8, 106, 32, 10, 106, 32, 120, 106, 33, 121, 32, 1, 32, 121, 65, 4, 108, 106, 33, 122, 32, 119, 65, 255, 1, 113, 65, 6, 118, 65, 3, 113, 33, 123, 2, 64, 32, 122, 65, 0, 106, 33, 124, 2, 127, 32, 5, 32, 123, 65, 4, 108, 65, 255, 1, 113, 106, 65, 0, 106, 33, 125, 32, 125, 45, 0, 0, 12, 0, 11, 33, 126, 32, 124, 32, 126, 58, 0, 0, 11, 2, 64, 32, 122, 65, 1, 106, 33, 127, 2, 127, 32, 5, 32, 123, 65, 4, 108, 65, 255, 1, 113, 106, 65, 1, 106, 33, 128, 1, 32, 128, 1, 45, 0, 0, 12, 0, 11, 33, 129, 1, 32, 127, 32, 129, 1, 58, 0, 0, 11, 2, 64, 32, 122, 65, 2, 106, 33, 130, 1, 2, 127, 32, 5, 32, 123, 65, 4, 108, 65, 255, 1, 113, 106, 65, 2, 106, 33, 131, 1, 32, 131, 1, 45, 0, 0, 12, 0, 11, 33, 132, 1, 32, 130, 1, 32, 132, 1, 58, 0, 0, 11, 2, 64, 32, 122, 65, 3, 106, 33, 133, 1, 2, 127, 32, 5, 32, 123, 65, 4, 108, 65, 255, 1, 113, 106, 65, 3, 106, 33, 134, 1, 32, 134, 1, 45, 0, 0, 12, 0, 11, 33, 135, 1, 32, 133, 1, 32, 135, 1, 58, 0, 0, 11, 32, 119, 65, 2, 116, 33, 119, 11, 32, 120, 65, 1, 106, 33, 120, 12, 2, 11, 11, 11, 11, 11, 32, 117, 65, 1, 106, 33, 117, 12, 2, 11, 11, 11, 11, 32, 6, 65, 8, 106, 33, 6, 11, 32, 10, 65, 4, 106, 33, 10, 12, 2, 11, 11, 11, 11, 32, 9, 65, 4, 106, 33, 9, 12, 2, 11, 11, 11, 11, 32, 8, 65, 8, 106, 33, 8, 12, 2, 11, 11, 11, 11, 32, 7, 65, 8, 106, 33, 7, 12, 2, 11, 11, 11, 11, 11]);
             ;
-            gx_texture_asModule = new WebAssembly.Module(gx_texture_asCode);
         }
     };
 });
@@ -3182,29 +3186,31 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
     "use strict";
     var __moduleName = context_13 && context_13.id;
     function decompress(srcBuffer) {
-        var srcView = srcBuffer.createDataView();
-        util_3.assert(util_3.readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
-        var dstSize = srcView.getUint32(0x04, false);
-        var srcSize = srcBuffer.byteLength;
-        var pDstOffs = 0;
-        var pSrcOffs = util_3.align(dstSize, 0x10);
-        var heapSize = pSrcOffs + util_3.align(srcSize, 0x10);
-        var heapBase = 0;
-        var wasmMemory = new WasmMemoryManager_1.default(wasmInstance.memory);
-        wasmMemory.resize(heapBase + heapSize);
-        var mem = wasmMemory.mem;
-        var heap = wasmMemory.heap;
-        var pDst = heapBase + pDstOffs;
-        var pSrc = heapBase + pSrcOffs;
-        // Copy src buffer.
-        heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
-        wasmInstance.decompress(pDst, pSrc, dstSize);
-        // Copy the result buffer to a new buffer for memory usage purposes.
-        var result = new ArrayBufferSlice_4.default(heap.buffer).copySlice(pDst, dstSize);
-        return result;
+        return _wasmInstance.then(function (wasmInstance) {
+            var srcView = srcBuffer.createDataView();
+            util_3.assert(util_3.readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
+            var dstSize = srcView.getUint32(0x04, false);
+            var srcSize = srcBuffer.byteLength;
+            var pDstOffs = 0;
+            var pSrcOffs = util_3.align(dstSize, 0x10);
+            var heapSize = pSrcOffs + util_3.align(srcSize, 0x10);
+            var heapBase = 0;
+            var wasmMemory = new WasmMemoryManager_1.default(wasmInstance.memory);
+            wasmMemory.resize(heapBase + heapSize);
+            var mem = wasmMemory.mem;
+            var heap = wasmMemory.heap;
+            var pDst = heapBase + pDstOffs;
+            var pSrc = heapBase + pSrcOffs;
+            // Copy src buffer.
+            heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
+            wasmInstance.decompress(pDst, pSrc, dstSize);
+            // Copy the result buffer to a new buffer for memory usage purposes.
+            var result = new ArrayBufferSlice_4.default(heap.buffer).copySlice(pDst, dstSize);
+            return result;
+        });
     }
     exports_13("decompress", decompress);
-    var util_3, wat_modules_1, ArrayBufferSlice_4, WasmMemoryManager_1, wasmInstance;
+    var util_3, wat_modules_1, ArrayBufferSlice_4, WasmMemoryManager_1, _wasmInstance;
     return {
         setters: [
             function (util_3_1) {
@@ -3224,7 +3230,7 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
             // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
             // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
             // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-            wasmInstance = wat_modules_1.yaz0_asInstance();
+            _wasmInstance = wat_modules_1.yaz0_asInstance();
         }
     };
 });
@@ -6300,7 +6306,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         return textureSize;
     }
     exports_22("calcFullTextureSize", calcFullTextureSize);
-    function decode_Wasm(texture, decoder, scratchSize) {
+    function decode_Wasm(wasmInstance, texture, decoder, scratchSize) {
         if (scratchSize === void 0) { scratchSize = 0; }
         var dstSize = texture.width * texture.height * 4;
         var srcSize = texture.data.byteLength;
@@ -6318,43 +6324,45 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         // Copy the result buffer to a new buffer for memory usage purposes.
         var pixelsBuffer = new ArrayBufferSlice_6.default(heap.buffer).copyToBuffer(pDst, dstSize);
         var pixels = new Uint8Array(pixelsBuffer);
-        return { pixels: pixels, width: texture.width, height: texture.height };
+        return { pixels: pixels };
     }
     function decode_Dummy(texture) {
         var pixels = new Uint8Array(texture.width * texture.height * 4);
         pixels.fill(0xFF);
-        return { pixels: pixels, width: texture.width, height: texture.height };
+        return { pixels: pixels };
     }
     function decodeTexture(texture) {
         if (texture.data === null)
-            return decode_Dummy(texture);
-        switch (texture.format) {
-            case 0 /* I4 */:
-                return decode_Wasm(texture, wasmInstance.decode_I4);
-            case 1 /* I8 */:
-                return decode_Wasm(texture, wasmInstance.decode_I8);
-            case 2 /* IA4 */:
-                return decode_Wasm(texture, wasmInstance.decode_IA4);
-            case 3 /* IA8 */:
-                return decode_Wasm(texture, wasmInstance.decode_IA8);
-            case 4 /* RGB565 */:
-                return decode_Wasm(texture, wasmInstance.decode_RGB565);
-            case 5 /* RGB5A3 */:
-                return decode_Wasm(texture, wasmInstance.decode_RGB5A3);
-            case 6 /* RGBA8 */:
-                return decode_Wasm(texture, wasmInstance.decode_RGBA8);
-            case 14 /* CMPR */:
-                return decode_Wasm(texture, wasmInstance.decode_CMPR, 16);
-            case 8 /* C4 */:
-            case 9 /* C8 */:
-            case 10 /* C14X2 */:
-            default:
-                console.error("Unsupported texture format " + texture.format + " on texture " + texture.name);
-                return decode_Dummy(texture);
-        }
+            return Promise.resolve(decode_Dummy(texture));
+        return _wasmInstance.then(function (wasmInstance) {
+            switch (texture.format) {
+                case 0 /* I4 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_I4);
+                case 1 /* I8 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_I8);
+                case 2 /* IA4 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_IA4);
+                case 3 /* IA8 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_IA8);
+                case 4 /* RGB565 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGB565);
+                case 5 /* RGB5A3 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGB5A3);
+                case 6 /* RGBA8 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGBA8);
+                case 14 /* CMPR */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_CMPR, 16);
+                case 8 /* C4 */:
+                case 9 /* C8 */:
+                case 10 /* C14X2 */:
+                default:
+                    console.error("Unsupported texture format " + texture.format + " on texture " + texture.name);
+                    return decode_Dummy(texture);
+            }
+        });
     }
     exports_22("decodeTexture", decodeTexture);
-    var ArrayBufferSlice_6, util_9, wat_modules_2, WasmMemoryManager_2, wasmInstance;
+    var ArrayBufferSlice_6, util_9, wat_modules_2, WasmMemoryManager_2, _wasmInstance;
     return {
         setters: [
             function (ArrayBufferSlice_6_1) {
@@ -6374,7 +6382,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
             // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
             // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
             // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-            wasmInstance = wat_modules_2.gx_texture_asInstance();
+            _wasmInstance = wat_modules_2.gx_texture_asInstance();
         }
     };
 });
@@ -6892,16 +6900,22 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
                     var format = texture.format;
                     var offs = 0, width = texture.width, height = texture.height;
-                    for (var i = 0; i < texture.mipCount; i++) {
+                    var _loop_7 = function (i) {
                         var name_6 = texture.name;
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data !== null ? texture.data.subarray(offs, size) : null;
                         var surface = { name: name_6, format: format, width: width, height: height, data: data };
-                        var decodedTexture = GX_Texture.decodeTexture(surface);
-                        gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
+                        var level = i;
+                        GX_Texture.decodeTexture(surface).then(function (rgbaTexture) {
+                            gl.bindTexture(gl.TEXTURE_2D, texId);
+                            gl.texImage2D(gl.TEXTURE_2D, level, gl.RGBA8, surface.width, surface.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgbaTexture.pixels);
+                        });
                         offs += size;
                         width /= 2;
                         height /= 2;
+                    };
+                    for (var i = 0; i < texture.mipCount; i++) {
+                        _loop_7(i);
                     }
                     return texId;
                 };
@@ -6909,24 +6923,28 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     var surfaces = [];
                     var width = texture.width, height = texture.height, offs = 0;
                     var format = texture.format;
-                    for (var i = 0; i < texture.mipCount; i++) {
+                    var _loop_8 = function (i) {
                         var name_7 = texture.name;
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data !== null ? texture.data.subarray(offs, size) : null;
                         var surface = { name: name_7, format: format, width: width, height: height, data: data };
-                        var rgbaTexture = GX_Texture.decodeTexture(surface);
                         var canvas = document.createElement('canvas');
-                        canvas.width = rgbaTexture.width;
-                        canvas.height = rgbaTexture.height;
+                        canvas.width = width;
+                        canvas.height = height;
                         canvas.title = texture.name + " " + texture.format;
-                        var ctx = canvas.getContext('2d');
-                        var imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
-                        imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-                        ctx.putImageData(imgData, 0, 0);
+                        GX_Texture.decodeTexture(surface).then(function (rgbaTexture) {
+                            var ctx = canvas.getContext('2d');
+                            var imgData = new ImageData(surface.width, surface.height);
+                            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
+                            ctx.putImageData(imgData, 0, 0);
+                        });
                         surfaces.push(canvas);
                         offs += size;
                         width /= 2;
                         height /= 2;
+                    };
+                    for (var i = 0; i < texture.mipCount; i++) {
+                        _loop_8(i);
                     }
                     return { name: texture.name, surfaces: surfaces };
                 };
@@ -7271,9 +7289,8 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                     var _this = this;
                     var basePath = "data/j3d/ztp/" + this.folder;
                     var paths = __spread(["STG_00.arc"], this.roomPaths).map(function (path) { return basePath + "/" + path; });
-                    return Progressable_2.default.all(paths.map(function (path) { return util_10.fetch(path); })).then(function (buffers) {
-                        var stageBuffer = Yaz0.decompress(buffers.shift());
-                        var stageRarc = RARC.parse(stageBuffer);
+                    return Progressable_2.default.all(paths.map(function (path) { return _this.fetchRarc(path); })).then(function (rarcs) {
+                        var stageRarc = rarcs.shift();
                         var texcFolder = stageRarc.findDir("texc");
                         var extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
                         var extraTextures = extraTextureFiles.map(function (file) {
@@ -7291,11 +7308,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                             scene.setIsSkybox(true);
                             return scene;
                         }).filter(function (s) { return !!s; });
-                        var roomBuffers = buffers;
-                        var roomRarcs = roomBuffers.map(function (buffer) {
-                            buffer = Yaz0.decompress(buffer);
-                            return RARC.parse(buffer);
-                        });
+                        var roomRarcs = rarcs;
                         var roomScenes_ = roomRarcs.map(function (rarc, i) {
                             var rarcBasename = _this.roomPaths[i].split('.')[0];
                             return createScenesFromRARC(gl, rarcBasename, rarc, extraTextures);
@@ -7303,6 +7316,13 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                         var roomScenes = [];
                         roomScenes_.forEach(function (scenes) { return roomScenes.push.apply(roomScenes, scenes); });
                         return new TwilightPrincessRenderer(stageRarc, roomRarcs, skyboxScenes, roomScenes);
+                    });
+                };
+                TwilightPrincessSceneDesc.prototype.fetchRarc = function (path) {
+                    return util_10.fetch(path).then(function (buffer) {
+                        return Yaz0.decompress(buffer);
+                    }).then(function (buffer) {
+                        return RARC.parse(buffer);
                     });
                 };
                 return TwilightPrincessSceneDesc;
@@ -7347,39 +7367,46 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
             return 0;
     }
     function createScenesFromBuffer(gl, buffer) {
-        if (util_11.readString(buffer, 0, 4) === 'Yaz0')
-            buffer = Yaz0.decompress(buffer);
-        if (util_11.readString(buffer, 0, 4) === 'RARC') {
-            var rarc_1 = RARC.parse(buffer);
-            var bmdFiles = rarc_1.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
-            var scenes = bmdFiles.map(function (bmdFile) {
-                // Find the corresponding btk.
-                var basename = bmdFile.name.split('.')[0];
-                var btkFile = rarc_1.files.find(function (f) { return f.name === basename + ".btk"; });
-                var brkFile = rarc_1.files.find(function (f) { return f.name === basename + ".brk"; });
-                var bckFile = rarc_1.files.find(function (f) { return f.name === basename + ".bck"; });
-                var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
-                var scene = createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile);
-                scene.name = basename;
-                if (basename.includes('_sky'))
-                    scene.setIsSkybox(true);
-                return scene;
-            });
-            // Sort skyboxen before non-skyboxen.
-            scenes = scenes.sort(function (a, b) {
-                return boolSort(a.isSkybox, b.isSkybox);
-            });
-            return scenes;
-        }
-        if (['J3D2bmd3', 'J3D2bdl4'].includes(util_11.readString(buffer, 0, 8))) {
-            var bmd = j3d_3.BMD.parse(buffer);
-            return [new render_6.Scene(gl, bmd, null, null, null, null)];
-        }
-        return null;
+        return Promise.resolve(buffer).then(function (buffer) {
+            if (util_11.readString(buffer, 0, 4) === 'Yaz0')
+                return Yaz0.decompress(buffer);
+            else
+                return buffer;
+        }).then(function (buffer) {
+            if (util_11.readString(buffer, 0, 4) === 'RARC') {
+                var rarc_1 = RARC.parse(buffer);
+                var bmdFiles = rarc_1.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
+                var scenes = bmdFiles.map(function (bmdFile) {
+                    // Find the corresponding btk.
+                    var basename = bmdFile.name.split('.')[0];
+                    var btkFile = rarc_1.files.find(function (f) { return f.name === basename + ".btk"; });
+                    var brkFile = rarc_1.files.find(function (f) { return f.name === basename + ".brk"; });
+                    var bckFile = rarc_1.files.find(function (f) { return f.name === basename + ".bck"; });
+                    var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
+                    var scene = createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+                    scene.name = basename;
+                    if (basename.includes('_sky'))
+                        scene.setIsSkybox(true);
+                    return scene;
+                });
+                // Sort skyboxen before non-skyboxen.
+                scenes = scenes.sort(function (a, b) {
+                    return boolSort(a.isSkybox, b.isSkybox);
+                });
+                return scenes;
+            }
+            if (['J3D2bmd3', 'J3D2bdl4'].includes(util_11.readString(buffer, 0, 8))) {
+                var bmd = j3d_3.BMD.parse(buffer);
+                return [new render_6.Scene(gl, bmd, null, null, null, null)];
+            }
+            return null;
+        });
     }
     exports_25("createScenesFromBuffer", createScenesFromBuffer);
     function createMultiSceneFromBuffer(gl, buffer) {
-        return new MultiScene(createScenesFromBuffer(gl, buffer));
+        return createScenesFromBuffer(gl, buffer).then(function (scenes) {
+            return new MultiScene(scenes);
+        });
     }
     exports_25("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
     var util_11, Yaz0, j3d_3, RARC, render_6, MultiScene;
@@ -7463,7 +7490,8 @@ System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_26,
                 MKDDSceneDesc.prototype.createScene = function (gl) {
                     var path = "data/j3d/mkdd/Course/" + this.path;
                     return util_12.fetch(path).then(function (buffer) {
-                        var multiScene = scenes_2.createMultiSceneFromBuffer(gl, buffer);
+                        return scenes_2.createMultiSceneFromBuffer(gl, buffer);
+                    }).then(function (multiScene) {
                         multiScene.scenes.forEach(function (scene) {
                             // Kill skybox flag.
                             scene.setIsSkybox(false);
@@ -7756,13 +7784,21 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     var _this = this;
                     var roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
                     return Progressable_3.default.all([
-                        util_13.fetch("data/j3d/ww/sea/Stage.arc"),
-                        util_13.fetch(this.path),
+                        this.fetchRarc("data/j3d/ww/sea/Stage.arc"),
+                        this.fetchRarc(this.path),
                     ]).then(function (_a) {
-                        var _b = __read(_a, 2), stage = _b[0], room = _b[1];
-                        var stageRarc = RARC.parse(Yaz0.decompress(stage));
-                        var roomRarc = RARC.parse(room);
+                        var _b = __read(_a, 2), stageRarc = _b[0], roomRarc = _b[1];
                         return new WindWakerRenderer(gl, roomIdx, stageRarc, roomRarc, _this.cameraPos);
+                    });
+                };
+                WindWakerSceneDesc.prototype.fetchRarc = function (path) {
+                    return util_13.fetch(path).then(function (buffer) {
+                        if (util_13.readString(buffer, 0, 4) === 'Yaz0')
+                            return Yaz0.decompress(buffer);
+                        else
+                            return buffer;
+                    }).then(function (buffer) {
+                        return RARC.parse(buffer);
                     });
                 };
                 return WindWakerSceneDesc;
@@ -8100,7 +8136,9 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                 SunshineSceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
                     return util_14.fetch(this.path).then(function (result) {
-                        var rarc = RARC.parse(Yaz0.decompress(result));
+                        return Yaz0.decompress(result);
+                    }).then(function (buffer) {
+                        var rarc = RARC.parse(buffer);
                         var sceneBin = rarc.findFile('map/scene.bin');
                         var sceneBinObj = readSceneBin(sceneBin.buffer);
                         console.log(sceneBinObj);
@@ -8438,12 +8476,13 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "j3d/scenes
                     return util_15.fetch(path).then(function (buffer) { return _this.createSceneFromBuffer(gl, buffer, isSkybox); });
                 };
                 SMGSceneDesc.prototype.createSceneFromBuffer = function (gl, buffer, isSkybox) {
-                    var scenes = scenes_7.createScenesFromBuffer(gl, buffer);
-                    util_15.assert(scenes.length === 1);
-                    var scene = scenes[0];
-                    scene.setFPS(60);
-                    scene.setIsSkybox(isSkybox);
-                    return scene;
+                    return scenes_7.createScenesFromBuffer(gl, buffer).then(function (scenes) {
+                        util_15.assert(scenes.length === 1);
+                        var scene = scenes[0];
+                        scene.setFPS(60);
+                        scene.setIsSkybox(isSkybox);
+                        return scene;
+                    });
                 };
                 return SMGSceneDesc;
             }());
@@ -13735,7 +13774,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         state.useProgram(prog);
                         state.bindModelView(_this.isSkybox);
                         state.useFlags(renderFlags);
-                        var _loop_7 = function (i) {
+                        var _loop_9 = function (i) {
                             var attribName = attribNames[i];
                             gl.activeTexture(gl.TEXTURE0 + i);
                             var uniformLocation = void 0;
@@ -13764,7 +13803,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         };
                         // Textures.
                         for (var i = 0; i < attribNames.length; i++) {
-                            _loop_7(i);
+                            _loop_9(i);
                         }
                     };
                     var e_49, _a;
@@ -13924,7 +13963,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     var texture = textureEntry.texture;
                     var surface = texture.surface;
                     var canvases = [];
-                    var _loop_8 = function (i) {
+                    var _loop_10 = function (i) {
                         var mipLevel = i;
                         var canvas = document.createElement('canvas');
                         canvas.width = 0;
@@ -13984,7 +14023,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         });
                     };
                     for (var i = 0; i < surface.numMips; i++) {
-                        _loop_8(i);
+                        _loop_10(i);
                     }
                     this.textures.push({ name: textureEntry.entry.name, surfaces: canvases });
                     return glTexture;
@@ -14056,11 +14095,16 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
     exports_53("createSceneFromFRESBuffer", createSceneFromFRESBuffer);
     function createSceneFromSARCBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
-        if (util_30.readString(buffer, 0, 4) === 'Yaz0')
-            buffer = Yaz0.decompress(buffer);
-        var sarc = SARC.parse(buffer);
-        var file = sarc.files.find(function (file) { return file.name.endsWith('.bfres'); });
-        return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
+        return Promise.resolve(buffer).then(function (buffer) {
+            if (util_30.readString(buffer, 0, 4) === 'Yaz0')
+                return Yaz0.decompress(buffer);
+            else
+                return buffer;
+        }).then(function (buffer) {
+            var sarc = SARC.parse(buffer);
+            var file = sarc.files.find(function (file) { return file.name.endsWith('.bfres'); });
+            return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
+        });
     }
     exports_53("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
     var BFRES, SARC, Yaz0, render_21, Progressable_6, util_30, SplatoonRenderer, SplatoonSceneDesc, name, id, sceneDescs, sceneGroup;
@@ -14494,7 +14538,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_57, context_57)
         // Regular resource table.
         var resourceTableCount = view.getUint32(offs + 0x00);
         offs += 0x04;
-        var _loop_9 = function (i) {
+        var _loop_11 = function (i) {
             var isCompressed = !!view.getUint32(offs + 0x00);
             var fourCC = util_32.readString(buffer, offs + 0x04, 4, false);
             var fileID = util_32.readString(buffer, offs + 0x08, 4, false);
@@ -14528,7 +14572,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_57, context_57)
                 namedResourceTable.set(fileResource.name, fileResource);
         };
         for (var i = 0; i < resourceTableCount; i++) {
-            _loop_9(i);
+            _loop_11(i);
         }
         return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
     }
@@ -14882,7 +14926,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
         var firstSurfaceOffs = sectionOffsTable[sectionIndex];
         var surfaceCount = view.getUint32(surfaceTableOffs + 0x00);
         var surfaces = [];
-        var _loop_10 = function (i) {
+        var _loop_12 = function (i) {
             var surfaceOffs = sectionOffsTable[sectionIndex];
             var surfaceEnd = firstSurfaceOffs + view.getUint32(surfaceTableOffs + 0x04 + i * 0x04);
             var centerX = view.getFloat32(surfaceOffs + 0x00);
@@ -15077,7 +15121,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             var e_55, _a;
         };
         for (var i = 0; i < surfaceCount; i++) {
-            _loop_10(i);
+            _loop_12(i);
         }
         var geometry = { surfaces: surfaces };
         return [geometry, sectionIndex];
@@ -15465,16 +15509,21 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
                     var format = texture.format;
                     var offs = 0, width = texture.width, height = texture.height;
-                    for (var i = 0; i < texture.mipCount; i++) {
+                    var _loop_13 = function (i) {
                         var name_17 = "";
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data.subarray(offs, size);
                         var surface = { name: name_17, format: format, width: width, height: height, data: data };
-                        var decodedTexture = GX_Texture.decodeTexture(surface);
-                        gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
+                        GX_Texture.decodeTexture(surface).then(function (rgbaTexture) {
+                            gl.bindTexture(gl.TEXTURE_2D, texId);
+                            gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, surface.width, surface.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgbaTexture.pixels);
+                        });
                         offs += size;
                         width /= 2;
                         height /= 2;
+                    };
+                    for (var i = 0; i < texture.mipCount; i++) {
+                        _loop_13(i);
                     }
                     return texId;
                 };
@@ -15519,23 +15568,27 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     var surfaces = [];
                     var width = texture.width, height = texture.height, offs = 0;
                     var format = texture.format;
-                    for (var i = 0; i < texture.mipCount; i++) {
+                    var _loop_14 = function (i) {
                         var name_18 = "";
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data.subarray(offs, size);
                         var surface = { name: name_18, format: format, width: width, height: height, data: data };
-                        var rgbaTexture = GX_Texture.decodeTexture(surface);
                         var canvas = document.createElement('canvas');
-                        canvas.width = rgbaTexture.width;
-                        canvas.height = rgbaTexture.height;
-                        var ctx = canvas.getContext('2d');
-                        var imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
-                        imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-                        ctx.putImageData(imgData, 0, 0);
+                        canvas.width = width;
+                        canvas.height = height;
+                        GX_Texture.decodeTexture(surface).then(function (rgbaTexture) {
+                            var ctx = canvas.getContext('2d');
+                            var imgData = new ImageData(surface.width, surface.height);
+                            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
+                            ctx.putImageData(imgData, 0, 0);
+                        });
                         surfaces.push(canvas);
                         offs += size;
                         width /= 2;
                         height /= 2;
+                    };
+                    for (var i = 0; i < texture.mipCount; i++) {
+                        _loop_14(i);
                     }
                     return { name: "" + name, surfaces: surfaces };
                 };
@@ -15959,12 +16012,12 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     return pr;
                 };
                 DroppedFileSceneDesc.prototype.createSceneFromFile = function (gl, file, buffer) {
-                    var scene;
                     if (file.name.endsWith('.bfres'))
-                        return FRES.createSceneFromFRESBuffer(gl, buffer);
-                    scene = J3D.createMultiSceneFromBuffer(gl, buffer);
-                    if (scene)
-                        return scene;
+                        return Promise.resolve(FRES.createSceneFromFRESBuffer(gl, buffer));
+                    // XXX(jstpierre): Figure out WTF to do here...
+                    var promise = J3D.createMultiSceneFromBuffer(gl, buffer);
+                    if (promise)
+                        return promise;
                     return null;
                 };
                 DroppedFileSceneDesc.prototype.createScene = function (gl) {
@@ -16259,8 +16312,9 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
     var __moduleName = context_67 && context_67.id;
     function createScene(gl, name) {
         return util_39.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
-            var bufferSlice = Yaz0.decompress(buffer);
-            var rarc = RARC.parse(bufferSlice);
+            return Yaz0.decompress(buffer);
+        }).then(function (buffer) {
+            var rarc = RARC.parse(buffer);
             var skyScene = sms_scenes_1.SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
             var bmdFile = rarc.findFile('map/map/sea.bmd');
             var btkFile = rarc.findFile('map/map/sea.btk');

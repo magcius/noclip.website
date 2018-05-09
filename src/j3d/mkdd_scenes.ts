@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 
-import { createMultiSceneFromBuffer } from './scenes';
+import { createMultiSceneFromBuffer, MultiScene } from './scenes';
 
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -18,8 +18,9 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const path = `data/j3d/mkdd/Course/${this.path}`;
-        return fetch(path).then((buffer: ArrayBufferSlice): Viewer.MainScene => {
-            const multiScene = createMultiSceneFromBuffer(gl, buffer);
+        return fetch(path).then((buffer: ArrayBufferSlice) => {
+            return createMultiSceneFromBuffer(gl, buffer);
+        }).then((multiScene: MultiScene): Viewer.MainScene => {
             multiScene.scenes.forEach((scene) => {
                 // Kill skybox flag.
                 scene.setIsSkybox(false);

@@ -33,8 +33,6 @@ export interface Texture {
 
 export interface DecodedTexture {
     pixels: ArrayBufferView;
-    width: number;
-    height: number;
 }
 
 export function calcPaletteSize(format: GX.TexFormat, palette: GX.TexPalette) {
@@ -97,9 +95,9 @@ export function calcFullTextureSize(format: GX.TexFormat, width: number, height:
 // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
 // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
 // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-const wasmInstance = gx_texture_asInstance();
+const _wasmInstance = gx_texture_asInstance();
 
-function decode_Wasm(texture: Texture, decoder: TextureDecoder, scratchSize: number = 0): DecodedTexture {
+function decode_Wasm(wasmInstance: gx_texture_asExports, texture: Texture, decoder: TextureDecoder, scratchSize: number = 0): DecodedTexture {
     const dstSize = texture.width * texture.height * 4;
     const srcSize = texture.data.byteLength;
 
@@ -121,41 +119,43 @@ function decode_Wasm(texture: Texture, decoder: TextureDecoder, scratchSize: num
     // Copy the result buffer to a new buffer for memory usage purposes.
     const pixelsBuffer = new ArrayBufferSlice(heap.buffer).copyToBuffer(pDst, dstSize);
     const pixels = new Uint8Array(pixelsBuffer);
-    return { pixels, width: texture.width, height: texture.height };
+    return { pixels };
 }
 
 function decode_Dummy(texture: Texture): DecodedTexture {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     pixels.fill(0xFF);
-    return { pixels, width: texture.width, height: texture.height };
+    return { pixels };
 }
 
-export function decodeTexture(texture: Texture): DecodedTexture {
+export function decodeTexture(texture: Texture): Promise<DecodedTexture> {
     if (texture.data === null)
-        return decode_Dummy(texture);
+        return Promise.resolve(decode_Dummy(texture));
 
-    switch (texture.format) {
-    case GX.TexFormat.I4:
-        return decode_Wasm(texture, wasmInstance.decode_I4);
-    case GX.TexFormat.I8:
-        return decode_Wasm(texture, wasmInstance.decode_I8);
-    case GX.TexFormat.IA4:
-        return decode_Wasm(texture, wasmInstance.decode_IA4);
-    case GX.TexFormat.IA8:
-        return decode_Wasm(texture, wasmInstance.decode_IA8);
-    case GX.TexFormat.RGB565:
-        return decode_Wasm(texture, wasmInstance.decode_RGB565);
-    case GX.TexFormat.RGB5A3:
-        return decode_Wasm(texture, wasmInstance.decode_RGB5A3);
-    case GX.TexFormat.RGBA8:
-        return decode_Wasm(texture, wasmInstance.decode_RGBA8);
-    case GX.TexFormat.CMPR:
-        return decode_Wasm(texture, wasmInstance.decode_CMPR, 16);
-    case GX.TexFormat.C4:
-    case GX.TexFormat.C8:
-    case GX.TexFormat.C14X2:
-    default:
-        console.error(`Unsupported texture format ${texture.format} on texture ${texture.name}`);
-        return decode_Dummy(texture);
-    }
+    return _wasmInstance.then((wasmInstance) => {
+        switch (texture.format) {
+        case GX.TexFormat.I4:
+            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_I4);
+        case GX.TexFormat.I8:
+            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_I8);
+        case GX.TexFormat.IA4:
+            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_IA4);
+        case GX.TexFormat.IA8:
+            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_IA8);
+        case GX.TexFormat.RGB565:
+            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGB565);
+        case GX.TexFormat.RGB5A3:
+            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGB5A3);
+        case GX.TexFormat.RGBA8:
+            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGBA8);
+        case GX.TexFormat.CMPR:
+            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_CMPR, 16);
+        case GX.TexFormat.C4:
+        case GX.TexFormat.C8:
+        case GX.TexFormat.C14X2:
+        default:
+            console.error(`Unsupported texture format ${texture.format} on texture ${texture.name}`);
+            return decode_Dummy(texture);
+        }
+    })
 }

@@ -273,13 +273,22 @@ class WindWakerSceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
 
-        return Progressable.all<ArrayBufferSlice>([
-            fetch(`data/j3d/ww/sea/Stage.arc`),
-            fetch(this.path),
-        ]).then(([stage, room]) => {
-            const stageRarc = RARC.parse(Yaz0.decompress(stage));
-            const roomRarc = RARC.parse(room);
+        return Progressable.all([
+            this.fetchRarc(`data/j3d/ww/sea/Stage.arc`),
+            this.fetchRarc(this.path),
+        ]).then(([stageRarc, roomRarc]) => {
             return new WindWakerRenderer(gl, roomIdx, stageRarc, roomRarc, this.cameraPos);
+        });
+    }
+
+    private fetchRarc(path: string): Progressable<RARC.RARC> {
+        return fetch(path).then((buffer: ArrayBufferSlice) => {
+            if (readString(buffer, 0, 4) === 'Yaz0')
+                return Yaz0.decompress(buffer);
+            else
+                return buffer;
+        }).then((buffer: ArrayBufferSlice) => {
+            return RARC.parse(buffer);
         });
     }
 }

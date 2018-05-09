@@ -58,10 +58,12 @@ function buildModuleCode(module) {
 // ${filename}
 ${buildModuleExportsInterface(exportName, wasmModule)}
 const ${exportName}Code = ${binArrayStr};
-const ${exportName}Module = new WebAssembly.Module(${exportName}Code);
-export function ${exportName}Instance(imports?: any): ${exportName}Exports {
-    const instance = new WebAssembly.Instance(${exportName}Module, imports);
-    return (<${exportName}Exports> instance.exports);
+export function ${exportName}Instance(imports?: any): Promise<${exportName}Exports> {
+    return WebAssembly.compile(${exportName}Code).then((module: WebAssembly.Module) => {
+        return WebAssembly.instantiate(module, imports);
+    }).then((instance: WebAssembly.Instance) => {
+        return (<${exportName}Exports> instance.exports);
+    });
 }
 `;
 }

@@ -270,13 +270,14 @@ class SMGSceneDesc implements Viewer.SceneDesc {
         return fetch(path).then((buffer: ArrayBufferSlice) => this.createSceneFromBuffer(gl, buffer, isSkybox));
     }
 
-    private createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean): Scene {
-        const scenes: Scene[] = createScenesFromBuffer(gl, buffer);
-        assert(scenes.length === 1);
-        const scene: Scene = scenes[0];
-        scene.setFPS(60);
-        scene.setIsSkybox(isSkybox);
-        return scene;
+    private createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean): Promise<Scene> {
+        return createScenesFromBuffer(gl, buffer).then((scenes) => {
+            assert(scenes.length === 1);
+            const scene: Scene = scenes[0];
+            scene.setFPS(60);
+            scene.setIsSkybox(isSkybox);
+            return scene;
+        });
     }
 }
 

@@ -56,8 +56,10 @@ export class Scene implements Viewer.MainScene {
             const size = GX_Texture.calcTextureSize(format, width, height);
             const data = texture.data.subarray(offs, size);
             const surface = { name, format, width, height, data };
-            const decodedTexture = GX_Texture.decodeTexture(surface);
-            gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, decodedTexture.width, decodedTexture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedTexture.pixels);
+            GX_Texture.decodeTexture(surface).then((rgbaTexture) => {
+                gl.bindTexture(gl.TEXTURE_2D, texId);
+                gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, surface.width, surface.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgbaTexture.pixels);
+            });
             offs += size;
             width /= 2;
             height /= 2;
@@ -120,14 +122,15 @@ export class Scene implements Viewer.MainScene {
             const size = GX_Texture.calcTextureSize(format, width, height);
             const data = texture.data.subarray(offs, size);
             const surface = { name, format, width, height, data };
-            const rgbaTexture = GX_Texture.decodeTexture(surface);
             const canvas = document.createElement('canvas');
-            canvas.width = rgbaTexture.width;
-            canvas.height = rgbaTexture.height;
-            const ctx = canvas.getContext('2d');
-            const imgData = new ImageData(rgbaTexture.width, rgbaTexture.height);
-            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-            ctx.putImageData(imgData, 0, 0);
+            canvas.width = width;
+            canvas.height = height;
+            GX_Texture.decodeTexture(surface).then((rgbaTexture) => {
+                const ctx = canvas.getContext('2d');
+                const imgData = new ImageData(surface.width, surface.height);
+                imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
+                ctx.putImageData(imgData, 0, 0);
+            });
             surfaces.push(canvas);
 
             offs += size;

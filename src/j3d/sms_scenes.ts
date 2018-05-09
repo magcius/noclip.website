@@ -345,7 +345,9 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return fetch(this.path).then((result: ArrayBufferSlice) => {
-            const rarc = RARC.parse(Yaz0.decompress(result));
+            return Yaz0.decompress(result);
+        }).then((buffer: ArrayBufferSlice) => {
+            const rarc = RARC.parse(buffer);
 
             const sceneBin = rarc.findFile('map/scene.bin');
             const sceneBinObj = readSceneBin(sceneBin.buffer);

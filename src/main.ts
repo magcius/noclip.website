@@ -68,14 +68,14 @@ class DroppedFileSceneDesc implements SceneDesc {
         return pr;
     }
 
-    private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBufferSlice): MainScene {
-        let scene;
+    private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBufferSlice): Promise<MainScene> {
         if (file.name.endsWith('.bfres'))
-            return FRES.createSceneFromFRESBuffer(gl, buffer);
+            return Promise.resolve(FRES.createSceneFromFRESBuffer(gl, buffer));
 
-        scene = J3D.createMultiSceneFromBuffer(gl, buffer);
-        if (scene)
-            return scene;
+        // XXX(jstpierre): Figure out WTF to do here...
+        const promise = J3D.createMultiSceneFromBuffer(gl, buffer);
+        if (promise)
+            return promise;
 
         return null;
     }

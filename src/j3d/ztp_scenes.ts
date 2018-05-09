@@ -143,9 +143,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const basePath = `data/j3d/ztp/${this.folder}`;
         const paths = [`STG_00.arc`, ...this.roomPaths].map((path) => `${basePath}/${path}`);
-        return Progressable.all(paths.map((path) => fetch(path))).then((buffers: ArrayBufferSlice[]): Viewer.MainScene => {
-            const stageBuffer = Yaz0.decompress(buffers.shift());
-            const stageRarc = RARC.parse(stageBuffer);
+        return Progressable.all(paths.map(path => this.fetchRarc(path))).then((rarcs: RARC.RARC[]): Viewer.MainScene => {
+            const stageRarc = rarcs.shift();
             const texcFolder = stageRarc.findDir(`texc`);
             const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
             const extraTextures = extraTextureFiles.map((file) => {
@@ -165,11 +164,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 return scene;
             }).filter((s) => !!s);
 
-            const roomBuffers = buffers;
-            const roomRarcs: RARC.RARC[] = roomBuffers.map((buffer: ArrayBufferSlice) => {
-                buffer = Yaz0.decompress(buffer);
-                return RARC.parse(buffer);
-            });
+            const roomRarcs: RARC.RARC[] = rarcs;
             const roomScenes_: Scene[][] = roomRarcs.map((rarc: RARC.RARC, i: number) => {
                 const rarcBasename = this.roomPaths[i].split('.')[0];
                 return createScenesFromRARC(gl, rarcBasename, rarc, extraTextures);
@@ -178,6 +173,14 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             roomScenes_.forEach((scenes: Scene[]) => roomScenes.push.apply(roomScenes, scenes));
 
             return new TwilightPrincessRenderer(stageRarc, roomRarcs, skyboxScenes, roomScenes);
+        });
+    }
+
+    private fetchRarc(path: string): Progressable<RARC.RARC> {
+        return fetch(path).then((buffer: ArrayBufferSlice) => {
+            return Yaz0.decompress(buffer);
+        }).then((buffer: ArrayBufferSlice) => {
+            return RARC.parse(buffer);
         });
     }
 }

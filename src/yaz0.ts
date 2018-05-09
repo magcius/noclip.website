@@ -29,37 +29,39 @@ declare module "./wat_modules" {
 // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
 // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
 // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-const wasmInstance = yaz0_asInstance();
+const _wasmInstance = yaz0_asInstance();
 
-export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
-    const srcView = srcBuffer.createDataView();
-    assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
-
-    const dstSize = srcView.getUint32(0x04, false);
-    const srcSize = srcBuffer.byteLength;
-
-    const pDstOffs = 0;
-    const pSrcOffs = align(dstSize, 0x10);
-
-    const heapSize = pSrcOffs + align(srcSize, 0x10);
-
-    const heapBase = 0;
-
-    const wasmMemory = new WasmMemoryManager(wasmInstance.memory);
-    wasmMemory.resize(heapBase + heapSize);
-    const mem = wasmMemory.mem;
-    const heap = wasmMemory.heap;
-
-    const pDst = heapBase + pDstOffs;
-    const pSrc = heapBase + pSrcOffs;
-
-    // Copy src buffer.
-    heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
-
-    wasmInstance.decompress(pDst, pSrc, dstSize);
-
-    // Copy the result buffer to a new buffer for memory usage purposes.
-    const result = new ArrayBufferSlice(heap.buffer).copySlice(pDst, dstSize);
-
-    return result;
+export function decompress(srcBuffer: ArrayBufferSlice): Promise<ArrayBufferSlice> {
+    return _wasmInstance.then((wasmInstance) => {
+        const srcView = srcBuffer.createDataView();
+        assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
+    
+        const dstSize = srcView.getUint32(0x04, false);
+        const srcSize = srcBuffer.byteLength;
+    
+        const pDstOffs = 0;
+        const pSrcOffs = align(dstSize, 0x10);
+    
+        const heapSize = pSrcOffs + align(srcSize, 0x10);
+    
+        const heapBase = 0;
+    
+        const wasmMemory = new WasmMemoryManager(wasmInstance.memory);
+        wasmMemory.resize(heapBase + heapSize);
+        const mem = wasmMemory.mem;
+        const heap = wasmMemory.heap;
+    
+        const pDst = heapBase + pDstOffs;
+        const pSrc = heapBase + pSrcOffs;
+    
+        // Copy src buffer.
+        heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
+    
+        wasmInstance.decompress(pDst, pSrc, dstSize);
+    
+        // Copy the result buffer to a new buffer for memory usage purposes.
+        const result = new ArrayBufferSlice(heap.buffer).copySlice(pDst, dstSize);
+    
+        return result;
+    });
 }
