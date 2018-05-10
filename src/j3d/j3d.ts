@@ -4,7 +4,7 @@
 import { mat4, quat } from 'gl-matrix';
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
-import { betoh } from 'endian';
+import { betoh, Endianness } from 'endian';
 import { assert, readString } from 'util';
 
 import { coalesceLoadedDatas, compileVtxLoader, getComponentSize, getNumComponents, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData } from 'gx/gx_displaylist';
@@ -509,8 +509,8 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             const matrixFirstIndex = view.getUint32(packetMatrixDataOffs + 0x04);
 
             const packetMatrixTableOffs = matrixTableOffs + matrixFirstIndex * 0x02;
-            const packetMatrixTableSize = matrixCount * 0x02;
-            const weightedJointTable = betoh(buffer.subarray(packetMatrixTableOffs, packetMatrixTableSize), 2).createTypedArray(Uint16Array);
+            const packetMatrixTableSize = matrixCount;
+            const weightedJointTable = buffer.createTypedArray(Uint16Array, packetMatrixTableOffs, packetMatrixTableSize, Endianness.BIG_ENDIAN);
 
             const srcOffs = packetStart;
             const subBuffer = buffer.subarray(srcOffs, packetSize);
@@ -1380,9 +1380,9 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
 
     const rotationScale = Math.pow(2, rotationDecimal) / 32767;
 
-    const sTable = betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
-    const rTable = betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array);
-    const tTable = betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
+    const sTable = buffer.createTypedArray(Float32Array, sTableOffs, sCount, Endianness.BIG_ENDIAN);
+    const rTable = buffer.createTypedArray(Int16Array, rTableOffs, rCount, Endianness.BIG_ENDIAN);
+    const tTable = buffer.createTypedArray(Float32Array, tTableOffs, tCount, Endianness.BIG_ENDIAN);
 
     const materialNameTable = readStringTable(buffer, materialNameTableOffs);
 
@@ -1523,10 +1523,10 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
     }
 
-    const registerRTable = betoh(buffer.subarray(registerROffs, registerRCount * 2), 2).createTypedArray(Int16Array);
-    const registerGTable = betoh(buffer.subarray(registerGOffs, registerGCount * 2), 2).createTypedArray(Int16Array);
-    const registerBTable = betoh(buffer.subarray(registerBOffs, registerBCount * 2), 2).createTypedArray(Int16Array);
-    const registerATable = betoh(buffer.subarray(registerAOffs, registerACount * 2), 2).createTypedArray(Int16Array);
+    const registerRTable = buffer.createTypedArray(Int16Array, registerROffs, registerRCount, Endianness.BIG_ENDIAN);
+    const registerGTable = buffer.createTypedArray(Int16Array, registerGOffs, registerGCount, Endianness.BIG_ENDIAN);
+    const registerBTable = buffer.createTypedArray(Int16Array, registerBOffs, registerBCount, Endianness.BIG_ENDIAN);
+    const registerATable = buffer.createTypedArray(Int16Array, registerAOffs, registerACount, Endianness.BIG_ENDIAN);
 
     const registerAnimationEntries: PaletteAnimationEntry[] = [];
 
@@ -1543,10 +1543,10 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         registerAnimationEntries.push({ materialName, remapIndex, colorId, r, g, b, a });
     }
 
-    const konstantRTable = betoh(buffer.subarray(konstantROffs, konstantRCount * 2), 2).createTypedArray(Int16Array);
-    const konstantGTable = betoh(buffer.subarray(konstantGOffs, konstantGCount * 2), 2).createTypedArray(Int16Array);
-    const konstantBTable = betoh(buffer.subarray(konstantBOffs, konstantBCount * 2), 2).createTypedArray(Int16Array);
-    const konstantATable = betoh(buffer.subarray(konstantAOffs, konstantACount * 2), 2).createTypedArray(Int16Array);
+    const konstantRTable = buffer.createTypedArray(Int16Array, konstantROffs, konstantRCount, Endianness.BIG_ENDIAN);
+    const konstantGTable = buffer.createTypedArray(Int16Array, konstantGOffs, konstantGCount, Endianness.BIG_ENDIAN);
+    const konstantBTable = buffer.createTypedArray(Int16Array, konstantBOffs, konstantBCount, Endianness.BIG_ENDIAN);
+    const konstantATable = buffer.createTypedArray(Int16Array, konstantAOffs, konstantACount, Endianness.BIG_ENDIAN);
 
     const konstantAnimationEntries: PaletteAnimationEntry[] = [];
 
@@ -1646,9 +1646,9 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
 
     const rotationScale = Math.pow(2, rotationDecimal) / 32767;
 
-    const sTable = betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
-    const rTable = betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array);
-    const tTable = betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
+    const sTable = buffer.createTypedArray(Float32Array, sTableOffs, sCount, Endianness.BIG_ENDIAN);
+    const rTable = buffer.createTypedArray(Int16Array, rTableOffs, rCount, Endianness.BIG_ENDIAN);
+    const tTable = buffer.createTypedArray(Float32Array, tTableOffs, tCount, Endianness.BIG_ENDIAN);
 
     let animationTableIdx = jointAnimationTableOffs;
     function readAnimationTrack(data: Int16Array | Float32Array, scale: number) {

@@ -1,12 +1,21 @@
 
 import ArrayBufferSlice from "ArrayBufferSlice";
 
+export const enum Endianness {
+    LITTLE_ENDIAN,
+    BIG_ENDIAN,
+}
+
 const _test: Uint16Array = new Uint16Array([0xFEFF]);
 const _testView: DataView = new DataView(_test.buffer);
-const _isLittle: boolean = _testView.getUint8(0) == 0xFF;
+const _systemEndianness: Endianness = (_testView.getUint8(0) == 0xFF) ? Endianness.LITTLE_ENDIAN : Endianness.BIG_ENDIAN;
 
-export function isLittleEndian(): boolean {
-    return _isLittle;
+export function getSystemEndianness(): Endianness {
+    return _systemEndianness;
+}
+
+function isLittleEndian(): boolean {
+    return _systemEndianness === Endianness.LITTLE_ENDIAN;
 }
 
 function bswap16(m: ArrayBufferSlice): ArrayBufferSlice {
