@@ -72,7 +72,7 @@ function parseArray(context: ParseContext, buffer: ArrayBufferSlice, offs: numbe
     const view = buffer.createDataView();
     const header = view.getUint32(offs + 0x00);
     const nodeType: NodeType = header >>> 24;
-    const numValues: number = header & 0xFF;
+    const numValues: number = header & 0x00FFFFFF;
     assert(nodeType === NodeType.ARRAY);
 
     const result: NodeArray = [];
@@ -91,7 +91,7 @@ function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, expec
     const view = buffer.createDataView();
     const header = view.getUint32(offs + 0x00);
     const nodeType: NodeType = header >>> 24;
-    const numValues: number = header & 0xFF;
+    const numValues: number = header & 0x00FFFFFF;
     assert(expectedNodeType === nodeType);
     switch(nodeType) {
     case NodeType.DICT:

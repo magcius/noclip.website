@@ -35,6 +35,7 @@ export class Model {
     public name: string;
     public parentID: number;
     public batches: Batch[];
+    public billboard: boolean;
 }
 
 function parseModel(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
@@ -56,6 +57,9 @@ function parseModel(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
     const xt = view.getUint16(offs + 0x24, true);
     const yt = view.getUint16(offs + 0x28, true);
     const zt = view.getUint16(offs + 0x2C, true);
+
+    const flags = view.getUint32(offs + 0x3C, true);
+    model.billboard = !!(flags & 0x01);
 
     // A "batch" is a combination of a material and a poly.
     const batchCount = view.getUint32(offs + 0x30, true);

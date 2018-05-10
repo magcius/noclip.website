@@ -4061,6 +4061,8 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var xt = view.getUint16(offs + 0x24, true);
         var yt = view.getUint16(offs + 0x28, true);
         var zt = view.getUint16(offs + 0x2C, true);
+        var flags = view.getUint32(offs + 0x3C, true);
+        model.billboard = !!(flags & 0x01);
         // A "batch" is a combination of a material and a poly.
         var batchCount = view.getUint32(offs + 0x30, true);
         var batchMaterialOffs = view.getUint32(offs + 0x34, true);
@@ -8545,7 +8547,7 @@ System.register("sm64ds/crg1", ["util"], function (exports_30, context_30) {
         var view = buffer.createDataView();
         var header = view.getUint32(offs + 0x00);
         var nodeType = header >>> 24;
-        var numValues = header & 0xFF;
+        var numValues = header & 0x00FFFFFF;
         util_16.assert(nodeType === 192 /* ARRAY */);
         var result = [];
         var entryTypeIdx = offs + 0x04;
@@ -8562,7 +8564,7 @@ System.register("sm64ds/crg1", ["util"], function (exports_30, context_30) {
         var view = buffer.createDataView();
         var header = view.getUint32(offs + 0x00);
         var nodeType = header >>> 24;
-        var numValues = header & 0xFF;
+        var numValues = header & 0x00FFFFFF;
         util_16.assert(expectedNodeType === nodeType);
         switch (nodeType) {
             case 193 /* DICT */:
@@ -8697,7 +8699,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
         return textures;
         var e_33, _a;
     }
-    var gl_matrix_8, CRG1, LZ77, NITRO_BMD, render_11, util_18, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, BMDRenderer, SM64DSRenderer, SceneDesc;
+    var gl_matrix_8, CRG1, LZ77, NITRO_BMD, render_11, util_18, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, YSpinAnimation, scratchVec3, BMDRenderer, SM64DSRenderer, SceneDesc;
     return {
         setters: [
             function (gl_matrix_8_1) {
@@ -8740,12 +8742,24 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
             // 3 pos + 4 color + 2 uv
             VERTEX_SIZE = 9;
             VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+            YSpinAnimation = /** @class */ (function () {
+                function YSpinAnimation(speed, phase) {
+                    this.speed = speed;
+                    this.phase = phase;
+                }
+                YSpinAnimation.prototype.updateModelView = function (state, modelView) {
+                    var theta = this.phase + (state.time / 30 * this.speed);
+                    gl_matrix_8.mat4.rotateY(modelView, modelView, theta);
+                };
+                return YSpinAnimation;
+            }());
+            scratchVec3 = gl_matrix_8.vec3.create();
             BMDRenderer = /** @class */ (function () {
-                function BMDRenderer(gl, bmd, localScale, crg1Level) {
+                function BMDRenderer(gl, bmd, crg1Level) {
+                    this.animation = null;
                     this.opaqueCommands = [];
                     this.transparentCommands = [];
                     this.bmd = bmd;
-                    this.localScale = localScale;
                     this.crg1Level = crg1Level;
                     this.isSkybox = false;
                     this.arena = new render_11.RenderArena();
@@ -8753,7 +8767,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                         return textureToCanvas(texture);
                     });
                     this.translateBMD(gl, this.bmd);
-                    var scaleFactor = this.bmd.scaleFactor * this.localScale;
+                    var scaleFactor = this.bmd.scaleFactor;
                     this.localMatrix = gl_matrix_8.mat4.create();
                     gl_matrix_8.mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
                 }
@@ -8826,7 +8840,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
                     }
                     // Find any possible material animations.
-                    var crg1mat = this.crg1Level.TextureAnimations.find(function (c) { return c.MaterialName === material.name; });
+                    var crg1mat = this.crg1Level ? this.crg1Level.TextureAnimations.find(function (c) { return c.MaterialName === material.name; }) : undefined;
                     var texCoordMat = gl_matrix_8.mat3.create();
                     gl_matrix_8.mat3.fromMat2d(texCoordMat, material.texCoordMat);
                     var renderFlags = new render_11.RenderFlags();
@@ -8834,7 +8848,6 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                     renderFlags.depthTest = true;
                     renderFlags.depthWrite = material.depthWrite;
                     renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
-                    console.log(crg1mat);
                     var texAnimMat = gl_matrix_8.mat3.create();
                     return function (state) {
                         function selectArray(arr, time) {
@@ -8861,11 +8874,31 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                         state.useFlags(renderFlags);
                     };
                 };
-                BMDRenderer.prototype.translateBatch = function (gl, batch) {
+                BMDRenderer.prototype.bindModelView = function (state, isBillboard) {
+                    var gl = state.gl;
+                    var prog = state.currentProgram;
+                    var modelView = state.updateModelView(this.isSkybox, this.localMatrix);
+                    if (this.animation !== null)
+                        this.animation.updateModelView(state, modelView);
+                    if (isBillboard) {
+                        var tx = modelView[12];
+                        var ty = modelView[13];
+                        var tz = modelView[14];
+                        gl_matrix_8.mat4.getScaling(scratchVec3, this.localMatrix);
+                        gl_matrix_8.mat4.identity(modelView);
+                        gl_matrix_8.mat4.translate(modelView, modelView, [tx, ty, tz]);
+                        gl_matrix_8.mat4.scale(modelView, modelView, scratchVec3);
+                    }
+                    gl.uniformMatrix4fv(prog.projectionLocation, false, state.projection);
+                    gl.uniformMatrix4fv(prog.modelViewLocation, false, modelView);
+                };
+                BMDRenderer.prototype.translateBatch = function (gl, model, batch) {
+                    var _this = this;
                     var applyMaterial = this.translateMaterial(gl, batch.material);
                     var renderPoly = this.translatePoly(gl, batch.poly);
                     var func = function (state) {
                         applyMaterial(state);
+                        _this.bindModelView(state, model.billboard);
                         renderPoly(state);
                     };
                     if (batch.material.isTranslucent)
@@ -8880,7 +8913,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                             try {
                                 for (var _c = __values(model.batches), _d = _c.next(); !_d.done; _d = _c.next()) {
                                     var batch = _d.value;
-                                    this.translateBatch(gl, batch);
+                                    this.translateBatch(gl, model, batch);
                                 }
                             }
                             catch (e_34_1) { e_34 = { error: e_34_1 }; }
@@ -8907,10 +8940,11 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                 return BMDRenderer;
             }());
             SM64DSRenderer = /** @class */ (function () {
-                function SM64DSRenderer(mainBMD, skyboxBMD) {
+                function SM64DSRenderer(mainBMD, skyboxBMD, extraBMDs) {
                     this.mainBMD = mainBMD;
                     this.skyboxBMD = skyboxBMD;
-                    this.textures = collectTextures([this.mainBMD, this.skyboxBMD]);
+                    this.extraBMDs = extraBMDs;
+                    this.textures = collectTextures(__spread([this.mainBMD, this.skyboxBMD], this.extraBMDs));
                     this.program = new NITRO_Program();
                 }
                 SM64DSRenderer.prototype.runCommands = function (state, funcs) {
@@ -8919,10 +8953,10 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                     });
                 };
                 SM64DSRenderer.prototype.render = function (renderState) {
+                    var _this = this;
                     var gl = renderState.gl;
                     renderState.useProgram(this.program);
                     if (this.skyboxBMD) {
-                        renderState.bindModelView(true, this.skyboxBMD.localMatrix);
                         this.runCommands(renderState, this.skyboxBMD.opaqueCommands);
                         gl.clear(gl.DEPTH_BUFFER_BIT);
                     }
@@ -8931,14 +8965,22 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                         gl.clearColor(0, 0, 0, 1.0);
                         gl.clear(gl.COLOR_BUFFER_BIT);
                     }
-                    renderState.bindModelView(false, this.mainBMD.localMatrix);
+                    // Opaque.
                     this.runCommands(renderState, this.mainBMD.opaqueCommands);
+                    this.extraBMDs.forEach(function (bmd) {
+                        _this.runCommands(renderState, bmd.opaqueCommands);
+                    });
+                    // Transparent.
                     this.runCommands(renderState, this.mainBMD.transparentCommands);
+                    this.extraBMDs.forEach(function (bmd) {
+                        _this.runCommands(renderState, bmd.transparentCommands);
+                    });
                 };
                 SM64DSRenderer.prototype.destroy = function (gl) {
                     this.mainBMD.destroy(gl);
                     if (this.skyboxBMD)
                         this.skyboxBMD.destroy(gl);
+                    this.extraBMDs.forEach(function (renderer) { return renderer.destroy(gl); });
                 };
                 return SM64DSRenderer;
             }());
@@ -8955,24 +8997,207 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                         return _this._createSceneFromCRG1(gl, crg1);
                     });
                 };
-                SceneDesc.prototype._createBMDRenderer = function (gl, filename, localScale, level, isSkybox) {
+                SceneDesc.prototype._createBMDRenderer = function (gl, filename, scale, level, isSkybox) {
                     return util_18.fetch("data/sm64ds/" + filename).then(function (result) {
                         result = LZ77.maybeDecompress(result);
                         var bmd = NITRO_BMD.parse(result);
-                        var renderer = new BMDRenderer(gl, bmd, localScale, level);
+                        var renderer = new BMDRenderer(gl, bmd, level);
+                        gl_matrix_8.mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
                         renderer.isSkybox = isSkybox;
                         return renderer;
                     });
+                };
+                SceneDesc.prototype._createBMDObjRenderer = function (gl, filename, translation, rotationY, scale, spinSpeed) {
+                    if (scale === void 0) { scale = 1; }
+                    if (spinSpeed === void 0) { spinSpeed = 0; }
+                    return util_18.fetch("data/sm64ds/" + filename).then(function (result) {
+                        result = LZ77.maybeDecompress(result);
+                        var bmd = NITRO_BMD.parse(result);
+                        var renderer = new BMDRenderer(gl, bmd, null);
+                        gl_matrix_8.vec3.scale(translation, translation, 16 / bmd.scaleFactor);
+                        gl_matrix_8.mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
+                        gl_matrix_8.mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
+                        gl_matrix_8.mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
+                        if (spinSpeed > 0) {
+                            var spinPhase = Math.random() * Math.PI * 2;
+                            renderer.animation = new YSpinAnimation(spinSpeed, spinPhase);
+                        }
+                        return renderer;
+                    });
+                };
+                SceneDesc.prototype._createBMDRendererForObject = function (gl, object) {
+                    var translation = gl_matrix_8.vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
+                    // WTF is with the Tau? And the object scales?
+                    gl_matrix_8.vec3.scale(translation, translation, Math.PI * 2);
+                    var rotationY = object.Rotation.Y / 180 * Math.PI;
+                    switch (object.ObjectId) {
+                        case 7: // Up/down lift thingy
+                        case 9: // Pathlift?
+                        case 10: // Chain Chomp (copy/pasted)
+                        case 13: // LONELY ROLLING BALL
+                        case 15: // Goomba
+                        case 19: // Bob-omb
+                        case 20: // Friendly Bob-omb
+                        case 21: // Koopa
+                            return null;
+                        case 23: // Brick Block
+                            return this._createBMDObjRenderer(gl, "normal_obj/obj_block/broken_block_l.bmd", translation, rotationY, 0.8);
+                        case 24: // Brick Block Larger
+                            return this._createBMDObjRenderer(gl, "normal_obj/obj_block/broken_block_l.bmd", translation, rotationY, 1.2);
+                        case 26: // Powerup inside block?
+                        case 29: // Cannon hatch
+                            return null;
+                        case 30: // Item Block
+                            return this._createBMDObjRenderer(gl, "normal_obj/obj_hatena_box/hatena_box.bmd", translation, rotationY, 0.8);
+                        case 36: // Pole
+                            return this._createBMDObjRenderer(gl, "normal_obj/obj_pile/pile.bmd", translation, rotationY, 0.8);
+                        case 37: // Coin
+                            return this._createBMDObjRenderer(gl, "normal_obj/coin/coin_poly32.bmd", translation, rotationY, 0.8, 0.1);
+                        case 38: // Red Coin
+                            return this._createBMDObjRenderer(gl, "normal_obj/coin/coin_red_poly32.bmd", translation, rotationY, 0.8, 0.1);
+                        case 39: // Blue Coin
+                            return this._createBMDObjRenderer(gl, "normal_obj/coin/coin_blue_poly32.bmd", translation, rotationY, 0.8, 0.1);
+                        case 41: { // Tree
+                            var treeType = (object.Parameters[0] >>> 4) & 0x07;
+                            var treeFilenames = ['bomb', 'toge', 'yuki', 'yashi', 'castle', 'castle', 'castle', 'castle'];
+                            var filename = "normal_obj/tree/" + treeFilenames[treeType] + "_tree.bmd";
+                            return this._createBMDObjRenderer(gl, filename, translation, rotationY);
+                        }
+                        case 42: { // Castle Painting
+                            var painting = (object.Parameters[0] >>> 8) & 0x1F;
+                            var filenames = [
+                                'for_bh', 'for_bk', 'for_ki', 'for_sm', 'for_cv_ex5', 'for_fl', 'for_dl', 'for_wl', 'for_sl', 'for_wc',
+                                'for_hm', 'for_hs', 'for_td_tt', 'for_ct', 'for_ex_mario', 'for_ex_luigi', 'for_ex_wario', 'for_vs_cross', 'for_vs_island',
+                            ];
+                            var filename = "picture/" + filenames[painting] + ".bmd";
+                            var scale = ((object.Parameters[0] & 0xF) + 1);
+                            translation[1] += scale * 0.3;
+                            return this._createBMDObjRenderer(gl, filename, translation, rotationY, scale);
+                        }
+                        case 43: // Switch
+                        case 44: // Switch-powered Star
+                        case 45: // Switch-powered Trapdoor
+                        case 48: // Chain Chomp Unchained
+                        case 49: // 1-up
+                        case 50: // Cannon
+                        case 51: // Chain-chomp fence (BoB)
+                        case 52: // Water bombs (BoB)
+                        case 53: // Birds
+                        case 54: // Fish
+                        case 55: // Butterflies
+                        case 56: // Super Bob Fuckan Omb Bob-Omb In BoB (the summit)
+                        case 59: // Pirahna Plant
+                        case 60: // Star Camera Path
+                        case 61: // Star Target
+                            return null;
+                        case 62: // Silver Star
+                            return this._createBMDObjRenderer(gl, "normal_obj/star/obj_star_silver.bmd", translation, rotationY, 0.8, 0.08);
+                        case 63: // Star
+                            return this._createBMDObjRenderer(gl, "normal_obj/star/obj_star.bmd", translation, rotationY, 0.8, 0.08);
+                        case 64: // Whomp
+                        case 65: // Big Whomp
+                        case 66: // Thwomp
+                        case 67: // Boo
+                        case 74: // Minigame Cabinet Trigger (Invisible)
+                            return null;
+                        case 75: // Wall sign
+                            return this._createBMDObjRenderer(gl, "normal_obj/obj_kanban/obj_kanban.bmd", translation, rotationY, 0.8);
+                        case 76: // Signpost
+                            return this._createBMDObjRenderer(gl, "normal_obj/obj_tatefuda/obj_tatefuda.bmd", translation, rotationY, 0.8);
+                        case 79: // Heart
+                        case 80: // Toad
+                        case 167: // Peach's Castle Tippy TTC Hour Hand
+                        case 168: // Peach's Castle Tippy TTC Minute Hand
+                        case 169: // Peach's Castle Tippy TTC Pendulum
+                            return null;
+                        case 187: // Left Arrow Sign
+                            return this._createBMDObjRenderer(gl, "normal_obj/obj_yajirusi_l/yajirusi_l.bmd", translation, rotationY, 0.8);
+                        case 188: // Right Arrow Sign
+                            return this._createBMDObjRenderer(gl, "normal_obj/obj_yajirusi_r/yajirusi_r.bmd", translation, rotationY, 0.8);
+                        case 196: // WF
+                        case 197: // WF
+                        case 198: // WF
+                        case 199: // WF
+                        case 200: // WF
+                        case 201: // WF
+                        case 202: // WF
+                        case 203: // WF Tower
+                            return null;
+                        case 204: // WF Spinning Island
+                            return this._createBMDObjRenderer(gl, "special_obj/bk_ukisima/bk_ukisima.bmd", translation, rotationY, 1, 0.1);
+                        case 205: // WF
+                        case 206: // WF
+                        case 207: // WF
+                        case 208: // WF
+                        case 209: // WF
+                        case 228: // Switch Pillar
+                        case 237: // MIPS
+                        case 239: // That Stupid Owl™
+                        case 243: // Invisible pole hitbox
+                        case 244: // Lakitu
+                        case 254: // Mario's Iconic Cap
+                        case 264: // Red Flame
+                        case 265: // Blue Flame
+                        case 269: // 1-Up Mushroom Inside Block
+                        case 270: // Some brick thing?
+                        case 273: // Peach's Castle First Floor Trapdoor
+                        case 274: // Peach's Castle First Floor Light Beam
+                        case 275: // Peach's Castle First Floor Peach/Bowser Fade Painting
+                        case 281: // Koopa the Quick
+                        case 282: // Koopa the Quick Finish Flag
+                            return null;
+                        case 284: // Wario Block
+                            return this._createBMDObjRenderer(gl, "normal_obj/obj_block/broken_block_ll.bmd", translation, rotationY);
+                        case 293: // Water
+                            return this._createBMDObjRenderer(gl, "special_obj/mc_water/mc_water.bmd", translation, rotationY, 0.8);
+                        case 295: // Metal net
+                            return this._createBMDObjRenderer(gl, "special_obj/mc_metalnet/mc_metalnet.bmd", translation, rotationY, 0.8);
+                        case 298: // Flag
+                            return this._createBMDObjRenderer(gl, "special_obj/mc_flag/mc_flag.bmd", translation, rotationY, 0.8);
+                        case 303: // Castle Basement Water
+                        case 304: // Secret number thingy
+                            return null;
+                        case 305: // Blue Coin Switch
+                            return this._createBMDObjRenderer(gl, "normal_obj/b_coin_switch/b_coin_switch.bmd", translation, rotationY, 0.8);
+                        case 314: // Hidden Pirahna Plant
+                        case 315: // Enemy spawner trigger
+                        case 316: // Enemy spawner
+                        case 323: // Ambient sound effects
+                        case 324: // Music
+                        case 511: // Appears to be a bug in the level layout
+                            return null;
+                        default:
+                            console.warn("Unknown object type " + object.ObjectId);
+                            return null;
+                    }
                 };
                 SceneDesc.prototype._createSceneFromCRG1 = function (gl, crg1) {
                     var level = crg1.Levels[this.levelId];
                     var renderers = [this._createBMDRenderer(gl, level.MapBmdFile, 100, level, false)];
                     if (level.VrboxBmdFile)
                         renderers.push(this._createBMDRenderer(gl, level.VrboxBmdFile, 0.8, level, true));
+                    else
+                        renderers.push(Promise.resolve(null));
+                    try {
+                        for (var _a = __values(level.Objects), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var object = _b.value;
+                            var objRenderer = this._createBMDRendererForObject(gl, object);
+                            if (objRenderer)
+                                renderers.push(objRenderer);
+                        }
+                    }
+                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_36) throw e_36.error; }
+                    }
                     return Promise.all(renderers).then(function (_a) {
-                        var _b = __read(_a, 2), mainBMD = _b[0], skyboxBMD = _b[1];
-                        return new SM64DSRenderer(mainBMD, skyboxBMD);
+                        var _b = __read(_a), mainBMD = _b[0], skyboxBMD = _b[1], extraBMDs = _b.slice(2);
+                        return new SM64DSRenderer(mainBMD, skyboxBMD, extraBMDs);
                     });
+                    var e_36, _c;
                 };
                 return SceneDesc;
             }());
@@ -9657,15 +9882,15 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                                 return entry;
                         }
                     }
-                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
+                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_36) throw e_36.error; }
+                        finally { if (e_37) throw e_37.error; }
                     }
                     return null;
-                    var e_36, _c;
+                    var e_37, _c;
                 };
                 ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
                     var bankIdx = addr >>> 24;
@@ -11940,15 +12165,15 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 gl.drawElements(gl.TRIANGLES, prm.count, _this.translateDataType(gl, prm.indexType), prm.offset * _this.dataTypeSize(prm.indexType));
                             }
                         }
-                        catch (e_37_1) { e_37 = { error: e_37_1 }; }
+                        catch (e_38_1) { e_38 = { error: e_38_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_37) throw e_37.error; }
+                            finally { if (e_38) throw e_38.error; }
                         }
                         gl.bindVertexArray(null);
-                        var e_37, _c;
+                        var e_38, _c;
                     };
                 };
                 Scene.prototype.translateTexture = function (gl, texture) {
@@ -12041,14 +12266,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 func();
                             }
                         }
-                        catch (e_38_1) { e_38 = { error: e_38_1 }; }
+                        catch (e_39_1) { e_39 = { error: e_39_1 }; }
                         finally {
                             try {
                                 if (meshFuncs_1_1 && !meshFuncs_1_1.done && (_a = meshFuncs_1.return)) _a.call(meshFuncs_1);
                             }
-                            finally { if (e_38) throw e_38.error; }
+                            finally { if (e_39) throw e_39.error; }
                         }
-                        var e_38, _a;
+                        var e_39, _a;
                     };
                 };
                 Scene.prototype.translateModel = function (gl, mesh) {
@@ -12079,14 +12304,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_39_1) { e_39 = { error: e_39_1 }; }
+                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_39) throw e_39.error; }
+                        finally { if (e_40) throw e_40.error; }
                     }
-                    var e_39, _c;
+                    var e_40, _c;
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -12359,15 +12584,15 @@ System.register("worker_util", [], function (exports_47, context_47) {
                             worker.terminate();
                         }
                     }
-                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
+                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_40) throw e_40.error; }
+                        finally { if (e_41) throw e_41.error; }
                     }
                     this.workers = [];
-                    var e_40, _c;
+                    var e_41, _c;
                 };
                 WorkerPool.prototype.build = function () {
                     if (this.workers.length > 0)
@@ -12410,14 +12635,14 @@ System.register("worker_util", [], function (exports_47, context_47) {
                             }
                         }
                     }
-                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
+                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_41) throw e_41.error; }
+                        finally { if (e_42) throw e_42.error; }
                     }
-                    var e_41, _c;
+                    var e_42, _c;
                 };
                 WorkerPool.prototype._onWorkerDone = function () {
                     this.pumpQueue();
@@ -13195,15 +13420,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_50
                     entries.push({ key: key, value: value });
                 }
             }
-            catch (e_42_1) { e_42 = { error: e_42_1 }; }
+            catch (e_43_1) { e_43 = { error: e_43_1 }; }
             finally {
                 try {
                     if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
                 }
-                finally { if (e_42) throw e_42.error; }
+                finally { if (e_43) throw e_43.error; }
             }
             return entries;
-            var e_42, _a;
+            var e_43, _a;
         }
         // Vertex buffers.
         var fvtxIdx = fvtxOffs;
@@ -13275,12 +13500,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_50
                 fshp.push({ name: name_10, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
             }
         }
-        catch (e_43_1) { e_43 = { error: e_43_1 }; }
+        catch (e_44_1) { e_44 = { error: e_44_1 }; }
         finally {
             try {
                 if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
             }
-            finally { if (e_43) throw e_43.error; }
+            finally { if (e_44) throw e_44.error; }
         }
         // Materials.
         var fmat = [];
@@ -13343,12 +13568,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_50
                         }
                     }
                 }
-                catch (e_44_1) { e_44 = { error: e_44_1 }; }
+                catch (e_45_1) { e_45 = { error: e_45_1 }; }
                 finally {
                     try {
                         if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
                     }
-                    finally { if (e_44) throw e_44.error; }
+                    finally { if (e_45) throw e_45.error; }
                 }
                 util_27.assert(textureSamplerCount === textureReferenceCount);
                 var textureSamplerArrayIdx = textureSamplerArrayOffs;
@@ -13417,15 +13642,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_50
                 fmat.push({ name: name_11, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
             }
         }
-        catch (e_45_1) { e_45 = { error: e_45_1 }; }
+        catch (e_46_1) { e_46 = { error: e_46_1 }; }
         finally {
             try {
                 if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
             }
-            finally { if (e_45) throw e_45.error; }
+            finally { if (e_46) throw e_46.error; }
         }
         return { fvtx: fvtx, fshp: fshp, fmat: fmat };
-        var e_43, _a, e_45, _c, e_44, _b;
+        var e_44, _a, e_46, _c, e_45, _b;
     }
     function parse(buffer) {
         var view = buffer.createDataView();
@@ -13466,12 +13691,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_50
                 textures.push({ entry: entry, texture: texture });
             }
         }
-        catch (e_46_1) { e_46 = { error: e_46_1 }; }
+        catch (e_47_1) { e_47 = { error: e_47_1 }; }
         finally {
             try {
                 if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
             }
-            finally { if (e_46) throw e_46.error; }
+            finally { if (e_47) throw e_47.error; }
         }
         var models = [];
         try {
@@ -13481,15 +13706,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_50
                 models.push({ entry: entry, fmdl: fmdl });
             }
         }
-        catch (e_47_1) { e_47 = { error: e_47_1 }; }
+        catch (e_48_1) { e_48 = { error: e_48_1 }; }
         finally {
             try {
                 if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
             }
-            finally { if (e_47) throw e_47.error; }
+            finally { if (e_48) throw e_48.error; }
         }
         return { textures: textures, models: models };
-        var e_46, _a, e_47, _b;
+        var e_47, _a, e_48, _b;
     }
     exports_50("parse", parse);
     var gx2_surface_1, util_27, UBOParameterType, RenderInfoParameterType;
@@ -13818,12 +14043,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             samplers.push(sampler);
                         }
                     }
-                    catch (e_48_1) { e_48 = { error: e_48_1 }; }
+                    catch (e_49_1) { e_49 = { error: e_49_1 }; }
                     finally {
                         try {
                             if (textureAssigns_1_1 && !textureAssigns_1_1.done && (_a = textureAssigns_1.return)) _a.call(textureAssigns_1);
                         }
-                        finally { if (e_48) throw e_48.error; }
+                        finally { if (e_49) throw e_49.error; }
                     }
                     var prog = new ProgramGambit_UBER();
                     this.arena.trackProgram(prog);
@@ -13864,7 +14089,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             _loop_9(i);
                         }
                     };
-                    var e_48, _a;
+                    var e_49, _a;
                 };
                 Scene.prototype.translateIndexBuffer = function (indexFormat, indexBufferData) {
                     switch (indexFormat) {
@@ -13886,14 +14111,14 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             indexDatas.push(indexData);
                         }
                     }
-                    catch (e_49_1) { e_49 = { error: e_49_1 }; }
+                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_49) throw e_49.error; }
+                        finally { if (e_50) throw e_50.error; }
                     }
-                    var e_49, _c;
+                    var e_50, _c;
                 };
                 Scene.prototype.translateIndexFormat = function (gl, indexFormat) {
                     // Little-endian translation was done above.
@@ -13925,12 +14150,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             glIndexBuffers.push(coalescedIndex.shift());
                         }
                     }
-                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
+                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_50) throw e_50.error; }
+                        finally { if (e_51) throw e_51.error; }
                     }
                     return function (state) {
                         var lod = 0;
@@ -13943,16 +14168,16 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 gl.drawElements(_this.translatePrimType(gl, mesh.primType), submesh.indexBufferCount, _this.translateIndexFormat(gl, mesh.indexFormat), glIndexBuffer.offset + submesh.indexBufferOffset);
                             }
                         }
-                        catch (e_51_1) { e_51 = { error: e_51_1 }; }
+                        catch (e_52_1) { e_52 = { error: e_52_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_51) throw e_51.error; }
+                            finally { if (e_52) throw e_52.error; }
                         }
-                        var e_51, _c;
+                        var e_52, _c;
                     };
-                    var e_50, _c;
+                    var e_51, _c;
                 };
                 Scene.prototype.translateModel = function (gl, model, coalescedVertex, coalescedIndex) {
                     var _this = this;
@@ -14135,15 +14360,15 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_52_1) { e_52 = { error: e_52_1 }; }
+        catch (e_53_1) { e_53 = { error: e_53_1 }; }
         finally {
             try {
                 if (scenes_9_1 && !scenes_9_1.done && (_a = scenes_9.return)) _a.call(scenes_9);
             }
-            finally { if (e_52) throw e_52.error; }
+            finally { if (e_53) throw e_53.error; }
         }
         return textures;
-        var e_52, _a;
+        var e_53, _a;
     }
     function createSceneFromFRESBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
@@ -14514,14 +14739,14 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_53_1) { e_53 = { error: e_53_1 }; }
+                    catch (e_54_1) { e_54 = { error: e_54_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_53) throw e_53.error; }
+                        finally { if (e_54) throw e_54.error; }
                     }
-                    var e_53, _c;
+                    var e_54, _c;
                 }
                 MultiScene.prototype.createPanels = function () {
                     var layers = new UI.LayerPanel();
@@ -15014,12 +15239,12 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
                     vertexIndexSize += 0x02;
                 }
             }
-            catch (e_54_1) { e_54 = { error: e_54_1 }; }
+            catch (e_55_1) { e_55 = { error: e_55_1 }; }
             finally {
                 try {
                     if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
                 }
-                finally { if (e_54) throw e_54.error; }
+                finally { if (e_55) throw e_55.error; }
             }
             var totalVertexCount = 0;
             var totalTriangleCount = 0;
@@ -15176,7 +15401,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             };
             surfaces.push(surface);
             sectionIndex++;
-            var e_54, _a;
+            var e_55, _a;
         };
         for (var i = 0; i < surfaceCount; i++) {
             _loop_12(i);
@@ -15382,15 +15607,15 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                                 return resource;
                         }
                     }
-                    catch (e_55_1) { e_55 = { error: e_55_1 }; }
+                    catch (e_56_1) { e_56 = { error: e_56_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_55) throw e_55.error; }
+                        finally { if (e_56) throw e_56.error; }
                     }
                     return null;
-                    var e_55, _c;
+                    var e_56, _c;
                 };
                 ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
                     var cached = this._cache.get(assetID);
@@ -15729,15 +15954,15 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                             offset += 4 * attrib.compCount;
                         }
                     }
-                    catch (e_56_1) { e_56 = { error: e_56_1 }; }
+                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
                     finally {
                         try {
                             if (vtxAttrFormats_2_1 && !vtxAttrFormats_2_1.done && (_a = vtxAttrFormats_2.return)) _a.call(vtxAttrFormats_2);
                         }
-                        finally { if (e_56) throw e_56.error; }
+                        finally { if (e_57) throw e_57.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_56, _a;
+                    var e_57, _a;
                 }
                 Command_Surface.prototype.exec = function (state) {
                     var gl = state.gl;
@@ -15896,14 +16121,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
+                    catch (e_58_1) { e_58 = { error: e_58_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_57) throw e_57.error; }
+                        finally { if (e_58) throw e_58.error; }
                     }
-                    var e_57, _c;
+                    var e_58, _c;
                 };
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -15947,15 +16172,15 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                                 return new MultiScene(scenes);
                             }
                         }
-                        catch (e_58_1) { e_58 = { error: e_58_1 }; }
+                        catch (e_59_1) { e_59 = { error: e_59_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_58) throw e_58.error; }
+                            finally { if (e_59) throw e_59.error; }
                         }
                         return null;
-                        var e_58, _c;
+                        var e_59, _c;
                     });
                 };
                 return MP1SceneDesc;
@@ -16484,16 +16709,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_59_1) { e_59 = { error: e_59_1 }; }
+                        catch (e_60_1) { e_60 = { error: e_60_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_59) throw e_59.error; }
+                            finally { if (e_60) throw e_60.error; }
                         }
                     }
                     return cmd;
-                    var e_59, _c;
+                    var e_60, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
