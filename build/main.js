@@ -201,10 +201,13 @@ System.register("util", ["ArrayBufferSlice", "Progressable"], function (exports_
 System.register("endian", ["ArrayBufferSlice"], function (exports_3, context_3) {
     "use strict";
     var __moduleName = context_3 && context_3.id;
-    function isLittleEndian() {
-        return _isLittle;
+    function getSystemEndianness() {
+        return _systemEndianness;
     }
-    exports_3("isLittleEndian", isLittleEndian);
+    exports_3("getSystemEndianness", getSystemEndianness);
+    function isLittleEndian() {
+        return _systemEndianness === 0 /* LITTLE_ENDIAN */;
+    }
     function bswap16(m) {
         var a = m.createTypedArray(Uint8Array);
         var o = new Uint8Array(a.byteLength);
@@ -260,7 +263,7 @@ System.register("endian", ["ArrayBufferSlice"], function (exports_3, context_3) 
         }
     }
     exports_3("betoh", betoh);
-    var ArrayBufferSlice_2, _test, _testView, _isLittle;
+    var ArrayBufferSlice_2, _test, _testView, _systemEndianness;
     return {
         setters: [
             function (ArrayBufferSlice_2_1) {
@@ -270,7 +273,7 @@ System.register("endian", ["ArrayBufferSlice"], function (exports_3, context_3) 
         execute: function () {
             _test = new Uint16Array([0xFEFF]);
             _testView = new DataView(_test.buffer);
-            _isLittle = _testView.getUint8(0) == 0xFF;
+            _systemEndianness = (_testView.getUint8(0) == 0xFF) ? 0 /* LITTLE_ENDIAN */ : 1 /* BIG_ENDIAN */;
         }
     };
 });
@@ -358,9 +361,9 @@ System.register("ArrayBufferSlice", ["util", "endian"], function (exports_4, con
                         return this.subarray(offs, length).createDataView();
                     }
                 };
-                ArrayBufferSlice.prototype.createTypedArray = function (clazz, offs, count, littleEndian) {
+                ArrayBufferSlice.prototype.createTypedArray = function (clazz, offs, count, endianness) {
                     if (offs === void 0) { offs = 0; }
-                    if (littleEndian === void 0) { littleEndian = true; }
+                    if (endianness === void 0) { endianness = 0 /* LITTLE_ENDIAN */; }
                     var begin = this.byteOffset + offs;
                     var byteLength;
                     if (count !== undefined) {
@@ -372,7 +375,7 @@ System.register("ArrayBufferSlice", ["util", "endian"], function (exports_4, con
                         count = byteLength / clazz.BYTES_PER_ELEMENT;
                         util_1.assert((count | 0) === count);
                     }
-                    var needsEndianSwap = (endian_1.isLittleEndian() != littleEndian);
+                    var needsEndianSwap = (endianness !== endian_1.getSystemEndianness());
                     // Typed arrays require alignment.
                     if (isAligned(begin, clazz.BYTES_PER_ELEMENT) && !needsEndianSwap) {
                         return new clazz(this.arrayBuffer, begin, count);
@@ -380,7 +383,7 @@ System.register("ArrayBufferSlice", ["util", "endian"], function (exports_4, con
                     else if (needsEndianSwap) {
                         // TODO(jstpierre): Handle endian swap internally..
                         var componentSize = clazz.BYTES_PER_ELEMENT;
-                        var copy = endian_1.betoh(this.copySlice(offs, byteLength), componentSize);
+                        var copy = endian_1.betoh(this.subarray(offs, byteLength), componentSize);
                         return copy.createTypedArray(clazz);
                     }
                     else {
@@ -4530,8 +4533,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
                 var matrixCount = view.getUint16(packetMatrixDataOffs + 0x02);
                 var matrixFirstIndex = view.getUint32(packetMatrixDataOffs + 0x04);
                 var packetMatrixTableOffs = matrixTableOffs + matrixFirstIndex * 0x02;
-                var packetMatrixTableSize = matrixCount * 0x02;
-                var weightedJointTable = endian_2.betoh(buffer.subarray(packetMatrixTableOffs, packetMatrixTableSize), 2).createTypedArray(Uint16Array);
+                var packetMatrixTableSize = matrixCount;
+                var weightedJointTable = buffer.createTypedArray(Uint16Array, packetMatrixTableOffs, packetMatrixTableSize, 1 /* BIG_ENDIAN */);
                 var srcOffs = packetStart;
                 var subBuffer = buffer.subarray(srcOffs, packetSize);
                 var loadedSubData = vtxLoader.runVertices(vtxArrays, subBuffer);
@@ -5076,9 +5079,9 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var rTableOffs = view.getUint32(0x2C);
         var tTableOffs = view.getUint32(0x30);
         var rotationScale = Math.pow(2, rotationDecimal) / 32767;
-        var sTable = endian_2.betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
-        var rTable = endian_2.betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array);
-        var tTable = endian_2.betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
+        var sTable = buffer.createTypedArray(Float32Array, sTableOffs, sCount, 1 /* BIG_ENDIAN */);
+        var rTable = buffer.createTypedArray(Int16Array, rTableOffs, rCount, 1 /* BIG_ENDIAN */);
+        var tTable = buffer.createTypedArray(Float32Array, tTableOffs, tCount, 1 /* BIG_ENDIAN */);
         var materialNameTable = readStringTable(buffer, materialNameTableOffs);
         var animationTableIdx = animationTableOffs;
         function readAnimationTrack(data, scale) {
@@ -5153,10 +5156,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             animationTableIdx += 0x06;
             return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
         }
-        var registerRTable = endian_2.betoh(buffer.subarray(registerROffs, registerRCount * 2), 2).createTypedArray(Int16Array);
-        var registerGTable = endian_2.betoh(buffer.subarray(registerGOffs, registerGCount * 2), 2).createTypedArray(Int16Array);
-        var registerBTable = endian_2.betoh(buffer.subarray(registerBOffs, registerBCount * 2), 2).createTypedArray(Int16Array);
-        var registerATable = endian_2.betoh(buffer.subarray(registerAOffs, registerACount * 2), 2).createTypedArray(Int16Array);
+        var registerRTable = buffer.createTypedArray(Int16Array, registerROffs, registerRCount, 1 /* BIG_ENDIAN */);
+        var registerGTable = buffer.createTypedArray(Int16Array, registerGOffs, registerGCount, 1 /* BIG_ENDIAN */);
+        var registerBTable = buffer.createTypedArray(Int16Array, registerBOffs, registerBCount, 1 /* BIG_ENDIAN */);
+        var registerATable = buffer.createTypedArray(Int16Array, registerAOffs, registerACount, 1 /* BIG_ENDIAN */);
         var registerAnimationEntries = [];
         animationTableIdx = registerColorAnimationTableOffs;
         for (var i = 0; i < registerColorAnimationTableCount; i++) {
@@ -5170,10 +5173,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             animationTableIdx += 0x04;
             registerAnimationEntries.push({ materialName: materialName, remapIndex: remapIndex, colorId: colorId, r: r, g: g, b: b, a: a });
         }
-        var konstantRTable = endian_2.betoh(buffer.subarray(konstantROffs, konstantRCount * 2), 2).createTypedArray(Int16Array);
-        var konstantGTable = endian_2.betoh(buffer.subarray(konstantGOffs, konstantGCount * 2), 2).createTypedArray(Int16Array);
-        var konstantBTable = endian_2.betoh(buffer.subarray(konstantBOffs, konstantBCount * 2), 2).createTypedArray(Int16Array);
-        var konstantATable = endian_2.betoh(buffer.subarray(konstantAOffs, konstantACount * 2), 2).createTypedArray(Int16Array);
+        var konstantRTable = buffer.createTypedArray(Int16Array, konstantROffs, konstantRCount, 1 /* BIG_ENDIAN */);
+        var konstantGTable = buffer.createTypedArray(Int16Array, konstantGOffs, konstantGCount, 1 /* BIG_ENDIAN */);
+        var konstantBTable = buffer.createTypedArray(Int16Array, konstantBOffs, konstantBCount, 1 /* BIG_ENDIAN */);
+        var konstantATable = buffer.createTypedArray(Int16Array, konstantAOffs, konstantACount, 1 /* BIG_ENDIAN */);
         var konstantAnimationEntries = [];
         animationTableIdx = konstantColorAnimationTableOffs;
         for (var i = 0; i < konstantColorAnimationTableCount; i++) {
@@ -5203,9 +5206,9 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         var rTableOffs = view.getUint32(0x1C);
         var tTableOffs = view.getUint32(0x20);
         var rotationScale = Math.pow(2, rotationDecimal) / 32767;
-        var sTable = endian_2.betoh(buffer.subarray(sTableOffs, sCount * 4), 4).createTypedArray(Float32Array);
-        var rTable = endian_2.betoh(buffer.subarray(rTableOffs, rCount * 2), 2).createTypedArray(Int16Array);
-        var tTable = endian_2.betoh(buffer.subarray(tTableOffs, tCount * 4), 4).createTypedArray(Float32Array);
+        var sTable = buffer.createTypedArray(Float32Array, sTableOffs, sCount, 1 /* BIG_ENDIAN */);
+        var rTable = buffer.createTypedArray(Int16Array, rTableOffs, rCount, 1 /* BIG_ENDIAN */);
+        var tTable = buffer.createTypedArray(Float32Array, tTableOffs, tCount, 1 /* BIG_ENDIAN */);
         var animationTableIdx = jointAnimationTableOffs;
         function readAnimationTrack(data, scale) {
             var count = view.getUint16(animationTableIdx + 0x00);
@@ -7924,7 +7927,7 @@ System.register("sm64ds/crg1", ["util"], function (exports_29, context_29) {
             case 203 /* BINARY_DATA */:
                 return buffer.subarray(offs + 0x04, numValues);
             case 226 /* FLOAT_ARRAY */:
-                return buffer.createTypedArray(Float32Array, offs + 0x04, numValues, false);
+                return buffer.createTypedArray(Float32Array, offs + 0x04, numValues, 1 /* BIG_ENDIAN */);
             default:
                 throw new Error("whoops");
         }
@@ -15021,7 +15024,7 @@ System.register("metroid_prime/txtr", ["gx/gx_texture"], function (exports_60, c
     };
 });
 // Implements Retro's MREA format as seen in Metroid Prime 1.
-System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], function (exports_61, context_61) {
+System.register("metroid_prime/mrea", ["gx/gx_material", "util"], function (exports_61, context_61) {
     "use strict";
     var __moduleName = context_61 && context_61.id;
     function parseMaterialSet(resourceSystem, buffer, offs) {
@@ -15380,7 +15383,6 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             var vertexId = 0;
             var packedDataSize = packedVertexSize * totalVertexCount;
             var packedDataView = new Float32Array(packedDataSize);
-            var littleEndian = endian_4.isLittleEndian();
             var packedDataOffs = 0;
             drawCalls.forEach(function (drawCall) {
                 // Convert topology to triangles.
@@ -15551,7 +15553,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
         var _a;
     }
     exports_61("parse", parse);
-    var GX_Material, util_37, endian_4, vtxAttrFormats;
+    var GX_Material, util_37, vtxAttrFormats;
     return {
         setters: [
             function (GX_Material_4) {
@@ -15559,9 +15561,6 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "endian"], func
             },
             function (util_37_1) {
                 util_37 = util_37_1;
-            },
-            function (endian_4_1) {
-                endian_4 = endian_4_1;
             }
         ],
         execute: function () {

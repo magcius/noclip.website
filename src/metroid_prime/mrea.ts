@@ -8,7 +8,6 @@ import { TXTR } from './txtr';
 
 import { ResourceSystem } from "./resource";
 import { assert, readString, align } from "../util";
-import { isLittleEndian } from '../endian';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export interface MREA {
@@ -541,7 +540,6 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice,
 
         const packedDataSize = packedVertexSize * totalVertexCount;
         const packedDataView = new Float32Array(packedDataSize);
-        const littleEndian = isLittleEndian();
         let packedDataOffs = 0;
         drawCalls.forEach((drawCall) => {
             // Convert topology to triangles.

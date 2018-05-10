@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, align } from "../util";
-import { betoh } from "../endian";
+import { Endianness } from "../endian";
 
 const enum NodeType {
     STRING       = 0xA0,
@@ -103,7 +103,7 @@ function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, expec
     case NodeType.BINARY_DATA:
         return buffer.subarray(offs + 0x04, numValues);
     case NodeType.FLOAT_ARRAY:
-        return buffer.createTypedArray(Float32Array, offs + 0x04, numValues, false);
+        return buffer.createTypedArray(Float32Array, offs + 0x04, numValues, Endianness.BIG_ENDIAN);
     default:
         throw new Error("whoops");
     }
