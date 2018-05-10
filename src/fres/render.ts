@@ -11,7 +11,9 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import Progressable from 'Progressable';
-import { RenderState, Program, RenderArena, RenderFlags, FrontFaceMode, CompareMode, CullMode, coalesceBuffer, CoalescedBuffer } from '../render';
+import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode, coalesceBuffer, CoalescedBuffer } from '../render';
+import Program from '../Program';
+import RenderArena from '../RenderArena';
 import { betoh } from '../endian';
 import { assert, fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';

@@ -3,7 +3,8 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 import { assert, fetch } from 'util';
 
-import { Program, RenderState, ColorTarget, FullscreenProgram, RenderFlags, BlendMode, BlendFactor } from '../render';
+import { RenderState, ColorTarget, RenderFlags, BlendMode, BlendFactor } from '../render';
+import Program, { FullscreenProgram } from '../Program';
 import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK } from './j3d';
