@@ -3,14 +3,9 @@
 
 import * as Viewer from './viewer';
 import Progressable from './Progressable';
+import { assertExists } from './util';
 
 const HIGHLIGHT_COLOR = 'rgb(255, 66, 95)';
-
-declare global {
-    interface CSSStyleDeclaration {
-        webkitUserSelect: string;
-    }
-}
 
 function createDOMFromString(s: string): DocumentFragment {
     return document.createRange().createContextualFragment(s);
@@ -90,7 +85,7 @@ export abstract class ScrollSelect implements Widget {
 
             const background = (flair !== undefined && flair.background !== undefined) ? flair.background : '';
             selector.style.background = background;
-            const textSpan = selector.querySelector('span');
+            const textSpan = assertExists(selector.querySelector('span'));
             const color = (flair !== undefined && flair.color !== undefined) ? flair.color : '';
             textSpan.style.color = color;
             if (flair !== undefined && flair.bulletColor !== undefined) {
@@ -115,7 +110,7 @@ export class SingleSelect extends ScrollSelect {
     public itemClicked(index: number) {
         this.selectItem(index);
     }
-    
+
     public selectItem(index: number) {
         this.onselectionchange(index);
     }
@@ -727,7 +722,7 @@ export class LayerPanel extends Panel {
 
     private _onItemChanged(index: number, visible: boolean): void {
         this.layers[index].setVisible(visible);
-    };
+    }
 
     public setLayers(layers: Layer[]): void {
         this.layers = layers;

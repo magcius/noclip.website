@@ -1,6 +1,6 @@
 
 import { mat4 } from 'gl-matrix';
-import { assert, align } from './util';
+import { assert, align, assertExists } from './util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import MemoizeCache from 'MemoizeCache';
 import CodeEditor from 'CodeEditor';
@@ -48,19 +48,30 @@ export enum BlendMode {
     REVERSE_SUBTRACT = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
 }
 
+interface RenderFlagsResolved {
+    depthWrite: boolean;
+    depthTest: boolean;
+    depthFunc: CompareMode;
+    blendSrc: BlendFactor;
+    blendDst: BlendFactor;
+    blendMode: BlendMode;
+    cullMode: CullMode;
+    frontFace: FrontFaceMode;
+}
+
 export class RenderFlags {
-    public depthWrite: boolean = undefined;
-    public depthTest: boolean = undefined;
-    public depthFunc: CompareMode = undefined;
-    public blendSrc: BlendFactor = undefined;
-    public blendDst: BlendFactor = undefined;
-    public blendMode: BlendMode = undefined;
-    public cullMode: CullMode = undefined;
-    public frontFace: FrontFaceMode = undefined;
+    public depthWrite: boolean | undefined = undefined;
+    public depthTest: boolean | undefined = undefined;
+    public depthFunc: CompareMode | undefined = undefined;
+    public blendSrc: BlendFactor | undefined = undefined;
+    public blendDst: BlendFactor | undefined = undefined;
+    public blendMode: BlendMode | undefined = undefined;
+    public cullMode: CullMode | undefined = undefined;
+    public frontFace: FrontFaceMode | undefined = undefined;
 
     static default: RenderFlags = new RenderFlags();
 
-    static flatten(dst: RenderFlags, src: RenderFlags) {
+    static flatten(dst: RenderFlags, src: RenderFlags): RenderFlagsResolved {
         if (dst.depthWrite === undefined)
             dst.depthWrite = src.depthWrite;
         if (dst.depthTest === undefined)
@@ -77,9 +88,10 @@ export class RenderFlags {
             dst.cullMode = src.cullMode;
         if (dst.frontFace === undefined)
             dst.frontFace = src.frontFace;
+        return <RenderFlagsResolved> dst;
     }
 
-    static apply(gl: WebGL2RenderingContext, oldFlags: RenderFlags, newFlags: RenderFlags) {
+    static apply(gl: WebGL2RenderingContext, oldFlags: RenderFlags, newFlags: RenderFlagsResolved) {
         if (oldFlags.depthWrite !== newFlags.depthWrite) {
             gl.depthMask(newFlags.depthWrite);
         }
@@ -140,15 +152,16 @@ RenderFlags.default.frontFace = FrontFaceMode.CCW;
 const DEBUG = true;
 
 function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
-    const shader: WebGLShader = gl.createShader(type);
+    const shader: WebGLShader = assertExists(gl.createShader(type));
 
     gl.shaderSource(shader, str);
     gl.compileShader(shader);
 
     if (DEBUG && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
         console.error(str);
-        if (gl.getExtension('WEBGL_debug_shaders'))
-            console.error(gl.getExtension('WEBGL_debug_shaders').getTranslatedShaderSource(shader));
+        const debug_shaders = gl.getExtension('WEBGL_debug_shaders');
+        if (debug_shaders)
+            console.error(debug_shaders.getTranslatedShaderSource(shader));
         console.error(gl.getShaderInfoLog(shader));
         gl.deleteShader(shader);
         return null;
@@ -158,12 +171,12 @@ function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
 }
 
 export class Program {
-    public name: string;
-    public vert: string;
-    public frag: string;
+    public name: string = '(unnamed)';
+    public vert: string = '';
+    public frag: string = '';
 
-    public projectionLocation: WebGLUniformLocation;
-    public modelViewLocation: WebGLUniformLocation;
+    public projectionLocation: WebGLUniformLocation | null = null;
+    public modelViewLocation: WebGLUniformLocation | null = null;
 
     private glProg: WebGLProgram;
     private forceRecompile: boolean = false;
@@ -205,7 +218,7 @@ export class Program {
         ).join('\n');
         const rest = lines.filter((line) => !line.startsWith('precision') && !line.startsWith('#extension')).join('\n');
 
-        const extensionDefines = gl.getSupportedExtensions().map((s) => {
+        const extensionDefines = assertExists(gl.getSupportedExtensions()).map((s) => {
             return `#define HAS_${s}`;
         }).join('\n');
         return `
@@ -224,7 +237,7 @@ ${rest}
     }
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        this.modelViewLocation = gl.getUniformLocation(prog, "u_modelView");
+        this.modelViewLocation  = gl.getUniformLocation(prog, "u_modelView");
         this.projectionLocation = gl.getUniformLocation(prog, "u_projection");
     }
 
@@ -237,7 +250,7 @@ ${rest}
     }
 
     private _editShader(n: 'vert' | 'frag') {
-        const win = window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`);
+        const win = assertExists(window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`));
         const init = () => {
             const editor = new CodeEditor(win.document);
             const document = win.document;
@@ -253,10 +266,10 @@ ${rest}
                     clearTimeout(timeout);
                 timeout = setTimeout(tryCompile, 500);
             };
-            win.onresize = () => {
+            const onresize = win.onresize = () => {
                 editor.setSize(document.body.offsetWidth, window.innerHeight);
             };
-            win.onresize(null);
+            onresize();
             const tryCompile = () => {
                 timeout = 0;
                 this[n] = editor.getValue();
@@ -552,11 +565,11 @@ export class RenderState {
     private programCache: ProgramCache;
 
     // State.
-    public currentProgram: Program = null;
+    public currentProgram: Program | null = null;
     public currentFlags: RenderFlags = new RenderFlags();
 
-    private currentColorTarget: ColorTarget = null;
-    private currentDepthTarget: DepthTarget = null;
+    private currentColorTarget: ColorTarget | null = null;
+    private currentDepthTarget: DepthTarget | null = null;
 
     // Parameters.
     public fov: number;
@@ -570,8 +583,8 @@ export class RenderState {
 
     private scratchMatrix: mat4;
 
-    public drawCallCount: number;
-    public frameStartTime: number;
+    public drawCallCount: number = 0;
+    public frameStartTime: number = 0;
 
     public onscreenColorTarget: ColorTarget;
     public onscreenDepthTarget: DepthTarget;
@@ -596,7 +609,7 @@ export class RenderState {
         this.fullscreenFlags.blendMode = BlendMode.NONE;
         this.fullscreenFlags.cullMode = CullMode.NONE;
 
-        this.msaaFramebuffer = gl.createFramebuffer();
+        this.msaaFramebuffer = assertExists(gl.createFramebuffer());
     }
 
     public destroy() {
@@ -616,13 +629,13 @@ export class RenderState {
     }
 
     // XXX(jstpierre): Design a better API than this.
-    public runFullscreen(flags: RenderFlags = null): void {
+    public runFullscreen(flags: RenderFlags | null = null): void {
         const gl = this.gl;
         this.useFlags(flags !== null ? flags : this.fullscreenFlags);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 
-    private blitFullscreenTexture(colorTexture: WebGLTexture, flags: RenderFlags = null) {
+    private blitFullscreenTexture(colorTexture: WebGLTexture, flags: RenderFlags | null = null) {
         const gl = this.gl;
         this.useProgram(this.fullscreenCopyProgram);
         gl.activeTexture(gl.TEXTURE0);
@@ -631,7 +644,7 @@ export class RenderState {
         this.runFullscreen(flags);
     }
 
-    public blitColorTarget(colorTarget: ColorTarget, flags: RenderFlags = null) {
+    public blitColorTarget(colorTarget: ColorTarget, flags: RenderFlags | null = null) {
         const gl = this.gl;
         const resolvedColorTexture = colorTarget.resolve(gl);
         // Make sure to re-bind our destination RT, since the resolve screws things up...
@@ -700,7 +713,7 @@ export class RenderState {
         gl.useProgram(this.compileProgram(prog));
     }
 
-    public updateModelView(isSkybox: boolean = false, model: mat4 = null): mat4 {
+    public updateModelView(isSkybox: boolean = false, model: mat4 | null = null): mat4 {
         const scratch = this.scratchMatrix;
         mat4.copy(scratch, this.view);
         if (isSkybox) {
@@ -714,7 +727,7 @@ export class RenderState {
         return scratch;
     }
 
-    public bindModelView(isSkybox: boolean = false, model: mat4 = null) {
+    public bindModelView(isSkybox: boolean = false, model: mat4 | null = null) {
         const gl = this.gl;
         const prog = this.currentProgram;
         const scratch = this.updateModelView(isSkybox, model);
@@ -724,9 +737,8 @@ export class RenderState {
 
     public useFlags(flags: RenderFlags) {
         const gl = this.gl;
-        // TODO(jstpierre): Move the flattening to a stack, possibly?
-        RenderFlags.flatten(flags, this.currentFlags);
-        RenderFlags.apply(gl, this.currentFlags, flags);
-        this.currentFlags = flags;
+        const resolved = RenderFlags.flatten(flags, this.currentFlags);
+        RenderFlags.apply(gl, this.currentFlags, resolved);
+        this.currentFlags = resolved;
     }
 }

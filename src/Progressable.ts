@@ -1,7 +1,7 @@
 
 export default class Progressable<T> {
     public promise: PromiseLike<T>;
-    public onProgress: () => void;
+    public onProgress: (() => void) | null;
     public progress: number; // Between 0 and 1.
 
     constructor(promise: PromiseLike<T>, initialProgress: number = 0) {
@@ -12,7 +12,7 @@ export default class Progressable<T> {
 
     public setProgress(n: number) {
         this.progress = n;
-        if (this.onProgress)
+        if (this.onProgress !== null)
             this.onProgress();
     }
 

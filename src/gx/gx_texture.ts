@@ -107,9 +107,7 @@ function decode_Wasm(wasmInstance: gx_texture_asExports, texture: Texture, decod
     const heapSize = align(pSrc + srcSize, 0x10);
 
     const wasmMemory = new WasmMemoryManager(wasmInstance.memory);
-    wasmMemory.resize(heapSize);
-    const mem = wasmMemory.mem;
-    const heap = wasmMemory.heap;
+    const heap = wasmMemory.resize(heapSize);
 
     // Copy src buffer.
     heap.set(texture.data.createTypedArray(Uint8Array), pSrc);

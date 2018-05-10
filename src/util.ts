@@ -27,8 +27,15 @@ export function fetch(path: string): Progressable<ArrayBufferSlice> {
     return pr;
 }
 
-export function assert(b: boolean) {
+export function assert(b: boolean): void {
     if (!b) throw new Error("Assert fail");
+}
+
+export function assertExists<T>(v: T | null | undefined): T {
+    if (v)
+        return v;
+    else
+        throw new Error("Missing object");
 }
 
 export function readString(buffer: ArrayBufferSlice, offs: number, length: number = -1, nulTerminated: boolean = true): string {

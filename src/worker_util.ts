@@ -1,3 +1,4 @@
+import { assert, assertExists } from "./util";
 
 interface WorkerManagerRequest<TReq, TRes> {
     request: TReq;
@@ -9,15 +10,15 @@ interface WorkerRequest {
 }
 
 class WorkerManager<TReq extends WorkerRequest, TRes> {
-    private currentRequest: WorkerManagerRequest<TReq, TRes> = null;
-    public onworkerdone: () => void;
-
-    constructor(private worker: Worker) {
+    private currentRequest: (WorkerManagerRequest<TReq, TRes> | null) = null;
+    
+    constructor(private worker: Worker, public onworkerdone: () => void) {
         this.worker.onmessage = this._workerOnMessage.bind(this);
     }
 
     private _workerOnMessage(e: MessageEvent) {
         const resp: TRes = e.data;
+        this.currentRequest = assertExists(this.currentRequest);
         this.currentRequest.resolve(resp);
         this.currentRequest = null;
         this.onworkerdone();
@@ -57,8 +58,7 @@ export class WorkerPool<TReq extends WorkerRequest, TRes> {
 
         let numWorkers = this.numWorkers;
         while(numWorkers--) {
-            const manager = new WorkerManager<TReq, TRes>(this.workerConstructor());
-            manager.onworkerdone = this._onWorkerDone.bind(this);
+            const manager = new WorkerManager<TReq, TRes>(this.workerConstructor(), this._onWorkerDone.bind(this));
             this.workers.push(manager);
         }
     }
@@ -66,12 +66,10 @@ export class WorkerPool<TReq extends WorkerRequest, TRes> {
     public execute(request: TReq): Promise<TRes> {
         this.build();
 
-        let resolve;
-        const p = new Promise<TRes>((resolve_, reject) => {
-            resolve = resolve_;
+        const p = new Promise<TRes>((resolve, reject) => {
+            const workerManagerRequest = { request, resolve };
+            this.insertRequest(workerManagerRequest);
         });
-        const workerManagerRequest = { request, resolve };
-        this.insertRequest(workerManagerRequest);
         this.pumpQueue();
         return p;
     }
@@ -88,10 +86,10 @@ export class WorkerPool<TReq extends WorkerRequest, TRes> {
     private pumpQueue() {
         for (const worker of this.workers) {
             if (this.outstandingRequests.length === 0)
-            return;
+                return;
 
             if (worker.isFree()) {
-                const req = this.outstandingRequests.shift();
+                const req = assertExists(this.outstandingRequests.shift());
                 worker.execute(req);
             }
         }
