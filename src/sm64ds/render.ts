@@ -1,7 +1,7 @@
 
 import { mat3, mat4 } from 'gl-matrix';
 
-import * as CRG0 from './crg0';
+import * as CRG1 from './crg1';
 import * as LZ77 from './lz77';
 import * as NITRO_BMD from './nitro_bmd';
 import * as NITRO_GX from './nitro_gx';
@@ -81,7 +81,7 @@ class BMDRenderer {
     public textures: Viewer.Texture[];
     public bmd: NITRO_BMD.BMD;
     public localScale: number;
-    public crg0Level: CRG0.Level;
+    public crg1Level: CRG1Level;
     public isSkybox: boolean;
     public localMatrix: mat4;
 
@@ -90,10 +90,10 @@ class BMDRenderer {
 
     private arena: RenderArena;
 
-    constructor(gl: WebGL2RenderingContext, bmd: NITRO_BMD.BMD, localScale: number, crg0Level: CRG0.Level) {
+    constructor(gl: WebGL2RenderingContext, bmd: NITRO_BMD.BMD, localScale: number, crg1Level: CRG1Level) {
         this.bmd = bmd;
         this.localScale = localScale;
-        this.crg0Level = crg0Level;
+        this.crg1Level = crg1Level;
         this.isSkybox = false;
         this.arena = new RenderArena();
 
@@ -190,7 +190,7 @@ class BMDRenderer {
         }
 
         // Find any possible material animations.
-        const crg0mat = this.crg0Level.materials.find((c) => c.name === material.name);
+        const crg1mat = this.crg1Level.TextureAnimations.find((c) => c.MaterialName === material.name);
         const texCoordMat = mat3.create();
         mat3.fromMat2d(texCoordMat, material.texCoordMat);
 
@@ -200,21 +200,24 @@ class BMDRenderer {
         renderFlags.depthWrite = material.depthWrite;
         renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
 
+        console.log(crg1mat);
+        const texAnimMat = mat3.create();
+
         return (state: RenderState) => {
-            if (crg0mat !== undefined) {
-                const texAnimMat = mat3.create();
-                for (const anim of crg0mat.animations) {
-                    const time = state.time / 30;
-                    const value = anim.values[(time | 0) % anim.values.length];
-                    if (anim.property === 'x')
-                        mat3.translate(texAnimMat, texAnimMat, [-value, 0]);
-                    else if (anim.property === 'y')
-                        mat3.translate(texAnimMat, texAnimMat, [0, value]);
-                    else if (anim.property === 'scale')
-                        mat3.scale(texAnimMat, texAnimMat, [value, value]);
-                    else if (anim.property === 'rotation')
-                        mat3.rotate(texAnimMat, texAnimMat, value / 180 * Math.PI);
-                }
+            function selectArray(arr: Float32Array, time: number): number {
+                return arr[(time | 0) % arr.length];
+            }
+
+            if (crg1mat !== undefined) {
+                const time = state.time / 30;
+                const scale = selectArray(crg1mat.Scale, time);
+                const rotation = selectArray(crg1mat.Rotation, time);
+                const x = selectArray(crg1mat.X, time);
+                const y = selectArray(crg1mat.Y, time);
+                mat3.identity(texAnimMat);
+                mat3.scale(texAnimMat, texAnimMat, [scale, scale]);
+                mat3.rotate(texAnimMat, texAnimMat, rotation / 180 * Math.PI);
+                mat3.translate(texAnimMat, texAnimMat, [-x, y]);
                 mat3.fromMat2d(texCoordMat, material.texCoordMat);
                 mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
             }
@@ -304,6 +307,25 @@ class SM64DSRenderer implements Viewer.MainScene {
     }
 }
 
+interface CRG1TextureAnimation {
+    MaterialName: string;
+    Duration: number;
+    Scale: Float32Array;
+    Rotation: Float32Array;
+    X: Float32Array;
+    Y: Float32Array;
+}
+
+interface CRG1Level {
+    MapBmdFile: string;
+    VrboxBmdFile: string;
+    TextureAnimations: CRG1TextureAnimation[];
+}
+
+interface Sm64DSCRG1 {
+    Levels: CRG1Level[];
+}
+
 export class SceneDesc implements Viewer.SceneDesc {
     public id: string;
     public name: string;
@@ -316,13 +338,13 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch('data/sm64ds/sm64ds.crg0').then((result: ArrayBufferSlice) => {
-            const crg0 = CRG0.parse(result);
-            return this._createSceneFromCRG0(gl, crg0);
+        return fetch('data/sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
+            const crg1 = <Sm64DSCRG1> <any> CRG1.parse(result);
+            return this._createSceneFromCRG1(gl, crg1);
         });
     }
 
-    private _createBMDRenderer(gl: WebGL2RenderingContext, filename: string, localScale: number, level: CRG0.Level, isSkybox: boolean): PromiseLike<BMDRenderer> {
+    private _createBMDRenderer(gl: WebGL2RenderingContext, filename: string, localScale: number, level: CRG1Level, isSkybox: boolean): PromiseLike<BMDRenderer> {
         return fetch(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
@@ -332,11 +354,11 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createSceneFromCRG0(gl: WebGL2RenderingContext, crg0: CRG0.CRG0): PromiseLike<Viewer.MainScene> {
-        const level = crg0.levels[this.levelId];
-        const renderers = [this._createBMDRenderer(gl, level.attributes.get('bmd'), 100, level, false)];
-        if (level.attributes.get('vrbox'))
-            renderers.push(this._createBMDRenderer(gl, level.attributes.get('vrbox'), 0.8, level, true));
+    private _createSceneFromCRG1(gl: WebGL2RenderingContext, crg1: Sm64DSCRG1): PromiseLike<Viewer.MainScene> {
+        const level = crg1.Levels[this.levelId];
+        const renderers = [this._createBMDRenderer(gl, level.MapBmdFile, 100, level, false)];
+        if (level.VrboxBmdFile)
+            renderers.push(this._createBMDRenderer(gl, level.VrboxBmdFile, 0.8, level, true));
         return Promise.all(renderers).then(([mainBMD, skyboxBMD]) => {
             return new SM64DSRenderer(mainBMD, skyboxBMD);
         });
