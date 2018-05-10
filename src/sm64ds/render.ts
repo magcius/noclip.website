@@ -1,7 +1,7 @@
 
 import { mat3, mat4, vec3 } from 'gl-matrix';
 
-import * as CRG1 from './crg1';
+import * as BYML from '../byml';
 import * as LZ77 from './lz77';
 import * as NITRO_BMD from './nitro_bmd';
 import * as NITRO_GX from './nitro_gx';
@@ -391,7 +391,7 @@ export class SceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return fetch('data/sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
-            const crg1 = <Sm64DSCRG1> <any> CRG1.parse(result);
+            const crg1 = <Sm64DSCRG1> <any> BYML.parse(result, BYML.FileType.CRG1);
             return this._createSceneFromCRG1(gl, crg1);
         });
     }
