@@ -67,7 +67,7 @@ void main() {
     color.a *= clamp(v_eyeFade, 0.3, 1.0);
     gl_FragColor = color;
 
-    gl_FragDepthEXT = gl_FragCoord.z + 1e-6;
+    gl_FragDepth = gl_FragCoord.z + 1e-6;
 }
 `;
 

@@ -5,7 +5,7 @@ import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';
 
-import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontFaceMode, Program, RenderFlags, RenderState } from '../render';
+import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontFaceMode, Program, RenderFlags, RenderState, BaseProgram } from '../render';
 import { align } from '../util';
 import { Material } from '../sm64ds/nitro_bmd';
 
@@ -170,7 +170,7 @@ export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
     return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrib === vtxAttrib);
 }
 
-export class GX_Program extends Program {
+export class GX_Program extends BaseProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
@@ -186,8 +186,6 @@ export class GX_Program extends Program {
     }
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-
         gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_SceneParams`), GX_Program.ub_SceneParams);
         gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_MaterialParams`), GX_Program.ub_MaterialParams);
         gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_PacketParams`), GX_Program.ub_PacketParams);

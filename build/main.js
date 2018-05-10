@@ -1626,7 +1626,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
         var e_7, _a, e_8, _b;
     }
     exports_9("coalesceBuffer", coalesceBuffer);
-    var gl_matrix_1, util_3, MemoizeCache_1, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, DEBUG, Program, ProgramCache, RenderArena, BufferCoalescer, FullscreenProgram, FullscreenCopyProgram, RENDER_SAMPLES, ColorTarget, DepthTarget, RenderState;
+    var gl_matrix_1, util_3, MemoizeCache_1, CodeEditor_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, DEBUG, BaseProgram, Program, ProgramCache, RenderArena, BufferCoalescer, FullscreenProgram, FullscreenCopyProgram, RENDER_SAMPLES, ColorTarget, DepthTarget, RenderState;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -1770,16 +1770,14 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
             RenderFlags.default.depthFunc = CompareMode.LEQUAL;
             RenderFlags.default.frontFace = FrontFaceMode.CCW;
             DEBUG = true;
-            Program = /** @class */ (function () {
-                function Program() {
+            BaseProgram = /** @class */ (function () {
+                function BaseProgram() {
                     this.name = '(unnamed)';
                     this.vert = '';
                     this.frag = '';
-                    this.projectionLocation = null;
-                    this.modelViewLocation = null;
                     this.forceRecompile = false;
                 }
-                Program.prototype.compile = function (gl, programCache) {
+                BaseProgram.prototype.compile = function (gl, programCache) {
                     if (!this.glProg || this.forceRecompile) {
                         this.forceRecompile = false;
                         var vert = this.preprocessShader(gl, this.vert, "vert");
@@ -1795,7 +1793,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                     }
                     return this.glProg;
                 };
-                Program.prototype.preprocessShader = function (gl, source, type) {
+                BaseProgram.prototype.preprocessShader = function (gl, source, type) {
                     // Garbage WebGL2 shader compiler until I get something better down the line...
                     var lines = source.split('\n').map(function (n) {
                         // Remove comments.
@@ -1815,19 +1813,12 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                     var extensionDefines = util_3.assertExists(gl.getSupportedExtensions()).map(function (s) {
                         return "#define HAS_" + s;
                     }).join('\n');
-                    return ("\n#version 300 es\n#define attribute in\n#define varying " + (type === 'vert' ? 'out' : 'in') + "\n" + extensionDefines + "\n#define gl_FragColor o_color\n#define gl_FragDepthEXT gl_FragDepth\n#define texture2D texture\n" + extensions + "\n" + precision + "\nout vec4 o_color;\n" + rest + "\n").trim();
+                    return ("\n#version 300 es\n#define attribute in\n#define varying " + (type === 'vert' ? 'out' : 'in') + "\n" + extensionDefines + "\n#define gl_FragColor o_color\n#define texture2D texture\n" + extensions + "\n" + precision + "\nout vec4 o_color;\n" + rest + "\n").trim();
                 };
-                Program.prototype.bind = function (gl, prog) {
-                    this.modelViewLocation = gl.getUniformLocation(prog, "u_modelView");
-                    this.projectionLocation = gl.getUniformLocation(prog, "u_projection");
-                };
-                Program.prototype.track = function (arena) {
-                    arena.programs.push(this);
-                };
-                Program.prototype.destroy = function (gl) {
+                BaseProgram.prototype.destroy = function (gl) {
                     // TODO(jstpierre): Refcounting in the program cache?
                 };
-                Program.prototype._editShader = function (n) {
+                BaseProgram.prototype._editShader = function (n) {
                     var _this = this;
                     var win = util_3.assertExists(window.open('about:blank', undefined, "location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900"));
                     var init = function () {
@@ -1862,14 +1853,29 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                     else
                         win.onload = init;
                 };
-                Program.prototype.editv = function () {
+                BaseProgram.prototype.editv = function () {
                     this._editShader('vert');
                 };
-                Program.prototype.editf = function () {
+                BaseProgram.prototype.editf = function () {
                     this._editShader('frag');
                 };
-                return Program;
+                return BaseProgram;
             }());
+            exports_9("BaseProgram", BaseProgram);
+            Program = /** @class */ (function (_super) {
+                __extends(Program, _super);
+                function Program() {
+                    var _this = _super !== null && _super.apply(this, arguments) || this;
+                    _this.projectionLocation = null;
+                    _this.modelViewLocation = null;
+                    return _this;
+                }
+                Program.prototype.bind = function (gl, prog) {
+                    this.modelViewLocation = util_3.assertExists(gl.getUniformLocation(prog, "u_modelView"));
+                    this.projectionLocation = util_3.assertExists(gl.getUniformLocation(prog, "u_projection"));
+                };
+                return Program;
+            }(BaseProgram));
             exports_9("Program", Program);
             ProgramCache = /** @class */ (function (_super) {
                 __extends(ProgramCache, _super);
@@ -1898,6 +1904,10 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                         return null;
                     }
                     return prog;
+                };
+                ProgramCache.prototype.destroy = function (obj) {
+                    var gl = this.gl;
+                    gl.deleteProgram(obj);
                 };
                 ProgramCache.prototype.makeKey = function (key) {
                     return key.vert + "$" + key.frag;
@@ -1929,7 +1939,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                     return pushAndReturn(this.vaos, gl.createVertexArray());
                 };
                 RenderArena.prototype.trackProgram = function (program) {
-                    program.track(this);
+                    this.programs.push(program);
                 };
                 RenderArena.prototype.destroy = function (gl) {
                     try {
@@ -2036,8 +2046,11 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                     _this.vert = "\nout vec2 v_TexCoord;\n\nvoid main() {\n    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;\n    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;\n    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);\n    gl_Position.zw = vec2(1);\n}\n";
                     return _this;
                 }
+                FullscreenProgram.prototype.bind = function (gl, prog) {
+                    // Nothing to do.
+                };
                 return FullscreenProgram;
-            }(Program));
+            }(BaseProgram));
             exports_9("FullscreenProgram", FullscreenProgram);
             FullscreenCopyProgram = /** @class */ (function (_super) {
                 __extends(FullscreenCopyProgram, _super);
@@ -2245,6 +2258,7 @@ System.register("render", ["gl-matrix", "util", "MemoizeCache", "CodeEditor"], f
                 RenderState.prototype.bindModelView = function (isSkybox, model) {
                     if (isSkybox === void 0) { isSkybox = false; }
                     if (model === void 0) { model = null; }
+                    // XXX(jstpierre): Remove this junk
                     var gl = this.gl;
                     var prog = this.currentProgram;
                     var scratch = this.updateModelView(isSkybox, model);
@@ -4429,7 +4443,6 @@ System.register("gx/gx_material", ["render", "util"], function (exports_19, cont
                     return _this;
                 }
                 GX_Program.prototype.bind = function (gl, prog) {
-                    _super.prototype.bind.call(this, gl, prog);
                     gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, "ub_SceneParams"), GX_Program.ub_SceneParams);
                     gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, "ub_MaterialParams"), GX_Program.ub_MaterialParams);
                     gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, "ub_PacketParams"), GX_Program.ub_PacketParams);
@@ -4888,7 +4901,7 @@ System.register("gx/gx_material", ["render", "util"], function (exports_19, cont
                 GX_Program.ub_MaterialParams = 1;
                 GX_Program.ub_PacketParams = 2;
                 return GX_Program;
-            }(render_2.Program));
+            }(render_2.BaseProgram));
             exports_19("GX_Program", GX_Program);
         }
     };
@@ -8774,6 +8787,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                     this.animation = null;
                     this.opaqueCommands = [];
                     this.transparentCommands = [];
+                    this.program = new NITRO_Program();
                     this.bmd = bmd;
                     this.crg1Level = crg1Level;
                     this.isSkybox = false;
@@ -8891,7 +8905,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                 };
                 BMDRenderer.prototype.bindModelView = function (state, isBillboard) {
                     var gl = state.gl;
-                    var prog = state.currentProgram;
+                    var prog = this.program;
                     var modelView = state.updateModelView(this.isSkybox, this.localMatrix);
                     if (this.animation !== null)
                         this.animation.updateModelView(state, modelView);
@@ -8912,6 +8926,7 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                     var applyMaterial = this.translateMaterial(gl, batch.material);
                     var renderPoly = this.translatePoly(gl, batch.poly);
                     var func = function (state) {
+                        state.useProgram(_this.program);
                         applyMaterial(state);
                         _this.bindModelView(state, model.billboard);
                         renderPoly(state);
@@ -8960,7 +8975,6 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                     this.skyboxBMD = skyboxBMD;
                     this.extraBMDs = extraBMDs;
                     this.textures = collectTextures(__spread([this.mainBMD, this.skyboxBMD], this.extraBMDs));
-                    this.program = new NITRO_Program();
                 }
                 SM64DSRenderer.prototype.runCommands = function (state, funcs) {
                     funcs.forEach(function (func) {
@@ -8970,7 +8984,6 @@ System.register("sm64ds/render", ["gl-matrix", "sm64ds/crg1", "sm64ds/lz77", "sm
                 SM64DSRenderer.prototype.render = function (renderState) {
                     var _this = this;
                     var gl = renderState.gl;
-                    renderState.useProgram(this.program);
                     if (this.skyboxBMD) {
                         this.runCommands(renderState, this.skyboxBMD.opaqueCommands);
                         gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -9390,7 +9403,7 @@ System.register("mdl0/render", ["mdl0/mdl0", "viewer", "render", "util"], functi
                 function FancyGrid_Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
                     _this.vert = "\nprecision mediump float;\n\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\n\nattribute vec3 a_position;\nvarying float v_eyeFade;\nvarying vec2 v_surfCoord;\n\nvoid main() {\n    v_surfCoord = a_position.xz;\n\n    float scale = 200.0;\n    gl_Position = u_projection * u_modelView * vec4(a_position * scale, 1.0);\n\n    vec3 V = (vec4(0.0, 0.0, 1.0, 0.0) * u_modelView).xyz;\n    vec3 N = vec3(0.0, 1.0, 0.0);\n    v_eyeFade = dot(V, N);\n}\n";
-                    _this.frag = "\n#extension GL_EXT_frag_depth : enable\n#extension GL_OES_standard_derivatives : enable\n\nprecision highp float;\nvarying float v_eyeFade;\nvarying vec2 v_surfCoord;\n\nvoid main() {\n    float distFromCenter = distance(v_surfCoord, vec2(0.0));\n    vec2 uv = (v_surfCoord + 1.0) * 0.5;\n\n    vec4 color;\n    color.a = 1.0;\n\n    // Base Grid color.\n    color.rgb = mix(vec3(0.8, 0.0, 0.8), vec3(0.4, 0.2, 0.8), clamp(distFromCenter * 1.5, 0.0, 1.0));\n    color.a *= clamp(mix(2.0, 0.0, distFromCenter), 0.0, 1.0);\n\n    // Grid lines mask.\n    uv *= 80.0;\n    float sharpDx = clamp(1.0 / min(abs(dFdx(uv.x)), abs(dFdy(uv.y))), 2.0, 20.0);\n    float sharpMult = sharpDx * 10.0;\n    float sharpOffs = sharpDx * 4.40;\n    vec2 gridM = (abs(fract(uv) - 0.5)) * sharpMult - sharpOffs;\n    float gridMask = max(gridM.x, gridM.y);\n    color.a *= clamp(gridMask, 0.0, 1.0);\n\n    color.a += (1.0 - clamp(distFromCenter * 1.2, 0.0, 1.0)) * 0.5 * v_eyeFade;\n\n    // Eye fade.\n    color.a *= clamp(v_eyeFade, 0.3, 1.0);\n    gl_FragColor = color;\n\n    gl_FragDepthEXT = gl_FragCoord.z + 1e-6;\n}\n";
+                    _this.frag = "\n#extension GL_EXT_frag_depth : enable\n#extension GL_OES_standard_derivatives : enable\n\nprecision highp float;\nvarying float v_eyeFade;\nvarying vec2 v_surfCoord;\n\nvoid main() {\n    float distFromCenter = distance(v_surfCoord, vec2(0.0));\n    vec2 uv = (v_surfCoord + 1.0) * 0.5;\n\n    vec4 color;\n    color.a = 1.0;\n\n    // Base Grid color.\n    color.rgb = mix(vec3(0.8, 0.0, 0.8), vec3(0.4, 0.2, 0.8), clamp(distFromCenter * 1.5, 0.0, 1.0));\n    color.a *= clamp(mix(2.0, 0.0, distFromCenter), 0.0, 1.0);\n\n    // Grid lines mask.\n    uv *= 80.0;\n    float sharpDx = clamp(1.0 / min(abs(dFdx(uv.x)), abs(dFdy(uv.y))), 2.0, 20.0);\n    float sharpMult = sharpDx * 10.0;\n    float sharpOffs = sharpDx * 4.40;\n    vec2 gridM = (abs(fract(uv) - 0.5)) * sharpMult - sharpOffs;\n    float gridMask = max(gridM.x, gridM.y);\n    color.a *= clamp(gridMask, 0.0, 1.0);\n\n    color.a += (1.0 - clamp(distFromCenter * 1.2, 0.0, 1.0)) * 0.5 * v_eyeFade;\n\n    // Eye fade.\n    color.a *= clamp(v_eyeFade, 0.3, 1.0);\n    gl_FragColor = color;\n\n    gl_FragDepth = gl_FragCoord.z + 1e-6;\n}\n";
                     return _this;
                 }
                 FancyGrid_Program.prototype.bind = function (gl, prog) {
