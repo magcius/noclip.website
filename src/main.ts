@@ -328,7 +328,7 @@ class Main {
     }
 
     private _onKeyDown(e: KeyboardEvent) {
-        if (e.key === 'z') {
+        if (e.code === 'KeyZ') {
             this._toggleUI();
             e.preventDefault();
         }

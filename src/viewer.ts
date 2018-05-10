@@ -31,7 +31,7 @@ export interface Scene {
 
 class InputManager {
     public toplevel: HTMLElement;
-    public keysDown: Map<number, boolean>;
+    public keysDown: Map<string, boolean>;
     public dx: number;
     public dy: number;
     public dz: number;
@@ -43,7 +43,7 @@ class InputManager {
     constructor(toplevel: HTMLElement) {
         this.toplevel = toplevel;
 
-        this.keysDown = new Map<number, boolean>();
+        this.keysDown = new Map<string, boolean>();
         window.addEventListener('keydown', this._onKeyDown);
         window.addEventListener('keyup', this._onKeyUp);
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
@@ -53,10 +53,7 @@ class InputManager {
     }
 
     public isKeyDown(key: string) {
-        return this.keysDown.get(key.charCodeAt(0));
-    }
-    public isKeyDownRaw(keyCode: number) {
-        return this.keysDown.get(keyCode);
+        return this.keysDown.get(key);
     }
     public isDragging(): boolean {
         return this.grabbing;
@@ -68,10 +65,10 @@ class InputManager {
     }
 
     private _onKeyDown = (e: KeyboardEvent) => {
-        this.keysDown.set(e.keyCode, true);
+        this.keysDown.set(e.code, true);
     };
     private _onKeyUp = (e: KeyboardEvent) => {
-        this.keysDown.delete(e.keyCode);
+        this.keysDown.delete(e.code);
     };
 
     private _onWheel = (e: WheelEvent) => {
@@ -166,7 +163,6 @@ export class FPSCameraController implements CameraController {
     }
 
     public update(outCamera: mat4, inputManager: InputManager, dt: number): boolean {
-        const SHIFT = 16;
         const tmp = this.tmp;
         const camera = this.camera;
         let updated = false;
@@ -175,43 +171,43 @@ export class FPSCameraController implements CameraController {
         this.speed = Math.max(this.speed, 1);
 
         let mult = this.speed;
-        if (inputManager.isKeyDownRaw(SHIFT))
+        if (inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight'))
             mult *= 5;
         mult *= (dt / 16.0);
 
         let amt;
         amt = 0;
-        if (inputManager.isKeyDown('W')) {
+        if (inputManager.isKeyDown('KeyW')) {
             amt = -mult;
-        } else if (inputManager.isKeyDown('S')) {
+        } else if (inputManager.isKeyDown('KeyS')) {
             amt = mult;
         }
         updated = updated || (amt !== 0);
         tmp[14] = amt;
 
         amt = 0;
-        if (inputManager.isKeyDown('A')) {
+        if (inputManager.isKeyDown('KeyA')) {
             amt = -mult;
-        } else if (inputManager.isKeyDown('D')) {
+        } else if (inputManager.isKeyDown('KeyD')) {
             amt = mult;
         }
         updated = updated || (amt !== 0);
         tmp[12] = amt;
 
         amt = 0;
-        if (inputManager.isKeyDown('Q')) {
+        if (inputManager.isKeyDown('KeyQ')) {
             amt = -mult;
-        } else if (inputManager.isKeyDown('E')) {
+        } else if (inputManager.isKeyDown('KeyE')) {
             amt = mult;
         }
         updated = updated || (amt !== 0);
         tmp[13] = amt;
 
-        if (inputManager.isKeyDown('B')) {
+        if (inputManager.isKeyDown('KeyB')) {
             mat4.identity(camera);
             updated = true;
         }
-        if (inputManager.isKeyDown('C')) {
+        if (inputManager.isKeyDown('KeyC')) {
             console.log(camera);
         }
 

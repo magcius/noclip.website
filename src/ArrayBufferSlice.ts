@@ -1,5 +1,6 @@
 
 import { assert } from "./util";
+import { isLittleEndian, betoh } from "./endian";
 
 // This implements a "saner" ArrayBuffer, since the JS one is absurd.
 //
@@ -79,7 +80,7 @@ export default class ArrayBufferSlice {
         }
     }
 
-    public createTypedArray<T extends ArrayBufferView>(clazz: _TypedArrayConstructor<T>, offs: number = 0, count?: number): T {
+    public createTypedArray<T extends ArrayBufferView>(clazz: _TypedArrayConstructor<T>, offs: number = 0, count?: number, littleEndian: boolean = true): T {
         const begin = this.byteOffset + offs;
 
         let byteLength;
@@ -92,10 +93,18 @@ export default class ArrayBufferSlice {
             assert((count | 0) === count);
         }
 
+        const needsEndianSwap = (isLittleEndian() != littleEndian);
+
         // Typed arrays require alignment.
-        if (isAligned(begin, clazz.BYTES_PER_ELEMENT))
+        if (isAligned(begin, clazz.BYTES_PER_ELEMENT) && !needsEndianSwap) {
             return new clazz(this.arrayBuffer, begin, count);
-        else
+        } else if (needsEndianSwap) {
+            // TODO(jstpierre): Handle endian swap internally..
+            const componentSize = <1 | 2 | 4> clazz.BYTES_PER_ELEMENT;
+            let copy = betoh(this.copySlice(offs, byteLength), componentSize);
+            return copy.createTypedArray(clazz);
+        } else {
             return new clazz(this.copyToBuffer(offs, byteLength), 0);
+        }
     }
 }
