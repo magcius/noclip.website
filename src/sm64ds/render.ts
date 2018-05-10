@@ -102,6 +102,7 @@ class BMDRenderer {
     public transparentCommands: RenderFunc[] = [];
 
     private arena: RenderArena;
+    private program: NITRO_Program = new NITRO_Program();
 
     constructor(gl: WebGL2RenderingContext, bmd: NITRO_BMD.BMD, crg1Level: CRG1Level) {
         this.bmd = bmd;
@@ -245,7 +246,7 @@ class BMDRenderer {
 
     public bindModelView(state: RenderState, isBillboard: boolean) {
         const gl = state.gl;
-        const prog = state.currentProgram;
+        const prog = this.program;
         const modelView = state.updateModelView(this.isSkybox, this.localMatrix);
 
         if (this.animation !== null)
@@ -269,6 +270,7 @@ class BMDRenderer {
         const renderPoly = this.translatePoly(gl, batch.poly);
 
         const func = (state: RenderState): void => {
+            state.useProgram(this.program);
             applyMaterial(state);
             this.bindModelView(state, model.billboard);
             renderPoly(state);
@@ -301,11 +303,9 @@ function collectTextures(scenes: BMDRenderer[]): Viewer.Texture[] {
 
 class SM64DSRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[];
-    private program: NITRO_Program;
 
     constructor(public mainBMD: BMDRenderer, public skyboxBMD: BMDRenderer, public extraBMDs: BMDRenderer[]) {
         this.textures = collectTextures([this.mainBMD, this.skyboxBMD, ...this.extraBMDs]);
-        this.program = new NITRO_Program();
     }
 
     private runCommands(state: RenderState, funcs: RenderFunc[]) {
@@ -316,8 +316,6 @@ class SM64DSRenderer implements Viewer.MainScene {
 
     public render(renderState: RenderState) {
         const gl = renderState.gl;
-
-        renderState.useProgram(this.program);
 
         if (this.skyboxBMD) {
             this.runCommands(renderState, this.skyboxBMD.opaqueCommands);

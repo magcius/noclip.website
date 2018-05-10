@@ -170,13 +170,10 @@ function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     return shader;
 }
 
-export class Program {
+export abstract class BaseProgram {
     public name: string = '(unnamed)';
     public vert: string = '';
     public frag: string = '';
-
-    public projectionLocation: WebGLUniformLocation | null = null;
-    public modelViewLocation: WebGLUniformLocation | null = null;
 
     private glProg: WebGLProgram;
     private forceRecompile: boolean = false;
@@ -227,7 +224,6 @@ export class Program {
 #define varying ${type === 'vert' ? 'out' : 'in'}
 ${extensionDefines}
 #define gl_FragColor o_color
-#define gl_FragDepthEXT gl_FragDepth
 #define texture2D texture
 ${extensions}
 ${precision}
@@ -236,14 +232,7 @@ ${rest}
 `.trim();
     }
 
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        this.modelViewLocation  = gl.getUniformLocation(prog, "u_modelView");
-        this.projectionLocation = gl.getUniformLocation(prog, "u_projection");
-    }
-
-    public track(arena: RenderArena) {
-        arena.programs.push(this);
-    }
+    public abstract bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void;
 
     public destroy(gl: WebGL2RenderingContext) {
         // TODO(jstpierre): Refcounting in the program cache?
@@ -293,6 +282,16 @@ ${rest}
     }
 }
 
+export class Program extends BaseProgram {
+    public projectionLocation: WebGLUniformLocation | null = null;
+    public modelViewLocation: WebGLUniformLocation | null = null;
+
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
+        this.modelViewLocation  = assertExists(gl.getUniformLocation(prog, "u_modelView"));
+        this.projectionLocation = assertExists(gl.getUniformLocation(prog, "u_projection"));
+    }
+}
+
 interface ProgramKey {
     vert: string;
     frag: string;
@@ -323,6 +322,11 @@ class ProgramCache extends MemoizeCache<ProgramKey, WebGLProgram> {
             return null;
         }
         return prog;
+    }
+
+    protected destroy(obj: WebGLProgram) {
+        const gl = this.gl;
+        gl.deleteProgram(obj);
     }
 
     protected makeKey(key: ProgramKey): string {
@@ -360,7 +364,7 @@ export class RenderArena {
         return pushAndReturn(this.vaos, gl.createVertexArray());
     }
     public trackProgram(program: Program) {
-        program.track(this);
+        this.programs.push(program);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -445,7 +449,7 @@ export class BufferCoalescer {
     }
 }
 
-export class FullscreenProgram extends Program {
+export class FullscreenProgram extends BaseProgram {
     public vert: string = `
 out vec2 v_TexCoord;
 
@@ -456,6 +460,10 @@ void main() {
     gl_Position.zw = vec2(1);
 }
 `;
+
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
+        // Nothing to do.
+    }
 }
 
 class FullscreenCopyProgram extends FullscreenProgram {
@@ -565,7 +573,7 @@ export class RenderState {
     private programCache: ProgramCache;
 
     // State.
-    public currentProgram: Program | null = null;
+    public currentProgram: BaseProgram | null = null;
     public currentFlags: RenderFlags = new RenderFlags();
 
     private currentColorTarget: ColorTarget | null = null;
@@ -703,11 +711,11 @@ export class RenderState {
         }
     }
 
-    public compileProgram(prog: Program) {
+    public compileProgram(prog: BaseProgram) {
         return prog.compile(this.gl, this.programCache);
     }
 
-    public useProgram(prog: Program) {
+    public useProgram(prog: BaseProgram) {
         const gl = this.gl;
         this.currentProgram = prog;
         gl.useProgram(this.compileProgram(prog));
@@ -728,8 +736,9 @@ export class RenderState {
     }
 
     public bindModelView(isSkybox: boolean = false, model: mat4 | null = null) {
+        // XXX(jstpierre): Remove this junk
         const gl = this.gl;
-        const prog = this.currentProgram;
+        const prog = <Program> this.currentProgram;
         const scratch = this.updateModelView(isSkybox, model);
         gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
         gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);
