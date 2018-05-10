@@ -1,20 +1,35 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, align } from "../util";
-import { Endianness } from "../endian";
+import ArrayBufferSlice from "ArrayBufferSlice";
+import { assert, readString, align } from "util";
+import { Endianness } from "endian";
+
+export const enum FileType {
+    BYML,
+    CRG1, // Jasper's BYML variant with extensions.
+}
+
+interface FileDescription {
+    magic: string;
+    allowedNodeTypes: NodeType[];
+}
+
+const fileDescriptions: { [key: number]: FileDescription } = {
+    [FileType.BYML]: { magic: 'BY\0\x02', allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.SHORT, NodeType.FLOAT ] },
+    [FileType.CRG1]: { magic: 'CRG1',     allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.SHORT, NodeType.FLOAT, NodeType.FLOAT_ARRAY, NodeType.BINARY_DATA, NodeType.NULL ] },
+}
 
 const enum NodeType {
     STRING       = 0xA0,
     ARRAY        = 0xC0,
     DICT         = 0xC1,
     STRING_TABLE = 0xC2,
-    BINARY_DATA  = 0xCB,
+    BINARY_DATA  = 0xCB, // CRG1 extension.
     BOOL         = 0xD0,
     INT          = 0xD1,
     FLOAT        = 0xD2,
     SHORT        = 0xD3,
-    NULL         = 0xDF,
-    FLOAT_ARRAY  = 0xE2,
+    NULL         = 0xDF, // CRG1 extension. Probably exists in original.
+    FLOAT_ARRAY  = 0xE2, // CRG1 extension.
 }
 
 export type StringTable = string[];
@@ -26,6 +41,7 @@ export interface NodeDict { [key: string]: Node; }
 export interface NodeArray extends Array<Node> {}
 
 interface ParseContext {
+    fileType: FileType;
     strKeyTable: StringTable;
     strValueTable: StringTable;
 }
@@ -109,8 +125,14 @@ function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, expec
     }
 }
 
+function validateNodeType(context: ParseContext, nodeType: NodeType) {
+    assert(fileDescriptions[context.fileType].allowedNodeTypes.includes(nodeType));
+}
+
 function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: NodeType, offs: number): Node {
     const view = buffer.createDataView();
+    validateNodeType(context, nodeType);
+
     switch (nodeType) {
     case NodeType.ARRAY:
     case NodeType.DICT:
@@ -144,13 +166,14 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
     }
 }
 
-export function parse(buffer: ArrayBufferSlice): NodeDict {
-    assert(readString(buffer, 0x00, 0x04) == 'CRG1');
+export function parse(buffer: ArrayBufferSlice, fileType: FileType = FileType.BYML): NodeDict {
+    const magic = fileDescriptions[fileType].magic;
+    assert(readString(buffer, 0x00, 0x04) == magic);
     const view = buffer.createDataView();
 
     const strKeyTable = parseStringTable(buffer, view.getUint32(0x04));
     const strValueTable = parseStringTable(buffer, view.getUint32(0x08));
-    const context: ParseContext = { strKeyTable, strValueTable };
+    const context: ParseContext = { fileType, strKeyTable, strValueTable };
     const node = parseComplexNode(context, buffer, NodeType.DICT, view.getUint32(0x0C));
     return <NodeDict> node;
 }
