@@ -35,33 +35,26 @@ export function decompress(srcBuffer: ArrayBufferSlice): Promise<ArrayBufferSlic
     return _wasmInstance.then((wasmInstance) => {
         const srcView = srcBuffer.createDataView();
         assert(readString(srcBuffer, 0x00, 0x04) === 'Yaz0');
-    
+
         const dstSize = srcView.getUint32(0x04, false);
         const srcSize = srcBuffer.byteLength;
-    
-        const pDstOffs = 0;
-        const pSrcOffs = align(dstSize, 0x10);
-    
-        const heapSize = pSrcOffs + align(srcSize, 0x10);
-    
-        const heapBase = 0;
-    
+
+        const pDst = 0;
+        const pSrc = align(dstSize, 0x10);
+
+        const heapSize = pSrc + align(srcSize, 0x10);
+
         const wasmMemory = new WasmMemoryManager(wasmInstance.memory);
-        wasmMemory.resize(heapBase + heapSize);
-        const mem = wasmMemory.mem;
-        const heap = wasmMemory.heap;
-    
-        const pDst = heapBase + pDstOffs;
-        const pSrc = heapBase + pSrcOffs;
-    
+        const heap = wasmMemory.resize(heapSize);
+
         // Copy src buffer.
         heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
-    
+
         wasmInstance.decompress(pDst, pSrc, dstSize);
-    
+
         // Copy the result buffer to a new buffer for memory usage purposes.
         const result = new ArrayBufferSlice(heap.buffer).copySlice(pDst, dstSize);
-    
+
         return result;
     });
 }
