@@ -3,7 +3,7 @@
 
 import { mat4, vec3, vec4 } from 'gl-matrix';
 
-import { RenderState, RenderFlags, Program, ColorTarget, DepthTarget } from './render';
+import { RenderState, RenderFlags, ColorTarget, DepthTarget } from './render';
 import * as UI from './ui';
 
 import Progressable from 'Progressable';

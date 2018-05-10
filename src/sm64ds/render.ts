@@ -8,8 +8,10 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, RenderFlags, RenderState, Program, RenderArena, BlendMode } from '../render';
+import { CullMode, RenderFlags, RenderState, BlendMode } from '../render';
+import Program from '../Program';
 import Progressable from 'Progressable';
+import RenderArena from '../RenderArena';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 

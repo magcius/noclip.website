@@ -3,7 +3,8 @@ import * as F3DEX2 from './f3dex2';
 import * as ZELVIEW0 from './zelview0';
 
 import Progressable from 'Progressable';
-import { CullMode, RenderFlags, RenderState, Program, BlendMode } from '../render';
+import { CullMode, RenderFlags, RenderState, BlendMode } from '../render';
+import Program from '../Program';
 import { fetch } from '../util';
 
 import * as Viewer from '../viewer';

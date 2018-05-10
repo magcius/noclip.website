@@ -5,7 +5,9 @@ import * as ZSI from './zsi';
 import * as Viewer from '../viewer';
 
 import Progressable from 'Progressable';
-import { BlendMode, CullMode, RenderFlags, RenderState, Program, RenderArena } from '../render';
+import { BlendMode, CullMode, RenderFlags, RenderState } from '../render';
+import Program from '../Program';
+import RenderArena from '../RenderArena';
 import { fetch, assert } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 

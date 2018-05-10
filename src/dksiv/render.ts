@@ -1,7 +1,8 @@
 
 import { vec3 } from 'gl-matrix';
 
-import { CullMode, Program, RenderFlags, RenderState } from '../render';
+import { CullMode, RenderFlags, RenderState } from '../render';
+import Program from '../Program';
 import * as Viewer from '../viewer';
 
 import * as IV from './iv';

@@ -5,9 +5,9 @@ import * as GX from './gx_enum';
 
 import * as Viewer from '../viewer';
 
-import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontFaceMode, Program, RenderFlags, RenderState, BaseProgram } from '../render';
+import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontFaceMode, RenderFlags, RenderState } from '../render';
+import { BaseProgram } from '../Program';
 import { align } from '../util';
-import { Material } from '../sm64ds/nitro_bmd';
 
 export const EFB_WIDTH = 640;
 export const EFB_HEIGHT = 528;
