@@ -1851,7 +1851,7 @@ System.register("byml", ["util"], function (exports_10, context_10) {
                 var value = view.getFloat32(offs);
                 return value;
             }
-            case 223 /* NULL */: {
+            case 255 /* NULL */: {
                 return null;
             }
         }
@@ -1878,7 +1878,7 @@ System.register("byml", ["util"], function (exports_10, context_10) {
         execute: function () {
             fileDescriptions = (_a = {},
                 _a[0 /* BYML */] = { magic: 'BY\0\x02', allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */] },
-                _a[1 /* CRG1 */] = { magic: 'CRG1', allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */, 226 /* FLOAT_ARRAY */, 203 /* BINARY_DATA */, 223 /* NULL */] },
+                _a[1 /* CRG1 */] = { magic: 'CRG1', allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */, 226 /* FLOAT_ARRAY */, 203 /* BINARY_DATA */, 255 /* NULL */] },
                 _a);
         }
     };
