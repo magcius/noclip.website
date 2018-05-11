@@ -9,13 +9,13 @@ export const enum FileType {
 }
 
 interface FileDescription {
-    magic: string;
+    magics: string[];
     allowedNodeTypes: NodeType[];
 }
 
 const fileDescriptions: { [key: number]: FileDescription } = {
-    [FileType.BYML]: { magic: 'BY\0\x02', allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.SHORT, NodeType.FLOAT ] },
-    [FileType.CRG1]: { magic: 'CRG1',     allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.SHORT, NodeType.FLOAT, NodeType.FLOAT_ARRAY, NodeType.BINARY_DATA, NodeType.NULL ] },
+    [FileType.BYML]: { magics: ['BY\0\x01', 'BY\0\x02'], allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.SHORT, NodeType.FLOAT ] },
+    [FileType.CRG1]: { magics: ['CRG1'],                 allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.SHORT, NodeType.FLOAT, NodeType.FLOAT_ARRAY, NodeType.BINARY_DATA, NodeType.NULL ] },
 }
 
 const enum NodeType {
@@ -167,12 +167,14 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
 }
 
 export function parse(buffer: ArrayBufferSlice, fileType: FileType = FileType.BYML): NodeDict {
-    const magic = fileDescriptions[fileType].magic;
-    assert(readString(buffer, 0x00, 0x04) == magic);
+    const magics = fileDescriptions[fileType].magics;
+    assert(magics.includes(readString(buffer, 0x00, 0x04)));
     const view = buffer.createDataView();
 
-    const strKeyTable = parseStringTable(buffer, view.getUint32(0x04));
-    const strValueTable = parseStringTable(buffer, view.getUint32(0x08));
+    const strKeyTableOffs = view.getUint32(0x04);
+    const strValueTableOffs = view.getUint32(0x08);
+    const strKeyTable = strKeyTableOffs !== 0 ? parseStringTable(buffer, strKeyTableOffs) : null;
+    const strValueTable = strValueTableOffs !== 0 ? parseStringTable(buffer, strValueTableOffs) : null;
     const context: ParseContext = { fileType, strKeyTable, strValueTable };
     const node = parseComplexNode(context, buffer, NodeType.DICT, view.getUint32(0x0C));
     return <NodeDict> node;
