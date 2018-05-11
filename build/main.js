@@ -1858,11 +1858,13 @@ System.register("byml", ["util"], function (exports_10, context_10) {
     }
     function parse(buffer, fileType) {
         if (fileType === void 0) { fileType = 0 /* BYML */; }
-        var magic = fileDescriptions[fileType].magic;
-        util_4.assert(util_4.readString(buffer, 0x00, 0x04) == magic);
+        var magics = fileDescriptions[fileType].magics;
+        util_4.assert(magics.includes(util_4.readString(buffer, 0x00, 0x04)));
         var view = buffer.createDataView();
-        var strKeyTable = parseStringTable(buffer, view.getUint32(0x04));
-        var strValueTable = parseStringTable(buffer, view.getUint32(0x08));
+        var strKeyTableOffs = view.getUint32(0x04);
+        var strValueTableOffs = view.getUint32(0x08);
+        var strKeyTable = strKeyTableOffs !== 0 ? parseStringTable(buffer, strKeyTableOffs) : null;
+        var strValueTable = strValueTableOffs !== 0 ? parseStringTable(buffer, strValueTableOffs) : null;
         var context = { fileType: fileType, strKeyTable: strKeyTable, strValueTable: strValueTable };
         var node = parseComplexNode(context, buffer, 193 /* DICT */, view.getUint32(0x0C));
         return node;
@@ -1877,8 +1879,8 @@ System.register("byml", ["util"], function (exports_10, context_10) {
         ],
         execute: function () {
             fileDescriptions = (_a = {},
-                _a[0 /* BYML */] = { magic: 'BY\0\x02', allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */] },
-                _a[1 /* CRG1 */] = { magic: 'CRG1', allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */, 226 /* FLOAT_ARRAY */, 203 /* BINARY_DATA */, 255 /* NULL */] },
+                _a[0 /* BYML */] = { magics: ['BY\0\x01', 'BY\0\x02'], allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */] },
+                _a[1 /* CRG1 */] = { magics: ['CRG1'], allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */, 226 /* FLOAT_ARRAY */, 203 /* BINARY_DATA */, 255 /* NULL */] },
                 _a);
         }
     };
