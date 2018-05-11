@@ -241,7 +241,7 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
 
     function readBufferData(offs: number): BufferData {
         const size = view.getUint32(offs + 0x04, littleEndian);
-        const stride = view.getUint16(offs + 0x02, littleEndian);
+        const stride = view.getUint16(offs + 0x0C, littleEndian);
         const dataOffs = readBinPtrT(view, offs + 0x14, littleEndian);
         const data = buffer.subarray(dataOffs, size);
         return { data, stride };
@@ -267,7 +267,7 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
         const bufferCount = view.getUint8(fvtxIdx + 0x05);
         const sectionIndex = view.getUint16(fvtxIdx + 0x06);
         assert(i === sectionIndex);
-        const vtxCount = view.getUint16(fvtxIdx + 0x08);
+        const vtxCount = view.getUint32(fvtxIdx + 0x08);
         const attribArrayOffs = readBinPtrT(view, fvtxIdx + 0x10, littleEndian);
         const bufferArrayOffs = readBinPtrT(view, fvtxIdx + 0x18, littleEndian);
 
@@ -286,7 +286,6 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
         let bufferArrayIdx = bufferArrayOffs;
         for (let j = 0; j < bufferCount; j++) {
             const bufferData = readBufferData(bufferArrayIdx);
-            assert(bufferData.stride === 0);
             buffers.push(bufferData);
             bufferArrayIdx += 0x18;
         }
@@ -312,8 +311,8 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
         let meshArrayIdx = meshArrayOffs;
         const meshes: Mesh[] = [];
         for (let i = 0; i < meshArrayCount; i++) {
-            const primType = view.getUint32(meshArrayIdx + 0x00, littleEndian);
-            const indexFormat = view.getUint32(meshArrayIdx + 0x04, littleEndian);
+            const primType: GX2PrimitiveType = view.getUint32(meshArrayIdx + 0x00, littleEndian);
+            const indexFormat: GX2IndexFormat = view.getUint32(meshArrayIdx + 0x04, littleEndian);
             const indexBufferOffs = readBinPtrT(view, meshArrayIdx + 0x14, littleEndian);
             const indexBufferData = readBufferData(indexBufferOffs);
 
@@ -429,8 +428,8 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
             const type = view.getUint8(materialParameterArrayIdx + 0x00);
             const size = view.getUint8(materialParameterArrayIdx + 0x01);
             const dataOffs = view.getUint16(materialParameterArrayIdx + 0x02, littleEndian);
-            const index = view.getUint16(materialParameterArrayIdx + 0x0C, littleEndian);
-            assert(index === i);
+            const dependedIndex = view.getUint16(materialParameterArrayIdx + 0x0C, littleEndian);
+            const dependIndex = view.getUint16(materialParameterArrayIdx + 0x0E, littleEndian);
             const name = readString(buffer, readBinPtrT(view, materialParameterArrayIdx + 0x10, littleEndian));
             materialParameterArrayIdx += 0x14;
             materialParameters.push({ type, size, dataOffs, name });
@@ -513,10 +512,9 @@ export function parse(buffer: ArrayBufferSlice): FRES {
     const version = view.getUint32(0x04, littleEndian);
 
     const supportedVersions = [
+        0x03040001, // v3.4.0.1 - Wind Waker HD
+        0x03040002, // v3.4.0.2 - Super Mario 3D World
         0x03050003, // v3.5.0.3 - Splatoon.
-
-        // TODO(jstpierre): Figure out WWHD.
-        // 0x03040001, // v3.4.0.1 - Wind Waker HD
     ];
     assert(supportedVersions.includes(version));
 

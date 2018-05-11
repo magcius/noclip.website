@@ -49,7 +49,8 @@ uniform sampler2D _e0;
 vec4 textureSRGB(sampler2D s, vec2 uv) {
     vec4 srgba = texture(s, uv);
     vec3 srgb = srgba.rgb;
-#ifdef NOPE_HAS_WEBGL_compressed_texture_s3tc_srgb
+    // XXX(jstpierre): Turn sRGB texturing back on at some point...
+#ifndef NOPE_HAS_WEBGL_compressed_texture_s3tc_srgb
     vec3 rgb = srgb;
 #else
     // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html
@@ -76,7 +77,7 @@ void main() {
 }
 
 interface GX2AttribFormatInfo {
-    size: number;
+    compCount: number;
     elemSize: 1 | 2 | 4;
     type: number;
     normalized: boolean;
@@ -85,33 +86,74 @@ interface GX2AttribFormatInfo {
 function getAttribFormatInfo(format: GX2AttribFormat): GX2AttribFormatInfo {
     switch (format) {
     case GX2AttribFormat._8_SINT:
-        return { size: 1, elemSize: 1, type: WebGL2RenderingContext.BYTE, normalized: false };
+        return { compCount: 1, elemSize: 1, type: WebGL2RenderingContext.BYTE, normalized: false };
     case GX2AttribFormat._8_SNORM:
-        return { size: 1, elemSize: 1, type: WebGL2RenderingContext.BYTE, normalized: true };
+        return { compCount: 1, elemSize: 1, type: WebGL2RenderingContext.BYTE, normalized: true };
     case GX2AttribFormat._8_UINT:
-        return { size: 1, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: false };
+        return { compCount: 1, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: false };
     case GX2AttribFormat._8_UNORM:
-        return { size: 1, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
+        return { compCount: 1, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
     case GX2AttribFormat._8_8_UNORM:
-        return { size: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
+        return { compCount: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
     case GX2AttribFormat._8_8_SNORM:
-        return { size: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
+        return { compCount: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
     case GX2AttribFormat._16_16_UNORM:
-        return { size: 2, elemSize: 2, type: WebGL2RenderingContext.UNSIGNED_SHORT, normalized: true };
+        return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.UNSIGNED_SHORT, normalized: true };
     case GX2AttribFormat._16_16_SNORM:
-        return { size: 2, elemSize: 2, type: WebGL2RenderingContext.SHORT, normalized: true };
+        return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.SHORT, normalized: true };
     case GX2AttribFormat._16_16_FLOAT:
-        return { size: 2, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
+        return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
     case GX2AttribFormat._16_16_16_16_FLOAT:
-        return { size: 4, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
+        return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
     case GX2AttribFormat._32_32_FLOAT:
-        return { size: 2, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
+        return { compCount: 2, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
     case GX2AttribFormat._32_32_32_FLOAT:
-        return { size: 4, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
+        return { compCount: 4, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
     default:
         const m_: never = format;
         throw new Error(`Unsupported attribute format ${format}`);
     }
+}
+
+function pullVertexData(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, vtxCount: number): ArrayBufferSlice {
+    // XXX(jstpierre): This is super ugly
+    const stride = buffer.stride;
+    assert(stride !== 0);
+
+    const formatInfo = getAttribFormatInfo(attrib.format);
+
+    const numValues = vtxCount * formatInfo.compCount;
+
+    function getOutputBuffer() {
+        if (formatInfo.elemSize === 1)
+            return new Uint8Array(numValues);
+        else if (formatInfo.elemSize === 2)
+            return new Uint16Array(numValues);
+        else if (formatInfo.elemSize === 4)
+            return new Uint32Array(numValues);
+        else
+            throw new Error();
+    }
+
+    const dataView = buffer.data.createDataView();
+    const out = getOutputBuffer();
+
+    let offs = attrib.bufferStart;
+    let dst = 0;
+    for (let i = 0; i < vtxCount; i++) {
+        for (let j = 0; j < formatInfo.compCount; j++) {
+            let srcOffs = offs + j * formatInfo.elemSize;
+            if (formatInfo.elemSize === 1)
+                out[dst] = dataView.getUint8(srcOffs);
+            else if (formatInfo.elemSize === 2)
+                out[dst] = dataView.getUint16(srcOffs);
+            else if (formatInfo.elemSize === 4)
+                out[dst] = dataView.getUint32(srcOffs);
+            dst++;
+        }
+        offs += stride;
+    }
+    return new ArrayBufferSlice(out.buffer);
 }
 
 export class Scene implements Viewer.Scene {
@@ -144,9 +186,16 @@ export class Scene implements Viewer.Scene {
                 continue;
 
             const buffer = fvtx.buffers[attrib.bufferIndex];
-            assert(buffer.stride === 0);
-            assert(attrib.bufferStart === 0);
-            const vertexData = betoh(buffer.data, getAttribFormatInfo(attrib.format).elemSize);
+            const formatInfo = getAttribFormatInfo(attrib.format);
+            const byteSize = formatInfo.compCount * formatInfo.elemSize;
+            let vertexData;
+            if (buffer.stride <= byteSize && attrib.bufferStart === 0) {
+                // Fast path. Single attribute per buffer.
+                vertexData = betoh(buffer.data, formatInfo.elemSize);
+            } else {
+                // Slower. Requires picking apart the buffer.
+                vertexData = pullVertexData(buffer, attrib, fvtx.vtxCount);
+            }
             vertexDatas.push(vertexData);
         }
     }
@@ -165,7 +214,7 @@ export class Scene implements Viewer.Scene {
             const formatInfo = getAttribFormatInfo(attrib.format);
             const buffer = coalescedVertex.shift();
             gl.bindBuffer(gl.ARRAY_BUFFER, buffer.buffer);
-            gl.vertexAttribPointer(location, formatInfo.size, formatInfo.type, formatInfo.normalized, 0, buffer.offset);
+            gl.vertexAttribPointer(location, formatInfo.compCount, formatInfo.type, formatInfo.normalized, 0, buffer.offset);
             gl.enableVertexAttribArray(location);
         }
 
@@ -299,19 +348,25 @@ export class Scene implements Viewer.Scene {
                 gl.uniform1i(uniformLocation, i);
 
                 const textureAssignIndex = textureAssigns.findIndex((textureAssign) => textureAssign.attribName === attribName);
+                let bound = false;
                 if (textureAssignIndex >= 0) {
                     const textureAssign = textureAssigns[textureAssignIndex];
 
                     const ftexIndex = this.fres.textures.findIndex((textureEntry) => textureEntry.entry.offs === textureAssign.ftexOffs);
-                    const ftex = this.fres.textures[ftexIndex];
-                    assert(ftex.entry.name === textureAssign.textureName);
+                    if (ftexIndex >= 0) {
+                        const ftex = this.fres.textures[ftexIndex];
+                        assert(ftex.entry.name === textureAssign.textureName);
 
-                    const glTexture = this.glTextures[ftexIndex];
-                    gl.bindTexture(gl.TEXTURE_2D, glTexture);
+                        const glTexture = this.glTextures[ftexIndex];
+                        gl.bindTexture(gl.TEXTURE_2D, glTexture);
 
-                    const sampler = samplers[textureAssignIndex];
-                    gl.bindSampler(i, sampler);
-                } else {
+                        const sampler = samplers[textureAssignIndex];
+                        gl.bindSampler(i, sampler);
+                        bound = true;
+                    }
+                }
+
+                if (!bound) {
                     // If we have no binding for this texture, replace it with something harmless...
                     gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
                 }
