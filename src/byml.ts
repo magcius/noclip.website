@@ -28,8 +28,8 @@ const enum NodeType {
     INT          = 0xD1,
     FLOAT        = 0xD2,
     SHORT        = 0xD3,
-    NULL         = 0xDF, // CRG1 extension. Probably exists in original.
     FLOAT_ARRAY  = 0xE2, // CRG1 extension.
+    NULL         = 0xFF,
 }
 
 export type StringTable = string[];
