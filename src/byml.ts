@@ -173,9 +173,14 @@ export function parse(buffer: ArrayBufferSlice, fileType: FileType = FileType.BY
 
     const strKeyTableOffs = view.getUint32(0x04);
     const strValueTableOffs = view.getUint32(0x08);
+    const rootNodeOffs = view.getUint32(0x0C);
+
+    if (rootNodeOffs === 0)
+        return {};
+
     const strKeyTable = strKeyTableOffs !== 0 ? parseStringTable(buffer, strKeyTableOffs) : null;
     const strValueTable = strValueTableOffs !== 0 ? parseStringTable(buffer, strValueTableOffs) : null;
     const context: ParseContext = { fileType, strKeyTable, strValueTable };
-    const node = parseComplexNode(context, buffer, NodeType.DICT, view.getUint32(0x0C));
+    const node = parseComplexNode(context, buffer, NodeType.DICT, rootNodeOffs);
     return <NodeDict> node;
 }

@@ -14,6 +14,7 @@ import * as MDL0 from './mdl0/scenes';
 import * as ZELVIEW from './zelview/scenes';
 import * as OOT3D from './oot3d/scenes';
 import * as FRES from './fres/scenes';
+import * as SPL from './fres/splatoon_scenes';
 import * as DKSIV from './dksiv/scenes';
 import * as MP1 from './metroid_prime/scenes';
 
@@ -30,7 +31,7 @@ const sceneGroups = [
     MDL0.sceneGroup,
     ZELVIEW.sceneGroup,
     OOT3D.sceneGroup,
-    FRES.sceneGroup,
+    SPL.sceneGroup,
     DKSIV.sceneGroup,
     MP1.sceneGroup,
 ];
@@ -71,6 +72,9 @@ class DroppedFileSceneDesc implements SceneDesc {
     private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBufferSlice): Promise<MainScene> {
         if (file.name.endsWith('.bfres'))
             return Promise.resolve(FRES.createSceneFromFRESBuffer(gl, buffer));
+
+        if (file.name.endsWith('.szs'))
+            return FRES.createSceneFromSARCBuffer(gl, buffer);
 
         // XXX(jstpierre): Figure out WTF to do here...
         const promise = J3D.createMultiSceneFromBuffer(gl, buffer);
