@@ -12,7 +12,8 @@ export default abstract class MemoizeCache<TKey, TRes> {
             return assertExists(this.cache.get(keyStr));
         } else {
             const obj = this.make(key);
-            this.cache.set(keyStr, obj);
+            if (obj !== null)
+                this.cache.set(keyStr, obj);
             return obj;
         }
     }
