@@ -13,7 +13,7 @@ import * as GX_Material from 'gx/gx_material';
 
 import { BMD, BMT, BTK, MaterialEntry, TEX1, BTI_Texture, TEX1_TextureData, TEX1_Sampler, BRK } from 'j3d/j3d';
 import * as RARC from 'j3d/rarc';
-import { Command_Material, Scene as J3DScene, TextureBindData } from 'j3d/render';
+import { Command_Material, Scene as J3DScene, TextureBindData, SceneLoader } from 'j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from 'j3d/sms_scenes';
 import * as Yaz0 from 'yaz0';
 
@@ -29,14 +29,12 @@ const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.l
 class SeaPlaneScene implements Scene {
     public textures: Texture[];
 
-    public bmd: BMD;
-    public btk: BTK;
-
     public sceneParamsBuffer: WebGLBuffer;
 
     public animationScale: number = 5;
 
     // Play make-believe for Command_Material.
+    public btk: BTK = null;
     public brk: BRK = null;
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: number[] = [];
@@ -57,12 +55,12 @@ class SeaPlaneScene implements Scene {
     private plane: PlaneShape;
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, configName: string) {
-        this.bmd = bmd;
         this.btk = btk;
 
         this.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
 
-        J3DScene.prototype.translateTextures.call(this, gl);
+        const sceneLoader: SceneLoader = new SceneLoader(bmd, null);
+        J3DScene.prototype.translateTextures.call(this, gl, sceneLoader);
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);

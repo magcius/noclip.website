@@ -16984,16 +16984,17 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                 function SeaPlaneScene(gl, bmd, btk, configName) {
                     this.animationScale = 5;
                     // Play make-believe for Command_Material.
+                    this.btk = null;
                     this.brk = null;
                     this.colorOverrides = [];
                     this.alphaOverrides = [];
                     // Play make-believe for translateTextures
                     this.bmt = null;
                     this.fps = 30;
-                    this.bmd = bmd;
                     this.btk = btk;
                     this.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(function () { return 1; }));
-                    render_25.Scene.prototype.translateTextures.call(this, gl);
+                    var sceneLoader = new render_25.SceneLoader(bmd, null);
+                    render_25.Scene.prototype.translateTextures.call(this, gl, sceneLoader);
                     var seaMaterial = bmd.mat3.materialEntries.find(function (m) { return m.name === '_umi'; });
                     this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
                     this.plane = new PlaneShape(gl);
