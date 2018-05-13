@@ -15,8 +15,9 @@ export interface CameraController {
     update(camera: mat4, inputManager: InputManager, dt: number): boolean;
 }
 
-// XXX: Is there any way to do this properly and reference the interface?
-export type CameraControllerClass = typeof FPSCameraController | typeof OrbitCameraController;
+export interface CameraControllerClass {
+    new(): CameraController;
+}
 
 export interface Texture {
     name: string;
