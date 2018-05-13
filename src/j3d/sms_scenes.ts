@@ -296,7 +296,6 @@ export class SunshineRenderer implements Viewer.MainScene {
         state.useRenderTarget(state.onscreenColorTarget);
         state.blitColorTarget(this.mainColorTarget);
 
-        // XXX(jstpierre): does sea go before or after seaindirect?
         if (this.seaIndirectScene) {
             const indirectScene = this.seaIndirectScene;
             const texProjection = indirectScene.materialCommands[0].material.texMatrices[1].projectionMatrix;
@@ -400,10 +399,11 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         }
 
         function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT) {
-            const bmd = BMD.parse(rarc.findFile(bmdFilename).buffer);
-            const bck = BCK.parse(rarc.findFile(bckFilename).buffer);
-            bck.ank1.loopMode = loopMode;
-            return new Scene(gl, bmd, null, null, bck, null);
+            const bmdFile = rarc.findFile(bmdFilename);
+            const bckFile = rarc.findFile(bckFilename);
+            const scene = createScene(gl, bmdFile, null, null, bckFile, null);
+            scene.bck.ank1.loopMode = loopMode;
+            return scene;
         }
 
         const modelLookup: ModelLookup[] = [

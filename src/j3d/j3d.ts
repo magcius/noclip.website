@@ -1029,7 +1029,7 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
 // TEX1_Surface.
 
 export interface TEX1_TextureData {
-    // XXX(jstpierre): Required for the ZTP BTI hack
+    // The name can be used for external lookups and is required.
     name: string;
     width: number;
     height: number;

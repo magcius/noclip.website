@@ -10,7 +10,7 @@ import * as Yaz0 from '../yaz0';
 
 import { BMD, BMT, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
-import { Scene } from './render';
+import { Scene, SceneLoader } from './render';
 
 export class MultiScene implements Viewer.MainScene {
     public scenes: Scene[];
@@ -40,11 +40,13 @@ export class MultiScene implements Viewer.MainScene {
 
 export function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
     const bmd = BMD.parse(bmdFile.buffer);
-    const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
-    const brk = brkFile ? BRK.parse(brkFile.buffer) : null;
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const bck = bckFile ? BCK.parse(bckFile.buffer) : null;
-    return new Scene(gl, bmd, btk, brk, bck, bmt);
+    const sceneLoader: SceneLoader = new SceneLoader(bmd, bmt);
+    const scene = sceneLoader.createScene(gl);
+    scene.setBTK(btkFile ? BTK.parse(btkFile.buffer) : null);
+    scene.setBRK(brkFile ? BRK.parse(brkFile.buffer) : null);
+    scene.setBCK(bckFile ? BCK.parse(bckFile.buffer) : null);
+    return scene;
 }
 
 function boolSort(a: boolean, b: boolean): number {
@@ -90,7 +92,9 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, buffer: Array
     
         if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
             const bmd = BMD.parse(buffer);
-            return [new Scene(gl, bmd, null, null, null, null)];
+            const sceneLoader = new SceneLoader(bmd);
+            const scene = sceneLoader.createScene(gl);
+            return [scene];
         }
     
         return null;
