@@ -14,7 +14,7 @@ import * as GX_Material from 'gx/gx_material';
 
 import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
-import { ColorOverride, Scene } from './render';
+import { ColorOverride, Scene, SceneLoader } from './render';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
@@ -255,10 +255,11 @@ class WindWakerRenderer implements Viewer.MainScene {
         const brkFile = rarc.findFile(`brk/${name}.brk`);
         const bckFile = rarc.findFile(`bck/${name}.bck`);
         const bdl = BMD.parse(bdlFile.buffer);
-        const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
-        const brk = brkFile ? BRK.parse(brkFile.buffer) : null;
-        const bck = bckFile ? BCK.parse(bckFile.buffer) : null;
-        const scene = new Scene(gl, bdl, btk, brk, bck, null);
+        const sceneLoader = new SceneLoader(bdl, null);
+        const scene = sceneLoader.createScene(gl);
+        scene.setBTK(btkFile !== null ? BTK.parse(btkFile.buffer) : null);
+        scene.setBRK(brkFile !== null ? BRK.parse(brkFile.buffer) : null);
+        scene.setBCK(bckFile !== null ? BCK.parse(bckFile.buffer) : null);
         scene.setIsSkybox(isSkybox);
         return scene;
     }

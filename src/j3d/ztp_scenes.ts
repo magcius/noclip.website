@@ -11,7 +11,7 @@ import * as GX from '../gx/gx_enum';
 
 import { BMD, BMT, BTK, BTI_Texture, BTI, TEX1_TextureData, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
-import { Scene, TextureOverride } from './render';
+import { Scene, TextureOverride, SceneLoader } from './render';
 import { RenderState, ColorTarget } from '../render';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 
@@ -25,11 +25,17 @@ function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
 
 function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: TEX1_TextureData[]) {
     const bmd = BMD.parse(bmdFile.buffer);
-    const btk = btkFile ? BTK.parse(btkFile.buffer) : null;
-    const brk = brkFile ? BRK.parse(brkFile.buffer) : null;
-    const bck = bckFile ? BCK.parse(bckFile.buffer) : null;
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const scene = new Scene(gl, bmd, btk, brk, bck, bmt, extraTextures);
+    const sceneLoader = new SceneLoader(bmd, bmt);
+    sceneLoader.textureResolveCallback = (name: string): TEX1_TextureData => {
+        const textureName = name.toLowerCase().replace('.tga', '');
+        return extraTextures.find(tex => tex.name.toLowerCase() === textureName);
+    };
+
+    const scene = sceneLoader.createScene(gl);
+    scene.setBTK(btkFile ? BTK.parse(btkFile.buffer) : null);
+    scene.setBRK(brkFile ? BRK.parse(brkFile.buffer) : null);
+    scene.setBCK(bckFile ? BCK.parse(bckFile.buffer) : null);
     return scene;
 }
 

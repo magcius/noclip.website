@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray, BRK, DRW1JointKind, BCK } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray, BRK, DRW1JointKind, BCK, BTI } from './j3d';
 
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
@@ -41,9 +41,9 @@ class Command_Shape {
     private coalescedBuffers: CoalescedBuffers;
     private packetParamsBuffer: WebGLBuffer;
 
-    constructor(gl: WebGL2RenderingContext, scene: Scene, shape: Shape, coalescedBuffers: CoalescedBuffers) {
+    constructor(gl: WebGL2RenderingContext, sceneLoader: SceneLoader, scene: Scene, shape: Shape, coalescedBuffers: CoalescedBuffers) {
+        this.bmd = sceneLoader.bmd;
         this.scene = scene;
-        this.bmd = this.scene.bmd;
         this.shape = shape;
         this.coalescedBuffers = coalescedBuffers;
 
@@ -155,9 +155,8 @@ class Command_Shape {
 const materialParamsData = new Float32Array(4*2 + 4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8);
 
 interface Command_MaterialScene {
-    bmd: BMD;
-    btk: BTK;
     brk: BRK;
+    btk: BTK;
     currentMaterialCommand: Command_Material;
     getTimeInFrames(milliseconds: number): number;
     colorOverrides: GX_Material.Color[];
@@ -170,9 +169,6 @@ export class Command_Material {
     private static matrixScratch = mat4.create();
     private static textureScratch = new Int32Array(8);
 
-    public bmd: BMD;
-    public brk: BRK;
-    public btk: BTK;
     public material: MaterialEntry;
 
     public name: string;
@@ -187,9 +183,6 @@ export class Command_Material {
     constructor(gl: WebGL2RenderingContext, scene: Command_MaterialScene, material: MaterialEntry) {
         this.name = material.name;
         this.scene = scene;
-        this.bmd = scene.bmd;
-        this.brk = scene.brk;
-        this.btk = scene.btk;
         this.material = material;
         this.program = new GX_Material.GX_Program(material.gxMaterial);
         this.program.name = this.name;
@@ -244,8 +237,8 @@ export class Command_Material {
             materialParamsData[offs + i*4 + 3] = alpha;
         }
 
-        if (this.brk !== null) {
-            this.brk.calcColorOverrides(materialParamsData, 4*2 + 4*2, this.material.name, animationFrame);
+        if (this.scene.brk !== null) {
+            this.scene.brk.calcColorOverrides(materialParamsData, 4*2 + 4*2, this.material.name, animationFrame);
         }
 
         offs += 4*12;
@@ -260,8 +253,8 @@ export class Command_Material {
             let finalMatrix = matrixScratch;
             mat4.copy(finalMatrix, texMtx.matrix);
 
-            if (this.btk !== null)
-                this.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, animationFrame);
+            if (this.scene.btk !== null)
+                this.scene.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, animationFrame);
 
             switch(texMtx.type) {
             case 0x00: // Normal. Does nothing.
@@ -432,6 +425,36 @@ interface HierarchyTraverseContext {
 
 const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
+
+// SceneLoaderToken is a private class that's passed to Scene.
+// Basically, this emulates an internal constructor by making
+// it impossible to call...
+class SceneLoaderToken {
+    constructor(public gl: WebGL2RenderingContext) {}
+}
+
+type TextureResolveCallback = (name: string) => TEX1_TextureData;
+
+export class SceneLoader {
+    constructor(
+        public bmd: BMD,
+        public bmt: BMT | null = null)
+    {}
+
+    public textureResolveCallback: TextureResolveCallback;
+
+    public createScene(gl: WebGL2RenderingContext): Scene {
+        return new Scene(new SceneLoaderToken(gl), this);
+    }
+
+    public resolveTexture(name: string): TEX1_TextureData {
+        if (this.textureResolveCallback !== null)
+            return this.textureResolveCallback(name);
+        else
+            return null;
+    }
+}
+
 export class Scene implements Viewer.Scene {
     public textures: Viewer.Texture[];
 
@@ -447,6 +470,16 @@ export class Scene implements Viewer.Scene {
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: number[] = [];
     public sceneParamsBuffer: WebGLBuffer;
+
+    // BMD
+    public bmd: BMD;
+    // TODO(jstpierre): Make BMT settable after load...
+    public bmt: BMT | null = null;
+
+    // Animations.
+    public bck: BCK | null = null;
+    public brk: BRK | null = null;
+    public btk: BTK | null = null;
 
     // Texture information.
     private tex1TextureDatas: TEX1_TextureData[];
@@ -467,17 +500,14 @@ export class Scene implements Viewer.Scene {
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
 
-    // TODO(jstpierre): SceneLoader. This constructor is getting unwieldy.
     constructor(
-        gl: WebGL2RenderingContext,
-        public bmd: BMD,
-        public btk: BTK,
-        public brk: BRK,
-        public bck: BCK,
-        public bmt: BMT,
-        public extraTextures: TEX1_TextureData[] = [],
+        sceneLoaderToken: SceneLoaderToken,
+        sceneLoader: SceneLoader,
     ) {
-        this.translateModel(gl);
+        const gl = sceneLoaderToken.gl;
+        this.bmd = sceneLoader.bmd;
+        this.bmt = sceneLoader.bmt;
+        this.translateModel(gl, sceneLoader);
 
         this.sceneParamsBuffer = gl.createBuffer();
         this.modelMatrix = mat4.create();
@@ -514,6 +544,18 @@ export class Scene implements Viewer.Scene {
 
     public setVisible(v: boolean): void {
         this.visible = v;
+    }
+
+    public setBCK(bck: BCK | null): void {
+        this.bck = bck;
+    }
+
+    public setBRK(brk: BRK | null): void {
+        this.brk = brk;
+    }
+
+    public setBTK(btk: BTK | null): void {
+        this.btk = btk;
     }
 
     public getTextureBindData(texIndex: number): TextureBindData {
@@ -596,16 +638,6 @@ export class Scene implements Viewer.Scene {
         commands.forEach((command, i) => {
             command.exec(state);
         });
-    }
-
-    private loadExtraTexture(texture: TEX1_TextureData): TEX1_TextureData {
-        // XXX(jstpierre): Better texture replacement API, this one is ZTP specific...
-        const textureName = texture.name.toLowerCase().replace('.tga', '');
-        for (const extraTexture of this.extraTextures) {
-            if (extraTexture.name.toLowerCase() === textureName)
-                return extraTexture;
-        }
-        return texture;
     }
 
     private static translateTexFilter(gl: WebGL2RenderingContext, texFilter: GX.TexFilter) {
@@ -705,14 +737,17 @@ export class Scene implements Viewer.Scene {
         return { name: texture.name, surfaces };
     }
 
-    public translateTextures(gl: WebGL2RenderingContext) {
-        const tex1 = this.bmt !== null ? this.bmt.tex1 : this.bmd.tex1;
+    public translateTextures(gl: WebGL2RenderingContext, sceneLoader: SceneLoader) {
+        const tex1 = sceneLoader.bmt !== null ? sceneLoader.bmt.tex1 : sceneLoader.bmd.tex1;
+
+        // TODO(jstpierre): How does separable textureData / sampler work with external
+        // texture resolve?
 
         this.glTextures = [];
         this.textures = [];
         for (let textureData of tex1.textureDatas) {
             if (textureData.data === null) {
-                textureData = this.loadExtraTexture(textureData);
+                textureData = sceneLoader.resolveTexture(textureData.name);
             }
 
             this.glTextures.push(Scene.translateTexture(gl, textureData));
@@ -728,12 +763,16 @@ export class Scene implements Viewer.Scene {
         this.tex1Samplers = tex1.samplers;
     }
 
-    private translateModel(gl: WebGL2RenderingContext) {
+    private translateModel(gl: WebGL2RenderingContext, sceneLoader: SceneLoader) {
+        const bmd = sceneLoader.bmd;
+        const bmt = sceneLoader.bmt;
+        const mat3 = (bmt !== null && bmt.mat3 !== null) ? bmt.mat3 : bmd.mat3;
+
         const attrScaleCount = GX_Material.scaledVtxAttributes.length;
         const attrScaleData = new Float32Array(attrScaleCount);
         for (let i = 0; i < GX_Material.scaledVtxAttributes.length; i++) {
             const attrib = GX_Material.scaledVtxAttributes[i];
-            const vtxArray = this.bmd.vtx1.vertexArrays.get(attrib);
+            const vtxArray = bmd.vtx1.vertexArrays.get(attrib);
             const scale = vtxArray !== undefined ? vtxArray.scale : 1;
             attrScaleData[i] = scale;
         }
@@ -743,44 +782,45 @@ export class Scene implements Viewer.Scene {
         this.transparentCommands = [];
 
         this.jointMatrices = [];
-        for (const index of this.bmd.jnt1.remapTable)
+        for (const index of bmd.jnt1.remapTable)
             if (this.jointMatrices[index] === undefined)
                 this.jointMatrices[index] = mat4.create();
 
         this.weightedJointMatrices = [];
-        for (const drw1Joint of this.bmd.drw1.drw1Joints)
+        for (const drw1Joint of bmd.drw1.drw1Joints)
             this.weightedJointMatrices.push(mat4.create());
 
-        this.translateTextures(gl);
+        this.translateTextures(gl, sceneLoader);
 
-        const mat3 = (this.bmt !== null && this.bmt.mat3 !== null) ? this.bmt.mat3 : this.bmd.mat3;
-        this.materialCommands = mat3.materialEntries.map((material) => {
+        const materialCommands = mat3.materialEntries.map((material) => {
             return new Command_Material(gl, this, material);
         });
 
+        // Apply remap table.
+        this.materialCommands = mat3.remapTable.map((index) => {
+            return materialCommands[index];
+        });
+
         this.bufferCoalescer = new BufferCoalescer(gl,
-            this.bmd.shp1.shapes.map((shape) => shape.packedData),
-            this.bmd.shp1.shapes.map((shape) => shape.indexData),
+            bmd.shp1.shapes.map((shape) => shape.packedData),
+            bmd.shp1.shapes.map((shape) => shape.indexData),
         );
 
-        this.shapeCommands = this.bmd.shp1.shapes.map((shape, i) => {
-            return new Command_Shape(gl, this, shape, this.bufferCoalescer.coalescedBuffers[i]);
+        this.shapeCommands = bmd.shp1.shapes.map((shape, i) => {
+            return new Command_Shape(gl, sceneLoader, this, shape, this.bufferCoalescer.coalescedBuffers[i]);
         });
 
         // Iterate through scene graph.
-        this.translateSceneGraph(this.bmd.inf1.sceneGraph, null);
+        this.translateSceneGraph(bmd.inf1.sceneGraph, null);
     }
 
     private translateSceneGraph(node: HierarchyNode, commandList: Command[]) {
-        const mat3 = (this.bmt !== null && this.bmt.mat3 !== null) ? this.bmt.mat3 : this.bmd.mat3;
-
         switch (node.type) {
         case HierarchyType.Shape:
             commandList.push(this.shapeCommands[node.shapeIdx]);
             break;
         case HierarchyType.Material:
-            const materialIdx = mat3.remapTable[node.materialIdx];
-            const materialCommand = this.materialCommands[materialIdx];
+            const materialCommand = this.materialCommands[node.materialIdx];
             commandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
             commandList.push(materialCommand);
             break;
