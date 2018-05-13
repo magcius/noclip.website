@@ -37,9 +37,9 @@ class ProgramGambit_UBER extends Program {
 
     private $a = ProgramGambit_UBER.attribLocations;
     public vert = `
-uniform mat4 u_view;
 uniform mat4 u_modelView;
 uniform mat4 u_projection;
+uniform mat4 u_view;
 layout(location = ${this.$a._p0}) in vec3 a_p0;
 layout(location = ${this.$a._n0}) in vec3 a_n0;
 layout(location = ${this.$a._t0}) in vec4 a_t0;
@@ -65,17 +65,19 @@ void main() {
 `;
 
     public frag = `
+uniform mat4 u_view;
+
+uniform sampler2D s_a0;
+uniform sampler2D s_n0;
+uniform sampler2D s_e0;
+uniform sampler2D s_s0;
+
 in vec3 v_PositionWorld;
 in vec2 v_TexCoord0;
 in vec3 v_NormalWorld;
 in vec4 v_TangentWorld;
 
 in vec3 v_CameraWorld;
-
-uniform sampler2D s_a0;
-uniform sampler2D s_n0;
-uniform sampler2D s_e0;
-uniform sampler2D s_s0;
 
 vec4 textureSRGB(sampler2D s, vec2 uv) {
     vec4 srgba = texture(s, uv);
@@ -114,17 +116,16 @@ void main() {
     float specular = 0.0;
 
     // Basic directional lighting.
-    const vec3 d_light_dir = vec3(0.0, 0.4, 1.0);
+    vec3 d_light_dir = normalize(vec3(-u_view[2].x, 0.0, u_view[2].z));
     // Sky-ish color. If we were better we would use a cubemap...
     const vec3 d_light_col = vec3(0.9, 0.9, 1.4);
     const float spec_power = 35.0;
 
-    vec3 light_dir = normalize(d_light_dir);
-    diffuse += clamp(dot(normal_dir, light_dir), 0.0, 1.0);
-    specular += pow(clamp(dot(refl_dir, light_dir), 0.0, 1.0), spec_power);
+    diffuse += clamp(dot(normal_dir, d_light_dir), 0.0, 1.0);
+    specular += pow(clamp(dot(refl_dir, d_light_dir), 0.0, 1.0), spec_power);
 
     // Dumb constant ambient.
-    diffuse += 0.3;
+    diffuse += 0.6;
     specular += 0.012;
 
     vec3 diffuse_light = d_light_col * diffuse;
