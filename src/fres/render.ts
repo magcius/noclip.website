@@ -21,30 +21,61 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 type RenderFunc = (renderState: RenderState) => void;
 
 class ProgramGambit_UBER extends Program {
-    public a0Location: WebGLUniformLocation;
-    public e0Location: WebGLUniformLocation;
+    public s_a0: WebGLUniformLocation;
+    public s_e0: WebGLUniformLocation;
+    public s_n0: WebGLUniformLocation;
+    public s_s0: WebGLUniformLocation;
+    public u_view: WebGLUniformLocation;
 
     public static attribLocations: { [name: string]: number } = {
-        _p0: 0,
-        _u0: 1,
+        _p0: 0, // Position
+        _n0: 1, // Normal
+        _t0: 2, // Tangent
+        _u0: 3, // UV of albedo map 0
+        _u1: 4, // UV of albedo map 1
     };
+
     private $a = ProgramGambit_UBER.attribLocations;
     public vert = `
+uniform mat4 u_view;
 uniform mat4 u_modelView;
 uniform mat4 u_projection;
-layout(location = ${this.$a._p0}) in vec3 _p0;
-layout(location = ${this.$a._u0}) in vec2 _u0;
-out vec2 a_u0;
+layout(location = ${this.$a._p0}) in vec3 a_p0;
+layout(location = ${this.$a._n0}) in vec3 a_n0;
+layout(location = ${this.$a._t0}) in vec4 a_t0;
+layout(location = ${this.$a._u0}) in vec2 a_u0;
+layout(location = ${this.$a._u1}) in vec2 a_u1;
+
+out vec3 v_PositionWorld;
+out vec2 v_TexCoord0;
+out vec3 v_NormalWorld;
+out vec4 v_TangentWorld;
+
+out vec3 v_CameraWorld;
 
 void main() {
-    gl_Position = u_projection * u_modelView * vec4(_p0, 1.0);
-    a_u0 = _u0;
+    gl_Position = u_projection * u_modelView * vec4(a_p0, 1.0);
+    v_PositionWorld = a_p0.xyz;
+    v_TexCoord0 = a_u0;
+    v_NormalWorld = a_n0;
+    v_TangentWorld = a_t0;
+    // TODO(jstpierre): Don't be dumb.
+    v_CameraWorld = inverse(u_view)[3].xyz;
 }
 `;
+
     public frag = `
-in vec2 a_u0;
-uniform sampler2D _a0;
-uniform sampler2D _e0;
+in vec3 v_PositionWorld;
+in vec2 v_TexCoord0;
+in vec3 v_NormalWorld;
+in vec4 v_TangentWorld;
+
+in vec3 v_CameraWorld;
+
+uniform sampler2D s_a0;
+uniform sampler2D s_n0;
+uniform sampler2D s_e0;
+uniform sampler2D s_s0;
 
 vec4 textureSRGB(sampler2D s, vec2 uv) {
     vec4 srgba = texture(s, uv);
@@ -60,19 +91,84 @@ vec4 textureSRGB(sampler2D s, vec2 uv) {
 }
 
 void main() {
-    o_color = textureSRGB(_a0, a_u0);
+    vec4 tx_albedo0  = textureSRGB(s_a0, v_TexCoord0);
+    vec4 tx_emissive = textureSRGB(s_e0, v_TexCoord0);
+    vec4 tx_normal   = textureSRGB(s_n0, v_TexCoord0);
+    vec4 tx_specular = textureSRGB(s_s0, v_TexCoord0);
+
+    // Perturb normal with map.
+    vec3 nrm = v_NormalWorld.xyz;
+    vec3 tan = normalize(v_TangentWorld.xyz);
+    vec3 btn = cross(nrm, tan) * v_TangentWorld.w;
+
+    vec3 local_nrm = vec3(tx_normal.xy, 0);
+    float len2 = 1.0 - local_nrm.x*local_nrm.x - local_nrm.y*local_nrm.y;
+    local_nrm.z = sqrt(clamp(len2, 0.0, 1.0));
+    vec3 normal_dir = (local_nrm.x * tan + local_nrm.y * btn + local_nrm.z * nrm);
+
+    vec3 view_dir = normalize(v_PositionWorld.xyz - v_CameraWorld);
+    vec3 refl_dir = reflect(-view_dir, normal_dir);
+
+    // Calulate incident light.
+    float diffuse = 0.0;
+    float specular = 0.0;
+
+    // Basic directional lighting.
+    const vec3 d_light_dir = vec3(0.0, 0.4, 1.0);
+    // Sky-ish color. If we were better we would use a cubemap...
+    const vec3 d_light_col = vec3(0.9, 0.9, 1.4);
+    const float spec_power = 35.0;
+
+    vec3 light_dir = normalize(d_light_dir);
+    diffuse += clamp(dot(normal_dir, light_dir), 0.0, 1.0);
+    specular += pow(clamp(dot(refl_dir, light_dir), 0.0, 1.0), spec_power);
+
+    // Dumb constant ambient.
+    diffuse += 0.3;
+    specular += 0.012;
+
+    vec3 diffuse_light = d_light_col * diffuse;
+    vec3 specular_light = d_light_col * specular * tx_specular.x;
+
+    vec4 albedo = tx_albedo0;
+    // TODO(jstpierre): Multitex?
+
+    o_color = vec4(0, 0, 0, 0);
+    o_color.rgb += albedo.rgb * diffuse_light;
+    o_color.rgb += specular_light;
+    o_color.a = albedo.a;
+
     // TODO(jstpierre): Configurable alpha test
     if (o_color.a < 0.5)
         discard;
-    o_color.rgb += textureSRGB(_e0, a_u0).rgb;
+
+    o_color.rgb += tx_emissive.rgb;
+
+    // Gamma correction.
     o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));
 }
 `;
 
-    bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
-        this.a0Location = gl.getUniformLocation(prog, "_a0");
-        this.e0Location = gl.getUniformLocation(prog, "_e0");
+        this.u_view = gl.getUniformLocation(prog, "u_view");
+        this.s_a0 = gl.getUniformLocation(prog, "s_a0");
+        this.s_e0 = gl.getUniformLocation(prog, "s_e0");
+        this.s_n0 = gl.getUniformLocation(prog, "s_n0");
+        this.s_s0 = gl.getUniformLocation(prog, "s_s0");
+    }
+
+    public getTextureUniformLocation(name: string): WebGLUniformLocation | null {
+        if (name === "_a0")
+            return this.s_a0;
+        else if (name === "_e0")
+            return this.s_e0;
+        else if (name === "_n0")
+            return this.s_n0;
+        else if (name === "_s0")
+            return this.s_s0;
+        else
+            return null;
     }
 }
 
@@ -97,6 +193,10 @@ function getAttribFormatInfo(format: GX2AttribFormat): GX2AttribFormatInfo {
         return { compCount: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
     case GX2AttribFormat._8_8_SNORM:
         return { compCount: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
+    case GX2AttribFormat._8_8_8_8_UNORM:
+        return { compCount: 4, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
+    case GX2AttribFormat._8_8_8_8_SNORM:
+        return { compCount: 4, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
     case GX2AttribFormat._16_16_UNORM:
         return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.UNSIGNED_SHORT, normalized: true };
     case GX2AttribFormat._16_16_SNORM:
@@ -105,22 +205,29 @@ function getAttribFormatInfo(format: GX2AttribFormat): GX2AttribFormatInfo {
         return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
     case GX2AttribFormat._16_16_16_16_FLOAT:
         return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
+    case GX2AttribFormat._16_16_16_16_UNORM:
+        return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.UNSIGNED_SHORT, normalized: true };
+    case GX2AttribFormat._16_16_16_16_SNORM:
+        return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.SHORT, normalized: true };
     case GX2AttribFormat._32_32_FLOAT:
         return { compCount: 2, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
     case GX2AttribFormat._32_32_32_FLOAT:
         return { compCount: 4, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
+    case GX2AttribFormat._10_10_10_2_UNORM:
+    case GX2AttribFormat._10_10_10_2_SNORM:
+        // Should be handled during the buffer load case.
+        return null;
     default:
-        const m_: never = format;
         throw new Error(`Unsupported attribute format ${format}`);
     }
 }
 
-function pullVertexData(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, vtxCount: number): ArrayBufferSlice {
-    // XXX(jstpierre): This is super ugly
+function convertVertexBufferCopy(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, vtxCount: number): ArrayBufferSlice {
     const stride = buffer.stride;
     assert(stride !== 0);
 
     const formatInfo = getAttribFormatInfo(attrib.format);
+    assert(formatInfo !== null);
 
     const numValues = vtxCount * formatInfo.compCount;
 
@@ -156,6 +263,77 @@ function pullVertexData(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, vtxCo
     return new ArrayBufferSlice(out.buffer);
 }
 
+function convertVertexBuffer_10_10_10_2(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, vtxCount: number): ArrayBufferSlice {
+    assert(buffer.stride !== 0);
+
+    const elemSize = 4;
+    const compCount = 4;
+
+    const numValues = vtxCount * compCount;
+
+    let signed: boolean;
+    function getOutputBuffer() {
+        if (attrib.format === GX2AttribFormat._10_10_10_2_SNORM) {
+            attrib.format = GX2AttribFormat._16_16_16_16_SNORM;
+            signed = true;
+            return new Int16Array(numValues);
+        } else if (attrib.format === GX2AttribFormat._10_10_10_2_UNORM) {
+            attrib.format = GX2AttribFormat._16_16_16_16_UNORM;
+            signed = false;
+            return new Uint16Array(numValues);
+        } else {
+            throw new Error("whoops");
+        }
+    }
+
+    const view = buffer.data.createDataView();
+    const out = getOutputBuffer();
+
+    function signExtend10(n: number): number {
+        if (signed)
+            return (n << 22) >> 22;
+        else
+            return n;
+    }
+
+    let offs = attrib.bufferStart;
+    let dst = 0;
+    for (let i = 0; i < vtxCount; i++) {
+        const n = view.getUint32(offs, false);
+        out[dst++] = signExtend10((n >>>  0) & 0x3FF) << 4;
+        out[dst++] = signExtend10((n >>> 10) & 0x3FF) << 4;
+        out[dst++] = signExtend10((n >>> 20) & 0x3FF) << 4;
+        out[dst++] = ((n >>> 30) & 0x03) << 14;
+        offs += buffer.stride;
+    }
+
+    return new ArrayBufferSlice(out.buffer);
+}
+
+function convertVertexBuffer(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, vtxCount: number): ArrayBufferSlice {
+    const formatInfo = getAttribFormatInfo(attrib.format);
+
+    if (formatInfo !== null) {
+        const byteSize = formatInfo.compCount * formatInfo.elemSize;
+        if (buffer.stride <= byteSize && attrib.bufferStart === 0) {
+            // Fastest path -- just endian swap.
+            return betoh(buffer.data, formatInfo.elemSize);
+        } else {
+            // Has a native WebGL equivalent, just requires us to convert strides.
+            return convertVertexBufferCopy(buffer, attrib, vtxCount);
+        }
+    } else {
+        // No native WebGL equivalent. Let's see what we can do...
+        switch (attrib.format) {
+        case GX2AttribFormat._10_10_10_2_SNORM:
+        case GX2AttribFormat._10_10_10_2_UNORM:
+            return convertVertexBuffer_10_10_10_2(buffer, attrib, vtxCount);
+        }
+    }
+
+    throw new Error("whoops");
+}
+
 export class Scene implements Viewer.Scene {
     public textures: Viewer.Texture[];
 
@@ -163,6 +341,8 @@ export class Scene implements Viewer.Scene {
     private glTextures: WebGLTexture[];
     private blankTexture: WebGLTexture;
     private arena: RenderArena;
+
+    private prog: ProgramGambit_UBER = new ProgramGambit_UBER();
 
     constructor(gl: WebGL2RenderingContext, private fres: BFRES.FRES, private isSkybox: boolean) {
         this.fres = fres;
@@ -186,16 +366,9 @@ export class Scene implements Viewer.Scene {
                 continue;
 
             const buffer = fvtx.buffers[attrib.bufferIndex];
-            const formatInfo = getAttribFormatInfo(attrib.format);
-            const byteSize = formatInfo.compCount * formatInfo.elemSize;
-            let vertexData;
-            if (buffer.stride <= byteSize && attrib.bufferStart === 0) {
-                // Fast path. Single attribute per buffer.
-                vertexData = betoh(buffer.data, formatInfo.elemSize);
-            } else {
-                // Slower. Requires picking apart the buffer.
-                vertexData = pullVertexData(buffer, attrib, fvtx.vtxCount);
-            }
+            // Convert the vertex buffer data into a loadable format... might edit "attrib"
+            // if it has to load a non-WebGL-native format...
+            const vertexData = convertVertexBuffer(buffer, attrib, fvtx.vtxCount);
             vertexDatas.push(vertexData);
         }
     }
@@ -302,8 +475,7 @@ export class Scene implements Viewer.Scene {
     }
 
     private translateFMAT(gl: WebGL2RenderingContext, fmat: BFRES.FMAT): RenderFunc {
-        // We only support the albedo/emissive texture.
-        const attribNames = ['_a0', '_e0'];
+        const attribNames = ['_a0', '_e0', '_n0', '_s0'];
         const textureAssigns = fmat.textureAssigns.filter((textureAssign) => {
             return attribNames.includes(textureAssign.attribName);
         });
@@ -320,14 +492,16 @@ export class Scene implements Viewer.Scene {
             samplers.push(sampler);
         }
 
-        const prog = new ProgramGambit_UBER();
-        this.arena.trackProgram(prog);
+        // const prog = new ProgramGambit_UBER();
+        // this.arena.trackProgram(prog);
+        const prog = this.prog;
 
         const renderFlags = this.translateRenderState(fmat.renderState);
 
         return (state: RenderState) => {
             state.useProgram(prog);
             state.bindModelView(this.isSkybox);
+            gl.uniformMatrix4fv(prog.u_view, false, state.view);
 
             state.useFlags(renderFlags);
 
@@ -337,14 +511,7 @@ export class Scene implements Viewer.Scene {
 
                 gl.activeTexture(gl.TEXTURE0 + i);
 
-                let uniformLocation;
-                if (attribName === '_a0')
-                    uniformLocation = prog.a0Location;
-                else if (attribName === '_e0')
-                    uniformLocation = prog.e0Location;
-                else
-                    assert(false);
-
+                const uniformLocation = prog.getTextureUniformLocation(attribName)
                 gl.uniform1i(uniformLocation, i);
 
                 const textureAssignIndex = textureAssigns.findIndex((textureAssign) => textureAssign.attribName === attribName);
