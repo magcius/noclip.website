@@ -10564,8 +10564,9 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         }
         var texId = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texId);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        // Filters are set to NEAREST here because filtering is performed in the fragment shader.
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, translateWrap(texture.cms));
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, translateWrap(texture.cmt));
         var glFormat;
@@ -10883,7 +10884,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "Program", "uti
                 function F3DEX2Program() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
                     _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + F3DEX2Program.a_Position + ") attribute vec3 a_Position;\nlayout(location = " + F3DEX2Program.a_UV + ") attribute vec2 a_UV;\nlayout(location = " + F3DEX2Program.a_Color + ") attribute vec4 a_Color;\nout vec4 v_color;\nout vec2 v_uv;\nuniform vec2 u_txs;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);\n    v_uv = a_UV * u_txs;\n    v_color = a_Color;\n}\n";
-                    _this.frag = "\nprecision mediump float;\nvarying vec2 v_uv;\nvarying vec4 v_color;\nuniform sampler2D u_texture;\nuniform bool u_useVertexColors;\nuniform int u_alphaTest;\n\nvoid main() {\n    gl_FragColor = texture2D(u_texture, v_uv);\n    if (u_useVertexColors)\n        gl_FragColor *= v_color;\n    if (u_alphaTest > 0 && gl_FragColor.a < 0.0125)\n        discard;\n}\n";
+                    _this.frag = "\nprecision mediump float;\nvarying vec2 v_uv;\nvarying vec4 v_color;\nuniform sampler2D u_texture;\nuniform bool u_useVertexColors;\nuniform int u_alphaTest;\n\nvec4 n64Texture2D(sampler2D tex, vec2 texCoord) {\n    vec2 texSize = vec2(textureSize(tex, 0));\n    vec2 offset = fract(texCoord * texSize - 0.5);\n    offset -= step(1.0, offset.x + offset.y);\n    vec4 c0 = texture2D(tex, texCoord - offset / texSize, 0.0);\n    vec4 c1 = texture2D(tex, texCoord - vec2(offset.x - sign(offset.x), offset.y) / texSize, 0.0);\n    vec4 c2 = texture2D(tex, texCoord - vec2(offset.x, offset.y - sign(offset.y)) / texSize, 0.0);\n    return c0 + abs(offset.x) * (c1 - c0) + abs(offset.y) * (c2 - c0);\t\t\n}\n\nvoid main() {\n    gl_FragColor = n64Texture2D(u_texture, v_uv);\n    if (u_useVertexColors)\n        gl_FragColor *= v_color;\n    if (u_alphaTest > 0 && gl_FragColor.a < 0.0125)\n        discard;\n}\n";
                     return _this;
                 }
                 F3DEX2Program.prototype.bind = function (gl, prog) {
@@ -10944,7 +10945,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "Program", "uti
                     var renderWaterBoxes = this.translateWaterBoxes(gl, mainScene);
                     this.render = function (state) {
                         renderScene(state);
-                        renderCollision(state);
+                        //renderCollision(state);
                         renderWaterBoxes(state);
                     };
                 }
@@ -16731,8 +16732,10 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     this._loadSceneDesc(this.droppedFileGroup, sceneDesc);
                 };
                 Main.prototype._onResize = function () {
-                    this.canvas.width = window.innerWidth;
-                    this.canvas.height = window.innerHeight;
+                    var devicePixelRatio = window.devicePixelRatio || 1;
+                    this.canvas.setAttribute('style', "width: " + window.innerWidth + "px; height: " + window.innerHeight + "px;");
+                    this.canvas.width = window.innerWidth * devicePixelRatio;
+                    this.canvas.height = window.innerHeight * devicePixelRatio;
                 };
                 Main.prototype._loadState = function (state) {
                     var parts = state.split(';');
@@ -16914,8 +16917,9 @@ System.register("embeds/main", ["viewer"], function (exports_69, context_69) {
                     });
                 };
                 Main.prototype.onResize = function () {
-                    this.canvas.width = window.innerWidth;
-                    this.canvas.height = window.innerHeight;
+                    var devicePixelRatio = window.devicePixelRatio || 1;
+                    this.canvas.width = Math.ceil(window.innerWidth * devicePixelRatio);
+                    this.canvas.height = Math.ceil(window.innerHeight * devicePixelRatio);
                 };
                 return Main;
             }());
