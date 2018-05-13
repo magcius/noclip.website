@@ -1382,7 +1382,8 @@ System.register("MemoizeCache", ["util"], function (exports_6, context_6) {
                     }
                     else {
                         var obj = this.make(key);
-                        this.cache.set(keyStr, obj);
+                        if (obj !== null)
+                            this.cache.set(keyStr, obj);
                         return obj;
                     }
                 };
@@ -1398,12 +1399,23 @@ System.register("MemoizeCache", ["util"], function (exports_6, context_6) {
 System.register("Program", ["MemoizeCache", "CodeEditor", "util"], function (exports_7, context_7) {
     "use strict";
     var __moduleName = context_7 && context_7.id;
+    function leftPad(n, v, num) {
+        var s = '' + n;
+        while (s.length < num)
+            s = v + s;
+        return s;
+    }
+    function prependLineNo(str, lineStart) {
+        if (lineStart === void 0) { lineStart = 1; }
+        var lines = str.split('\n');
+        return lines.map(function (s, i) { return leftPad(lineStart + i, ' ', 4) + "  " + s; }).join('\n');
+    }
     function compileShader(gl, str, type) {
         var shader = util_3.assertExists(gl.createShader(type));
         gl.shaderSource(shader, str);
         gl.compileShader(shader);
         if (DEBUG && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            console.error(str);
+            console.error(prependLineNo(str));
             var debug_shaders = gl.getExtension('WEBGL_debug_shaders');
             if (debug_shaders)
                 console.error(debug_shaders.getTranslatedShaderSource(shader));
@@ -13954,6 +13966,10 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                 return { compCount: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
             case 516 /* _8_8_SNORM */:
                 return { compCount: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
+            case 10 /* _8_8_8_8_UNORM */:
+                return { compCount: 4, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
+            case 522 /* _8_8_8_8_SNORM */:
+                return { compCount: 4, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
             case 7 /* _16_16_UNORM */:
                 return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.UNSIGNED_SHORT, normalized: true };
             case 519 /* _16_16_SNORM */:
@@ -13962,20 +13978,27 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                 return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
             case 2063 /* _16_16_16_16_FLOAT */:
                 return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
+            case 14 /* _16_16_16_16_UNORM */:
+                return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.UNSIGNED_SHORT, normalized: true };
+            case 526 /* _16_16_16_16_SNORM */:
+                return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.SHORT, normalized: true };
             case 2061 /* _32_32_FLOAT */:
                 return { compCount: 2, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
             case 2065 /* _32_32_32_FLOAT */:
                 return { compCount: 4, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
+            case 11 /* _10_10_10_2_UNORM */:
+            case 523 /* _10_10_10_2_SNORM */:
+                // Should be handled during the buffer load case.
+                return null;
             default:
-                var m_ = format;
                 throw new Error("Unsupported attribute format " + format);
         }
     }
-    function pullVertexData(buffer, attrib, vtxCount) {
-        // XXX(jstpierre): This is super ugly
+    function convertVertexBufferCopy(buffer, attrib, vtxCount) {
         var stride = buffer.stride;
         util_33.assert(stride !== 0);
         var formatInfo = getAttribFormatInfo(attrib.format);
+        util_33.assert(formatInfo !== null);
         var numValues = vtxCount * formatInfo.compCount;
         function getOutputBuffer() {
             if (formatInfo.elemSize === 1)
@@ -14005,6 +14028,70 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
             offs += stride;
         }
         return new ArrayBufferSlice_7.default(out.buffer);
+    }
+    function convertVertexBuffer_10_10_10_2(buffer, attrib, vtxCount) {
+        util_33.assert(buffer.stride !== 0);
+        var elemSize = 4;
+        var compCount = 4;
+        var numValues = vtxCount * compCount;
+        var signed;
+        function getOutputBuffer() {
+            if (attrib.format === 523 /* _10_10_10_2_SNORM */) {
+                attrib.format = 526 /* _16_16_16_16_SNORM */;
+                signed = true;
+                return new Int16Array(numValues);
+            }
+            else if (attrib.format === 11 /* _10_10_10_2_UNORM */) {
+                attrib.format = 14 /* _16_16_16_16_UNORM */;
+                signed = false;
+                return new Uint16Array(numValues);
+            }
+            else {
+                throw new Error("whoops");
+            }
+        }
+        var view = buffer.data.createDataView();
+        var out = getOutputBuffer();
+        function signExtend10(n) {
+            if (signed)
+                return (n << 22) >> 22;
+            else
+                return n;
+        }
+        var offs = attrib.bufferStart;
+        var dst = 0;
+        for (var i = 0; i < vtxCount; i++) {
+            var n = view.getUint32(offs, false);
+            out[dst++] = signExtend10((n >>> 0) & 0x3FF) << 4;
+            out[dst++] = signExtend10((n >>> 10) & 0x3FF) << 4;
+            out[dst++] = signExtend10((n >>> 20) & 0x3FF) << 4;
+            out[dst++] = ((n >>> 30) & 0x03) << 14;
+            offs += buffer.stride;
+        }
+        return new ArrayBufferSlice_7.default(out.buffer);
+    }
+    function convertVertexBuffer(buffer, attrib, vtxCount) {
+        var formatInfo = getAttribFormatInfo(attrib.format);
+        if (formatInfo !== null) {
+            var byteSize = formatInfo.compCount * formatInfo.elemSize;
+            if (buffer.stride <= byteSize && attrib.bufferStart === 0) {
+                // Fastest path -- just endian swap.
+                return endian_3.betoh(buffer.data, formatInfo.elemSize);
+            }
+            else {
+                // Has a native WebGL equivalent, just requires us to convert strides.
+                return convertVertexBufferCopy(buffer, attrib, vtxCount);
+            }
+        }
+        else {
+            // No native WebGL equivalent. Let's see what we can do...
+            switch (attrib.format) {
+                case 523 /* _10_10_10_2_SNORM */:
+                case 11 /* _10_10_10_2_UNORM */:
+                    return convertVertexBuffer_10_10_10_2(buffer, attrib, vtxCount);
+            }
+        }
+        throw new Error("whoops");
     }
     var gx2_swizzle_2, GX2Texture, render_20, Program_8, RenderArena_3, endian_3, util_33, ArrayBufferSlice_7, ProgramGambit_UBER, Scene;
     return {
@@ -14040,18 +14127,36 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                 function ProgramGambit_UBER() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
                     _this.$a = ProgramGambit_UBER.attribLocations;
-                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + _this.$a._p0 + ") in vec3 _p0;\nlayout(location = " + _this.$a._u0 + ") in vec2 _u0;\nout vec2 a_u0;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(_p0, 1.0);\n    a_u0 = _u0;\n}\n";
-                    _this.frag = "\nin vec2 a_u0;\nuniform sampler2D _a0;\nuniform sampler2D _e0;\n\nvec4 textureSRGB(sampler2D s, vec2 uv) {\n    vec4 srgba = texture(s, uv);\n    vec3 srgb = srgba.rgb;\n    // XXX(jstpierre): Turn sRGB texturing back on at some point...\n#ifndef NOPE_HAS_WEBGL_compressed_texture_s3tc_srgb\n    vec3 rgb = srgb;\n#else\n    // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html\n    vec3 rgb = srgb * (srgb * (srgb * 0.305306011 + 0.682171111) + 0.012522878);\n#endif\n    return vec4(rgb, srgba.a);\n}\n\nvoid main() {\n    o_color = textureSRGB(_a0, a_u0);\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n    o_color.rgb += textureSRGB(_e0, a_u0).rgb;\n    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));\n}\n";
+                    _this.vert = "\nuniform mat4 u_view;\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + _this.$a._p0 + ") in vec3 a_p0;\nlayout(location = " + _this.$a._n0 + ") in vec3 a_n0;\nlayout(location = " + _this.$a._t0 + ") in vec4 a_t0;\nlayout(location = " + _this.$a._u0 + ") in vec2 a_u0;\nlayout(location = " + _this.$a._u1 + ") in vec2 a_u1;\n\nout vec3 v_PositionWorld;\nout vec2 v_TexCoord0;\nout vec3 v_NormalWorld;\nout vec4 v_TangentWorld;\n\nout vec3 v_CameraWorld;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_p0, 1.0);\n    v_PositionWorld = a_p0.xyz;\n    v_TexCoord0 = a_u0;\n    v_NormalWorld = a_n0;\n    v_TangentWorld = a_t0;\n    // TODO(jstpierre): Don't be dumb.\n    v_CameraWorld = inverse(u_view)[3].xyz;\n}\n";
+                    _this.frag = "\nin vec3 v_PositionWorld;\nin vec2 v_TexCoord0;\nin vec3 v_NormalWorld;\nin vec4 v_TangentWorld;\n\nin vec3 v_CameraWorld;\n\nuniform sampler2D s_a0;\nuniform sampler2D s_n0;\nuniform sampler2D s_e0;\nuniform sampler2D s_s0;\n\nvec4 textureSRGB(sampler2D s, vec2 uv) {\n    vec4 srgba = texture(s, uv);\n    vec3 srgb = srgba.rgb;\n    // XXX(jstpierre): Turn sRGB texturing back on at some point...\n#ifndef NOPE_HAS_WEBGL_compressed_texture_s3tc_srgb\n    vec3 rgb = srgb;\n#else\n    // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html\n    vec3 rgb = srgb * (srgb * (srgb * 0.305306011 + 0.682171111) + 0.012522878);\n#endif\n    return vec4(rgb, srgba.a);\n}\n\nvoid main() {\n    vec4 tx_albedo0  = textureSRGB(s_a0, v_TexCoord0);\n    vec4 tx_emissive = textureSRGB(s_e0, v_TexCoord0);\n    vec4 tx_normal   = textureSRGB(s_n0, v_TexCoord0);\n    vec4 tx_specular = textureSRGB(s_s0, v_TexCoord0);\n\n    // Perturb normal with map.\n    vec3 nrm = v_NormalWorld.xyz;\n    vec3 tan = normalize(v_TangentWorld.xyz);\n    vec3 btn = cross(nrm, tan) * v_TangentWorld.w;\n\n    vec3 local_nrm = vec3(tx_normal.xy, 0);\n    float len2 = 1.0 - local_nrm.x*local_nrm.x - local_nrm.y*local_nrm.y;\n    local_nrm.z = sqrt(clamp(len2, 0.0, 1.0));\n    vec3 normal_dir = (local_nrm.x * tan + local_nrm.y * btn + local_nrm.z * nrm);\n\n    vec3 view_dir = normalize(v_PositionWorld.xyz - v_CameraWorld);\n    vec3 refl_dir = reflect(-view_dir, normal_dir);\n\n    // Calulate incident light.\n    float diffuse = 0.0;\n    float specular = 0.0;\n\n    // Basic directional lighting.\n    const vec3 d_light_dir = vec3(0.0, 0.4, 1.0);\n    // Sky-ish color. If we were better we would use a cubemap...\n    const vec3 d_light_col = vec3(0.9, 0.9, 1.4);\n    const float spec_power = 35.0;\n\n    vec3 light_dir = normalize(d_light_dir);\n    diffuse += clamp(dot(normal_dir, light_dir), 0.0, 1.0);\n    specular += pow(clamp(dot(refl_dir, light_dir), 0.0, 1.0), spec_power);\n\n    // Dumb constant ambient.\n    diffuse += 0.3;\n    specular += 0.012;\n\n    vec3 diffuse_light = d_light_col * diffuse;\n    vec3 specular_light = d_light_col * specular * tx_specular.x;\n\n    vec4 albedo = tx_albedo0;\n    // TODO(jstpierre): Multitex?\n\n    o_color = vec4(0, 0, 0, 0);\n    o_color.rgb += albedo.rgb * diffuse_light;\n    o_color.rgb += specular_light;\n    o_color.a = albedo.a;\n\n    // TODO(jstpierre): Configurable alpha test\n    if (o_color.a < 0.5)\n        discard;\n\n    o_color.rgb += tx_emissive.rgb;\n\n    // Gamma correction.\n    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));\n}\n";
                     return _this;
                 }
                 ProgramGambit_UBER.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
-                    this.a0Location = gl.getUniformLocation(prog, "_a0");
-                    this.e0Location = gl.getUniformLocation(prog, "_e0");
+                    this.u_view = gl.getUniformLocation(prog, "u_view");
+                    this.s_a0 = gl.getUniformLocation(prog, "s_a0");
+                    this.s_e0 = gl.getUniformLocation(prog, "s_e0");
+                    this.s_n0 = gl.getUniformLocation(prog, "s_n0");
+                    this.s_s0 = gl.getUniformLocation(prog, "s_s0");
+                };
+                ProgramGambit_UBER.prototype.getTextureUniformLocation = function (name) {
+                    if (name === "_a0")
+                        return this.s_a0;
+                    else if (name === "_e0")
+                        return this.s_e0;
+                    else if (name === "_n0")
+                        return this.s_n0;
+                    else if (name === "_s0")
+                        return this.s_s0;
+                    else
+                        return null;
                 };
                 ProgramGambit_UBER.attribLocations = {
                     _p0: 0,
-                    _u0: 1,
+                    _n0: 1,
+                    _t0: 2,
+                    _u0: 3,
+                    _u1: 4,
                 };
                 return ProgramGambit_UBER;
             }(Program_8.default));
@@ -14059,6 +14164,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                 function Scene(gl, fres, isSkybox) {
                     this.fres = fres;
                     this.isSkybox = isSkybox;
+                    this.prog = new ProgramGambit_UBER();
                     this.fres = fres;
                     this.arena = new RenderArena_3.default();
                     this.blankTexture = this.arena.createTexture(gl);
@@ -14074,17 +14180,9 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         if (location_1 === undefined)
                             continue;
                         var buffer = fvtx.buffers[attrib.bufferIndex];
-                        var formatInfo = getAttribFormatInfo(attrib.format);
-                        var byteSize = formatInfo.compCount * formatInfo.elemSize;
-                        var vertexData = void 0;
-                        if (buffer.stride <= byteSize && attrib.bufferStart === 0) {
-                            // Fast path. Single attribute per buffer.
-                            vertexData = endian_3.betoh(buffer.data, formatInfo.elemSize);
-                        }
-                        else {
-                            // Slower. Requires picking apart the buffer.
-                            vertexData = pullVertexData(buffer, attrib, fvtx.vtxCount);
-                        }
+                        // Convert the vertex buffer data into a loadable format... might edit "attrib"
+                        // if it has to load a non-WebGL-native format...
+                        var vertexData = convertVertexBuffer(buffer, attrib, fvtx.vtxCount);
                         vertexDatas.push(vertexData);
                     }
                 };
@@ -14180,8 +14278,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                 };
                 Scene.prototype.translateFMAT = function (gl, fmat) {
                     var _this = this;
-                    // We only support the albedo/emissive texture.
-                    var attribNames = ['_a0', '_e0'];
+                    var attribNames = ['_a0', '_e0', '_n0', '_s0'];
                     var textureAssigns = fmat.textureAssigns.filter(function (textureAssign) {
                         return attribNames.includes(textureAssign.attribName);
                     });
@@ -14206,23 +14303,19 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         }
                         finally { if (e_49) throw e_49.error; }
                     }
-                    var prog = new ProgramGambit_UBER();
-                    this.arena.trackProgram(prog);
+                    // const prog = new ProgramGambit_UBER();
+                    // this.arena.trackProgram(prog);
+                    var prog = this.prog;
                     var renderFlags = this.translateRenderState(fmat.renderState);
                     return function (state) {
                         state.useProgram(prog);
                         state.bindModelView(_this.isSkybox);
+                        gl.uniformMatrix4fv(prog.u_view, false, state.view);
                         state.useFlags(renderFlags);
                         var _loop_9 = function (i) {
                             var attribName = attribNames[i];
                             gl.activeTexture(gl.TEXTURE0 + i);
-                            var uniformLocation = void 0;
-                            if (attribName === '_a0')
-                                uniformLocation = prog.a0Location;
-                            else if (attribName === '_e0')
-                                uniformLocation = prog.e0Location;
-                            else
-                                util_33.assert(false);
+                            var uniformLocation = prog.getTextureUniformLocation(attribName);
                             gl.uniform1i(uniformLocation, i);
                             var textureAssignIndex = textureAssigns.findIndex(function (textureAssign) { return textureAssign.attribName === attribName; });
                             var bound = false;
