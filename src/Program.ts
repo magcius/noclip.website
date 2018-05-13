@@ -5,6 +5,18 @@ import { assertExists } from "./util";
 
 const DEBUG = true;
 
+function leftPad(n: number, v: string, num: number) {
+    let s = ''+n;
+    while (s.length < num)
+        s = v + s;
+    return s;
+}
+
+function prependLineNo(str: string, lineStart: number = 1) {
+    const lines = str.split('\n');
+    return lines.map((s, i) => `${leftPad(lineStart + i, ' ', 4)}  ${s}`).join('\n');
+}
+
 function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     const shader: WebGLShader = assertExists(gl.createShader(type));
 
@@ -12,7 +24,7 @@ function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     gl.compileShader(shader);
 
     if (DEBUG && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error(str);
+        console.error(prependLineNo(str));
         const debug_shaders = gl.getExtension('WEBGL_debug_shaders');
         if (debug_shaders)
             console.error(debug_shaders.getTranslatedShaderSource(shader));
