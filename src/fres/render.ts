@@ -14,9 +14,9 @@ import Progressable from 'Progressable';
 import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode, coalesceBuffer, CoalescedBuffer } from '../render';
 import Program from '../Program';
 import RenderArena from '../RenderArena';
-import { betoh } from '../endian';
 import { assert, fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import { Endianness } from '../endian';
 
 type RenderFunc = (renderState: RenderState) => void;
 
@@ -318,7 +318,7 @@ function convertVertexBuffer(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, 
         const byteSize = formatInfo.compCount * formatInfo.elemSize;
         if (buffer.stride <= byteSize && attrib.bufferStart === 0) {
             // Fastest path -- just endian swap.
-            return betoh(buffer.data, formatInfo.elemSize);
+            return buffer.data.convertFromEndianness(Endianness.BIG_ENDIAN, formatInfo.elemSize);
         } else {
             // Has a native WebGL equivalent, just requires us to convert strides.
             return convertVertexBufferCopy(buffer, attrib, vtxCount);
@@ -548,9 +548,9 @@ export class Scene implements Viewer.Scene {
         case GX2IndexFormat.U32_LE:
             return indexBufferData;
         case GX2IndexFormat.U16:
-            return betoh(indexBufferData, 2);
+            return indexBufferData.convertFromEndianness(Endianness.BIG_ENDIAN, 2);
         case GX2IndexFormat.U32:
-            return betoh(indexBufferData, 4);
+            return indexBufferData.convertFromEndianness(Endianness.BIG_ENDIAN, 4);
         }
     }
 
