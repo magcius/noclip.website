@@ -1,5 +1,5 @@
 
-import { MainScene, SceneDesc, SceneGroup, Viewer, FPSCameraController, CameraControllerClass } from './viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer } from './viewer';
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
@@ -20,6 +20,7 @@ import * as MP1 from './metroid_prime/scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI } from './ui';
+import { CameraControllerClass, FPSCameraController } from './Camera';
 
 const sceneGroups = [
     ZTP.sceneGroup,
@@ -116,15 +117,17 @@ class SceneLoader {
             cameraControllerClass = FPSCameraController;
 
         const cameraController = new cameraControllerClass();
+        this.viewer.setCameraController(cameraController);
+
         if (cameraState !== null) {
             cameraController.deserialize(cameraState);
         } else if (scene !== null && scene.resetCamera) {
-            scene.resetCamera(cameraController);
+            scene.resetCamera(cameraController.camera);
+        } else {
+            cameraController.camera.identity();
         }
 
-        const viewer = this.viewer;
-        viewer.setCameraController(cameraController);
-        viewer.setScene(scene);
+        this.viewer.setScene(scene);
 
         this.onscenechanged();
     }

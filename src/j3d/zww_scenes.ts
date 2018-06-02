@@ -15,6 +15,7 @@ import * as GX_Material from 'gx/gx_material';
 import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { ColorOverride, Scene, SceneLoader } from './render';
+import { CameraController, Camera } from '../Camera';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
@@ -211,10 +212,11 @@ class WindWakerRenderer implements Viewer.MainScene {
         return [timeOfDayPanel];
     }
 
-    public resetCamera(cameraController: Viewer.CameraController) {
+    public resetCamera(camera: Camera) {
         const m = mat4.create();
         this.cameraPos.set(m);
-        cameraController.setInitialCamera(m);
+        mat4.invert(camera.worldMatrix, m);
+        camera.worldMatrixUpdated();
     }
 
     public render(state: RenderState) {

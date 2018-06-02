@@ -14,6 +14,7 @@ import Progressable from 'Progressable';
 import RenderArena from '../RenderArena';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import { computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 
 class NITRO_Program extends Program {
     public texCoordMatLocation: WebGLUniformLocation;
@@ -80,18 +81,19 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
 type RenderFunc = (state: RenderState) => void;
 
 interface Animation {
-    updateModelView(state: RenderState, modelView: mat4): void;
+    updateModelMatrix(state: RenderState, modelMatrix: mat4): void;
 }
 
 class YSpinAnimation {
     constructor(public speed: number, public phase: number) {}
-    updateModelView(state: RenderState, modelView: mat4) {
+    updateModelMatrix(state: RenderState, modelMatrix: mat4) {
         const theta = this.phase + (state.time / 30 * this.speed);
-        mat4.rotateY(modelView, modelView, theta);
+        mat4.rotateY(modelMatrix, modelMatrix, theta);
     }
 }
 
-const scratchVec3 = vec3.create();
+const scratchModelMatrix = mat4.create();
+const scratchViewMatrix = mat4.create();
 class BMDRenderer {
     public textures: Viewer.Texture[];
     public bmd: NITRO_BMD.BMD;
@@ -249,22 +251,32 @@ class BMDRenderer {
     public bindModelView(state: RenderState, isBillboard: boolean) {
         const gl = state.gl;
         const prog = this.program;
-        const modelView = state.updateModelView(this.isSkybox, this.localMatrix);
+
+        // Build model matrix
+        const modelMatrix = scratchModelMatrix;
+        if (isBillboard) {
+            // Apply billboard model if necessary.
+            computeModelMatrixYBillboard(modelMatrix, state.camera);
+            mat4.mul(modelMatrix, this.localMatrix, modelMatrix);
+        } else {
+            mat4.copy(modelMatrix, this.localMatrix);
+        }
 
         if (this.animation !== null)
-            this.animation.updateModelView(state, modelView);
+            this.animation.updateModelMatrix(state, modelMatrix);
 
-        if (isBillboard) {
-            const tx = modelView[12];
-            const ty = modelView[13];
-            const tz = modelView[14];
-            mat4.getScaling(scratchVec3, this.localMatrix);
-            mat4.identity(modelView);
-            mat4.translate(modelView, modelView, [tx, ty, tz]);
-            mat4.scale(modelView, modelView, scratchVec3);
+        // Build view matrix
+        const viewMatrix = scratchViewMatrix;
+        if (this.isSkybox) {
+            computeViewMatrixSkybox(viewMatrix, state.camera);
+        } else {
+            computeViewMatrix(viewMatrix, state.camera);
         }
+
+        mat4.mul(viewMatrix, viewMatrix, modelMatrix);
+
         gl.uniformMatrix4fv(prog.projectionLocation, false, state.projection);
-        gl.uniformMatrix4fv(prog.modelViewLocation, false, modelView);
+        gl.uniformMatrix4fv(prog.modelViewLocation, false, viewMatrix);
     }
 
     private translateBatch(gl: WebGL2RenderingContext, model: NITRO_BMD.Model, batch: NITRO_BMD.Batch): void {

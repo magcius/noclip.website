@@ -4,6 +4,7 @@
 import * as Viewer from './viewer';
 import Progressable from './Progressable';
 import { assertExists } from './util';
+import { CameraControllerClass, OrbitCameraController, FPSCameraController } from './Camera';
 
 const HIGHLIGHT_COLOR = 'rgb(255, 66, 95)';
 
@@ -606,12 +607,12 @@ class ViewerSettings extends Panel {
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
         this.cameraControllerWASD.onclick = () => {
-            this.setCameraControllerClass(Viewer.FPSCameraController);
+            this.setCameraControllerClass(FPSCameraController);
         };
 
         this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit');
         this.cameraControllerOrbit.onclick = () => {
-            this.setCameraControllerClass(Viewer.OrbitCameraController);
+            this.setCameraControllerClass(OrbitCameraController);
         };
     }
 
@@ -625,14 +626,14 @@ class ViewerSettings extends Panel {
         this.viewer.renderState.fov = value * (Math.PI * 0.995);
     }
 
-    private setCameraControllerClass(cameraControllerClass: Viewer.CameraControllerClass) {
+    private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
         this.viewer.setCameraController(new cameraControllerClass());
         this.cameraControllerSelected(cameraControllerClass);
     }
 
-    public cameraControllerSelected(cameraControllerClass: Viewer.CameraControllerClass) {
-        setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === Viewer.FPSCameraController);
-        setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === Viewer.OrbitCameraController);
+    public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
+        setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
+        setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
     }
 }
 
@@ -764,7 +765,7 @@ export class UI {
 
     public sceneChanged() {
         const scene = this.viewer.scene;
-        const cameraControllerClass = (<Viewer.CameraControllerClass> this.viewer.cameraController.constructor);
+        const cameraControllerClass = (<CameraControllerClass> this.viewer.cameraController.constructor);
         // Set up UI.
         this.viewerSettings.cameraControllerSelected(cameraControllerClass);
         this.textureViewer.setTextureList(scene !== null ? scene.textures : []);
