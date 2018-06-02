@@ -1,6 +1,6 @@
 
 import { assert } from "./util";
-import { getSystemEndianness, betoh, Endianness } from "./endian";
+import { getSystemEndianness, Endianness } from "./endian";
 
 // This implements a "saner" ArrayBuffer, since the JS one is absurd.
 //
@@ -80,6 +80,47 @@ export default class ArrayBufferSlice {
         }
     }
 
+    private bswap16(): ArrayBufferSlice {
+        assert(this.byteLength % 2 === 0);
+        const a = this.createTypedArray(Uint8Array);
+        const o = new Uint8Array(this.byteLength);
+        for (let i = 0; i < a.byteLength; i += 2) {
+            o[i+0] = a[i+1];
+            o[i+1] = a[i+0];
+        }
+        return new ArrayBufferSlice(o.buffer);
+    }
+
+    private bswap32(): ArrayBufferSlice {
+        assert(this.byteLength % 4 === 0);
+        const a = this.createTypedArray(Uint8Array);
+        const o = new Uint8Array(a.byteLength);
+        for (let i = 0; i < a.byteLength; i += 4) {
+            o[i+0] = a[i+3];
+            o[i+1] = a[i+2];
+            o[i+2] = a[i+1];
+            o[i+3] = a[i+0];
+        }
+        return new ArrayBufferSlice(o.buffer);
+    }
+
+    private bswap(componentSize: 2 | 4): ArrayBufferSlice {
+        if (componentSize === 2) {
+            return this.bswap16();
+        } else if (componentSize === 4) {
+            return this.bswap32();
+        } else {
+            return componentSize;
+        }
+    }
+
+    public convertFromEndianness(endianness: Endianness, componentSize: 1 | 2 | 4): ArrayBufferSlice {
+        if (componentSize !== 1 && endianness !== getSystemEndianness())
+            return this.bswap(componentSize);
+        else
+            return this;
+    }
+
     public createTypedArray<T extends ArrayBufferView>(clazz: _TypedArrayConstructor<T>, offs: number = 0, count?: number, endianness: Endianness = Endianness.LITTLE_ENDIAN): T {
         const begin = this.byteOffset + offs;
 
@@ -93,15 +134,15 @@ export default class ArrayBufferSlice {
             assert((count | 0) === count);
         }
 
-        const needsEndianSwap = (endianness !== getSystemEndianness());
+        const componentSize = <1 | 2 | 4> clazz.BYTES_PER_ELEMENT;
+        const needsEndianSwap = (componentSize > 1) && (endianness !== getSystemEndianness());
 
         // Typed arrays require alignment.
-        if (isAligned(begin, clazz.BYTES_PER_ELEMENT) && !needsEndianSwap) {
+        if (isAligned(begin, componentSize) && !needsEndianSwap) {
             return new clazz(this.arrayBuffer, begin, count);
         } else if (needsEndianSwap) {
-            // TODO(jstpierre): Handle endian swap internally..
-            const componentSize = <1 | 2 | 4> clazz.BYTES_PER_ELEMENT;
-            const copy = betoh(this.subarray(offs, byteLength), componentSize);
+            const componentSize_ = <2 | 4> componentSize;
+            const copy = this.subarray(offs, byteLength).bswap(componentSize_);
             return copy.createTypedArray(clazz);
         } else {
             return new clazz(this.copyToBuffer(offs, byteLength), 0);

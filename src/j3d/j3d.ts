@@ -4,7 +4,7 @@
 import { mat4, quat } from 'gl-matrix';
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
-import { betoh, Endianness } from 'endian';
+import { Endianness } from 'endian';
 import { assert, readString } from 'util';
 
 import { coalesceLoadedDatas, compileVtxLoader, getComponentSize, getNumComponents, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData } from 'gx/gx_displaylist';
@@ -179,7 +179,7 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
         const dataSize: number = dataEnd - dataStart;
         const compSize = getComponentSize(compType);
         const compCount = getNumComponents(vtxAttrib, compCnt);
-        const vtxDataBuffer = betoh(buffer.subarray(dataOffs, dataSize), compSize);
+        const vtxDataBuffer = buffer.subarray(dataOffs, dataSize).convertFromEndianness(Endianness.BIG_ENDIAN, compSize);
         const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compCnt, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }

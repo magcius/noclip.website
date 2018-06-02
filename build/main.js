@@ -198,82 +198,20 @@ System.register("util", ["ArrayBufferSlice", "Progressable"], function (exports_
         }
     };
 });
-System.register("endian", ["ArrayBufferSlice"], function (exports_3, context_3) {
+System.register("endian", [], function (exports_3, context_3) {
     "use strict";
     var __moduleName = context_3 && context_3.id;
     function getSystemEndianness() {
-        return _systemEndianness;
+        return systemEndianness;
     }
     exports_3("getSystemEndianness", getSystemEndianness);
-    function isLittleEndian() {
-        return _systemEndianness === 0 /* LITTLE_ENDIAN */;
-    }
-    function bswap16(m) {
-        var a = m.createTypedArray(Uint8Array);
-        var o = new Uint8Array(a.byteLength);
-        for (var i = 0; i < a.byteLength; i += 2) {
-            o[i + 0] = a[i + 1];
-            o[i + 1] = a[i + 0];
-        }
-        return new ArrayBufferSlice_2.default(o.buffer);
-    }
-    function bswap32(m) {
-        var a = m.createTypedArray(Uint8Array);
-        var o = new Uint8Array(a.byteLength);
-        for (var i = 0; i < a.byteLength; i += 4) {
-            o[i + 0] = a[i + 3];
-            o[i + 1] = a[i + 2];
-            o[i + 2] = a[i + 1];
-            o[i + 3] = a[i + 0];
-        }
-        return new ArrayBufferSlice_2.default(o.buffer);
-    }
-    function be16toh(m) {
-        if (isLittleEndian())
-            return bswap16(m);
-        else
-            return m;
-    }
-    function le16toh(m) {
-        if (!isLittleEndian())
-            return bswap16(m);
-        else
-            return m;
-    }
-    function be32toh(m) {
-        if (isLittleEndian())
-            return bswap32(m);
-        else
-            return m;
-    }
-    function le32toh(m) {
-        if (!isLittleEndian())
-            return bswap32(m);
-        else
-            return m;
-    }
-    function betoh(m, componentSize) {
-        switch (componentSize) {
-            case 1:
-                return m;
-            case 2:
-                return be16toh(m);
-            case 4:
-                return be32toh(m);
-        }
-    }
-    exports_3("betoh", betoh);
-    var ArrayBufferSlice_2, _test, _testView, _systemEndianness;
+    var test, testView, systemEndianness;
     return {
-        setters: [
-            function (ArrayBufferSlice_2_1) {
-                ArrayBufferSlice_2 = ArrayBufferSlice_2_1;
-            }
-        ],
+        setters: [],
         execute: function () {
-            _test = new Uint16Array([0xFEFF]);
-            _testView = new DataView(_test.buffer);
-            _systemEndianness = (_testView.getUint8(0) == 0xFF) ? 0 /* LITTLE_ENDIAN */ : 1 /* BIG_ENDIAN */;
+            test = new Uint16Array([0xFEFF]);
+            testView = new DataView(test.buffer);
+            systemEndianness = (testView.getUint8(0) == 0xFF) ? 0 /* LITTLE_ENDIAN */ : 1 /* BIG_ENDIAN */;
         }
     };
 });
@@ -361,6 +299,45 @@ System.register("ArrayBufferSlice", ["util", "endian"], function (exports_4, con
                         return this.subarray(offs, length).createDataView();
                     }
                 };
+                ArrayBufferSlice.prototype.bswap16 = function () {
+                    util_1.assert(this.byteLength % 2 === 0);
+                    var a = this.createTypedArray(Uint8Array);
+                    var o = new Uint8Array(this.byteLength);
+                    for (var i = 0; i < a.byteLength; i += 2) {
+                        o[i + 0] = a[i + 1];
+                        o[i + 1] = a[i + 0];
+                    }
+                    return new ArrayBufferSlice(o.buffer);
+                };
+                ArrayBufferSlice.prototype.bswap32 = function () {
+                    util_1.assert(this.byteLength % 4 === 0);
+                    var a = this.createTypedArray(Uint8Array);
+                    var o = new Uint8Array(a.byteLength);
+                    for (var i = 0; i < a.byteLength; i += 4) {
+                        o[i + 0] = a[i + 3];
+                        o[i + 1] = a[i + 2];
+                        o[i + 2] = a[i + 1];
+                        o[i + 3] = a[i + 0];
+                    }
+                    return new ArrayBufferSlice(o.buffer);
+                };
+                ArrayBufferSlice.prototype.bswap = function (componentSize) {
+                    if (componentSize === 2) {
+                        return this.bswap16();
+                    }
+                    else if (componentSize === 4) {
+                        return this.bswap32();
+                    }
+                    else {
+                        return componentSize;
+                    }
+                };
+                ArrayBufferSlice.prototype.convertFromEndianness = function (endianness, componentSize) {
+                    if (componentSize !== 1 && endianness !== endian_1.getSystemEndianness())
+                        return this.bswap(componentSize);
+                    else
+                        return this;
+                };
                 ArrayBufferSlice.prototype.createTypedArray = function (clazz, offs, count, endianness) {
                     if (offs === void 0) { offs = 0; }
                     if (endianness === void 0) { endianness = 0 /* LITTLE_ENDIAN */; }
@@ -375,15 +352,15 @@ System.register("ArrayBufferSlice", ["util", "endian"], function (exports_4, con
                         count = byteLength / clazz.BYTES_PER_ELEMENT;
                         util_1.assert((count | 0) === count);
                     }
-                    var needsEndianSwap = (endianness !== endian_1.getSystemEndianness());
+                    var componentSize = clazz.BYTES_PER_ELEMENT;
+                    var needsEndianSwap = (componentSize > 1) && (endianness !== endian_1.getSystemEndianness());
                     // Typed arrays require alignment.
-                    if (isAligned(begin, clazz.BYTES_PER_ELEMENT) && !needsEndianSwap) {
+                    if (isAligned(begin, componentSize) && !needsEndianSwap) {
                         return new clazz(this.arrayBuffer, begin, count);
                     }
                     else if (needsEndianSwap) {
-                        // TODO(jstpierre): Handle endian swap internally..
-                        var componentSize = clazz.BYTES_PER_ELEMENT;
-                        var copy = endian_1.betoh(this.subarray(offs, byteLength), componentSize);
+                        var componentSize_ = componentSize;
+                        var copy = this.subarray(offs, byteLength).bswap(componentSize_);
                         return copy.createTypedArray(clazz);
                     }
                     else {
@@ -2334,7 +2311,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_13, context_13) 
                     dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
                 }
                 if (uncompressedSize <= 0)
-                    return new ArrayBufferSlice_3.default(dstBuffer.buffer);
+                    return new ArrayBufferSlice_2.default(dstBuffer.buffer);
             }
         }
     }
@@ -2398,7 +2375,7 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_13, context_13) 
                     dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
                 }
                 if (uncompressedSize <= 0)
-                    return new ArrayBufferSlice_3.default(dstBuffer.buffer);
+                    return new ArrayBufferSlice_2.default(dstBuffer.buffer);
             }
         }
     }
@@ -2414,11 +2391,11 @@ System.register("lz77", ["ArrayBufferSlice"], function (exports_13, context_13) 
             throw new Error("Not Nintendo LZ77");
     }
     exports_13("decompress", decompress);
-    var ArrayBufferSlice_3;
+    var ArrayBufferSlice_2;
     return {
         setters: [
-            function (ArrayBufferSlice_3_1) {
-                ArrayBufferSlice_3 = ArrayBufferSlice_3_1;
+            function (ArrayBufferSlice_2_1) {
+                ArrayBufferSlice_2 = ArrayBufferSlice_2_1;
             }
         ],
         execute: function () {
@@ -3572,12 +3549,12 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
             heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
             wasmInstance.decompress(pDst, pSrc, dstSize);
             // Copy the result buffer to a new buffer for memory usage purposes.
-            var result = new ArrayBufferSlice_4.default(heap.buffer).copySlice(pDst, dstSize);
+            var result = new ArrayBufferSlice_3.default(heap.buffer).copySlice(pDst, dstSize);
             return result;
         });
     }
     exports_18("decompress", decompress);
-    var util_7, wat_modules_1, ArrayBufferSlice_4, WasmMemoryManager_1, _wasmInstance;
+    var util_7, wat_modules_1, ArrayBufferSlice_3, WasmMemoryManager_1, _wasmInstance;
     return {
         setters: [
             function (util_7_1) {
@@ -3586,8 +3563,8 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
             function (wat_modules_1_1) {
                 wat_modules_1 = wat_modules_1_1;
             },
-            function (ArrayBufferSlice_4_1) {
-                ArrayBufferSlice_4 = ArrayBufferSlice_4_1;
+            function (ArrayBufferSlice_3_1) {
+                ArrayBufferSlice_3 = ArrayBufferSlice_3_1;
             },
             function (WasmMemoryManager_1_1) {
                 WasmMemoryManager_1 = WasmMemoryManager_1_1;
@@ -4522,7 +4499,7 @@ System.register("gx/gx_material", ["render", "Program", "util"], function (expor
     };
 });
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
-System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "gx/gx_displaylist", "gx/gx_material"], function (exports_22, context_22) {
+System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_displaylist", "gx/gx_material"], function (exports_22, context_22) {
     "use strict";
     var __moduleName = context_22 && context_22.id;
     function readStringTable(buffer, offs) {
@@ -4625,7 +4602,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             var dataSize = dataEnd - dataStart;
             var compSize = gx_displaylist_1.getComponentSize(compType);
             var compCount = gx_displaylist_1.getNumComponents(vtxAttrib, compCnt);
-            var vtxDataBuffer = endian_2.betoh(buffer.subarray(dataOffs, dataSize), compSize);
+            var vtxDataBuffer = buffer.subarray(dataOffs, dataSize).convertFromEndianness(1 /* BIG_ENDIAN */, compSize);
             var vertexArray = { vtxAttrib: vtxAttrib, compType: compType, compCount: compCount, compCnt: compCnt, scale: scale, dataOffs: dataOffs, dataSize: dataSize, buffer: vtxDataBuffer };
             vertexArrays.set(vtxAttrib, vertexArray);
         }
@@ -4842,8 +4819,8 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
             }
             // Coalesce shape data.
             var loadedData = gx_displaylist_1.coalesceLoadedDatas(loadedDatas);
-            var indexData = new ArrayBufferSlice_5.default(loadedData.indexData.buffer);
-            var packedData = new ArrayBufferSlice_5.default(loadedData.packedVertexData.buffer);
+            var indexData = new ArrayBufferSlice_4.default(loadedData.indexData.buffer);
+            var packedData = new ArrayBufferSlice_4.default(loadedData.packedVertexData.buffer);
             // Now we should have a complete shape. Onto the next!
             shapes.push({ displayFlags: displayFlags, indexData: indexData, packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, packets: packets });
             shapeIdx += 0x28;
@@ -5532,17 +5509,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "endian", "util", "
         }
         return { loopMode: loopMode, duration: duration, jointAnimationEntries: jointAnimationEntries };
     }
-    var gl_matrix_3, ArrayBufferSlice_5, endian_2, util_10, gx_displaylist_1, GX_Material, HierarchyType, DRW1JointKind, quatScratch, t, c, ci, J3DFileReaderHelper, BMD, BMT, BTI, BTK, BRK, BCK;
+    var gl_matrix_3, ArrayBufferSlice_4, util_10, gx_displaylist_1, GX_Material, HierarchyType, DRW1JointKind, quatScratch, t, c, ci, J3DFileReaderHelper, BMD, BMT, BTI, BTK, BRK, BCK;
     return {
         setters: [
             function (gl_matrix_3_1) {
                 gl_matrix_3 = gl_matrix_3_1;
             },
-            function (ArrayBufferSlice_5_1) {
-                ArrayBufferSlice_5 = ArrayBufferSlice_5_1;
-            },
-            function (endian_2_1) {
-                endian_2 = endian_2_1;
+            function (ArrayBufferSlice_4_1) {
+                ArrayBufferSlice_4 = ArrayBufferSlice_4_1;
             },
             function (util_10_1) {
                 util_10 = util_10_1;
@@ -5979,7 +5953,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
         decoder(pScratch, pDst, pSrc, texture.width, texture.height);
         // Copy the result buffer to a new buffer for memory usage purposes.
-        var pixelsBuffer = new ArrayBufferSlice_6.default(heap.buffer).copyToBuffer(pDst, dstSize);
+        var pixelsBuffer = new ArrayBufferSlice_5.default(heap.buffer).copyToBuffer(pDst, dstSize);
         var pixels = new Uint8Array(pixelsBuffer);
         return { pixels: pixels };
     }
@@ -6019,11 +5993,11 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         });
     }
     exports_24("decodeTexture", decodeTexture);
-    var ArrayBufferSlice_6, util_12, wat_modules_2, WasmMemoryManager_2, _wasmInstance;
+    var ArrayBufferSlice_5, util_12, wat_modules_2, WasmMemoryManager_2, _wasmInstance;
     return {
         setters: [
-            function (ArrayBufferSlice_6_1) {
-                ArrayBufferSlice_6 = ArrayBufferSlice_6_1;
+            function (ArrayBufferSlice_5_1) {
+                ArrayBufferSlice_5 = ArrayBufferSlice_5_1;
             },
             function (util_12_1) {
                 util_12 = util_12_1;
@@ -14135,7 +14109,7 @@ System.register("fres/sarc", ["util"], function (exports_55, context_55) {
         }
     };
 });
-System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render", "Program", "RenderArena", "endian", "util", "ArrayBufferSlice"], function (exports_56, context_56) {
+System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render", "Program", "RenderArena", "util", "ArrayBufferSlice"], function (exports_56, context_56) {
     "use strict";
     var __moduleName = context_56 && context_56.id;
     function getAttribFormatInfo(format) {
@@ -14213,7 +14187,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
             }
             offs += stride;
         }
-        return new ArrayBufferSlice_7.default(out.buffer);
+        return new ArrayBufferSlice_6.default(out.buffer);
     }
     function convertVertexBuffer_10_10_10_2(buffer, attrib, vtxCount) {
         util_33.assert(buffer.stride !== 0);
@@ -14254,7 +14228,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
             out[dst++] = ((n >>> 30) & 0x03) << 14;
             offs += buffer.stride;
         }
-        return new ArrayBufferSlice_7.default(out.buffer);
+        return new ArrayBufferSlice_6.default(out.buffer);
     }
     function convertVertexBuffer(buffer, attrib, vtxCount) {
         var formatInfo = getAttribFormatInfo(attrib.format);
@@ -14262,7 +14236,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
             var byteSize = formatInfo.compCount * formatInfo.elemSize;
             if (buffer.stride <= byteSize && attrib.bufferStart === 0) {
                 // Fastest path -- just endian swap.
-                return endian_3.betoh(buffer.data, formatInfo.elemSize);
+                return buffer.data.convertFromEndianness(1 /* BIG_ENDIAN */, formatInfo.elemSize);
             }
             else {
                 // Has a native WebGL equivalent, just requires us to convert strides.
@@ -14279,7 +14253,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
         }
         throw new Error("whoops");
     }
-    var gx2_swizzle_2, GX2Texture, render_19, Program_8, RenderArena_3, endian_3, util_33, ArrayBufferSlice_7, ProgramGambit_UBER, Scene;
+    var gx2_swizzle_2, GX2Texture, render_19, Program_8, RenderArena_3, util_33, ArrayBufferSlice_6, ProgramGambit_UBER, Scene;
     return {
         setters: [
             function (gx2_swizzle_2_1) {
@@ -14297,14 +14271,11 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
             function (RenderArena_3_1) {
                 RenderArena_3 = RenderArena_3_1;
             },
-            function (endian_3_1) {
-                endian_3 = endian_3_1;
-            },
             function (util_33_1) {
                 util_33 = util_33_1;
             },
-            function (ArrayBufferSlice_7_1) {
-                ArrayBufferSlice_7 = ArrayBufferSlice_7_1;
+            function (ArrayBufferSlice_6_1) {
+                ArrayBufferSlice_6 = ArrayBufferSlice_6_1;
             }
         ],
         execute: function () {
@@ -14536,9 +14507,9 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         case 1 /* U32_LE */:
                             return indexBufferData;
                         case 4 /* U16 */:
-                            return endian_3.betoh(indexBufferData, 2);
+                            return indexBufferData.convertFromEndianness(1 /* BIG_ENDIAN */, 2);
                         case 9 /* U32 */:
-                            return endian_3.betoh(indexBufferData, 4);
+                            return indexBufferData.convertFromEndianness(1 /* BIG_ENDIAN */, 4);
                     }
                 };
                 Scene.prototype.translateFSHPBuffers = function (fshp, indexDatas) {
@@ -16042,7 +16013,7 @@ System.register("metroid_prime/strg", ["util"], function (exports_65, context_65
 System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_66, context_66) {
     "use strict";
     var __moduleName = context_66 && context_66.id;
-    var pako_1, MLVL, MREA, STRG, TXTR, util_40, ArrayBufferSlice_8, FourCCLoaders, ResourceSystem;
+    var pako_1, MLVL, MREA, STRG, TXTR, util_40, ArrayBufferSlice_7, FourCCLoaders, ResourceSystem;
     return {
         setters: [
             function (pako_1_1) {
@@ -16063,8 +16034,8 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
             function (util_40_1) {
                 util_40 = util_40_1;
             },
-            function (ArrayBufferSlice_8_1) {
-                ArrayBufferSlice_8 = ArrayBufferSlice_8_1;
+            function (ArrayBufferSlice_7_1) {
+                ArrayBufferSlice_7 = ArrayBufferSlice_7_1;
             }
         ],
         execute: function () {
@@ -16083,7 +16054,7 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                     if (resource.isCompressed) {
                         var deflated = resource.buffer.createTypedArray(Uint8Array);
                         var inflated = pako_1.default.inflate(deflated);
-                        return new ArrayBufferSlice_8.default(inflated.buffer);
+                        return new ArrayBufferSlice_7.default(inflated.buffer);
                     }
                     else {
                         return resource.buffer;
@@ -16229,7 +16200,7 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_67, context_67
 System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/gx_texture", "gx/gx_material", "render", "util", "ArrayBufferSlice"], function (exports_68, context_68) {
     "use strict";
     var __moduleName = context_68 && context_68.id;
-    var gl_matrix_12, mrea_1, GX_Texture, GX_Material, render_23, util_42, ArrayBufferSlice_9, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
+    var gl_matrix_12, mrea_1, GX_Texture, GX_Material, render_23, util_42, ArrayBufferSlice_8, sceneParamsData, attrScaleData, textureScratch, Scene, Command_Surface, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, materialParamsSize, packetParamsOffs, packetParamsSize, paramsData, Command_Material;
     return {
         setters: [
             function (gl_matrix_12_1) {
@@ -16250,8 +16221,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
             function (util_42_1) {
                 util_42 = util_42_1;
             },
-            function (ArrayBufferSlice_9_1) {
-                ArrayBufferSlice_9 = ArrayBufferSlice_9_1;
+            function (ArrayBufferSlice_8_1) {
+                ArrayBufferSlice_8 = ArrayBufferSlice_8_1;
             }
         ],
         execute: function () {
@@ -16327,8 +16298,8 @@ System.register("metroid_prime/render", ["gl-matrix", "metroid_prime/mrea", "gx/
                     var indexDatas = [];
                     var surfaces = this.coalesceSurfaces();
                     surfaces.forEach(function (surface) {
-                        vertexDatas.push(new ArrayBufferSlice_9.default(surface.packedData.buffer));
-                        indexDatas.push(new ArrayBufferSlice_9.default(surface.indexData.buffer));
+                        vertexDatas.push(new ArrayBufferSlice_8.default(surface.packedData.buffer));
+                        indexDatas.push(new ArrayBufferSlice_8.default(surface.indexData.buffer));
                     });
                     this.bufferCoalescer = new render_23.BufferCoalescer(gl, vertexDatas, indexDatas);
                     var i = 0;
@@ -16688,14 +16659,14 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
 System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "fres/splatoon_scenes", "dksiv/scenes", "metroid_prime/scenes", "j3d/scenes", "ui", "Camera"], function (exports_70, context_70) {
     "use strict";
     var __moduleName = context_70 && context_70.id;
-    var viewer_1, ArrayBufferSlice_10, Progressable_9, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, SPL, DKSIV, MP1, J3D, ui_1, Camera_6, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
+    var viewer_1, ArrayBufferSlice_9, Progressable_9, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, SPL, DKSIV, MP1, J3D, ui_1, Camera_6, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
     return {
         setters: [
             function (viewer_1_1) {
                 viewer_1 = viewer_1_1;
             },
-            function (ArrayBufferSlice_10_1) {
-                ArrayBufferSlice_10 = ArrayBufferSlice_10_1;
+            function (ArrayBufferSlice_9_1) {
+                ArrayBufferSlice_9 = ArrayBufferSlice_9_1;
             },
             function (Progressable_9_1) {
                 Progressable_9 = Progressable_9_1;
@@ -16776,7 +16747,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     var p = new Promise(function (resolve, reject) {
                         request.onload = function () {
                             var buffer = request.result;
-                            var slice = new ArrayBufferSlice_10.default(buffer);
+                            var slice = new ArrayBufferSlice_9.default(buffer);
                             resolve(slice);
                         };
                         request.onerror = function () {
