@@ -42,7 +42,10 @@ export class RARC {
         const dir = this.findDirParts(parts);
         if (dir === null)
             return null;
-        return dir.files.find((file) => file.name === filename);
+        const file = dir.files.find((file) => file.name === filename);
+        if (!file)
+            return null;
+        return file;
     }
 }
 
