@@ -3,6 +3,7 @@ import { mat4 } from 'gl-matrix';
 import { assert, align, assertExists } from './util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Program, { BaseProgram, FullscreenProgram, ProgramCache } from 'Program';
+import { Camera, computeViewMatrix, computeViewMatrixSkybox } from './Camera';
 
 export enum CompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
@@ -328,8 +329,9 @@ export class RenderState {
     public fov: number;
     public time: number;
 
+    // TODO(jstpierre): Move projection matrix to Camera.
     public projection: mat4;
-    public view: mat4;
+    public camera: Camera;
 
     public nearClipPlane: number;
     public farClipPlane: number;
@@ -353,7 +355,7 @@ export class RenderState {
         this.fov = Math.PI / 4;
 
         this.projection = mat4.create();
-        this.view = mat4.create();
+        this.camera = new Camera();
         this.scratchMatrix = mat4.create();
 
         this.fullscreenCopyProgram = new FullscreenCopyProgram();
@@ -363,6 +365,11 @@ export class RenderState {
         this.fullscreenFlags.cullMode = CullMode.NONE;
 
         this.msaaFramebuffer = assertExists(gl.createFramebuffer());
+    }
+
+    // TODO(jstpierre): Remove.
+    public get view(): mat4 {
+        return this.camera.viewMatrix;
     }
 
     public destroy() {
@@ -375,10 +382,6 @@ export class RenderState {
         this.frameStartTime = window.performance.now();
         this.useRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
         this.useFlags(RenderFlags.default);
-    }
-
-    public setView(m: mat4) {
-        mat4.copy(this.view, m);
     }
 
     // XXX(jstpierre): Design a better API than this.
@@ -467,17 +470,19 @@ export class RenderState {
     }
 
     public updateModelView(isSkybox: boolean = false, model: mat4 | null = null): mat4 {
-        const scratch = this.scratchMatrix;
-        mat4.copy(scratch, this.view);
+        const modelView = this.scratchMatrix;
+
         if (isSkybox) {
-            scratch[12] = 0;
-            scratch[13] = 0;
-            scratch[14] = 0;
+            computeViewMatrixSkybox(modelView, this.camera);
+        } else {
+            computeViewMatrix(modelView, this.camera);
         }
 
-        if (model)
-            mat4.mul(scratch, scratch, model);
-        return scratch;
+        if (model) {
+            mat4.mul(modelView, modelView, model);
+        }
+
+        return modelView;
     }
 
     public bindModelView(isSkybox: boolean = false, model: mat4 | null = null) {

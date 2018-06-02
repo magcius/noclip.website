@@ -11,6 +11,7 @@ import * as Viewer from 'viewer';
 import { BufferCoalescer, CoalescedBuffers, CompareMode, RenderFlags, RenderState } from '../render';
 import { align, assert } from '../util';
 import { getNumComponents } from '../gx/gx_displaylist';
+import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox } from '../Camera';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
@@ -32,7 +33,8 @@ function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): {
 }
 
 const packetParamsData = new Float32Array(11 * 16);
-const modelViewScratch = mat4.create();
+const scratchModelMatrix = mat4.create();
+const scratchViewMatrix = mat4.create();
 class Command_Shape {
     private scene: Scene;
     private bmd: BMD;
@@ -77,32 +79,35 @@ class Command_Shape {
         gl.bindVertexArray(null);
     }
 
-    private computeModelView(modelView: mat4, state: RenderState) {
-        mat4.copy(modelView, state.view);
-        if (this.scene.isSkybox) {
-            modelView[12] = 0;
-            modelView[13] = 0;
-            modelView[14] = 0;
-        }
+    private computeModelView(state: RenderState): mat4 {
+        mat4.copy(scratchModelMatrix, this.scene.modelMatrix);
 
         switch (this.shape.displayFlags) {
         case ShapeDisplayFlags.NORMAL:
         case ShapeDisplayFlags.USE_PNMTXIDX:
             // We should already be using PNMTXIDX in the normal case -- it's hardwired to 0.
             break;
+
         case ShapeDisplayFlags.BILLBOARD:
+            computeModelMatrixBillboard(scratchModelMatrix, state.camera);
+            mat4.mul(scratchModelMatrix, this.scene.modelMatrix, scratchModelMatrix);
+            break;
         case ShapeDisplayFlags.Y_BILLBOARD:
-            // TODO(jstpierre): Proper Y
-            const tx = modelView[12];
-            const ty = modelView[13];
-            const tz = modelView[14];
-            mat4.fromTranslation(modelView, [tx, ty, tz]);
+            computeModelMatrixYBillboard(scratchModelMatrix, state.camera);
+            mat4.mul(scratchModelMatrix, this.scene.modelMatrix, scratchModelMatrix);
             break;
         default:
             throw new Error("whoops");
         }
 
-        mat4.mul(modelView, modelView, this.scene.modelMatrix);
+        if (this.scene.isSkybox) {
+            computeViewMatrixSkybox(scratchViewMatrix, state.camera);
+        } else {
+            computeViewMatrix(scratchViewMatrix, state.camera);
+        }
+
+        mat4.mul(scratchViewMatrix, scratchViewMatrix, scratchModelMatrix);
+        return scratchViewMatrix;
     }
 
     public exec(state: RenderState) {
@@ -119,8 +124,8 @@ class Command_Shape {
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
 
         let offs = 0;
-        this.computeModelView(modelViewScratch, state);
-        packetParamsData.set(modelViewScratch, 0);
+        const modelViewMatrix = this.computeModelView(state);
+        packetParamsData.set(modelViewMatrix, 0);
         offs += 4*4;
 
         gl.bufferSubData(gl.UNIFORM_BUFFER, 0, packetParamsData, 0, offs);

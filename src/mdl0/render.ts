@@ -8,6 +8,7 @@ import Program from '../Program';
 import Progressable from 'Progressable';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import { OrbitCameraController } from '../Camera';
 
 class FancyGrid_Program extends Program {
     public positionLocation: number;
@@ -246,7 +247,7 @@ class Scene implements Viewer.MainScene {
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
-    public defaultCameraController = Viewer.OrbitCameraController;
+    public defaultCameraController = OrbitCameraController;
     public id: string;
     public name: string;
     public path: string;

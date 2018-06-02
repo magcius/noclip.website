@@ -3,6 +3,7 @@ import { System } from 'systemjs';
 
 import Progressable from 'Progressable';
 import * as Viewer from 'viewer';
+import { OrbitCameraController } from '../Camera';
 
 interface EmbedModule {
     createScene(gl: WebGL2RenderingContext, name: string): Progressable<Viewer.MainScene>;
@@ -84,7 +85,7 @@ class Main {
         System.import(`embeds/${file}`).then((embedModule: EmbedModule) => {
             const gl = this.viewer.renderState.gl;
             embedModule.createScene(gl, name).then((scene: Viewer.MainScene) => {
-                this.viewer.setCameraController(new Viewer.OrbitCameraController());
+                this.viewer.setCameraController(new OrbitCameraController());
                 this.viewer.setScene(scene);
             });
         });
