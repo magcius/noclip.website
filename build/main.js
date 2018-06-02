@@ -1758,16 +1758,22 @@ System.register("WasmMemoryManager", [], function (exports_9, context_9) {
 System.register("byml", ["util"], function (exports_10, context_10) {
     "use strict";
     var __moduleName = context_10 && context_10.id;
-    function parseStringTable(buffer, offs) {
+    function getUint24(view, offs, littleEndian) {
+        if (littleEndian)
+            return view.getUint32(offs - 1, true) >>> 8;
+        else
+            return view.getUint32(offs - 1, false) & 0x00FFFFFF;
+    }
+    function parseStringTable(context, buffer, offs) {
         var view = buffer.createDataView();
-        var header = view.getUint32(offs + 0x00);
+        var header = view.getUint32(offs + 0x00, context.littleEndian);
         var nodeType = header >>> 24;
         var numValues = header & 0x00FFFFFF;
         util_4.assert(nodeType === 194 /* STRING_TABLE */);
         var stringTableIdx = offs + 0x04;
         var strings = [];
         for (var i = 0; i < numValues; i++) {
-            var strOffs = offs + view.getUint32(stringTableIdx);
+            var strOffs = offs + view.getUint32(stringTableIdx, context.littleEndian);
             strings.push(util_4.readString(buffer, strOffs, -1, true));
             stringTableIdx += 0x04;
         }
@@ -1775,17 +1781,15 @@ System.register("byml", ["util"], function (exports_10, context_10) {
     }
     function parseDict(context, buffer, offs) {
         var view = buffer.createDataView();
-        var header = view.getUint32(offs + 0x00);
-        var nodeType = header >>> 24;
-        var numValues = header & 0x00FFFFFF;
+        var nodeType = view.getUint8(offs + 0x00);
+        var numValues = getUint24(view, offs + 0x01, context.littleEndian);
         util_4.assert(nodeType === 193 /* DICT */);
         var result = {};
         var dictIdx = offs + 0x04;
         for (var i = 0; i < numValues; i++) {
-            var entryHeader = view.getUint32(dictIdx + 0x00);
-            var entryStrKeyIdx = entryHeader >>> 8;
+            var entryStrKeyIdx = getUint24(view, dictIdx + 0x00, context.littleEndian);
             var entryKey = context.strKeyTable[entryStrKeyIdx];
-            var entryNodeType = entryHeader & 0xFF;
+            var entryNodeType = view.getUint8(dictIdx + 0x03);
             var entryValue = parseNode(context, buffer, entryNodeType, dictIdx + 0x04);
             result[entryKey] = entryValue;
             dictIdx += 0x08;
@@ -1794,9 +1798,8 @@ System.register("byml", ["util"], function (exports_10, context_10) {
     }
     function parseArray(context, buffer, offs) {
         var view = buffer.createDataView();
-        var header = view.getUint32(offs + 0x00);
-        var nodeType = header >>> 24;
-        var numValues = header & 0x00FFFFFF;
+        var nodeType = view.getUint8(offs + 0x00);
+        var numValues = getUint24(view, offs + 0x01, context.littleEndian);
         util_4.assert(nodeType === 192 /* ARRAY */);
         var result = [];
         var entryTypeIdx = offs + 0x04;
@@ -1809,19 +1812,19 @@ System.register("byml", ["util"], function (exports_10, context_10) {
         }
         return result;
     }
-    function parseComplexNode(context, buffer, expectedNodeType, offs) {
+    function parseComplexNode(context, buffer, offs, expectedNodeType) {
         var view = buffer.createDataView();
-        var header = view.getUint32(offs + 0x00);
-        var nodeType = header >>> 24;
-        var numValues = header & 0x00FFFFFF;
-        util_4.assert(expectedNodeType === nodeType);
+        var nodeType = view.getUint8(offs + 0x00);
+        var numValues = getUint24(view, offs + 0x01, context.littleEndian);
+        if (expectedNodeType !== undefined)
+            util_4.assert(expectedNodeType === nodeType);
         switch (nodeType) {
             case 193 /* DICT */:
                 return parseDict(context, buffer, offs);
             case 192 /* ARRAY */:
                 return parseArray(context, buffer, offs);
             case 194 /* STRING_TABLE */:
-                return parseStringTable(buffer, offs);
+                return parseStringTable(context, buffer, offs);
             case 203 /* BINARY_DATA */:
                 return buffer.subarray(offs + 0x04, numValues);
             case 226 /* FLOAT_ARRAY */:
@@ -1843,7 +1846,7 @@ System.register("byml", ["util"], function (exports_10, context_10) {
             case 203 /* BINARY_DATA */:
             case 226 /* FLOAT_ARRAY */: {
                 var complexOffs = view.getUint32(offs);
-                return parseComplexNode(context, buffer, nodeType, complexOffs);
+                return parseComplexNode(context, buffer, complexOffs, nodeType);
             }
             case 160 /* STRING */: {
                 var idx = view.getUint32(offs);
@@ -1870,22 +1873,25 @@ System.register("byml", ["util"], function (exports_10, context_10) {
     }
     function parse(buffer, fileType) {
         if (fileType === void 0) { fileType = 0 /* BYML */; }
+        var magic = util_4.readString(buffer, 0x00, 0x04);
         var magics = fileDescriptions[fileType].magics;
-        util_4.assert(magics.includes(util_4.readString(buffer, 0x00, 0x04)));
+        util_4.assert(magics.includes(magic));
         var view = buffer.createDataView();
-        var strKeyTableOffs = view.getUint32(0x04);
-        var strValueTableOffs = view.getUint32(0x08);
-        var rootNodeOffs = view.getUint32(0x0C);
+        var littleEndian = magic.slice(0, 2) == 'YB';
+        var endianness = littleEndian ? 0 /* LITTLE_ENDIAN */ : 1 /* BIG_ENDIAN */;
+        var context = new ParseContext(fileType, endianness);
+        var strKeyTableOffs = view.getUint32(0x04, context.littleEndian);
+        var strValueTableOffs = view.getUint32(0x08, context.littleEndian);
+        var rootNodeOffs = view.getUint32(0x0C, context.littleEndian);
         if (rootNodeOffs === 0)
             return {};
-        var strKeyTable = strKeyTableOffs !== 0 ? parseStringTable(buffer, strKeyTableOffs) : null;
-        var strValueTable = strValueTableOffs !== 0 ? parseStringTable(buffer, strValueTableOffs) : null;
-        var context = { fileType: fileType, strKeyTable: strKeyTable, strValueTable: strValueTable };
-        var node = parseComplexNode(context, buffer, 193 /* DICT */, rootNodeOffs);
+        context.strKeyTable = strKeyTableOffs !== 0 ? parseStringTable(context, buffer, strKeyTableOffs) : null;
+        context.strValueTable = strValueTableOffs !== 0 ? parseStringTable(context, buffer, strValueTableOffs) : null;
+        var node = parseComplexNode(context, buffer, rootNodeOffs);
         return node;
     }
     exports_10("parse", parse);
-    var util_4, fileDescriptions, _a;
+    var util_4, fileDescriptions, ParseContext, _a;
     return {
         setters: [
             function (util_4_1) {
@@ -1894,9 +1900,29 @@ System.register("byml", ["util"], function (exports_10, context_10) {
         ],
         execute: function () {
             fileDescriptions = (_a = {},
-                _a[0 /* BYML */] = { magics: ['BY\0\x01', 'BY\0\x02'], allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */] },
-                _a[1 /* CRG1 */] = { magics: ['CRG1'], allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */, 226 /* FLOAT_ARRAY */, 203 /* BINARY_DATA */, 255 /* NULL */] },
+                _a[0 /* BYML */] = {
+                    magics: ['BY\0\x01', 'BY\0\x02', 'YB\x03\0'],
+                    allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */, 255 /* NULL */],
+                },
+                _a[1 /* CRG1 */] = {
+                    magics: ['CRG1'],
+                    allowedNodeTypes: [160 /* STRING */, 192 /* ARRAY */, 193 /* DICT */, 194 /* STRING_TABLE */, 208 /* BOOL */, 209 /* INT */, 211 /* SHORT */, 210 /* FLOAT */, 255 /* NULL */, 226 /* FLOAT_ARRAY */, 203 /* BINARY_DATA */],
+                },
                 _a);
+            ParseContext = /** @class */ (function () {
+                function ParseContext(fileType, endianness) {
+                    this.fileType = fileType;
+                    this.endianness = endianness;
+                    this.strKeyTable = null;
+                    this.strValueTable = null;
+                }
+                Object.defineProperty(ParseContext.prototype, "littleEndian", {
+                    get: function () { return this.endianness === 0 /* LITTLE_ENDIAN */; },
+                    enumerable: true,
+                    configurable: true
+                });
+                return ParseContext;
+            }());
         }
     };
 });
@@ -5757,7 +5783,10 @@ System.register("j3d/rarc", ["util"], function (exports_21, context_21) {
                     var dir = this.findDirParts(parts);
                     if (dir === null)
                         return null;
-                    return dir.files.find(function (file) { return file.name === filename; });
+                    var file = dir.files.find(function (file) { return file.name === filename; });
+                    if (!file)
+                        return null;
+                    return file;
                 };
                 return RARC;
             }());
