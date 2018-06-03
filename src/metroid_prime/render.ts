@@ -323,7 +323,7 @@ class Command_Material {
             paramsData[offs + i*12 +  7] = 0;
             paramsData[offs + i*12 +  8] = finalMatrix[2];
             paramsData[offs + i*12 +  9] = finalMatrix[5];
-            paramsData[offs + i*12 + 10] = finalMatrix[9];
+            paramsData[offs + i*12 + 10] = finalMatrix[8];
             paramsData[offs + i*12 + 11] = 0;
         }
         offs += 4*3*10;
@@ -340,7 +340,7 @@ class Command_Material {
             paramsData[offs + i*12 +  7] = 0;
             paramsData[offs + i*12 +  8] = finalMatrix[2];
             paramsData[offs + i*12 +  9] = finalMatrix[5];
-            paramsData[offs + i*12 + 10] = finalMatrix[9];
+            paramsData[offs + i*12 + 10] = finalMatrix[8];
             paramsData[offs + i*12 + 11] = 0;
         }
         offs += 4*3*20;
