@@ -124,7 +124,7 @@ function getAttrName(vtxAttrib: GX.VertexAttribute): string {
     }
 }
 
-interface VattrLayout {
+export interface VattrLayout {
     // Packed vertex size.
     dstVertexSize: number;
     dstAttrOffsets: number[];
