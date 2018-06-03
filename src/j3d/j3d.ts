@@ -7,7 +7,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import { Endianness } from 'endian';
 import { assert, readString } from 'util';
 
-import { coalesceLoadedDatas, compileVtxLoader, getComponentSize, getNumComponents, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData } from 'gx/gx_displaylist';
+import { compileVtxLoader, getComponentSize, getNumComponents, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData } from 'gx/gx_displaylist';
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 
@@ -498,6 +498,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const packets: Packet[] = [];
 
         const loadedDatas: LoadedVertexData[] = [];
+        assert(packetCount === 1);
 
         let totalTriangleCount = 0;
         for (let j = 0; j < packetCount; j++) {
@@ -517,7 +518,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             const loadedSubData = vtxLoader.runVertices(vtxArrays, subBuffer);
             loadedDatas.push(loadedSubData);
 
-            const firstTriangle = totalTriangleCount;
+            const firstTriangle = 0; // totalTriangleCount;
             const numTriangles = loadedSubData.totalTriangleCount;
             totalTriangleCount += numTriangles;
 
@@ -526,9 +527,10 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         }
 
         // Coalesce shape data.
-        const loadedData = coalesceLoadedDatas(loadedDatas);
-        const indexData = new ArrayBufferSlice(loadedData.indexData.buffer);
-        const packedData = new ArrayBufferSlice(loadedData.packedVertexData.buffer);
+        // TODO(jstpierre): coalesceLoadedData is basically completely busted.
+        assert(loadedDatas.length === 1);
+        const indexData = new ArrayBufferSlice(loadedDatas[0].indexData.buffer);
+        const packedData = new ArrayBufferSlice(loadedDatas[0].packedVertexData.buffer);
 
         // Now we should have a complete shape. Onto the next!
         shapes.push({ displayFlags, indexData, packedData, packedVertexSize, packedVertexAttributes, packets });
