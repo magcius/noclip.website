@@ -8,7 +8,6 @@ export class Camera {
 
     public worldMatrixUpdated(): void {
         mat4.invert(this.viewMatrix, this.worldMatrix);
-        console.log(this.worldMatrix);
     }
 
     public identity(): void {
@@ -202,7 +201,6 @@ export class FPSCameraController implements CameraController {
 
         if (updated) {
             this.camera.worldMatrixUpdated();
-            console.log(camera.worldMatrix, camera.viewMatrix);
         }
 
         return updated;
