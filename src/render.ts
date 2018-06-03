@@ -184,16 +184,55 @@ export function coalesceBuffer(gl: WebGL2RenderingContext, target: number, datas
     return coalescedBuffers;
 }
 
-export class BufferCoalescer {
+// For debugging. Should be identical to just using the original buffers.
+export class FakeBufferCoalescer {
     public coalescedBuffers: CoalescedBuffers[];
-    private vertexBuffer: WebGLBuffer;
-    private indexBuffer: WebGLBuffer;
+    private vertexBuffers: WebGLBuffer[] = [];
+    private indexBuffers: WebGLBuffer[] = [];
 
     constructor(gl: WebGL2RenderingContext, vertexDatas: ArrayBufferSlice[], indexDatas: ArrayBufferSlice[]) {
         assert(vertexDatas.length === indexDatas.length);
+
+        const coalescedBuffers = [];
+        for (let i = 0; i < vertexDatas.length; i++) {
+            const vertexCoalescedBuffers = coalesceBuffer(gl, gl.ARRAY_BUFFER, [vertexDatas[i]]);
+            const indexCoalescedBuffers = coalesceBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, [indexDatas[i]]);
+
+            const vertexBuffer = vertexCoalescedBuffers[0];
+            const indexBuffer = indexCoalescedBuffers[0];
+
+            this.vertexBuffers.push(vertexBuffer.buffer);
+            this.indexBuffers.push(indexBuffer.buffer);
+
+            coalescedBuffers.push({ vertexBuffer, indexBuffer });
+        }
+
+        this.coalescedBuffers = coalescedBuffers;
+    }
+
+    public destroy(gl: WebGL2RenderingContext): void {
+        for (const vertexBuffer of this.vertexBuffers)
+            gl.deleteBuffer(vertexBuffer);
+        for (const indexBuffer of this.indexBuffers)
+            gl.deleteBuffer(indexBuffer);
+    }
+}
+
+export class BufferCoalescer {
+    public coalescedBuffers: CoalescedBuffers[];
+    private vertexBuffer: WebGLBuffer | null = null;
+    private indexBuffer: WebGLBuffer | null = null;
+
+    constructor(gl: WebGL2RenderingContext, vertexDatas: ArrayBufferSlice[], indexDatas: ArrayBufferSlice[]) {
+        assert(vertexDatas.length === indexDatas.length);
+
+        // Don't do anything if we have no data to care about.
+        if (vertexDatas.length === 0)
+            return;
+
         const vertexCoalescedBuffers = coalesceBuffer(gl, gl.ARRAY_BUFFER, vertexDatas);
         const indexCoalescedBuffers = coalesceBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, indexDatas);
-    
+
         const coalescedBuffers = [];
         for (let i = 0; i < vertexCoalescedBuffers.length; i++) {
             const vertexBuffer = vertexCoalescedBuffers[i];
@@ -207,8 +246,10 @@ export class BufferCoalescer {
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
-        gl.deleteBuffer(this.vertexBuffer);
-        gl.deleteBuffer(this.indexBuffer);
+        if (this.vertexBuffer !== null)
+            gl.deleteBuffer(this.vertexBuffer);
+        if (this.indexBuffer !== null)
+            gl.deleteBuffer(this.indexBuffer);
     }
 }
 
