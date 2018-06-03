@@ -11,12 +11,13 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import Progressable from 'Progressable';
-import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode, coalesceBuffer, CoalescedBuffer } from '../render';
+import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode } from '../render';
 import Program from '../Program';
 import RenderArena from '../RenderArena';
 import { assert, fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import { Endianness } from '../endian';
+import { CoalescedBuffer, coalesceBuffer } from '../BufferCoalescer';
 
 type RenderFunc = (renderState: RenderState) => void;
 

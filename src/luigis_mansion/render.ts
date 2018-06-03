@@ -1,6 +1,6 @@
 
 import * as Viewer from "../viewer";
-import { RenderState, RenderFlags, CoalescedBuffers, coalesceBuffer, BufferCoalescer } from "../render";
+import { RenderState, RenderFlags } from "../render";
 import { BIN, Sampler, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
 import * as GX from '../gx/gx_enum';
@@ -10,6 +10,7 @@ import { getNumComponents, GX_VtxAttrFmt } from "../gx/gx_displaylist";
 import { align, assert } from "../util";
 import { mat3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {

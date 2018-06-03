@@ -8,10 +8,11 @@ import * as GX_Material from 'gx/gx_material';
 import * as GX_Texture from 'gx/gx_texture';
 import * as Viewer from 'viewer';
 
-import { BufferCoalescer, CoalescedBuffers, CompareMode, RenderFlags, RenderState } from '../render';
+import { CompareMode, RenderFlags, RenderState } from '../render';
 import { align, assert } from '../util';
 import { getNumComponents } from '../gx/gx_displaylist';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox } from '../Camera';
+import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 
 function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
     switch (compType) {
