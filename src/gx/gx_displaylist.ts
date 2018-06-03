@@ -148,9 +148,17 @@ function translateVattrLayout(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): Vat
         if (!vtxDesc)
             continue;
 
-        const compSize = getComponentSize(vat[vtxAttrib].compType);
-        const compCnt = getNumComponents(vtxAttrib, vat[vtxAttrib].compCnt);
-        const attrByteSize = compSize * compCnt;
+        // If the VAT is missing, that means we don't care about the output of this vertex...
+        // we still need to know about it though so we can skip over the index.
+        // Obviously this doesn't work for DIRECT vertices.
+
+        let compSize = undefined;
+        let attrByteSize = undefined;
+        if (vat[vtxAttrib] !== undefined) {
+            compSize = getComponentSize(vat[vtxAttrib].compType);
+            const compCnt = getNumComponents(vtxAttrib, vat[vtxAttrib].compCnt);
+            attrByteSize = compSize * compCnt;
+        }
 
         switch (vtxDesc.type) {
         case GX.AttrType.NONE:
@@ -166,11 +174,13 @@ function translateVattrLayout(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): Vat
             break;
         }
 
-        dstVertexSize = align(dstVertexSize, compSize);
-        dstAttrOffsets[vtxAttrib] = dstVertexSize;
-        srcAttrSizes[vtxAttrib] = attrByteSize;
-        srcAttrCompSizes[vtxAttrib] = compSize;
-        dstVertexSize += attrByteSize;
+        if (attrByteSize !== undefined) {
+            dstVertexSize = align(dstVertexSize, compSize);
+            dstAttrOffsets[vtxAttrib] = dstVertexSize;
+            srcAttrSizes[vtxAttrib] = attrByteSize;
+            srcAttrCompSizes[vtxAttrib] = compSize;
+            dstVertexSize += attrByteSize;
+        }
     }
     // Align the whole thing to our minimum required alignment (F32).
     dstVertexSize = align(dstVertexSize, 4);
@@ -202,8 +212,8 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
 
             const attrName = getAttrName(vtxAttrib);
 
-            const compSizeSuffix = getComponentSize(vat[vtxAttrib].compType);
-            const compCntSuffix = getNumComponents(vtxAttrib, vat[vtxAttrib].compCnt);
+            const compSizeSuffix = vat[vtxAttrib] ? getComponentSize(vat[vtxAttrib].compType) : '';
+            const compCntSuffix = vat[vtxAttrib] ? getNumComponents(vtxAttrib, vat[vtxAttrib].compCnt) : '';
 
             const attrTypeSuffixes = ['', 'D', 'I8', 'I16'];
             const attrTypeSuffix = attrTypeSuffixes[vtxDescs[vtxAttrib].type];
@@ -215,7 +225,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
     function compileVtxTypedArrays(): string {
         const sources = [];
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vat.length; vtxAttrib++) {
-            if (!vtxDescs[vtxAttrib])
+            if (!vtxDescs[vtxAttrib] || !vat[vtxAttrib])
                 continue;
 
             const attrType = vtxDescs[vtxAttrib].type;
@@ -242,17 +252,18 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
             return '';
 
         const srcAttrSize = vattrLayout.srcAttrSizes[vtxAttrib];
-        if (srcAttrSize === undefined)
-            return '';
-
         const srcAttrCompSize = vattrLayout.srcAttrCompSizes[vtxAttrib];
         const copyFunc = selectCopyFunc(srcAttrCompSize);
 
         function readIndexTemplate(readIndex: string, drawCallIdxIncr: number): string {
-            const attrOffs = `(${srcAttrSize} * ${readIndex})`;
-            return `
-        ${copyFunc}(dstVertexData, ${dstOffs}, vtxArrayData${vtxAttrib}, ${attrOffs}, ${srcAttrSize});
-        drawCallIdx += ${drawCallIdxIncr};`.trim();
+            let S = '';
+            if (srcAttrSize !== undefined) {
+                const attrOffs = `(${srcAttrSize} * ${readIndex})`;
+                S += `${copyFunc}(dstVertexData, ${dstOffs}, vtxArrayData${vtxAttrib}, ${attrOffs}, ${srcAttrSize});`
+            }
+            S += `
+        drawCallIdx += ${drawCallIdxIncr};`;
+            return S.trim();
         }
 
         const dstOffs = `dstVertexDataOffs + ${vattrLayout.dstAttrOffsets[vtxAttrib]}`;
@@ -335,7 +346,6 @@ while (true) {
 // Now make the data.
 let indexDataIdx = 0;
 const dstIndexData = new Uint16Array(totalTriangleCount * 3);
-let vertexId = 0;
 
 const dstVertexDataSize = ${vattrLayout.dstVertexSize} * totalVertexCount;
 const dstVertexData = new Uint8Array(dstVertexDataSize);
