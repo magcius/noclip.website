@@ -14,6 +14,7 @@ import MemoizeCache from '../MemoizeCache';
 import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
+import { Endianness, getSystemEndianness } from '../endian';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -129,6 +130,7 @@ export interface VattrLayout {
     dstVertexSize: number;
     dstAttrOffsets: number[];
     srcAttrSizes: number[];
+    srcAttrCompSizes: number[];
     srcVertexSize: number;
 }
 
@@ -136,6 +138,7 @@ function translateVattrLayout(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): Vat
     // First, set up our vertex layout.
     const dstAttrOffsets = [];
     const srcAttrSizes = [];
+    const srcAttrCompSizes = [];
 
     let srcVertexSize = 0;
     let dstVertexSize = 0;
@@ -166,11 +169,12 @@ function translateVattrLayout(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): Vat
         dstVertexSize = align(dstVertexSize, compSize);
         dstAttrOffsets[vtxAttrib] = dstVertexSize;
         srcAttrSizes[vtxAttrib] = attrByteSize;
+        srcAttrCompSizes[vtxAttrib] = compSize;
         dstVertexSize += attrByteSize;
     }
     // Align the whole thing to our minimum required alignment (F32).
     dstVertexSize = align(dstVertexSize, 4);
-    return { dstVertexSize, dstAttrOffsets, srcAttrSizes, srcVertexSize };
+    return { dstVertexSize, dstAttrOffsets, srcAttrSizes, srcAttrCompSizes, srcVertexSize };
 }
 
 export interface LoadedVertexData {
@@ -222,6 +226,17 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
         return sources.join('\n');
     }
 
+    function selectCopyFunc(compSize: number) {
+        if (getSystemEndianness() === Endianness.BIG_ENDIAN || compSize === 1)
+            return 'memcpy';
+        else if (compSize === 2)
+            return 'memcpySwap2';
+        else if (compSize === 4)
+            return 'memcpySwap4';
+        else
+            return '%whoops';
+    }
+
     function compileVattr(vtxAttrib: GX.VertexAttribute): string {
         if (!vtxDescs[vtxAttrib])
             return '';
@@ -230,10 +245,13 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
         if (srcAttrSize === undefined)
             return '';
 
+        const srcAttrCompSize = vattrLayout.srcAttrCompSizes[vtxAttrib];
+        const copyFunc = selectCopyFunc(srcAttrCompSize);
+
         function readIndexTemplate(readIndex: string, drawCallIdxIncr: number): string {
             const attrOffs = `(${srcAttrSize} * ${readIndex})`;
             return `
-        memcpy(dstVertexData, ${dstOffs}, vtxArrayData${vtxAttrib}, ${attrOffs}, ${srcAttrSize});
+        ${copyFunc}(dstVertexData, ${dstOffs}, vtxArrayData${vtxAttrib}, ${attrOffs}, ${srcAttrSize});
         drawCallIdx += ${drawCallIdxIncr};`.trim();
         }
 
@@ -250,7 +268,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
             break;
         case GX.AttrType.DIRECT:
             readVertex = `
-        memcpy(dstVertexData, ${dstOffs}, srcBuffer, drawCallIdx, ${srcAttrSize});
+        ${copyFunc}(dstVertexData, ${dstOffs}, srcBuffer, drawCallIdx, ${srcAttrSize});
         drawCallIdx += ${srcAttrSize};
         `.trim();
             break;
@@ -326,6 +344,28 @@ let dstVertexDataOffs = 0;
 function memcpy(dst, dstOffs, src, srcOffs, size) {
     while (size--)
         dst[dstOffs++] = src[srcOffs++];
+}
+
+function memcpySwap2(dst, dstOffs, src, srcOffs, size) {
+    while (size > 0) {
+        dst[dstOffs+0] = src[srcOffs+1];
+        dst[dstOffs+1] = src[srcOffs+0];
+        dstOffs += 2;
+        srcOffs += 2;
+        size -= 2;
+    }
+}
+
+function memcpySwap4(dst, dstOffs, src, srcOffs, size) {
+    while (size > 0) {
+        dst[dstOffs+0] = src[srcOffs+3];
+        dst[dstOffs+1] = src[srcOffs+2];
+        dst[dstOffs+2] = src[srcOffs+1];
+        dst[dstOffs+3] = src[srcOffs+0];
+        dstOffs += 4;
+        srcOffs += 4;
+        size -= 4;
+    }
 }
 
 ${compileVtxTypedArrays()}

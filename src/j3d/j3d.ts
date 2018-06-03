@@ -179,7 +179,7 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
         const dataSize: number = dataEnd - dataStart;
         const compSize = getComponentSize(compType);
         const compCount = getNumComponents(vtxAttrib, compCnt);
-        const vtxDataBuffer = buffer.subarray(dataOffs, dataSize).convertFromEndianness(Endianness.BIG_ENDIAN, compSize);
+        const vtxDataBuffer = buffer.subarray(dataOffs, dataSize);
         const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compCnt, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }
