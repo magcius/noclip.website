@@ -305,7 +305,7 @@ while (true) {
         totalTriangleCount += (vertexCount - 2);
         break;
     default:
-        throw "whoops";
+        throw new Error("Invalid data at " + drawCallIdx.toString(16));
     }
 
     drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });
