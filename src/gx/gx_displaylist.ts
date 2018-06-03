@@ -20,6 +20,7 @@ import { Endianness, getSystemEndianness } from '../endian';
 export interface GX_VtxAttrFmt {
     compType: GX.CompType;
     compCnt: GX.CompCnt;
+    enableOutput?: boolean;
 }
 
 // GX_SetVtxDesc
@@ -71,8 +72,12 @@ export function getNumComponents(vtxAttrib: GX.VertexAttribute, componentCount: 
     case GX.VertexAttribute.NBT:
         if (componentCount === GX.CompCnt.NRM_XYZ)
             return 3;
-        else
-            throw new Error("whoops");
+        // NBT*XYZ
+        else if (componentCount === GX.CompCnt.NRM_NBT)
+            return 9;
+        // Separated NBT has three components per index.
+        else if (componentCount === GX.CompCnt.NRM_NBT3)
+            return 3;
     case GX.VertexAttribute.CLR0:
     case GX.VertexAttribute.CLR1:
         if (componentCount === GX.CompCnt.CLR_RGB)
@@ -94,6 +99,18 @@ export function getNumComponents(vtxAttrib: GX.VertexAttribute, componentCount: 
     case GX.VertexAttribute.NULL:
         // Shouldn't ever happen
         throw new Error("whoops");
+    }
+}
+
+function getIndexNumComponents(vtxAttrib: GX.VertexAttribute, compCnt: GX.CompCnt): number {
+    // TODO(jstpierre): Figure out how GX_VA_NBT works.
+    switch (vtxAttrib) {
+    case GX.VertexAttribute.NRM:
+        if (compCnt === GX.CompCnt.NRM_NBT3)
+            return 3;
+        // Fallthrough
+    default:
+        return 1;
     }
 }
 
@@ -131,6 +148,7 @@ export interface VattrLayout {
     dstAttrOffsets: number[];
     srcAttrSizes: number[];
     srcAttrCompSizes: number[];
+    srcIndexCompCounts: number[];
     srcVertexSize: number;
 }
 
@@ -139,11 +157,12 @@ function translateVattrLayout(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): Vat
     const dstAttrOffsets = [];
     const srcAttrSizes = [];
     const srcAttrCompSizes = [];
+    const srcIndexCompCounts = [];
 
     let srcVertexSize = 0;
     let dstVertexSize = 0;
     let firstCompSize;
-    for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vat.length; vtxAttrib++) {
+    for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vtxDescs.length; vtxAttrib++) {
         const vtxDesc = vtxDescs[vtxAttrib];
         if (!vtxDesc)
             continue;
@@ -154,10 +173,18 @@ function translateVattrLayout(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): Vat
 
         let compSize = undefined;
         let attrByteSize = undefined;
+
+        // Default to 1. This doesn't work in the case of NBT3 without a VAT entry --
+        // user has to manage that explicitly.
+        let indexComponentCount = 1;
+        let enableOutput = false;
         if (vat[vtxAttrib] !== undefined) {
             compSize = getComponentSize(vat[vtxAttrib].compType);
             const compCnt = getNumComponents(vtxAttrib, vat[vtxAttrib].compCnt);
-            attrByteSize = compSize * compCnt;
+            indexComponentCount = getIndexNumComponents(vtxAttrib, vat[vtxAttrib].compCnt);
+            attrByteSize = compSize * compCnt * indexComponentCount;
+            // VAT entries are assumed to be enabled by default.
+            enableOutput = (vat[vtxAttrib].enableOutput === undefined) ? true : vat[vtxAttrib].enableOutput;
         }
 
         switch (vtxDesc.type) {
@@ -167,14 +194,16 @@ function translateVattrLayout(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): Vat
             srcVertexSize += attrByteSize;
             break;
         case GX.AttrType.INDEX8:
-            srcVertexSize += 1;
+            srcVertexSize += 1 * indexComponentCount;
             break;
         case GX.AttrType.INDEX16:
-            srcVertexSize += 2;
+            srcVertexSize += 2 * indexComponentCount;
             break;
         }
 
-        if (attrByteSize !== undefined) {
+        srcIndexCompCounts[vtxAttrib] = indexComponentCount;
+
+        if (enableOutput) {
             dstVertexSize = align(dstVertexSize, compSize);
             dstAttrOffsets[vtxAttrib] = dstVertexSize;
             srcAttrSizes[vtxAttrib] = attrByteSize;
@@ -182,9 +211,10 @@ function translateVattrLayout(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): Vat
             dstVertexSize += attrByteSize;
         }
     }
+
     // Align the whole thing to our minimum required alignment (F32).
     dstVertexSize = align(dstVertexSize, 4);
-    return { dstVertexSize, dstAttrOffsets, srcAttrSizes, srcAttrCompSizes, srcVertexSize };
+    return { dstVertexSize, dstAttrOffsets, srcAttrSizes, srcAttrCompSizes, srcIndexCompCounts, srcVertexSize };
 }
 
 export interface LoadedVertexData {
@@ -225,7 +255,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
     function compileVtxTypedArrays(): string {
         const sources = [];
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vat.length; vtxAttrib++) {
-            if (!vtxDescs[vtxAttrib] || !vat[vtxAttrib])
+            if (vattrLayout.dstAttrOffsets[vtxAttrib] === undefined)
                 continue;
 
             const attrType = vtxDescs[vtxAttrib].type;
@@ -255,15 +285,31 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
         const srcAttrCompSize = vattrLayout.srcAttrCompSizes[vtxAttrib];
         const copyFunc = selectCopyFunc(srcAttrCompSize);
 
-        function readIndexTemplate(readIndex: string, drawCallIdxIncr: number): string {
+        function readOneIndexTemplate(attrOffset: string, drawCallIdxIncr: number): string {
             let S = '';
-            if (srcAttrSize !== undefined) {
-                const attrOffs = `(${srcAttrSize} * ${readIndex})`;
+            if (vattrLayout.dstAttrOffsets[vtxAttrib] !== undefined) {
+                const attrOffs = `(${srcAttrSize} * ${attrOffset})`;
                 S += `${copyFunc}(dstVertexData, ${dstOffs}, vtxArrayData${vtxAttrib}, ${attrOffs}, ${srcAttrSize});`
             }
             S += `
         drawCallIdx += ${drawCallIdxIncr};`;
             return S.trim();
+        }
+
+        function readIndexTemplate(readIndex: string, drawCallIdxIncr: number): string {
+            // Special case. NBT3 is annoying.
+            if (vtxAttrib === GX.VertexAttribute.NRM && vattrLayout.srcIndexCompCounts[vtxAttrib] === 3) {
+                return `
+        // NBT Normal
+        ${readOneIndexTemplate(`${readIndex} + 0`, drawCallIdxIncr)}
+        // NBT Bitangent
+        ${readOneIndexTemplate(`${readIndex} + 3`, drawCallIdxIncr)}
+        // NBT Tangent
+        ${readOneIndexTemplate(`${readIndex} + 6`, drawCallIdxIncr)}
+`.trim();
+            } else {
+                return readOneIndexTemplate(readIndex, drawCallIdxIncr);
+            }
         }
 
         const dstOffs = `dstVertexDataOffs + ${vattrLayout.dstAttrOffsets[vtxAttrib]}`;
@@ -294,7 +340,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoa
 
     function compileVattrs(): string {
         const sources = [];
-        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vat.length; vtxAttrib++) {
+        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vtxDescs.length; vtxAttrib++) {
             sources.push(compileVattr(vtxAttrib));
         }
         return sources.join('');
@@ -338,7 +384,7 @@ while (true) {
         totalTriangleCount += (vertexCount * 6) / 4;
         break;
     default:
-        throw new Error("Invalid data at " + drawCallIdx.toString(16));
+        throw new Error("Invalid data at " + srcBuffer.byteOffset.toString(16) + "/" + drawCallIdx.toString(16) + " primType " + primType.toString(16));
     }
 
     drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });
@@ -444,34 +490,6 @@ return { indexData: dstIndexData, packedVertexData: dstVertexData, totalVertexCo
     const runVerticesGenerator = new Function(source);
     const runVertices: VtxLoaderFunc = runVerticesGenerator();
     return { vattrLayout, runVertices };
-}
-
-export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVertexData {
-    let totalTriangleCount = 0;
-    let totalVertexCount = 0;
-    let indexDataSize = 0;
-    let packedVertexDataSize = 0;
-
-    for (const loadedData of loadedDatas) {
-        totalTriangleCount += loadedData.totalTriangleCount;
-        totalVertexCount += loadedData.totalVertexCount;
-        indexDataSize += loadedData.indexData.byteLength;
-        packedVertexDataSize += loadedData.packedVertexData.byteLength;
-    }
-
-    const indexData = new Uint16Array(indexDataSize);
-    const packedVertexData = new Uint8Array(packedVertexDataSize);
-
-    let indexDataOffs = 0;
-    let packedVertexDataOffs = 0;
-    for (const loadedData of loadedDatas) {
-        indexData.set(loadedData.indexData, indexDataOffs);
-        packedVertexData.set(loadedData.packedVertexData, packedVertexDataOffs);
-        indexDataOffs += loadedData.indexData.byteLength;
-        packedVertexDataOffs += loadedData.packedVertexData.byteLength;
-    }
-
-    return { indexData, packedVertexData, totalTriangleCount, totalVertexCount };
 }
 
 interface VtxLoaderDesc {
