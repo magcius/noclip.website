@@ -99,14 +99,14 @@ export function getNumComponents(vtxAttrib: GX.VertexAttribute, componentCount: 
 function getAttrName(vtxAttrib: GX.VertexAttribute): string {
     switch (vtxAttrib) {
     case GX.VertexAttribute.PNMTXIDX:   return `PNMTXIDX`;
-    case GX.VertexAttribute.TEX0MTXIDX: return `TEX0MTXIDX';`
-    case GX.VertexAttribute.TEX1MTXIDX: return `TEX1MTXIDX';`
-    case GX.VertexAttribute.TEX2MTXIDX: return `TEX2MTXIDX';`
-    case GX.VertexAttribute.TEX3MTXIDX: return `TEX3MTXIDX';`
-    case GX.VertexAttribute.TEX4MTXIDX: return `TEX4MTXIDX';`
-    case GX.VertexAttribute.TEX5MTXIDX: return `TEX5MTXIDX';`
-    case GX.VertexAttribute.TEX6MTXIDX: return `TEX6MTXIDX';`
-    case GX.VertexAttribute.TEX7MTXIDX: return `TEX7MTXIDX';`
+    case GX.VertexAttribute.TEX0MTXIDX: return `TEX0MTXIDX`;
+    case GX.VertexAttribute.TEX1MTXIDX: return `TEX1MTXIDX`;
+    case GX.VertexAttribute.TEX2MTXIDX: return `TEX2MTXIDX`;
+    case GX.VertexAttribute.TEX3MTXIDX: return `TEX3MTXIDX`;
+    case GX.VertexAttribute.TEX4MTXIDX: return `TEX4MTXIDX`;
+    case GX.VertexAttribute.TEX5MTXIDX: return `TEX5MTXIDX`;
+    case GX.VertexAttribute.TEX6MTXIDX: return `TEX6MTXIDX`;
+    case GX.VertexAttribute.TEX7MTXIDX: return `TEX7MTXIDX`;
     case GX.VertexAttribute.POS:        return `POS`;
     case GX.VertexAttribute.NRM:        return `NRM`;
     case GX.VertexAttribute.NBT:        return `NBT`;
