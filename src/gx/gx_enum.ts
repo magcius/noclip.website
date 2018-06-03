@@ -34,6 +34,9 @@ export const enum PrimitiveType {
     TRIANGLES = 0x90,
     TRIANGLESTRIP = 0x98,
     TRIANGLEFAN = 0xA0,
+    QUADS = 0x80,
+    // Early code for GX_DRAW_QUADS? Seen in Luigi's Mansion.
+    QUADS_2 = 0x88,
 }
 
 export const enum VertexAttribute {
@@ -59,6 +62,7 @@ export const enum VertexAttribute {
     TEX6 = 19,
     TEX7 = 20,
     NBT = 25,
+    MAX = NBT,
     NULL = 0xFF,
 }
 
