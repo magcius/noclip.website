@@ -9,9 +9,10 @@ import * as GX_Texture from 'gx/gx_texture';
 import * as GX_Material from 'gx/gx_material';
 
 import * as Viewer from '../viewer';
-import { RenderState, RenderFlags, CoalescedBuffers, BufferCoalescer } from '../render';
+import { RenderState, RenderFlags } from '../render';
 import { align } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 
 const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
 const attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
