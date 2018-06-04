@@ -18319,6 +18319,25 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
 System.register("luigis_mansion/jmp", ["util"], function (exports_78, context_78) {
     "use strict";
     var __moduleName = context_78 && context_78.id;
+    function nameHash(str) {
+        var hash = 0;
+        for (var i = 0; i < str.length; i++) {
+            hash <<= 8;
+            hash += str.charCodeAt(i);
+            // const r6 = Math.floor((4993 * hash) >>> 32);
+            var r6 = Math.floor((4993 * hash) / 0x100000000);
+            var r0 = (((hash - r6) / 2) + r6) >> 24;
+            hash -= r0 * 33554393;
+        }
+        return hash;
+    }
+    function findNameFromHash(hash) {
+        var name = hashLookup.get(hash);
+        if (name !== undefined)
+            return name;
+        else
+            return "Unk$" + hash;
+    }
     function parse(buffer) {
         var view = buffer.createDataView();
         var recordCount = view.getUint32(0x00, false);
@@ -18328,12 +18347,13 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_78, context_78
         var fieldTableIdx = 0x10;
         var fields = [];
         for (var i = 0; i < fieldCount; i++) {
-            var nameHash = view.getUint32(fieldTableIdx + 0x00);
+            var nameHash_2 = view.getUint32(fieldTableIdx + 0x00);
             var bitmask = view.getUint32(fieldTableIdx + 0x04);
             var recordOffset = view.getUint16(fieldTableIdx + 0x08);
-            var shift = view.getInt8(0x0A);
-            var type = view.getUint8(0x0B);
-            fields.push({ nameHash: nameHash, bitmask: bitmask, recordOffset: recordOffset, shift: shift, type: type });
+            var shift = view.getInt8(fieldTableIdx + 0x0A);
+            var type = view.getUint8(fieldTableIdx + 0x0B);
+            var name_19 = findNameFromHash(nameHash_2);
+            fields.push({ nameHash: nameHash_2, name: name_19, bitmask: bitmask, recordOffset: recordOffset, shift: shift, type: type });
             fieldTableIdx += 0x0C;
         }
         var recordTableIdx = recordOffs;
@@ -18356,7 +18376,7 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_78, context_78
                             value = view.getFloat32(fieldOffs, false);
                             break;
                     }
-                    record[field.nameHash] = value;
+                    record[field.name] = value;
                 }
             }
             catch (e_66_1) { e_66 = { error: e_66_1 }; }
@@ -18372,7 +18392,8 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_78, context_78
         return records;
         var e_66, _a;
     }
-    var util_50;
+    exports_78("parse", parse);
+    var util_50, nameTable, hashLookup;
     return {
         setters: [
             function (util_50_1) {
@@ -18380,6 +18401,20 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_78, context_78
             }
         ],
         execute: function () {
+            nameTable = [
+                'pos_x', 'pos_y', 'pos_z',
+                'dir_x', 'dir_y', 'dir_z',
+                'scale_x', 'scale_y', 'scale_z',
+                'pnt0_x', 'pnt0_y', 'pnt0_z',
+                'furniture_x', 'furniture_y', 'furniture_z',
+                'name', 'dmd_name', 'path_name', 'create_name', 'character_name', 'access_name', 'CodeName',
+                'arg0', 'arg1', 'arg2', 'arg3', 'arg4', 'arg5', 'arg6', 'arg7', 'arg8',
+                'room_no',
+            ];
+            hashLookup = new Map();
+            nameTable.forEach(function (name) {
+                hashLookup.set(nameHash(name), name);
+            });
         }
     };
 });
