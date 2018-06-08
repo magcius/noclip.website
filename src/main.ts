@@ -18,6 +18,7 @@ import * as SPL from './fres/splatoon_scenes';
 import * as DKSIV from './dksiv/scenes';
 import * as MP1 from './metroid_prime/scenes';
 import * as LM from './luigis_mansion/scenes';
+import * as ZSS from './rres/zss_scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI } from './ui';
@@ -37,6 +38,9 @@ const sceneGroups = [
     DKSIV.sceneGroup,
     MP1.sceneGroup,
     LM.sceneGroup,
+
+    // Not quite ready yet.
+    // ZSS.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {

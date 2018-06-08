@@ -62,3 +62,41 @@ let counter = 0;
 export function generateFormID() {
     return `FormGeneratedID_${counter++}`;
 }
+
+function hexzero(n: number, spaces: number): string {
+    let S = n.toString(16);
+    while (S.length < spaces)
+        S = `0${S}`;
+    return S;
+}
+
+export function hexdump(buffer: ArrayBufferSlice, offs: number = 0, length: number = 0x100): void {
+    const groupSize = 16;
+    let S = '';
+    const arr = buffer.createTypedArray(Uint8Array, offs, length);
+    for (let i = offs; i < length; i += groupSize) {
+        S += `${hexzero(i, 8)}    `;
+        for (let j = 0; j < groupSize; j++) {
+            const b = arr[i + j];
+            S += ` ${hexzero(b, 2)}`;
+        }
+
+        S += '  ';
+        for (let j = 0; j < groupSize; j++) {
+            const b = arr[i + j];
+            const c = (b >= 0x20 && b < 0x7F) ? String.fromCharCode(b) : '.';
+            S += `${c}`;
+        }
+
+        S += '\n';
+    }
+    console.log(S);
+}
+
+// Debugging.
+declare global {
+    interface Window {
+        hexdump: any;
+    }
+}
+window.hexdump = hexdump;

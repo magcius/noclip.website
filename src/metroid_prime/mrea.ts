@@ -205,7 +205,7 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSli
 
             const konstAlphaSel: GX.KonstAlphaSel = view.getUint8(offs + 0x11);
             const konstColorSel: GX.KonstColorSel = view.getUint8(offs + 0x12);
-            const channelId: GX.ColorChannelId = view.getUint8(offs + 0x13);
+            const channelId: GX.RasColorChannelID = GX_Material.getRasColorChannelID(view.getUint8(offs + 0x13));
 
             const colorInA: GX.CombineColorInput = (colorInputSel >>>  0) & 0x1F;
             const colorInB: GX.CombineColorInput = (colorInputSel >>>  5) & 0x1F;
@@ -485,7 +485,7 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice,
         // we should have some shared code for GameCube vertex loading?
 
         interface DrawCall {
-            primType: number;
+            primType: GX.Command;
             vertexFormat: number;
             srcOffs: number;
             vertexCount: number;
@@ -503,7 +503,7 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice,
             if (cmd === 0x00)
                 break;
 
-            const primType: GX.PrimitiveType = cmd & 0xF8;
+            const primType: GX.Command = cmd & 0xF8;
             const vertexFormat: GX.VtxFmt = cmd & 0x07;
 
             const vertexCount = view.getUint16(drawCallIdx + 0x01);
@@ -513,11 +513,11 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice,
             totalVertexCount += vertexCount;
 
             switch (primType) {
-            case GX.PrimitiveType.TRIANGLES:
+            case GX.Command.DRAW_TRIANGLES:
                 totalTriangleCount += vertexCount;
                 break;
-            case GX.PrimitiveType.TRIANGLEFAN:
-            case GX.PrimitiveType.TRIANGLESTRIP:
+            case GX.Command.DRAW_TRIANGLE_FAN:
+            case GX.Command.DRAW_TRIANGLE_STRIP:
                 totalTriangleCount += (vertexCount - 2);
                 break;
             default:
@@ -550,19 +550,19 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice,
                 indexData[indexDataIdx++] = vertexId++;
 
             switch (drawCall.primType) {
-            case GX.PrimitiveType.TRIANGLES:
+            case GX.Command.DRAW_TRIANGLES:
                 for (let i = 3; i < drawCall.vertexCount; i++) {
                     indexData[indexDataIdx++] = vertexId++;
                 }
                 break;
-            case GX.PrimitiveType.TRIANGLESTRIP:
+            case GX.Command.DRAW_TRIANGLE_STRIP:
                 for (let i = 3; i < drawCall.vertexCount; i++) {
                     indexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);
                     indexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);
                     indexData[indexDataIdx++] = vertexId++;
                 }
                 break;
-            case GX.PrimitiveType.TRIANGLEFAN:
+            case GX.Command.DRAW_TRIANGLE_FAN:
                 for (let i = 3; i < drawCall.vertexCount; i++) {
                     indexData[indexDataIdx++] = firstVertex;
                     indexData[indexDataIdx++] = vertexId - 1;

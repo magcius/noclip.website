@@ -194,7 +194,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
         const tevStage0: GX_Material.TevStage = {
             index: 0,
 
-            channelId: GX.ColorChannelId.COLOR0,
+            channelId: GX.RasColorChannelID.COLOR0A0,
 
             alphaInA: GX.CombineAlphaInput.ZERO,
             alphaInB: GX.CombineAlphaInput.ZERO,

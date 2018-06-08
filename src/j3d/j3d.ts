@@ -816,7 +816,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const tevOrderOffs = tevOrderTableOffs + tevOrderIndex * 0x04;
             const texCoordId: GX.TexCoordID = view.getUint8(tevOrderOffs + 0x00);
             const texMap: number = view.getUint8(tevOrderOffs + 0x01);
-            const channelId: GX.ColorChannelId = view.getUint8(tevOrderOffs + 0x02);
+            const channelId: GX.RasColorChannelID = GX_Material.getRasColorChannelID(view.getUint8(tevOrderOffs + 0x02));
             assert(view.getUint8(tevOrderOffs + 0x03) === 0xFF);
 
             // KonstSel

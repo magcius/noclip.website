@@ -77,27 +77,30 @@ export function decompressLZ11(srcView: DataView) {
         let i = 8;
         while (i--) {
             if (commandByte & (1 << i)) {
-                const tmp = srcView.getUint32(srcOffs, false);
+                const indicator = srcView.getUint8(srcOffs) >>> 4;
 
                 let windowOffset;
                 let windowLength;
-                const indicator = (tmp >>> 28);
                 if (indicator > 1) {
-                    // Two bytes. AB CD xx xx
+                    // Two bytes. AB CD
+                    const tmp = srcView.getUint16(srcOffs, false);
                     // Length: A + 1
                     // Offset: BCD + 1
                     windowLength = indicator + 1;
-                    windowOffset = ((tmp >>> 16) & 0x0FFF) + 1;
+                    windowOffset = (tmp & 0x0FFF) + 1;
+                    srcOffs += 2;
                 } else if (indicator === 0) {
-                    // Three bytes: AB CD EF xx
+                    // Three bytes: AB CD EF
+                    const tmp = (srcView.getUint16(srcOffs, false) << 8) | srcView.getUint8(srcOffs + 0x02);
                     // Length: BC + 0x11
                     // Offset: DEF + 1
-                    windowLength = (tmp >>> 20) + 0x11;
-                    windowOffset = ((tmp >>> 8) & 0x0FFF) + 1;
+                    windowLength = (tmp >>> 12) + 0x11;
+                    windowOffset = (tmp & 0x0FFF) + 1;
                     srcOffs += 3;
                 } else if (indicator === 1) {
                     // Four bytes. AB CD EF GH
-                    // Length: BCDE + 0x11
+                    const tmp = srcView.getUint32(srcOffs, false);
+                    // Length: BCDE + 0x111
                     // Offset: FGH + 1
                     windowLength = ((tmp >>> 12) & 0xFFFF) + 0x111;
                     windowOffset = (tmp & 0x0FFF) + 1;
