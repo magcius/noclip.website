@@ -98,7 +98,7 @@ export interface TevStage {
     // SetTevOrder
     texCoordId: GX.TexCoordID;
     texMap: GX.TexMapID;
-    channelId: GX.ColorChannelId;
+    channelId: GX.RasColorChannelID;
 
     konstColorSel: GX.KonstColorSel;
     konstAlphaSel: GX.KonstAlphaSel;
@@ -434,11 +434,9 @@ export class GX_Program extends BaseProgram {
 
     private generateRas(stage: TevStage) {
         switch (stage.channelId) {
-        case GX.ColorChannelId.COLOR0:     return `v_Color0.rgb`;
-        case GX.ColorChannelId.COLOR1:     return `v_Color1.rgb`;
-        case GX.ColorChannelId.COLOR0A0:   return `v_Color0`;
-        case GX.ColorChannelId.COLOR1A1:   return `v_Color1`;
-        case GX.ColorChannelId.COLOR_ZERO: return `vec4(0, 0, 0, 0)`;
+        case GX.RasColorChannelID.COLOR0A0:   return `v_Color0`;
+        case GX.RasColorChannelID.COLOR1A1:   return `v_Color1`;
+        case GX.RasColorChannelID.COLOR_ZERO: return `vec4(0, 0, 0, 0)`;
         default:
             throw new Error(`whoops ${stage.channelId}`);
         }
@@ -946,4 +944,25 @@ export function getTextureLODBias(state: RenderState): number {
     const viewportHeight = state.onscreenColorTarget.height;
     const textureLODBias = Math.log2(Math.min(viewportWidth / EFB_WIDTH, viewportHeight / EFB_HEIGHT));
     return textureLODBias;
+}
+
+export function getRasColorChannelID(v: GX.ColorChannelId): GX.RasColorChannelID {
+    switch (v) {
+    case GX.ColorChannelId.COLOR0:
+    case GX.ColorChannelId.ALPHA0:
+    case GX.ColorChannelId.COLOR0A0:
+        return GX.RasColorChannelID.COLOR0A0;
+    case GX.ColorChannelId.COLOR1:
+    case GX.ColorChannelId.ALPHA1:
+    case GX.ColorChannelId.COLOR1A1:
+        return GX.RasColorChannelID.COLOR1A1;
+    case GX.ColorChannelId.ALPHA_BUMP:
+        return GX.RasColorChannelID.ALPHA_BUMP;
+    case GX.ColorChannelId.ALPHA_BUMP_N:
+        return GX.RasColorChannelID.ALPHA_BUMP_N;
+    case GX.ColorChannelId.COLOR_ZERO:
+        return GX.RasColorChannelID.COLOR_ZERO;
+    default:
+        throw "whoops";
+    }
 }

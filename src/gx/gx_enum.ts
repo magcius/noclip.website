@@ -30,13 +30,22 @@ export const enum TexFilter {
     LIN_MIP_LIN = 5, /*!< Trilinear filtering */
 }
 
-export const enum PrimitiveType {
-    TRIANGLES = 0x90,
-    TRIANGLESTRIP = 0x98,
-    TRIANGLEFAN = 0xA0,
-    QUADS = 0x80,
+export const enum Command {
+    NOOP                = 0x00,
+
+    DRAW_QUADS          = 0x80,
     // Early code for GX_DRAW_QUADS? Seen in Luigi's Mansion.
-    QUADS_2 = 0x88,
+    DRAW_QUADS_2        = 0x88,
+    DRAW_TRIANGLES      = 0x90,
+    DRAW_TRIANGLE_STRIP = 0x98,
+    DRAW_TRIANGLE_FAN   = 0xA0,
+    DRAW_LINES          = 0xA8,
+    DRAW_LINE_STRIP     = 0xB0,
+    DRAW_POINTS         = 0xB8,
+
+    LOAD_BP_REG         = 0x61,
+    LOAD_CP_REG         = 0x08,
+    LOAD_XF_REG         = 0x10,
 }
 
 export const enum VertexAttribute {
@@ -170,6 +179,9 @@ export const enum TevBias {
     ZERO = 0,
     ADDHALF = 1,
     SUBHALF = 2,
+
+    // Used to denote the compare ops to the HW.
+    $HWB_COMPARE = 3,
 }
 
 export const enum TevScale {
@@ -177,6 +189,12 @@ export const enum TevScale {
     SCALE_2 = 1,
     SCALE_4 = 2,
     DIVIDE_2 = 3,
+
+    // Used to denote the width of the compare op.
+    $HWB_R8 = 0,
+    $HWB_GR16 = 1,
+    $HWB_BGR24 = 2,
+    $HWB_RGB8 = 3,
 }
 
 export const enum CombineColorInput {
@@ -385,6 +403,14 @@ export const enum ColorChannelId {
     ALPHA_BUMP_N = 8,
 }
 
+export const enum RasColorChannelID {
+    COLOR0A0     = 0,
+    COLOR1A1     = 1,
+    ALPHA_BUMP   = 5,
+    ALPHA_BUMP_N = 6,
+    COLOR_ZERO   = 7,
+}
+
 export const enum VtxFmt {
     VTXFMT0 = 0,
     VTXFMT1 = 1,
@@ -473,4 +499,60 @@ export const enum IndTexMtxID {
     T0 = 9,
     T1 = 10,
     T2 = 11,
+}
+
+export const enum XFRegister {
+    XF_INVTXSPEC_ID    = 0x1008,
+    XF_NUMCOLORS_ID    = 0x1009,
+    XF_NUMTEX_ID       = 0x103F,
+    XF_TEX0_ID         = 0x1040,
+    XF_DUALTEX0_ID     = 0x1050,
+}
+
+export const enum BPRegister {
+    // GEN (Graphics ENgine)
+    GEN_MODE_ID        = 0x00,
+
+    // IND (INDirect Texture Hardware)
+    // SetTevIndirect
+    IND_CMD0_ID        = 0x10,
+
+    // RAS1 (RASterization)
+    // SetIndTexScale
+    RAS1_SS0_ID        = 0x25,
+    RAS1_SS1_ID        = 0x26,
+    // SetIndTexOrder
+    RAS1_IREF_ID       = 0x27,
+    // SetTevOrder
+    RAS1_TREF_0_ID     = 0x28,
+
+    // PE (ROP / Pixel Engine)
+    // SetZMode
+    PE_ZMODE_ID        = 0x40,
+    // SetBlendMode
+    PE_CMODE0_ID       = 0x41,
+    PE_CMODE1_ID       = 0x42,
+
+    // TEV (Texture EnVironments)
+    // SetTev
+    TEV_COLOR_ENV_0_ID = 0xC0,
+    TEV_ALPHA_ENV_0_ID = 0xC1,
+
+    // SetTevColor / SetTevKColor
+    TEV_REGISTERL_0_ID = 0xE0,
+    TEV_REGISTERH_0_ID = 0xE1,
+
+    TEV_FOG_PARAM_0_ID = 0xEE,
+    TEV_FOG_PARAM_1_ID = 0xEF,
+    TEV_FOG_PARAM_2_ID = 0xF0,
+    TEV_FOG_PARAM_3_ID = 0xF1,
+    TEV_FOG_COLOR_ID   = 0xF2,
+
+    // SetAlphaCompare
+    TEV_ALPHAFUNC_ID   = 0xF3,
+
+    // SetTevKColorSel
+    TEV_KSEL_0_ID      = 0xF6,
+
+    SS_MASK            = 0xFE,
 }

@@ -375,12 +375,12 @@ while (true) {
     totalVertexCount += vertexCount;
 
     switch (primType) {
-    case ${GX.PrimitiveType.TRIANGLEFAN}:
-    case ${GX.PrimitiveType.TRIANGLESTRIP}:
+    case ${GX.Command.DRAW_TRIANGLE_FAN}:
+    case ${GX.Command.DRAW_TRIANGLE_STRIP}:
         totalTriangleCount += (vertexCount - 2);
         break;
-    case ${GX.PrimitiveType.QUADS}:
-    case ${GX.PrimitiveType.QUADS_2}:
+    case ${GX.Command.DRAW_QUADS}:
+    case ${GX.Command.DRAW_QUADS_2}:
         totalTriangleCount += (vertexCount * 6) / 4;
         break;
     default:
@@ -436,7 +436,7 @@ for (let z = 0; z < drawCalls.length; z++) {
 
     // Convert topology to triangles.
     switch (drawCall.primType) {
-    case ${GX.PrimitiveType.TRIANGLESTRIP}:
+    case ${GX.Command.DRAW_TRIANGLE_STRIP}:
         // First vertex defines original triangle.
         for (let i = 0; i < 3; i++) {
             dstIndexData[indexDataIdx++] = vertexId++;
@@ -448,7 +448,7 @@ for (let z = 0; z < drawCalls.length; z++) {
             dstIndexData[indexDataIdx++] = vertexId++;
         }
         break;
-    case ${GX.PrimitiveType.TRIANGLEFAN}:
+    case ${GX.Command.DRAW_TRIANGLE_FAN}:
         // First vertex defines original triangle.
         const firstVertex = vertexId;
 
@@ -462,8 +462,8 @@ for (let z = 0; z < drawCalls.length; z++) {
             dstIndexData[indexDataIdx++] = vertexId++;
         }
         break;
-    case ${GX.PrimitiveType.QUADS}:
-    case ${GX.PrimitiveType.QUADS_2}:
+    case ${GX.Command.DRAW_QUADS}:
+    case ${GX.Command.DRAW_QUADS_2}:
         // Each quad (4 vertices) is split into 2 triangles (6 vertices)
         for (let i = 0; i < drawCall.vertexCount; i += 4) {
             dstIndexData[indexDataIdx++] = vertexId + 0;
