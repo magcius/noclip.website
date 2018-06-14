@@ -375,6 +375,9 @@ while (true) {
     totalVertexCount += vertexCount;
 
     switch (primType) {
+        case ${GX.Command.DRAW_TRIANGLES}:
+        totalTriangleCount += (vertexCount / 3);
+        break;
     case ${GX.Command.DRAW_TRIANGLE_FAN}:
     case ${GX.Command.DRAW_TRIANGLE_STRIP}:
         totalTriangleCount += (vertexCount - 2);
@@ -436,6 +439,12 @@ for (let z = 0; z < drawCalls.length; z++) {
 
     // Convert topology to triangles.
     switch (drawCall.primType) {
+    case ${GX.Command.DRAW_TRIANGLES}:
+        // Copy vertices.
+        for (let i = 0; i < drawCall.vertexCount; i++) {
+            dstIndexData[indexDataIdx++] = vertexId++;
+        }
+        break;
     case ${GX.Command.DRAW_TRIANGLE_STRIP}:
         // First vertex defines original triangle.
         for (let i = 0; i < 3; i++) {

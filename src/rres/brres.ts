@@ -7,6 +7,8 @@ import * as GX from '../gx/gx_enum';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import * as GX_Material from '../gx/gx_material';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, getNumComponents, getComponentSize, VattrLayout } from '../gx/gx_displaylist';
+import { vec3, mat4, quat } from 'gl-matrix';
 
 interface ResDicEntry {
     name: string;
@@ -37,12 +39,12 @@ function parseResDic(buffer: ArrayBufferSlice, tableOffs: number): ResDicEntry[]
     return entries;
 }
 
-interface TEX0 {
+export interface TEX0 {
     name: string;
     width: number;
     height: number;
     format: GX.TexFormat;
-    numMipmaps: number;
+    mipCount: number;
     minLod: number;
     maxLod: number;
     data: ArrayBufferSlice;
@@ -63,16 +65,20 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     const width = view.getUint16(0x1C);
     const height = view.getUint16(0x1E);
     const format: GX.TexFormat = view.getUint32(0x20);
-    const numMipmaps = view.getUint32(0x24);
+    const mipCount = view.getUint32(0x24);
     const minLod = view.getFloat32(0x28);
     const maxLod = view.getFloat32(0x2C);
 
     const data = buffer.subarray(dataOffs);
-    return { name, width, height, format, numMipmaps, minLod, maxLod, data };
+    return { name, width, height, format, mipCount, minLod, maxLod, data };
 }
 
-interface MDL0 {
+export interface MDL0 {
     name: string;
+    materials: MDL0_MaterialEntry[];
+    shapes: MDL0_ShapeEntry[];
+    nodes: MDL0_NodeEntry[];
+    sceneGraph: MDL0_SceneGraph;
 }
 
 class DisplayListRegisters {
@@ -80,7 +86,7 @@ class DisplayListRegisters {
     public cp: Uint32Array = new Uint32Array(0x100);
 
     // Can have up to 16 values per register.
-    public xf: Uint32Array = new Uint32Array(0x1000);
+    private xf: Uint32Array = new Uint32Array(0x1000);
 
     // TEV colors are weird and are two things under the hood
     // with the same register address.
@@ -128,6 +134,7 @@ function runDisplayListRegisters(r: DisplayListRegisters, buffer: ArrayBufferSli
 
     for (let i = 0; i < buffer.byteLength;) {
         const cmd = view.getUint8(i++);
+
         switch (cmd) {
         case GX.Command.NOOP:
             continue;
@@ -157,20 +164,21 @@ function runDisplayListRegisters(r: DisplayListRegisters, buffer: ArrayBufferSli
             i += 2;
 
             for (let j = 0; j < len; j++) {
-                r.xf[(regAddr * 0x10) + j] = view.getUint32(i);
+                r.xfs(regAddr, j, view.getUint32(i));
                 i += 4;
             }
 
             // Clear out the other values.
             for (let j = len; j < 16; j++) {
-                r.xf[(regAddr * 0x10) + j] = 0;
+                r.xfs(regAddr, j, 0);
             }
 
             break;
         }
 
         default:
-            throw "whoops";
+            console.error(`Unknown command ${cmd} at ${i} (buffer: 0x${buffer.byteOffset.toString(16)})`);
+            throw "whoops 1";
         }
     }
 }
@@ -183,7 +191,7 @@ function findTevOp(bias: GX.TevBias, scale: GX.TevScale, sub: boolean): GX.TevOp
         case GX.TevScale.$HWB_BGR24: return sub ? GX.TevOp.COMP_BGR24_EQ : GX.TevOp.COMP_BGR24_GT;
         case GX.TevScale.$HWB_RGB8: return sub ? GX.TevOp.COMP_RGB8_EQ : GX.TevOp.COMP_RGB8_GT;
         default:
-            throw "whoops";
+            throw "whoops 2";
         }
     } else {
         return sub ? GX.TevOp.SUB : GX.TevOp.ADD;
@@ -200,9 +208,17 @@ function parseMDL0_TevEntry(buffer: ArrayBufferSlice, r: DisplayListRegisters, n
     const numStages = view.getUint8(0x0C);
     assert(numStages === numStagesCheck);
 
-    const dlOffs = 0x14;
-
+    const dlOffs = 0x20;
     runDisplayListRegisters(r, buffer.subarray(dlOffs, 480));
+}
+
+interface MDL0_MaterialTextureEntry {
+    name: string;
+    namePalette: string;
+    wrapS: GX.WrapMode;
+    wrapT: GX.WrapMode;
+    minFilter: GX.TexFilter;
+    magFilter: GX.TexFilter;
 }
 
 interface MDL0_MaterialEntry {
@@ -210,6 +226,7 @@ interface MDL0_MaterialEntry {
     name: string;
     translucent: boolean;
     gxMaterial: GX_Material.GXMaterial;
+    textures: MDL0_MaterialTextureEntry[];
 }
 
 function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
@@ -246,15 +263,15 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
     const tevOffs = view.getUint32(0x28);
     assert(numTevs <= 16);
 
-    const numPalettes = view.getUint32(0x2C);
-    const paletteOffs = view.getUint32(0x30);
+    const numTexPltt = view.getUint32(0x2C);
+    const texPlttOffs = view.getUint32(0x30);
     // fur
     // user data
 
     // Run the mat DLs.
     const r = new DisplayListRegisters();
 
-    const matDLOffs = view.getUint32(0x34);
+    const matDLOffs = view.getUint32(0x3C);
     const matDLSize = 32 + 128 + 64 + 160;
     runDisplayListRegisters(r, buffer.subarray(matDLOffs, matDLSize));
 
@@ -262,24 +279,6 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
     parseMDL0_TevEntry(buffer.subarray(tevOffs), r, numTevs);
 
     // Now combine the whole thing.
-
-    // First up, validate.
-    assert(r.xfg(GX.XFRegister.XF_NUMTEX_ID) === numTexGens);
-    assert(r.xfg(GX.XFRegister.XF_NUMCOLORS_ID) === numChans);
-
-    const genMode = r.bp[GX.BPRegister.GEN_MODE_ID];
-    assert(((genMode >>>  0) & 0x0F) === numTexGens);
-    assert(((genMode >>>  4) & 0x0F) === numChans);
-    assert(((genMode >>> 10) & 0x0F) === numTevs);
-
-    // Cull mode specifies which face we reject, genMode specifies which face we rasterize.
-    const rastWhichFace = (genMode >>> 14) & 0x02;
-    if (cullMode === GX.CullMode.BACK)
-        assert(rastWhichFace === GX.CullMode.FRONT);
-    else if (cullMode === GX.CullMode.FRONT)
-        assert(rastWhichFace === GX.CullMode.BACK);
-    else
-        assert(rastWhichFace === cullMode);
 
     // TexGens.
     const texGens: GX_Material.TexGen[] = [];
@@ -547,7 +546,425 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         indTexStages, alphaTest, ropInfo,
     }
 
-    return { index, name, translucent, gxMaterial };
+    // Textures.
+    const textures: MDL0_MaterialTextureEntry[] = [];
+    for (let i = 0; i < numTexPltt; i++) {
+        const texPlttInfoOffs = texPlttOffs + i * 0x34;
+        const nameTexOffs = view.getUint32(texPlttInfoOffs + 0x00);
+        const namePltOffs = view.getUint32(texPlttInfoOffs + 0x04);
+        // unk
+        // unk
+        const texMapId: GX.TexMapID = view.getUint32(texPlttInfoOffs + 0x10);
+        const tlutId = view.getUint32(texPlttInfoOffs + 0x14);
+        const wrapS: GX.WrapMode = view.getUint32(texPlttInfoOffs + 0x18);
+        const wrapT: GX.WrapMode = view.getUint32(texPlttInfoOffs + 0x1C);
+        const minFilter: GX.TexFilter = view.getUint32(texPlttInfoOffs + 0x20);
+        const magFilter: GX.TexFilter = view.getUint32(texPlttInfoOffs + 0x24);
+        const lodBias = view.getFloat32(texPlttInfoOffs + 0x28);
+        const maxAniso = view.getUint32(texPlttInfoOffs + 0x2C);
+        const biasClamp = view.getUint8(texPlttInfoOffs + 0x30);
+        const edgeLod = view.getUint8(texPlttInfoOffs + 0x31);
+
+        const name = readString(buffer, texPlttOffs + nameTexOffs);
+        const namePalette = (namePltOffs !== 0) ? readString(buffer, texPlttOffs + namePltOffs) : null;
+        textures[texMapId] = { name, namePalette, wrapS, wrapT, minFilter, magFilter };
+    }
+
+    return { index, name, translucent, gxMaterial, textures };
+}
+
+interface VtxBufferData {
+    name: string;
+    id: number;
+
+    compCnt: GX.CompCnt;
+    compType: GX.CompType;
+    compShift: number;
+    stride: number;
+
+    count: number;
+    data: ArrayBufferSlice;
+}
+
+function parseMDL0_VtxData(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribute): VtxBufferData {
+    const view = buffer.createDataView();
+    const dataOffs = view.getUint32(0x08);
+    const nameOffs = view.getUint32(0x0C);
+    const name = readString(buffer, nameOffs);
+    const id = view.getUint32(0x10);
+    const compCnt: GX.CompCnt = view.getUint32(0x14);
+    const compType: GX.CompType = view.getUint32(0x18);
+    let compShift: number = view.getUint8(0x1C);
+    let stride: number = view.getUint8(0x1D);
+    const count: number = view.getUint16(0x1E);
+
+    // Color attributes don't have shift -- they store stride in the shift field.
+    if (vtxAttrib === GX.VertexAttribute.CLR0) {
+        stride = compShift;
+        compShift = 0;
+    }
+
+    const numComponents = getNumComponents(vtxAttrib, compCnt);
+    const compSize = getComponentSize(compType);
+    const compByteSize = numComponents * compSize;
+    const dataByteSize = compByteSize * count;
+
+    const data: ArrayBufferSlice = buffer.subarray(dataOffs, dataByteSize);
+    return { name, id, compCnt, compType, compShift, stride, count, data };
+}
+
+interface InputVertexBuffers {
+    pos: VtxBufferData[];
+    nrm: VtxBufferData[];
+    clr: VtxBufferData[];
+    txc: VtxBufferData[];
+}
+
+function parseInputBufferSet(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribute, resDic: ResDicEntry[]): VtxBufferData[] {
+    const vtxBuffers: VtxBufferData[] = [];
+    for (let i = 0; i < resDic.length; i++) {
+        const entry = resDic[i];
+        const vtxBufferData = parseMDL0_VtxData(buffer.subarray(entry.offs), vtxAttrib);
+        assert(vtxBufferData.name === entry.name);
+        assert(vtxBufferData.id === i);
+        vtxBuffers.push(vtxBufferData);
+    }
+    return vtxBuffers;
+}
+
+function parseInputVertexBuffers(buffer: ArrayBufferSlice, vtxPosResDic: ResDicEntry[], vtxNrmResDic: ResDicEntry[], vtxClrResDic: ResDicEntry[], vtxTxcResDic: ResDicEntry[]): InputVertexBuffers {
+    const pos = parseInputBufferSet(buffer, GX.VertexAttribute.POS, vtxPosResDic);
+    const nrm = parseInputBufferSet(buffer, GX.VertexAttribute.NRM, vtxNrmResDic);
+    const clr = parseInputBufferSet(buffer, GX.VertexAttribute.CLR0, vtxClrResDic);
+    const txc = parseInputBufferSet(buffer, GX.VertexAttribute.TEX0, vtxTxcResDic);
+    return { pos, nrm, clr, txc };
+}
+
+interface MDL0_ShapeEntry {
+    name: string;
+    vattrLayout: VattrLayout;
+    loadedVtxData: LoadedVertexData;
+};
+
+function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVertexBuffers): MDL0_ShapeEntry {
+    const view = buffer.createDataView();
+
+    const mtxIdx = view.getInt32(0x08);
+
+    // These offsets are relative to the start of the structure.
+    const prePrimDLSize = view.getUint32(0x18);
+    const prePrimDLCmdSize = view.getUint32(0x1C);
+    const prePrimDLOffs = 0x18 + view.getUint32(0x20);
+
+    const primDLSize = view.getUint32(0x24);
+    const primDLCmdSize = view.getUint32(0x28);
+    const primDLOffs = 0x24 + view.getUint32(0x2C);
+
+    const enum VcdFlags {
+        PNMTXIDX   = 1 << 0,
+        TEX0MTXIDX = 1 << 1,
+        TEX1MTXIDX = 1 << 2,
+        TEX2MTXIDX = 1 << 3,
+        TEX3MTXIDX = 1 << 4,
+        TEX4MTXIDX = 1 << 5,
+        TEX5MTXIDX = 1 << 6,
+        TEX6MTXIDX = 1 << 7,
+        TEX7MTXIDX = 1 << 8,
+        POS        = 1 << 9,
+        NRM        = 1 << 10,
+        CLR0       = 1 << 11,
+        CLR1       = 1 << 12,
+        TEX0       = 1 << 13,
+        TEX1       = 1 << 14,
+        TEX2       = 1 << 15,
+        TEX3       = 1 << 16,
+        TEX4       = 1 << 17,
+        TEX5       = 1 << 18,
+        TEX6       = 1 << 19,
+        TEX7       = 1 << 20,
+    }
+    const vcd: VcdFlags = view.getUint32(0x30);
+    const flags = view.getUint32(0x34);
+    const nameOffs = view.getUint32(0x38);
+    const name = readString(buffer, nameOffs);
+    const id = view.getUint32(0x3C);
+
+    const numVertices = view.getUint32(0x40);
+    const numPolygons = view.getUint32(0x44);
+
+    const idVtxPos = view.getInt16(0x48);
+    assert(idVtxPos >= 0);
+    const idVtxNrm = view.getInt16(0x4A);
+    const idVtxClr0 = view.getInt16(0x4C);
+    const idVtxClr1 = view.getInt16(0x4E);
+    const idVtxTxc0 = view.getInt16(0x50);
+    const idVtxTxc1 = view.getInt16(0x52);
+    const idVtxTxc2 = view.getInt16(0x54);
+    const idVtxTxc3 = view.getInt16(0x56);
+    const idVtxTxc4 = view.getInt16(0x58);
+    const idVtxTxc5 = view.getInt16(0x5A);
+    const idVtxTxc6 = view.getInt16(0x5C);
+    const idVtxTxc7 = view.getInt16(0x5E);
+    const idVtxFurVec = view.getInt16(0x60);
+    const idVtxFurPos = view.getInt16(0x62);
+    const mtxSetOffs = view.getUint32(0x64);
+
+    // Run preprim. This should get us our VAT / VCD.
+    const r = new DisplayListRegisters();
+    runDisplayListRegisters(r, buffer.subarray(prePrimDLOffs, prePrimDLSize));
+
+    // VCD. Describes primitive data.
+    const vcdL = r.cp[GX.CPRegister.VCD_LO_ID];
+    const vcdH = r.cp[GX.CPRegister.VCD_HI_ID];
+    const vtxDescs: GX_VtxDesc[] = [];
+
+    vtxDescs[GX.VertexAttribute.PNMTXIDX] =   { type: (vcdL >>>  0) & 0x01 };
+    vtxDescs[GX.VertexAttribute.TEX0MTXIDX] = { type: (vcdL >>>  1) & 0x01 };
+    vtxDescs[GX.VertexAttribute.TEX1MTXIDX] = { type: (vcdL >>>  2) & 0x01 };
+    vtxDescs[GX.VertexAttribute.TEX2MTXIDX] = { type: (vcdL >>>  3) & 0x01 };
+    vtxDescs[GX.VertexAttribute.TEX3MTXIDX] = { type: (vcdL >>>  4) & 0x01 };
+    vtxDescs[GX.VertexAttribute.TEX4MTXIDX] = { type: (vcdL >>>  5) & 0x01 };
+    vtxDescs[GX.VertexAttribute.TEX5MTXIDX] = { type: (vcdL >>>  6) & 0x01 };
+    vtxDescs[GX.VertexAttribute.TEX6MTXIDX] = { type: (vcdL >>>  7) & 0x01 };
+    vtxDescs[GX.VertexAttribute.TEX7MTXIDX] = { type: (vcdL >>>  8) & 0x01 };
+    vtxDescs[GX.VertexAttribute.POS] =        { type: (vcdL >>>  9) & 0x03 };
+    vtxDescs[GX.VertexAttribute.NRM] =        { type: (vcdL >>> 11) & 0x03 };
+    vtxDescs[GX.VertexAttribute.CLR0] =       { type: (vcdL >>> 13) & 0x03 };
+    vtxDescs[GX.VertexAttribute.CLR1] =       { type: (vcdL >>> 15) & 0x03 };
+    vtxDescs[GX.VertexAttribute.TEX0] =       { type: (vcdH >>>  0) & 0x03 };
+    vtxDescs[GX.VertexAttribute.TEX1] =       { type: (vcdH >>>  2) & 0x03 };
+    vtxDescs[GX.VertexAttribute.TEX2] =       { type: (vcdH >>>  4) & 0x03 };
+    vtxDescs[GX.VertexAttribute.TEX3] =       { type: (vcdH >>>  6) & 0x03 };
+    vtxDescs[GX.VertexAttribute.TEX4] =       { type: (vcdH >>>  8) & 0x03 };
+    vtxDescs[GX.VertexAttribute.TEX5] =       { type: (vcdH >>> 10) & 0x03 };
+    vtxDescs[GX.VertexAttribute.TEX6] =       { type: (vcdH >>> 12) & 0x03 };
+    vtxDescs[GX.VertexAttribute.TEX7] =       { type: (vcdH >>> 14) & 0x03 };
+
+    // Validate against our VCD flags.
+    for (let attr: GX.VertexAttribute = 0; attr <= GX.VertexAttribute.TEX7; attr++) {
+        const enabled = !!(vcd & (1 << attr));
+        assert(enabled === (vtxDescs[attr].type !== GX.AttrType.NONE));
+    }
+
+    // VAT. Describes attribute formats.
+    // BRRES always uses VTXFMT0.
+    const vatA = r.cp[GX.CPRegister.VAT_A_ID + GX.VtxFmt.VTXFMT0];
+    const vatB = r.cp[GX.CPRegister.VAT_B_ID + GX.VtxFmt.VTXFMT0];
+    const vatC = r.cp[GX.CPRegister.VAT_C_ID + GX.VtxFmt.VTXFMT0];
+
+    // TODO(jstpierre): Support compShift during the conversion rather than in AttrScale in the shader...
+    const vat: GX_VtxAttrFmt[] = [];
+    vat[GX.VertexAttribute.POS]  = { compCnt: (vatA >>>  0) & 0x01, compType: (vatA >>>  1) & 0x07 };
+    const nrm3 = !!(vatA >>> 31);
+    vat[GX.VertexAttribute.NRM]  = { compCnt: nrm3 ? GX.CompCnt.NRM_NBT3 : (vatA >>> 9) & 0x01, compType: (vatA >>> 10) & 0x07 };
+    vat[GX.VertexAttribute.CLR0] = { compCnt: (vatA >>> 13) & 0x01, compType: (vatA >>> 14) & 0x07 };
+    vat[GX.VertexAttribute.CLR1] = { compCnt: (vatA >>> 17) & 0x01, compType: (vatA >>> 18) & 0x07 };
+    vat[GX.VertexAttribute.TEX0] = { compCnt: (vatA >>> 21) & 0x01, compType: (vatA >>> 22) & 0x07 };
+    vat[GX.VertexAttribute.TEX1] = { compCnt: (vatB >>>  0) & 0x01, compType: (vatB >>>  1) & 0x07 };
+    vat[GX.VertexAttribute.TEX2] = { compCnt: (vatB >>>  9) & 0x01, compType: (vatB >>> 10) & 0x07 };
+    vat[GX.VertexAttribute.TEX3] = { compCnt: (vatB >>> 18) & 0x01, compType: (vatB >>> 19) & 0x07 };
+    vat[GX.VertexAttribute.TEX4] = { compCnt: (vatB >>> 27) & 0x01, compType: (vatB >>> 28) & 0x07 };
+    vat[GX.VertexAttribute.TEX5] = { compCnt: (vatC >>>  5) & 0x01, compType: (vatC >>>  6) & 0x07 };
+    vat[GX.VertexAttribute.TEX6] = { compCnt: (vatC >>> 14) & 0x01, compType: (vatC >>> 15) & 0x07 };
+    vat[GX.VertexAttribute.TEX7] = { compCnt: (vatC >>> 23) & 0x01, compType: (vatC >>> 24) & 0x07 };
+
+    const vtxArrays: GX_Array[] = [];
+    vtxArrays[GX.VertexAttribute.POS] = { buffer: inputBuffers.pos[idVtxPos].data, offs: 0 };
+    if (idVtxNrm >= 0)
+        vtxArrays[GX.VertexAttribute.NRM] = { buffer: inputBuffers.nrm[idVtxNrm].data, offs: 0 };
+    if (idVtxClr0 >= 0)
+        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: inputBuffers.clr[idVtxClr0].data, offs: 0 };
+    if (idVtxClr1 >= 0)
+        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: inputBuffers.clr[idVtxClr1].data, offs: 0 };
+    if (idVtxTxc0 >= 0)
+        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: inputBuffers.txc[idVtxTxc0].data, offs: 0 };
+    if (idVtxTxc1 >= 0)
+        vtxArrays[GX.VertexAttribute.TEX1] = { buffer: inputBuffers.txc[idVtxTxc1].data, offs: 0 };
+    if (idVtxTxc2 >= 0)
+        vtxArrays[GX.VertexAttribute.TEX2] = { buffer: inputBuffers.txc[idVtxTxc2].data, offs: 0 };
+    if (idVtxTxc3 >= 0)
+        vtxArrays[GX.VertexAttribute.TEX3] = { buffer: inputBuffers.txc[idVtxTxc3].data, offs: 0 };
+    if (idVtxTxc4 >= 0)
+        vtxArrays[GX.VertexAttribute.TEX4] = { buffer: inputBuffers.txc[idVtxTxc4].data, offs: 0 };
+    if (idVtxTxc5 >= 0)
+        vtxArrays[GX.VertexAttribute.TEX5] = { buffer: inputBuffers.txc[idVtxTxc5].data, offs: 0 };
+    if (idVtxTxc6 >= 0)
+        vtxArrays[GX.VertexAttribute.TEX6] = { buffer: inputBuffers.txc[idVtxTxc6].data, offs: 0 };
+    if (idVtxTxc7 >= 0)
+        vtxArrays[GX.VertexAttribute.TEX7] = { buffer: inputBuffers.txc[idVtxTxc7].data, offs: 0 };
+
+    const vtxLoader = compileVtxLoader(vat, vtxDescs);
+    const vattrLayout = vtxLoader.vattrLayout;
+    const loadedVtxData = vtxLoader.runVertices(vtxArrays, buffer.subarray(primDLOffs, primDLSize));
+    assert(loadedVtxData.totalVertexCount === numVertices);
+
+    return { name, vattrLayout, loadedVtxData };
+}
+
+const enum NodeFlags {
+    SRT_IDENTITY = 0x01,
+    TRANS_ZERO   = 0x02,
+    ROT_ZERO     = 0x04,
+    SCALE_ONE    = 0x08,
+    SCALE_HOMO   = 0x10,
+}
+
+const enum BillboardMode {
+    NONE = 0,
+    BILLBOARD,
+    PERSP_BILLBOARD,
+    ROT,
+    PERSP_ROT,
+    Y,
+    PERSP_Y,
+}
+
+interface MDL0_NodeEntry {
+    name: string;
+    id: number;
+    mtxId: number;
+    flags: NodeFlags;
+    billboardMode: BillboardMode;
+    modelMatrix: mat4;
+}
+
+function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
+    const view = buffer.createDataView();
+    const nameOffs = view.getUint32(0x08);
+    const name = readString(buffer, nameOffs);
+
+    const id = view.getUint32(0x0C);
+    const mtxId = view.getUint32(0x10);
+    const flags: NodeFlags = view.getUint32(0x14);
+    const billboardMode: BillboardMode = view.getUint32(0x18);
+    const bbrefNodeId = view.getUint32(0x1C);
+
+    const scaleX = view.getFloat32(0x20);
+    const scaleY = view.getFloat32(0x24);
+    const scaleZ = view.getFloat32(0x28);
+    const rotationX = view.getFloat32(0x2C);
+    const rotationY = view.getFloat32(0x30);
+    const rotationZ = view.getFloat32(0x34);
+    const translationX = view.getFloat32(0x38);
+    const translationY = view.getFloat32(0x3C);
+    const translationZ = view.getFloat32(0x40);
+
+    const scale = vec3.fromValues(scaleX, scaleY, scaleZ);
+    const rotation = quat.create();
+    quat.fromEuler(rotation, rotationX, rotationY, rotationZ);
+    const translation = vec3.fromValues(translationX, translationY, translationZ);
+
+    const modelMatrix = mat4.create();
+    mat4.fromRotationTranslationScale(modelMatrix, rotation, translation, scale);
+
+    return { name, id, mtxId, flags, billboardMode, modelMatrix };
+}
+
+const enum ByteCodeOp {
+    NOP = 0x00,
+    RET = 0x01,
+    NODEDESC = 0x02, // NodeID ParentMtxID
+    NODEMIX = 0x03, // TODO
+    DRAW = 0x04, // MatID ShpID NodeID
+    EVPMTX = 0x05, // TODO
+    MTXDUP = 0x06, // ToMtxID FromMtxID
+};
+
+interface NodeDescOp {
+    op: ByteCodeOp.NODEDESC;
+    nodeId: number;
+    parentMtxId: number;
+}
+
+interface MtxDupOp {
+    op: ByteCodeOp.MTXDUP;
+    toMtxId: number;
+    fromMtxId: number;
+}
+
+type NodeTreeOp = NodeDescOp | MtxDupOp;
+
+function parseMDL0_NodeTreeBytecode(buffer: ArrayBufferSlice): NodeTreeOp[] {
+    const view = buffer.createDataView();
+
+    const nodeTreeOps: NodeTreeOp[] = [];
+    let i = 0;
+    while (true) {
+        const op: ByteCodeOp = view.getUint8(i);
+        if (op === ByteCodeOp.RET) {
+            break;
+        } else if (op === ByteCodeOp.NODEDESC) {
+            const nodeId = view.getUint16(i + 1);
+            const parentMtxId = view.getUint16(i + 3);
+            i += 5;
+            nodeTreeOps.push({ op, nodeId, parentMtxId });
+        } else if (op === ByteCodeOp.MTXDUP) {
+            const toMtxId = view.getUint16(i + 1);
+            const fromMtxId = view.getUint16(i + 3);
+            i += 5;
+            nodeTreeOps.push({ op, toMtxId, fromMtxId });
+        } else {
+            throw "whoops";
+        }
+    }
+    return nodeTreeOps;
+}
+
+interface DrawOp {
+    matId: number;
+    shpId: number;
+    nodeId: number;
+}
+
+function parseMDL0_DrawBytecode(buffer: ArrayBufferSlice): DrawOp[] {
+    const view = buffer.createDataView();
+
+    const drawOps: DrawOp[] = [];
+    let i = 0;
+    while (true) {
+        const op: ByteCodeOp = view.getUint8(i);
+        if (op === ByteCodeOp.RET) {
+            break;
+        } else if (op === ByteCodeOp.DRAW) {
+            const matId = view.getUint16(i + 1);
+            const shpId = view.getUint16(i + 3);
+            const nodeId = view.getUint16(i + 5);
+            i += 8;
+            drawOps.push({ matId, shpId, nodeId });
+        } else {
+            throw "whoops";
+        }
+    }
+    return drawOps;
+}
+
+interface MDL0_SceneGraph {
+    nodeTreeOps: NodeTreeOp[];
+    drawOpaOps: DrawOp[];
+    drawXluOps: DrawOp[];
+}
+
+function parseMDL0_SceneGraph(buffer: ArrayBufferSlice, byteCodeResDic: ResDicEntry[]): MDL0_SceneGraph {
+    const nodeTreeResDicEntry = byteCodeResDic.find((entry) => entry.name === "NodeTree");
+    assert(nodeTreeResDicEntry !== null);
+    const nodeTreeBuffer = buffer.subarray(nodeTreeResDicEntry.offs);
+    const nodeTreeOps = parseMDL0_NodeTreeBytecode(nodeTreeBuffer);
+
+    let drawOpaOps: DrawOp[] = [];
+    const drawOpaResDicEntry = byteCodeResDic.find((entry => entry.name === "DrawOpa"));
+    if (drawOpaResDicEntry) {
+        const drawOpaBuffer = buffer.subarray(drawOpaResDicEntry.offs);
+        drawOpaOps = parseMDL0_DrawBytecode(drawOpaBuffer);
+    }
+
+    let drawXluOps: DrawOp[] = [];
+    const drawXluResDicEntry = byteCodeResDic.find((entry => entry.name === "DrawXlu"));
+    if (drawXluResDicEntry) {
+        const drawXluBuffer = buffer.subarray(drawXluResDicEntry.offs);
+        drawXluOps = parseMDL0_DrawBytecode(drawXluBuffer);
+    }
+
+    return { nodeTreeOps, drawOpaOps, drawXluOps };
 }
 
 function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
@@ -572,14 +989,36 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
     const nameOffs = view.getUint32(0x48);
     const name = readString(buffer, nameOffs);
 
-    for (const tevEntry of tevResDic) {
-        tevEntry.offs
+    const materials: MDL0_MaterialEntry[] = [];
+    for (const materialResDicEntry of materialResDic) {
+        const material = parseMDL0_MaterialEntry(buffer.subarray(materialResDicEntry.offs));
+        assert(material.name === materialResDicEntry.name);
+        materials.push(material);
     }
 
-    return { name };
+    const inputBuffers = parseInputVertexBuffers(buffer, vtxPosResDic, vtxNrmResDic, vtxClrResDic, vtxTxcResDic);
+
+    const shapes: MDL0_ShapeEntry[] = [];
+    for (let i = 0; i < shpResDic.length; i++) {
+        const shpResDicEntry = shpResDic[i];
+        const shape = parseMDL0_ShapeEntry(buffer.subarray(shpResDicEntry.offs), inputBuffers);
+        assert(shape.name === shpResDicEntry.name);
+        shapes.push(shape);
+    }
+
+    const nodes: MDL0_NodeEntry[] = [];
+    for (const nodeResDicEntry of nodeResDic) {
+        const node = parseMDL0_NodeEntry(buffer.subarray(nodeResDicEntry.offs));
+        assert(node.name === nodeResDicEntry.name);
+        nodes.push(node);
+    }
+
+    const sceneGraph = parseMDL0_SceneGraph(buffer, byteCodeResDic);
+
+    return { name, materials, shapes, nodes, sceneGraph };
 }
 
-interface RRES {
+export interface RRES {
     models: MDL0[];
     textures: TEX0[];
 }
@@ -616,7 +1055,8 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     const modelsEntry = rootResDic.find((entry) => entry.name === '3DModels(NW4R)');
     if (modelsEntry) {
         const modelsResDic = parseResDic(buffer, modelsEntry.offs);
-        for (const modelEntry of modelsResDic) {
+        for (let i = 0; i < modelsResDic.length; i++) {
+            const modelEntry = modelsResDic[i];
             const model = parseMDL0(buffer.subarray(modelEntry.offs));
             assert(model.name === modelEntry.name);
             models.push(model);

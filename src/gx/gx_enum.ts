@@ -556,3 +556,13 @@ export const enum BPRegister {
 
     SS_MASK            = 0xFE,
 }
+
+export const enum CPRegister {
+    MATINDEX_A_ID = 0x30,
+    MATINDEX_B_ID = 0x40,
+    VCD_LO_ID     = 0x50,
+    VCD_HI_ID     = 0x60,
+    VAT_A_ID      = 0x70,
+    VAT_B_ID      = 0x80,
+    VAT_C_ID      = 0x90,
+}
