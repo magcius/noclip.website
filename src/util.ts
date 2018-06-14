@@ -28,7 +28,7 @@ export function fetch(path: string): Progressable<ArrayBufferSlice> {
 }
 
 export function assert(b: boolean): void {
-    if (!b) throw new Error("Assert fail");
+    if (!b) { console.error(new Error().stack); throw new Error("Assert fail"); }
 }
 
 export function assertExists<T>(v: T | null | undefined): T {

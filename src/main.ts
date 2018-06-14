@@ -40,7 +40,7 @@ const sceneGroups = [
     LM.sceneGroup,
 
     // Not quite ready yet.
-    // ZSS.sceneGroup,
+    ZSS.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {

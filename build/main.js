@@ -146,8 +146,10 @@ System.register("util", ["ArrayBufferSlice", "Progressable"], function (exports_
     }
     exports_2("fetch", fetch);
     function assert(b) {
-        if (!b)
+        if (!b) {
+            console.error(new Error().stack);
             throw new Error("Assert fail");
+        }
     }
     exports_2("assert", assert);
     function assertExists(v) {
@@ -3943,7 +3945,7 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util", "endian"], functio
             return sources.join('');
         }
         var loaderName = makeLoaderName();
-        var source = "\n\"use strict\";\n\nreturn function " + loaderName + "(vtxArrays, srcBuffer) {\n// Parse display list.\nconst view = srcBuffer.createDataView();\nconst drawCalls = [];\nlet totalVertexCount = 0;\nlet totalTriangleCount = 0;\nlet drawCallIdx = 0;\nwhile (true) {\n    if (drawCallIdx >= srcBuffer.byteLength)\n        break;\n    const cmd = view.getUint8(drawCallIdx);\n    if (cmd === 0)\n        break;\n\n    const primType = cmd & 0xF8;\n    const vertexFormat = cmd & 0x07;\n\n    const vertexCount = view.getUint16(drawCallIdx + 0x01);\n    drawCallIdx += 0x03;\n    const srcOffs = drawCallIdx;\n    const first = totalVertexCount;\n    totalVertexCount += vertexCount;\n\n    switch (primType) {\n    case " + 160 /* DRAW_TRIANGLE_FAN */ + ":\n    case " + 152 /* DRAW_TRIANGLE_STRIP */ + ":\n        totalTriangleCount += (vertexCount - 2);\n        break;\n    case " + 128 /* DRAW_QUADS */ + ":\n    case " + 136 /* DRAW_QUADS_2 */ + ":\n        totalTriangleCount += (vertexCount * 6) / 4;\n        break;\n    default:\n        throw new Error(\"Invalid data at \" + srcBuffer.byteOffset.toString(16) + \"/\" + drawCallIdx.toString(16) + \" primType \" + primType.toString(16));\n    }\n\n    drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });\n\n    // Skip over the index data.\n    drawCallIdx += " + vattrLayout.srcVertexSize + " * vertexCount;\n}\n\n// Now make the data.\nlet indexDataIdx = 0;\nconst dstIndexData = new Uint16Array(totalTriangleCount * 3);\nlet vertexId = 0;\n\nconst dstVertexDataSize = " + vattrLayout.dstVertexSize + " * totalVertexCount;\nconst dstVertexData = new Uint8Array(dstVertexDataSize);\nlet dstVertexDataOffs = 0;\n\nfunction memcpy(dst, dstOffs, src, srcOffs, size) {\n    while (size--)\n        dst[dstOffs++] = src[srcOffs++];\n}\n\nfunction memcpySwap2(dst, dstOffs, src, srcOffs, size) {\n    while (size > 0) {\n        dst[dstOffs+0] = src[srcOffs+1];\n        dst[dstOffs+1] = src[srcOffs+0];\n        dstOffs += 2;\n        srcOffs += 2;\n        size -= 2;\n    }\n}\n\nfunction memcpySwap4(dst, dstOffs, src, srcOffs, size) {\n    while (size > 0) {\n        dst[dstOffs+0] = src[srcOffs+3];\n        dst[dstOffs+1] = src[srcOffs+2];\n        dst[dstOffs+2] = src[srcOffs+1];\n        dst[dstOffs+3] = src[srcOffs+0];\n        dstOffs += 4;\n        srcOffs += 4;\n        size -= 4;\n    }\n}\n\n" + compileVtxTypedArrays() + "\n\nfor (let z = 0; z < drawCalls.length; z++) {\n    const drawCall = drawCalls[z];\n\n    // Convert topology to triangles.\n    switch (drawCall.primType) {\n    case " + 152 /* DRAW_TRIANGLE_STRIP */ + ":\n        // First vertex defines original triangle.\n        for (let i = 0; i < 3; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 160 /* DRAW_TRIANGLE_FAN */ + ":\n        // First vertex defines original triangle.\n        const firstVertex = vertexId;\n\n        for (let i = 0; i < 3; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = firstVertex;\n            dstIndexData[indexDataIdx++] = vertexId - 1;\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 128 /* DRAW_QUADS */ + ":\n    case " + 136 /* DRAW_QUADS_2 */ + ":\n        // Each quad (4 vertices) is split into 2 triangles (6 vertices)\n        for (let i = 0; i < drawCall.vertexCount; i += 4) {\n            dstIndexData[indexDataIdx++] = vertexId + 0;\n            dstIndexData[indexDataIdx++] = vertexId + 1;\n            dstIndexData[indexDataIdx++] = vertexId + 2;\n\n            dstIndexData[indexDataIdx++] = vertexId + 1;\n            dstIndexData[indexDataIdx++] = vertexId + 3;\n            dstIndexData[indexDataIdx++] = vertexId + 2;\n            vertexId += 4;\n        }\n    }\n\n    let drawCallIdx = drawCall.srcOffs;\n    for (let j = 0; j < drawCall.vertexCount; j++) {\n" + compileVattrs() + "\n        dstVertexDataOffs += " + vattrLayout.dstVertexSize + ";\n    }\n}\nreturn { indexData: dstIndexData, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };\n\n};\n";
+        var source = "\n\"use strict\";\n\nreturn function " + loaderName + "(vtxArrays, srcBuffer) {\n// Parse display list.\nconst view = srcBuffer.createDataView();\nconst drawCalls = [];\nlet totalVertexCount = 0;\nlet totalTriangleCount = 0;\nlet drawCallIdx = 0;\nwhile (true) {\n    if (drawCallIdx >= srcBuffer.byteLength)\n        break;\n    const cmd = view.getUint8(drawCallIdx);\n    if (cmd === 0)\n        break;\n\n    const primType = cmd & 0xF8;\n    const vertexFormat = cmd & 0x07;\n\n    const vertexCount = view.getUint16(drawCallIdx + 0x01);\n    drawCallIdx += 0x03;\n    const srcOffs = drawCallIdx;\n    const first = totalVertexCount;\n    totalVertexCount += vertexCount;\n\n    switch (primType) {\n        case " + 144 /* DRAW_TRIANGLES */ + ":\n        totalTriangleCount += (vertexCount / 3);\n        break;\n    case " + 160 /* DRAW_TRIANGLE_FAN */ + ":\n    case " + 152 /* DRAW_TRIANGLE_STRIP */ + ":\n        totalTriangleCount += (vertexCount - 2);\n        break;\n    case " + 128 /* DRAW_QUADS */ + ":\n    case " + 136 /* DRAW_QUADS_2 */ + ":\n        totalTriangleCount += (vertexCount * 6) / 4;\n        break;\n    default:\n        throw new Error(\"Invalid data at \" + srcBuffer.byteOffset.toString(16) + \"/\" + drawCallIdx.toString(16) + \" primType \" + primType.toString(16));\n    }\n\n    drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });\n\n    // Skip over the index data.\n    drawCallIdx += " + vattrLayout.srcVertexSize + " * vertexCount;\n}\n\n// Now make the data.\nlet indexDataIdx = 0;\nconst dstIndexData = new Uint16Array(totalTriangleCount * 3);\nlet vertexId = 0;\n\nconst dstVertexDataSize = " + vattrLayout.dstVertexSize + " * totalVertexCount;\nconst dstVertexData = new Uint8Array(dstVertexDataSize);\nlet dstVertexDataOffs = 0;\n\nfunction memcpy(dst, dstOffs, src, srcOffs, size) {\n    while (size--)\n        dst[dstOffs++] = src[srcOffs++];\n}\n\nfunction memcpySwap2(dst, dstOffs, src, srcOffs, size) {\n    while (size > 0) {\n        dst[dstOffs+0] = src[srcOffs+1];\n        dst[dstOffs+1] = src[srcOffs+0];\n        dstOffs += 2;\n        srcOffs += 2;\n        size -= 2;\n    }\n}\n\nfunction memcpySwap4(dst, dstOffs, src, srcOffs, size) {\n    while (size > 0) {\n        dst[dstOffs+0] = src[srcOffs+3];\n        dst[dstOffs+1] = src[srcOffs+2];\n        dst[dstOffs+2] = src[srcOffs+1];\n        dst[dstOffs+3] = src[srcOffs+0];\n        dstOffs += 4;\n        srcOffs += 4;\n        size -= 4;\n    }\n}\n\n" + compileVtxTypedArrays() + "\n\nfor (let z = 0; z < drawCalls.length; z++) {\n    const drawCall = drawCalls[z];\n\n    // Convert topology to triangles.\n    switch (drawCall.primType) {\n    case " + 144 /* DRAW_TRIANGLES */ + ":\n        // Copy vertices.\n        for (let i = 0; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 152 /* DRAW_TRIANGLE_STRIP */ + ":\n        // First vertex defines original triangle.\n        for (let i = 0; i < 3; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 160 /* DRAW_TRIANGLE_FAN */ + ":\n        // First vertex defines original triangle.\n        const firstVertex = vertexId;\n\n        for (let i = 0; i < 3; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = firstVertex;\n            dstIndexData[indexDataIdx++] = vertexId - 1;\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 128 /* DRAW_QUADS */ + ":\n    case " + 136 /* DRAW_QUADS_2 */ + ":\n        // Each quad (4 vertices) is split into 2 triangles (6 vertices)\n        for (let i = 0; i < drawCall.vertexCount; i += 4) {\n            dstIndexData[indexDataIdx++] = vertexId + 0;\n            dstIndexData[indexDataIdx++] = vertexId + 1;\n            dstIndexData[indexDataIdx++] = vertexId + 2;\n\n            dstIndexData[indexDataIdx++] = vertexId + 1;\n            dstIndexData[indexDataIdx++] = vertexId + 3;\n            dstIndexData[indexDataIdx++] = vertexId + 2;\n            vertexId += 4;\n        }\n    }\n\n    let drawCallIdx = drawCall.srcOffs;\n    for (let j = 0; j < drawCall.vertexCount; j++) {\n" + compileVattrs() + "\n        dstVertexDataOffs += " + vattrLayout.dstVertexSize + ";\n    }\n}\nreturn { indexData: dstIndexData, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };\n\n};\n";
         var runVerticesGenerator = new Function(source);
         var runVertices = runVerticesGenerator();
         return { vattrLayout: vattrLayout, runVertices: runVertices };
@@ -17718,7 +17720,7 @@ System.register("luigis_mansion/scenes", ["Progressable", "yay0", "util", "j3d/r
 });
 // Parses NintendoWare BRRES (Binary Revolution RESource) files.
 // http://wiki.tockdom.com/wiki/BRRES
-System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, context_75) {
+System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "gl-matrix"], function (exports_75, context_75) {
     "use strict";
     var __moduleName = context_75 && context_75.id;
     function parseResDic(buffer, tableOffs) {
@@ -17752,11 +17754,11 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
         var width = view.getUint16(0x1C);
         var height = view.getUint16(0x1E);
         var format = view.getUint32(0x20);
-        var numMipmaps = view.getUint32(0x24);
+        var mipCount = view.getUint32(0x24);
         var minLod = view.getFloat32(0x28);
         var maxLod = view.getFloat32(0x2C);
         var data = buffer.subarray(dataOffs);
-        return { name: name, width: width, height: height, format: format, numMipmaps: numMipmaps, minLod: minLod, maxLod: maxLod, data: data };
+        return { name: name, width: width, height: height, format: format, mipCount: mipCount, minLod: minLod, maxLod: maxLod, data: data };
     }
     // TODO(jstpierre): Move this to gx_displaylist.ts
     function runDisplayListRegisters(r, buffer) {
@@ -17787,17 +17789,18 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
                     var regAddr = view.getUint16(i);
                     i += 2;
                     for (var j = 0; j < len; j++) {
-                        r.xf[(regAddr * 0x10) + j] = view.getUint32(i);
+                        r.xfs(regAddr, j, view.getUint32(i));
                         i += 4;
                     }
                     // Clear out the other values.
                     for (var j = len; j < 16; j++) {
-                        r.xf[(regAddr * 0x10) + j] = 0;
+                        r.xfs(regAddr, j, 0);
                     }
                     break;
                 }
                 default:
-                    throw "whoops";
+                    console.error("Unknown command " + cmd + " at " + i + " (buffer: 0x" + buffer.byteOffset.toString(16) + ")");
+                    throw "whoops 1";
             }
         }
     }
@@ -17809,7 +17812,7 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
                 case 2 /* $HWB_BGR24 */: return sub ? 13 /* COMP_BGR24_EQ */ : 12 /* COMP_BGR24_GT */;
                 case 3 /* $HWB_RGB8 */: return sub ? 15 /* COMP_RGB8_EQ */ : 14 /* COMP_RGB8_GT */;
                 default:
-                    throw "whoops";
+                    throw "whoops 2";
             }
         }
         else {
@@ -17823,7 +17826,7 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
         var index = view.getUint32(0x08);
         var numStages = view.getUint8(0x0C);
         util_49.assert(numStages === numStagesCheck);
-        var dlOffs = 0x14;
+        var dlOffs = 0x20;
         runDisplayListRegisters(r, buffer.subarray(dlOffs, 480));
     }
     function parseMDL0_MaterialEntry(buffer) {
@@ -17855,33 +17858,18 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
         var nrmRefLight3 = view.getUint8(0x27);
         var tevOffs = view.getUint32(0x28);
         util_49.assert(numTevs <= 16);
-        var numPalettes = view.getUint32(0x2C);
-        var paletteOffs = view.getUint32(0x30);
+        var numTexPltt = view.getUint32(0x2C);
+        var texPlttOffs = view.getUint32(0x30);
         // fur
         // user data
         // Run the mat DLs.
         var r = new DisplayListRegisters();
-        var matDLOffs = view.getUint32(0x34);
+        var matDLOffs = view.getUint32(0x3C);
         var matDLSize = 32 + 128 + 64 + 160;
         runDisplayListRegisters(r, buffer.subarray(matDLOffs, matDLSize));
         // Run the TEV registers as well.
         parseMDL0_TevEntry(buffer.subarray(tevOffs), r, numTevs);
         // Now combine the whole thing.
-        // First up, validate.
-        util_49.assert(r.xfg(4159 /* XF_NUMTEX_ID */) === numTexGens);
-        util_49.assert(r.xfg(4105 /* XF_NUMCOLORS_ID */) === numChans);
-        var genMode = r.bp[0 /* GEN_MODE_ID */];
-        util_49.assert(((genMode >>> 0) & 0x0F) === numTexGens);
-        util_49.assert(((genMode >>> 4) & 0x0F) === numChans);
-        util_49.assert(((genMode >>> 10) & 0x0F) === numTevs);
-        // Cull mode specifies which face we reject, genMode specifies which face we rasterize.
-        var rastWhichFace = (genMode >>> 14) & 0x02;
-        if (cullMode === 2 /* BACK */)
-            util_49.assert(rastWhichFace === 1 /* FRONT */);
-        else if (cullMode === 1 /* FRONT */)
-            util_49.assert(rastWhichFace === 2 /* BACK */);
-        else
-            util_49.assert(rastWhichFace === cullMode);
         // TexGens.
         var texGens = [];
         for (var i = 0; i < numTexGens; i++) {
@@ -18075,7 +18063,280 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
             colorRegisters: colorRegisters, colorConstants: colorConstants,
             indTexStages: indTexStages, alphaTest: alphaTest, ropInfo: ropInfo,
         };
-        return { index: index, name: name, translucent: translucent, gxMaterial: gxMaterial };
+        // Textures.
+        var textures = [];
+        for (var i = 0; i < numTexPltt; i++) {
+            var texPlttInfoOffs = texPlttOffs + i * 0x34;
+            var nameTexOffs = view.getUint32(texPlttInfoOffs + 0x00);
+            var namePltOffs = view.getUint32(texPlttInfoOffs + 0x04);
+            // unk
+            // unk
+            var texMapId = view.getUint32(texPlttInfoOffs + 0x10);
+            var tlutId = view.getUint32(texPlttInfoOffs + 0x14);
+            var wrapS = view.getUint32(texPlttInfoOffs + 0x18);
+            var wrapT = view.getUint32(texPlttInfoOffs + 0x1C);
+            var minFilter = view.getUint32(texPlttInfoOffs + 0x20);
+            var magFilter = view.getUint32(texPlttInfoOffs + 0x24);
+            var lodBias = view.getFloat32(texPlttInfoOffs + 0x28);
+            var maxAniso = view.getUint32(texPlttInfoOffs + 0x2C);
+            var biasClamp = view.getUint8(texPlttInfoOffs + 0x30);
+            var edgeLod = view.getUint8(texPlttInfoOffs + 0x31);
+            var name_20 = util_49.readString(buffer, texPlttOffs + nameTexOffs);
+            var namePalette = (namePltOffs !== 0) ? util_49.readString(buffer, texPlttOffs + namePltOffs) : null;
+            textures[texMapId] = { name: name_20, namePalette: namePalette, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter };
+        }
+        return { index: index, name: name, translucent: translucent, gxMaterial: gxMaterial, textures: textures };
+    }
+    function parseMDL0_VtxData(buffer, vtxAttrib) {
+        var view = buffer.createDataView();
+        var dataOffs = view.getUint32(0x08);
+        var nameOffs = view.getUint32(0x0C);
+        var name = util_49.readString(buffer, nameOffs);
+        var id = view.getUint32(0x10);
+        var compCnt = view.getUint32(0x14);
+        var compType = view.getUint32(0x18);
+        var compShift = view.getUint8(0x1C);
+        var stride = view.getUint8(0x1D);
+        var count = view.getUint16(0x1E);
+        // Color attributes don't have shift -- they store stride in the shift field.
+        if (vtxAttrib === 11 /* CLR0 */) {
+            stride = compShift;
+            compShift = 0;
+        }
+        var numComponents = gx_displaylist_5.getNumComponents(vtxAttrib, compCnt);
+        var compSize = gx_displaylist_5.getComponentSize(compType);
+        var compByteSize = numComponents * compSize;
+        var dataByteSize = compByteSize * count;
+        var data = buffer.subarray(dataOffs, dataByteSize);
+        return { name: name, id: id, compCnt: compCnt, compType: compType, compShift: compShift, stride: stride, count: count, data: data };
+    }
+    function parseInputBufferSet(buffer, vtxAttrib, resDic) {
+        var vtxBuffers = [];
+        for (var i = 0; i < resDic.length; i++) {
+            var entry = resDic[i];
+            var vtxBufferData = parseMDL0_VtxData(buffer.subarray(entry.offs), vtxAttrib);
+            util_49.assert(vtxBufferData.name === entry.name);
+            util_49.assert(vtxBufferData.id === i);
+            vtxBuffers.push(vtxBufferData);
+        }
+        return vtxBuffers;
+    }
+    function parseInputVertexBuffers(buffer, vtxPosResDic, vtxNrmResDic, vtxClrResDic, vtxTxcResDic) {
+        var pos = parseInputBufferSet(buffer, 9 /* POS */, vtxPosResDic);
+        var nrm = parseInputBufferSet(buffer, 10 /* NRM */, vtxNrmResDic);
+        var clr = parseInputBufferSet(buffer, 11 /* CLR0 */, vtxClrResDic);
+        var txc = parseInputBufferSet(buffer, 13 /* TEX0 */, vtxTxcResDic);
+        return { pos: pos, nrm: nrm, clr: clr, txc: txc };
+    }
+    function parseMDL0_ShapeEntry(buffer, inputBuffers) {
+        var view = buffer.createDataView();
+        var mtxIdx = view.getInt32(0x08);
+        // These offsets are relative to the start of the structure.
+        var prePrimDLSize = view.getUint32(0x18);
+        var prePrimDLCmdSize = view.getUint32(0x1C);
+        var prePrimDLOffs = 0x18 + view.getUint32(0x20);
+        var primDLSize = view.getUint32(0x24);
+        var primDLCmdSize = view.getUint32(0x28);
+        var primDLOffs = 0x24 + view.getUint32(0x2C);
+        var vcd = view.getUint32(0x30);
+        var flags = view.getUint32(0x34);
+        var nameOffs = view.getUint32(0x38);
+        var name = util_49.readString(buffer, nameOffs);
+        var id = view.getUint32(0x3C);
+        var numVertices = view.getUint32(0x40);
+        var numPolygons = view.getUint32(0x44);
+        var idVtxPos = view.getInt16(0x48);
+        util_49.assert(idVtxPos >= 0);
+        var idVtxNrm = view.getInt16(0x4A);
+        var idVtxClr0 = view.getInt16(0x4C);
+        var idVtxClr1 = view.getInt16(0x4E);
+        var idVtxTxc0 = view.getInt16(0x50);
+        var idVtxTxc1 = view.getInt16(0x52);
+        var idVtxTxc2 = view.getInt16(0x54);
+        var idVtxTxc3 = view.getInt16(0x56);
+        var idVtxTxc4 = view.getInt16(0x58);
+        var idVtxTxc5 = view.getInt16(0x5A);
+        var idVtxTxc6 = view.getInt16(0x5C);
+        var idVtxTxc7 = view.getInt16(0x5E);
+        var idVtxFurVec = view.getInt16(0x60);
+        var idVtxFurPos = view.getInt16(0x62);
+        var mtxSetOffs = view.getUint32(0x64);
+        // Run preprim. This should get us our VAT / VCD.
+        var r = new DisplayListRegisters();
+        runDisplayListRegisters(r, buffer.subarray(prePrimDLOffs, prePrimDLSize));
+        // VCD. Describes primitive data.
+        var vcdL = r.cp[80 /* VCD_LO_ID */];
+        var vcdH = r.cp[96 /* VCD_HI_ID */];
+        var vtxDescs = [];
+        vtxDescs[0 /* PNMTXIDX */] = { type: (vcdL >>> 0) & 0x01 };
+        vtxDescs[1 /* TEX0MTXIDX */] = { type: (vcdL >>> 1) & 0x01 };
+        vtxDescs[2 /* TEX1MTXIDX */] = { type: (vcdL >>> 2) & 0x01 };
+        vtxDescs[3 /* TEX2MTXIDX */] = { type: (vcdL >>> 3) & 0x01 };
+        vtxDescs[4 /* TEX3MTXIDX */] = { type: (vcdL >>> 4) & 0x01 };
+        vtxDescs[5 /* TEX4MTXIDX */] = { type: (vcdL >>> 5) & 0x01 };
+        vtxDescs[6 /* TEX5MTXIDX */] = { type: (vcdL >>> 6) & 0x01 };
+        vtxDescs[7 /* TEX6MTXIDX */] = { type: (vcdL >>> 7) & 0x01 };
+        vtxDescs[8 /* TEX7MTXIDX */] = { type: (vcdL >>> 8) & 0x01 };
+        vtxDescs[9 /* POS */] = { type: (vcdL >>> 9) & 0x03 };
+        vtxDescs[10 /* NRM */] = { type: (vcdL >>> 11) & 0x03 };
+        vtxDescs[11 /* CLR0 */] = { type: (vcdL >>> 13) & 0x03 };
+        vtxDescs[12 /* CLR1 */] = { type: (vcdL >>> 15) & 0x03 };
+        vtxDescs[13 /* TEX0 */] = { type: (vcdH >>> 0) & 0x03 };
+        vtxDescs[14 /* TEX1 */] = { type: (vcdH >>> 2) & 0x03 };
+        vtxDescs[15 /* TEX2 */] = { type: (vcdH >>> 4) & 0x03 };
+        vtxDescs[16 /* TEX3 */] = { type: (vcdH >>> 6) & 0x03 };
+        vtxDescs[17 /* TEX4 */] = { type: (vcdH >>> 8) & 0x03 };
+        vtxDescs[18 /* TEX5 */] = { type: (vcdH >>> 10) & 0x03 };
+        vtxDescs[19 /* TEX6 */] = { type: (vcdH >>> 12) & 0x03 };
+        vtxDescs[20 /* TEX7 */] = { type: (vcdH >>> 14) & 0x03 };
+        // Validate against our VCD flags.
+        for (var attr = 0; attr <= 20 /* TEX7 */; attr++) {
+            var enabled = !!(vcd & (1 << attr));
+            util_49.assert(enabled === (vtxDescs[attr].type !== 0 /* NONE */));
+        }
+        // VAT. Describes attribute formats.
+        // BRRES always uses VTXFMT0.
+        var vatA = r.cp[112 /* VAT_A_ID */ + 0 /* VTXFMT0 */];
+        var vatB = r.cp[128 /* VAT_B_ID */ + 0 /* VTXFMT0 */];
+        var vatC = r.cp[144 /* VAT_C_ID */ + 0 /* VTXFMT0 */];
+        // TODO(jstpierre): Support compShift during the conversion rather than in AttrScale in the shader...
+        var vat = [];
+        vat[9 /* POS */] = { compCnt: (vatA >>> 0) & 0x01, compType: (vatA >>> 1) & 0x07 };
+        var nrm3 = !!(vatA >>> 31);
+        vat[10 /* NRM */] = { compCnt: nrm3 ? 2 /* NRM_NBT3 */ : (vatA >>> 9) & 0x01, compType: (vatA >>> 10) & 0x07 };
+        vat[11 /* CLR0 */] = { compCnt: (vatA >>> 13) & 0x01, compType: (vatA >>> 14) & 0x07 };
+        vat[12 /* CLR1 */] = { compCnt: (vatA >>> 17) & 0x01, compType: (vatA >>> 18) & 0x07 };
+        vat[13 /* TEX0 */] = { compCnt: (vatA >>> 21) & 0x01, compType: (vatA >>> 22) & 0x07 };
+        vat[14 /* TEX1 */] = { compCnt: (vatB >>> 0) & 0x01, compType: (vatB >>> 1) & 0x07 };
+        vat[15 /* TEX2 */] = { compCnt: (vatB >>> 9) & 0x01, compType: (vatB >>> 10) & 0x07 };
+        vat[16 /* TEX3 */] = { compCnt: (vatB >>> 18) & 0x01, compType: (vatB >>> 19) & 0x07 };
+        vat[17 /* TEX4 */] = { compCnt: (vatB >>> 27) & 0x01, compType: (vatB >>> 28) & 0x07 };
+        vat[18 /* TEX5 */] = { compCnt: (vatC >>> 5) & 0x01, compType: (vatC >>> 6) & 0x07 };
+        vat[19 /* TEX6 */] = { compCnt: (vatC >>> 14) & 0x01, compType: (vatC >>> 15) & 0x07 };
+        vat[20 /* TEX7 */] = { compCnt: (vatC >>> 23) & 0x01, compType: (vatC >>> 24) & 0x07 };
+        var vtxArrays = [];
+        vtxArrays[9 /* POS */] = { buffer: inputBuffers.pos[idVtxPos].data, offs: 0 };
+        if (idVtxNrm >= 0)
+            vtxArrays[10 /* NRM */] = { buffer: inputBuffers.nrm[idVtxNrm].data, offs: 0 };
+        if (idVtxClr0 >= 0)
+            vtxArrays[11 /* CLR0 */] = { buffer: inputBuffers.clr[idVtxClr0].data, offs: 0 };
+        if (idVtxClr1 >= 0)
+            vtxArrays[12 /* CLR1 */] = { buffer: inputBuffers.clr[idVtxClr1].data, offs: 0 };
+        if (idVtxTxc0 >= 0)
+            vtxArrays[13 /* TEX0 */] = { buffer: inputBuffers.txc[idVtxTxc0].data, offs: 0 };
+        if (idVtxTxc1 >= 0)
+            vtxArrays[14 /* TEX1 */] = { buffer: inputBuffers.txc[idVtxTxc1].data, offs: 0 };
+        if (idVtxTxc2 >= 0)
+            vtxArrays[15 /* TEX2 */] = { buffer: inputBuffers.txc[idVtxTxc2].data, offs: 0 };
+        if (idVtxTxc3 >= 0)
+            vtxArrays[16 /* TEX3 */] = { buffer: inputBuffers.txc[idVtxTxc3].data, offs: 0 };
+        if (idVtxTxc4 >= 0)
+            vtxArrays[17 /* TEX4 */] = { buffer: inputBuffers.txc[idVtxTxc4].data, offs: 0 };
+        if (idVtxTxc5 >= 0)
+            vtxArrays[18 /* TEX5 */] = { buffer: inputBuffers.txc[idVtxTxc5].data, offs: 0 };
+        if (idVtxTxc6 >= 0)
+            vtxArrays[19 /* TEX6 */] = { buffer: inputBuffers.txc[idVtxTxc6].data, offs: 0 };
+        if (idVtxTxc7 >= 0)
+            vtxArrays[20 /* TEX7 */] = { buffer: inputBuffers.txc[idVtxTxc7].data, offs: 0 };
+        var vtxLoader = gx_displaylist_5.compileVtxLoader(vat, vtxDescs);
+        var vattrLayout = vtxLoader.vattrLayout;
+        var loadedVtxData = vtxLoader.runVertices(vtxArrays, buffer.subarray(primDLOffs, primDLSize));
+        util_49.assert(loadedVtxData.totalVertexCount === numVertices);
+        return { name: name, vattrLayout: vattrLayout, loadedVtxData: loadedVtxData };
+    }
+    function parseMDL0_NodeEntry(buffer) {
+        var view = buffer.createDataView();
+        var nameOffs = view.getUint32(0x08);
+        var name = util_49.readString(buffer, nameOffs);
+        var id = view.getUint32(0x0C);
+        var mtxId = view.getUint32(0x10);
+        var flags = view.getUint32(0x14);
+        var billboardMode = view.getUint32(0x18);
+        var bbrefNodeId = view.getUint32(0x1C);
+        var scaleX = view.getFloat32(0x20);
+        var scaleY = view.getFloat32(0x24);
+        var scaleZ = view.getFloat32(0x28);
+        var rotationX = view.getFloat32(0x2C);
+        var rotationY = view.getFloat32(0x30);
+        var rotationZ = view.getFloat32(0x34);
+        var translationX = view.getFloat32(0x38);
+        var translationY = view.getFloat32(0x3C);
+        var translationZ = view.getFloat32(0x40);
+        var scale = gl_matrix_15.vec3.fromValues(scaleX, scaleY, scaleZ);
+        var rotation = gl_matrix_15.quat.create();
+        gl_matrix_15.quat.fromEuler(rotation, rotationX, rotationY, rotationZ);
+        var translation = gl_matrix_15.vec3.fromValues(translationX, translationY, translationZ);
+        var modelMatrix = gl_matrix_15.mat4.create();
+        gl_matrix_15.mat4.fromRotationTranslationScale(modelMatrix, rotation, translation, scale);
+        return { name: name, id: id, mtxId: mtxId, flags: flags, billboardMode: billboardMode, modelMatrix: modelMatrix };
+    }
+    function parseMDL0_NodeTreeBytecode(buffer) {
+        var view = buffer.createDataView();
+        var nodeTreeOps = [];
+        var i = 0;
+        while (true) {
+            var op = view.getUint8(i);
+            if (op === 1 /* RET */) {
+                break;
+            }
+            else if (op === 2 /* NODEDESC */) {
+                var nodeId = view.getUint16(i + 1);
+                var parentMtxId = view.getUint16(i + 3);
+                i += 5;
+                nodeTreeOps.push({ op: op, nodeId: nodeId, parentMtxId: parentMtxId });
+            }
+            else if (op === 6 /* MTXDUP */) {
+                var toMtxId = view.getUint16(i + 1);
+                var fromMtxId = view.getUint16(i + 3);
+                i += 5;
+                nodeTreeOps.push({ op: op, toMtxId: toMtxId, fromMtxId: fromMtxId });
+            }
+            else {
+                throw "whoops";
+            }
+        }
+        return nodeTreeOps;
+    }
+    function parseMDL0_DrawBytecode(buffer) {
+        var view = buffer.createDataView();
+        var drawOps = [];
+        var i = 0;
+        while (true) {
+            var op = view.getUint8(i);
+            if (op === 1 /* RET */) {
+                break;
+            }
+            else if (op === 4 /* DRAW */) {
+                var matId = view.getUint16(i + 1);
+                var shpId = view.getUint16(i + 3);
+                var nodeId = view.getUint16(i + 5);
+                i += 8;
+                drawOps.push({ matId: matId, shpId: shpId, nodeId: nodeId });
+            }
+            else {
+                throw "whoops";
+            }
+        }
+        return drawOps;
+    }
+    function parseMDL0_SceneGraph(buffer, byteCodeResDic) {
+        var nodeTreeResDicEntry = byteCodeResDic.find(function (entry) { return entry.name === "NodeTree"; });
+        util_49.assert(nodeTreeResDicEntry !== null);
+        var nodeTreeBuffer = buffer.subarray(nodeTreeResDicEntry.offs);
+        var nodeTreeOps = parseMDL0_NodeTreeBytecode(nodeTreeBuffer);
+        var drawOpaOps = [];
+        var drawOpaResDicEntry = byteCodeResDic.find((function (entry) { return entry.name === "DrawOpa"; }));
+        if (drawOpaResDicEntry) {
+            var drawOpaBuffer = buffer.subarray(drawOpaResDicEntry.offs);
+            drawOpaOps = parseMDL0_DrawBytecode(drawOpaBuffer);
+        }
+        var drawXluOps = [];
+        var drawXluResDicEntry = byteCodeResDic.find((function (entry) { return entry.name === "DrawXlu"; }));
+        if (drawXluResDicEntry) {
+            var drawXluBuffer = buffer.subarray(drawXluResDicEntry.offs);
+            drawXluOps = parseMDL0_DrawBytecode(drawXluBuffer);
+        }
+        return { nodeTreeOps: nodeTreeOps, drawOpaOps: drawOpaOps, drawXluOps: drawXluOps };
     }
     function parseMDL0(buffer) {
         var view = buffer.createDataView();
@@ -18095,21 +18356,49 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
         var shpResDic = parseResDic(buffer, view.getUint32(0x38));
         var nameOffs = view.getUint32(0x48);
         var name = util_49.readString(buffer, nameOffs);
+        var materials = [];
         try {
-            for (var tevResDic_1 = __values(tevResDic), tevResDic_1_1 = tevResDic_1.next(); !tevResDic_1_1.done; tevResDic_1_1 = tevResDic_1.next()) {
-                var tevEntry = tevResDic_1_1.value;
-                tevEntry.offs;
+            for (var materialResDic_1 = __values(materialResDic), materialResDic_1_1 = materialResDic_1.next(); !materialResDic_1_1.done; materialResDic_1_1 = materialResDic_1.next()) {
+                var materialResDicEntry = materialResDic_1_1.value;
+                var material = parseMDL0_MaterialEntry(buffer.subarray(materialResDicEntry.offs));
+                util_49.assert(material.name === materialResDicEntry.name);
+                materials.push(material);
             }
         }
         catch (e_65_1) { e_65 = { error: e_65_1 }; }
         finally {
             try {
-                if (tevResDic_1_1 && !tevResDic_1_1.done && (_a = tevResDic_1.return)) _a.call(tevResDic_1);
+                if (materialResDic_1_1 && !materialResDic_1_1.done && (_a = materialResDic_1.return)) _a.call(materialResDic_1);
             }
             finally { if (e_65) throw e_65.error; }
         }
-        return { name: name };
-        var e_65, _a;
+        var inputBuffers = parseInputVertexBuffers(buffer, vtxPosResDic, vtxNrmResDic, vtxClrResDic, vtxTxcResDic);
+        var shapes = [];
+        for (var i = 0; i < shpResDic.length; i++) {
+            var shpResDicEntry = shpResDic[i];
+            var shape = parseMDL0_ShapeEntry(buffer.subarray(shpResDicEntry.offs), inputBuffers);
+            util_49.assert(shape.name === shpResDicEntry.name);
+            shapes.push(shape);
+        }
+        var nodes = [];
+        try {
+            for (var nodeResDic_1 = __values(nodeResDic), nodeResDic_1_1 = nodeResDic_1.next(); !nodeResDic_1_1.done; nodeResDic_1_1 = nodeResDic_1.next()) {
+                var nodeResDicEntry = nodeResDic_1_1.value;
+                var node = parseMDL0_NodeEntry(buffer.subarray(nodeResDicEntry.offs));
+                util_49.assert(node.name === nodeResDicEntry.name);
+                nodes.push(node);
+            }
+        }
+        catch (e_66_1) { e_66 = { error: e_66_1 }; }
+        finally {
+            try {
+                if (nodeResDic_1_1 && !nodeResDic_1_1.done && (_b = nodeResDic_1.return)) _b.call(nodeResDic_1);
+            }
+            finally { if (e_66) throw e_66.error; }
+        }
+        var sceneGraph = parseMDL0_SceneGraph(buffer, byteCodeResDic);
+        return { name: name, materials: materials, shapes: shapes, nodes: nodes, sceneGraph: sceneGraph };
+        var e_65, _a, e_66, _b;
     }
     function parse(buffer) {
         var view = buffer.createDataView();
@@ -18137,20 +18426,11 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
         var modelsEntry = rootResDic.find(function (entry) { return entry.name === '3DModels(NW4R)'; });
         if (modelsEntry) {
             var modelsResDic = parseResDic(buffer, modelsEntry.offs);
-            try {
-                for (var modelsResDic_1 = __values(modelsResDic), modelsResDic_1_1 = modelsResDic_1.next(); !modelsResDic_1_1.done; modelsResDic_1_1 = modelsResDic_1.next()) {
-                    var modelEntry = modelsResDic_1_1.value;
-                    var model = parseMDL0(buffer.subarray(modelEntry.offs));
-                    util_49.assert(model.name === modelEntry.name);
-                    models.push(model);
-                }
-            }
-            catch (e_66_1) { e_66 = { error: e_66_1 }; }
-            finally {
-                try {
-                    if (modelsResDic_1_1 && !modelsResDic_1_1.done && (_a = modelsResDic_1.return)) _a.call(modelsResDic_1);
-                }
-                finally { if (e_66) throw e_66.error; }
+            for (var i = 0; i < modelsResDic.length; i++) {
+                var modelEntry = modelsResDic[i];
+                var model = parseMDL0(buffer.subarray(modelEntry.offs));
+                util_49.assert(model.name === modelEntry.name);
+                models.push(model);
             }
         }
         // Textures
@@ -18169,16 +18449,16 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
             catch (e_67_1) { e_67 = { error: e_67_1 }; }
             finally {
                 try {
-                    if (texturesResDic_1_1 && !texturesResDic_1_1.done && (_b = texturesResDic_1.return)) _b.call(texturesResDic_1);
+                    if (texturesResDic_1_1 && !texturesResDic_1_1.done && (_a = texturesResDic_1.return)) _a.call(texturesResDic_1);
                 }
                 finally { if (e_67) throw e_67.error; }
             }
         }
         return { models: models, textures: textures };
-        var e_66, _a, e_67, _b;
+        var e_67, _a;
     }
     exports_75("parse", parse);
-    var util_49, GX_Material, DisplayListRegisters;
+    var util_49, GX_Material, gx_displaylist_5, gl_matrix_15, DisplayListRegisters;
     return {
         setters: [
             function (util_49_1) {
@@ -18186,6 +18466,12 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
             },
             function (GX_Material_8) {
                 GX_Material = GX_Material_8;
+            },
+            function (gx_displaylist_5_1) {
+                gx_displaylist_5 = gx_displaylist_5_1;
+            },
+            function (gl_matrix_15_1) {
+                gl_matrix_15 = gl_matrix_15_1;
             }
         ],
         execute: function () {
@@ -18231,6 +18517,8 @@ System.register("rres/brres", ["util", "gx/gx_material"], function (exports_75, 
                 };
                 return DisplayListRegisters;
             }());
+            ;
+            ;
         }
     };
 });
@@ -18357,11 +18645,116 @@ System.register("rres/u8", ["util"], function (exports_76, context_76) {
         }
     };
 });
-// Skyward Sword
-System.register("rres/zss_scenes", ["lz77", "rres/brres", "rres/u8", "util"], function (exports_77, context_77) {
+System.register("rres/render", ["gx/gx_texture"], function (exports_77, context_77) {
     "use strict";
     var __moduleName = context_77 && context_77.id;
-    var LZ77, BRRES, U8, util_51, SkywardSwordSceneDescc, id, name, sceneDescs, sceneGroup;
+    var GX_Texture, Scene;
+    return {
+        setters: [
+            function (GX_Texture_5) {
+                GX_Texture = GX_Texture_5;
+            }
+        ],
+        execute: function () {
+            Scene = /** @class */ (function () {
+                function Scene(gl, rres) {
+                    this.rres = rres;
+                    this.textures = rres.textures.map(function (texture) { return Scene.translateTextureToViewer(texture); });
+                    this.glTextures = rres.textures.map(function (texture) { return Scene.translateTexture(gl, texture); });
+                    this.translateRRES(gl, rres);
+                }
+                Scene.prototype.render = function (state) {
+                };
+                Scene.prototype.destroy = function (gl) {
+                    this.glTextures.forEach(function (texture) { return gl.deleteTexture(texture); });
+                };
+                Scene.prototype.translateRRES = function (gl, rres) {
+                };
+                Scene.translateTexture = function (gl, texture) {
+                    var texId = gl.createTexture();
+                    texId.name = texture.name;
+                    gl.bindTexture(gl.TEXTURE_2D, texId);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
+                    var format = texture.format;
+                    var offs = 0, width = texture.width, height = texture.height;
+                    var _loop_16 = function (i) {
+                        var name_21 = texture.name;
+                        var size = GX_Texture.calcTextureSize(format, width, height);
+                        var data = texture.data !== null ? texture.data.subarray(offs, size) : null;
+                        var surface = { name: name_21, format: format, width: width, height: height, data: data };
+                        var level = i;
+                        GX_Texture.decodeTexture(surface).then(function (rgbaTexture) {
+                            gl.bindTexture(gl.TEXTURE_2D, texId);
+                            gl.texImage2D(gl.TEXTURE_2D, level, gl.RGBA8, surface.width, surface.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgbaTexture.pixels);
+                        });
+                        offs += size;
+                        width /= 2;
+                        height /= 2;
+                    };
+                    for (var i = 0; i < texture.mipCount; i++) {
+                        _loop_16(i);
+                    }
+                    return texId;
+                };
+                Scene.translateTextureToViewer = function (texture) {
+                    var surfaces = [];
+                    var width = texture.width, height = texture.height, offs = 0;
+                    var format = texture.format;
+                    var _loop_17 = function (i) {
+                        var name_22 = texture.name;
+                        var size = GX_Texture.calcTextureSize(format, width, height);
+                        var data = texture.data !== null ? texture.data.subarray(offs, size) : null;
+                        var surface = { name: name_22, format: format, width: width, height: height, data: data };
+                        var canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        canvas.title = texture.name + " " + texture.format;
+                        GX_Texture.decodeTexture(surface).then(function (rgbaTexture) {
+                            var ctx = canvas.getContext('2d');
+                            var imgData = new ImageData(surface.width, surface.height);
+                            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
+                            ctx.putImageData(imgData, 0, 0);
+                        });
+                        surfaces.push(canvas);
+                        offs += size;
+                        width /= 2;
+                        height /= 2;
+                    };
+                    for (var i = 0; i < texture.mipCount; i++) {
+                        _loop_17(i);
+                    }
+                    return { name: texture.name, surfaces: surfaces };
+                };
+                return Scene;
+            }());
+            exports_77("Scene", Scene);
+        }
+    };
+});
+// Skyward Sword
+System.register("rres/zss_scenes", ["lz77", "rres/brres", "rres/u8", "util", "rres/render"], function (exports_78, context_78) {
+    "use strict";
+    var __moduleName = context_78 && context_78.id;
+    function collectTextures(scenes) {
+        var textures = [];
+        try {
+            for (var scenes_14 = __values(scenes), scenes_14_1 = scenes_14.next(); !scenes_14_1.done; scenes_14_1 = scenes_14.next()) {
+                var scene = scenes_14_1.value;
+                if (scene)
+                    textures.push.apply(textures, scene.textures);
+            }
+        }
+        catch (e_69_1) { e_69 = { error: e_69_1 }; }
+        finally {
+            try {
+                if (scenes_14_1 && !scenes_14_1.done && (_a = scenes_14.return)) _a.call(scenes_14);
+            }
+            finally { if (e_69) throw e_69.error; }
+        }
+        return textures;
+        var e_69, _a;
+    }
+    var LZ77, BRRES, U8, util_51, render_24, SkywardSwordSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (LZ77_2) {
@@ -18375,39 +18768,42 @@ System.register("rres/zss_scenes", ["lz77", "rres/brres", "rres/u8", "util"], fu
             },
             function (util_51_1) {
                 util_51 = util_51_1;
+            },
+            function (render_24_1) {
+                render_24 = render_24_1;
             }
         ],
         execute: function () {
-            SkywardSwordSceneDescc = /** @class */ (function () {
-                function SkywardSwordSceneDescc(id, name, path) {
+            SkywardSwordSceneDesc = /** @class */ (function () {
+                function SkywardSwordSceneDesc(id, name, path) {
                     this.id = id;
                     this.name = name;
                     this.path = path;
                 }
-                SkywardSwordSceneDescc.prototype.createScene = function (gl) {
+                SkywardSwordSceneDesc.prototype.createScene = function (gl) {
                     return util_51.fetch(this.path).then(function (buffer) {
                         var decompressed = LZ77.decompress(buffer);
                         var u8Archive = U8.parse(decompressed);
                         var brresFile = u8Archive.findFile('g3d/stage.brres');
-                        BRRES.parse(brresFile.buffer);
-                        return null;
+                        var rres = BRRES.parse(brresFile.buffer);
+                        return new render_24.Scene(gl, rres);
                     });
                 };
-                return SkywardSwordSceneDescc;
+                return SkywardSwordSceneDesc;
             }());
             id = "zss";
             name = "Skyward Sword";
             sceneDescs = [
-                new SkywardSwordSceneDescc("F000", "F000", "data/zss/F000_stg_l0.arc.LZ"),
+                new SkywardSwordSceneDesc("F000", "F000", "data/zss/F000_stg_l0.arc.LZ"),
             ];
-            exports_77("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_78("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "fres/splatoon_scenes", "dksiv/scenes", "metroid_prime/scenes", "luigis_mansion/scenes", "j3d/scenes", "ui", "Camera"], function (exports_78, context_78) {
+System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "fres/splatoon_scenes", "dksiv/scenes", "metroid_prime/scenes", "luigis_mansion/scenes", "rres/zss_scenes", "j3d/scenes", "ui", "Camera"], function (exports_79, context_79) {
     "use strict";
-    var __moduleName = context_78 && context_78.id;
-    var viewer_1, ArrayBufferSlice_11, Progressable_10, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, SPL, DKSIV, MP1, LM, J3D, ui_1, Camera_6, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
+    var __moduleName = context_79 && context_79.id;
+    var viewer_1, ArrayBufferSlice_11, Progressable_10, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, SPL, DKSIV, MP1, LM, ZSS, J3D, ui_1, Camera_6, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
     return {
         setters: [
             function (viewer_1_1) {
@@ -18461,6 +18857,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
             function (LM_1) {
                 LM = LM_1;
             },
+            function (ZSS_1) {
+                ZSS = ZSS_1;
+            },
             function (J3D_1) {
                 J3D = J3D_1;
             },
@@ -18486,6 +18885,8 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                 DKSIV.sceneGroup,
                 MP1.sceneGroup,
                 LM.sceneGroup,
+                // Not quite ready yet.
+                ZSS.sceneGroup,
             ];
             DroppedFileSceneDesc = /** @class */ (function () {
                 function DroppedFileSceneDesc(file) {
@@ -18726,9 +19127,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
         }
     };
 });
-System.register("embeds/main", ["viewer", "Camera"], function (exports_79, context_79) {
+System.register("embeds/main", ["viewer", "Camera"], function (exports_80, context_80) {
     "use strict";
-    var __moduleName = context_79 && context_79.id;
+    var __moduleName = context_80 && context_80.id;
     var Viewer, Camera_7, FsButton, Main;
     return {
         setters: [
@@ -18819,9 +19220,9 @@ System.register("embeds/main", ["viewer", "Camera"], function (exports_79, conte
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0"], function (exports_80, context_80) {
+System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0"], function (exports_81, context_81) {
     "use strict";
-    var __moduleName = context_80 && context_80.id;
+    var __moduleName = context_81 && context_81.id;
     function createScene(gl, name) {
         return util_52.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
             return Yaz0.decompress(buffer);
@@ -18838,12 +19239,12 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             []);
         });
     }
-    exports_80("createScene", createScene);
-    var gl_matrix_15, util_52, GX_Material, j3d_5, RARC, render_24, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
+    exports_81("createScene", createScene);
+    var gl_matrix_16, util_52, GX_Material, j3d_5, RARC, render_25, sms_scenes_1, Yaz0, scale, posMtx, packetParamsData, sceneParamsData, SeaPlaneScene, PlaneShape;
     return {
         setters: [
-            function (gl_matrix_15_1) {
-                gl_matrix_15 = gl_matrix_15_1;
+            function (gl_matrix_16_1) {
+                gl_matrix_16 = gl_matrix_16_1;
             },
             function (util_52_1) {
                 util_52 = util_52_1;
@@ -18857,8 +19258,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             function (RARC_6) {
                 RARC = RARC_6;
             },
-            function (render_24_1) {
-                render_24 = render_24_1;
+            function (render_25_1) {
+                render_25 = render_25_1;
             },
             function (sms_scenes_1_1) {
                 sms_scenes_1 = sms_scenes_1_1;
@@ -18869,8 +19270,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         ],
         execute: function () {
             scale = 200;
-            posMtx = gl_matrix_15.mat4.create();
-            gl_matrix_15.mat4.fromScaling(posMtx, [scale, scale, scale]);
+            posMtx = gl_matrix_16.mat4.create();
+            gl_matrix_16.mat4.fromScaling(posMtx, [scale, scale, scale]);
             packetParamsData = new Float32Array(11 * 16);
             for (var i = 0; i < 11; i++) {
                 packetParamsData.set(posMtx, i * 16);
@@ -18889,8 +19290,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                     this.fps = 30;
                     this.btk = btk;
                     this.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(function () { return 1; }));
-                    var sceneLoader = new render_24.SceneLoader(bmd, null);
-                    render_24.Scene.prototype.translateTextures.call(this, gl, sceneLoader);
+                    var sceneLoader = new render_25.SceneLoader(bmd, null);
+                    render_25.Scene.prototype.translateTextures.call(this, gl, sceneLoader);
                     var seaMaterial = bmd.mat3.materialEntries.find(function (m) { return m.name === '_umi'; });
                     this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
                     this.plane = new PlaneShape(gl);
@@ -18930,7 +19331,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                             gxMaterial.tevStages.length = 1;
                         }
                     }
-                    var cmd = new render_24.Command_Material(gl, this, material);
+                    var cmd = new render_25.Command_Material(gl, this, material);
                     if (configName.includes('nomip')) {
                         try {
                             for (var _a = __values(this.glSamplers), _b = _a.next(); !_b.done; _b = _a.next()) {
@@ -18939,16 +19340,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_69_1) { e_69 = { error: e_69_1 }; }
+                        catch (e_70_1) { e_70 = { error: e_70_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_69) throw e_69.error; }
+                            finally { if (e_70) throw e_70.error; }
                         }
                     }
                     return cmd;
-                    var e_69, _c;
+                    var e_70, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
@@ -19056,9 +19457,9 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         }
     };
 });
-System.register("luigis_mansion/jmp", ["util"], function (exports_81, context_81) {
+System.register("luigis_mansion/jmp", ["util"], function (exports_82, context_82) {
     "use strict";
-    var __moduleName = context_81 && context_81.id;
+    var __moduleName = context_82 && context_82.id;
     function nameHash(str) {
         var hash = 0;
         for (var i = 0; i < str.length; i++) {
@@ -19092,8 +19493,8 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_81, context_81
             var recordOffset = view.getUint16(fieldTableIdx + 0x08);
             var shift = view.getInt8(fieldTableIdx + 0x0A);
             var type = view.getUint8(fieldTableIdx + 0x0B);
-            var name_20 = findNameFromHash(nameHash_2);
-            fields.push({ nameHash: nameHash_2, name: name_20, bitmask: bitmask, recordOffset: recordOffset, shift: shift, type: type });
+            var name_23 = findNameFromHash(nameHash_2);
+            fields.push({ nameHash: nameHash_2, name: name_23, bitmask: bitmask, recordOffset: recordOffset, shift: shift, type: type });
             fieldTableIdx += 0x0C;
         }
         var recordTableIdx = recordOffs;
@@ -19119,20 +19520,20 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_81, context_81
                     record[field.name] = value;
                 }
             }
-            catch (e_70_1) { e_70 = { error: e_70_1 }; }
+            catch (e_71_1) { e_71 = { error: e_71_1 }; }
             finally {
                 try {
                     if (fields_1_1 && !fields_1_1.done && (_a = fields_1.return)) _a.call(fields_1);
                 }
-                finally { if (e_70) throw e_70.error; }
+                finally { if (e_71) throw e_71.error; }
             }
             records.push(record);
             recordTableIdx += recordSize;
         }
         return records;
-        var e_70, _a;
+        var e_71, _a;
     }
-    exports_81("parse", parse);
+    exports_82("parse", parse);
     var util_53, nameTable, hashLookup;
     return {
         setters: [
