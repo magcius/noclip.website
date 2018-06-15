@@ -114,7 +114,7 @@ export interface VertexArray {
     vtxAttrib: GX.VertexAttribute;
     compType: GX.CompType;
     compCnt: GX.CompCnt;
-    scale: number;
+    compShift: number;
     buffer: ArrayBufferSlice;
     dataOffs: number;
     dataSize: number;
@@ -156,8 +156,7 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
 
         const compCnt: GX.CompCnt = view.getUint32(offs + 0x04);
         const compType: GX.CompType = view.getUint32(offs + 0x08);
-        const decimalPoint: number = view.getUint8(offs + 0x0C);
-        const scale = Math.pow(0.5, decimalPoint);
+        const compShift: number = view.getUint8(offs + 0x0C);
         offs += 0x10;
 
         const formatIdx = dataTables.indexOf(vtxAttrib);
@@ -177,7 +176,7 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
         const dataOffs: number = dataStart;
         const dataSize: number = dataEnd - dataStart;
         const vtxDataBuffer = buffer.subarray(dataOffs, dataSize);
-        const vertexArray: VertexArray = { vtxAttrib, compType, compCnt, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
+        const vertexArray: VertexArray = { vtxAttrib, compType, compCnt, compShift, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }
 
@@ -441,8 +440,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 
     // J3D only uses VTXFMT0.
     for (const [attr, vertexArray] of bmd.vtx1.vertexArrays.entries()) {
-        // TODO(jstpierre): Support compShift natively.
-        vat[attr] = { compCnt: vertexArray.compCnt, compType: vertexArray.compType, compShift: 0 };
+        vat[attr] = { compCnt: vertexArray.compCnt, compType: vertexArray.compType, compShift: vertexArray.compShift };
         vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0 };
     }
 

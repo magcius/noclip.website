@@ -683,7 +683,7 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
         TEX6       = 1 << 19,
         TEX7       = 1 << 20,
     }
-    const vcd: VcdFlags = view.getUint32(0x30);
+    const vcdFlags: VcdFlags = view.getUint32(0x30);
     const flags = view.getUint32(0x34);
     const nameOffs = view.getUint32(0x38);
     const name = readString(buffer, nameOffs);
@@ -716,34 +716,35 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     // VCD. Describes primitive data.
     const vcdL = r.cp[GX.CPRegister.VCD_LO_ID];
     const vcdH = r.cp[GX.CPRegister.VCD_HI_ID];
-    const vtxDescs: GX_VtxDesc[] = [];
+    const vcd: GX_VtxDesc[] = [];
 
-    vtxDescs[GX.VertexAttribute.PNMTXIDX] =   { type: (vcdL >>>  0) & 0x01 };
-    vtxDescs[GX.VertexAttribute.TEX0MTXIDX] = { type: (vcdL >>>  1) & 0x01 };
-    vtxDescs[GX.VertexAttribute.TEX1MTXIDX] = { type: (vcdL >>>  2) & 0x01 };
-    vtxDescs[GX.VertexAttribute.TEX2MTXIDX] = { type: (vcdL >>>  3) & 0x01 };
-    vtxDescs[GX.VertexAttribute.TEX3MTXIDX] = { type: (vcdL >>>  4) & 0x01 };
-    vtxDescs[GX.VertexAttribute.TEX4MTXIDX] = { type: (vcdL >>>  5) & 0x01 };
-    vtxDescs[GX.VertexAttribute.TEX5MTXIDX] = { type: (vcdL >>>  6) & 0x01 };
-    vtxDescs[GX.VertexAttribute.TEX6MTXIDX] = { type: (vcdL >>>  7) & 0x01 };
-    vtxDescs[GX.VertexAttribute.TEX7MTXIDX] = { type: (vcdL >>>  8) & 0x01 };
-    vtxDescs[GX.VertexAttribute.POS] =        { type: (vcdL >>>  9) & 0x03 };
-    vtxDescs[GX.VertexAttribute.NRM] =        { type: (vcdL >>> 11) & 0x03 };
-    vtxDescs[GX.VertexAttribute.CLR0] =       { type: (vcdL >>> 13) & 0x03 };
-    vtxDescs[GX.VertexAttribute.CLR1] =       { type: (vcdL >>> 15) & 0x03 };
-    vtxDescs[GX.VertexAttribute.TEX0] =       { type: (vcdH >>>  0) & 0x03 };
-    vtxDescs[GX.VertexAttribute.TEX1] =       { type: (vcdH >>>  2) & 0x03 };
-    vtxDescs[GX.VertexAttribute.TEX2] =       { type: (vcdH >>>  4) & 0x03 };
-    vtxDescs[GX.VertexAttribute.TEX3] =       { type: (vcdH >>>  6) & 0x03 };
-    vtxDescs[GX.VertexAttribute.TEX4] =       { type: (vcdH >>>  8) & 0x03 };
-    vtxDescs[GX.VertexAttribute.TEX5] =       { type: (vcdH >>> 10) & 0x03 };
-    vtxDescs[GX.VertexAttribute.TEX6] =       { type: (vcdH >>> 12) & 0x03 };
-    vtxDescs[GX.VertexAttribute.TEX7] =       { type: (vcdH >>> 14) & 0x03 };
+    vcd[GX.VertexAttribute.PNMTXIDX] =   { type: (vcdL >>>  0) & 0x01 };
+    vcd[GX.VertexAttribute.TEX0MTXIDX] = { type: (vcdL >>>  1) & 0x01 };
+    vcd[GX.VertexAttribute.TEX1MTXIDX] = { type: (vcdL >>>  2) & 0x01 };
+    vcd[GX.VertexAttribute.TEX2MTXIDX] = { type: (vcdL >>>  3) & 0x01 };
+    vcd[GX.VertexAttribute.TEX3MTXIDX] = { type: (vcdL >>>  4) & 0x01 };
+    vcd[GX.VertexAttribute.TEX4MTXIDX] = { type: (vcdL >>>  5) & 0x01 };
+    vcd[GX.VertexAttribute.TEX5MTXIDX] = { type: (vcdL >>>  6) & 0x01 };
+    vcd[GX.VertexAttribute.TEX6MTXIDX] = { type: (vcdL >>>  7) & 0x01 };
+    vcd[GX.VertexAttribute.TEX7MTXIDX] = { type: (vcdL >>>  8) & 0x01 };
+    vcd[GX.VertexAttribute.POS] =        { type: (vcdL >>>  9) & 0x03 };
+    vcd[GX.VertexAttribute.NRM] =        { type: (vcdL >>> 11) & 0x03 };
+    vcd[GX.VertexAttribute.CLR0] =       { type: (vcdL >>> 13) & 0x03 };
+    vcd[GX.VertexAttribute.CLR1] =       { type: (vcdL >>> 15) & 0x03 };
+    vcd[GX.VertexAttribute.TEX0] =       { type: (vcdH >>>  0) & 0x03 };
+    vcd[GX.VertexAttribute.TEX1] =       { type: (vcdH >>>  2) & 0x03 };
+    vcd[GX.VertexAttribute.TEX2] =       { type: (vcdH >>>  4) & 0x03 };
+    vcd[GX.VertexAttribute.TEX3] =       { type: (vcdH >>>  6) & 0x03 };
+    vcd[GX.VertexAttribute.TEX4] =       { type: (vcdH >>>  8) & 0x03 };
+    vcd[GX.VertexAttribute.TEX5] =       { type: (vcdH >>> 10) & 0x03 };
+    vcd[GX.VertexAttribute.TEX6] =       { type: (vcdH >>> 12) & 0x03 };
+    vcd[GX.VertexAttribute.TEX7] =       { type: (vcdH >>> 14) & 0x03 };
 
     // Validate against our VCD flags.
     for (let attr: GX.VertexAttribute = 0; attr <= GX.VertexAttribute.TEX7; attr++) {
-        const enabled = !!(vcd & (1 << attr));
-        assert(enabled === (vtxDescs[attr].type !== GX.AttrType.NONE));
+        const vcdFlagsEnabled = !!(vcdFlags & (1 << attr));
+        const vcdEnabled = !!(vcd[attr].type !== GX.AttrType.NONE);
+        assert(vcdFlagsEnabled === vcdEnabled);
     }
 
     // VAT. Describes attribute formats.
@@ -793,7 +794,7 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     if (idVtxTxc7 >= 0)
         vtxArrays[GX.VertexAttribute.TEX7] = { buffer: inputBuffers.txc[idVtxTxc7].data, offs: 0 };
 
-    const vtxLoader = compileVtxLoader(vat, vtxDescs);
+    const vtxLoader = compileVtxLoader(vat, vcd);
     const loadedVertexLayout = vtxLoader.loadedVertexLayout;
     const loadedVertexData = vtxLoader.runVertices(vtxArrays, buffer.subarray(primDLOffs, primDLSize));
     assert(loadedVertexData.totalVertexCount === numVertices);

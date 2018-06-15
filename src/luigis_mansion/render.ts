@@ -23,7 +23,6 @@ function translateAttribType(gl: WebGL2RenderingContext, attribFormat: Attribute
 
 const materialParamsData = new Float32Array(4*2 + 4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8);
 class Command_Material {
-    static attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
     static matrixScratch = mat3.create();
     static colorScratch = new Float32Array(4 * 8);
 
@@ -191,8 +190,7 @@ class Command_Batch {
 
 type RenderCommand = Command_Batch | Command_Material;
 
-const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
-const attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
+const sceneParamsData = new Float32Array(4*4 + 4);
 
 export class BinScene implements Viewer.MainScene {
     public name: string;
@@ -227,8 +225,6 @@ export class BinScene implements Viewer.MainScene {
         let offs = 0;
         sceneParamsData.set(renderState.projection, offs);
         offs += 4*4;
-        sceneParamsData.set(attrScaleData, offs);
-        offs += GX_Material.scaledVtxAttributes.length;
         sceneParamsData[offs++] = GX_Material.getTextureLODBias(renderState);
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
