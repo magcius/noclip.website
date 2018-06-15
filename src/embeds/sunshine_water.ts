@@ -25,7 +25,7 @@ for (let i = 0; i < 11; i++) {
     packetParamsData.set(posMtx, i * 16);
 }
 
-const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
+const sceneParamsData = new Float32Array(4*4 + 4);
 class SeaPlaneScene implements Scene {
     public textures: Texture[];
 
@@ -49,15 +49,12 @@ class SeaPlaneScene implements Scene {
     private glTextures: WebGLTexture[];
 
     public fps: number = 30;
-    public attrScaleData: Float32Array;
 
     private seaCmd: Command_Material;
     private plane: PlaneShape;
 
     constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, configName: string) {
         this.btk = btk;
-
-        this.attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
 
         const sceneLoader: SceneLoader = new SceneLoader(bmd, null);
         J3DScene.prototype.translateTextures.call(this, gl, sceneLoader);
@@ -126,8 +123,6 @@ class SeaPlaneScene implements Scene {
         let offs = 0;
         sceneParamsData.set(state.projection, offs);
         offs += 4*4;
-        sceneParamsData.set(this.attrScaleData, offs);
-        offs += GX_Material.scaledVtxAttributes.length;
         sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);

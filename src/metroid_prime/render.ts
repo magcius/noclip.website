@@ -15,11 +15,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { AttributeFormat } from '../gx/gx_displaylist';
 
-const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
-const attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
-// Cheap bad way to do a scale up.
-attrScaleData[0] = 10.0;
-
+const sceneParamsData = new Float32Array(4*4 + 4);
 const textureScratch = new Int32Array(8);
 
 export class Scene implements Viewer.MainScene {
@@ -165,8 +161,6 @@ export class Scene implements Viewer.MainScene {
         let offs = 0;
         sceneParamsData.set(state.projection, offs);
         offs += 4*4;
-        sceneParamsData.set(attrScaleData, offs);
-        offs += GX_Material.scaledVtxAttributes.length;
         sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
@@ -258,12 +252,16 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
     0, 0, 0, 1,
 );
 
+// Cheap way to scale up.
+const posScale = 1;
+const posMtx = mat4.create();
+mat4.multiplyScalar(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, posScale);
+
 const materialParamsSize = 4*2 + 4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8;
 const packetParamsOffs = align(materialParamsSize, 64);
 const packetParamsSize = 11*16;
 const paramsData = new Float32Array(packetParamsOffs + packetParamsSize);
 class Command_Material {
-    static attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
     static matrixScratch = mat3.create();
     static colorScratch = new Float32Array(4 * 8);
 
@@ -355,7 +353,7 @@ class Command_Material {
         offs += 4*4;
 
         // Position matrix.
-        paramsData.set(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, offs);
+        paramsData.set(posMtx, offs);
         offs += 4*4;
 
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);

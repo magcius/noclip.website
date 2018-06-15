@@ -199,6 +199,7 @@ function getAttrName(vtxAttrib: GX.VertexAttribute): string {
     }
 }
 
+// TODO(jstpierre): Make this a core utility?
 export const enum AttributeFormat {
     U16,
     F32,

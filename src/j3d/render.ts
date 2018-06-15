@@ -18,6 +18,8 @@ function translateAttribType(gl: WebGL2RenderingContext, attribFormat: Attribute
     switch (attribFormat) {
     case AttributeFormat.F32:
         return { type: gl.FLOAT, normalized: false };
+    case AttributeFormat.U16:
+        return { type: gl.UNSIGNED_SHORT, normalized: false };
     default:
         throw "whoops";
     }
@@ -417,7 +419,7 @@ interface HierarchyTraverseContext {
     parentJointMatrix: mat4;
 }
 
-const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
+const sceneParamsData = new Float32Array(4*4 + 4);
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
 
 // SceneLoaderToken is a private class that's passed to Scene.
@@ -458,8 +460,6 @@ export class Scene implements Viewer.Scene {
     public fps: number = 30;
 
     public modelMatrix: mat4;
-
-    public attrScaleData: Float32Array;
 
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: number[] = [];
@@ -603,8 +603,6 @@ export class Scene implements Viewer.Scene {
         let offs = 0;
         sceneParamsData.set(state.projection, offs);
         offs += 4*4;
-        sceneParamsData.set(this.attrScaleData, offs);
-        offs += GX_Material.scaledVtxAttributes.length;
         sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
 
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
@@ -761,16 +759,6 @@ export class Scene implements Viewer.Scene {
         const bmd = sceneLoader.bmd;
         const bmt = sceneLoader.bmt;
         const mat3 = (bmt !== null && bmt.mat3 !== null) ? bmt.mat3 : bmd.mat3;
-
-        const attrScaleCount = GX_Material.scaledVtxAttributes.length;
-        const attrScaleData = new Float32Array(attrScaleCount);
-        for (let i = 0; i < GX_Material.scaledVtxAttributes.length; i++) {
-            const attrib = GX_Material.scaledVtxAttributes[i];
-            const vtxArray = bmd.vtx1.vertexArrays.get(attrib);
-            const scale = vtxArray !== undefined ? vtxArray.scale : 1;
-            attrScaleData[i] = scale;
-        }
-        this.attrScaleData = attrScaleData;
 
         this.opaqueCommands = [];
         this.transparentCommands = [];

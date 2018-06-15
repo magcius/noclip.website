@@ -142,29 +142,23 @@ interface VertexAttributeGenDef {
     attrib: GX.VertexAttribute;
     storage: string;
     name: string;
-    scale: boolean;
 }
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  storage: "float", scale: false },
-    { attrib: GX.VertexAttribute.POS,        name: "Position",   storage: "vec3",  scale: true },
-    { attrib: GX.VertexAttribute.NRM,        name: "Normal",     storage: "vec3",  scale: true },
-    { attrib: GX.VertexAttribute.CLR0,       name: "Color0",     storage: "vec4",  scale: false },
-    { attrib: GX.VertexAttribute.CLR1,       name: "Color1",     storage: "vec4",  scale: false },
-    { attrib: GX.VertexAttribute.TEX0,       name: "Tex0",       storage: "vec2",  scale: true },
-    { attrib: GX.VertexAttribute.TEX1,       name: "Tex1",       storage: "vec2",  scale: true },
-    { attrib: GX.VertexAttribute.TEX2,       name: "Tex2",       storage: "vec2",  scale: true },
-    { attrib: GX.VertexAttribute.TEX3,       name: "Tex3",       storage: "vec2",  scale: true },
-    { attrib: GX.VertexAttribute.TEX4,       name: "Tex4",       storage: "vec2",  scale: true },
-    { attrib: GX.VertexAttribute.TEX5,       name: "Tex5",       storage: "vec2",  scale: true },
-    { attrib: GX.VertexAttribute.TEX6,       name: "Tex6",       storage: "vec2",  scale: true },
-    { attrib: GX.VertexAttribute.TEX7,       name: "Tex7",       storage: "vec2",  scale: true },
+    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  storage: "float" },
+    { attrib: GX.VertexAttribute.POS,        name: "Position",   storage: "vec3" },
+    { attrib: GX.VertexAttribute.NRM,        name: "Normal",     storage: "vec3" },
+    { attrib: GX.VertexAttribute.CLR0,       name: "Color0",     storage: "vec4" },
+    { attrib: GX.VertexAttribute.CLR1,       name: "Color1",     storage: "vec4" },
+    { attrib: GX.VertexAttribute.TEX0,       name: "Tex0",       storage: "vec2" },
+    { attrib: GX.VertexAttribute.TEX1,       name: "Tex1",       storage: "vec2" },
+    { attrib: GX.VertexAttribute.TEX2,       name: "Tex2",       storage: "vec2" },
+    { attrib: GX.VertexAttribute.TEX3,       name: "Tex3",       storage: "vec2" },
+    { attrib: GX.VertexAttribute.TEX4,       name: "Tex4",       storage: "vec2" },
+    { attrib: GX.VertexAttribute.TEX5,       name: "Tex5",       storage: "vec2" },
+    { attrib: GX.VertexAttribute.TEX6,       name: "Tex6",       storage: "vec2" },
+    { attrib: GX.VertexAttribute.TEX7,       name: "Tex7",       storage: "vec2" },
 ];
-
-export const scaledVtxAttributes: GX.VertexAttribute[] = vtxAttributeGenDefs.filter((a) => a.scale).map((a) => a.attrib);
-
-while (scaledVtxAttributes.length < align(scaledVtxAttributes.length, 4))
-    scaledVtxAttributes.push(-1);
 
 export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
     return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrib === vtxAttrib);
@@ -692,27 +686,20 @@ export class GX_Program extends BaseProgram {
 
     private generateVertAttributeDefs() {
         return vtxAttributeGenDefs.map((a, i) => {
-            const scaleIdx = scaledVtxAttributes.indexOf(a.attrib);
-            const scaleVecIdx = scaleIdx >> 2;
-            const scaleScalarIdx = scaleIdx & 3;
-
             return `
 layout(location = ${i}) in ${a.storage} a_${a.name};
 ${a.storage} ReadAttrib_${a.name}() {
-    return a_${a.name}${a.scale ? ` * u_AttrScale[${scaleVecIdx}][${scaleScalarIdx}]` : ``};
+    return a_${a.name};
 }
 `;
         }).join('');
     }
 
     private generateUBO() {
-        const scaledVecCount = scaledVtxAttributes.length >> 2;
-
         return `
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
     mat4 u_Projection;
-    vec4 u_AttrScale[${scaledVecCount}];
     vec4 u_Misc0;
 };
 

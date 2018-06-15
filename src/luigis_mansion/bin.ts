@@ -121,16 +121,16 @@ export function parse(buffer: ArrayBufferSlice): BIN {
         vat[GX.VertexAttribute.NRM] = { compCnt: nbt3 ? GX.CompCnt.NRM_NBT3 : GX.CompCnt.NRM_NBT, compType: GX.CompType.F32, compShift: 0 };
 
         // Set up our input vertex description.
-        const vtxDescs: GX_VtxDesc[] = [];
+        const vcd: GX_VtxDesc[] = [];
         for (let i = 0; i < GX.VertexAttribute.MAX; i++) {
             if ((attributes & (1 << i)) !== 0) {
                 // Only care about TEX0 and POS for now...
                 const enableOutput = (i === GX.VertexAttribute.POS || i === GX.VertexAttribute.TEX0);
-                vtxDescs[i] = { type: GX.AttrType.INDEX16, enableOutput };
+                vcd[i] = { type: GX.AttrType.INDEX16, enableOutput };
             }
         }
 
-        const vtxLoader = compileVtxLoader(vat, vtxDescs);
+        const vtxLoader = compileVtxLoader(vat, vcd);
         const loadedVertexLayout = vtxLoader.loadedVertexLayout;
         const displayListBuffer = buffer.subarray(displayListOffset, displayListSize);
 
