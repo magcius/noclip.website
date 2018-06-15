@@ -7,7 +7,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import { Endianness } from 'endian';
 import { assert, readString } from 'util';
 
-import { compileVtxLoader, getComponentSize, getNumComponents, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData } from 'gx/gx_displaylist';
+import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, VertexAttributeLayout } from 'gx/gx_displaylist';
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 
@@ -114,7 +114,6 @@ export interface VertexArray {
     vtxAttrib: GX.VertexAttribute;
     compType: GX.CompType;
     compCnt: GX.CompCnt;
-    compCount: number;
     scale: number;
     buffer: ArrayBufferSlice;
     dataOffs: number;
@@ -177,10 +176,8 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
         const dataEnd: number = getDataEnd(dataOffsLookupTableEntry, dataOffsLookupTableEnd);
         const dataOffs: number = dataStart;
         const dataSize: number = dataEnd - dataStart;
-        const compSize = getComponentSize(compType);
-        const compCount = getNumComponents(vtxAttrib, compCnt);
         const vtxDataBuffer = buffer.subarray(dataOffs, dataSize);
-        const vertexArray: VertexArray = { vtxAttrib, compType, compCount, compCnt, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
+        const vertexArray: VertexArray = { vtxAttrib, compType, compCnt, scale, dataOffs, dataSize, buffer: vtxDataBuffer };
         vertexArrays.set(vtxAttrib, vertexArray);
     }
 
@@ -375,13 +372,6 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
 //#endregion
 
 //#region SHP1
-// Describes an individual vertex attribute in the packed data.
-export interface PackedVertexAttribute {
-    vtxAttrib: GX.VertexAttribute;
-    indexDataType: GX.AttrType;
-    offset: number;
-}
-
 // A packet is a series of draw calls that use the same matrix table.
 interface Packet {
     weightedJointTable: Uint16Array;
@@ -403,12 +393,12 @@ export interface Shape {
     packedData: ArrayBufferSlice;
     // The size of an individual vertex.
     packedVertexSize: number;
-    packedVertexAttributes: PackedVertexAttribute[];
+    packedVertexAttributes: VertexAttributeLayout[];
     packets: Packet[];
 }
 
 export interface SHP1 {
-    vattrs: GX_VtxAttrFmt[];
+    vat: GX_VtxAttrFmt[];
     shapes: Shape[];
 }
 
@@ -446,16 +436,13 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
     // JIT. We construct buffers for each of the components that are shape-specific.
 
     // Build vattrs for VTX1.
-    const vattrs: GX_VtxAttrFmt[] = [];
+    const vat: GX_VtxAttrFmt[] = [];
     const vtxArrays: GX_Array[] = [];
 
-    // Hardcoded by the J3D engine.
-    for (let i = GX.VertexAttribute.PNMTXIDX; i < GX.VertexAttribute.TEX7MTXIDX; i++) {
-        vattrs[i] = { compCnt: 1, compType: GX.CompType.U8 };
-    }
-
+    // J3D only uses VTXFMT0.
     for (const [attr, vertexArray] of bmd.vtx1.vertexArrays.entries()) {
-        vattrs[attr] = { compCnt: vertexArray.compCnt, compType: vertexArray.compType };
+        // TODO(jstpierre): Support compShift natively.
+        vat[attr] = { compCnt: vertexArray.compCnt, compType: vertexArray.compType, compShift: 0 };
         vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0 };
     }
 
@@ -469,7 +456,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const firstMatrix = view.getUint16(shapeIdx + 0x06);
         const firstPacket = view.getUint16(shapeIdx + 0x08);
 
-        const vtxDescs: GX_VtxDesc[] = [];
+        const vcd: GX_VtxDesc[] = [];
 
         let attribIdx = attribTableOffs + attribOffs;
         while (true) {
@@ -477,21 +464,14 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             if (vtxAttrib === GX.VertexAttribute.NULL)
                 break;
             const indexDataType: GX.AttrType = view.getUint32(attribIdx + 0x04);
-            vtxDescs[vtxAttrib] = { type: indexDataType };
+            vcd[vtxAttrib] = { type: indexDataType };
             attribIdx += 0x08;
         }
 
-        const vtxLoader = compileVtxLoader(vattrs, vtxDescs);
+        const vtxLoader = compileVtxLoader(vat, vcd);
 
-        const packedVertexAttributes: PackedVertexAttribute[] = [];
-        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vtxLoader.vattrLayout.dstAttrOffsets.length; vtxAttrib++) {
-            if (!vtxDescs[vtxAttrib])
-                continue;
-            const indexDataType = vtxDescs[vtxAttrib].type;
-            const offset = vtxLoader.vattrLayout.dstAttrOffsets[vtxAttrib];
-            packedVertexAttributes.push({ vtxAttrib, indexDataType, offset });
-        }
-        const packedVertexSize = vtxLoader.vattrLayout.dstVertexSize;
+        const packedVertexAttributes = vtxLoader.loadedVertexLayout.dstVertexAttributeLayouts;
+        const packedVertexSize = vtxLoader.loadedVertexLayout.dstVertexSize;
 
         // Now parse out the packets.
         let packetIdx = packetTableOffs + (firstPacket * 0x08);
@@ -529,8 +509,8 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         // Coalesce shape data.
         // TODO(jstpierre): coalesceLoadedData is basically completely busted.
         assert(loadedDatas.length === 1);
-        const indexData = new ArrayBufferSlice(loadedDatas[0].indexData.buffer);
-        const packedData = new ArrayBufferSlice(loadedDatas[0].packedVertexData.buffer);
+        const indexData = new ArrayBufferSlice(loadedDatas[0].indexData);
+        const packedData = new ArrayBufferSlice(loadedDatas[0].packedVertexData);
 
         // Now we should have a complete shape. Onto the next!
         shapes.push({ displayFlags, indexData, packedData, packedVertexSize, packedVertexAttributes, packets });
@@ -538,7 +518,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         shapeIdx += 0x28;
     }
 
-    return { vattrs, shapes };
+    return { vat, shapes };
 }
 //#endregion
 

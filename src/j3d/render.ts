@@ -10,26 +10,16 @@ import * as Viewer from 'viewer';
 
 import { CompareMode, RenderFlags, RenderState } from '../render';
 import { align, assert } from '../util';
-import { getNumComponents } from '../gx/gx_displaylist';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
+import { AttributeFormat } from '../gx/gx_displaylist';
 
-function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
-    switch (compType) {
-    case GX.CompType.F32:
+function translateAttribType(gl: WebGL2RenderingContext, attribFormat: AttributeFormat): { type: GLenum, normalized: boolean } {
+    switch (attribFormat) {
+    case AttributeFormat.F32:
         return { type: gl.FLOAT, normalized: false };
-    case GX.CompType.S8:
-        return { type: gl.BYTE, normalized: false };
-    case GX.CompType.S16:
-        return { type: gl.SHORT, normalized: false };
-    case GX.CompType.U16:
-        return { type: gl.UNSIGNED_SHORT, normalized: false };
-    case GX.CompType.U8:
-        return { type: gl.UNSIGNED_BYTE, normalized: false };
-    case GX.CompType.RGBA8: // XXX: Is this right?
-        return { type: gl.UNSIGNED_BYTE, normalized: true };
     default:
-        throw new Error(`Unknown CompType ${compType}`);
+        throw "whoops";
     }
 }
 
@@ -61,16 +51,14 @@ class Command_Shape {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, coalescedBuffers.indexBuffer.buffer);
 
         for (const attrib of this.shape.packedVertexAttributes) {
-            const vattr = this.bmd.shp1.vattrs[attrib.vtxAttrib];
-
             const attribLocation = GX_Material.getVertexAttribLocation(attrib.vtxAttrib);
             gl.enableVertexAttribArray(attribLocation);
 
-            const { type, normalized } = translateCompType(gl, vattr.compType);
+            const { type, normalized } = translateAttribType(gl, attrib.format);
 
             gl.vertexAttribPointer(
                 attribLocation,
-                getNumComponents(attrib.vtxAttrib, vattr.compCnt),
+                attrib.componentCount,
                 type, normalized,
                 this.shape.packedVertexSize,
                 coalescedBuffers.vertexBuffer.offset + attrib.offset,
