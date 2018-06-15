@@ -10,9 +10,10 @@ import * as GX_Material from 'gx/gx_material';
 
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
-import { align } from '../util';
+import { align, assert } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
+import { AttributeFormat } from '../gx/gx_displaylist';
 
 const sceneParamsData = new Float32Array(4*4 + GX_Material.scaledVtxAttributes.length + 4);
 const attrScaleData = new Float32Array(GX_Material.scaledVtxAttributes.map(() => 1));
@@ -98,8 +99,8 @@ export class Scene implements Viewer.MainScene {
         const surfaces = this.coalesceSurfaces();
 
         surfaces.forEach((surface) => {
-            vertexDatas.push(new ArrayBufferSlice(surface.packedData.buffer));
-            indexDatas.push(new ArrayBufferSlice(surface.indexData.buffer));
+            vertexDatas.push(new ArrayBufferSlice(surface.loadedVertexData.packedVertexData));
+            indexDatas.push(new ArrayBufferSlice(surface.loadedVertexData.indexData));
         });
 
         this.bufferCoalescer = new BufferCoalescer(gl, vertexDatas, indexDatas);
@@ -219,23 +220,18 @@ class Command_Surface {
         gl.bindBuffer(gl.ARRAY_BUFFER, coalescedBuffers.vertexBuffer.buffer);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, coalescedBuffers.indexBuffer.buffer);
 
-        let offset = 0;
-        for (const attrib of vtxAttrFormats) {
-            if (!(this.surface.vtxAttrFormat & attrib.mask))
-                continue;
-
+        for (const attrib of this.surface.loadedVertexLayout.dstVertexAttributeLayouts) {
             const attribLocation = GX_Material.getVertexAttribLocation(attrib.vtxAttrib);
             gl.enableVertexAttribArray(attribLocation);
 
+            assert(attrib.format === AttributeFormat.F32);
             gl.vertexAttribPointer(
                 attribLocation,
-                attrib.compCount,
+                attrib.componentCount,
                 gl.FLOAT, false,
-                4 * this.surface.packedVertexSize,
-                coalescedBuffers.vertexBuffer.offset + offset,
+                this.surface.loadedVertexLayout.dstVertexSize,
+                coalescedBuffers.vertexBuffer.offset + attrib.offset,
             );
-
-            offset += 4 * attrib.compCount;
         }
         gl.bindVertexArray(null);
     }
@@ -244,7 +240,7 @@ class Command_Surface {
         const gl = state.gl;
 
         gl.bindVertexArray(this.vao);
-        gl.drawElements(gl.TRIANGLES, this.surface.numTriangles * 3, gl.UNSIGNED_SHORT, this.coalescedBuffers.indexBuffer.offset);
+        gl.drawElements(gl.TRIANGLES, this.surface.loadedVertexData.totalTriangleCount * 3, gl.UNSIGNED_SHORT, this.coalescedBuffers.indexBuffer.offset);
         gl.bindVertexArray(null);
 
         state.drawCallCount++;

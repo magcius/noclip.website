@@ -399,9 +399,18 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
             srcAttrByteSize = srcAttrCompSize * srcAttrCompCount;
         }
 
-        function compileReadOneComponentF32(viewName: string, attrOffset: string): string {
+        function compileShift(n: string): string {
+            // Instead of just doing `${n} >> srcAttrCompShift`, we use division
+            // to get us the fractional components...
             const srcAttrCompShift = getComponentShift(vtxAttrib, vtxAttrFmt);
+            const divisor = 1 << srcAttrCompShift;
+            if (divisor === 1)
+                return n;
+            else
+                return `(${n} / ${divisor})`;
+        }
 
+        function compileReadOneComponentF32(viewName: string, attrOffset: string): string {
             switch (vtxAttrFmt.compType) {
             case GX.CompType.F32:
                 return `${viewName}.getFloat32(${attrOffset})`;
@@ -409,13 +418,13 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
                 // This gets four components.
                 return `(${viewName}.getUint8(${attrOffset}) / 0xFF)`;
             case GX.CompType.U8:
-                return `(${viewName}.getUint8(${attrOffset}) << ${srcAttrCompShift})`;
+                return compileShift(`${viewName}.getUint8(${attrOffset})`);
             case GX.CompType.U16:
-                return `(${viewName}.getUint16(${attrOffset}) << ${srcAttrCompShift})`;
+                return compileShift(`${viewName}.getUint16(${attrOffset})`);
             case GX.CompType.S8:
-                return `(${viewName}.getInt8(${attrOffset}) << ${srcAttrCompShift})`;
+                return compileShift(`${viewName}.getInt8(${attrOffset})`);
             case GX.CompType.S16:
-                return `(${viewName}.getInt16(${attrOffset}) << ${srcAttrCompShift})`;
+                return compileShift(`${viewName}.getInt16(${attrOffset})`);
             default:
                 throw "whoops";
             }
@@ -531,7 +540,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
         `;
 
         for (const [vtxFmt, vatLayoutSource] of vatLayoutSources.entries()) {
-            S += `if (vertexFormat === ${vtxFmt}) {
+            S += `if (drawCall.vertexFormat === ${vtxFmt}) {
 
             ${vatLayoutSource}
 
@@ -685,27 +694,28 @@ return { indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalV
 
 interface VtxLoaderDesc {
     vat: GX_VtxAttrFmt[][];
-    vtxDescs: GX_VtxDesc[];
+    vcd: GX_VtxDesc[];
 }
 
 class VtxLoaderCache extends MemoizeCache<VtxLoaderDesc, VtxLoader> {
     protected make(key: VtxLoaderDesc): VtxLoader {
-        return _compileVtxLoader(key.vat, key.vtxDescs);
+        return _compileVtxLoader(key.vat, key.vcd);
     }
 
     protected makeKey(key: VtxLoaderDesc): string {
         return JSON.stringify(key);
     }
 
-    public compileVtxLoader = (vatFormat: GX_VtxAttrFmt[], vtxDescs: GX_VtxDesc[]): VtxLoader => {
+    public compileVtxLoader = (vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VtxLoader => {
         const vat = [vatFormat];
-        return this.get({ vat, vtxDescs });
+        return this.get({ vat, vcd });
     }
 
-    public compileVtxLoaderFormats = (vat: GX_VtxAttrFmt[][], vtxDescs: GX_VtxDesc[]): VtxLoader => {
-        return this.get({ vat, vtxDescs });
+    public compileVtxLoaderMultiVat = (vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader => {
+        return this.get({ vat, vcd });
     }
 }
 
 const cache = new VtxLoaderCache();
 export const compileVtxLoader = cache.compileVtxLoader;
+export const compileVtxLoaderMultiVat = cache.compileVtxLoaderMultiVat;
