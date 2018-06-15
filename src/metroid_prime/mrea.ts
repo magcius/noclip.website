@@ -9,6 +9,7 @@ import { TXTR } from './txtr';
 import { ResourceSystem } from "./resource";
 import { assert, readString, align } from "../util";
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import { compileVtxLoader, compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 
 export interface MREA {
     materialSet: MaterialSet;
@@ -400,28 +401,12 @@ export const vtxAttrFormats = [
 
 export interface Surface {
     materialIndex: number;
-    vtxAttrFormat: number;
-    packedVertexSize: number;
-    packedData: Float32Array;
-    indexData: Uint16Array;
-    numTriangles: number;
+    loadedVertexData: LoadedVertexData;
+    loadedVertexLayout: LoadedVertexLayout;
 }
 
 export interface Geometry {
     surfaces: Surface[];
-}
-
-function readIndex(view: DataView, offs: number, type: GX.CompType) {
-    switch (type) {
-    case GX.CompType.U8:
-    case GX.CompType.S8:
-        return view.getUint8(offs);
-    case GX.CompType.U16:
-    case GX.CompType.S16:
-        return view.getUint16(offs);
-    default:
-        throw new Error(`Unknown index data type ${type}!`);
-    }
 }
 
 interface SectionTables {
@@ -437,7 +422,7 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice,
 
     const posSectionOffs = sectionOffsTable[sectionIndex++];
     const nrmSectionOffs = sectionOffsTable[sectionIndex++];
-    const colSectionOffs = sectionOffsTable[sectionIndex++];
+    const clrSectionOffs = sectionOffsTable[sectionIndex++];
     const uvfSectionOffs = sectionOffsTable[sectionIndex++];
     const uvsSectionOffs = sectionOffsTable[sectionIndex++];
 
@@ -446,6 +431,24 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice,
 
     const surfaceCount = view.getUint32(surfaceTableOffs + 0x00);
     const surfaces: Surface[] = [];
+
+    function fillVatFormat(nrmType: GX.CompType, tex0Type: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
+        const vatFormat: GX_VtxAttrFmt[] = [];
+        vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.VertexAttribute.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: nrmType, compShift };
+        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
+        vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
+        vatFormat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: tex0Type, compShift };
+        vatFormat[GX.VertexAttribute.TEX1] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.VertexAttribute.TEX2] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.VertexAttribute.TEX3] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.VertexAttribute.TEX4] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.VertexAttribute.TEX5] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.VertexAttribute.TEX6] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.VertexAttribute.TEX7] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        return vatFormat;
+    }
+
     for (let i = 0; i < surfaceCount; i++) {
         const surfaceOffs = sectionOffsTable[sectionIndex];
         const surfaceEnd = firstSurfaceOffs + view.getUint32(surfaceTableOffs + 0x04 + i * 0x04);
@@ -469,195 +472,51 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice,
         const material = materialSet.materials[materialIndex];
         const vtxAttrFormat = material.vtxAttrFormat;
 
-        let packedVertexSize = 0;
-        let vertexIndexSize = 0;
+        const vat: GX_VtxAttrFmt[][] = [];
+
+        const useUvsArray = (material.flags & MaterialFlags.UV_SHORT);
+
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.VertexAttribute.POS]  = { buffer, offs: posSectionOffs };
+        vtxArrays[GX.VertexAttribute.NRM]  = { buffer, offs: nrmSectionOffs };
+        vtxArrays[GX.VertexAttribute.CLR0] = { buffer, offs: clrSectionOffs };
+        vtxArrays[GX.VertexAttribute.CLR1] = { buffer, offs: clrSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: useUvsArray ? uvsSectionOffs : uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX1] = { buffer, offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX2] = { buffer, offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX3] = { buffer, offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX4] = { buffer, offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX5] = { buffer, offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX6] = { buffer, offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX7] = { buffer, offs: uvfSectionOffs };
+    
+        const vcd: GX_VtxDesc[] = [];
         for (const format of vtxAttrFormats) {
             if (!(vtxAttrFormat & format.mask))
                 continue;
-
-            packedVertexSize += format.compCount;
-            vertexIndexSize += 0x02;
+            vcd[format.vtxAttrib] = { type: GX.AttrType.INDEX16 };
         }
 
-        // Go through the display list and pack things into our vertex buffer.
+        // GX_VTXFMT0 | GX_VA_NRM = GX_F32
+        // GX_VTXFMT1 | GX_VA_NRM = GX_S16
+        // GX_VTXFMT2 | GX_VA_NRM = GX_S16
+        // GX_VTXFMT0 | GX_VA_TEX0 = GX_F32
+        // GX_VTXFMT1 | GX_VA_TEX0 = GX_F32
+        // GX_VTXFMT2 | GX_VA_TEX0 = GX_S16
+        const compShift = Math.log2(mantissa);
+        vat[GX.VtxFmt.VTXFMT0] = fillVatFormat(GX.CompType.F32, GX.CompType.F32, compShift);
+        vat[GX.VtxFmt.VTXFMT1] = fillVatFormat(GX.CompType.S16, GX.CompType.F32, compShift);
+        vat[GX.VtxFmt.VTXFMT2] = fillVatFormat(GX.CompType.S16, GX.CompType.S16, compShift);
 
-        // XXX(jstpierre): This is mostly stolen from SHP1 parsing in j3d.ts. Perhaps
-        // we should have some shared code for GameCube vertex loading?
-
-        interface DrawCall {
-            primType: GX.Command;
-            vertexFormat: number;
-            srcOffs: number;
-            vertexCount: number;
-        }
-
-        let totalVertexCount = 0;
-        let totalTriangleCount = 0;
-        let drawCallIdx = primitiveDataOffs;
-        const drawCalls: DrawCall[] = [];
-        while (true) {
-            if (drawCallIdx >= surfaceEnd)
-                break;
-
-            const cmd = view.getUint8(drawCallIdx);
-            if (cmd === 0x00)
-                break;
-
-            const primType: GX.Command = cmd & 0xF8;
-            const vertexFormat: GX.VtxFmt = cmd & 0x07;
-
-            const vertexCount = view.getUint16(drawCallIdx + 0x01);
-            drawCallIdx += 0x03;
-            const srcOffs = drawCallIdx;
-            const first = totalVertexCount;
-            totalVertexCount += vertexCount;
-
-            switch (primType) {
-            case GX.Command.DRAW_TRIANGLES:
-                totalTriangleCount += vertexCount;
-                break;
-            case GX.Command.DRAW_TRIANGLE_FAN:
-            case GX.Command.DRAW_TRIANGLE_STRIP:
-                totalTriangleCount += (vertexCount - 2);
-                break;
-            default:
-                throw "whoops";
-            }
-
-            drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });
-
-            // Skip over the index data.
-            drawCallIdx += vertexIndexSize * vertexCount;
-        }
-
-        // Make sure the whole thing fits in 16 bits.
-        assert(totalVertexCount <= 0xFFFF);
-
-        // Now make the data.
-        let indexDataIdx = 0;
-        const indexData = new Uint16Array(totalTriangleCount * 3);
-        let vertexId = 0;
-
-        const packedDataSize = packedVertexSize * totalVertexCount;
-        const packedDataView = new Float32Array(packedDataSize);
-        let packedDataOffs = 0;
-        drawCalls.forEach((drawCall) => {
-            // Convert topology to triangles.
-            const firstVertex = vertexId;
-
-            // First triangle is the same for all topo.
-            for (let i = 0; i < 3; i++)
-                indexData[indexDataIdx++] = vertexId++;
-
-            switch (drawCall.primType) {
-            case GX.Command.DRAW_TRIANGLES:
-                for (let i = 3; i < drawCall.vertexCount; i++) {
-                    indexData[indexDataIdx++] = vertexId++;
-                }
-                break;
-            case GX.Command.DRAW_TRIANGLE_STRIP:
-                for (let i = 3; i < drawCall.vertexCount; i++) {
-                    indexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);
-                    indexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);
-                    indexData[indexDataIdx++] = vertexId++;
-                }
-                break;
-            case GX.Command.DRAW_TRIANGLE_FAN:
-                for (let i = 3; i < drawCall.vertexCount; i++) {
-                    indexData[indexDataIdx++] = firstVertex;
-                    indexData[indexDataIdx++] = vertexId - 1;
-                    indexData[indexDataIdx++] = vertexId++;
-                }
-                break;
-            }
-            assert((vertexId - firstVertex) === drawCall.vertexCount);
-
-            let drawCallIdx = drawCall.srcOffs;
-            for (let j = 0; j < drawCall.vertexCount; j++) {
-                // Copy attribute data.
-                const packedDataOffs_ = packedDataOffs;
-                for (let k = 0; k < vtxAttrFormats.length; k++) {
-                    const format = vtxAttrFormats[k];
-                    const packedDataOffs__ = packedDataOffs;
-                    if (!(vtxAttrFormat & format.mask))
-                        continue;
-
-                    const index = readIndex(view, drawCallIdx, GX.CompType.U16);
-                    const indexDataSize = 2;
-                    drawCallIdx += indexDataSize;
-
-                    const vertexFormat = drawCall.vertexFormat;
-
-                    switch (format.vtxAttrib) {
-                    case GX.VertexAttribute.POS:
-                        packedDataView[packedDataOffs++] = view.getFloat32(posSectionOffs + ((index * 3) + 0) * 0x04);
-                        packedDataView[packedDataOffs++] = view.getFloat32(posSectionOffs + ((index * 3) + 1) * 0x04);
-                        packedDataView[packedDataOffs++] = view.getFloat32(posSectionOffs + ((index * 3) + 2) * 0x04);
-                        break;
-                    case GX.VertexAttribute.NRM:
-                        // GX_VTXFMT0 | GX_VA_NRM = GX_F32
-                        // GX_VTXFMT1 | GX_VA_NRM = GX_S16
-                        // GX_VTXFMT2 | GX_VA_NRM = GX_S16
-                        switch (vertexFormat) {
-                        case GX.VtxFmt.VTXFMT0:
-                            packedDataView[packedDataOffs++] = view.getFloat32(nrmSectionOffs + ((index * 3) + 0) * 0x04);
-                            packedDataView[packedDataOffs++] = view.getFloat32(nrmSectionOffs + ((index * 3) + 1) * 0x04);
-                            packedDataView[packedDataOffs++] = view.getFloat32(nrmSectionOffs + ((index * 3) + 2) * 0x04);
-                            break;
-                        case GX.VtxFmt.VTXFMT1:
-                        case GX.VtxFmt.VTXFMT2:
-                            packedDataView[packedDataOffs++] = view.getUint16(nrmSectionOffs + ((index * 3) + 0) * 0x02) / mantissa;
-                            packedDataView[packedDataOffs++] = view.getUint16(nrmSectionOffs + ((index * 3) + 1) * 0x02) / mantissa;
-                            packedDataView[packedDataOffs++] = view.getUint16(nrmSectionOffs + ((index * 3) + 2) * 0x02) / mantissa;
-                            break;
-                        }
-                        break;
-                    case GX.VertexAttribute.CLR0:
-                    case GX.VertexAttribute.CLR1:
-                        packedDataView[packedDataOffs++] = view.getUint8(colSectionOffs + ((index * 4) + 0) * 0x04);
-                        packedDataView[packedDataOffs++] = view.getUint8(colSectionOffs + ((index * 4) + 1) * 0x04);
-                        packedDataView[packedDataOffs++] = view.getUint8(colSectionOffs + ((index * 4) + 2) * 0x04);
-                        packedDataView[packedDataOffs++] = view.getUint8(colSectionOffs + ((index * 4) + 3) * 0x04);
-                        break;
-                    case GX.VertexAttribute.TEX0:
-                        // GX_VTXFMT0 | GX_VA_TEX0 = GX_F32
-                        // GX_VTXFMT1 | GX_VA_TEX0 = GX_F32
-                        // GX_VTXFMT2 | GX_VA_TEX0 = GX_S16
-                        switch (vertexFormat) {
-                        case GX.VtxFmt.VTXFMT0:
-                        case GX.VtxFmt.VTXFMT1:
-                            packedDataView[packedDataOffs++] = view.getFloat32(uvfSectionOffs + ((index * 2) + 0) * 0x04);
-                            packedDataView[packedDataOffs++] = view.getFloat32(uvfSectionOffs + ((index * 2) + 1) * 0x04);
-                            break;
-                        case GX.VtxFmt.VTXFMT2:
-                            packedDataView[packedDataOffs++] = view.getUint16(uvsSectionOffs + ((index * 2) + 0) * 0x02) / mantissa;
-                            packedDataView[packedDataOffs++] = view.getUint16(uvsSectionOffs + ((index * 2) + 1) * 0x02) / mantissa;
-                            break;
-                        }
-                        break;
-                    case GX.VertexAttribute.TEX1:
-                    case GX.VertexAttribute.TEX2:
-                    case GX.VertexAttribute.TEX3:
-                    case GX.VertexAttribute.TEX4:
-                    case GX.VertexAttribute.TEX5:
-                    case GX.VertexAttribute.TEX6:
-                        packedDataView[packedDataOffs++] = view.getFloat32(uvfSectionOffs + ((index * 2) + 0) * 0x04);
-                        packedDataView[packedDataOffs++] = view.getFloat32(uvfSectionOffs + ((index * 2) + 1) * 0x04);
-                        break;
-                    }
-                    assert((packedDataOffs - packedDataOffs__) === format.compCount);
-                }
-                assert((packedDataOffs - packedDataOffs_) === packedVertexSize);
-            }
-        });
+        const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
+        const dlData = buffer.slice(primitiveDataOffs, surfaceEnd);
+        const loadedVertexLayout = vtxLoader.loadedVertexLayout;
+        const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
 
         const surface: Surface = {
             materialIndex,
-            vtxAttrFormat,
-            packedVertexSize,
-            packedData: packedDataView,
-            indexData,
-            numTriangles: totalTriangleCount,
+            loadedVertexData,
+            loadedVertexLayout,
         };
         surfaces.push(surface);
 
