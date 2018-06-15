@@ -401,6 +401,7 @@ export const enum ColorChannelId {
     COLOR_ZERO = 6,
     ALPHA_BUMP = 7,
     ALPHA_BUMP_N = 8,
+    COLOR_NULL = 0xFF,
 }
 
 export const enum RasColorChannelID {

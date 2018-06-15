@@ -961,6 +961,7 @@ export function getRasColorChannelID(v: GX.ColorChannelId): GX.RasColorChannelID
     case GX.ColorChannelId.ALPHA_BUMP_N:
         return GX.RasColorChannelID.ALPHA_BUMP_N;
     case GX.ColorChannelId.COLOR_ZERO:
+    case GX.ColorChannelId.COLOR_NULL:
         return GX.RasColorChannelID.COLOR_ZERO;
     default:
         throw "whoops";
