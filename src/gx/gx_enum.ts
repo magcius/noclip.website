@@ -70,8 +70,9 @@ export const enum VertexAttribute {
     TEX5 = 18,
     TEX6 = 19,
     TEX7 = 20,
+    MAX = TEX7,
+    // NBT is an "API convenience" and practically shouldn't exist...
     NBT = 25,
-    MAX = NBT,
     NULL = 0xFF,
 }
 

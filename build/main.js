@@ -3693,14 +3693,472 @@ System.register("gx/gx_enum", [], function (exports_20, context_20) {
         }
     };
 });
-// GX materials.
-System.register("gx/gx_material", ["render", "Program"], function (exports_21, context_21) {
+// GX Display List parsing.
+System.register("gx/gx_displaylist", ["MemoizeCache", "util", "endian"], function (exports_21, context_21) {
     "use strict";
     var __moduleName = context_21 && context_21.id;
+    function getComponentSizeRaw(compType) {
+        switch (compType) {
+            case 0 /* U8 */:
+            case 1 /* S8 */:
+            case 5 /* RGBA8 */:
+                return 1;
+            case 2 /* U16 */:
+            case 3 /* S16 */:
+                return 2;
+            case 4 /* F32 */:
+                return 4;
+        }
+    }
+    exports_21("getComponentSizeRaw", getComponentSizeRaw);
+    // PNMTXIDX, TEXnMTXIDX are special cases in GX.
+    function isVtxAttribMtxIdx(vtxAttrib) {
+        switch (vtxAttrib) {
+            case 0 /* PNMTXIDX */:
+            case 1 /* TEX0MTXIDX */:
+            case 2 /* TEX1MTXIDX */:
+            case 3 /* TEX2MTXIDX */:
+            case 4 /* TEX3MTXIDX */:
+            case 5 /* TEX4MTXIDX */:
+            case 6 /* TEX5MTXIDX */:
+            case 7 /* TEX6MTXIDX */:
+            case 8 /* TEX7MTXIDX */:
+                return true;
+            default:
+                return false;
+        }
+    }
+    function getComponentSize(vtxAttrib, vatFormat) {
+        // MTXIDX fields don't have VAT entries.
+        if (isVtxAttribMtxIdx(vtxAttrib))
+            return 1;
+        return getComponentSizeRaw(vatFormat.compType);
+    }
+    function getComponentCountRaw(vtxAttrib, compCnt) {
+        switch (vtxAttrib) {
+            case 9 /* POS */:
+                if (compCnt === 0 /* POS_XY */)
+                    return 2;
+                else if (compCnt === 1 /* POS_XYZ */)
+                    return 3;
+            case 10 /* NRM */:
+                if (compCnt === 0 /* NRM_XYZ */)
+                    return 3;
+                // NBT*XYZ
+                else if (compCnt === 1 /* NRM_NBT */)
+                    return 9;
+                // Separated NBT has three components per index.
+                else if (compCnt === 2 /* NRM_NBT3 */)
+                    return 3;
+            case 11 /* CLR0 */:
+            case 12 /* CLR1 */:
+                if (compCnt === 0 /* CLR_RGB */)
+                    return 3;
+                else if (compCnt === 1 /* CLR_RGBA */)
+                    return 4;
+            case 13 /* TEX0 */:
+            case 14 /* TEX1 */:
+            case 15 /* TEX2 */:
+            case 16 /* TEX3 */:
+            case 17 /* TEX4 */:
+            case 18 /* TEX5 */:
+            case 19 /* TEX6 */:
+            case 20 /* TEX7 */:
+                if (compCnt === 0 /* TEX_S */)
+                    return 1;
+                else if (compCnt === 1 /* TEX_ST */)
+                    return 2;
+            case 255 /* NULL */:
+            default:
+                // Shouldn't ever happen
+                throw new Error("whoops");
+        }
+    }
+    exports_21("getComponentCountRaw", getComponentCountRaw);
+    function getComponentCount(vtxAttrib, vatFormat) {
+        // MTXIDX fields don't have VAT entries.
+        if (isVtxAttribMtxIdx(vtxAttrib))
+            return 1;
+        return getComponentCountRaw(vtxAttrib, vatFormat.compCnt);
+    }
+    function getComponentShiftRaw(compType, compShift) {
+        switch (compType) {
+            case 4 /* F32 */:
+            case 5 /* RGBA8 */:
+                return 0;
+            case 0 /* U8 */:
+            case 2 /* U16 */:
+            case 1 /* S8 */:
+            case 3 /* S16 */:
+                return compShift;
+        }
+    }
+    function getComponentShift(vtxAttrib, vatFormat) {
+        // MTXIDX fields don't have VAT entries.
+        if (isVtxAttribMtxIdx(vtxAttrib))
+            return 0;
+        return getComponentShiftRaw(vatFormat.compType, vatFormat.compShift);
+    }
+    function getIndexNumComponents(vtxAttrib, vatFormat) {
+        switch (vtxAttrib) {
+            case 10 /* NRM */:
+                if (vatFormat.compCnt === 2 /* NRM_NBT3 */)
+                    return 3;
+            // Fallthrough
+            default:
+                return 1;
+        }
+    }
+    function getAttrName(vtxAttrib) {
+        switch (vtxAttrib) {
+            case 0 /* PNMTXIDX */: return "PNMTXIDX";
+            case 1 /* TEX0MTXIDX */: return "TEX0MTXIDX";
+            case 2 /* TEX1MTXIDX */: return "TEX1MTXIDX";
+            case 3 /* TEX2MTXIDX */: return "TEX2MTXIDX";
+            case 4 /* TEX3MTXIDX */: return "TEX3MTXIDX";
+            case 5 /* TEX4MTXIDX */: return "TEX4MTXIDX";
+            case 6 /* TEX5MTXIDX */: return "TEX5MTXIDX";
+            case 7 /* TEX6MTXIDX */: return "TEX6MTXIDX";
+            case 8 /* TEX7MTXIDX */: return "TEX7MTXIDX";
+            case 9 /* POS */: return "POS";
+            case 10 /* NRM */: return "NRM";
+            case 11 /* CLR0 */: return "CLR0";
+            case 12 /* CLR1 */: return "CLR1";
+            case 13 /* TEX0 */: return "TEX0";
+            case 14 /* TEX1 */: return "TEX1";
+            case 15 /* TEX2 */: return "TEX2";
+            case 16 /* TEX3 */: return "TEX3";
+            case 17 /* TEX4 */: return "TEX4";
+            case 18 /* TEX5 */: return "TEX5";
+            case 19 /* TEX6 */: return "TEX6";
+            case 20 /* TEX7 */: return "TEX7";
+            default:
+                throw new Error("whoops");
+        }
+    }
+    function getAttributeFormatSize(attributeFormat) {
+        switch (attributeFormat) {
+            case 0 /* U16 */:
+                return 2;
+            case 1 /* F32 */:
+                return 4;
+        }
+    }
+    function translateVatLayout(vatFormat, vcd) {
+        if (vatFormat === undefined)
+            return undefined;
+        var srcVertexSize = 0;
+        for (var vtxAttrib = 0; vtxAttrib < vcd.length; vtxAttrib++) {
+            // Describes packed vertex layout.
+            var vtxAttrDesc = vcd[vtxAttrib];
+            // Describes format of pointed-to data.
+            var vtxAttrFmt = vatFormat[vtxAttrib];
+            if (!vtxAttrDesc || vtxAttrDesc.type === 0 /* NONE */)
+                continue;
+            // TODO(jstpierre): Find a better way to do NBT3.
+            var srcIndexComponentCount = getIndexNumComponents(vtxAttrib, vtxAttrFmt);
+            // MTXIDX entries can only be DIRECT if they exist.
+            if (isVtxAttribMtxIdx(vtxAttrib))
+                util_9.assert(vtxAttrDesc.type === 1 /* DIRECT */);
+            switch (vtxAttrDesc.type) {
+                case 1 /* DIRECT */: {
+                    var srcAttrCompSize = getComponentSize(vtxAttrib, vtxAttrFmt);
+                    var srcAttrCompCount = getComponentCount(vtxAttrib, vtxAttrFmt);
+                    var srcAttrByteSize = srcAttrCompSize * srcAttrCompCount;
+                    srcVertexSize += srcAttrByteSize;
+                    break;
+                }
+                case 2 /* INDEX8 */:
+                    srcVertexSize += 1 * srcIndexComponentCount;
+                    break;
+                case 3 /* INDEX16 */:
+                    srcVertexSize += 2 * srcIndexComponentCount;
+                    break;
+            }
+        }
+        return { srcVertexSize: srcVertexSize, vatFormat: vatFormat, vcd: vcd };
+    }
+    function translateVertexLayout(vat, vcd) {
+        // Create source VAT layouts.
+        var vatLayouts = vat.map(function (vatFormat) { return translateVatLayout(vatFormat, vcd); });
+        // Create destination vertex layout.
+        var dstVertexSize = 0;
+        var dstVertexAttributeLayouts = [];
+        var _loop_3 = function (vtxAttrib) {
+            var vtxAttrDesc = vcd[vtxAttrib];
+            if (!vtxAttrDesc || vtxAttrDesc.type === 0 /* NONE */)
+                return "continue";
+            var enableOutput = (vtxAttrDesc.enableOutput === undefined || vtxAttrDesc.enableOutput);
+            if (!enableOutput)
+                return "continue";
+            // TODO(jstpierre): Worth supporting other component types?
+            var format = 1 /* F32 */;
+            var formatComponentSize = 4;
+            dstVertexSize = util_9.align(dstVertexSize, formatComponentSize);
+            var offset = dstVertexSize;
+            // Find our maximum component count by choosing from a maximum of all the VAT formats.
+            var componentCount = 0;
+            vatLayouts.forEach(function (vatLayout) {
+                var fmtComponentCount = getComponentCount(vtxAttrib, vatLayout.vatFormat[vtxAttrib]);
+                componentCount = Math.max(componentCount, fmtComponentCount);
+            });
+            dstVertexSize += formatComponentSize * componentCount;
+            dstVertexAttributeLayouts.push({ vtxAttrib: vtxAttrib, offset: offset, format: format, componentCount: componentCount });
+        };
+        for (var vtxAttrib = 0; vtxAttrib < vcd.length; vtxAttrib++) {
+            _loop_3(vtxAttrib);
+        }
+        // Align the whole thing to our minimum required alignment (F32).
+        dstVertexSize = util_9.align(dstVertexSize, 4);
+        return { dstVertexSize: dstVertexSize, dstVertexAttributeLayouts: dstVertexAttributeLayouts, vatLayouts: vatLayouts };
+    }
+    function _compileVtxLoader(vat, vcd) {
+        var loadedVertexLayout = translateVertexLayout(vat, vcd);
+        function makeLoaderName() {
+            var name = 'VtxLoader';
+            // TODO(jstpierre): Re-enable this at some point. Right now it's not so easy...
+            /*
+            for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vat.length; vtxAttrib++) {
+                if (!vtxDescs[vtxAttrib] || vtxDescs[vtxAttrib].type === GX.AttrType.NONE)
+                    continue;
+    
+                const attrName = getAttrName(vtxAttrib);
+    
+                const compSizeSuffix = vat[vtxAttrib] ? getComponentSize(vat[vtxAttrib].compType) : '';
+                const compCntSuffix = vat[vtxAttrib] ? getComponentCount(vtxAttrib, vat[vtxAttrib].compCnt) : '';
+    
+                const attrTypeSuffixes = ['', 'D', 'I8', 'I16'];
+                const attrTypeSuffix = attrTypeSuffixes[vtxDescs[vtxAttrib].type];
+                name += `_${attrName}$${attrTypeSuffix}$${compSizeSuffix}x${compCntSuffix}`;
+            }
+            */
+            return name;
+        }
+        function compileVtxArrayViewName(vtxAttrib) {
+            return "srcAttrArrayView" + vtxAttrib;
+        }
+        function compileVtxArrayViews() {
+            var sources = [];
+            var _loop_4 = function (vtxAttrib) {
+                var dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find(function (layout) { return layout.vtxAttrib === vtxAttrib; });
+                var outputEnabled = !!dstAttribLayout;
+                if (!outputEnabled)
+                    return "continue";
+                var attrType = vcd[vtxAttrib].type;
+                if (attrType === 3 /* INDEX16 */ || attrType === 2 /* INDEX8 */) {
+                    var viewName = compileVtxArrayViewName(vtxAttrib);
+                    sources.push("const " + viewName + " = vtxArrays[" + vtxAttrib + "].buffer.createDataView(vtxArrays[" + vtxAttrib + "].offs);");
+                }
+            };
+            for (var vtxAttrib = 0; vtxAttrib < 20 /* MAX */; vtxAttrib++) {
+                _loop_4(vtxAttrib);
+            }
+            return sources.join('\n');
+        }
+        // Loads a single vertex layout.
+        function compileVatLayoutAttribute(vatLayout, vtxAttrib) {
+            var vtxAttrFmt = vatLayout.vatFormat[vtxAttrib];
+            var vtxAttrDesc = vatLayout.vcd[vtxAttrib];
+            var dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find(function (layout) { return layout.vtxAttrib === vtxAttrib; });
+            if (!vtxAttrDesc || vtxAttrDesc.type === 0 /* NONE */)
+                return '';
+            // If we don't have a destination for the data, then don't bother outputting.
+            var outputEnabled = !!dstAttribLayout;
+            var srcAttrCompSize;
+            var srcAttrCompCount;
+            var srcAttrByteSize;
+            // We only need vtxAttrFmt if we're going to read the data.
+            if (vtxAttrDesc.type === 1 /* DIRECT */ || outputEnabled) {
+                srcAttrCompSize = getComponentSize(vtxAttrib, vtxAttrFmt);
+                srcAttrCompCount = getComponentCount(vtxAttrib, vtxAttrFmt);
+                srcAttrByteSize = srcAttrCompSize * srcAttrCompCount;
+            }
+            function compileShift(n) {
+                // Instead of just doing `${n} >> srcAttrCompShift`, we use division
+                // to get us the fractional components...
+                var srcAttrCompShift = getComponentShift(vtxAttrib, vtxAttrFmt);
+                var divisor = 1 << srcAttrCompShift;
+                if (divisor === 1)
+                    return n;
+                else
+                    return "(" + n + " / " + divisor + ")";
+            }
+            function compileReadOneComponentF32(viewName, attrOffset) {
+                switch (vtxAttrFmt.compType) {
+                    case 4 /* F32 */:
+                        return viewName + ".getFloat32(" + attrOffset + ")";
+                    case 5 /* RGBA8 */:
+                        // This gets four components.
+                        return "(" + viewName + ".getUint8(" + attrOffset + ") / 0xFF)";
+                    case 0 /* U8 */:
+                        return compileShift(viewName + ".getUint8(" + attrOffset + ")");
+                    case 2 /* U16 */:
+                        return compileShift(viewName + ".getUint16(" + attrOffset + ")");
+                    case 1 /* S8 */:
+                        return compileShift(viewName + ".getInt8(" + attrOffset + ")");
+                    case 3 /* S16 */:
+                        return compileShift(viewName + ".getInt16(" + attrOffset + ")");
+                    default:
+                        throw "whoops";
+                }
+            }
+            function compileReadOneComponent(viewName, attrOffset) {
+                util_9.assert(dstAttribLayout.format === 1 /* F32 */);
+                return compileReadOneComponentF32(viewName, attrOffset);
+            }
+            function compileWriteOneComponent(offs, value) {
+                util_9.assert(dstAttribLayout.format === 1 /* F32 */);
+                var littleEndian = (endian_2.getSystemEndianness() === 0 /* LITTLE_ENDIAN */);
+                var dstOffs = "dstVertexDataOffs + " + offs;
+                return "dstVertexDataView.setFloat32(" + dstOffs + ", " + value + ", " + littleEndian + ")";
+            }
+            function compileOneAttrib(viewName, attrOffsetBase, drawCallIdxIncr) {
+                var S = "";
+                if (outputEnabled) {
+                    var dstComponentSize = getAttributeFormatSize(dstAttribLayout.format);
+                    for (var i = 0; i < dstAttribLayout.componentCount; i++) {
+                        var dstOffs = dstAttribLayout.offset + (i * dstComponentSize);
+                        var srcOffs = attrOffsetBase + " + " + i * srcAttrCompSize;
+                        // Fill in components not in the source with zero.
+                        var value = void 0;
+                        if (i < srcAttrCompCount)
+                            value = compileReadOneComponent(viewName, srcOffs);
+                        else
+                            value = "0";
+                        S += "\n        " + compileWriteOneComponent(dstOffs, value) + ";";
+                    }
+                }
+                S += "\n        drawCallIdx += " + drawCallIdxIncr + ";\n";
+                return S;
+            }
+            function compileOneIndex(viewName, readIndex, drawCallIdxIncr, uniqueSuffix) {
+                if (uniqueSuffix === void 0) { uniqueSuffix = ''; }
+                // TODO(jstpierre): Stride.
+                var attrOffsetBase = "(" + readIndex + ") * " + srcAttrByteSize;
+                var arrayOffsetVarName = "arrayOffset" + vtxAttrib + uniqueSuffix;
+                var S = '';
+                if (outputEnabled) {
+                    return "const " + arrayOffsetVarName + " = " + attrOffsetBase + ";" + compileOneAttrib(viewName, arrayOffsetVarName, drawCallIdxIncr);
+                }
+                else {
+                    return compileOneAttrib('', '', drawCallIdxIncr);
+                }
+            }
+            function compileAttribIndex(viewName, readIndex, drawCallIdxIncr) {
+                if (vtxAttrib === 10 /* NRM */ && vtxAttrFmt.compCnt === 2 /* NRM_NBT3 */) {
+                    // Special case: NBT3.
+                    return "\n        // NBT Normal\n        " + compileOneIndex(viewName, readIndex + " + 0", drawCallIdxIncr, "_N") + "\n        // NBT Bitangent\n        " + compileOneIndex(viewName, readIndex + " + 3", drawCallIdxIncr, "_B") + "\n        // NBT Tangent\n        " + compileOneIndex(viewName, readIndex + " + 6", drawCallIdxIncr, "_T");
+                }
+                else {
+                    return "\n        // " + getAttrName(vtxAttrib) + "\n        " + compileOneIndex(viewName, readIndex, drawCallIdxIncr);
+                }
+            }
+            switch (vtxAttrDesc.type) {
+                case 1 /* DIRECT */:
+                    return compileOneAttrib("dlView", "drawCallIdx", srcAttrByteSize);
+                case 2 /* INDEX8 */:
+                    return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), "dlView.getUint8(drawCallIdx)", 1);
+                case 3 /* INDEX16 */:
+                    return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), "dlView.getUint16(drawCallIdx)", 2);
+                default:
+                    throw "whoops";
+            }
+        }
+        function compileVatFormats() {
+            var sources = [];
+            var vatLayoutSources = new Map();
+            for (var i = 0; i < 7 /* VTXFMT7 */; i++) {
+                var vatLayout = loadedVertexLayout.vatLayouts[i];
+                if (!vatLayout)
+                    continue;
+                util_9.assert(vatLayout.vcd === vcd);
+                var S_1 = '';
+                for (var vtxAttrib = 0; vtxAttrib < 20 /* MAX */; vtxAttrib++) {
+                    S_1 += compileVatLayoutAttribute(vatLayout, vtxAttrib);
+                }
+                vatLayoutSources.set(i, S_1);
+            }
+            if (vatLayoutSources.size === 0)
+                throw "whoops";
+            if (vatLayoutSources.size === 1)
+                return vatLayoutSources.values().next().value;
+            // Dynamic dispatch.
+            var S = "\n        ";
+            try {
+                for (var _a = __values(vatLayoutSources.entries()), _b = _a.next(); !_b.done; _b = _a.next()) {
+                    var _c = __read(_b.value, 2), vtxFmt = _c[0], vatLayoutSource = _c[1];
+                    S += "if (drawCall.vertexFormat === " + vtxFmt + ") {\n\n            " + vatLayoutSource + "\n\n        } else ";
+                }
+            }
+            catch (e_17_1) { e_17 = { error: e_17_1 }; }
+            finally {
+                try {
+                    if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
+                }
+                finally { if (e_17) throw e_17.error; }
+            }
+            S += "{\n            throw new Error(\"Invalid vertex format \" + vertexFormat);\n        }";
+            return S;
+            var e_17, _d;
+        }
+        function compileSrcVertexSizes() {
+            return JSON.stringify(loadedVertexLayout.vatLayouts.map(function (vatLayout) { return vatLayout && vatLayout.srcVertexSize; }));
+        }
+        var loaderName = makeLoaderName();
+        var source = "\n\"use strict\";\n\nreturn function " + loaderName + "(vtxArrays, srcBuffer) {\n// Parse display list.\nconst dlView = srcBuffer.createDataView();\nconst drawCalls = [];\nconst srcVertexSizes = " + compileSrcVertexSizes() + ";\nlet totalVertexCount = 0;\nlet totalTriangleCount = 0;\nlet drawCallIdx = 0;\nwhile (true) {\n    if (drawCallIdx >= srcBuffer.byteLength)\n        break;\n    const cmd = dlView.getUint8(drawCallIdx);\n    if (cmd === 0)\n        break;\n\n    const primType = cmd & 0xF8;\n    const vertexFormat = cmd & 0x07;\n\n    const vertexCount = dlView.getUint16(drawCallIdx + 0x01);\n    drawCallIdx += 0x03;\n    const srcOffs = drawCallIdx;\n    const first = totalVertexCount;\n    totalVertexCount += vertexCount;\n\n    switch (primType) {\n    case " + 144 /* DRAW_TRIANGLES */ + ":\n        totalTriangleCount += (vertexCount / 3);\n        break;\n    case " + 160 /* DRAW_TRIANGLE_FAN */ + ":\n    case " + 152 /* DRAW_TRIANGLE_STRIP */ + ":\n        totalTriangleCount += (vertexCount - 2);\n        break;\n    case " + 128 /* DRAW_QUADS */ + ":\n    case " + 136 /* DRAW_QUADS_2 */ + ":\n        totalTriangleCount += (vertexCount * 6) / 4;\n        break;\n    default:\n        throw new Error(\"Invalid data at \" + srcBuffer.byteOffset.toString(16) + \"/\" + drawCallIdx.toString(16) + \" primType \" + primType.toString(16));\n    }\n\n    drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });\n\n    // Skip over the index data.\n    drawCallIdx += srcVertexSizes[vertexFormat] * vertexCount;\n}\n\n// Now make the data.\nlet indexDataIdx = 0;\nconst dstIndexData = new Uint16Array(totalTriangleCount * 3);\nlet vertexId = 0;\n\nconst dstVertexDataSize = " + loadedVertexLayout.dstVertexSize + " * totalVertexCount;\nconst dstVertexData = new ArrayBuffer(dstVertexDataSize);\nconst dstVertexDataView = new DataView(dstVertexData);\nlet dstVertexDataOffs = 0;\n\n" + compileVtxArrayViews() + "\n\nfor (let z = 0; z < drawCalls.length; z++) {\n    const drawCall = drawCalls[z];\n\n    // Convert topology to triangles.\n    switch (drawCall.primType) {\n    case " + 144 /* DRAW_TRIANGLES */ + ":\n        // Copy vertices.\n        for (let i = 0; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 152 /* DRAW_TRIANGLE_STRIP */ + ":\n        // First vertex defines original triangle.\n        for (let i = 0; i < 3; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 160 /* DRAW_TRIANGLE_FAN */ + ":\n        // First vertex defines original triangle.\n        const firstVertex = vertexId;\n\n        for (let i = 0; i < 3; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = firstVertex;\n            dstIndexData[indexDataIdx++] = vertexId - 1;\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 128 /* DRAW_QUADS */ + ":\n    case " + 136 /* DRAW_QUADS_2 */ + ":\n        // Each quad (4 vertices) is split into 2 triangles (6 vertices)\n        for (let i = 0; i < drawCall.vertexCount; i += 4) {\n            dstIndexData[indexDataIdx++] = vertexId + 0;\n            dstIndexData[indexDataIdx++] = vertexId + 1;\n            dstIndexData[indexDataIdx++] = vertexId + 2;\n\n            dstIndexData[indexDataIdx++] = vertexId + 1;\n            dstIndexData[indexDataIdx++] = vertexId + 3;\n            dstIndexData[indexDataIdx++] = vertexId + 2;\n            vertexId += 4;\n        }\n    }\n\n    let drawCallIdx = drawCall.srcOffs;\n    for (let j = 0; j < drawCall.vertexCount; j++) {\n" + compileVatFormats() + "\n        dstVertexDataOffs += " + loadedVertexLayout.dstVertexSize + ";\n    }\n}\n\nif (dstIndexData.length !== totalTriangleCount * 3)\n    throw new Error(\"Number of indexes does not match triangle count\");\n\nreturn { indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };\n\n};\n";
+        var runVerticesGenerator = new Function(source);
+        var runVertices = runVerticesGenerator();
+        return { loadedVertexLayout: loadedVertexLayout, runVertices: runVertices };
+    }
+    var MemoizeCache_2, util_9, endian_2, VtxLoaderCache, cache, compileVtxLoader, compileVtxLoaderMultiVat;
+    return {
+        setters: [
+            function (MemoizeCache_2_1) {
+                MemoizeCache_2 = MemoizeCache_2_1;
+            },
+            function (util_9_1) {
+                util_9 = util_9_1;
+            },
+            function (endian_2_1) {
+                endian_2 = endian_2_1;
+            }
+        ],
+        execute: function () {
+            VtxLoaderCache = /** @class */ (function (_super) {
+                __extends(VtxLoaderCache, _super);
+                function VtxLoaderCache() {
+                    var _this = _super !== null && _super.apply(this, arguments) || this;
+                    _this.compileVtxLoader = function (vatFormat, vcd) {
+                        var vat = [vatFormat];
+                        return _this.get({ vat: vat, vcd: vcd });
+                    };
+                    _this.compileVtxLoaderMultiVat = function (vat, vcd) {
+                        return _this.get({ vat: vat, vcd: vcd });
+                    };
+                    return _this;
+                }
+                VtxLoaderCache.prototype.make = function (key) {
+                    return _compileVtxLoader(key.vat, key.vcd);
+                };
+                VtxLoaderCache.prototype.makeKey = function (key) {
+                    return JSON.stringify(key);
+                };
+                return VtxLoaderCache;
+            }(MemoizeCache_2.default));
+            cache = new VtxLoaderCache();
+            exports_21("compileVtxLoader", compileVtxLoader = cache.compileVtxLoader);
+            exports_21("compileVtxLoaderMultiVat", compileVtxLoaderMultiVat = cache.compileVtxLoaderMultiVat);
+        }
+    };
+});
+// GX materials.
+System.register("gx/gx_material", ["render", "Program"], function (exports_22, context_22) {
+    "use strict";
+    var __moduleName = context_22 && context_22.id;
     function getVertexAttribLocation(vtxAttrib) {
         return vtxAttributeGenDefs.findIndex(function (genDef) { return genDef.attrib === vtxAttrib; });
     }
-    exports_21("getVertexAttribLocation", getVertexAttribLocation);
+    exports_22("getVertexAttribLocation", getVertexAttribLocation);
     // #endregion
     // #region Material flags generation.
     function translateCullMode(cullMode) {
@@ -3798,7 +4256,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_21, c
         }
         return renderFlags;
     }
-    exports_21("translateRenderFlags", translateRenderFlags);
+    exports_22("translateRenderFlags", translateRenderFlags);
     // #endregion
     // XXX(jstpierre): Put this somewhere better.
     // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
@@ -3810,7 +4268,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_21, c
         var textureLODBias = Math.log2(Math.min(viewportWidth / EFB_WIDTH, viewportHeight / EFB_HEIGHT));
         return textureLODBias;
     }
-    exports_21("getTextureLODBias", getTextureLODBias);
+    exports_22("getTextureLODBias", getTextureLODBias);
     function getRasColorChannelID(v) {
         switch (v) {
             case 0 /* COLOR0 */:
@@ -3832,7 +4290,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_21, c
                 throw "whoops";
         }
     }
-    exports_21("getRasColorChannelID", getRasColorChannelID);
+    exports_22("getRasColorChannelID", getRasColorChannelID);
     var render_2, Program_2, EFB_WIDTH, EFB_HEIGHT, Color, vtxAttributeGenDefs, GX_Program;
     return {
         setters: [
@@ -3844,8 +4302,8 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_21, c
             }
         ],
         execute: function () {
-            exports_21("EFB_WIDTH", EFB_WIDTH = 640);
-            exports_21("EFB_HEIGHT", EFB_HEIGHT = 528);
+            exports_22("EFB_WIDTH", EFB_WIDTH = 640);
+            exports_22("EFB_HEIGHT", EFB_HEIGHT = 528);
             Color = /** @class */ (function () {
                 function Color(r, g, b, a) {
                     this.r = r;
@@ -3855,7 +4313,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_21, c
                 }
                 return Color;
             }());
-            exports_21("Color", Color);
+            exports_22("Color", Color);
             vtxAttributeGenDefs = [
                 { attrib: 0 /* PNMTXIDX */, name: "PosMtxIdx", storage: "float" },
                 { attrib: 9 /* POS */, name: "Position", storage: "vec3" },
@@ -4333,1439 +4791,14 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_21, c
                 GX_Program.ub_PacketParams = 2;
                 return GX_Program;
             }(Program_2.BaseProgram));
-            exports_21("GX_Program", GX_Program);
-        }
-    };
-});
-// Implements Retro's PAK format as seen in Metroid Prime 1.
-System.register("metroid_prime/pak", ["util"], function (exports_22, context_22) {
-    "use strict";
-    var __moduleName = context_22 && context_22.id;
-    function parse(buffer) {
-        var view = buffer.createDataView();
-        util_9.assert(view.getUint32(0x00) === 0x00030005);
-        // Named resource table.
-        var offs = 0x08;
-        var namedResourceTableEntries = [];
-        var namedResourceTableCount = view.getUint32(offs);
-        offs += 0x04;
-        for (var i = 0; i < namedResourceTableCount; i++) {
-            var fourCC = util_9.readString(buffer, offs + 0x00, 4, false);
-            var fileID = util_9.readString(buffer, offs + 0x04, 4, false);
-            var fileNameLength = view.getUint32(offs + 0x08);
-            var fileName = util_9.readString(buffer, offs + 0x0C, fileNameLength, false);
-            namedResourceTableEntries.push({ fourCC: fourCC, fileID: fileID, fileName: fileName });
-            offs += 0x0C + fileNameLength;
-        }
-        var namedResourceTable = new Map();
-        var resourceTable = new Map();
-        // Regular resource table.
-        var resourceTableCount = view.getUint32(offs + 0x00);
-        offs += 0x04;
-        var _loop_3 = function (i) {
-            var isCompressed = !!view.getUint32(offs + 0x00);
-            var fourCC = util_9.readString(buffer, offs + 0x04, 4, false);
-            var fileID = util_9.readString(buffer, offs + 0x08, 4, false);
-            var fileSize = view.getUint32(offs + 0x0C);
-            var fileOffset = view.getUint32(offs + 0x10);
-            offs += 0x14;
-            var decompressedSize = fileSize;
-            if (isCompressed) {
-                decompressedSize = view.getUint32(fileOffset);
-                fileOffset += 0x04;
-                fileSize -= 0x04;
-            }
-            if (resourceTable.has(fileID)) {
-                var existingResource = resourceTable.get(fileID);
-                // Skip files that are apparently the same.
-                util_9.assert(fourCC === existingResource.fourCC);
-                util_9.assert(fileSize === existingResource.fileSize);
-                return "continue";
-            }
-            // Check for a named resource.
-            var name_1 = null;
-            var namedResourceTableEntry = namedResourceTableEntries.find(function (nr) { return nr.fileID === fileID; });
-            if (namedResourceTableEntry) {
-                name_1 = namedResourceTableEntry.fileName;
-                util_9.assert(namedResourceTableEntry.fourCC === fourCC);
-            }
-            var fileBuffer = buffer.slice(fileOffset, fileOffset + fileSize);
-            var fileResource = { name: name_1, fourCC: fourCC, fileID: fileID, fileSize: fileSize, fileOffset: fileOffset, isCompressed: isCompressed, decompressedSize: decompressedSize, buffer: fileBuffer };
-            resourceTable.set(fileResource.fileID, fileResource);
-            if (name_1 !== null)
-                namedResourceTable.set(fileResource.name, fileResource);
-        };
-        for (var i = 0; i < resourceTableCount; i++) {
-            _loop_3(i);
-        }
-        return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
-    }
-    exports_22("parse", parse);
-    var util_9;
-    return {
-        setters: [
-            function (util_9_1) {
-                util_9 = util_9_1;
-            }
-        ],
-        execute: function () {
-        }
-    };
-});
-// Implements Retro's MLVL format as seen in Metroid Prime 1.
-System.register("metroid_prime/mlvl", ["util"], function (exports_23, context_23) {
-    "use strict";
-    var __moduleName = context_23 && context_23.id;
-    function parse(resourceSystem, buffer) {
-        var view = buffer.createDataView();
-        util_10.assert(view.getUint32(0x00) == 0xDEAFBABE);
-        var version = view.getUint32(0x04);
-        // Version that appears in Metroid Prime 1.
-        util_10.assert(version === 0x11);
-        // STRG file ID?
-        var worldNameSTRGID = util_10.readString(buffer, 0x08, 4, false);
-        var worldNameSTRG = resourceSystem.findResourceByID(worldNameSTRGID);
-        resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
-        var worldSaveID = view.getUint32(0x0C);
-        var skyboxID = view.getUint32(0x10);
-        // Memory Relay junk.
-        var memoryRelayTableIdx = 0x14;
-        var memoryRelayTableCount = view.getUint32(memoryRelayTableIdx + 0x00);
-        memoryRelayTableIdx += 0x04;
-        for (var i = 0; i < memoryRelayTableCount; i++) {
-            var memoryRelayInstanceID = view.getUint32(memoryRelayTableIdx + 0x00);
-            var targetInstanceID = view.getUint32(memoryRelayTableIdx + 0x04);
-            var messageType = view.getUint16(memoryRelayTableIdx + 0x08);
-            var active = !!view.getUint8(memoryRelayTableIdx + 0x0A);
-            memoryRelayTableIdx += 0x0B;
-        }
-        var areaTableOffs = memoryRelayTableIdx;
-        var areaTableCount = view.getUint32(areaTableOffs + 0x00);
-        util_10.assert(view.getUint32(areaTableOffs + 0x04) === 0x01);
-        var areaTableIdx = areaTableOffs + 0x08;
-        var areaTable = [];
-        for (var i = 0; i < areaTableCount; i++) {
-            var areaSTRGID = util_10.readString(buffer, areaTableIdx, 4, false);
-            var areaSTRG = resourceSystem.findResourceByID(areaSTRGID);
-            util_10.assert(areaSTRG !== null);
-            areaTableIdx += 0x04;
-            areaTableIdx += 0x04 * 12; // Transform matrix
-            areaTableIdx += 0x04 * 6; // AABB
-            var areaMREAID = util_10.readString(buffer, areaTableIdx + 0x00, 4, false);
-            var areaMREA = resourceSystem.findResourceByID(areaMREAID);
-            util_10.assert(areaMREA !== null);
-            var areaInternalID = view.getUint32(areaTableIdx + 0x04);
-            areaTableIdx += 0x08;
-            var attachedAreaCount = view.getUint32(areaTableIdx + 0x00);
-            areaTableIdx += 0x04;
-            for (var j = 0; j < attachedAreaCount; j++) {
-                areaTableIdx += 0x02; // Attached Area Index Array
-            }
-            // TODO(jstpierre): Verify with Aruki. Seems to be undocumented?
-            areaTableIdx += 0x04;
-            var dependencyTableCount = view.getUint32(areaTableIdx);
-            areaTableIdx += 0x04;
-            for (var j = 0; j < dependencyTableCount; j++) {
-                var dependencyID = view.getUint32(areaTableIdx + 0x00);
-                var dependencyFOURCC = view.getUint32(areaTableIdx + 0x04);
-                areaTableIdx += 0x08;
-            }
-            var dependencyOffsetTableCount = view.getUint32(areaTableIdx);
-            areaTableIdx += 0x04;
-            for (var j = 0; j < dependencyOffsetTableCount; j++) {
-                var dependencyOffset = view.getUint32(areaTableIdx + 0x00);
-                areaTableIdx += 0x04;
-            }
-            var dockCount = view.getUint32(areaTableIdx);
-            areaTableIdx += 0x04;
-            for (var j = 0; j < dockCount; j++) {
-                var connectingDockCount = view.getUint32(areaTableIdx);
-                areaTableIdx += 0x04;
-                for (var k = 0; k < connectingDockCount; k++) {
-                    var connectingDockAreaIndex = view.getUint32(areaTableIdx + 0x00);
-                    var connectingDockDockIndex = view.getUint32(areaTableIdx + 0x04);
-                    areaTableIdx += 0x08;
-                }
-                var dockCoordinateCount = view.getUint32(areaTableIdx);
-                areaTableIdx += 0x04;
-                for (var k = 0; k < dockCoordinateCount; k++) {
-                    areaTableIdx += 0x0C; // xyz floats
-                }
-            }
-            areaTable.push({ areaSTRGID: areaSTRGID, areaMREAID: areaMREAID });
-        }
-        return { areaTable: areaTable };
-    }
-    exports_23("parse", parse);
-    var util_10;
-    return {
-        setters: [
-            function (util_10_1) {
-                util_10 = util_10_1;
-            }
-        ],
-        execute: function () {
-        }
-    };
-});
-// Implements Retro's STRG (string table resource group) format as seen in Metroid Prime 1.
-System.register("metroid_prime/strg", ["util"], function (exports_24, context_24) {
-    "use strict";
-    var __moduleName = context_24 && context_24.id;
-    function readUTF16String(buffer, offs) {
-        var arr = buffer.createTypedArray(Uint8Array, offs, 0xFF);
-        var raw = utf16Decoder.decode(arr);
-        var nul = raw.indexOf('\u0000');
-        var str;
-        if (nul >= 0)
-            str = raw.slice(0, nul);
-        else
-            str = raw;
-        return str;
-    }
-    function parse(resourceSystem, buffer) {
-        var view = buffer.createDataView();
-        util_11.assert(view.getUint32(0x00) === 0x87654321);
-        var version = view.getUint32(0x04);
-        util_11.assert(version === 0x00); // Metroid Prime 1
-        var languageCount = view.getUint32(0x08);
-        var stringCount = view.getUint32(0x0C);
-        var languageTableOffs = 0x10;
-        var stringsTableOffs = languageTableOffs + languageCount * 0x08;
-        var languageTableIdx = languageTableOffs;
-        var strings = [];
-        for (var i = 0; i < languageCount; i++) {
-            var languageID = util_11.readString(buffer, languageTableIdx + 0x00, 4, false);
-            var languageStringsOffs = view.getUint32(languageTableIdx + 0x04);
-            languageTableIdx += 0x08;
-            // Load English for now because I am a dirty American.
-            if (languageID === 'ENGL') {
-                var stringTableIdx = stringsTableOffs + languageStringsOffs;
-                var stringTableSize = view.getUint32(stringTableIdx + 0x00);
-                stringTableIdx += 0x04;
-                var stringTableDataOffs = stringTableIdx;
-                for (var j = 0; j < stringCount; j++) {
-                    var stringOffs = view.getUint32(stringTableIdx);
-                    var string = readUTF16String(buffer, stringTableDataOffs + stringOffs);
-                    strings.push(string);
-                    stringTableIdx += 0x04;
-                }
-            }
-        }
-        return { strings: strings };
-    }
-    exports_24("parse", parse);
-    var util_11, utf16Decoder;
-    return {
-        setters: [
-            function (util_11_1) {
-                util_11 = util_11_1;
-            }
-        ],
-        execute: function () {
-            utf16Decoder = new TextDecoder('utf-16be');
-        }
-    };
-});
-// Resource System
-System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_25, context_25) {
-    "use strict";
-    var __moduleName = context_25 && context_25.id;
-    var pako_1, MLVL, MREA, STRG, TXTR, util_12, ArrayBufferSlice_4, FourCCLoaders, ResourceSystem;
-    return {
-        setters: [
-            function (pako_1_1) {
-                pako_1 = pako_1_1;
-            },
-            function (MLVL_1) {
-                MLVL = MLVL_1;
-            },
-            function (MREA_1) {
-                MREA = MREA_1;
-            },
-            function (STRG_1) {
-                STRG = STRG_1;
-            },
-            function (TXTR_1) {
-                TXTR = TXTR_1;
-            },
-            function (util_12_1) {
-                util_12 = util_12_1;
-            },
-            function (ArrayBufferSlice_4_1) {
-                ArrayBufferSlice_4 = ArrayBufferSlice_4_1;
-            }
-        ],
-        execute: function () {
-            FourCCLoaders = {
-                'MLVL': MLVL.parse,
-                'MREA': MREA.parse,
-                'STRG': STRG.parse,
-                'TXTR': TXTR.parse,
-            };
-            ResourceSystem = /** @class */ (function () {
-                function ResourceSystem(paks) {
-                    this.paks = paks;
-                    this._cache = new Map();
-                }
-                ResourceSystem.prototype.loadResourceBuffer = function (resource) {
-                    if (resource.isCompressed) {
-                        var deflated = resource.buffer.createTypedArray(Uint8Array);
-                        var inflated = pako_1.default.inflate(deflated);
-                        return new ArrayBufferSlice_4.default(inflated.buffer);
-                    }
-                    else {
-                        return resource.buffer;
-                    }
-                };
-                ResourceSystem.prototype.findResourceByID = function (assetID) {
-                    util_12.assert(assetID.length === 4);
-                    try {
-                        for (var _a = __values(this.paks), _b = _a.next(); !_b.done; _b = _a.next()) {
-                            var pak = _b.value;
-                            var resource = pak.resourceTable.get(assetID);
-                            if (resource)
-                                return resource;
-                        }
-                    }
-                    catch (e_17_1) { e_17 = { error: e_17_1 }; }
-                    finally {
-                        try {
-                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                        }
-                        finally { if (e_17) throw e_17.error; }
-                    }
-                    return null;
-                    var e_17, _c;
-                };
-                ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
-                    var cached = this._cache.get(assetID);
-                    if (cached !== undefined)
-                        return cached;
-                    var loaderFunc = FourCCLoaders[fourCC];
-                    if (!loaderFunc)
-                        return null;
-                    var resource = this.findResourceByID(assetID);
-                    util_12.assert(resource.fourCC === fourCC);
-                    var buffer = this.loadResourceBuffer(resource);
-                    var inst = loaderFunc(this, buffer);
-                    this._cache.set(assetID, inst);
-                    return inst;
-                };
-                return ResourceSystem;
-            }());
-            exports_25("ResourceSystem", ResourceSystem);
-        }
-    };
-});
-// GX texture decoding
-System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "WasmMemoryManager"], function (exports_26, context_26) {
-    "use strict";
-    var __moduleName = context_26 && context_26.id;
-    function calcPaletteSize(format, palette) {
-        var paletteSize = 0;
-        switch (format) {
-            case 8 /* C4 */:
-                paletteSize = 16;
-                break;
-            case 9 /* C8 */:
-                paletteSize = 256;
-                break;
-            case 10 /* C14X2 */:
-            default:
-                throw new Error("whoops");
-        }
-        // All palette-formats are 16-bit.
-        return paletteSize * 2;
-    }
-    exports_26("calcPaletteSize", calcPaletteSize);
-    function calcTextureSize(format, width, height) {
-        var numPixels = width * height;
-        switch (format) {
-            case 0 /* I4 */:
-                return numPixels / 2;
-            case 1 /* I8 */:
-                return numPixels;
-            case 2 /* IA4 */:
-                return numPixels;
-            case 3 /* IA8 */:
-                return numPixels * 2;
-            case 8 /* C4 */:
-                return numPixels / 2;
-            case 9 /* C8 */:
-                return numPixels;
-            case 4 /* RGB565 */:
-                return numPixels * 2;
-            case 5 /* RGB5A3 */:
-                return numPixels * 2;
-            case 6 /* RGBA8 */:
-                return numPixels * 4;
-            case 14 /* CMPR */:
-                return numPixels / 2;
-            default:
-                throw new Error("whoops");
-        }
-    }
-    exports_26("calcTextureSize", calcTextureSize);
-    function calcFullTextureSize(format, width, height, mipCount) {
-        var textureSize = 0;
-        while (mipCount--) {
-            textureSize += calcTextureSize(format, width, height);
-            width /= 2;
-            height /= 2;
-        }
-        return textureSize;
-    }
-    exports_26("calcFullTextureSize", calcFullTextureSize);
-    function decode_Wasm(wasmInstance, texture, decoder, scratchSize) {
-        if (scratchSize === void 0) { scratchSize = 0; }
-        var dstSize = texture.width * texture.height * 4;
-        var srcSize = texture.data.byteLength;
-        var pScratch = 0;
-        var pDst = util_13.align(pScratch + scratchSize, 0x10);
-        var pSrc = util_13.align(pDst + dstSize, 0x10);
-        var heapSize = util_13.align(pSrc + srcSize, 0x10);
-        var wasmMemory = new WasmMemoryManager_2.default(wasmInstance.memory);
-        var heap = wasmMemory.resize(heapSize);
-        // Copy src buffer.
-        heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
-        decoder(pScratch, pDst, pSrc, texture.width, texture.height);
-        // Copy the result buffer to a new buffer for memory usage purposes.
-        var pixelsBuffer = new ArrayBufferSlice_5.default(heap.buffer).copyToBuffer(pDst, dstSize);
-        var pixels = new Uint8Array(pixelsBuffer);
-        return { pixels: pixels };
-    }
-    function decode_Dummy(texture) {
-        var pixels = new Uint8Array(texture.width * texture.height * 4);
-        pixels.fill(0xFF);
-        return { pixels: pixels };
-    }
-    function decodeTexture(texture) {
-        if (texture.data === null)
-            return Promise.resolve(decode_Dummy(texture));
-        return _wasmInstance.then(function (wasmInstance) {
-            switch (texture.format) {
-                case 0 /* I4 */:
-                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_I4);
-                case 1 /* I8 */:
-                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_I8);
-                case 2 /* IA4 */:
-                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_IA4);
-                case 3 /* IA8 */:
-                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_IA8);
-                case 4 /* RGB565 */:
-                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGB565);
-                case 5 /* RGB5A3 */:
-                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGB5A3);
-                case 6 /* RGBA8 */:
-                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGBA8);
-                case 14 /* CMPR */:
-                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_CMPR, 16);
-                case 8 /* C4 */:
-                case 9 /* C8 */:
-                case 10 /* C14X2 */:
-                default:
-                    console.error("Unsupported texture format " + texture.format + " on texture " + texture.name);
-                    return decode_Dummy(texture);
-            }
-        });
-    }
-    exports_26("decodeTexture", decodeTexture);
-    var ArrayBufferSlice_5, util_13, wat_modules_2, WasmMemoryManager_2, _wasmInstance;
-    return {
-        setters: [
-            function (ArrayBufferSlice_5_1) {
-                ArrayBufferSlice_5 = ArrayBufferSlice_5_1;
-            },
-            function (util_13_1) {
-                util_13 = util_13_1;
-            },
-            function (wat_modules_2_1) {
-                wat_modules_2 = wat_modules_2_1;
-            },
-            function (WasmMemoryManager_2_1) {
-                WasmMemoryManager_2 = WasmMemoryManager_2_1;
-            }
-        ],
-        execute: function () {
-            // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
-            // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
-            // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
-            _wasmInstance = wat_modules_2.gx_texture_asInstance();
-        }
-    };
-});
-// Implements Retro's TXTR (texture) format as seen in Metroid Prime 1.
-System.register("metroid_prime/txtr", ["gx/gx_texture"], function (exports_27, context_27) {
-    "use strict";
-    var __moduleName = context_27 && context_27.id;
-    function parse(resourceSystem, buffer) {
-        var view = buffer.createDataView();
-        var txtrFormat = view.getUint32(0x00);
-        var format = txtrFormatRemap[txtrFormat];
-        var width = view.getUint16(0x04);
-        var height = view.getUint16(0x06);
-        var mipCount = view.getUint32(0x08);
-        var offs = 0x0C;
-        var paletteFormat = 0;
-        var paletteData = null;
-        switch (format) {
-            case 8 /* C4 */:
-            case 9 /* C8 */:
-                paletteFormat = view.getUint32(offs + 0x00);
-                var palWidth = view.getUint32(offs + 0x04);
-                var palHeight = view.getUint32(offs + 0x06);
-                offs += 0x08;
-                var palSize = GX_Texture.calcPaletteSize(format, paletteFormat);
-                paletteData = buffer.slice(offs, offs + palSize);
-                offs += palSize;
-            case 10 /* C14X2 */:
-                throw "whoops";
-        }
-        var data = buffer.slice(offs);
-        return { format: format, width: width, height: height, mipCount: mipCount, data: data, paletteFormat: paletteFormat, paletteData: paletteData };
-    }
-    exports_27("parse", parse);
-    var GX_Texture, txtrFormatRemap;
-    return {
-        setters: [
-            function (GX_Texture_1) {
-                GX_Texture = GX_Texture_1;
-            }
-        ],
-        execute: function () {
-            txtrFormatRemap = [
-                0 /* I4 */,
-                1 /* I8 */,
-                2 /* IA4 */,
-                3 /* IA8 */,
-                8 /* C4 */,
-                9 /* C8 */,
-                10 /* C14X2 */,
-                4 /* RGB565 */,
-                5 /* RGB5A3 */,
-                6 /* RGBA8 */,
-                14 /* CMPR */,
-            ];
-        }
-    };
-});
-// Implements Retro's MREA format as seen in Metroid Prime 1.
-System.register("metroid_prime/mrea", ["gx/gx_material", "util", "gx/gx_displaylist"], function (exports_28, context_28) {
-    "use strict";
-    var __moduleName = context_28 && context_28.id;
-    function parseMaterialSet(resourceSystem, buffer, offs) {
-        var view = buffer.createDataView();
-        var textureCount = view.getUint32(offs + 0x00);
-        offs += 0x04;
-        var textures = [];
-        var textureRemapTable = [];
-        for (var i = 0; i < textureCount; i++) {
-            var materialTXTRID = util_14.readString(buffer, offs, 0x04, false);
-            var txtr = resourceSystem.loadAssetByID(materialTXTRID, 'TXTR');
-            var txtrIndex = textures.indexOf(txtr);
-            if (txtrIndex >= 0) {
-                textureRemapTable.push(txtrIndex);
-            }
-            else {
-                var newIndex = textures.push(txtr) - 1;
-                textureRemapTable.push(newIndex);
-            }
-            offs += 0x04;
-        }
-        var materialCount = view.getUint32(offs + 0x00);
-        offs += 0x04;
-        var materialEndTable = [];
-        for (var i = 0; i < materialCount; i++) {
-            var materialEndOffs = view.getUint32(offs);
-            materialEndTable.push(materialEndOffs);
-            offs += 0x04;
-        }
-        var materialsStart = offs;
-        var materials = [];
-        for (var i = 0; i < materialCount; i++) {
-            var flags = view.getUint32(offs + 0x00);
-            var textureIndexCount = view.getUint32(offs + 0x04);
-            offs += 0x08;
-            var textureIndexes = [];
-            util_14.assert(textureIndexCount < 8);
-            for (var j = 0; j < textureIndexCount; j++) {
-                var textureIndex = view.getUint32(offs);
-                textureIndexes.push(textureIndex);
-                offs += 0x04;
-            }
-            var vtxAttrFormat = view.getUint32(offs + 0x00);
-            var groupIndex = view.getUint32(offs + 0x04);
-            offs += 0x08;
-            var colorConstants = [];
-            if (flags & 8 /* HAS_KONST */) {
-                var konstCount = view.getUint32(offs);
-                offs += 0x04;
-                for (var j = 0; j < konstCount; j++) {
-                    var r = view.getUint8(offs + 0x00);
-                    var g = view.getUint8(offs + 0x01);
-                    var b = view.getUint8(offs + 0x02);
-                    var a = view.getUint8(offs + 0x03);
-                    colorConstants.push(new GX_Material.Color(r, g, b, a));
-                    offs += 0x04;
-                }
-            }
-            for (var j = colorConstants.length; j < 4; j++) {
-                // Push default colors.
-                // XXX(jstpierre): Should this stuff be moved outside GXMaterial?
-                colorConstants.push(new GX_Material.Color(0, 0, 0, 0));
-            }
-            var blendDstFactor = view.getUint16(offs + 0x00);
-            var blendSrcFactor = view.getUint16(offs + 0x02);
-            offs += 0x04;
-            if (flags & 16384 /* HAS_INDTX_REFL */) {
-                var reflectionIndtexSlot = view.getUint32(offs);
-                offs += 0x04;
-            }
-            var colorChannelFlagsTableCount = view.getUint32(offs);
-            util_14.assert(colorChannelFlagsTableCount <= 4);
-            offs += 0x04;
-            var lightChannels = [];
-            // Only color channel 1 is stored in the format.
-            for (var j = 0; j < 1; j++) {
-                var colorChannelFlags = view.getUint32(offs);
-                var lightingEnabled = !!(colorChannelFlags & 0x01);
-                var ambColorSource = (colorChannelFlags >>> 1) & 0x01;
-                var matColorSource = (colorChannelFlags >>> 2) & 0x01;
-                var colorChannel = { lightingEnabled: lightingEnabled, ambColorSource: ambColorSource, matColorSource: matColorSource };
-                // XXX(jstpierre): What's with COLOR0A0?
-                var alphaChannel = { lightingEnabled: false, ambColorSource: 0 /* REG */, matColorSource: 0 /* REG */ };
-                lightChannels.push({ colorChannel: colorChannel, alphaChannel: alphaChannel });
-            }
-            offs += 0x04 * colorChannelFlagsTableCount;
-            // Fake other channel.
-            lightChannels.push({
-                colorChannel: { lightingEnabled: false, ambColorSource: 0 /* REG */, matColorSource: 0 /* REG */ },
-                alphaChannel: { lightingEnabled: false, ambColorSource: 0 /* REG */, matColorSource: 0 /* REG */ },
-            });
-            var tevStageCount = view.getUint32(offs);
-            util_14.assert(tevStageCount <= 8);
-            offs += 0x04;
-            var tevOrderTableOffs = offs + tevStageCount * 0x14;
-            var tevStages = [];
-            for (var j = 0; j < tevStageCount; j++) {
-                var colorInputSel = view.getUint32(offs + 0x00);
-                var alphaInputSel = view.getUint32(offs + 0x04);
-                var colorCombineFlags = view.getUint32(offs + 0x08);
-                var alphaCombineFlags = view.getUint32(offs + 0x0C);
-                var konstAlphaSel = view.getUint8(offs + 0x11);
-                var konstColorSel = view.getUint8(offs + 0x12);
-                var channelId = GX_Material.getRasColorChannelID(view.getUint8(offs + 0x13));
-                var colorInA = (colorInputSel >>> 0) & 0x1F;
-                var colorInB = (colorInputSel >>> 5) & 0x1F;
-                var colorInC = (colorInputSel >>> 10) & 0x1F;
-                var colorInD = (colorInputSel >>> 15) & 0x1F;
-                var alphaInA = (alphaInputSel >>> 0) & 0x1F;
-                var alphaInB = (alphaInputSel >>> 5) & 0x1F;
-                var alphaInC = (alphaInputSel >>> 10) & 0x1F;
-                var alphaInD = (alphaInputSel >>> 15) & 0x1F;
-                var colorOp = (colorCombineFlags >>> 0) & 0x0F;
-                var colorBias = (colorCombineFlags >>> 4) & 0x03;
-                var colorScale = (colorCombineFlags >>> 6) & 0x03;
-                var colorClamp = !!(colorCombineFlags >>> 8);
-                var colorRegId = (colorCombineFlags >>> 9) & 0x03;
-                var alphaOp = (alphaCombineFlags >>> 0) & 0x0F;
-                var alphaBias = (alphaCombineFlags >>> 4) & 0x03;
-                var alphaScale = (alphaCombineFlags >>> 6) & 0x03;
-                var alphaClamp = !!(alphaCombineFlags >>> 8);
-                var alphaRegId = (alphaCombineFlags >>> 9) & 0x03;
-                var texCoordId = view.getUint8(tevOrderTableOffs + 0x03);
-                var texMap = view.getUint8(tevOrderTableOffs + 0x02);
-                var index_1 = j;
-                var tevStage = {
-                    index: index_1,
-                    colorInA: colorInA, colorInB: colorInB, colorInC: colorInC, colorInD: colorInD, colorOp: colorOp, colorBias: colorBias, colorScale: colorScale, colorClamp: colorClamp, colorRegId: colorRegId,
-                    alphaInA: alphaInA, alphaInB: alphaInB, alphaInC: alphaInC, alphaInD: alphaInD, alphaOp: alphaOp, alphaBias: alphaBias, alphaScale: alphaScale, alphaClamp: alphaClamp, alphaRegId: alphaRegId,
-                    texCoordId: texCoordId, texMap: texMap, channelId: channelId,
-                    konstColorSel: konstColorSel, konstAlphaSel: konstAlphaSel,
-                    // We don't use indtex.
-                    indTexStage: 0 /* STAGE0 */,
-                    indTexMatrix: 0 /* OFF */,
-                    indTexFormat: 0 /* _8 */,
-                    indTexBiasSel: 0 /* NONE */,
-                    indTexWrapS: 0 /* OFF */,
-                    indTexWrapT: 0 /* OFF */,
-                    indTexAddPrev: false,
-                    indTexUseOrigLOD: false,
-                };
-                tevStages.push(tevStage);
-                offs += 0x14;
-                tevOrderTableOffs += 0x04;
-            }
-            // Skip past TEV order table.
-            offs = tevOrderTableOffs;
-            var texGenCount = view.getUint32(offs);
-            util_14.assert(texGenCount <= 8);
-            offs += 0x04;
-            var texGens = [];
-            for (var j = 0; j < texGenCount; j++) {
-                var index_2 = j;
-                var flags_1 = view.getUint32(offs);
-                var type = (flags_1 >>> 0) & 0x0F;
-                var source = (flags_1 >>> 4) & 0x0F;
-                var matrix = ((flags_1 >>> 9) & 0x1F) + 30;
-                var normalize = !!(flags_1 & 14);
-                var postMatrix = ((flags_1 >>> 15) & 0x3F) + 64;
-                texGens.push({ index: index_2, type: type, source: source, matrix: matrix, normalize: normalize, postMatrix: postMatrix });
-                offs += 0x04;
-            }
-            var uvAnimations = [];
-            var uvAnimationsSize = view.getUint32(offs + 0x00);
-            var uvAnimationsCount = view.getUint32(offs + 0x04);
-            offs += 0x08;
-            for (var j = 0; j < uvAnimationsCount; j++) {
-                var type = view.getUint32(offs + 0x00);
-                offs += 0x04;
-                switch (type) {
-                    case 0 /* INV_MAT_SKY */:
-                    case 1 /* INV_MAT */:
-                    case 6 /* MODEL_MAT */:
-                        uvAnimations.push({ type: type });
-                        // These guys have no parameters.
-                        break;
-                    case 2 /* UV_SCROLL */: {
-                        var offsetA = view.getUint32(offs + 0x00);
-                        var offsetB = view.getUint32(offs + 0x04);
-                        var scaleA = view.getUint32(offs + 0x08);
-                        var scaleB = view.getUint32(offs + 0x0C);
-                        uvAnimations.push({ type: type, offsetA: offsetA, offsetB: offsetB, scaleA: scaleA, scaleB: scaleB });
-                        offs += 0x10;
-                        break;
-                    }
-                    case 3 /* ROTATION */: {
-                        var offset = view.getUint32(offs + 0x00);
-                        var scale = view.getUint32(offs + 0x04);
-                        uvAnimations.push({ type: type, offset: offset, scale: scale });
-                        offs += 0x08;
-                        break;
-                    }
-                    case 4 /* FLIPBOOK_U */:
-                    case 5 /* FLIPBOOK_V */: {
-                        var scale = view.getUint32(offs + 0x00);
-                        var numFrames = view.getUint32(offs + 0x04);
-                        var step = view.getUint32(offs + 0x08);
-                        var offset = view.getUint32(offs + 0x0C);
-                        uvAnimations.push({ type: type, scale: scale, numFrames: numFrames, step: step, offset: offset });
-                        offs += 0x10;
-                        break;
-                    }
-                    case 7 /* CYLINDER */: {
-                        var theta = view.getUint32(offs + 0x00);
-                        var phi = view.getUint32(offs + 0x04);
-                        uvAnimations.push({ type: type, theta: theta, phi: phi });
-                        offs += 0x08;
-                        break;
-                    }
-                }
-            }
-            var index = i;
-            var translucent = flags & 16 /* IS_TRANSPARENT */;
-            var name_2 = "PrimeGen_" + i;
-            var cullMode = 2 /* BACK */;
-            var colorRegisters = [];
-            colorRegisters.push(new GX_Material.Color(1, 1, 1, 0));
-            colorRegisters.push(new GX_Material.Color(1, 1, 1, 0));
-            colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
-            colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
-            var alphaTest = {
-                op: 1 /* OR */,
-                compareA: 4 /* GREATER */,
-                referenceA: 0.25,
-                compareB: 0 /* NEVER */,
-                referenceB: 0,
-            };
-            var blendMode = {
-                type: translucent ? 1 /* BLEND */ : 0 /* NONE */,
-                srcFactor: blendSrcFactor,
-                dstFactor: blendDstFactor,
-                logicOp: 0 /* CLEAR */,
-            };
-            var ropInfo = {
-                blendMode: blendMode,
-                depthTest: true,
-                depthFunc: 1 /* LESS */,
-                depthWrite: (!!(flags & 128 /* DEPTH_WRITE */)) && !translucent,
-            };
-            var gxMaterial = {
-                index: index, name: name_2,
-                cullMode: cullMode,
-                colorRegisters: colorRegisters,
-                colorConstants: colorConstants,
-                lightChannels: lightChannels,
-                texGens: texGens,
-                tevStages: tevStages,
-                alphaTest: alphaTest,
-                ropInfo: ropInfo,
-                indTexStages: [],
-            };
-            materials.push({ flags: flags, groupIndex: groupIndex, textureIndexes: textureIndexes, vtxAttrFormat: vtxAttrFormat, gxMaterial: gxMaterial, uvAnimations: uvAnimations });
-            util_14.assert((offs - materialsStart) === materialEndTable[i]);
-        }
-        return { textures: textures, textureRemapTable: textureRemapTable, materials: materials };
-    }
-    function parseGeometry(resourceSystem, buffer, materialSet, sectionTables, sectionIndex) {
-        var sectionOffsTable = sectionTables.dataSectionOffsTable;
-        var sectionSizeTable = sectionTables.dataSectionSizeTable;
-        var view = buffer.createDataView();
-        var posSectionOffs = sectionOffsTable[sectionIndex++];
-        var nrmSectionOffs = sectionOffsTable[sectionIndex++];
-        var clrSectionOffs = sectionOffsTable[sectionIndex++];
-        var uvfSectionOffs = sectionOffsTable[sectionIndex++];
-        var uvsSectionOffs = sectionOffsTable[sectionIndex++];
-        var surfaceTableOffs = sectionOffsTable[sectionIndex++];
-        var firstSurfaceOffs = sectionOffsTable[sectionIndex];
-        var surfaceCount = view.getUint32(surfaceTableOffs + 0x00);
-        var surfaces = [];
-        function fillVatFormat(nrmType, tex0Type, compShift) {
-            var vatFormat = [];
-            vatFormat[9 /* POS */] = { compCnt: 1 /* POS_XYZ */, compType: 4 /* F32 */, compShift: compShift };
-            vatFormat[10 /* NRM */] = { compCnt: 0 /* NRM_XYZ */, compType: nrmType, compShift: compShift };
-            vatFormat[11 /* CLR0 */] = { compCnt: 1 /* CLR_RGBA */, compType: 5 /* RGBA8 */, compShift: compShift };
-            vatFormat[12 /* CLR1 */] = { compCnt: 1 /* CLR_RGBA */, compType: 5 /* RGBA8 */, compShift: compShift };
-            vatFormat[13 /* TEX0 */] = { compCnt: 1 /* TEX_ST */, compType: tex0Type, compShift: compShift };
-            vatFormat[14 /* TEX1 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
-            vatFormat[15 /* TEX2 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
-            vatFormat[16 /* TEX3 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
-            vatFormat[17 /* TEX4 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
-            vatFormat[18 /* TEX5 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
-            vatFormat[19 /* TEX6 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
-            vatFormat[20 /* TEX7 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
-            return vatFormat;
-        }
-        for (var i = 0; i < surfaceCount; i++) {
-            var surfaceOffs = sectionOffsTable[sectionIndex];
-            var surfaceEnd = firstSurfaceOffs + view.getUint32(surfaceTableOffs + 0x04 + i * 0x04);
-            var centerX = view.getFloat32(surfaceOffs + 0x00);
-            var centerY = view.getFloat32(surfaceOffs + 0x04);
-            var centerZ = view.getFloat32(surfaceOffs + 0x08);
-            var materialIndex = view.getUint32(surfaceOffs + 0x0C);
-            var mantissa = view.getUint16(surfaceOffs + 0x10);
-            var displayListSizeExceptNotReally = view.getUint16(surfaceOffs + 0x12);
-            var extraDataSize = view.getUint32(surfaceOffs + 0x1C);
-            var normalX = view.getFloat32(surfaceOffs + 0x20);
-            var normalY = view.getFloat32(surfaceOffs + 0x24);
-            var normalZ = view.getFloat32(surfaceOffs + 0x28);
-            // XXX(jstpierre): 0x30 or 0x2C?
-            var surfaceHeaderEnd = surfaceOffs + 0x2C + extraDataSize;
-            var primitiveDataOffs = util_14.align(surfaceHeaderEnd, 32);
-            // Build our vertex format.
-            var material = materialSet.materials[materialIndex];
-            var vtxAttrFormat = material.vtxAttrFormat;
-            var vat = [];
-            var useUvsArray = (material.flags & 8192 /* UV_SHORT */);
-            var vtxArrays = [];
-            vtxArrays[9 /* POS */] = { buffer: buffer, offs: posSectionOffs };
-            vtxArrays[10 /* NRM */] = { buffer: buffer, offs: nrmSectionOffs };
-            vtxArrays[11 /* CLR0 */] = { buffer: buffer, offs: clrSectionOffs };
-            vtxArrays[12 /* CLR1 */] = { buffer: buffer, offs: clrSectionOffs };
-            vtxArrays[13 /* TEX0 */] = { buffer: buffer, offs: useUvsArray ? uvsSectionOffs : uvfSectionOffs };
-            vtxArrays[14 /* TEX1 */] = { buffer: buffer, offs: uvfSectionOffs };
-            vtxArrays[15 /* TEX2 */] = { buffer: buffer, offs: uvfSectionOffs };
-            vtxArrays[16 /* TEX3 */] = { buffer: buffer, offs: uvfSectionOffs };
-            vtxArrays[17 /* TEX4 */] = { buffer: buffer, offs: uvfSectionOffs };
-            vtxArrays[18 /* TEX5 */] = { buffer: buffer, offs: uvfSectionOffs };
-            vtxArrays[19 /* TEX6 */] = { buffer: buffer, offs: uvfSectionOffs };
-            vtxArrays[20 /* TEX7 */] = { buffer: buffer, offs: uvfSectionOffs };
-            var vcd = [];
-            try {
-                for (var vtxAttrFormats_1 = __values(vtxAttrFormats), vtxAttrFormats_1_1 = vtxAttrFormats_1.next(); !vtxAttrFormats_1_1.done; vtxAttrFormats_1_1 = vtxAttrFormats_1.next()) {
-                    var format = vtxAttrFormats_1_1.value;
-                    if (!(vtxAttrFormat & format.mask))
-                        continue;
-                    vcd[format.vtxAttrib] = { type: 3 /* INDEX16 */ };
-                }
-            }
-            catch (e_18_1) { e_18 = { error: e_18_1 }; }
-            finally {
-                try {
-                    if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
-                }
-                finally { if (e_18) throw e_18.error; }
-            }
-            // GX_VTXFMT0 | GX_VA_NRM = GX_F32
-            // GX_VTXFMT1 | GX_VA_NRM = GX_S16
-            // GX_VTXFMT2 | GX_VA_NRM = GX_S16
-            // GX_VTXFMT0 | GX_VA_TEX0 = GX_F32
-            // GX_VTXFMT1 | GX_VA_TEX0 = GX_F32
-            // GX_VTXFMT2 | GX_VA_TEX0 = GX_S16
-            var compShift = Math.log2(mantissa);
-            vat[0 /* VTXFMT0 */] = fillVatFormat(4 /* F32 */, 4 /* F32 */, compShift);
-            vat[1 /* VTXFMT1 */] = fillVatFormat(3 /* S16 */, 4 /* F32 */, compShift);
-            vat[2 /* VTXFMT2 */] = fillVatFormat(3 /* S16 */, 3 /* S16 */, compShift);
-            var vtxLoader = gx_displaylist_1.compileVtxLoaderMultiVat(vat, vcd);
-            var dlData = buffer.slice(primitiveDataOffs, surfaceEnd);
-            var loadedVertexLayout = vtxLoader.loadedVertexLayout;
-            var loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
-            var surface = {
-                materialIndex: materialIndex,
-                loadedVertexData: loadedVertexData,
-                loadedVertexLayout: loadedVertexLayout,
-            };
-            surfaces.push(surface);
-            sectionIndex++;
-        }
-        var geometry = { surfaces: surfaces };
-        return [geometry, sectionIndex];
-        var e_18, _a;
-    }
-    function parse(resourceSystem, buffer) {
-        var view = buffer.createDataView();
-        util_14.assert(view.getUint32(0x00) === 0xDEADBEEF);
-        var version = view.getUint32(0x04);
-        util_14.assert(version === 0x0F);
-        // 0x10 - 0x34: Transform matrix
-        var worldModelCount = view.getUint32(0x38);
-        var dataSectionCount = view.getUint32(0x3C);
-        var worldGeometrySectionIndex = view.getUint32(0x40);
-        var dataSectionSizeTable = [];
-        var dataSectionSizeTableIdx = 0x60;
-        for (var i = 0; i < dataSectionCount; i++) {
-            var size = view.getUint32(dataSectionSizeTableIdx + 0x00);
-            dataSectionSizeTable.push(size);
-            dataSectionSizeTableIdx += 0x04;
-        }
-        var firstDataSectionOffs = util_14.align(dataSectionSizeTableIdx, 32);
-        var dataSectionOffsTable = [firstDataSectionOffs];
-        for (var i = 1; i < dataSectionCount; i++) {
-            var prevOffs = dataSectionOffsTable[i - 1];
-            var prevSize = dataSectionSizeTable[i - 1];
-            dataSectionOffsTable.push(util_14.align(prevOffs + prevSize, 32));
-        }
-        // In practice.
-        util_14.assert(worldGeometrySectionIndex === 0);
-        // The materials section is always the first index in the world geometry section indexes...
-        var materialSectionOffs = dataSectionOffsTable[worldGeometrySectionIndex + 0];
-        // Parse out materials.
-        var materialSet = parseMaterialSet(resourceSystem, buffer, materialSectionOffs);
-        // Now do geometry.
-        var sectionTables = { dataSectionOffsTable: dataSectionOffsTable, dataSectionSizeTable: dataSectionSizeTable };
-        var geometrySectionIndex = worldGeometrySectionIndex + 1;
-        var worldModels = [];
-        for (var i = 0; i < worldModelCount; i++) {
-            // World model header.
-            var worldModelHeaderOffs = dataSectionOffsTable[geometrySectionIndex];
-            var visorFlags = view.getUint32(worldModelHeaderOffs + 0x00);
-            worldModelHeaderOffs += 4 * 12; // World transform matrix
-            worldModelHeaderOffs += 4 * 6; // AABB
-            geometrySectionIndex += 1;
-            var worldModelGeometry = void 0;
-            _a = __read(parseGeometry(resourceSystem, buffer, materialSet, sectionTables, geometrySectionIndex), 2), worldModelGeometry = _a[0], geometrySectionIndex = _a[1];
-            worldModels.push(worldModelGeometry);
-        }
-        return { materialSet: materialSet, worldModels: worldModels };
-        var _a;
-    }
-    exports_28("parse", parse);
-    var GX_Material, util_14, gx_displaylist_1, vtxAttrFormats;
-    return {
-        setters: [
-            function (GX_Material_1) {
-                GX_Material = GX_Material_1;
-            },
-            function (util_14_1) {
-                util_14 = util_14_1;
-            },
-            function (gx_displaylist_1_1) {
-                gx_displaylist_1 = gx_displaylist_1_1;
-            }
-        ],
-        execute: function () {
-            exports_28("vtxAttrFormats", vtxAttrFormats = [
-                { vtxAttrib: 9 /* POS */, mask: 0x00000003, compCount: 3 },
-                { vtxAttrib: 10 /* NRM */, mask: 0x0000000C, compCount: 3 },
-                { vtxAttrib: 11 /* CLR0 */, mask: 0x00000030, compCount: 4 },
-                { vtxAttrib: 12 /* CLR1 */, mask: 0x000000C0, compCount: 4 },
-                { vtxAttrib: 13 /* TEX0 */, mask: 0x00000300, compCount: 2 },
-                { vtxAttrib: 14 /* TEX1 */, mask: 0x00000C00, compCount: 2 },
-                { vtxAttrib: 15 /* TEX2 */, mask: 0x00003000, compCount: 2 },
-                { vtxAttrib: 16 /* TEX3 */, mask: 0x0000C000, compCount: 2 },
-                { vtxAttrib: 17 /* TEX4 */, mask: 0x00030000, compCount: 2 },
-                { vtxAttrib: 18 /* TEX5 */, mask: 0x000C0000, compCount: 2 },
-                { vtxAttrib: 19 /* TEX6 */, mask: 0x00300000, compCount: 2 },
-            ]);
-        }
-    };
-});
-// GX display list parsing.
-System.register("gx/gx_displaylist", ["MemoizeCache", "util", "endian"], function (exports_29, context_29) {
-    "use strict";
-    var __moduleName = context_29 && context_29.id;
-    function getComponentSizeRaw(compType) {
-        switch (compType) {
-            case 0 /* U8 */:
-            case 1 /* S8 */:
-            case 5 /* RGBA8 */:
-                return 1;
-            case 2 /* U16 */:
-            case 3 /* S16 */:
-                return 2;
-            case 4 /* F32 */:
-                return 4;
-        }
-    }
-    exports_29("getComponentSizeRaw", getComponentSizeRaw);
-    function getComponentSize(vtxAttrib, vatFormat) {
-        // MTXIDX fields don't have VAT entries.
-        switch (vtxAttrib) {
-            case 0 /* PNMTXIDX */:
-            case 1 /* TEX0MTXIDX */:
-            case 2 /* TEX1MTXIDX */:
-            case 3 /* TEX2MTXIDX */:
-            case 4 /* TEX3MTXIDX */:
-            case 5 /* TEX4MTXIDX */:
-            case 6 /* TEX5MTXIDX */:
-            case 7 /* TEX6MTXIDX */:
-            case 8 /* TEX7MTXIDX */:
-                return 1;
-            default:
-                return getComponentSizeRaw(vatFormat.compType);
-        }
-    }
-    function getComponentCountRaw(vtxAttrib, compCnt) {
-        switch (vtxAttrib) {
-            case 9 /* POS */:
-                if (compCnt === 0 /* POS_XY */)
-                    return 2;
-                else if (compCnt === 1 /* POS_XYZ */)
-                    return 3;
-            case 10 /* NRM */:
-            case 25 /* NBT */:
-                if (compCnt === 0 /* NRM_XYZ */)
-                    return 3;
-                // NBT*XYZ
-                else if (compCnt === 1 /* NRM_NBT */)
-                    return 9;
-                // Separated NBT has three components per index.
-                else if (compCnt === 2 /* NRM_NBT3 */)
-                    return 3;
-            case 11 /* CLR0 */:
-            case 12 /* CLR1 */:
-                if (compCnt === 0 /* CLR_RGB */)
-                    return 3;
-                else if (compCnt === 1 /* CLR_RGBA */)
-                    return 4;
-            case 13 /* TEX0 */:
-            case 14 /* TEX1 */:
-            case 15 /* TEX2 */:
-            case 16 /* TEX3 */:
-            case 17 /* TEX4 */:
-            case 18 /* TEX5 */:
-            case 19 /* TEX6 */:
-            case 20 /* TEX7 */:
-                if (compCnt === 0 /* TEX_S */)
-                    return 1;
-                else if (compCnt === 1 /* TEX_ST */)
-                    return 2;
-            case 255 /* NULL */:
-            default:
-                // Shouldn't ever happen
-                throw new Error("whoops");
-        }
-    }
-    exports_29("getComponentCountRaw", getComponentCountRaw);
-    function getComponentCount(vtxAttrib, vatFormat) {
-        switch (vtxAttrib) {
-            case 0 /* PNMTXIDX */:
-            case 1 /* TEX0MTXIDX */:
-            case 2 /* TEX1MTXIDX */:
-            case 3 /* TEX2MTXIDX */:
-            case 4 /* TEX3MTXIDX */:
-            case 5 /* TEX4MTXIDX */:
-            case 6 /* TEX5MTXIDX */:
-            case 7 /* TEX6MTXIDX */:
-            case 8 /* TEX7MTXIDX */:
-                return 1;
-            default:
-                return getComponentCountRaw(vtxAttrib, vatFormat.compCnt);
-        }
-    }
-    function getComponentShiftRaw(compType, compShift) {
-        switch (compType) {
-            case 4 /* F32 */:
-            case 5 /* RGBA8 */:
-                return 0;
-            case 0 /* U8 */:
-            case 2 /* U16 */:
-            case 1 /* S8 */:
-            case 3 /* S16 */:
-                return compShift;
-        }
-    }
-    function getComponentShift(vtxAttrib, vatFormat) {
-        switch (vtxAttrib) {
-            case 0 /* PNMTXIDX */:
-            case 1 /* TEX0MTXIDX */:
-            case 2 /* TEX1MTXIDX */:
-            case 3 /* TEX2MTXIDX */:
-            case 4 /* TEX3MTXIDX */:
-            case 5 /* TEX4MTXIDX */:
-            case 6 /* TEX5MTXIDX */:
-            case 7 /* TEX6MTXIDX */:
-            case 8 /* TEX7MTXIDX */:
-                return 0;
-            default:
-                return getComponentShiftRaw(vatFormat.compType, vatFormat.compShift);
-        }
-    }
-    function getIndexNumComponents(vtxAttrib, vatFormat) {
-        // TODO(jstpierre): Figure out how GX_VA_NBT works.
-        switch (vtxAttrib) {
-            case 10 /* NRM */:
-                if (vatFormat.compCnt === 2 /* NRM_NBT3 */)
-                    return 3;
-            // Fallthrough
-            default:
-                return 1;
-        }
-    }
-    function getAttrName(vtxAttrib) {
-        switch (vtxAttrib) {
-            case 0 /* PNMTXIDX */: return "PNMTXIDX";
-            case 1 /* TEX0MTXIDX */: return "TEX0MTXIDX";
-            case 2 /* TEX1MTXIDX */: return "TEX1MTXIDX";
-            case 3 /* TEX2MTXIDX */: return "TEX2MTXIDX";
-            case 4 /* TEX3MTXIDX */: return "TEX3MTXIDX";
-            case 5 /* TEX4MTXIDX */: return "TEX4MTXIDX";
-            case 6 /* TEX5MTXIDX */: return "TEX5MTXIDX";
-            case 7 /* TEX6MTXIDX */: return "TEX6MTXIDX";
-            case 8 /* TEX7MTXIDX */: return "TEX7MTXIDX";
-            case 9 /* POS */: return "POS";
-            case 10 /* NRM */: return "NRM";
-            case 25 /* NBT */: return "NBT";
-            case 11 /* CLR0 */: return "CLR0";
-            case 12 /* CLR1 */: return "CLR1";
-            case 13 /* TEX0 */: return "TEX0";
-            case 14 /* TEX1 */: return "TEX1";
-            case 15 /* TEX2 */: return "TEX2";
-            case 16 /* TEX3 */: return "TEX3";
-            case 17 /* TEX4 */: return "TEX4";
-            case 18 /* TEX5 */: return "TEX5";
-            case 19 /* TEX6 */: return "TEX6";
-            case 20 /* TEX7 */: return "TEX7";
-            case 255 /* NULL */: throw new Error("whoops");
-        }
-    }
-    function getAttributeFormatSize(attributeFormat) {
-        switch (attributeFormat) {
-            case 0 /* U16 */:
-                return 2;
-            case 1 /* F32 */:
-                return 4;
-        }
-    }
-    function translateVatLayout(vatFormat, vcd) {
-        if (vatFormat === undefined)
-            return undefined;
-        var srcVertexSize = 0;
-        for (var vtxAttrib = 0; vtxAttrib < vcd.length; vtxAttrib++) {
-            // Describes packed vertex layout.
-            var vtxAttrDesc = vcd[vtxAttrib];
-            // Describes format of pointed-to data.
-            var vtxAttrFmt = vatFormat[vtxAttrib];
-            if (!vtxAttrDesc || vtxAttrDesc.type === 0 /* NONE */)
-                continue;
-            // TODO(jstpierre): Find a better way to do NBT3.
-            var srcIndexComponentCount = getIndexNumComponents(vtxAttrib, vtxAttrFmt);
-            switch (vtxAttrDesc.type) {
-                case 1 /* DIRECT */: {
-                    var srcAttrCompSize = getComponentSize(vtxAttrib, vtxAttrFmt);
-                    var srcAttrCompCount = getComponentCount(vtxAttrib, vtxAttrFmt);
-                    var srcAttrByteSize = srcAttrCompSize * srcAttrCompCount;
-                    srcVertexSize += srcAttrByteSize;
-                    break;
-                }
-                case 2 /* INDEX8 */:
-                    srcVertexSize += 1 * srcIndexComponentCount;
-                    break;
-                case 3 /* INDEX16 */:
-                    srcVertexSize += 2 * srcIndexComponentCount;
-                    break;
-            }
-        }
-        return { srcVertexSize: srcVertexSize, vatFormat: vatFormat, vcd: vcd };
-    }
-    function translateVertexLayout(vat, vcd) {
-        // Create source VAT layouts.
-        var vatLayouts = vat.map(function (vatFormat) { return translateVatLayout(vatFormat, vcd); });
-        // Create destination vertex layout.
-        var dstVertexSize = 0;
-        var dstVertexAttributeLayouts = [];
-        var _loop_4 = function (vtxAttrib) {
-            var vtxAttrDesc = vcd[vtxAttrib];
-            if (!vtxAttrDesc || vtxAttrDesc.type === 0 /* NONE */)
-                return "continue";
-            var enableOutput = (vtxAttrDesc.enableOutput === undefined || vtxAttrDesc.enableOutput);
-            if (!enableOutput)
-                return "continue";
-            // TODO(jstpierre): Worth supporting other component types?
-            var format = 1 /* F32 */;
-            var formatComponentSize = 4;
-            dstVertexSize = util_15.align(dstVertexSize, formatComponentSize);
-            var offset = dstVertexSize;
-            // Find our maximum component count by choosing from a maximum of all the VAT formats.
-            var componentCount = 0;
-            vatLayouts.forEach(function (vatLayout) {
-                var fmtComponentCount = getComponentCount(vtxAttrib, vatLayout.vatFormat[vtxAttrib]);
-                componentCount = Math.max(componentCount, fmtComponentCount);
-            });
-            dstVertexSize += formatComponentSize * componentCount;
-            dstVertexAttributeLayouts.push({ vtxAttrib: vtxAttrib, offset: offset, format: format, componentCount: componentCount });
-        };
-        for (var vtxAttrib = 0; vtxAttrib < vcd.length; vtxAttrib++) {
-            _loop_4(vtxAttrib);
-        }
-        // Align the whole thing to our minimum required alignment (F32).
-        dstVertexSize = util_15.align(dstVertexSize, 4);
-        return { dstVertexSize: dstVertexSize, dstVertexAttributeLayouts: dstVertexAttributeLayouts, vatLayouts: vatLayouts };
-    }
-    function _compileVtxLoader(vat, vcd) {
-        var loadedVertexLayout = translateVertexLayout(vat, vcd);
-        function makeLoaderName() {
-            var name = 'VtxLoader';
-            // TODO(jstpierre): Re-enable this at some point. Right now it's not so easy...
-            /*
-            for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vat.length; vtxAttrib++) {
-                if (!vtxDescs[vtxAttrib] || vtxDescs[vtxAttrib].type === GX.AttrType.NONE)
-                    continue;
-    
-                const attrName = getAttrName(vtxAttrib);
-    
-                const compSizeSuffix = vat[vtxAttrib] ? getComponentSize(vat[vtxAttrib].compType) : '';
-                const compCntSuffix = vat[vtxAttrib] ? getComponentCount(vtxAttrib, vat[vtxAttrib].compCnt) : '';
-    
-                const attrTypeSuffixes = ['', 'D', 'I8', 'I16'];
-                const attrTypeSuffix = attrTypeSuffixes[vtxDescs[vtxAttrib].type];
-                name += `_${attrName}$${attrTypeSuffix}$${compSizeSuffix}x${compCntSuffix}`;
-            }
-            */
-            return name;
-        }
-        function compileVtxArrayViewName(vtxAttrib) {
-            return "srcAttrArrayView" + vtxAttrib;
-        }
-        function compileVtxArrayViews() {
-            var sources = [];
-            var _loop_5 = function (vtxAttrib) {
-                var dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find(function (layout) { return layout.vtxAttrib === vtxAttrib; });
-                var outputEnabled = !!dstAttribLayout;
-                if (!outputEnabled)
-                    return "continue";
-                var attrType = vcd[vtxAttrib].type;
-                if (attrType === 3 /* INDEX16 */ || attrType === 2 /* INDEX8 */) {
-                    var viewName = compileVtxArrayViewName(vtxAttrib);
-                    sources.push("const " + viewName + " = vtxArrays[" + vtxAttrib + "].buffer.createDataView(vtxArrays[" + vtxAttrib + "].offs);");
-                }
-            };
-            for (var vtxAttrib = 0; vtxAttrib < 25 /* MAX */; vtxAttrib++) {
-                _loop_5(vtxAttrib);
-            }
-            return sources.join('\n');
-        }
-        // Loads a single vertex layout.
-        function compileVatLayoutAttribute(vatLayout, vtxAttrib) {
-            var vtxAttrFmt = vatLayout.vatFormat[vtxAttrib];
-            var vtxAttrDesc = vatLayout.vcd[vtxAttrib];
-            var dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find(function (layout) { return layout.vtxAttrib === vtxAttrib; });
-            if (!vtxAttrDesc || vtxAttrDesc.type === 0 /* NONE */)
-                return '';
-            // If we don't have a destination for the data, then don't bother outputting.
-            var outputEnabled = !!dstAttribLayout;
-            var srcAttrCompSize;
-            var srcAttrCompCount;
-            var srcAttrByteSize;
-            // We only need vtxAttrFmt if we're going to read the data.
-            if (vtxAttrDesc.type === 1 /* DIRECT */ || outputEnabled) {
-                srcAttrCompSize = getComponentSize(vtxAttrib, vtxAttrFmt);
-                srcAttrCompCount = getComponentCount(vtxAttrib, vtxAttrFmt);
-                srcAttrByteSize = srcAttrCompSize * srcAttrCompCount;
-            }
-            function compileShift(n) {
-                // Instead of just doing `${n} >> srcAttrCompShift`, we use division
-                // to get us the fractional components...
-                var srcAttrCompShift = getComponentShift(vtxAttrib, vtxAttrFmt);
-                var divisor = 1 << srcAttrCompShift;
-                if (divisor === 1)
-                    return n;
-                else
-                    return "(" + n + " / " + divisor + ")";
-            }
-            function compileReadOneComponentF32(viewName, attrOffset) {
-                switch (vtxAttrFmt.compType) {
-                    case 4 /* F32 */:
-                        return viewName + ".getFloat32(" + attrOffset + ")";
-                    case 5 /* RGBA8 */:
-                        // This gets four components.
-                        return "(" + viewName + ".getUint8(" + attrOffset + ") / 0xFF)";
-                    case 0 /* U8 */:
-                        return compileShift(viewName + ".getUint8(" + attrOffset + ")");
-                    case 2 /* U16 */:
-                        return compileShift(viewName + ".getUint16(" + attrOffset + ")");
-                    case 1 /* S8 */:
-                        return compileShift(viewName + ".getInt8(" + attrOffset + ")");
-                    case 3 /* S16 */:
-                        return compileShift(viewName + ".getInt16(" + attrOffset + ")");
-                    default:
-                        throw "whoops";
-                }
-            }
-            function compileReadOneComponent(viewName, attrOffset) {
-                util_15.assert(dstAttribLayout.format === 1 /* F32 */);
-                return compileReadOneComponentF32(viewName, attrOffset);
-            }
-            function compileWriteOneComponent(offs, value) {
-                util_15.assert(dstAttribLayout.format === 1 /* F32 */);
-                var littleEndian = (endian_2.getSystemEndianness() === 0 /* LITTLE_ENDIAN */);
-                var dstOffs = "dstVertexDataOffs + " + offs;
-                return "dstVertexDataView.setFloat32(" + dstOffs + ", " + value + ", " + littleEndian + ")";
-            }
-            function compileOneAttrib(viewName, attrOffsetBase, drawCallIdxIncr) {
-                var S = "";
-                if (outputEnabled) {
-                    var dstComponentSize = getAttributeFormatSize(dstAttribLayout.format);
-                    for (var i = 0; i < dstAttribLayout.componentCount; i++) {
-                        var dstOffs = dstAttribLayout.offset + (i * dstComponentSize);
-                        var srcOffs = attrOffsetBase + " + " + i * srcAttrCompSize;
-                        // Fill in components not in the source with zero.
-                        var value = void 0;
-                        if (i < srcAttrCompCount)
-                            value = compileReadOneComponent(viewName, srcOffs);
-                        else
-                            value = "0";
-                        S += "\n        " + compileWriteOneComponent(dstOffs, value) + ";";
-                    }
-                }
-                S += "\n        drawCallIdx += " + drawCallIdxIncr + ";\n";
-                return S;
-            }
-            function compileOneIndex(viewName, readIndex, drawCallIdxIncr, uniqueSuffix) {
-                if (uniqueSuffix === void 0) { uniqueSuffix = ''; }
-                // TODO(jstpierre): Stride.
-                var attrOffsetBase = "(" + readIndex + ") * " + srcAttrByteSize;
-                var arrayOffsetVarName = "arrayOffset" + vtxAttrib + uniqueSuffix;
-                var S = '';
-                if (outputEnabled) {
-                    return "const " + arrayOffsetVarName + " = " + attrOffsetBase + ";" + compileOneAttrib(viewName, arrayOffsetVarName, drawCallIdxIncr);
-                }
-                else {
-                    return compileOneAttrib('', '', drawCallIdxIncr);
-                }
-            }
-            function compileAttribIndex(viewName, readIndex, drawCallIdxIncr) {
-                if (vtxAttrib === 10 /* NRM */ && vtxAttrFmt.compCnt === 2 /* NRM_NBT3 */) {
-                    // Special case: NBT3.
-                    return "\n        // NBT Normal\n        " + compileOneIndex(viewName, readIndex + " + 0", drawCallIdxIncr, "_N") + "\n        // NBT Bitangent\n        " + compileOneIndex(viewName, readIndex + " + 3", drawCallIdxIncr, "_B") + "\n        // NBT Tangent\n        " + compileOneIndex(viewName, readIndex + " + 6", drawCallIdxIncr, "_T");
-                }
-                else {
-                    return "\n        // " + getAttrName(vtxAttrib) + "\n        " + compileOneIndex(viewName, readIndex, drawCallIdxIncr);
-                }
-            }
-            switch (vtxAttrDesc.type) {
-                case 1 /* DIRECT */:
-                    return compileOneAttrib("dlView", "drawCallIdx", srcAttrByteSize);
-                case 2 /* INDEX8 */:
-                    return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), "dlView.getUint8(drawCallIdx)", 1);
-                case 3 /* INDEX16 */:
-                    return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), "dlView.getUint16(drawCallIdx)", 2);
-                default:
-                    throw "whoops";
-            }
-        }
-        function compileVatFormats() {
-            var sources = [];
-            var vatLayoutSources = new Map();
-            for (var i = 0; i < 7 /* VTXFMT7 */; i++) {
-                var vatLayout = loadedVertexLayout.vatLayouts[i];
-                if (!vatLayout)
-                    continue;
-                util_15.assert(vatLayout.vcd === vcd);
-                var S_1 = '';
-                for (var vtxAttrib = 0; vtxAttrib < 25 /* MAX */; vtxAttrib++) {
-                    S_1 += compileVatLayoutAttribute(vatLayout, vtxAttrib);
-                }
-                vatLayoutSources.set(i, S_1);
-            }
-            if (vatLayoutSources.size === 0)
-                throw "whoops";
-            if (vatLayoutSources.size === 1)
-                return vatLayoutSources.values().next().value;
-            // Dynamic dispatch.
-            var S = "\n        ";
-            try {
-                for (var _a = __values(vatLayoutSources.entries()), _b = _a.next(); !_b.done; _b = _a.next()) {
-                    var _c = __read(_b.value, 2), vtxFmt = _c[0], vatLayoutSource = _c[1];
-                    S += "if (drawCall.vertexFormat === " + vtxFmt + ") {\n\n            " + vatLayoutSource + "\n\n        } else ";
-                }
-            }
-            catch (e_19_1) { e_19 = { error: e_19_1 }; }
-            finally {
-                try {
-                    if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
-                }
-                finally { if (e_19) throw e_19.error; }
-            }
-            S += "{\n            throw new Error(\"Invalid vertex format \" + vertexFormat);\n        }";
-            return S;
-            var e_19, _d;
-        }
-        function compileSrcVertexSizes() {
-            return JSON.stringify(loadedVertexLayout.vatLayouts.map(function (vatLayout) { return vatLayout && vatLayout.srcVertexSize; }));
-        }
-        var loaderName = makeLoaderName();
-        var source = "\n\"use strict\";\n\nreturn function " + loaderName + "(vtxArrays, srcBuffer) {\n// Parse display list.\nconst dlView = srcBuffer.createDataView();\nconst drawCalls = [];\nconst srcVertexSizes = " + compileSrcVertexSizes() + ";\nlet totalVertexCount = 0;\nlet totalTriangleCount = 0;\nlet drawCallIdx = 0;\nwhile (true) {\n    if (drawCallIdx >= srcBuffer.byteLength)\n        break;\n    const cmd = dlView.getUint8(drawCallIdx);\n    if (cmd === 0)\n        break;\n\n    const primType = cmd & 0xF8;\n    const vertexFormat = cmd & 0x07;\n\n    const vertexCount = dlView.getUint16(drawCallIdx + 0x01);\n    drawCallIdx += 0x03;\n    const srcOffs = drawCallIdx;\n    const first = totalVertexCount;\n    totalVertexCount += vertexCount;\n\n    switch (primType) {\n    case " + 144 /* DRAW_TRIANGLES */ + ":\n        totalTriangleCount += (vertexCount / 3);\n        break;\n    case " + 160 /* DRAW_TRIANGLE_FAN */ + ":\n    case " + 152 /* DRAW_TRIANGLE_STRIP */ + ":\n        totalTriangleCount += (vertexCount - 2);\n        break;\n    case " + 128 /* DRAW_QUADS */ + ":\n    case " + 136 /* DRAW_QUADS_2 */ + ":\n        totalTriangleCount += (vertexCount * 6) / 4;\n        break;\n    default:\n        throw new Error(\"Invalid data at \" + srcBuffer.byteOffset.toString(16) + \"/\" + drawCallIdx.toString(16) + \" primType \" + primType.toString(16));\n    }\n\n    drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });\n\n    // Skip over the index data.\n    drawCallIdx += srcVertexSizes[vertexFormat] * vertexCount;\n}\n\n// Now make the data.\nlet indexDataIdx = 0;\nconst dstIndexData = new Uint16Array(totalTriangleCount * 3);\nlet vertexId = 0;\n\nconst dstVertexDataSize = " + loadedVertexLayout.dstVertexSize + " * totalVertexCount;\nconst dstVertexData = new ArrayBuffer(dstVertexDataSize);\nconst dstVertexDataView = new DataView(dstVertexData);\nlet dstVertexDataOffs = 0;\n\n" + compileVtxArrayViews() + "\n\nfor (let z = 0; z < drawCalls.length; z++) {\n    const drawCall = drawCalls[z];\n\n    // Convert topology to triangles.\n    switch (drawCall.primType) {\n    case " + 144 /* DRAW_TRIANGLES */ + ":\n        // Copy vertices.\n        for (let i = 0; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 152 /* DRAW_TRIANGLE_STRIP */ + ":\n        // First vertex defines original triangle.\n        for (let i = 0; i < 3; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 1 : 2);\n            dstIndexData[indexDataIdx++] = vertexId - ((i & 1) ? 2 : 1);\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 160 /* DRAW_TRIANGLE_FAN */ + ":\n        // First vertex defines original triangle.\n        const firstVertex = vertexId;\n\n        for (let i = 0; i < 3; i++) {\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n\n        for (let i = 3; i < drawCall.vertexCount; i++) {\n            dstIndexData[indexDataIdx++] = firstVertex;\n            dstIndexData[indexDataIdx++] = vertexId - 1;\n            dstIndexData[indexDataIdx++] = vertexId++;\n        }\n        break;\n    case " + 128 /* DRAW_QUADS */ + ":\n    case " + 136 /* DRAW_QUADS_2 */ + ":\n        // Each quad (4 vertices) is split into 2 triangles (6 vertices)\n        for (let i = 0; i < drawCall.vertexCount; i += 4) {\n            dstIndexData[indexDataIdx++] = vertexId + 0;\n            dstIndexData[indexDataIdx++] = vertexId + 1;\n            dstIndexData[indexDataIdx++] = vertexId + 2;\n\n            dstIndexData[indexDataIdx++] = vertexId + 1;\n            dstIndexData[indexDataIdx++] = vertexId + 3;\n            dstIndexData[indexDataIdx++] = vertexId + 2;\n            vertexId += 4;\n        }\n    }\n\n    let drawCallIdx = drawCall.srcOffs;\n    for (let j = 0; j < drawCall.vertexCount; j++) {\n" + compileVatFormats() + "\n        dstVertexDataOffs += " + loadedVertexLayout.dstVertexSize + ";\n    }\n}\n\nif (dstIndexData.length !== totalTriangleCount * 3)\n    throw new Error(\"Number of indexes does not match triangle count\");\n\nreturn { indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };\n\n};\n";
-        var runVerticesGenerator = new Function(source);
-        var runVertices = runVerticesGenerator();
-        return { loadedVertexLayout: loadedVertexLayout, runVertices: runVertices };
-    }
-    var MemoizeCache_2, util_15, endian_2, VtxLoaderCache, cache, compileVtxLoader, compileVtxLoaderMultiVat;
-    return {
-        setters: [
-            function (MemoizeCache_2_1) {
-                MemoizeCache_2 = MemoizeCache_2_1;
-            },
-            function (util_15_1) {
-                util_15 = util_15_1;
-            },
-            function (endian_2_1) {
-                endian_2 = endian_2_1;
-            }
-        ],
-        execute: function () {
-            VtxLoaderCache = /** @class */ (function (_super) {
-                __extends(VtxLoaderCache, _super);
-                function VtxLoaderCache() {
-                    var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.compileVtxLoader = function (vatFormat, vcd) {
-                        var vat = [vatFormat];
-                        return _this.get({ vat: vat, vcd: vcd });
-                    };
-                    _this.compileVtxLoaderMultiVat = function (vat, vcd) {
-                        return _this.get({ vat: vat, vcd: vcd });
-                    };
-                    return _this;
-                }
-                VtxLoaderCache.prototype.make = function (key) {
-                    return _compileVtxLoader(key.vat, key.vcd);
-                };
-                VtxLoaderCache.prototype.makeKey = function (key) {
-                    return JSON.stringify(key);
-                };
-                return VtxLoaderCache;
-            }(MemoizeCache_2.default));
-            cache = new VtxLoaderCache();
-            exports_29("compileVtxLoader", compileVtxLoader = cache.compileVtxLoader);
-            exports_29("compileVtxLoaderMultiVat", compileVtxLoaderMultiVat = cache.compileVtxLoaderMultiVat);
+            exports_22("GX_Program", GX_Program);
         }
     };
 });
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
-System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_displaylist", "gx/gx_material"], function (exports_30, context_30) {
+System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_displaylist", "gx/gx_material"], function (exports_23, context_23) {
     "use strict";
-    var __moduleName = context_30 && context_30.id;
+    var __moduleName = context_23 && context_23.id;
     function readStringTable(buffer, offs) {
         var view = buffer.createDataView(offs);
         var stringCount = view.getUint16(0x00);
@@ -5773,7 +4806,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
         var strings = [];
         for (var i = 0; i < stringCount; i++) {
             var stringOffs = view.getUint16(tableIdx);
-            var str = util_16.readString(buffer, offs + stringOffs, 255);
+            var str = util_10.readString(buffer, offs + stringOffs, 255);
             strings.push(str);
             tableIdx += 0x04;
         }
@@ -5815,7 +4848,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                     break;
             }
         }
-        util_16.assert(parentStack.length === 1);
+        util_10.assert(parentStack.length === 1);
         return { sceneGraph: parentStack.pop() };
     }
     function readVTX1Chunk(buffer) {
@@ -5945,7 +4978,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
     function readJNT1Chunk(buffer) {
         var view = buffer.createDataView();
         var boneDataCount = view.getUint16(0x08);
-        util_16.assert(view.getUint16(0x0A) === 0xFFFF);
+        util_10.assert(view.getUint16(0x0A) === 0xFFFF);
         var boneDataTableOffs = view.getUint32(0x0C);
         var remapTableOffs = view.getUint32(0x10);
         var remapTable = [];
@@ -5956,7 +4989,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
         var bones = [];
         var boneDataTableIdx = boneDataTableOffs;
         for (var i = 0; i < boneDataCount; i++) {
-            var name_3 = nameTable[i];
+            var name_1 = nameTable[i];
             var scaleX = view.getFloat32(boneDataTableIdx + 0x04);
             var scaleY = view.getFloat32(boneDataTableIdx + 0x08);
             var scaleZ = view.getFloat32(boneDataTableIdx + 0x0C);
@@ -5969,7 +5002,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
             // Skipping bounding box data for now.
             var matrix = gl_matrix_3.mat4.create();
             createJointMatrix(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-            bones.push({ name: name_3, matrix: matrix, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ });
+            bones.push({ name: name_1, matrix: matrix, scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ });
             boneDataTableIdx += 0x40;
         }
         return { remapTable: remapTable, bones: bones };
@@ -6015,18 +5048,18 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0 };
             }
         }
-        catch (e_20_1) { e_20 = { error: e_20_1 }; }
+        catch (e_18_1) { e_18 = { error: e_18_1 }; }
         finally {
             try {
                 if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
             }
-            finally { if (e_20) throw e_20.error; }
+            finally { if (e_18) throw e_18.error; }
         }
         var shapes = [];
         var shapeIdx = shapeTableOffs;
         for (var i = 0; i < shapeCount; i++) {
             var displayFlags = view.getUint8(shapeIdx + 0x00);
-            util_16.assert(view.getUint8(shapeIdx + 0x01) == 0xFF);
+            util_10.assert(view.getUint8(shapeIdx + 0x01) == 0xFF);
             var packetCount = view.getUint16(shapeIdx + 0x02);
             var attribOffs = view.getUint16(shapeIdx + 0x04);
             var firstMatrix = view.getUint16(shapeIdx + 0x06);
@@ -6041,14 +5074,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 vcd[vtxAttrib] = { type: indexDataType };
                 attribIdx += 0x08;
             }
-            var vtxLoader = gx_displaylist_2.compileVtxLoader(vat, vcd);
+            var vtxLoader = gx_displaylist_1.compileVtxLoader(vat, vcd);
             var packedVertexAttributes = vtxLoader.loadedVertexLayout.dstVertexAttributeLayouts;
             var packedVertexSize = vtxLoader.loadedVertexLayout.dstVertexSize;
             // Now parse out the packets.
             var packetIdx = packetTableOffs + (firstPacket * 0x08);
             var packets = [];
             var loadedDatas = [];
-            util_16.assert(packetCount === 1);
+            util_10.assert(packetCount === 1);
             var totalTriangleCount = 0;
             for (var j = 0; j < packetCount; j++) {
                 var packetSize = view.getUint32(packetIdx + 0x00);
@@ -6071,15 +5104,15 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
             }
             // Coalesce shape data.
             // TODO(jstpierre): coalesceLoadedData is basically completely busted.
-            util_16.assert(loadedDatas.length === 1);
-            var indexData = new ArrayBufferSlice_6.default(loadedDatas[0].indexData);
-            var packedData = new ArrayBufferSlice_6.default(loadedDatas[0].packedVertexData);
+            util_10.assert(loadedDatas.length === 1);
+            var indexData = new ArrayBufferSlice_4.default(loadedDatas[0].indexData);
+            var packedData = new ArrayBufferSlice_4.default(loadedDatas[0].packedVertexData);
             // Now we should have a complete shape. Onto the next!
             shapes.push({ displayFlags: displayFlags, indexData: indexData, packedData: packedData, packedVertexSize: packedVertexSize, packedVertexAttributes: packedVertexAttributes, packets: packets });
             shapeIdx += 0x28;
         }
         return { vat: vat, shapes: shapes };
-        var e_20, _d;
+        var e_18, _d;
     }
     function createTexMtx(m, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ) {
         // TODO(jstpierre): Remove these.
@@ -6139,7 +5172,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
         var materialEntryIdx = view.getUint32(0x0C);
         for (var i = 0; i <= maxIndex; i++) {
             var index = i;
-            var name_4 = nameTable[i];
+            var name_2 = nameTable[i];
             var flags = view.getUint8(materialEntryIdx + 0x00);
             var cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
             var colorChanCountIndex = view.getUint8(materialEntryIdx + 0x02);
@@ -6176,19 +5209,19 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 var texGenIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
                 if (texGenIndex < 0)
                     continue;
-                var index_3 = j;
+                var index_1 = j;
                 var type = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x00);
                 var source = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
                 var matrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
-                util_16.assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
+                util_10.assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
                 var postMatrix = 125 /* PTIDENTITY */;
                 var postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
                 if (postTexGenTableOffs > 0 && postTexGenIndex >= 0) {
                     postMatrix = view.getUint8(postTexGenTableOffs + texGenIndex * 0x04 + 0x02);
-                    util_16.assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
+                    util_10.assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
                 }
                 var normalize = false;
-                var texGen = { index: index_3, type: type, source: source, matrix: matrix, normalize: normalize, postMatrix: postMatrix };
+                var texGen = { index: index_1, type: type, source: source, matrix: matrix, normalize: normalize, postMatrix: postMatrix };
                 texGens.push(texGen);
             }
             var texMatrices = [];
@@ -6234,10 +5267,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
             }
             var indirectEntryOffs = indirectTableOffset + i * 0x138;
             var indirectStageCount = view.getUint8(indirectEntryOffs + 0x00);
-            util_16.assert(indirectStageCount <= 4);
+            util_10.assert(indirectStageCount <= 4);
             var indTexStages = [];
             for (var j = 0; j < indirectStageCount; j++) {
-                var index_4 = j;
+                var index_2 = j;
                 // SetIndTexOrder
                 var indTexOrderOffs = indirectEntryOffs + 0x04 + j * 0x04;
                 var texCoordId = view.getUint8(indTexOrderOffs + 0x00);
@@ -6246,7 +5279,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 var indTexScaleOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + j * 0x04;
                 var scaleS = view.getUint8(indTexScaleOffs + 0x00);
                 var scaleT = view.getUint8(indTexScaleOffs + 0x01);
-                indTexStages.push({ index: index_4, texCoordId: texCoordId, texture: texture, scaleS: scaleS, scaleT: scaleT });
+                indTexStages.push({ index: index_2, texCoordId: texCoordId, texture: texture, scaleS: scaleS, scaleT: scaleT });
             }
             // SetIndTexMatrix
             var indTexMatrices = [];
@@ -6271,7 +5304,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 var tevStageIndex = view.getInt16(materialEntryIdx + 0xE4 + j * 0x02);
                 if (tevStageIndex < 0)
                     continue;
-                var index_5 = j;
+                var index_3 = j;
                 var tevStageOffs = tevStageTableOffs + tevStageIndex * 0x14;
                 // const unknown0 = view.getUint8(tevStageOffs + 0x00);
                 var colorInA = view.getUint8(tevStageOffs + 0x01);
@@ -6299,7 +5332,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 var texCoordId = view.getUint8(tevOrderOffs + 0x00);
                 var texMap = view.getUint8(tevOrderOffs + 0x01);
                 var channelId = GX_Material.getRasColorChannelID(view.getUint8(tevOrderOffs + 0x02));
-                util_16.assert(view.getUint8(tevOrderOffs + 0x03) === 0xFF);
+                util_10.assert(view.getUint8(tevOrderOffs + 0x03) === 0xFF);
                 // KonstSel
                 var konstColorSel = view.getUint8(materialEntryIdx + 0x9C + j);
                 var konstAlphaSel = view.getUint8(materialEntryIdx + 0xAC + j);
@@ -6309,14 +5342,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 var indTexFormat = view.getUint8(indTexStageOffs + 0x01);
                 var indTexBiasSel = view.getUint8(indTexStageOffs + 0x02);
                 var indTexMatrix = view.getUint8(indTexStageOffs + 0x03);
-                util_16.assert(indTexMatrix <= 11 /* T2 */);
+                util_10.assert(indTexMatrix <= 11 /* T2 */);
                 var indTexWrapS = view.getUint8(indTexStageOffs + 0x04);
                 var indTexWrapT = view.getUint8(indTexStageOffs + 0x05);
                 var indTexAddPrev = !!view.getUint8(indTexStageOffs + 0x06);
                 var indTexUseOrigLOD = !!view.getUint8(indTexStageOffs + 0x07);
                 // bumpAlpha
                 var tevStage = {
-                    index: index_5,
+                    index: index_3,
                     colorInA: colorInA, colorInB: colorInB, colorInC: colorInC, colorInD: colorInD, colorOp: colorOp, colorBias: colorBias, colorScale: colorScale, colorClamp: colorClamp, colorRegId: colorRegId,
                     alphaInA: alphaInA, alphaInB: alphaInB, alphaInC: alphaInC, alphaInD: alphaInD, alphaOp: alphaOp, alphaBias: alphaBias, alphaScale: alphaScale, alphaClamp: alphaClamp, alphaRegId: alphaRegId,
                     texCoordId: texCoordId, texMap: texMap, channelId: channelId,
@@ -6357,7 +5390,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
             var ropInfo = { blendMode: blendMode, depthTest: depthTest, depthFunc: depthFunc, depthWrite: depthWrite };
             var translucent = !(flags & 0x03);
             var gxMaterial = {
-                index: index, name: name_4,
+                index: index, name: name_2,
                 cullMode: cullMode,
                 lightChannels: lightChannels,
                 texGens: texGens,
@@ -6369,7 +5402,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 ropInfo: ropInfo,
             };
             materialEntries.push({
-                index: index, name: name_4,
+                index: index, name: name_2,
                 translucent: translucent,
                 textureIndexes: textureIndexes,
                 texMatrices: texMatrices,
@@ -6384,7 +5417,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
         function readColorChannel(tableOffs, colorChanIndex) {
             var colorChanOffs = colorChanTableOffs + colorChanIndex * 0x08;
             var lightingEnabled = !!view.getUint8(colorChanOffs + 0x00);
-            util_16.assert(view.getUint8(colorChanOffs + 0x00) < 2);
+            util_10.assert(view.getUint8(colorChanOffs + 0x00) < 2);
             var matColorSource = view.getUint8(colorChanOffs + 0x01);
             var litMask = view.getUint8(colorChanOffs + 0x02);
             var diffuseFunction = view.getUint8(colorChanOffs + 0x03);
@@ -6399,14 +5432,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
             var texMtxOffs = tableOffs + texMtxIndex * 0x64;
             var projection = view.getUint8(texMtxOffs + 0x00);
             var type = view.getUint8(texMtxOffs + 0x01);
-            util_16.assert(view.getUint16(texMtxOffs + 0x02) === 0xFFFF);
+            util_10.assert(view.getUint16(texMtxOffs + 0x02) === 0xFFFF);
             var centerS = view.getFloat32(texMtxOffs + 0x04);
             var centerT = view.getFloat32(texMtxOffs + 0x08);
             var centerQ = view.getFloat32(texMtxOffs + 0x0C);
             var scaleS = view.getFloat32(texMtxOffs + 0x10);
             var scaleT = view.getFloat32(texMtxOffs + 0x14);
             var rotation = view.getInt16(texMtxOffs + 0x18) / 0x7FFF;
-            util_16.assert(view.getUint16(texMtxOffs + 0x1A) === 0xFFFF);
+            util_10.assert(view.getUint16(texMtxOffs + 0x1A) === 0xFFFF);
             var translationS = view.getFloat32(texMtxOffs + 0x1C);
             var translationT = view.getFloat32(texMtxOffs + 0x20);
             // A second matrix?
@@ -6451,7 +5484,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
         var mipCount = view.getUint8(0x18);
         var lodBias = view.getInt16(0x1A) * 1 / 100;
         var dataOffs = view.getUint32(0x1C);
-        util_16.assert(minLOD === 0);
+        util_10.assert(minLOD === 0);
         var data = null;
         if (dataOffs !== 0)
             data = buffer.slice(dataOffs);
@@ -6465,10 +5498,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
         var nameTable = readStringTable(buffer, nameTableOffs);
         var samplers = [];
         var textureDatas = [];
-        var _loop_6 = function (i) {
+        var _loop_5 = function (i) {
             var textureIdx = textureHeaderOffs + i * 0x20;
-            var name_5 = nameTable[i];
-            var btiTexture = readBTI_Texture(buffer.slice(textureIdx), name_5);
+            var name_3 = nameTable[i];
+            var btiTexture = readBTI_Texture(buffer.slice(textureIdx), name_3);
             var textureDataIndex = -1;
             // Try to find existing texture data.
             if (btiTexture.data !== null) {
@@ -6502,7 +5535,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
             samplers.push(sampler);
         };
         for (var i = 0; i < textureCount; i++) {
-            _loop_6(i);
+            _loop_5(i);
         }
         return { textureDatas: textureDatas, samplers: samplers };
     }
@@ -6762,23 +5795,23 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
         }
         return { loopMode: loopMode, duration: duration, jointAnimationEntries: jointAnimationEntries };
     }
-    var gl_matrix_3, ArrayBufferSlice_6, util_16, gx_displaylist_2, GX_Material, HierarchyType, DRW1JointKind, quatScratch, t, c, ci, J3DFileReaderHelper, BMD, BMT, BTI, BTK, BRK, BCK;
+    var gl_matrix_3, ArrayBufferSlice_4, util_10, gx_displaylist_1, GX_Material, HierarchyType, DRW1JointKind, quatScratch, t, c, ci, J3DFileReaderHelper, BMD, BMT, BTI, BTK, BRK, BCK;
     return {
         setters: [
             function (gl_matrix_3_1) {
                 gl_matrix_3 = gl_matrix_3_1;
             },
-            function (ArrayBufferSlice_6_1) {
-                ArrayBufferSlice_6 = ArrayBufferSlice_6_1;
+            function (ArrayBufferSlice_4_1) {
+                ArrayBufferSlice_4 = ArrayBufferSlice_4_1;
             },
-            function (util_16_1) {
-                util_16 = util_16_1;
+            function (util_10_1) {
+                util_10 = util_10_1;
             },
-            function (gx_displaylist_2_1) {
-                gx_displaylist_2 = gx_displaylist_2_1;
+            function (gx_displaylist_1_1) {
+                gx_displaylist_1 = gx_displaylist_1_1;
             },
-            function (GX_Material_2) {
-                GX_Material = GX_Material_2;
+            function (GX_Material_1) {
+                GX_Material = GX_Material_1;
             }
         ],
         execute: function () {
@@ -6791,14 +5824,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 HierarchyType[HierarchyType["Material"] = 17] = "Material";
                 HierarchyType[HierarchyType["Shape"] = 18] = "Shape";
             })(HierarchyType || (HierarchyType = {}));
-            exports_30("HierarchyType", HierarchyType);
+            exports_23("HierarchyType", HierarchyType);
             //#endregion
             //#region DRW1
             (function (DRW1JointKind) {
                 DRW1JointKind[DRW1JointKind["NormalJoint"] = 0] = "NormalJoint";
                 DRW1JointKind[DRW1JointKind["WeightedJoint"] = 1] = "WeightedJoint";
             })(DRW1JointKind || (DRW1JointKind = {}));
-            exports_30("DRW1JointKind", DRW1JointKind);
+            exports_23("DRW1JointKind", DRW1JointKind);
             quatScratch = gl_matrix_3.quat.create();
             // temp, center, center inverse
             t = gl_matrix_3.mat4.create(), c = gl_matrix_3.mat4.create(), ci = gl_matrix_3.mat4.create();
@@ -6807,14 +5840,14 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                     this.buffer = buffer;
                     this.offs = 0x20;
                     this.view = this.buffer.createDataView();
-                    this.magic = util_16.readString(this.buffer, 0, 8);
+                    this.magic = util_10.readString(this.buffer, 0, 8);
                     this.size = this.view.getUint32(0x08);
                     this.numChunks = this.view.getUint32(0x0C);
                     this.offs = 0x20;
                 }
                 J3DFileReaderHelper.prototype.maybeNextChunk = function (maybeChunkId) {
                     var chunkStart = this.offs;
-                    var chunkId = util_16.readString(this.buffer, chunkStart + 0x00, 4);
+                    var chunkId = util_10.readString(this.buffer, chunkStart + 0x00, 4);
                     var chunkSize = this.view.getUint32(chunkStart + 0x04);
                     if (chunkId === maybeChunkId) {
                         this.offs += chunkSize;
@@ -6826,9 +5859,9 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 };
                 J3DFileReaderHelper.prototype.nextChunk = function (expectedChunkId) {
                     var chunkStart = this.offs;
-                    var chunkId = util_16.readString(this.buffer, chunkStart + 0x00, 4);
+                    var chunkId = util_10.readString(this.buffer, chunkStart + 0x00, 4);
                     var chunkSize = this.view.getUint32(chunkStart + 0x04);
-                    util_16.assert(chunkId === expectedChunkId);
+                    util_10.assert(chunkId === expectedChunkId);
                     this.offs += chunkSize;
                     return this.buffer.subarray(chunkStart, chunkSize);
                 };
@@ -6842,7 +5875,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 BMD.parse = function (buffer) {
                     var bmd = new BMD();
                     var j3d = new J3DFileReaderHelper(buffer);
-                    util_16.assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
+                    util_10.assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
                     bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
                     bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
                     bmd.evp1 = readEVP1Chunk(j3d.nextChunk('EVP1'));
@@ -6856,7 +5889,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 };
                 return BMD;
             }());
-            exports_30("BMD", BMD);
+            exports_23("BMD", BMD);
             //#endregion
             //#region BMT
             BMT = /** @class */ (function () {
@@ -6865,7 +5898,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 BMT.parse = function (buffer) {
                     var bmt = new BMT();
                     var j3d = new J3DFileReaderHelper(buffer);
-                    util_16.assert(j3d.magic === 'J3D2bmt3');
+                    util_10.assert(j3d.magic === 'J3D2bmt3');
                     var mat3Chunk = j3d.maybeNextChunk('MAT3');
                     if (mat3Chunk !== null)
                         bmt.mat3 = readMAT3Chunk(mat3Chunk);
@@ -6876,7 +5909,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 };
                 return BMT;
             }());
-            exports_30("BMT", BMT);
+            exports_23("BMT", BMT);
             //#endregion
             //#region BTI
             BTI = /** @class */ (function () {
@@ -6890,7 +5923,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 };
                 return BTI;
             }());
-            exports_30("BTI", BTI);
+            exports_23("BTI", BTI);
             //#endregion
             //#region BTK
             BTK = /** @class */ (function () {
@@ -6899,7 +5932,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 BTK.parse = function (buffer) {
                     var btk = new BTK();
                     var j3d = new J3DFileReaderHelper(buffer);
-                    util_16.assert(j3d.magic === 'J3D1btk1');
+                    util_10.assert(j3d.magic === 'J3D1btk1');
                     btk.ttk1 = readTTK1Chunk(j3d.nextChunk('TTK1'));
                     return btk;
                 };
@@ -6924,7 +5957,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 };
                 return BTK;
             }());
-            exports_30("BTK", BTK);
+            exports_23("BTK", BTK);
             //#endregion
             //#region BRK
             BRK = /** @class */ (function () {
@@ -6933,13 +5966,13 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 BRK.parse = function (buffer) {
                     var brk = new BRK();
                     var j3d = new J3DFileReaderHelper(buffer);
-                    util_16.assert(j3d.magic === 'J3D1brk1');
+                    util_10.assert(j3d.magic === 'J3D1brk1');
                     brk.trk1 = readTRK1Chunk(j3d.nextChunk('TRK1'));
                     return brk;
                 };
                 BRK.prototype.calcColorOverrides = function (dst, offs, materialName, frame) {
                     var animFrame = getAnimFrame(this.trk1, frame);
-                    var _loop_7 = function (i) {
+                    var _loop_6 = function (i) {
                         var animationEntry = this_3.trk1.konstantAnimationEntries.find(function (e) { return e.materialName === materialName && e.colorId === i; });
                         if (!animationEntry)
                             return "continue";
@@ -6950,10 +5983,10 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                     };
                     var this_3 = this;
                     for (var i = 0; i < 4; i++) {
-                        _loop_7(i);
+                        _loop_6(i);
                     }
                     offs += 4 * 4;
-                    var _loop_8 = function (i) {
+                    var _loop_7 = function (i) {
                         var animationEntry = this_4.trk1.registerAnimationEntries.find(function (e) { return e.materialName === materialName && e.colorId === i; });
                         if (!animationEntry)
                             return "continue";
@@ -6964,13 +5997,13 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                     };
                     var this_4 = this;
                     for (var i = 0; i < 4; i++) {
-                        _loop_8(i);
+                        _loop_7(i);
                     }
                     offs += 4 * 4;
                 };
                 return BRK;
             }());
-            exports_30("BRK", BRK);
+            exports_23("BRK", BRK);
             //#endregion
             //#region BCK
             BCK = /** @class */ (function () {
@@ -6979,7 +6012,7 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 BCK.parse = function (buffer) {
                     var bck = new BCK();
                     var j3d = new J3DFileReaderHelper(buffer);
-                    util_16.assert(j3d.magic === 'J3D1bck1');
+                    util_10.assert(j3d.magic === 'J3D1bck1');
                     bck.ank1 = readANK1Chunk(j3d.nextChunk('ANK1'));
                     return bck;
                 };
@@ -6999,17 +6032,17 @@ System.register("j3d/j3d", ["gl-matrix", "ArrayBufferSlice", "util", "gx/gx_disp
                 };
                 return BCK;
             }());
-            exports_30("BCK", BCK);
+            exports_23("BCK", BCK);
         }
     };
 });
 // Nintendo RARC file format.
-System.register("j3d/rarc", ["util"], function (exports_31, context_31) {
+System.register("j3d/rarc", ["util"], function (exports_24, context_24) {
     "use strict";
-    var __moduleName = context_31 && context_31.id;
+    var __moduleName = context_24 && context_24.id;
     function parse(buffer) {
         var view = buffer.createDataView();
-        util_17.assert(util_17.readString(buffer, 0x00, 0x04) === 'RARC');
+        util_11.assert(util_11.readString(buffer, 0x00, 0x04) === 'RARC');
         var size = view.getUint32(0x04);
         var dataOffs = view.getUint32(0x0C) + 0x20;
         var dirCount = view.getUint32(0x20);
@@ -7021,9 +6054,9 @@ System.register("j3d/rarc", ["util"], function (exports_31, context_31) {
         var dirEntries = [];
         var allFiles = [];
         for (var i = 0; i < dirCount; i++) {
-            var type = util_17.readString(buffer, dirTableIdx + 0x00, 0x04, false);
+            var type = util_11.readString(buffer, dirTableIdx + 0x00, 0x04, false);
             var nameOffs = view.getUint32(dirTableIdx + 0x04);
-            var name_6 = util_17.readString(buffer, strTableOffs + nameOffs, -1, true);
+            var name_4 = util_11.readString(buffer, strTableOffs + nameOffs, -1, true);
             var nameHash = view.getUint16(dirTableIdx + 0x08);
             var fileEntryCount_1 = view.getUint16(dirTableIdx + 0x0A);
             var fileEntryFirstIndex = view.getUint32(dirTableIdx + 0x0C);
@@ -7036,11 +6069,11 @@ System.register("j3d/rarc", ["util"], function (exports_31, context_31) {
                 var nameHash_1 = view.getUint16(fileEntryIdx + 0x02);
                 var flags = view.getUint8(fileEntryIdx + 0x04);
                 var nameOffs_1 = view.getUint16(fileEntryIdx + 0x06);
-                var name_7 = util_17.readString(buffer, strTableOffs + nameOffs_1, -1, true);
+                var name_5 = util_11.readString(buffer, strTableOffs + nameOffs_1, -1, true);
                 var entryDataOffs = view.getUint32(fileEntryIdx + 0x08);
                 var entryDataSize = view.getUint32(fileEntryIdx + 0x0C);
                 fileEntryIdx += 0x14;
-                if (name_7 === '.' || name_7 === '..')
+                if (name_5 === '.' || name_5 === '..')
                     continue;
                 var isDirectory = !!(flags & 0x02);
                 if (isDirectory) {
@@ -7050,12 +6083,12 @@ System.register("j3d/rarc", ["util"], function (exports_31, context_31) {
                 else {
                     var offs = dataOffs + entryDataOffs;
                     var fileBuffer = buffer.slice(offs, offs + entryDataSize);
-                    var file = { name: name_7, buffer: fileBuffer };
+                    var file = { name: name_5, buffer: fileBuffer };
                     files.push(file);
                     allFiles.push(file);
                 }
             }
-            dirEntries.push({ name: name_6, type: type, files: files, subdirIndexes: subdirIndexes });
+            dirEntries.push({ name: name_4, type: type, files: files, subdirIndexes: subdirIndexes });
             dirTableIdx += 0x10;
         }
         var dirs = [];
@@ -7070,18 +6103,18 @@ System.register("j3d/rarc", ["util"], function (exports_31, context_31) {
             return dir;
         }
         var root = translateDirEntry(0);
-        util_17.assert(root.type === 'ROOT');
+        util_11.assert(root.type === 'ROOT');
         var rarc = new RARC();
         rarc.files = allFiles;
         rarc.root = root;
         return rarc;
     }
-    exports_31("parse", parse);
-    var util_17, RARC;
+    exports_24("parse", parse);
+    var util_11, RARC;
     return {
         setters: [
-            function (util_17_1) {
-                util_17 = util_17_1;
+            function (util_11_1) {
+                util_11 = util_11_1;
             }
         ],
         execute: function () {
@@ -7090,7 +6123,7 @@ System.register("j3d/rarc", ["util"], function (exports_31, context_31) {
                 }
                 RARC.prototype.findDirParts = function (parts) {
                     var dir = this.root;
-                    var _loop_9 = function (part) {
+                    var _loop_8 = function (part) {
                         dir = dir.subdirs.find(function (subdir) { return subdir.name === part; });
                         if (dir === undefined)
                             return { value: null };
@@ -7098,20 +6131,20 @@ System.register("j3d/rarc", ["util"], function (exports_31, context_31) {
                     try {
                         for (var parts_1 = __values(parts), parts_1_1 = parts_1.next(); !parts_1_1.done; parts_1_1 = parts_1.next()) {
                             var part = parts_1_1.value;
-                            var state_1 = _loop_9(part);
+                            var state_1 = _loop_8(part);
                             if (typeof state_1 === "object")
                                 return state_1.value;
                         }
                     }
-                    catch (e_21_1) { e_21 = { error: e_21_1 }; }
+                    catch (e_19_1) { e_19 = { error: e_19_1 }; }
                     finally {
                         try {
                             if (parts_1_1 && !parts_1_1.done && (_a = parts_1.return)) _a.call(parts_1);
                         }
-                        finally { if (e_21) throw e_21.error; }
+                        finally { if (e_19) throw e_19.error; }
                     }
                     return dir;
-                    var e_21, _a;
+                    var e_19, _a;
                 };
                 RARC.prototype.findDir = function (path) {
                     return this.findDirParts(path.split('/'));
@@ -7129,13 +6162,150 @@ System.register("j3d/rarc", ["util"], function (exports_31, context_31) {
                 };
                 return RARC;
             }());
-            exports_31("RARC", RARC);
+            exports_24("RARC", RARC);
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "Camera", "BufferCoalescer"], function (exports_32, context_32) {
+// GX texture decoding
+System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "WasmMemoryManager"], function (exports_25, context_25) {
     "use strict";
-    var __moduleName = context_32 && context_32.id;
+    var __moduleName = context_25 && context_25.id;
+    function calcPaletteSize(format, palette) {
+        var paletteSize = 0;
+        switch (format) {
+            case 8 /* C4 */:
+                paletteSize = 16;
+                break;
+            case 9 /* C8 */:
+                paletteSize = 256;
+                break;
+            case 10 /* C14X2 */:
+            default:
+                throw new Error("whoops");
+        }
+        // All palette-formats are 16-bit.
+        return paletteSize * 2;
+    }
+    exports_25("calcPaletteSize", calcPaletteSize);
+    function calcTextureSize(format, width, height) {
+        var numPixels = width * height;
+        switch (format) {
+            case 0 /* I4 */:
+                return numPixels / 2;
+            case 1 /* I8 */:
+                return numPixels;
+            case 2 /* IA4 */:
+                return numPixels;
+            case 3 /* IA8 */:
+                return numPixels * 2;
+            case 8 /* C4 */:
+                return numPixels / 2;
+            case 9 /* C8 */:
+                return numPixels;
+            case 4 /* RGB565 */:
+                return numPixels * 2;
+            case 5 /* RGB5A3 */:
+                return numPixels * 2;
+            case 6 /* RGBA8 */:
+                return numPixels * 4;
+            case 14 /* CMPR */:
+                return numPixels / 2;
+            default:
+                throw new Error("whoops");
+        }
+    }
+    exports_25("calcTextureSize", calcTextureSize);
+    function calcFullTextureSize(format, width, height, mipCount) {
+        var textureSize = 0;
+        while (mipCount--) {
+            textureSize += calcTextureSize(format, width, height);
+            width /= 2;
+            height /= 2;
+        }
+        return textureSize;
+    }
+    exports_25("calcFullTextureSize", calcFullTextureSize);
+    function decode_Wasm(wasmInstance, texture, decoder, scratchSize) {
+        if (scratchSize === void 0) { scratchSize = 0; }
+        var dstSize = texture.width * texture.height * 4;
+        var srcSize = texture.data.byteLength;
+        var pScratch = 0;
+        var pDst = util_12.align(pScratch + scratchSize, 0x10);
+        var pSrc = util_12.align(pDst + dstSize, 0x10);
+        var heapSize = util_12.align(pSrc + srcSize, 0x10);
+        var wasmMemory = new WasmMemoryManager_2.default(wasmInstance.memory);
+        var heap = wasmMemory.resize(heapSize);
+        // Copy src buffer.
+        heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
+        decoder(pScratch, pDst, pSrc, texture.width, texture.height);
+        // Copy the result buffer to a new buffer for memory usage purposes.
+        var pixelsBuffer = new ArrayBufferSlice_5.default(heap.buffer).copyToBuffer(pDst, dstSize);
+        var pixels = new Uint8Array(pixelsBuffer);
+        return { pixels: pixels };
+    }
+    function decode_Dummy(texture) {
+        var pixels = new Uint8Array(texture.width * texture.height * 4);
+        pixels.fill(0xFF);
+        return { pixels: pixels };
+    }
+    function decodeTexture(texture) {
+        if (texture.data === null)
+            return Promise.resolve(decode_Dummy(texture));
+        return _wasmInstance.then(function (wasmInstance) {
+            switch (texture.format) {
+                case 0 /* I4 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_I4);
+                case 1 /* I8 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_I8);
+                case 2 /* IA4 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_IA4);
+                case 3 /* IA8 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_IA8);
+                case 4 /* RGB565 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGB565);
+                case 5 /* RGB5A3 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGB5A3);
+                case 6 /* RGBA8 */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGBA8);
+                case 14 /* CMPR */:
+                    return decode_Wasm(wasmInstance, texture, wasmInstance.decode_CMPR, 16);
+                case 8 /* C4 */:
+                case 9 /* C8 */:
+                case 10 /* C14X2 */:
+                default:
+                    console.error("Unsupported texture format " + texture.format + " on texture " + texture.name);
+                    return decode_Dummy(texture);
+            }
+        });
+    }
+    exports_25("decodeTexture", decodeTexture);
+    var ArrayBufferSlice_5, util_12, wat_modules_2, WasmMemoryManager_2, _wasmInstance;
+    return {
+        setters: [
+            function (ArrayBufferSlice_5_1) {
+                ArrayBufferSlice_5 = ArrayBufferSlice_5_1;
+            },
+            function (util_12_1) {
+                util_12 = util_12_1;
+            },
+            function (wat_modules_2_1) {
+                wat_modules_2 = wat_modules_2_1;
+            },
+            function (WasmMemoryManager_2_1) {
+                WasmMemoryManager_2 = WasmMemoryManager_2_1;
+            }
+        ],
+        execute: function () {
+            // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
+            // on 64-bit machines. Construct a global WebAssembly.Memory and use it. Remove this when the
+            // bug is fixed. https://bugzilla.mozilla.org/show_bug.cgi?id=1459761#c5
+            _wasmInstance = wat_modules_2.gx_texture_asInstance();
+        }
+    };
+});
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_texture", "Camera", "BufferCoalescer"], function (exports_26, context_26) {
+    "use strict";
+    var __moduleName = context_26 && context_26.id;
     function translateAttribType(gl, attribFormat) {
         switch (attribFormat) {
             case 1 /* F32 */:
@@ -7155,11 +6325,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
             function (j3d_1_1) {
                 j3d_1 = j3d_1_1;
             },
-            function (GX_Material_3) {
-                GX_Material = GX_Material_3;
+            function (GX_Material_2) {
+                GX_Material = GX_Material_2;
             },
-            function (GX_Texture_2) {
-                GX_Texture = GX_Texture_2;
+            function (GX_Texture_1) {
+                GX_Texture = GX_Texture_1;
             },
             function (Camera_3_1) {
                 Camera_3 = Camera_3_1;
@@ -7194,15 +6364,15 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             gl.vertexAttribPointer(attribLocation, attrib.componentCount, type, normalized, this.shape.packedVertexSize, coalescedBuffers.vertexBuffer.offset + attrib.offset);
                         }
                     }
-                    catch (e_22_1) { e_22 = { error: e_22_1 }; }
+                    catch (e_20_1) { e_20 = { error: e_20_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                         }
-                        finally { if (e_22) throw e_22.error; }
+                        finally { if (e_20) throw e_20.error; }
                     }
                     gl.bindVertexArray(null);
-                    var e_22, _d;
+                    var e_20, _d;
                 }
                 Command_Shape.prototype.computeModelView = function (state) {
                     gl_matrix_4.mat4.copy(scratchModelMatrix, this.scene.modelMatrix);
@@ -7444,7 +6614,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 Command_Material.textureScratch = new Int32Array(8);
                 return Command_Material;
             }());
-            exports_32("Command_Material", Command_Material);
+            exports_26("Command_Material", Command_Material);
             (function (ColorOverride) {
                 ColorOverride[ColorOverride["MAT0"] = 0] = "MAT0";
                 ColorOverride[ColorOverride["MAT1"] = 1] = "MAT1";
@@ -7459,7 +6629,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 ColorOverride[ColorOverride["C1"] = 10] = "C1";
                 ColorOverride[ColorOverride["C2"] = 11] = "C2";
             })(ColorOverride || (ColorOverride = {}));
-            exports_32("ColorOverride", ColorOverride);
+            exports_26("ColorOverride", ColorOverride);
             sceneParamsData = new Float32Array(4 * 4 + 4);
             matrixScratch = gl_matrix_4.mat4.create(), matrixScratch2 = gl_matrix_4.mat4.create();
             // SceneLoaderToken is a private class that's passed to Scene.
@@ -7488,7 +6658,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 return SceneLoader;
             }());
-            exports_32("SceneLoader", SceneLoader);
+            exports_26("SceneLoader", SceneLoader);
             Scene = /** @class */ (function () {
                 function Scene(sceneLoaderToken, sceneLoader) {
                     this.name = '';
@@ -7653,11 +6823,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
                     var format = texture.format;
                     var offs = 0, width = texture.width, height = texture.height;
-                    var _loop_10 = function (i) {
-                        var name_8 = texture.name;
+                    var _loop_9 = function (i) {
+                        var name_6 = texture.name;
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data !== null ? texture.data.subarray(offs, size) : null;
-                        var surface = { name: name_8, format: format, width: width, height: height, data: data };
+                        var surface = { name: name_6, format: format, width: width, height: height, data: data };
                         var level = i;
                         GX_Texture.decodeTexture(surface).then(function (rgbaTexture) {
                             gl.bindTexture(gl.TEXTURE_2D, texId);
@@ -7668,7 +6838,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         height /= 2;
                     };
                     for (var i = 0; i < texture.mipCount; i++) {
-                        _loop_10(i);
+                        _loop_9(i);
                     }
                     return texId;
                 };
@@ -7676,11 +6846,11 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     var surfaces = [];
                     var width = texture.width, height = texture.height, offs = 0;
                     var format = texture.format;
-                    var _loop_11 = function (i) {
-                        var name_9 = texture.name;
+                    var _loop_10 = function (i) {
+                        var name_7 = texture.name;
                         var size = GX_Texture.calcTextureSize(format, width, height);
                         var data = texture.data !== null ? texture.data.subarray(offs, size) : null;
-                        var surface = { name: name_9, format: format, width: width, height: height, data: data };
+                        var surface = { name: name_7, format: format, width: width, height: height, data: data };
                         var canvas = document.createElement('canvas');
                         canvas.width = width;
                         canvas.height = height;
@@ -7697,7 +6867,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         height /= 2;
                     };
                     for (var i = 0; i < texture.mipCount; i++) {
-                        _loop_11(i);
+                        _loop_10(i);
                     }
                     return { name: texture.name, surfaces: surfaces };
                 };
@@ -7717,12 +6887,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             this.textures.push(Scene.translateTextureToViewer(textureData));
                         }
                     }
-                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
+                    catch (e_21_1) { e_21 = { error: e_21_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_23) throw e_23.error; }
+                        finally { if (e_21) throw e_21.error; }
                     }
                     this.glSamplers = [];
                     try {
@@ -7731,16 +6901,16 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             this.glSamplers.push(Scene.translateSampler(gl, sampler));
                         }
                     }
-                    catch (e_24_1) { e_24 = { error: e_24_1 }; }
+                    catch (e_22_1) { e_22 = { error: e_22_1 }; }
                     finally {
                         try {
                             if (_e && !_e.done && (_f = _d.return)) _f.call(_d);
                         }
-                        finally { if (e_24) throw e_24.error; }
+                        finally { if (e_22) throw e_22.error; }
                     }
                     this.tex1TextureDatas = tex1.textureDatas;
                     this.tex1Samplers = tex1.samplers;
-                    var e_23, _c, e_24, _f;
+                    var e_21, _c, e_22, _f;
                 };
                 Scene.prototype.translateModel = function (gl, sceneLoader) {
                     var _this = this;
@@ -7757,12 +6927,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                                 this.jointMatrices[index] = gl_matrix_4.mat4.create();
                         }
                     }
-                    catch (e_25_1) { e_25 = { error: e_25_1 }; }
+                    catch (e_23_1) { e_23 = { error: e_23_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_25) throw e_25.error; }
+                        finally { if (e_23) throw e_23.error; }
                     }
                     this.weightedJointMatrices = [];
                     try {
@@ -7771,12 +6941,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             this.weightedJointMatrices.push(gl_matrix_4.mat4.create());
                         }
                     }
-                    catch (e_26_1) { e_26 = { error: e_26_1 }; }
+                    catch (e_24_1) { e_24 = { error: e_24_1 }; }
                     finally {
                         try {
                             if (_e && !_e.done && (_f = _d.return)) _f.call(_d);
                         }
-                        finally { if (e_26) throw e_26.error; }
+                        finally { if (e_24) throw e_24.error; }
                     }
                     this.translateTextures(gl, sceneLoader);
                     var materialCommands = mat3.materialEntries.map(function (material) {
@@ -7792,7 +6962,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     });
                     // Iterate through scene graph.
                     this.translateSceneGraph(bmd.inf1.sceneGraph, null);
-                    var e_25, _c, e_26, _f;
+                    var e_23, _c, e_24, _f;
                 };
                 Scene.prototype.translateSceneGraph = function (node, commandList) {
                     switch (node.type) {
@@ -7811,14 +6981,14 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             this.translateSceneGraph(child, commandList);
                         }
                     }
-                    catch (e_27_1) { e_27 = { error: e_27_1 }; }
+                    catch (e_25_1) { e_25 = { error: e_25_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_27) throw e_27.error; }
+                        finally { if (e_25) throw e_25.error; }
                     }
-                    var e_27, _c;
+                    var e_25, _c;
                 };
                 Scene.prototype.updateJointMatrixHierarchy = function (state, node, parentJointMatrix) {
                     // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
@@ -7864,13 +7034,13 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 return Scene;
             }());
-            exports_32("Scene", Scene);
+            exports_26("Scene", Scene);
         }
     };
 });
-System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_33, context_33) {
+System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_27, context_27) {
     "use strict";
-    var __moduleName = context_33 && context_33.id;
+    var __moduleName = context_27 && context_27.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -7880,15 +7050,15 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_28_1) { e_28 = { error: e_28_1 }; }
+        catch (e_26_1) { e_26 = { error: e_26_1 }; }
         finally {
             try {
                 if (scenes_1_1 && !scenes_1_1.done && (_a = scenes_1.return)) _a.call(scenes_1);
             }
-            finally { if (e_28) throw e_28.error; }
+            finally { if (e_26) throw e_26.error; }
         }
         return textures;
-        var e_28, _a;
+        var e_26, _a;
     }
     function createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile, extraTextures) {
         var bmd = j3d_2.BMD.parse(bmdFile.buffer);
@@ -7918,14 +7088,14 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
         });
         return scenes.filter(function (s) { return !!s; });
     }
-    var Progressable_2, util_18, Yaz0, UI, j3d_2, RARC, render_3, render_4, gx_material_1, TwilightPrincessRenderer, TwilightPrincessSceneDesc, id, name, sceneDescs, sceneGroup;
+    var Progressable_2, util_13, Yaz0, UI, j3d_2, RARC, render_3, render_4, gx_material_1, TwilightPrincessRenderer, TwilightPrincessSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (Progressable_2_1) {
                 Progressable_2 = Progressable_2_1;
             },
-            function (util_18_1) {
-                util_18 = util_18_1;
+            function (util_13_1) {
+                util_13 = util_13_1;
             },
             function (Yaz0_1) {
                 Yaz0 = Yaz0_1;
@@ -8074,7 +7244,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                     });
                 };
                 TwilightPrincessSceneDesc.prototype.fetchRarc = function (path) {
-                    return util_18.fetch(path).then(function (buffer) {
+                    return util_13.fetch(path).then(function (buffer) {
                         return Yaz0.decompress(buffer);
                     }).then(function (buffer) {
                         return RARC.parse(buffer);
@@ -8097,13 +7267,13 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                 new TwilightPrincessSceneDesc("Hyrule Field", "F_SP102", ["R00_00.arc"]),
                 new TwilightPrincessSceneDesc("Fishing Pond", "F_SP127", ["R00_00.arc"]),
             ];
-            exports_33("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_27("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_34, context_34) {
+System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_28, context_28) {
     "use strict";
-    var __moduleName = context_34 && context_34.id;
+    var __moduleName = context_28 && context_28.id;
     function createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile) {
         var bmd = j3d_3.BMD.parse(bmdFile.buffer);
         var bmt = bmtFile ? j3d_3.BMT.parse(bmtFile.buffer) : null;
@@ -8114,7 +7284,7 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
         scene.setBCK(bckFile ? j3d_3.BCK.parse(bckFile.buffer) : null);
         return scene;
     }
-    exports_34("createScene", createScene);
+    exports_28("createScene", createScene);
     function boolSort(a, b) {
         if (a && !b)
             return -1;
@@ -8125,12 +7295,12 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
     }
     function createScenesFromBuffer(gl, buffer) {
         return Promise.resolve(buffer).then(function (buffer) {
-            if (util_19.readString(buffer, 0, 4) === 'Yaz0')
+            if (util_14.readString(buffer, 0, 4) === 'Yaz0')
                 return Yaz0.decompress(buffer);
             else
                 return buffer;
         }).then(function (buffer) {
-            if (util_19.readString(buffer, 0, 4) === 'RARC') {
+            if (util_14.readString(buffer, 0, 4) === 'RARC') {
                 var rarc_1 = RARC.parse(buffer);
                 var bmdFiles = rarc_1.files.filter(function (f) { return f.name.endsWith('.bmd') || f.name.endsWith('.bdl'); });
                 var scenes = bmdFiles.map(function (bmdFile) {
@@ -8152,7 +7322,7 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                 });
                 return scenes;
             }
-            if (['J3D2bmd3', 'J3D2bdl4'].includes(util_19.readString(buffer, 0, 8))) {
+            if (['J3D2bmd3', 'J3D2bdl4'].includes(util_14.readString(buffer, 0, 8))) {
                 var bmd = j3d_3.BMD.parse(buffer);
                 var sceneLoader = new render_5.SceneLoader(bmd);
                 var scene = sceneLoader.createScene(gl);
@@ -8161,18 +7331,18 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
             return null;
         });
     }
-    exports_34("createScenesFromBuffer", createScenesFromBuffer);
+    exports_28("createScenesFromBuffer", createScenesFromBuffer);
     function createMultiSceneFromBuffer(gl, buffer) {
         return createScenesFromBuffer(gl, buffer).then(function (scenes) {
             return new MultiScene(scenes);
         });
     }
-    exports_34("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
-    var util_19, Yaz0, j3d_3, RARC, render_5, MultiScene;
+    exports_28("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
+    var util_14, Yaz0, j3d_3, RARC, render_5, MultiScene;
     return {
         setters: [
-            function (util_19_1) {
-                util_19 = util_19_1;
+            function (util_14_1) {
+                util_14 = util_14_1;
             },
             function (Yaz0_2) {
                 Yaz0 = Yaz0_2;
@@ -8209,32 +7379,32 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_29_1) { e_29 = { error: e_29_1 }; }
+                    catch (e_27_1) { e_27 = { error: e_27_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_29) throw e_29.error; }
+                        finally { if (e_27) throw e_27.error; }
                     }
-                    var e_29, _c;
+                    var e_27, _c;
                 };
                 return MultiScene;
             }());
-            exports_34("MultiScene", MultiScene);
+            exports_28("MultiScene", MultiScene);
         }
     };
 });
-System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_35, context_35) {
+System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_29, context_29) {
     "use strict";
-    var __moduleName = context_35 && context_35.id;
-    var scenes_2, util_20, id, name, MKDDSceneDesc, sceneDescs, sceneGroup;
+    var __moduleName = context_29 && context_29.id;
+    var scenes_2, util_15, id, name, MKDDSceneDesc, sceneDescs, sceneGroup;
     return {
         setters: [
             function (scenes_2_1) {
                 scenes_2 = scenes_2_1;
             },
-            function (util_20_1) {
-                util_20 = util_20_1;
+            function (util_15_1) {
+                util_15 = util_15_1;
             }
         ],
         execute: function () {
@@ -8248,7 +7418,7 @@ System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_35,
                 }
                 MKDDSceneDesc.prototype.createScene = function (gl) {
                     var path = "data/j3d/mkdd/Course/" + this.path;
-                    return util_20.fetch(path).then(function (buffer) {
+                    return util_15.fetch(path).then(function (buffer) {
                         return scenes_2.createMultiSceneFromBuffer(gl, buffer);
                     }).then(function (multiScene) {
                         multiScene.scenes.forEach(function (scene) {
@@ -8278,13 +7448,13 @@ System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_35,
                 new MKDDSceneDesc("Bowser's Castle", 'Koopa.arc'),
                 new MKDDSceneDesc("Rainbow Road", 'Rainbow.arc'),
             ];
-            exports_35("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_29("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", "ui", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_36, context_36) {
+System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", "ui", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_30, context_30) {
     "use strict";
-    var __moduleName = context_36 && context_36.id;
+    var __moduleName = context_30 && context_30.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -8294,17 +7464,17 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_30_1) { e_30 = { error: e_30_1 }; }
+        catch (e_28_1) { e_28 = { error: e_28_1 }; }
         finally {
             try {
                 if (scenes_3_1 && !scenes_3_1.done && (_a = scenes_3.return)) _a.call(scenes_3);
             }
-            finally { if (e_30) throw e_30.error; }
+            finally { if (e_28) throw e_28.error; }
         }
         return textures;
-        var e_30, _a;
+        var e_28, _a;
     }
-    var gl_matrix_5, Progressable_3, util_21, Yaz0, UI, GX_Material, j3d_4, RARC, render_6, CameraPos, TIME_OF_DAY_ICON, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
+    var gl_matrix_5, Progressable_3, util_16, Yaz0, UI, GX_Material, j3d_4, RARC, render_6, CameraPos, TIME_OF_DAY_ICON, WindWakerRenderer, WindWakerSceneDesc, sceneDescs, id, name, sceneGroup;
     return {
         setters: [
             function (gl_matrix_5_1) {
@@ -8313,8 +7483,8 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
             function (Progressable_3_1) {
                 Progressable_3 = Progressable_3_1;
             },
-            function (util_21_1) {
-                util_21 = util_21_1;
+            function (util_16_1) {
+                util_16 = util_16_1;
             },
             function (Yaz0_3) {
                 Yaz0 = Yaz0_3;
@@ -8322,8 +7492,8 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
             function (UI_2) {
                 UI = UI_2;
             },
-            function (GX_Material_4) {
-                GX_Material = GX_Material_4;
+            function (GX_Material_3) {
+                GX_Material = GX_Material_3;
             },
             function (j3d_4_1) {
                 j3d_4 = j3d_4_1;
@@ -8375,7 +7545,7 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     var chunkOffsets = new Map();
                     var chunkTableIdx = 0x04;
                     for (var i = 0; i < chunkCount; i++) {
-                        var type = util_21.readString(buffer, chunkTableIdx + 0x00, 0x04);
+                        var type = util_16.readString(buffer, chunkTableIdx + 0x00, 0x04);
                         var offs = view.getUint32(chunkTableIdx + 0x08);
                         chunkOffsets.set(type, offs);
                         chunkTableIdx += 0x0C;
@@ -8553,8 +7723,8 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     });
                 };
                 WindWakerSceneDesc.prototype.fetchRarc = function (path) {
-                    return util_21.fetch(path).then(function (buffer) {
-                        if (util_21.readString(buffer, 0, 4) === 'Yaz0')
+                    return util_16.fetch(path).then(function (buffer) {
+                        if (util_16.readString(buffer, 0, 4) === 'Yaz0')
                             return Yaz0.decompress(buffer);
                         else
                             return buffer;
@@ -8572,13 +7742,13 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
             ];
             id = "zww";
             name = "The Legend of Zelda: The Wind Waker";
-            exports_36("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_30("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/scenes", "gx/gx_material", "gl-matrix"], function (exports_37, context_37) {
+System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/scenes", "gx/gx_material", "gl-matrix"], function (exports_31, context_31) {
     "use strict";
-    var __moduleName = context_37 && context_37.id;
+    var __moduleName = context_31 && context_31.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -8588,15 +7758,15 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_31_1) { e_31 = { error: e_31_1 }; }
+        catch (e_29_1) { e_29 = { error: e_29_1 }; }
         finally {
             try {
                 if (scenes_4_1 && !scenes_4_1.done && (_a = scenes_4.return)) _a.call(scenes_4);
             }
-            finally { if (e_31) throw e_31.error; }
+            finally { if (e_29) throw e_29.error; }
         }
         return textures;
-        var e_31, _a;
+        var e_29, _a;
     }
     function unpack(buffer, sig) {
         var view = buffer.createDataView();
@@ -8624,7 +7794,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                 case 's':
                     var size = view.getUint16(offs);
                     offs += 0x02;
-                    result.push(util_22.readString(buffer, offs, size, false));
+                    result.push(util_17.readString(buffer, offs, size, false));
                     offs += size;
                     break;
                 case '.':
@@ -8633,11 +7803,11 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                 case ' ':
                     break;
                 default:
-                    util_22.assert(false);
+                    util_17.assert(false);
             }
         }
         if (!allowExtra) {
-            util_22.assert(buffer.byteLength === offs);
+            util_17.assert(buffer.byteLength === offs);
         }
         return __spread([offs], result);
     }
@@ -8650,7 +7820,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
         var klassHash = view.getUint16(offs + 0x00);
         var klassSize = view.getUint16(offs + 0x02);
         offs += 0x04;
-        var klass = util_22.readString(buffer, offs, klassSize, false);
+        var klass = util_17.readString(buffer, offs, klassSize, false);
         offs += klassSize;
         var nameHash = view.getUint16(offs + 0x00);
         var nameSize = view.getUint16(offs + 0x02);
@@ -8772,11 +7942,11 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                 return { type: 'Unknown', klass: klass, name: name, size: size };
         }
     }
-    var util_22, render_7, Yaz0, RARC, scenes_5, gx_material_2, gl_matrix_6, sjisDecoder, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
+    var util_17, render_7, Yaz0, RARC, scenes_5, gx_material_2, gl_matrix_6, sjisDecoder, SunshineRenderer, SunshineSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
-            function (util_22_1) {
-                util_22 = util_22_1;
+            function (util_17_1) {
+                util_17 = util_17_1;
             },
             function (render_7_1) {
                 render_7 = render_7_1;
@@ -8832,12 +8002,12 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                             scene.render(state);
                         }
                     }
-                    catch (e_32_1) { e_32 = { error: e_32_1 }; }
+                    catch (e_30_1) { e_30 = { error: e_30_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_32) throw e_32.error; }
+                        finally { if (e_30) throw e_30.error; }
                     }
                     // Copy to main render target.
                     state.useRenderTarget(state.onscreenColorTarget);
@@ -8852,7 +8022,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                         indirectScene.setTextureOverride("indirectdummy", textureOverride);
                         indirectScene.render(state);
                     }
-                    var e_32, _c;
+                    var e_30, _c;
                 };
                 SunshineRenderer.prototype.destroy = function (gl) {
                     if (this.skyScene)
@@ -8865,7 +8035,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                 };
                 return SunshineRenderer;
             }());
-            exports_37("SunshineRenderer", SunshineRenderer);
+            exports_31("SunshineRenderer", SunshineRenderer);
             SunshineSceneDesc = /** @class */ (function () {
                 function SunshineSceneDesc(path, name) {
                     this.path = path;
@@ -8889,7 +8059,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                 };
                 SunshineSceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return util_22.fetch(this.path).then(function (result) {
+                    return util_17.fetch(this.path).then(function (result) {
                         return Yaz0.decompress(result);
                     }).then(function (buffer) {
                         var rarc = RARC.parse(buffer);
@@ -8914,15 +8084,15 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                                 R.push.apply(R, Ts);
                             }
                         }
-                        catch (e_33_1) { e_33 = { error: e_33_1 }; }
+                        catch (e_31_1) { e_31 = { error: e_31_1 }; }
                         finally {
                             try {
                                 if (L_1_1 && !L_1_1.done && (_a = L_1.return)) _a.call(L_1);
                             }
-                            finally { if (e_33) throw e_33.error; }
+                            finally { if (e_31) throw e_31.error; }
                         }
                         return R;
-                        var e_33, _a;
+                        var e_31, _a;
                     }
                     switch (obj.type) {
                         case 'Group':
@@ -9026,7 +8196,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                 };
                 return SunshineSceneDesc;
             }());
-            exports_37("SunshineSceneDesc", SunshineSceneDesc);
+            exports_31("SunshineSceneDesc", SunshineSceneDesc);
             id = "sms";
             name = "Super Mario Sunshine";
             sceneDescs = [
@@ -9042,13 +8212,13 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/sc
                 new SunshineSceneDesc("data/j3d/sms/mare0.szs", "Noki Bay"),
                 new SunshineSceneDesc("data/j3d/sms/monte3.szs", "Pianta Village"),
             ];
-            exports_37("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_31("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", "j3d/scenes", "gx/gx_material"], function (exports_38, context_38) {
+System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", "j3d/scenes", "gx/gx_material"], function (exports_32, context_32) {
     "use strict";
-    var __moduleName = context_38 && context_38.id;
+    var __moduleName = context_32 && context_32.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -9058,24 +8228,24 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", 
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_34_1) { e_34 = { error: e_34_1 }; }
+        catch (e_32_1) { e_32 = { error: e_32_1 }; }
         finally {
             try {
                 if (scenes_6_1 && !scenes_6_1.done && (_a = scenes_6.return)) _a.call(scenes_6);
             }
-            finally { if (e_34) throw e_34.error; }
+            finally { if (e_32) throw e_32.error; }
         }
         return textures;
-        var e_34, _a;
+        var e_32, _a;
     }
-    var Progressable_4, util_23, render_8, Program_3, scenes_7, gx_material_3, BloomPassBlurProgram, BloomPassBokehProgram, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
+    var Progressable_4, util_18, render_8, Program_3, scenes_7, gx_material_3, BloomPassBlurProgram, BloomPassBokehProgram, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (Progressable_4_1) {
                 Progressable_4 = Progressable_4_1;
             },
-            function (util_23_1) {
-                util_23 = util_23_1;
+            function (util_18_1) {
+                util_18 = util_18_1;
             },
             function (render_8_1) {
                 render_8 = render_8_1;
@@ -9231,11 +8401,11 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", 
                     if (filename === null)
                         return new Progressable_4.default(Promise.resolve(null));
                     var path = "data/j3d/smg/" + filename;
-                    return util_23.fetch(path).then(function (buffer) { return _this.createSceneFromBuffer(gl, buffer, isSkybox); });
+                    return util_18.fetch(path).then(function (buffer) { return _this.createSceneFromBuffer(gl, buffer, isSkybox); });
                 };
                 SMGSceneDesc.prototype.createSceneFromBuffer = function (gl, buffer, isSkybox) {
                     return scenes_7.createScenesFromBuffer(gl, buffer).then(function (scenes) {
-                        util_23.assert(scenes.length === 1);
+                        util_18.assert(scenes.length === 1);
                         var scene = scenes[0];
                         scene.setFPS(60);
                         scene.setIsSkybox(isSkybox);
@@ -9249,42 +8419,42 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", 
             sceneDescs = [
                 new SMGSceneDesc("Peach's Castle Garden", "PeachCastleGardenPlanet.arc", "GalaxySky.arc", "PeachCastleGardenPlanetBloom.arc", "PeachCastleGardenPlanetIndirect.arc"),
             ];
-            exports_38("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_32("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
 // SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
-System.register("sm64ds/lz77", ["lz77", "util"], function (exports_39, context_39) {
+System.register("sm64ds/lz77", ["lz77", "util"], function (exports_33, context_33) {
     "use strict";
-    var __moduleName = context_39 && context_39.id;
+    var __moduleName = context_33 && context_33.id;
     function isLZ77(srcBuffer) {
-        return (util_24.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
+        return (util_19.readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
     }
-    exports_39("isLZ77", isLZ77);
+    exports_33("isLZ77", isLZ77);
     function maybeDecompress(srcBuffer) {
         if (isLZ77(srcBuffer))
             return lz77_1.decompress(srcBuffer.slice(4));
         else
             return srcBuffer;
     }
-    exports_39("maybeDecompress", maybeDecompress);
-    var lz77_1, util_24;
+    exports_33("maybeDecompress", maybeDecompress);
+    var lz77_1, util_19;
     return {
         setters: [
             function (lz77_1_1) {
                 lz77_1 = lz77_1_1;
             },
-            function (util_24_1) {
-                util_24 = util_24_1;
+            function (util_19_1) {
+                util_19 = util_19_1;
             }
         ],
         execute: function () {
         }
     };
 });
-System.register("sm64ds/nitro_tex", [], function (exports_40, context_40) {
+System.register("sm64ds/nitro_tex", [], function (exports_34, context_34) {
     "use strict";
-    var __moduleName = context_40 && context_40.id;
+    var __moduleName = context_34 && context_34.id;
     function expand3to8(n) {
         return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
     }
@@ -9300,7 +8470,7 @@ System.register("sm64ds/nitro_tex", [], function (exports_40, context_40) {
         pixels[dstOffs + 1] = expand5to8((p >>> 5) & 0x1F);
         pixels[dstOffs + 2] = expand5to8((p >>> 10) & 0x1F);
     }
-    exports_40("bgr5", bgr5);
+    exports_34("bgr5", bgr5);
     function readTexture_A3I5(width, height, texData, palData) {
         var pixels = new Uint8Array(width * height * 4);
         var texView = texData.createDataView();
@@ -9484,7 +8654,7 @@ System.register("sm64ds/nitro_tex", [], function (exports_40, context_40) {
                 throw new Error("Unsupported texture type! " + format);
         }
     }
-    exports_40("readTexture", readTexture);
+    exports_34("readTexture", readTexture);
     var Format;
     return {
         setters: [],
@@ -9500,20 +8670,20 @@ System.register("sm64ds/nitro_tex", [], function (exports_40, context_40) {
                 Format[Format["Tex_A5I3"] = 6] = "Tex_A5I3";
                 Format[Format["Tex_Direct"] = 7] = "Tex_Direct";
             })(Format || (Format = {}));
-            exports_40("Format", Format);
+            exports_34("Format", Format);
         }
     };
 });
 // Read DS Geometry Engine commands.
-System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_41, context_41) {
+System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_35, context_35) {
     "use strict";
-    var __moduleName = context_41 && context_41.id;
+    var __moduleName = context_35 && context_35.id;
     function bgr5(pixel) {
         nitro_tex_1.bgr5(tmp, 0, pixel);
         var r = tmp[0], g = tmp[1], b = tmp[2];
         return { r: r, g: g, b: b };
     }
-    exports_41("bgr5", bgr5);
+    exports_35("bgr5", bgr5);
     function cmd_MTX_RESTORE(ctx) {
         // XXX: We don't implement the matrix stack yet.
         ctx.readParam();
@@ -9732,7 +8902,7 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_41, c
         }
         return ctx.packets;
     }
-    exports_41("readCmds", readCmds);
+    exports_35("readCmds", readCmds);
     var nitro_tex_1, CmdType, PolyType, VERTEX_SIZE, VERTEX_BYTES, tmp, Context, ContextInternal;
     return {
         setters: [
@@ -9772,7 +8942,7 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_41, c
                 }
                 return Context;
             }());
-            exports_41("Context", Context);
+            exports_35("Context", Context);
             ContextInternal = /** @class */ (function () {
                 function ContextInternal(buffer, baseCtx) {
                     this.offs = 0;
@@ -9794,15 +8964,15 @@ System.register("sm64ds/nitro_gx", ["sm64ds/nitro_tex"], function (exports_41, c
         }
     };
 });
-System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_42, context_42) {
+System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nitro_tex", "util"], function (exports_36, context_36) {
     "use strict";
-    var __moduleName = context_42 && context_42.id;
+    var __moduleName = context_36 && context_36.id;
     function parseModel(bmd, buffer, idx) {
         var offs = bmd.modelOffsBase + idx * 0x40;
         var view = buffer.createDataView();
         var model = new Model();
         model.id = view.getUint32(offs + 0x00, true);
-        model.name = util_25.readString(buffer, view.getUint32(offs + 0x04, true), 0xFF);
+        model.name = util_20.readString(buffer, view.getUint32(offs + 0x04, true), 0xFF);
         model.parentID = view.getUint16(offs + 0x08, true);
         // Local transform.
         var xs = view.getUint32(offs + 0x10, true);
@@ -9844,7 +9014,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var view = buffer.createDataView();
         var offs = bmd.materialOffsBase + idx * 0x30;
         var material = new Material();
-        material.name = util_25.readString(buffer, view.getUint32(offs + 0x00, true), 0xFF);
+        material.name = util_20.readString(buffer, view.getUint32(offs + 0x00, true), 0xFF);
         material.texCoordMat = gl_matrix_7.mat2d.create();
         var textureIdx = view.getUint32(offs + 0x04, true);
         if (textureIdx !== 0xFFFFFFFF) {
@@ -9897,7 +9067,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var texOffs = bmd.textureOffsBase + key.texIdx * 0x14;
         var texture = new Texture();
         texture.id = key.texIdx;
-        texture.name = util_25.readString(buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
+        texture.name = util_20.readString(buffer, view.getUint32(texOffs + 0x00, true), 0xFF);
         var texDataOffs = view.getUint32(texOffs + 0x04, true);
         var texDataSize = view.getUint32(texOffs + 0x08, true);
         var texData = buffer.slice(texDataOffs);
@@ -9909,7 +9079,7 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
         var palData = null;
         if (key.palIdx !== 0xFFFFFFFF) {
             var palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
-            texture.paletteName = util_25.readString(buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
+            texture.paletteName = util_20.readString(buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
             var palDataOffs = view.getUint32(palOffs + 0x04, true);
             var palDataSize = view.getUint32(palOffs + 0x08, true);
             palData = buffer.slice(palDataOffs, palDataOffs + palDataSize);
@@ -9942,8 +9112,8 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             bmd.models.push(parseModel(bmd, buffer, i));
         return bmd;
     }
-    exports_42("parse", parse);
-    var gl_matrix_7, NITRO_GX, NITRO_Tex, util_25, Material, Model, TextureKey, Texture, BMD;
+    exports_36("parse", parse);
+    var gl_matrix_7, NITRO_GX, NITRO_Tex, util_20, Material, Model, TextureKey, Texture, BMD;
     return {
         setters: [
             function (gl_matrix_7_1) {
@@ -9955,8 +9125,8 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
             function (NITRO_Tex_1) {
                 NITRO_Tex = NITRO_Tex_1;
             },
-            function (util_25_1) {
-                util_25 = util_25_1;
+            function (util_20_1) {
+                util_20 = util_20_1;
             }
         ],
         execute: function () {
@@ -9965,13 +9135,13 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 }
                 return Material;
             }());
-            exports_42("Material", Material);
+            exports_36("Material", Material);
             Model = /** @class */ (function () {
                 function Model() {
                 }
                 return Model;
             }());
-            exports_42("Model", Model);
+            exports_36("Model", Model);
             TextureKey = /** @class */ (function () {
                 function TextureKey(texIdx, palIdx) {
                     this.texIdx = texIdx;
@@ -9987,19 +9157,19 @@ System.register("sm64ds/nitro_bmd", ["gl-matrix", "sm64ds/nitro_gx", "sm64ds/nit
                 }
                 return Texture;
             }());
-            exports_42("Texture", Texture);
+            exports_36("Texture", Texture);
             BMD = /** @class */ (function () {
                 function BMD() {
                 }
                 return BMD;
             }());
-            exports_42("BMD", BMD);
+            exports_36("BMD", BMD);
         }
     };
 });
-System.register("sm64ds/render", ["gl-matrix", "byml", "sm64ds/lz77", "sm64ds/nitro_bmd", "render", "Program", "RenderArena", "util", "Camera"], function (exports_43, context_43) {
+System.register("sm64ds/render", ["gl-matrix", "byml", "sm64ds/lz77", "sm64ds/nitro_bmd", "render", "Program", "RenderArena", "util", "Camera"], function (exports_37, context_37) {
     "use strict";
-    var __moduleName = context_43 && context_43.id;
+    var __moduleName = context_37 && context_37.id;
     function textureToCanvas(bmdTex) {
         var canvas = document.createElement("canvas");
         canvas.width = bmdTex.width;
@@ -10021,17 +9191,17 @@ System.register("sm64ds/render", ["gl-matrix", "byml", "sm64ds/lz77", "sm64ds/ni
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_35_1) { e_35 = { error: e_35_1 }; }
+        catch (e_33_1) { e_33 = { error: e_33_1 }; }
         finally {
             try {
                 if (scenes_8_1 && !scenes_8_1.done && (_a = scenes_8.return)) _a.call(scenes_8);
             }
-            finally { if (e_35) throw e_35.error; }
+            finally { if (e_33) throw e_33.error; }
         }
         return textures;
-        var e_35, _a;
+        var e_33, _a;
     }
-    var gl_matrix_8, BYML, LZ77, NITRO_BMD, render_9, Program_4, RenderArena_1, util_26, Camera_4, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, YSpinAnimation, scratchModelMatrix, scratchViewMatrix, BMDRenderer, SM64DSRenderer, SceneDesc;
+    var gl_matrix_8, BYML, LZ77, NITRO_BMD, render_9, Program_4, RenderArena_1, util_21, Camera_4, NITRO_Program, VERTEX_SIZE, VERTEX_BYTES, YSpinAnimation, scratchModelMatrix, scratchViewMatrix, BMDRenderer, SM64DSRenderer, SceneDesc;
     return {
         setters: [
             function (gl_matrix_8_1) {
@@ -10055,8 +9225,8 @@ System.register("sm64ds/render", ["gl-matrix", "byml", "sm64ds/lz77", "sm64ds/ni
             function (RenderArena_1_1) {
                 RenderArena_1 = RenderArena_1_1;
             },
-            function (util_26_1) {
-                util_26 = util_26_1;
+            function (util_21_1) {
+                util_21 = util_21_1;
             },
             function (Camera_4_1) {
                 Camera_4 = Camera_4_1;
@@ -10269,23 +9439,23 @@ System.register("sm64ds/render", ["gl-matrix", "byml", "sm64ds/lz77", "sm64ds/ni
                                     this.translateBatch(gl, model, batch);
                                 }
                             }
-                            catch (e_36_1) { e_36 = { error: e_36_1 }; }
+                            catch (e_34_1) { e_34 = { error: e_34_1 }; }
                             finally {
                                 try {
                                     if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
                                 }
-                                finally { if (e_36) throw e_36.error; }
+                                finally { if (e_34) throw e_34.error; }
                             }
                         }
                     }
-                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
+                    catch (e_35_1) { e_35 = { error: e_35_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
                         }
-                        finally { if (e_37) throw e_37.error; }
+                        finally { if (e_35) throw e_35.error; }
                     }
-                    var e_37, _f, e_36, _e;
+                    var e_35, _f, e_34, _e;
                 };
                 BMDRenderer.prototype.destroy = function (gl) {
                     this.arena.destroy(gl);
@@ -10343,13 +9513,13 @@ System.register("sm64ds/render", ["gl-matrix", "byml", "sm64ds/lz77", "sm64ds/ni
                 }
                 SceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return util_26.fetch('data/sm64ds/sm64ds.crg1').then(function (result) {
+                    return util_21.fetch('data/sm64ds/sm64ds.crg1').then(function (result) {
                         var crg1 = BYML.parse(result, 1 /* CRG1 */);
                         return _this._createSceneFromCRG1(gl, crg1);
                     });
                 };
                 SceneDesc.prototype._createBMDRenderer = function (gl, filename, scale, level, isSkybox) {
-                    return util_26.fetch("data/sm64ds/" + filename).then(function (result) {
+                    return util_21.fetch("data/sm64ds/" + filename).then(function (result) {
                         result = LZ77.maybeDecompress(result);
                         var bmd = NITRO_BMD.parse(result);
                         var renderer = new BMDRenderer(gl, bmd, level);
@@ -10361,7 +9531,7 @@ System.register("sm64ds/render", ["gl-matrix", "byml", "sm64ds/lz77", "sm64ds/ni
                 SceneDesc.prototype._createBMDObjRenderer = function (gl, filename, translation, rotationY, scale, spinSpeed) {
                     if (scale === void 0) { scale = 1; }
                     if (spinSpeed === void 0) { spinSpeed = 0; }
-                    return util_26.fetch("data/sm64ds/" + filename).then(function (result) {
+                    return util_21.fetch("data/sm64ds/" + filename).then(function (result) {
                         result = LZ77.maybeDecompress(result);
                         var bmd = NITRO_BMD.parse(result);
                         var renderer = new BMDRenderer(gl, bmd, null);
@@ -10537,28 +9707,28 @@ System.register("sm64ds/render", ["gl-matrix", "byml", "sm64ds/lz77", "sm64ds/ni
                                 renderers.push(objRenderer);
                         }
                     }
-                    catch (e_38_1) { e_38 = { error: e_38_1 }; }
+                    catch (e_36_1) { e_36 = { error: e_36_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_38) throw e_38.error; }
+                        finally { if (e_36) throw e_36.error; }
                     }
                     return Promise.all(renderers).then(function (_a) {
                         var _b = __read(_a), mainBMD = _b[0], skyboxBMD = _b[1], extraBMDs = _b.slice(2);
                         return new SM64DSRenderer(mainBMD, skyboxBMD, extraBMDs);
                     });
-                    var e_38, _c;
+                    var e_36, _c;
                 };
                 return SceneDesc;
             }());
-            exports_43("SceneDesc", SceneDesc);
+            exports_37("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_44, context_44) {
+System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_38, context_38) {
     "use strict";
-    var __moduleName = context_44 && context_44.id;
+    var __moduleName = context_38 && context_38.id;
     var render_10, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -10625,17 +9795,17 @@ System.register("sm64ds/scenes", ["sm64ds/render"], function (exports_44, contex
             ].map(function (entry) {
                 return new render_10.SceneDesc(entry.name, entry.id);
             });
-            exports_44("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_38("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("mdl0/mdl0", ["util"], function (exports_45, context_45) {
+System.register("mdl0/mdl0", ["util"], function (exports_39, context_39) {
     "use strict";
-    var __moduleName = context_45 && context_45.id;
+    var __moduleName = context_39 && context_39.id;
     function parse(buffer) {
         ;
         var view = buffer.createDataView();
-        util_27.assert(util_27.readString(buffer, 0, 4, false) === 'MDL\0');
+        util_22.assert(util_22.readString(buffer, 0, 4, false) === 'MDL\0');
         var flags = view.getUint8(0x04);
         var primType = view.getUint8(0x05);
         var vertCount = view.getUint16(0x06, true);
@@ -10686,25 +9856,25 @@ System.register("mdl0/mdl0", ["util"], function (exports_45, context_45) {
             vtxData = buffer.createTypedArray(Float32Array, offs, (animCount * animSize) / 4);
             offs += vtxData.byteLength;
         }
-        util_27.assert(offs === buffer.byteLength);
+        util_22.assert(offs === buffer.byteLength);
         return { clrData: clrData, idxData: idxData, vtxData: vtxData, animCount: animCount, animSize: animSize, vertCount: vertCount, vertSize: vertSize };
     }
-    exports_45("parse", parse);
-    var util_27;
+    exports_39("parse", parse);
+    var util_22;
     return {
         setters: [
-            function (util_27_1) {
-                util_27 = util_27_1;
+            function (util_22_1) {
+                util_22 = util_22_1;
             }
         ],
         execute: function () {
         }
     };
 });
-System.register("mdl0/render", ["mdl0/mdl0", "render", "Program", "util", "Camera"], function (exports_46, context_46) {
+System.register("mdl0/render", ["mdl0/mdl0", "render", "Program", "util", "Camera"], function (exports_40, context_40) {
     "use strict";
-    var __moduleName = context_46 && context_46.id;
-    var MDL0, render_11, Program_5, util_28, Camera_5, FancyGrid_Program, FancyGrid, MDL0_Program, Scene, SceneDesc;
+    var __moduleName = context_40 && context_40.id;
+    var MDL0, render_11, Program_5, util_23, Camera_5, FancyGrid_Program, FancyGrid, MDL0_Program, Scene, SceneDesc;
     return {
         setters: [
             function (MDL0_1) {
@@ -10716,8 +9886,8 @@ System.register("mdl0/render", ["mdl0/mdl0", "render", "Program", "util", "Camer
             function (Program_5_1) {
                 Program_5 = Program_5_1;
             },
-            function (util_28_1) {
-                util_28 = util_28_1;
+            function (util_23_1) {
+                util_23 = util_23_1;
             },
             function (Camera_5_1) {
                 Camera_5 = Camera_5_1;
@@ -10851,20 +10021,20 @@ System.register("mdl0/render", ["mdl0/mdl0", "render", "Program", "util", "Camer
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    return util_28.fetch(this.path).then(function (result) {
+                    return util_23.fetch(this.path).then(function (result) {
                         var mdl0 = MDL0.parse(result);
                         return new Scene(gl, mdl0);
                     });
                 };
                 return SceneDesc;
             }());
-            exports_46("SceneDesc", SceneDesc);
+            exports_40("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("mdl0/scenes", ["mdl0/render"], function (exports_47, context_47) {
+System.register("mdl0/scenes", ["mdl0/render"], function (exports_41, context_41) {
     "use strict";
-    var __moduleName = context_47 && context_47.id;
+    var __moduleName = context_41 && context_41.id;
     var render_12, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -10930,17 +10100,17 @@ System.register("mdl0/scenes", ["mdl0/render"], function (exports_47, context_47
                 var name = filename;
                 return new render_12.SceneDesc(name, path);
             });
-            exports_47("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_41("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], function (exports_48, context_48) {
+System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], function (exports_42, context_42) {
     "use strict";
-    var __moduleName = context_48 && context_48.id;
+    var __moduleName = context_42 && context_42.id;
     function readZELVIEW0(buffer) {
         var view = buffer.createDataView();
         var MAGIC = "ZELVIEW0";
-        if (util_29.readString(buffer, 0, MAGIC.length, false) !== MAGIC)
+        if (util_24.readString(buffer, 0, MAGIC.length, false) !== MAGIC)
             throw new Error("Invalid ZELVIEW0 file");
         var offs = 0x08;
         var count = view.getUint8(offs);
@@ -10949,7 +10119,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         offs += 0x04;
         function readVFSEntry() {
             var entry = new VFSEntry();
-            entry.filename = util_29.readString(buffer, offs, 0x30);
+            entry.filename = util_24.readString(buffer, offs, 0x30);
             offs += 0x30;
             entry.pStart = view.getUint32(offs, true);
             entry.pEnd = view.getUint32(offs + 0x04, true);
@@ -10968,7 +10138,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         zelview0.buffer = buffer;
         return zelview0;
     }
-    exports_48("readZELVIEW0", readZELVIEW0);
+    exports_42("readZELVIEW0", readZELVIEW0);
     function readHeaders(gl, rom, offs, banks) {
         var headers = new Headers();
         function loadAddress(addr) {
@@ -11205,7 +10375,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         var banks = { scene: file };
         return readHeaders(gl, zelview0, file.vStart, banks);
     }
-    var gl_matrix_9, F3DEX2, util_29, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
+    var gl_matrix_9, F3DEX2, util_24, VFSEntry, ZELVIEW0, Mesh, Headers, HeaderCommands;
     return {
         setters: [
             function (gl_matrix_9_1) {
@@ -11214,8 +10384,8 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
             function (F3DEX2_1) {
                 F3DEX2 = F3DEX2_1;
             },
-            function (util_29_1) {
-                util_29 = util_29_1;
+            function (util_24_1) {
+                util_24 = util_24_1;
             }
         ],
         execute: function () {
@@ -11236,15 +10406,15 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                                 return entry;
                         }
                     }
-                    catch (e_39_1) { e_39 = { error: e_39_1 }; }
+                    catch (e_37_1) { e_37 = { error: e_37_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_39) throw e_39.error; }
+                        finally { if (e_37) throw e_37.error; }
                     }
                     return null;
-                    var e_39, _c;
+                    var e_37, _c;
                 };
                 ZELVIEW0.prototype.lookupAddress = function (banks, addr) {
                     var bankIdx = addr >>> 24;
@@ -11276,7 +10446,7 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                 };
                 return ZELVIEW0;
             }());
-            exports_48("ZELVIEW0", ZELVIEW0);
+            exports_42("ZELVIEW0", ZELVIEW0);
             Mesh = /** @class */ (function () {
                 function Mesh() {
                     this.opaque = [];
@@ -11284,14 +10454,14 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
                 }
                 return Mesh;
             }());
-            exports_48("Mesh", Mesh);
+            exports_42("Mesh", Mesh);
             Headers = /** @class */ (function () {
                 function Headers() {
                     this.rooms = [];
                 }
                 return Headers;
             }());
-            exports_48("Headers", Headers);
+            exports_42("Headers", Headers);
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Spawns"] = 0] = "Spawns";
                 HeaderCommands[HeaderCommands["Actors"] = 1] = "Actors";
@@ -11316,9 +10486,9 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
         }
     };
 });
-System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_49, context_49) {
+System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_43, context_43) {
     "use strict";
-    var __moduleName = context_49 && context_49.id;
+    var __moduleName = context_43 && context_43.id;
     function readVertex(state, which, addr) {
         var rom = state.rom;
         var offs = state.lookupAddress(addr);
@@ -11995,7 +11165,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         gl.bindVertexArray(null);
         return new DL(vao, state.cmds, state.textures);
     }
-    exports_49("readDL", readDL);
+    exports_43("readDL", readDL);
     var gl_matrix_10, Render, render_13, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
@@ -12067,14 +11237,14 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
                 };
                 return DL;
             }());
-            exports_49("DL", DL);
+            exports_43("DL", DL);
         }
     };
 });
-System.register("zelview/render", ["zelview/zelview0", "render", "Program", "util"], function (exports_50, context_50) {
+System.register("zelview/render", ["zelview/zelview0", "render", "Program", "util"], function (exports_44, context_44) {
     "use strict";
-    var __moduleName = context_50 && context_50.id;
-    var ZELVIEW0, render_14, Program_6, util_30, BillboardBGProgram, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
+    var __moduleName = context_44 && context_44.id;
+    var ZELVIEW0, render_14, Program_6, util_25, BillboardBGProgram, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
     return {
         setters: [
             function (ZELVIEW0_1) {
@@ -12086,8 +11256,8 @@ System.register("zelview/render", ["zelview/zelview0", "render", "Program", "uti
             function (Program_6_1) {
                 Program_6 = Program_6_1;
             },
-            function (util_30_1) {
-                util_30 = util_30_1;
+            function (util_25_1) {
+                util_25 = util_25_1;
             }
         ],
         execute: function () {
@@ -12106,7 +11276,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "Program", "uti
                 };
                 return BillboardBGProgram;
             }(Program_6.default));
-            exports_50("BillboardBGProgram", BillboardBGProgram);
+            exports_44("BillboardBGProgram", BillboardBGProgram);
             F3DEX2Program = /** @class */ (function (_super) {
                 __extends(F3DEX2Program, _super);
                 function F3DEX2Program() {
@@ -12126,7 +11296,7 @@ System.register("zelview/render", ["zelview/zelview0", "render", "Program", "uti
                 F3DEX2Program.a_Color = 2;
                 return F3DEX2Program;
             }(Program_6.default));
-            exports_50("F3DEX2Program", F3DEX2Program);
+            exports_44("F3DEX2Program", F3DEX2Program);
             CollisionProgram = /** @class */ (function (_super) {
                 __extends(CollisionProgram, _super);
                 function CollisionProgram() {
@@ -12283,20 +11453,20 @@ System.register("zelview/render", ["zelview/zelview0", "render", "Program", "uti
                     this.id = this.path;
                 }
                 SceneDesc.prototype.createScene = function (gl) {
-                    return util_30.fetch(this.path).then(function (result) {
+                    return util_25.fetch(this.path).then(function (result) {
                         var zelview0 = ZELVIEW0.readZELVIEW0(result);
                         return new Scene(gl, zelview0);
                     });
                 };
                 return SceneDesc;
             }());
-            exports_50("SceneDesc", SceneDesc);
+            exports_44("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("zelview/scenes", ["zelview/render"], function (exports_51, context_51) {
+System.register("zelview/scenes", ["zelview/render"], function (exports_45, context_45) {
     "use strict";
-    var __moduleName = context_51 && context_51.id;
+    var __moduleName = context_45 && context_45.id;
     var render_15, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -12752,16 +11922,16 @@ System.register("zelview/scenes", ["zelview/render"], function (exports_51, cont
                 var path = "data/zelview/" + entry.filename + ".zelview0";
                 return new render_15.SceneDesc(entry.label, path);
             });
-            exports_51("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_45("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
+System.register("oot3d/cmb", ["util"], function (exports_46, context_46) {
     "use strict";
-    var __moduleName = context_52 && context_52.id;
+    var __moduleName = context_46 && context_46.id;
     function readMatsChunk(cmb, buffer) {
         var view = buffer.createDataView();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'mats');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'mats');
         var count = view.getUint32(0x08, true);
         var offs = 0x0C;
         for (var i = 0; i < count; i++) {
@@ -13045,7 +12215,7 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
     }
     function readTexChunk(cmb, buffer, texData) {
         var view = buffer.createDataView();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'tex ');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'tex ');
         var count = view.getUint32(0x08, true);
         var offs = 0x0C;
         for (var i = 0; i < count; i++) {
@@ -13055,7 +12225,7 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
             texture.height = view.getUint16(offs + 0x0A, true);
             texture.format = view.getUint32(offs + 0x0C, true);
             var dataOffs = view.getUint32(offs + 0x10, true);
-            texture.name = util_31.readString(buffer, offs + 0x14, 0x10);
+            texture.name = util_26.readString(buffer, offs + 0x14, 0x10);
             texture.name = texture.name + "  (" + texture.format + ")";
             offs += 0x24;
             texture.pixels = decodeTexture(texture, texData.slice(dataOffs, dataOffs + size));
@@ -13064,7 +12234,7 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
     }
     function readVatrChunk(cmb, buffer) {
         var view = buffer.createDataView();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'vatr');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'vatr');
         cmb.vertexBufferSlices = new VertexBufferSlices();
         var posSize = view.getUint32(0x0C, true);
         var posOffs = view.getUint32(0x10, true);
@@ -13081,7 +12251,7 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
     }
     function readMshsChunk(cmb, buffer) {
         var view = buffer.createDataView();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'mshs');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'mshs');
         var count = view.getUint32(0x08, true);
         var offs = 0x10;
         for (var i = 0; i < count; i++) {
@@ -13094,7 +12264,7 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
     }
     function readPrmChunk(cmb, buffer) {
         var view = buffer.createDataView();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'prm ');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'prm ');
         var prm = new Prm();
         prm.indexType = view.getUint32(0x10, true);
         prm.count = view.getUint16(0x14, true);
@@ -13103,13 +12273,13 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
     }
     function readPrmsChunk(cmb, buffer) {
         var view = buffer.createDataView();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'prms');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'prms');
         var prmOffs = view.getUint32(0x14, true);
         return readPrmChunk(cmb, buffer.slice(prmOffs));
     }
     function readSepdChunk(cmb, buffer) {
         var view = buffer.createDataView();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'sepd');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'sepd');
         var count = view.getUint16(0x08, true);
         var sepd = new Sepd();
         var offs = 0x108;
@@ -13134,7 +12304,7 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
     }
     function readShpChunk(cmb, buffer) {
         var view = buffer.createDataView();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'shp ');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'shp ');
         var count = view.getUint32(0x08, true);
         var offs = 0x10;
         for (var i = 0; i < count; i++) {
@@ -13146,7 +12316,7 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
     }
     function readSklmChunk(cmb, buffer) {
         var view = buffer.createDataView();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'sklm');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'sklm');
         var mshsChunkOffs = view.getUint32(0x08, true);
         readMshsChunk(cmb, buffer.slice(mshsChunkOffs));
         var shpChunkOffs = view.getUint32(0x0C, true);
@@ -13155,9 +12325,9 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
     function parse(buffer) {
         var view = buffer.createDataView();
         var cmb = new CMB();
-        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'cmb ');
+        util_26.assert(util_26.readString(buffer, 0x00, 0x04) === 'cmb ');
         var size = view.getUint32(0x04, true);
-        cmb.name = util_31.readString(buffer, 0x10, 0x10);
+        cmb.name = util_26.readString(buffer, 0x10, 0x10);
         var matsChunkOffs = view.getUint32(0x28, true);
         readMatsChunk(cmb, buffer.slice(matsChunkOffs));
         var texDataOffs = view.getUint32(0x40, true);
@@ -13172,12 +12342,12 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
         cmb.indexBuffer = buffer.slice(idxDataOffs, idxDataOffs + idxDataCount * 2);
         return cmb;
     }
-    exports_52("parse", parse);
-    var util_31, VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
+    exports_46("parse", parse);
+    var util_26, VertexBufferSlices, CMB, TextureFilter, TextureWrapMode, TextureBinding, Material, TextureFormat, Texture, Mesh, DataType, Prm, Sepd;
     return {
         setters: [
-            function (util_31_1) {
-                util_31 = util_31_1;
+            function (util_26_1) {
+                util_26 = util_26_1;
             }
         ],
         execute: function () {
@@ -13195,7 +12365,7 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
                 }
                 return CMB;
             }());
-            exports_52("CMB", CMB);
+            exports_46("CMB", CMB);
             (function (TextureFilter) {
                 TextureFilter[TextureFilter["NEAREST"] = 9728] = "NEAREST";
                 TextureFilter[TextureFilter["LINEAR"] = 9729] = "LINEAR";
@@ -13204,12 +12374,12 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
                 TextureFilter[TextureFilter["NEAREST_MIPMIP_LINEAR"] = 9986] = "NEAREST_MIPMIP_LINEAR";
                 TextureFilter[TextureFilter["LINEAR_MIPMAP_LINEAR"] = 9987] = "LINEAR_MIPMAP_LINEAR";
             })(TextureFilter || (TextureFilter = {}));
-            exports_52("TextureFilter", TextureFilter);
+            exports_46("TextureFilter", TextureFilter);
             (function (TextureWrapMode) {
                 TextureWrapMode[TextureWrapMode["CLAMP"] = 10496] = "CLAMP";
                 TextureWrapMode[TextureWrapMode["REPEAT"] = 10497] = "REPEAT";
             })(TextureWrapMode || (TextureWrapMode = {}));
-            exports_52("TextureWrapMode", TextureWrapMode);
+            exports_46("TextureWrapMode", TextureWrapMode);
             TextureBinding = /** @class */ (function () {
                 function TextureBinding() {
                 }
@@ -13221,7 +12391,7 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
                 }
                 return Material;
             }());
-            exports_52("Material", Material);
+            exports_46("Material", Material);
             (function (TextureFormat) {
                 TextureFormat[TextureFormat["ETC1"] = 26458] = "ETC1";
                 TextureFormat[TextureFormat["ETC1A4"] = 26459] = "ETC1A4";
@@ -13236,13 +12406,13 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
                 }
                 return Texture;
             }());
-            exports_52("Texture", Texture);
+            exports_46("Texture", Texture);
             Mesh = /** @class */ (function () {
                 function Mesh() {
                 }
                 return Mesh;
             }());
-            exports_52("Mesh", Mesh);
+            exports_46("Mesh", Mesh);
             (function (DataType) {
                 DataType[DataType["Byte"] = 5120] = "Byte";
                 DataType[DataType["UByte"] = 5121] = "UByte";
@@ -13252,30 +12422,30 @@ System.register("oot3d/cmb", ["util"], function (exports_52, context_52) {
                 DataType[DataType["UInt"] = 5125] = "UInt";
                 DataType[DataType["Float"] = 5126] = "Float";
             })(DataType || (DataType = {}));
-            exports_52("DataType", DataType);
+            exports_46("DataType", DataType);
             Prm = /** @class */ (function () {
                 function Prm() {
                 }
                 return Prm;
             }());
-            exports_52("Prm", Prm);
+            exports_46("Prm", Prm);
             Sepd = /** @class */ (function () {
                 function Sepd() {
                     this.prms = [];
                 }
                 return Sepd;
             }());
-            exports_52("Sepd", Sepd);
+            exports_46("Sepd", Sepd);
         }
     };
 });
-System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_53, context_53) {
+System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_47, context_47) {
     "use strict";
-    var __moduleName = context_53 && context_53.id;
+    var __moduleName = context_47 && context_47.id;
     function readRooms(buffer, nRooms, offs) {
         var rooms = [];
         for (var i = 0; i < nRooms; i++) {
-            rooms.push(util_32.readString(buffer, offs, 0x44));
+            rooms.push(util_27.readString(buffer, offs, 0x44));
             offs += 0x44;
         }
         return rooms;
@@ -13287,8 +12457,8 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_53, contex
         var type = (hdr >> 24);
         var nEntries = (hdr >> 16) & 0xFF;
         var entriesAddr = view.getUint32(offs + 4, true);
-        util_32.assert(type === 0x02);
-        util_32.assert(nEntries === 0x01);
+        util_27.assert(type === 0x02);
+        util_27.assert(nEntries === 0x01);
         var opaqueAddr = view.getUint32(entriesAddr + 0x08, true);
         var transparentAddr = view.getUint32(entriesAddr + 0x0C, true);
         if (opaqueAddr !== 0)
@@ -13358,21 +12528,21 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_53, contex
         return zsi;
     }
     function parse(buffer) {
-        util_32.assert(util_32.readString(buffer, 0x00, 0x04) === 'ZSI\x01');
-        var name = util_32.readString(buffer, 0x04, 0x0C);
+        util_27.assert(util_27.readString(buffer, 0x00, 0x04) === 'ZSI\x01');
+        var name = util_27.readString(buffer, 0x04, 0x0C);
         // ZSI header is done. It's that simple! Now for the actual data.
         var headersBuf = buffer.slice(0x10);
         return readHeaders(headersBuf);
     }
-    exports_53("parse", parse);
-    var CMB, util_32, ZSI, HeaderCommands, Mesh;
+    exports_47("parse", parse);
+    var CMB, util_27, ZSI, HeaderCommands, Mesh;
     return {
         setters: [
             function (CMB_1) {
                 CMB = CMB_1;
             },
-            function (util_32_1) {
-                util_32 = util_32_1;
+            function (util_27_1) {
+                util_27 = util_27_1;
             }
         ],
         execute: function () {
@@ -13381,7 +12551,7 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_53, contex
                 }
                 return ZSI;
             }());
-            exports_53("ZSI", ZSI);
+            exports_47("ZSI", ZSI);
             // Subset of Z64 command types.
             (function (HeaderCommands) {
                 HeaderCommands[HeaderCommands["Collision"] = 3] = "Collision";
@@ -13394,13 +12564,13 @@ System.register("oot3d/zsi", ["oot3d/cmb", "util"], function (exports_53, contex
                 }
                 return Mesh;
             }());
-            exports_53("Mesh", Mesh);
+            exports_47("Mesh", Mesh);
         }
     };
 });
-System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "render", "Program", "RenderArena", "util"], function (exports_54, context_54) {
+System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "render", "Program", "RenderArena", "util"], function (exports_48, context_48) {
     "use strict";
-    var __moduleName = context_54 && context_54.id;
+    var __moduleName = context_48 && context_48.id;
     function textureToCanvas(texture) {
         var canvas = document.createElement("canvas");
         canvas.width = texture.width;
@@ -13419,7 +12589,7 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
         parts.pop();
         return parts.join('/');
     }
-    var CMB, ZSI, Progressable_5, render_16, Program_7, RenderArena_2, util_33, OoT3D_Program, Scene, MultiScene, SceneDesc;
+    var CMB, ZSI, Progressable_5, render_16, Program_7, RenderArena_2, util_28, OoT3D_Program, Scene, MultiScene, SceneDesc;
     return {
         setters: [
             function (CMB_2) {
@@ -13440,8 +12610,8 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
             function (RenderArena_2_1) {
                 RenderArena_2 = RenderArena_2_1;
             },
-            function (util_33_1) {
-                util_33 = util_33_1;
+            function (util_28_1) {
+                util_28 = util_28_1;
             }
         ],
         execute: function () {
@@ -13529,15 +12699,15 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 gl.drawElements(gl.TRIANGLES, prm.count, _this.translateDataType(gl, prm.indexType), prm.offset * _this.dataTypeSize(prm.indexType));
                             }
                         }
-                        catch (e_40_1) { e_40 = { error: e_40_1 }; }
+                        catch (e_38_1) { e_38 = { error: e_38_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_40) throw e_40.error; }
+                            finally { if (e_38) throw e_38.error; }
                         }
                         gl.bindVertexArray(null);
-                        var e_40, _c;
+                        var e_38, _c;
                     };
                 };
                 Scene.prototype.translateTexture = function (gl, texture) {
@@ -13630,14 +12800,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                                 func();
                             }
                         }
-                        catch (e_41_1) { e_41 = { error: e_41_1 }; }
+                        catch (e_39_1) { e_39 = { error: e_39_1 }; }
                         finally {
                             try {
                                 if (meshFuncs_1_1 && !meshFuncs_1_1.done && (_a = meshFuncs_1.return)) _a.call(meshFuncs_1);
                             }
-                            finally { if (e_41) throw e_41.error; }
+                            finally { if (e_39) throw e_39.error; }
                         }
-                        var e_41, _a;
+                        var e_39, _a;
                     };
                 };
                 Scene.prototype.translateModel = function (gl, mesh) {
@@ -13668,14 +12838,14 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
+                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_42) throw e_42.error; }
+                        finally { if (e_40) throw e_40.error; }
                     }
-                    var e_42, _c;
+                    var e_40, _c;
                 }
                 MultiScene.prototype.render = function (renderState) {
                     this.scenes.forEach(function (scene) {
@@ -13695,39 +12865,39 @@ System.register("oot3d/render", ["oot3d/cmb", "oot3d/zsi", "Progressable", "rend
                 }
                 SceneDesc.prototype.createScene = function (gl) {
                     var _this = this;
-                    return util_33.fetch(this.path).then(function (result) {
+                    return util_28.fetch(this.path).then(function (result) {
                         return _this._createSceneFromData(gl, result);
                     });
                 };
                 SceneDesc.prototype._createRoomSceneFromData = function (gl, result) {
                     var zsi = ZSI.parse(result);
-                    util_33.assert(zsi.mesh !== null);
+                    util_28.assert(zsi.mesh !== null);
                     return new Progressable_5.default(Promise.resolve(new Scene(gl, zsi)));
                 };
                 SceneDesc.prototype._createSceneFromData = function (gl, result) {
                     var _this = this;
                     var zsi = ZSI.parse(result);
-                    util_33.assert(zsi.rooms !== null);
+                    util_28.assert(zsi.rooms !== null);
                     var basePath = dirname(this.path);
                     var roomFilenames = zsi.rooms.map(function (romPath) {
                         var filename = romPath.split('/').pop();
                         return basePath + '/' + filename;
                     });
                     return Progressable_5.default.all(roomFilenames.map(function (filename) {
-                        return util_33.fetch(filename).then(function (roomResult) { return _this._createRoomSceneFromData(gl, roomResult); });
+                        return util_28.fetch(filename).then(function (roomResult) { return _this._createRoomSceneFromData(gl, roomResult); });
                     })).then(function (scenes) {
                         return new MultiScene(scenes);
                     });
                 };
                 return SceneDesc;
             }());
-            exports_54("SceneDesc", SceneDesc);
+            exports_48("SceneDesc", SceneDesc);
         }
     };
 });
-System.register("oot3d/scenes", ["oot3d/render"], function (exports_55, context_55) {
+System.register("oot3d/scenes", ["oot3d/render"], function (exports_49, context_49) {
     "use strict";
-    var __moduleName = context_55 && context_55.id;
+    var __moduleName = context_49 && context_49.id;
     var render_17, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -13841,26 +13011,26 @@ System.register("oot3d/scenes", ["oot3d/render"], function (exports_55, context_
                 var name = entry.name || entry.filename;
                 return new render_17.SceneDesc(name, path);
             });
-            exports_55("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_49("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("fres/gx2_enum", [], function (exports_56, context_56) {
+System.register("fres/gx2_enum", [], function (exports_50, context_50) {
     "use strict";
-    var __moduleName = context_56 && context_56.id;
+    var __moduleName = context_50 && context_50.id;
     return {
         setters: [],
         execute: function () {
         }
     };
 });
-System.register("fres/gx2_surface", ["util"], function (exports_57, context_57) {
+System.register("fres/gx2_surface", ["util"], function (exports_51, context_51) {
     "use strict";
-    var __moduleName = context_57 && context_57.id;
+    var __moduleName = context_51 && context_51.id;
     function parseGX2Surface(buffer, gx2SurfaceOffs) {
         var view = buffer.slice(gx2SurfaceOffs, gx2SurfaceOffs + 0x9C).createDataView();
         var dimension = view.getUint32(0x00, false);
-        util_34.assert(dimension === 1 /* _2D */);
+        util_29.assert(dimension === 1 /* _2D */);
         var width = view.getUint32(0x04, false);
         var height = view.getUint32(0x08, false);
         var depth = view.getUint32(0x0C, false);
@@ -13882,21 +13052,21 @@ System.register("fres/gx2_surface", ["util"], function (exports_57, context_57) 
         var surface = { format: format, tileMode: tileMode, swizzle: swizzle, width: width, height: height, depth: depth, pitch: pitch, numMips: numMips, aaMode: aaMode, texDataSize: texDataSize, mipDataSize: mipDataSize, mipDataOffsets: mipDataOffsets };
         return surface;
     }
-    exports_57("parseGX2Surface", parseGX2Surface);
-    var util_34;
+    exports_51("parseGX2Surface", parseGX2Surface);
+    var util_29;
     return {
         setters: [
-            function (util_34_1) {
-                util_34 = util_34_1;
+            function (util_29_1) {
+                util_29 = util_29_1;
             }
         ],
         execute: function () {
         }
     };
 });
-System.register("worker_util", ["util"], function (exports_58, context_58) {
+System.register("worker_util", ["util"], function (exports_52, context_52) {
     "use strict";
-    var __moduleName = context_58 && context_58.id;
+    var __moduleName = context_52 && context_52.id;
     function makeWorkerFromSource(sources) {
         var blob = new Blob(sources, { type: 'application/javascript' });
         var url = window.URL.createObjectURL(blob);
@@ -13904,12 +13074,12 @@ System.register("worker_util", ["util"], function (exports_58, context_58) {
         window.URL.revokeObjectURL(url);
         return w;
     }
-    exports_58("makeWorkerFromSource", makeWorkerFromSource);
-    var util_35, WorkerManager, WorkerPool;
+    exports_52("makeWorkerFromSource", makeWorkerFromSource);
+    var util_30, WorkerManager, WorkerPool;
     return {
         setters: [
-            function (util_35_1) {
-                util_35 = util_35_1;
+            function (util_30_1) {
+                util_30 = util_30_1;
             }
         ],
         execute: function () {
@@ -13922,7 +13092,7 @@ System.register("worker_util", ["util"], function (exports_58, context_58) {
                 }
                 WorkerManager.prototype._workerOnMessage = function (e) {
                     var resp = e.data;
-                    this.currentRequest = util_35.assertExists(this.currentRequest);
+                    this.currentRequest = util_30.assertExists(this.currentRequest);
                     this.currentRequest.resolve(resp);
                     this.currentRequest = null;
                     this.onworkerdone();
@@ -13954,15 +13124,15 @@ System.register("worker_util", ["util"], function (exports_58, context_58) {
                             worker.terminate();
                         }
                     }
-                    catch (e_43_1) { e_43 = { error: e_43_1 }; }
+                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_43) throw e_43.error; }
+                        finally { if (e_41) throw e_41.error; }
                     }
                     this.workers = [];
-                    var e_43, _c;
+                    var e_41, _c;
                 };
                 WorkerPool.prototype.build = function () {
                     if (this.workers.length > 0)
@@ -13998,32 +13168,32 @@ System.register("worker_util", ["util"], function (exports_58, context_58) {
                             if (this.outstandingRequests.length === 0)
                                 return;
                             if (worker.isFree()) {
-                                var req = util_35.assertExists(this.outstandingRequests.shift());
+                                var req = util_30.assertExists(this.outstandingRequests.shift());
                                 worker.execute(req);
                             }
                         }
                     }
-                    catch (e_44_1) { e_44 = { error: e_44_1 }; }
+                    catch (e_42_1) { e_42 = { error: e_42_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_44) throw e_44.error; }
+                        finally { if (e_42) throw e_42.error; }
                     }
-                    var e_44, _c;
+                    var e_42, _c;
                 };
                 WorkerPool.prototype._onWorkerDone = function () {
                     this.pumpQueue();
                 };
                 return WorkerPool;
             }());
-            exports_58("WorkerPool", WorkerPool);
+            exports_52("WorkerPool", WorkerPool);
         }
     };
 });
-System.register("fres/gx2_swizzle", ["worker_util"], function (exports_59, context_59) {
+System.register("fres/gx2_swizzle", ["worker_util"], function (exports_53, context_53) {
     "use strict";
-    var __moduleName = context_59 && context_59.id;
+    var __moduleName = context_53 && context_53.id;
     // This is all contained in one function in order to make it easier to Worker-ize.
     function _deswizzle(inSurface, srcBuffer, mipLevel) {
         var numPipes = 2;
@@ -14333,13 +13503,13 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_59, conte
                 };
                 return Deswizzler;
             }());
-            exports_59("deswizzler", deswizzler = new Deswizzler());
+            exports_53("deswizzler", deswizzler = new Deswizzler());
         }
     };
 });
-System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_60, context_60) {
+System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_54, context_54) {
     "use strict";
-    var __moduleName = context_60 && context_60.id;
+    var __moduleName = context_54 && context_54.id;
     // #region Texture Decode
     function expand5to8(n) {
         return (n << (8 - 5)) | (n >>> (10 - 8));
@@ -14612,11 +13782,11 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_60, 
                 return decompressBC45Surface(surface);
         }
     }
-    exports_60("decompressBC", decompressBC);
+    exports_54("decompressBC", decompressBC);
     function deswizzleSurface(surface, texData, mipLevel) {
         return gx2_swizzle_1.deswizzler.deswizzle(surface, texData.castToBuffer(), mipLevel);
     }
-    exports_60("deswizzleSurface", deswizzleSurface);
+    exports_54("deswizzleSurface", deswizzleSurface);
     function decodeSurface(surface, texData, mipData, mipLevel) {
         var levelData;
         if (mipLevel === 0) {
@@ -14658,7 +13828,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_60, 
             }
         });
     }
-    exports_60("decodeSurface", decodeSurface);
+    exports_54("decodeSurface", decodeSurface);
     function surfaceToCanvas(canvas, surface) {
         var ctx = canvas.getContext('2d');
         var width = surface.width;
@@ -14687,7 +13857,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_60, 
         }
         ctx.putImageData(imageData, 0, 0);
     }
-    exports_60("surfaceToCanvas", surfaceToCanvas);
+    exports_54("surfaceToCanvas", surfaceToCanvas);
     function decompressSurface(texture) {
         switch (texture.type) {
             case 'RGBA':
@@ -14699,7 +13869,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_60, 
                 return decompressBC(texture);
         }
     }
-    exports_60("decompressSurface", decompressSurface);
+    exports_54("decompressSurface", decompressSurface);
     var gx2_swizzle_1;
     return {
         setters: [
@@ -14711,9 +13881,9 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_60, 
         }
     };
 });
-System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61, context_61) {
+System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_55, context_55) {
     "use strict";
-    var __moduleName = context_61 && context_61.id;
+    var __moduleName = context_55 && context_55.id;
     function readBinPtrT(view, offs, littleEndian) {
         var offs2 = view.getInt32(offs, littleEndian);
         if (offs2 === 0)
@@ -14727,16 +13897,16 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
         var view = buffer.createDataView();
         var tableSize = view.getUint32(tableOffs + 0x00, littleEndian);
         var tableCount = view.getUint32(tableOffs + 0x04, littleEndian);
-        util_36.assert(tableCount === tableCount);
+        util_31.assert(tableCount === tableCount);
         var entries = [];
         var tableIdx = tableOffs + 0x08;
         // Skip root entry.
         tableIdx += 0x10;
         for (var i = 0; i < tableCount; i++) {
             // There's a fancy search tree in here which I don't care about at all...
-            var name_10 = util_36.readString(buffer, readBinPtrT(view, tableIdx + 0x08, littleEndian));
+            var name_8 = util_31.readString(buffer, readBinPtrT(view, tableIdx + 0x08, littleEndian));
             var offs = readBinPtrT(view, tableIdx + 0x0C, littleEndian);
-            entries.push({ name: name_10, offs: offs });
+            entries.push({ name: name_8, offs: offs });
             tableIdx += 0x10;
         }
         return entries;
@@ -14744,9 +13914,9 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
     function parseFTEX(buffer, entry, littleEndian) {
         var offs = entry.offs;
         var view = buffer.createDataView();
-        util_36.assert(util_36.readString(buffer, offs + 0x00, 0x04) === 'FTEX');
+        util_31.assert(util_31.readString(buffer, offs + 0x00, 0x04) === 'FTEX');
         // GX2 is Wii U which is a little-endian system.
-        util_36.assert(!littleEndian);
+        util_31.assert(!littleEndian);
         var gx2SurfaceOffs = offs + 0x04;
         var surface = gx2_surface_1.parseGX2Surface(buffer, gx2SurfaceOffs);
         var texDataOffs = readBinPtrT(view, offs + 0xB0, littleEndian);
@@ -14758,7 +13928,7 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
     function parseFMDL(buffer, entry, littleEndian) {
         var offs = entry.offs;
         var view = buffer.createDataView();
-        util_36.assert(util_36.readString(buffer, offs + 0x00, 0x04) === 'FMDL');
+        util_31.assert(util_31.readString(buffer, offs + 0x00, 0x04) === 'FMDL');
         var fileName = readBinPtrT(view, offs + 0x04, littleEndian);
         var filePath = readBinPtrT(view, offs + 0x08, littleEndian);
         var fsklOffs = readBinPtrT(view, offs + 0x0C, littleEndian);
@@ -14768,8 +13938,8 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
         var fvtxCount = view.getUint16(offs + 0x20, littleEndian);
         var fshpCount = view.getUint16(offs + 0x22, littleEndian);
         var fmatCount = view.getUint16(offs + 0x24, littleEndian);
-        util_36.assert(fshpCount === fshpResDic.length);
-        util_36.assert(fmatCount === fmatResDic.length);
+        util_31.assert(fshpCount === fshpResDic.length);
+        util_31.assert(fmatCount === fmatResDic.length);
         function readBufferData(offs) {
             var size = view.getUint32(offs + 0x04, littleEndian);
             var stride = view.getUint16(offs + 0x0C, littleEndian);
@@ -14784,40 +13954,40 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                 for (var resDic_1 = __values(resDic), resDic_1_1 = resDic_1.next(); !resDic_1_1.done; resDic_1_1 = resDic_1.next()) {
                     var entry_1 = resDic_1_1.value;
                     var key = entry_1.name;
-                    var value = util_36.readString(buffer, entry_1.offs);
+                    var value = util_31.readString(buffer, entry_1.offs);
                     entries.push({ key: key, value: value });
                 }
             }
-            catch (e_45_1) { e_45 = { error: e_45_1 }; }
+            catch (e_43_1) { e_43 = { error: e_43_1 }; }
             finally {
                 try {
                     if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
                 }
-                finally { if (e_45) throw e_45.error; }
+                finally { if (e_43) throw e_43.error; }
             }
             return entries;
-            var e_45, _a;
+            var e_43, _a;
         }
         // Vertex buffers.
         var fvtxIdx = fvtxOffs;
         var fvtx = [];
         for (var i = 0; i < fvtxCount; i++) {
-            util_36.assert(util_36.readString(buffer, fvtxIdx + 0x00, 0x04) === 'FVTX');
+            util_31.assert(util_31.readString(buffer, fvtxIdx + 0x00, 0x04) === 'FVTX');
             var attribCount = view.getUint8(fvtxIdx + 0x04);
             var bufferCount = view.getUint8(fvtxIdx + 0x05);
             var sectionIndex = view.getUint16(fvtxIdx + 0x06);
-            util_36.assert(i === sectionIndex);
+            util_31.assert(i === sectionIndex);
             var vtxCount = view.getUint32(fvtxIdx + 0x08);
             var attribArrayOffs = readBinPtrT(view, fvtxIdx + 0x10, littleEndian);
             var bufferArrayOffs = readBinPtrT(view, fvtxIdx + 0x18, littleEndian);
             var attribs = [];
             var attribArrayIdx = attribArrayOffs;
             for (var j = 0; j < attribCount; j++) {
-                var name_11 = util_36.readString(buffer, readBinPtrT(view, attribArrayIdx + 0x00, littleEndian));
+                var name_9 = util_31.readString(buffer, readBinPtrT(view, attribArrayIdx + 0x00, littleEndian));
                 var bufferIndex = view.getUint8(attribArrayIdx + 0x04);
                 var bufferStart = view.getUint16(attribArrayIdx + 0x06, littleEndian);
                 var format = view.getUint32(attribArrayIdx + 0x08, littleEndian);
-                attribs.push({ name: name_11, bufferIndex: bufferIndex, bufferStart: bufferStart, format: format });
+                attribs.push({ name: name_9, bufferIndex: bufferIndex, bufferStart: bufferStart, format: format });
                 attribArrayIdx += 0x0C;
             }
             var buffers = [];
@@ -14836,8 +14006,8 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
             for (var fshpResDic_1 = __values(fshpResDic), fshpResDic_1_1 = fshpResDic_1.next(); !fshpResDic_1_1.done; fshpResDic_1_1 = fshpResDic_1.next()) {
                 var fshpEntry = fshpResDic_1_1.value;
                 var offs_1 = fshpEntry.offs;
-                util_36.assert(util_36.readString(buffer, offs_1 + 0x00, 0x04) === 'FSHP');
-                var name_12 = util_36.readString(buffer, readBinPtrT(view, offs_1 + 0x04, littleEndian));
+                util_31.assert(util_31.readString(buffer, offs_1 + 0x00, 0x04) === 'FSHP');
+                var name_10 = util_31.readString(buffer, readBinPtrT(view, offs_1 + 0x04, littleEndian));
                 var fmatIndex = view.getUint16(offs_1 + 0x0E, littleEndian);
                 var fsklIndex = view.getUint16(offs_1 + 0x10, littleEndian);
                 var fvtxIndex = view.getUint16(offs_1 + 0x12, littleEndian);
@@ -14864,15 +14034,15 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                     meshes.push({ primType: primType, indexFormat: indexFormat, indexBufferData: indexBufferData, submeshes: submeshes });
                     meshArrayIdx += 0x1C;
                 }
-                fshp.push({ name: name_12, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
+                fshp.push({ name: name_10, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
             }
         }
-        catch (e_46_1) { e_46 = { error: e_46_1 }; }
+        catch (e_44_1) { e_44 = { error: e_44_1 }; }
         finally {
             try {
                 if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
             }
-            finally { if (e_46) throw e_46.error; }
+            finally { if (e_44) throw e_44.error; }
         }
         // Materials.
         var fmat = [];
@@ -14880,8 +14050,8 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
             for (var fmatResDic_1 = __values(fmatResDic), fmatResDic_1_1 = fmatResDic_1.next(); !fmatResDic_1_1.done; fmatResDic_1_1 = fmatResDic_1.next()) {
                 var fmatEntry = fmatResDic_1_1.value;
                 var offs_2 = fmatEntry.offs;
-                util_36.assert(util_36.readString(buffer, offs_2 + 0x00, 0x04) === 'FMAT');
-                var name_13 = util_36.readString(buffer, readBinPtrT(view, offs_2 + 0x04, littleEndian));
+                util_31.assert(util_31.readString(buffer, offs_2 + 0x00, 0x04) === 'FMAT');
+                var name_11 = util_31.readString(buffer, readBinPtrT(view, offs_2 + 0x04, littleEndian));
                 var renderInfoParameterCount = view.getUint16(offs_2 + 0x0E, littleEndian);
                 var textureReferenceCount = view.getUint8(offs_2 + 0x10);
                 var textureSamplerCount = view.getUint8(offs_2 + 0x11);
@@ -14902,7 +14072,7 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                         var offs_3 = renderInfoParameterEntry.offs;
                         var arrayLength = view.getUint16(offs_3 + 0x00, littleEndian);
                         var type = view.getUint8(offs_3 + 0x02);
-                        var name_14 = util_36.readString(buffer, readBinPtrT(view, offs_3 + 0x04, littleEndian));
+                        var name_12 = util_31.readString(buffer, readBinPtrT(view, offs_3 + 0x04, littleEndian));
                         var arrayIdx = offs_3 + 0x08;
                         switch (type) {
                             case RenderInfoParameterType.Int: {
@@ -14911,7 +14081,7 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                                     data.push(view.getInt32(arrayIdx, littleEndian));
                                     arrayIdx += 0x04;
                                 }
-                                renderInfoParameters.push({ type: type, name: name_14, data: data });
+                                renderInfoParameters.push({ type: type, name: name_12, data: data });
                                 break;
                             }
                             case RenderInfoParameterType.Float: {
@@ -14920,29 +14090,29 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                                     data.push(view.getFloat32(arrayIdx, littleEndian));
                                     arrayIdx += 0x04;
                                 }
-                                renderInfoParameters.push({ type: type, name: name_14, data: data });
+                                renderInfoParameters.push({ type: type, name: name_12, data: data });
                                 break;
                             }
                             case RenderInfoParameterType.String: {
                                 var data = [];
                                 for (var i = 0; i < arrayLength; i++) {
-                                    data.push(util_36.readString(buffer, readBinPtrT(view, arrayIdx, littleEndian)));
+                                    data.push(util_31.readString(buffer, readBinPtrT(view, arrayIdx, littleEndian)));
                                     arrayIdx += 0x04;
                                 }
-                                renderInfoParameters.push({ type: type, name: name_14, data: data });
+                                renderInfoParameters.push({ type: type, name: name_12, data: data });
                                 break;
                             }
                         }
                     }
                 }
-                catch (e_47_1) { e_47 = { error: e_47_1 }; }
+                catch (e_45_1) { e_45 = { error: e_45_1 }; }
                 finally {
                     try {
                         if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
                     }
-                    finally { if (e_47) throw e_47.error; }
+                    finally { if (e_45) throw e_45.error; }
                 }
-                util_36.assert(textureSamplerCount === textureReferenceCount);
+                util_31.assert(textureSamplerCount === textureReferenceCount);
                 var textureSamplerArrayIdx = textureSamplerArrayOffs;
                 var textureReferenceArrayIdx = textureReferenceArrayOffs;
                 var textureAssigns = [];
@@ -14950,11 +14120,11 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                     var samplerParam0 = view.getUint32(textureSamplerArrayIdx + 0x00, littleEndian);
                     var samplerParam1 = view.getUint32(textureSamplerArrayIdx + 0x04, littleEndian);
                     var samplerParam2 = view.getUint32(textureSamplerArrayIdx + 0x08, littleEndian);
-                    var attribName = util_36.readString(buffer, readBinPtrT(view, textureSamplerArrayIdx + 0x10, littleEndian));
+                    var attribName = util_31.readString(buffer, readBinPtrT(view, textureSamplerArrayIdx + 0x10, littleEndian));
                     var index = view.getUint8(textureSamplerArrayIdx + 0x14);
-                    util_36.assert(index === i);
+                    util_31.assert(index === i);
                     textureSamplerArrayIdx += 0x18;
-                    var textureName = util_36.readString(buffer, readBinPtrT(view, textureReferenceArrayIdx + 0x00, littleEndian));
+                    var textureName = util_31.readString(buffer, readBinPtrT(view, textureReferenceArrayIdx + 0x00, littleEndian));
                     var ftexOffs = readBinPtrT(view, textureReferenceArrayIdx + 0x04, littleEndian);
                     textureReferenceArrayIdx += 0x08;
                     var texClampU = (samplerParam0 >>> 0) & 0x07;
@@ -14972,22 +14142,22 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                     var dataOffs = view.getUint16(materialParameterArrayIdx + 0x02, littleEndian);
                     var dependedIndex = view.getUint16(materialParameterArrayIdx + 0x0C, littleEndian);
                     var dependIndex = view.getUint16(materialParameterArrayIdx + 0x0E, littleEndian);
-                    var name_15 = util_36.readString(buffer, readBinPtrT(view, materialParameterArrayIdx + 0x10, littleEndian));
+                    var name_13 = util_31.readString(buffer, readBinPtrT(view, materialParameterArrayIdx + 0x10, littleEndian));
                     materialParameterArrayIdx += 0x14;
-                    materialParameters.push({ type: type, size: size, dataOffs: dataOffs, name: name_15 });
+                    materialParameters.push({ type: type, size: size, dataOffs: dataOffs, name: name_13 });
                 }
                 // Shader assign.
-                var shaderArchiveName = util_36.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x00, littleEndian));
-                var shadingModelName = util_36.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x04, littleEndian));
+                var shaderArchiveName = util_31.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x00, littleEndian));
+                var shadingModelName = util_31.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x04, littleEndian));
                 var vertShaderInputCount = view.getUint8(shaderAssignOffs + 0x0C);
                 var vertShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x10, littleEndian));
-                util_36.assert(vertShaderInputDict.length === vertShaderInputCount);
+                util_31.assert(vertShaderInputDict.length === vertShaderInputCount);
                 var fragShaderInputCount = view.getUint8(shaderAssignOffs + 0x0D);
                 var fragShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x14, littleEndian));
-                util_36.assert(fragShaderInputDict.length === fragShaderInputCount);
+                util_31.assert(fragShaderInputDict.length === fragShaderInputCount);
                 var paramDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x18, littleEndian));
                 var paramCount = view.getUint16(shaderAssignOffs + 0x0E);
-                util_36.assert(paramDict.length === paramCount);
+                util_31.assert(paramDict.length === paramCount);
                 var shaderAssign = {
                     shaderArchiveName: shaderArchiveName,
                     shadingModelName: shadingModelName,
@@ -15006,22 +14176,22 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                 var depthWrite = !!((renderState2 >>> 2) & 0x01);
                 var depthCompareFunc = (renderState2 >> 4) & 0x07;
                 var renderState = { cullFront: cullFront, cullBack: cullBack, frontFaceMode: frontFaceMode, depthTest: depthTest, depthWrite: depthWrite, depthCompareFunc: depthCompareFunc };
-                fmat.push({ name: name_13, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
+                fmat.push({ name: name_11, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
             }
         }
-        catch (e_48_1) { e_48 = { error: e_48_1 }; }
+        catch (e_46_1) { e_46 = { error: e_46_1 }; }
         finally {
             try {
                 if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
             }
-            finally { if (e_48) throw e_48.error; }
+            finally { if (e_46) throw e_46.error; }
         }
         return { fvtx: fvtx, fshp: fshp, fmat: fmat };
-        var e_46, _a, e_48, _c, e_47, _b;
+        var e_44, _a, e_46, _c, e_45, _b;
     }
     function parse(buffer) {
         var view = buffer.createDataView();
-        util_36.assert(util_36.readString(buffer, 0x00, 0x04) === 'FRES');
+        util_31.assert(util_31.readString(buffer, 0x00, 0x04) === 'FRES');
         var littleEndian;
         switch (view.getUint16(0x08, false)) {
             case 0xFEFF:
@@ -15039,14 +14209,14 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
             0x03040002,
             0x03050003,
         ];
-        util_36.assert(supportedVersions.includes(version));
+        util_31.assert(supportedVersions.includes(version));
         var fileNameOffs = readBinPtrT(view, 0x14, littleEndian);
-        var fileName = util_36.readString(buffer, fileNameOffs);
+        var fileName = util_31.readString(buffer, fileNameOffs);
         function parseResDicIdx(idx) {
             var tableOffs = readBinPtrT(view, 0x20 + idx * 0x04, littleEndian);
             var tableCount = view.getUint16(0x50 + idx * 0x02, littleEndian);
             var resDic = parseResDic(buffer, tableOffs, littleEndian);
-            util_36.assert(tableCount === resDic.length);
+            util_31.assert(tableCount === resDic.length);
             return resDic;
         }
         var fmdlTable = parseResDicIdx(0x00);
@@ -15060,12 +14230,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                 textures.push({ entry: entry, texture: texture });
             }
         }
-        catch (e_49_1) { e_49 = { error: e_49_1 }; }
+        catch (e_47_1) { e_47 = { error: e_47_1 }; }
         finally {
             try {
                 if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
             }
-            finally { if (e_49) throw e_49.error; }
+            finally { if (e_47) throw e_47.error; }
         }
         var models = [];
         try {
@@ -15075,25 +14245,25 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
                 models.push({ entry: entry, fmdl: fmdl });
             }
         }
-        catch (e_50_1) { e_50 = { error: e_50_1 }; }
+        catch (e_48_1) { e_48 = { error: e_48_1 }; }
         finally {
             try {
                 if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
             }
-            finally { if (e_50) throw e_50.error; }
+            finally { if (e_48) throw e_48.error; }
         }
         return { textures: textures, models: models };
-        var e_49, _a, e_50, _b;
+        var e_47, _a, e_48, _b;
     }
-    exports_61("parse", parse);
-    var gx2_surface_1, util_36, UBOParameterType, RenderInfoParameterType;
+    exports_55("parse", parse);
+    var gx2_surface_1, util_31, UBOParameterType, RenderInfoParameterType;
     return {
         setters: [
             function (gx2_surface_1_1) {
                 gx2_surface_1 = gx2_surface_1_1;
             },
-            function (util_36_1) {
-                util_36 = util_36_1;
+            function (util_31_1) {
+                util_31 = util_31_1;
             }
         ],
         execute: function () {
@@ -15140,12 +14310,12 @@ System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_61
     };
 });
 // Nintendo SARC archive format.
-System.register("fres/sarc", ["util"], function (exports_62, context_62) {
+System.register("fres/sarc", ["util"], function (exports_56, context_56) {
     "use strict";
-    var __moduleName = context_62 && context_62.id;
+    var __moduleName = context_56 && context_56.id;
     function parse(buffer) {
         var view = buffer.createDataView();
-        util_37.assert(util_37.readString(buffer, 0x00, 0x04) === 'SARC');
+        util_32.assert(util_32.readString(buffer, 0x00, 0x04) === 'SARC');
         var littleEndian;
         switch (view.getUint16(0x06, false)) {
             case 0xFEFF:
@@ -15157,54 +14327,54 @@ System.register("fres/sarc", ["util"], function (exports_62, context_62) {
             default:
                 throw new Error("Invalid BOM");
         }
-        util_37.assert(view.getUint16(0x04, littleEndian) === 0x14); // Header length.
+        util_32.assert(view.getUint16(0x04, littleEndian) === 0x14); // Header length.
         var dataOffset = view.getUint32(0x0C, littleEndian);
         var version = view.getUint16(0x10, littleEndian);
-        util_37.assert(version === 0x100);
-        util_37.assert(util_37.readString(buffer, 0x14, 0x04) === 'SFAT');
-        util_37.assert(view.getUint16(0x18, littleEndian) === 0x0C);
+        util_32.assert(version === 0x100);
+        util_32.assert(util_32.readString(buffer, 0x14, 0x04) === 'SFAT');
+        util_32.assert(view.getUint16(0x18, littleEndian) === 0x0C);
         var fileCount = view.getUint16(0x1A, littleEndian);
         var sfntTableOffs = 0x20 + 0x10 * fileCount;
-        util_37.assert(util_37.readString(buffer, sfntTableOffs, 0x04) === 'SFNT');
-        util_37.assert(view.getUint16(sfntTableOffs + 0x04, littleEndian) === 0x08);
+        util_32.assert(util_32.readString(buffer, sfntTableOffs, 0x04) === 'SFNT');
+        util_32.assert(view.getUint16(sfntTableOffs + 0x04, littleEndian) === 0x08);
         var sfntStringTableOffs = sfntTableOffs + 0x08;
         var files = [];
         var fileTableIdx = 0x20;
         for (var i = 0; i < fileCount; i++) {
             var nameHash = view.getUint32(fileTableIdx + 0x00, littleEndian);
             var flags = view.getUint16(fileTableIdx + 0x04, littleEndian);
-            var name_16 = void 0;
+            var name_14 = void 0;
             if (flags & 0x0100) {
                 var nameOffs = (view.getUint16(fileTableIdx + 0x06, littleEndian) * 4);
-                name_16 = util_37.readString(buffer, sfntStringTableOffs + nameOffs, 0xFF);
+                name_14 = util_32.readString(buffer, sfntStringTableOffs + nameOffs, 0xFF);
             }
             else {
-                name_16 = null;
+                name_14 = null;
             }
             var fileStart = view.getUint32(fileTableIdx + 0x08, littleEndian);
             var fileEnd = view.getUint32(fileTableIdx + 0x0C, littleEndian);
             var startOffs = dataOffset + fileStart;
             var endOffs = dataOffset + fileEnd;
-            files.push({ name: name_16, offset: startOffs, buffer: buffer.slice(startOffs, endOffs) });
+            files.push({ name: name_14, offset: startOffs, buffer: buffer.slice(startOffs, endOffs) });
             fileTableIdx += 0x10;
         }
         return { buffer: buffer, files: files };
     }
-    exports_62("parse", parse);
-    var util_37;
+    exports_56("parse", parse);
+    var util_32;
     return {
         setters: [
-            function (util_37_1) {
-                util_37 = util_37_1;
+            function (util_32_1) {
+                util_32 = util_32_1;
             }
         ],
         execute: function () {
         }
     };
 });
-System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render", "Program", "RenderArena", "util", "ArrayBufferSlice", "BufferCoalescer"], function (exports_63, context_63) {
+System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render", "Program", "RenderArena", "util", "ArrayBufferSlice", "BufferCoalescer"], function (exports_57, context_57) {
     "use strict";
-    var __moduleName = context_63 && context_63.id;
+    var __moduleName = context_57 && context_57.id;
     function getAttribFormatInfo(format) {
         switch (format) {
             case 768 /* _8_SINT */:
@@ -15249,9 +14419,9 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
     }
     function convertVertexBufferCopy(buffer, attrib, vtxCount) {
         var stride = buffer.stride;
-        util_38.assert(stride !== 0);
+        util_33.assert(stride !== 0);
         var formatInfo = getAttribFormatInfo(attrib.format);
-        util_38.assert(formatInfo !== null);
+        util_33.assert(formatInfo !== null);
         var numValues = vtxCount * formatInfo.compCount;
         function getOutputBuffer() {
             if (formatInfo.elemSize === 1)
@@ -15280,10 +14450,10 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
             }
             offs += stride;
         }
-        return new ArrayBufferSlice_7.default(out.buffer);
+        return new ArrayBufferSlice_6.default(out.buffer);
     }
     function convertVertexBuffer_10_10_10_2(buffer, attrib, vtxCount) {
-        util_38.assert(buffer.stride !== 0);
+        util_33.assert(buffer.stride !== 0);
         var elemSize = 4;
         var compCount = 4;
         var numValues = vtxCount * compCount;
@@ -15321,7 +14491,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
             out[dst++] = ((n >>> 30) & 0x03) << 14;
             offs += buffer.stride;
         }
-        return new ArrayBufferSlice_7.default(out.buffer);
+        return new ArrayBufferSlice_6.default(out.buffer);
     }
     function convertVertexBuffer(buffer, attrib, vtxCount) {
         var formatInfo = getAttribFormatInfo(attrib.format);
@@ -15346,7 +14516,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
         }
         throw new Error("whoops");
     }
-    var gx2_swizzle_2, GX2Texture, render_18, Program_8, RenderArena_3, util_38, ArrayBufferSlice_7, BufferCoalescer_2, ProgramGambit_UBER, Scene;
+    var gx2_swizzle_2, GX2Texture, render_18, Program_8, RenderArena_3, util_33, ArrayBufferSlice_6, BufferCoalescer_2, ProgramGambit_UBER, Scene;
     return {
         setters: [
             function (gx2_swizzle_2_1) {
@@ -15364,11 +14534,11 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
             function (RenderArena_3_1) {
                 RenderArena_3 = RenderArena_3_1;
             },
-            function (util_38_1) {
-                util_38 = util_38_1;
+            function (util_33_1) {
+                util_33 = util_33_1;
             },
-            function (ArrayBufferSlice_7_1) {
-                ArrayBufferSlice_7 = ArrayBufferSlice_7_1;
+            function (ArrayBufferSlice_6_1) {
+                ArrayBufferSlice_6 = ArrayBufferSlice_6_1;
             },
             function (BufferCoalescer_2_1) {
                 BufferCoalescer_2 = BufferCoalescer_2_1;
@@ -15549,12 +14719,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             samplers.push(sampler);
                         }
                     }
-                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
+                    catch (e_49_1) { e_49 = { error: e_49_1 }; }
                     finally {
                         try {
                             if (textureAssigns_1_1 && !textureAssigns_1_1.done && (_a = textureAssigns_1.return)) _a.call(textureAssigns_1);
                         }
-                        finally { if (e_51) throw e_51.error; }
+                        finally { if (e_49) throw e_49.error; }
                     }
                     // const prog = new ProgramGambit_UBER();
                     // this.arena.trackProgram(prog);
@@ -15565,7 +14735,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         state.bindModelView(_this.isSkybox);
                         gl.uniformMatrix4fv(prog.u_view, false, state.view);
                         state.useFlags(renderFlags);
-                        var _loop_12 = function (i) {
+                        var _loop_11 = function (i) {
                             var attribName = attribNames[i];
                             gl.activeTexture(gl.TEXTURE0 + i);
                             var uniformLocation = prog.getTextureUniformLocation(attribName);
@@ -15577,7 +14747,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 var ftexIndex = _this.fres.textures.findIndex(function (textureEntry) { return textureEntry.entry.offs === textureAssign_1.ftexOffs; });
                                 if (ftexIndex >= 0) {
                                     var ftex = _this.fres.textures[ftexIndex];
-                                    util_38.assert(ftex.entry.name === textureAssign_1.textureName);
+                                    util_33.assert(ftex.entry.name === textureAssign_1.textureName);
                                     var glTexture = _this.glTextures[ftexIndex];
                                     gl.bindTexture(gl.TEXTURE_2D, glTexture);
                                     var sampler = samplers[textureAssignIndex];
@@ -15592,10 +14762,10 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         };
                         // Textures.
                         for (var i = 0; i < attribNames.length; i++) {
-                            _loop_12(i);
+                            _loop_11(i);
                         }
                     };
-                    var e_51, _a;
+                    var e_49, _a;
                 };
                 Scene.prototype.translateIndexBuffer = function (indexFormat, indexBufferData) {
                     switch (indexFormat) {
@@ -15612,19 +14782,19 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     try {
                         for (var _a = __values(fshp.meshes), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var mesh = _b.value;
-                            util_38.assert(mesh.indexBufferData.stride === 0);
+                            util_33.assert(mesh.indexBufferData.stride === 0);
                             var indexData = this.translateIndexBuffer(mesh.indexFormat, mesh.indexBufferData.data);
                             indexDatas.push(indexData);
                         }
                     }
-                    catch (e_52_1) { e_52 = { error: e_52_1 }; }
+                    catch (e_50_1) { e_50 = { error: e_50_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_52) throw e_52.error; }
+                        finally { if (e_50) throw e_50.error; }
                     }
-                    var e_52, _c;
+                    var e_50, _c;
                 };
                 Scene.prototype.translateIndexFormat = function (gl, indexFormat) {
                     // Little-endian translation was done above.
@@ -15656,12 +14826,12 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             glIndexBuffers.push(coalescedIndex.shift());
                         }
                     }
-                    catch (e_53_1) { e_53 = { error: e_53_1 }; }
+                    catch (e_51_1) { e_51 = { error: e_51_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_53) throw e_53.error; }
+                        finally { if (e_51) throw e_51.error; }
                     }
                     return function (state) {
                         var lod = 0;
@@ -15674,16 +14844,16 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 gl.drawElements(_this.translatePrimType(gl, mesh.primType), submesh.indexBufferCount, _this.translateIndexFormat(gl, mesh.indexFormat), glIndexBuffer.offset + submesh.indexBufferOffset);
                             }
                         }
-                        catch (e_54_1) { e_54 = { error: e_54_1 }; }
+                        catch (e_52_1) { e_52 = { error: e_52_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_54) throw e_54.error; }
+                            finally { if (e_52) throw e_52.error; }
                         }
-                        var e_54, _c;
+                        var e_52, _c;
                     };
-                    var e_53, _c;
+                    var e_51, _c;
                 };
                 Scene.prototype.translateModel = function (gl, model, coalescedVertex, coalescedIndex) {
                     var _this = this;
@@ -15752,7 +14922,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     var texture = textureEntry.texture;
                     var surface = texture.surface;
                     var canvases = [];
-                    var _loop_13 = function (i) {
+                    var _loop_12 = function (i) {
                         var mipLevel = i;
                         var canvas = document.createElement('canvas');
                         canvas.width = 0;
@@ -15783,7 +14953,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                             var pixels = decodedSurface.pixels;
                             var width = decodedSurface.width;
                             var height = decodedSurface.height;
-                            util_38.assert(pixels.byteLength > 0);
+                            util_33.assert(pixels.byteLength > 0);
                             switch (decodedSurface.type) {
                                 case "RGBA": {
                                     var internalFormat = decodedSurface.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : decodedSurface.flag === 'SNORM' ? gl.RGBA8_SNORM : gl.RGBA8;
@@ -15797,7 +14967,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                                 case "BC4":
                                 case "BC5": {
                                     var compressedFormat = _this.getCompressedFormat(gl, decodedSurface);
-                                    util_38.assert(compressedFormat !== null);
+                                    util_33.assert(compressedFormat !== null);
                                     gl.compressedTexImage2D(gl.TEXTURE_2D, mipLevel, compressedFormat, width, height, 0, new Uint8Array(pixels));
                                     break;
                                 }
@@ -15812,7 +14982,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         });
                     };
                     for (var i = 0; i < surface.numMips; i++) {
-                        _loop_13(i);
+                        _loop_12(i);
                     }
                     this.textures.push({ name: textureEntry.entry.name, surfaces: canvases });
                     return glTexture;
@@ -15850,13 +15020,13 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                 };
                 return Scene;
             }());
-            exports_63("Scene", Scene);
+            exports_57("Scene", Scene);
         }
     };
 });
-System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "util"], function (exports_64, context_64) {
+System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "util"], function (exports_58, context_58) {
     "use strict";
-    var __moduleName = context_64 && context_64.id;
+    var __moduleName = context_58 && context_58.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -15866,26 +15036,26 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_55_1) { e_55 = { error: e_55_1 }; }
+        catch (e_53_1) { e_53 = { error: e_53_1 }; }
         finally {
             try {
                 if (scenes_9_1 && !scenes_9_1.done && (_a = scenes_9.return)) _a.call(scenes_9);
             }
-            finally { if (e_55) throw e_55.error; }
+            finally { if (e_53) throw e_53.error; }
         }
         return textures;
-        var e_55, _a;
+        var e_53, _a;
     }
     function createSceneFromFRESBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
         var fres = BFRES.parse(buffer);
         return new FRESRenderer(new render_19.Scene(gl, fres, isSkybox));
     }
-    exports_64("createSceneFromFRESBuffer", createSceneFromFRESBuffer);
+    exports_58("createSceneFromFRESBuffer", createSceneFromFRESBuffer);
     function createSceneFromSARCBuffer(gl, buffer, isSkybox) {
         if (isSkybox === void 0) { isSkybox = false; }
         return Promise.resolve(buffer).then(function (buffer) {
-            if (util_39.readString(buffer, 0, 4) === 'Yaz0')
+            if (util_34.readString(buffer, 0, 4) === 'Yaz0')
                 return Yaz0.decompress(buffer);
             else
                 return buffer;
@@ -15895,8 +15065,8 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
             return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
         });
     }
-    exports_64("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
-    var BFRES, SARC, Yaz0, render_19, util_39, FRESRenderer;
+    exports_58("createSceneFromSARCBuffer", createSceneFromSARCBuffer);
+    var BFRES, SARC, Yaz0, render_19, util_34, FRESRenderer;
     return {
         setters: [
             function (BFRES_1) {
@@ -15911,8 +15081,8 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
             function (render_19_1) {
                 render_19 = render_19_1;
             },
-            function (util_39_1) {
-                util_39 = util_39_1;
+            function (util_34_1) {
+                util_34 = util_34_1;
             }
         ],
         execute: function () {
@@ -15937,9 +15107,9 @@ System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render"
         }
     };
 });
-System.register("fres/splatoon_scenes", ["fres/scenes", "Progressable", "util"], function (exports_65, context_65) {
+System.register("fres/splatoon_scenes", ["fres/scenes", "Progressable", "util"], function (exports_59, context_59) {
     "use strict";
-    var __moduleName = context_65 && context_65.id;
+    var __moduleName = context_59 && context_59.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -15949,17 +15119,17 @@ System.register("fres/splatoon_scenes", ["fres/scenes", "Progressable", "util"],
                     textures.push.apply(textures, scene.textures);
             }
         }
-        catch (e_56_1) { e_56 = { error: e_56_1 }; }
+        catch (e_54_1) { e_54 = { error: e_54_1 }; }
         finally {
             try {
                 if (scenes_10_1 && !scenes_10_1.done && (_a = scenes_10.return)) _a.call(scenes_10);
             }
-            finally { if (e_56) throw e_56.error; }
+            finally { if (e_54) throw e_54.error; }
         }
         return textures;
-        var e_56, _a;
+        var e_54, _a;
     }
-    var scenes_11, Progressable_6, util_40, SplatoonRenderer, SplatoonSceneDesc, name, id, sceneDescs, sceneGroup;
+    var scenes_11, Progressable_6, util_35, SplatoonRenderer, SplatoonSceneDesc, name, id, sceneDescs, sceneGroup;
     return {
         setters: [
             function (scenes_11_1) {
@@ -15968,8 +15138,8 @@ System.register("fres/splatoon_scenes", ["fres/scenes", "Progressable", "util"],
             function (Progressable_6_1) {
                 Progressable_6 = Progressable_6_1;
             },
-            function (util_40_1) {
-                util_40 = util_40_1;
+            function (util_35_1) {
+                util_35 = util_35_1;
             }
         ],
         execute: function () {
@@ -16014,7 +15184,7 @@ System.register("fres/splatoon_scenes", ["fres/scenes", "Progressable", "util"],
                     });
                 };
                 SplatoonSceneDesc.prototype._createSceneFromPath = function (gl, path, isSkybox) {
-                    return util_40.fetch(path).then(function (result) {
+                    return util_35.fetch(path).then(function (result) {
                         return scenes_11.createSceneFromSARCBuffer(gl, result, isSkybox);
                     });
                 };
@@ -16046,13 +15216,13 @@ System.register("fres/splatoon_scenes", ["fres/scenes", "Progressable", "util"],
                 new SplatoonSceneDesc('Octo Valley', 'Fld_World00.szs'),
                 new SplatoonSceneDesc('Object: Tree', 'Obj_Tree02.szs'),
             ];
-            exports_65("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_59("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("dksiv/iv", [], function (exports_66, context_66) {
+System.register("dksiv/iv", [], function (exports_60, context_60) {
     "use strict";
-    var __moduleName = context_66 && context_66.id;
+    var __moduleName = context_60 && context_60.id;
     function parseIV(buffer) {
         var view = buffer.createDataView();
         var numChunks = view.getUint32(0x00, true);
@@ -16074,16 +15244,16 @@ System.register("dksiv/iv", [], function (exports_66, context_66) {
         }
         return { color: color, chunks: chunks };
     }
-    exports_66("parseIV", parseIV);
+    exports_60("parseIV", parseIV);
     return {
         setters: [],
         execute: function () {
         }
     };
 });
-System.register("dksiv/render", ["gl-matrix", "render", "Program"], function (exports_67, context_67) {
+System.register("dksiv/render", ["gl-matrix", "render", "Program"], function (exports_61, context_61) {
     "use strict";
-    var __moduleName = context_67 && context_67.id;
+    var __moduleName = context_61 && context_61.id;
     var gl_matrix_11, render_20, Program_9, IVProgram, Chunk, Scene;
     return {
         setters: [
@@ -16220,14 +15390,14 @@ System.register("dksiv/render", ["gl-matrix", "render", "Program"], function (ex
                 };
                 return Scene;
             }());
-            exports_67("Scene", Scene);
+            exports_61("Scene", Scene);
         }
     };
 });
-System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable", "util"], function (exports_68, context_68) {
+System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable", "util"], function (exports_62, context_62) {
     "use strict";
-    var __moduleName = context_68 && context_68.id;
-    var iv_1, render_21, UI, Progressable_7, util_41, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, name, id, sceneGroup;
+    var __moduleName = context_62 && context_62.id;
+    var iv_1, render_21, UI, Progressable_7, util_36, dks1Paths, dks2Paths, MultiScene, SceneDesc, sceneDescs, name, id, sceneGroup;
     return {
         setters: [
             function (iv_1_1) {
@@ -16242,8 +15412,8 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable
             function (Progressable_7_1) {
                 Progressable_7 = Progressable_7_1;
             },
-            function (util_41_1) {
-                util_41 = util_41_1;
+            function (util_36_1) {
+                util_36 = util_36_1;
             }
         ],
         execute: function () {
@@ -16302,14 +15472,14 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable
                             this.textures = this.textures.concat(scene.textures);
                         }
                     }
-                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
+                    catch (e_55_1) { e_55 = { error: e_55_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_57) throw e_57.error; }
+                        finally { if (e_55) throw e_55.error; }
                     }
-                    var e_57, _c;
+                    var e_55, _c;
                 }
                 MultiScene.prototype.createPanels = function () {
                     var layers = new UI.LayerPanel();
@@ -16341,7 +15511,7 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable
                     });
                 };
                 SceneDesc.prototype.createSceneForPath = function (gl, path) {
-                    return util_41.fetch(path).then(function (result) {
+                    return util_36.fetch(path).then(function (result) {
                         var iv = iv_1.parseIV(result);
                         var basename = path.split('/').pop();
                         return new render_21.Scene(gl, basename, iv);
@@ -16355,7 +15525,824 @@ System.register("dksiv/scenes", ["dksiv/iv", "dksiv/render", "ui", "Progressable
             ];
             name = "Dark Souls Collision Data";
             id = "dksiv";
-            exports_68("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_62("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+        }
+    };
+});
+// Implements Retro's PAK format as seen in Metroid Prime 1.
+System.register("metroid_prime/pak", ["util"], function (exports_63, context_63) {
+    "use strict";
+    var __moduleName = context_63 && context_63.id;
+    function parse(buffer) {
+        var view = buffer.createDataView();
+        util_37.assert(view.getUint32(0x00) === 0x00030005);
+        // Named resource table.
+        var offs = 0x08;
+        var namedResourceTableEntries = [];
+        var namedResourceTableCount = view.getUint32(offs);
+        offs += 0x04;
+        for (var i = 0; i < namedResourceTableCount; i++) {
+            var fourCC = util_37.readString(buffer, offs + 0x00, 4, false);
+            var fileID = util_37.readString(buffer, offs + 0x04, 4, false);
+            var fileNameLength = view.getUint32(offs + 0x08);
+            var fileName = util_37.readString(buffer, offs + 0x0C, fileNameLength, false);
+            namedResourceTableEntries.push({ fourCC: fourCC, fileID: fileID, fileName: fileName });
+            offs += 0x0C + fileNameLength;
+        }
+        var namedResourceTable = new Map();
+        var resourceTable = new Map();
+        // Regular resource table.
+        var resourceTableCount = view.getUint32(offs + 0x00);
+        offs += 0x04;
+        var _loop_13 = function (i) {
+            var isCompressed = !!view.getUint32(offs + 0x00);
+            var fourCC = util_37.readString(buffer, offs + 0x04, 4, false);
+            var fileID = util_37.readString(buffer, offs + 0x08, 4, false);
+            var fileSize = view.getUint32(offs + 0x0C);
+            var fileOffset = view.getUint32(offs + 0x10);
+            offs += 0x14;
+            var decompressedSize = fileSize;
+            if (isCompressed) {
+                decompressedSize = view.getUint32(fileOffset);
+                fileOffset += 0x04;
+                fileSize -= 0x04;
+            }
+            if (resourceTable.has(fileID)) {
+                var existingResource = resourceTable.get(fileID);
+                // Skip files that are apparently the same.
+                util_37.assert(fourCC === existingResource.fourCC);
+                util_37.assert(fileSize === existingResource.fileSize);
+                return "continue";
+            }
+            // Check for a named resource.
+            var name_15 = null;
+            var namedResourceTableEntry = namedResourceTableEntries.find(function (nr) { return nr.fileID === fileID; });
+            if (namedResourceTableEntry) {
+                name_15 = namedResourceTableEntry.fileName;
+                util_37.assert(namedResourceTableEntry.fourCC === fourCC);
+            }
+            var fileBuffer = buffer.slice(fileOffset, fileOffset + fileSize);
+            var fileResource = { name: name_15, fourCC: fourCC, fileID: fileID, fileSize: fileSize, fileOffset: fileOffset, isCompressed: isCompressed, decompressedSize: decompressedSize, buffer: fileBuffer };
+            resourceTable.set(fileResource.fileID, fileResource);
+            if (name_15 !== null)
+                namedResourceTable.set(fileResource.name, fileResource);
+        };
+        for (var i = 0; i < resourceTableCount; i++) {
+            _loop_13(i);
+        }
+        return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
+    }
+    exports_63("parse", parse);
+    var util_37;
+    return {
+        setters: [
+            function (util_37_1) {
+                util_37 = util_37_1;
+            }
+        ],
+        execute: function () {
+        }
+    };
+});
+// Implements Retro's TXTR (texture) format as seen in Metroid Prime 1.
+System.register("metroid_prime/txtr", ["gx/gx_texture"], function (exports_64, context_64) {
+    "use strict";
+    var __moduleName = context_64 && context_64.id;
+    function parse(resourceSystem, buffer) {
+        var view = buffer.createDataView();
+        var txtrFormat = view.getUint32(0x00);
+        var format = txtrFormatRemap[txtrFormat];
+        var width = view.getUint16(0x04);
+        var height = view.getUint16(0x06);
+        var mipCount = view.getUint32(0x08);
+        var offs = 0x0C;
+        var paletteFormat = 0;
+        var paletteData = null;
+        switch (format) {
+            case 8 /* C4 */:
+            case 9 /* C8 */:
+                paletteFormat = view.getUint32(offs + 0x00);
+                var palWidth = view.getUint32(offs + 0x04);
+                var palHeight = view.getUint32(offs + 0x06);
+                offs += 0x08;
+                var palSize = GX_Texture.calcPaletteSize(format, paletteFormat);
+                paletteData = buffer.slice(offs, offs + palSize);
+                offs += palSize;
+            case 10 /* C14X2 */:
+                throw "whoops";
+        }
+        var data = buffer.slice(offs);
+        return { format: format, width: width, height: height, mipCount: mipCount, data: data, paletteFormat: paletteFormat, paletteData: paletteData };
+    }
+    exports_64("parse", parse);
+    var GX_Texture, txtrFormatRemap;
+    return {
+        setters: [
+            function (GX_Texture_2) {
+                GX_Texture = GX_Texture_2;
+            }
+        ],
+        execute: function () {
+            txtrFormatRemap = [
+                0 /* I4 */,
+                1 /* I8 */,
+                2 /* IA4 */,
+                3 /* IA8 */,
+                8 /* C4 */,
+                9 /* C8 */,
+                10 /* C14X2 */,
+                4 /* RGB565 */,
+                5 /* RGB5A3 */,
+                6 /* RGBA8 */,
+                14 /* CMPR */,
+            ];
+        }
+    };
+});
+// Implements Retro's MREA format as seen in Metroid Prime 1.
+System.register("metroid_prime/mrea", ["gx/gx_material", "util", "gx/gx_displaylist"], function (exports_65, context_65) {
+    "use strict";
+    var __moduleName = context_65 && context_65.id;
+    function parseMaterialSet(resourceSystem, buffer, offs) {
+        var view = buffer.createDataView();
+        var textureCount = view.getUint32(offs + 0x00);
+        offs += 0x04;
+        var textures = [];
+        var textureRemapTable = [];
+        for (var i = 0; i < textureCount; i++) {
+            var materialTXTRID = util_38.readString(buffer, offs, 0x04, false);
+            var txtr = resourceSystem.loadAssetByID(materialTXTRID, 'TXTR');
+            var txtrIndex = textures.indexOf(txtr);
+            if (txtrIndex >= 0) {
+                textureRemapTable.push(txtrIndex);
+            }
+            else {
+                var newIndex = textures.push(txtr) - 1;
+                textureRemapTable.push(newIndex);
+            }
+            offs += 0x04;
+        }
+        var materialCount = view.getUint32(offs + 0x00);
+        offs += 0x04;
+        var materialEndTable = [];
+        for (var i = 0; i < materialCount; i++) {
+            var materialEndOffs = view.getUint32(offs);
+            materialEndTable.push(materialEndOffs);
+            offs += 0x04;
+        }
+        var materialsStart = offs;
+        var materials = [];
+        for (var i = 0; i < materialCount; i++) {
+            var flags = view.getUint32(offs + 0x00);
+            var textureIndexCount = view.getUint32(offs + 0x04);
+            offs += 0x08;
+            var textureIndexes = [];
+            util_38.assert(textureIndexCount < 8);
+            for (var j = 0; j < textureIndexCount; j++) {
+                var textureIndex = view.getUint32(offs);
+                textureIndexes.push(textureIndex);
+                offs += 0x04;
+            }
+            var vtxAttrFormat = view.getUint32(offs + 0x00);
+            var groupIndex = view.getUint32(offs + 0x04);
+            offs += 0x08;
+            var colorConstants = [];
+            if (flags & 8 /* HAS_KONST */) {
+                var konstCount = view.getUint32(offs);
+                offs += 0x04;
+                for (var j = 0; j < konstCount; j++) {
+                    var r = view.getUint8(offs + 0x00);
+                    var g = view.getUint8(offs + 0x01);
+                    var b = view.getUint8(offs + 0x02);
+                    var a = view.getUint8(offs + 0x03);
+                    colorConstants.push(new GX_Material.Color(r, g, b, a));
+                    offs += 0x04;
+                }
+            }
+            for (var j = colorConstants.length; j < 4; j++) {
+                // Push default colors.
+                // XXX(jstpierre): Should this stuff be moved outside GXMaterial?
+                colorConstants.push(new GX_Material.Color(0, 0, 0, 0));
+            }
+            var blendDstFactor = view.getUint16(offs + 0x00);
+            var blendSrcFactor = view.getUint16(offs + 0x02);
+            offs += 0x04;
+            if (flags & 16384 /* HAS_INDTX_REFL */) {
+                var reflectionIndtexSlot = view.getUint32(offs);
+                offs += 0x04;
+            }
+            var colorChannelFlagsTableCount = view.getUint32(offs);
+            util_38.assert(colorChannelFlagsTableCount <= 4);
+            offs += 0x04;
+            var lightChannels = [];
+            // Only color channel 1 is stored in the format.
+            for (var j = 0; j < 1; j++) {
+                var colorChannelFlags = view.getUint32(offs);
+                var lightingEnabled = !!(colorChannelFlags & 0x01);
+                var ambColorSource = (colorChannelFlags >>> 1) & 0x01;
+                var matColorSource = (colorChannelFlags >>> 2) & 0x01;
+                var colorChannel = { lightingEnabled: lightingEnabled, ambColorSource: ambColorSource, matColorSource: matColorSource };
+                // XXX(jstpierre): What's with COLOR0A0?
+                var alphaChannel = { lightingEnabled: false, ambColorSource: 0 /* REG */, matColorSource: 0 /* REG */ };
+                lightChannels.push({ colorChannel: colorChannel, alphaChannel: alphaChannel });
+            }
+            offs += 0x04 * colorChannelFlagsTableCount;
+            // Fake other channel.
+            lightChannels.push({
+                colorChannel: { lightingEnabled: false, ambColorSource: 0 /* REG */, matColorSource: 0 /* REG */ },
+                alphaChannel: { lightingEnabled: false, ambColorSource: 0 /* REG */, matColorSource: 0 /* REG */ },
+            });
+            var tevStageCount = view.getUint32(offs);
+            util_38.assert(tevStageCount <= 8);
+            offs += 0x04;
+            var tevOrderTableOffs = offs + tevStageCount * 0x14;
+            var tevStages = [];
+            for (var j = 0; j < tevStageCount; j++) {
+                var colorInputSel = view.getUint32(offs + 0x00);
+                var alphaInputSel = view.getUint32(offs + 0x04);
+                var colorCombineFlags = view.getUint32(offs + 0x08);
+                var alphaCombineFlags = view.getUint32(offs + 0x0C);
+                var konstAlphaSel = view.getUint8(offs + 0x11);
+                var konstColorSel = view.getUint8(offs + 0x12);
+                var channelId = GX_Material.getRasColorChannelID(view.getUint8(offs + 0x13));
+                var colorInA = (colorInputSel >>> 0) & 0x1F;
+                var colorInB = (colorInputSel >>> 5) & 0x1F;
+                var colorInC = (colorInputSel >>> 10) & 0x1F;
+                var colorInD = (colorInputSel >>> 15) & 0x1F;
+                var alphaInA = (alphaInputSel >>> 0) & 0x1F;
+                var alphaInB = (alphaInputSel >>> 5) & 0x1F;
+                var alphaInC = (alphaInputSel >>> 10) & 0x1F;
+                var alphaInD = (alphaInputSel >>> 15) & 0x1F;
+                var colorOp = (colorCombineFlags >>> 0) & 0x0F;
+                var colorBias = (colorCombineFlags >>> 4) & 0x03;
+                var colorScale = (colorCombineFlags >>> 6) & 0x03;
+                var colorClamp = !!(colorCombineFlags >>> 8);
+                var colorRegId = (colorCombineFlags >>> 9) & 0x03;
+                var alphaOp = (alphaCombineFlags >>> 0) & 0x0F;
+                var alphaBias = (alphaCombineFlags >>> 4) & 0x03;
+                var alphaScale = (alphaCombineFlags >>> 6) & 0x03;
+                var alphaClamp = !!(alphaCombineFlags >>> 8);
+                var alphaRegId = (alphaCombineFlags >>> 9) & 0x03;
+                var texCoordId = view.getUint8(tevOrderTableOffs + 0x03);
+                var texMap = view.getUint8(tevOrderTableOffs + 0x02);
+                var index_4 = j;
+                var tevStage = {
+                    index: index_4,
+                    colorInA: colorInA, colorInB: colorInB, colorInC: colorInC, colorInD: colorInD, colorOp: colorOp, colorBias: colorBias, colorScale: colorScale, colorClamp: colorClamp, colorRegId: colorRegId,
+                    alphaInA: alphaInA, alphaInB: alphaInB, alphaInC: alphaInC, alphaInD: alphaInD, alphaOp: alphaOp, alphaBias: alphaBias, alphaScale: alphaScale, alphaClamp: alphaClamp, alphaRegId: alphaRegId,
+                    texCoordId: texCoordId, texMap: texMap, channelId: channelId,
+                    konstColorSel: konstColorSel, konstAlphaSel: konstAlphaSel,
+                    // We don't use indtex.
+                    indTexStage: 0 /* STAGE0 */,
+                    indTexMatrix: 0 /* OFF */,
+                    indTexFormat: 0 /* _8 */,
+                    indTexBiasSel: 0 /* NONE */,
+                    indTexWrapS: 0 /* OFF */,
+                    indTexWrapT: 0 /* OFF */,
+                    indTexAddPrev: false,
+                    indTexUseOrigLOD: false,
+                };
+                tevStages.push(tevStage);
+                offs += 0x14;
+                tevOrderTableOffs += 0x04;
+            }
+            // Skip past TEV order table.
+            offs = tevOrderTableOffs;
+            var texGenCount = view.getUint32(offs);
+            util_38.assert(texGenCount <= 8);
+            offs += 0x04;
+            var texGens = [];
+            for (var j = 0; j < texGenCount; j++) {
+                var index_5 = j;
+                var flags_1 = view.getUint32(offs);
+                var type = (flags_1 >>> 0) & 0x0F;
+                var source = (flags_1 >>> 4) & 0x0F;
+                var matrix = ((flags_1 >>> 9) & 0x1F) + 30;
+                var normalize = !!(flags_1 & 14);
+                var postMatrix = ((flags_1 >>> 15) & 0x3F) + 64;
+                texGens.push({ index: index_5, type: type, source: source, matrix: matrix, normalize: normalize, postMatrix: postMatrix });
+                offs += 0x04;
+            }
+            var uvAnimations = [];
+            var uvAnimationsSize = view.getUint32(offs + 0x00);
+            var uvAnimationsCount = view.getUint32(offs + 0x04);
+            offs += 0x08;
+            for (var j = 0; j < uvAnimationsCount; j++) {
+                var type = view.getUint32(offs + 0x00);
+                offs += 0x04;
+                switch (type) {
+                    case 0 /* INV_MAT_SKY */:
+                    case 1 /* INV_MAT */:
+                    case 6 /* MODEL_MAT */:
+                        uvAnimations.push({ type: type });
+                        // These guys have no parameters.
+                        break;
+                    case 2 /* UV_SCROLL */: {
+                        var offsetA = view.getUint32(offs + 0x00);
+                        var offsetB = view.getUint32(offs + 0x04);
+                        var scaleA = view.getUint32(offs + 0x08);
+                        var scaleB = view.getUint32(offs + 0x0C);
+                        uvAnimations.push({ type: type, offsetA: offsetA, offsetB: offsetB, scaleA: scaleA, scaleB: scaleB });
+                        offs += 0x10;
+                        break;
+                    }
+                    case 3 /* ROTATION */: {
+                        var offset = view.getUint32(offs + 0x00);
+                        var scale = view.getUint32(offs + 0x04);
+                        uvAnimations.push({ type: type, offset: offset, scale: scale });
+                        offs += 0x08;
+                        break;
+                    }
+                    case 4 /* FLIPBOOK_U */:
+                    case 5 /* FLIPBOOK_V */: {
+                        var scale = view.getUint32(offs + 0x00);
+                        var numFrames = view.getUint32(offs + 0x04);
+                        var step = view.getUint32(offs + 0x08);
+                        var offset = view.getUint32(offs + 0x0C);
+                        uvAnimations.push({ type: type, scale: scale, numFrames: numFrames, step: step, offset: offset });
+                        offs += 0x10;
+                        break;
+                    }
+                    case 7 /* CYLINDER */: {
+                        var theta = view.getUint32(offs + 0x00);
+                        var phi = view.getUint32(offs + 0x04);
+                        uvAnimations.push({ type: type, theta: theta, phi: phi });
+                        offs += 0x08;
+                        break;
+                    }
+                }
+            }
+            var index = i;
+            var translucent = flags & 16 /* IS_TRANSPARENT */;
+            var name_16 = "PrimeGen_" + i;
+            var cullMode = 2 /* BACK */;
+            var colorRegisters = [];
+            colorRegisters.push(new GX_Material.Color(1, 1, 1, 0));
+            colorRegisters.push(new GX_Material.Color(1, 1, 1, 0));
+            colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
+            colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
+            var alphaTest = {
+                op: 1 /* OR */,
+                compareA: 4 /* GREATER */,
+                referenceA: 0.25,
+                compareB: 0 /* NEVER */,
+                referenceB: 0,
+            };
+            var blendMode = {
+                type: translucent ? 1 /* BLEND */ : 0 /* NONE */,
+                srcFactor: blendSrcFactor,
+                dstFactor: blendDstFactor,
+                logicOp: 0 /* CLEAR */,
+            };
+            var ropInfo = {
+                blendMode: blendMode,
+                depthTest: true,
+                depthFunc: 1 /* LESS */,
+                depthWrite: (!!(flags & 128 /* DEPTH_WRITE */)) && !translucent,
+            };
+            var gxMaterial = {
+                index: index, name: name_16,
+                cullMode: cullMode,
+                colorRegisters: colorRegisters,
+                colorConstants: colorConstants,
+                lightChannels: lightChannels,
+                texGens: texGens,
+                tevStages: tevStages,
+                alphaTest: alphaTest,
+                ropInfo: ropInfo,
+                indTexStages: [],
+            };
+            materials.push({ flags: flags, groupIndex: groupIndex, textureIndexes: textureIndexes, vtxAttrFormat: vtxAttrFormat, gxMaterial: gxMaterial, uvAnimations: uvAnimations });
+            util_38.assert((offs - materialsStart) === materialEndTable[i]);
+        }
+        return { textures: textures, textureRemapTable: textureRemapTable, materials: materials };
+    }
+    function parseGeometry(resourceSystem, buffer, materialSet, sectionTables, sectionIndex) {
+        var sectionOffsTable = sectionTables.dataSectionOffsTable;
+        var sectionSizeTable = sectionTables.dataSectionSizeTable;
+        var view = buffer.createDataView();
+        var posSectionOffs = sectionOffsTable[sectionIndex++];
+        var nrmSectionOffs = sectionOffsTable[sectionIndex++];
+        var clrSectionOffs = sectionOffsTable[sectionIndex++];
+        var uvfSectionOffs = sectionOffsTable[sectionIndex++];
+        var uvsSectionOffs = sectionOffsTable[sectionIndex++];
+        var surfaceTableOffs = sectionOffsTable[sectionIndex++];
+        var firstSurfaceOffs = sectionOffsTable[sectionIndex];
+        var surfaceCount = view.getUint32(surfaceTableOffs + 0x00);
+        var surfaces = [];
+        function fillVatFormat(nrmType, tex0Type, compShift) {
+            var vatFormat = [];
+            vatFormat[9 /* POS */] = { compCnt: 1 /* POS_XYZ */, compType: 4 /* F32 */, compShift: compShift };
+            vatFormat[10 /* NRM */] = { compCnt: 0 /* NRM_XYZ */, compType: nrmType, compShift: compShift };
+            vatFormat[11 /* CLR0 */] = { compCnt: 1 /* CLR_RGBA */, compType: 5 /* RGBA8 */, compShift: compShift };
+            vatFormat[12 /* CLR1 */] = { compCnt: 1 /* CLR_RGBA */, compType: 5 /* RGBA8 */, compShift: compShift };
+            vatFormat[13 /* TEX0 */] = { compCnt: 1 /* TEX_ST */, compType: tex0Type, compShift: compShift };
+            vatFormat[14 /* TEX1 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
+            vatFormat[15 /* TEX2 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
+            vatFormat[16 /* TEX3 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
+            vatFormat[17 /* TEX4 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
+            vatFormat[18 /* TEX5 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
+            vatFormat[19 /* TEX6 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
+            vatFormat[20 /* TEX7 */] = { compCnt: 1 /* TEX_ST */, compType: 4 /* F32 */, compShift: compShift };
+            return vatFormat;
+        }
+        for (var i = 0; i < surfaceCount; i++) {
+            var surfaceOffs = sectionOffsTable[sectionIndex];
+            var surfaceEnd = firstSurfaceOffs + view.getUint32(surfaceTableOffs + 0x04 + i * 0x04);
+            var centerX = view.getFloat32(surfaceOffs + 0x00);
+            var centerY = view.getFloat32(surfaceOffs + 0x04);
+            var centerZ = view.getFloat32(surfaceOffs + 0x08);
+            var materialIndex = view.getUint32(surfaceOffs + 0x0C);
+            var mantissa = view.getUint16(surfaceOffs + 0x10);
+            var displayListSizeExceptNotReally = view.getUint16(surfaceOffs + 0x12);
+            var extraDataSize = view.getUint32(surfaceOffs + 0x1C);
+            var normalX = view.getFloat32(surfaceOffs + 0x20);
+            var normalY = view.getFloat32(surfaceOffs + 0x24);
+            var normalZ = view.getFloat32(surfaceOffs + 0x28);
+            // XXX(jstpierre): 0x30 or 0x2C?
+            var surfaceHeaderEnd = surfaceOffs + 0x2C + extraDataSize;
+            var primitiveDataOffs = util_38.align(surfaceHeaderEnd, 32);
+            // Build our vertex format.
+            var material = materialSet.materials[materialIndex];
+            var vtxAttrFormat = material.vtxAttrFormat;
+            var vat = [];
+            var useUvsArray = (material.flags & 8192 /* UV_SHORT */);
+            var vtxArrays = [];
+            vtxArrays[9 /* POS */] = { buffer: buffer, offs: posSectionOffs };
+            vtxArrays[10 /* NRM */] = { buffer: buffer, offs: nrmSectionOffs };
+            vtxArrays[11 /* CLR0 */] = { buffer: buffer, offs: clrSectionOffs };
+            vtxArrays[12 /* CLR1 */] = { buffer: buffer, offs: clrSectionOffs };
+            vtxArrays[13 /* TEX0 */] = { buffer: buffer, offs: useUvsArray ? uvsSectionOffs : uvfSectionOffs };
+            vtxArrays[14 /* TEX1 */] = { buffer: buffer, offs: uvfSectionOffs };
+            vtxArrays[15 /* TEX2 */] = { buffer: buffer, offs: uvfSectionOffs };
+            vtxArrays[16 /* TEX3 */] = { buffer: buffer, offs: uvfSectionOffs };
+            vtxArrays[17 /* TEX4 */] = { buffer: buffer, offs: uvfSectionOffs };
+            vtxArrays[18 /* TEX5 */] = { buffer: buffer, offs: uvfSectionOffs };
+            vtxArrays[19 /* TEX6 */] = { buffer: buffer, offs: uvfSectionOffs };
+            vtxArrays[20 /* TEX7 */] = { buffer: buffer, offs: uvfSectionOffs };
+            var vcd = [];
+            try {
+                for (var vtxAttrFormats_1 = __values(vtxAttrFormats), vtxAttrFormats_1_1 = vtxAttrFormats_1.next(); !vtxAttrFormats_1_1.done; vtxAttrFormats_1_1 = vtxAttrFormats_1.next()) {
+                    var format = vtxAttrFormats_1_1.value;
+                    if (!(vtxAttrFormat & format.mask))
+                        continue;
+                    vcd[format.vtxAttrib] = { type: 3 /* INDEX16 */ };
+                }
+            }
+            catch (e_56_1) { e_56 = { error: e_56_1 }; }
+            finally {
+                try {
+                    if (vtxAttrFormats_1_1 && !vtxAttrFormats_1_1.done && (_a = vtxAttrFormats_1.return)) _a.call(vtxAttrFormats_1);
+                }
+                finally { if (e_56) throw e_56.error; }
+            }
+            // GX_VTXFMT0 | GX_VA_NRM = GX_F32
+            // GX_VTXFMT1 | GX_VA_NRM = GX_S16
+            // GX_VTXFMT2 | GX_VA_NRM = GX_S16
+            // GX_VTXFMT0 | GX_VA_TEX0 = GX_F32
+            // GX_VTXFMT1 | GX_VA_TEX0 = GX_F32
+            // GX_VTXFMT2 | GX_VA_TEX0 = GX_S16
+            var compShift = Math.log2(mantissa);
+            vat[0 /* VTXFMT0 */] = fillVatFormat(4 /* F32 */, 4 /* F32 */, compShift);
+            vat[1 /* VTXFMT1 */] = fillVatFormat(3 /* S16 */, 4 /* F32 */, compShift);
+            vat[2 /* VTXFMT2 */] = fillVatFormat(3 /* S16 */, 3 /* S16 */, compShift);
+            var vtxLoader = gx_displaylist_2.compileVtxLoaderMultiVat(vat, vcd);
+            var dlData = buffer.slice(primitiveDataOffs, surfaceEnd);
+            var loadedVertexLayout = vtxLoader.loadedVertexLayout;
+            var loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
+            var surface = {
+                materialIndex: materialIndex,
+                loadedVertexData: loadedVertexData,
+                loadedVertexLayout: loadedVertexLayout,
+            };
+            surfaces.push(surface);
+            sectionIndex++;
+        }
+        var geometry = { surfaces: surfaces };
+        return [geometry, sectionIndex];
+        var e_56, _a;
+    }
+    function parse(resourceSystem, buffer) {
+        var view = buffer.createDataView();
+        util_38.assert(view.getUint32(0x00) === 0xDEADBEEF);
+        var version = view.getUint32(0x04);
+        util_38.assert(version === 0x0F);
+        // 0x10 - 0x34: Transform matrix
+        var worldModelCount = view.getUint32(0x38);
+        var dataSectionCount = view.getUint32(0x3C);
+        var worldGeometrySectionIndex = view.getUint32(0x40);
+        var dataSectionSizeTable = [];
+        var dataSectionSizeTableIdx = 0x60;
+        for (var i = 0; i < dataSectionCount; i++) {
+            var size = view.getUint32(dataSectionSizeTableIdx + 0x00);
+            dataSectionSizeTable.push(size);
+            dataSectionSizeTableIdx += 0x04;
+        }
+        var firstDataSectionOffs = util_38.align(dataSectionSizeTableIdx, 32);
+        var dataSectionOffsTable = [firstDataSectionOffs];
+        for (var i = 1; i < dataSectionCount; i++) {
+            var prevOffs = dataSectionOffsTable[i - 1];
+            var prevSize = dataSectionSizeTable[i - 1];
+            dataSectionOffsTable.push(util_38.align(prevOffs + prevSize, 32));
+        }
+        // In practice.
+        util_38.assert(worldGeometrySectionIndex === 0);
+        // The materials section is always the first index in the world geometry section indexes...
+        var materialSectionOffs = dataSectionOffsTable[worldGeometrySectionIndex + 0];
+        // Parse out materials.
+        var materialSet = parseMaterialSet(resourceSystem, buffer, materialSectionOffs);
+        // Now do geometry.
+        var sectionTables = { dataSectionOffsTable: dataSectionOffsTable, dataSectionSizeTable: dataSectionSizeTable };
+        var geometrySectionIndex = worldGeometrySectionIndex + 1;
+        var worldModels = [];
+        for (var i = 0; i < worldModelCount; i++) {
+            // World model header.
+            var worldModelHeaderOffs = dataSectionOffsTable[geometrySectionIndex];
+            var visorFlags = view.getUint32(worldModelHeaderOffs + 0x00);
+            worldModelHeaderOffs += 4 * 12; // World transform matrix
+            worldModelHeaderOffs += 4 * 6; // AABB
+            geometrySectionIndex += 1;
+            var worldModelGeometry = void 0;
+            _a = __read(parseGeometry(resourceSystem, buffer, materialSet, sectionTables, geometrySectionIndex), 2), worldModelGeometry = _a[0], geometrySectionIndex = _a[1];
+            worldModels.push(worldModelGeometry);
+        }
+        return { materialSet: materialSet, worldModels: worldModels };
+        var _a;
+    }
+    exports_65("parse", parse);
+    var GX_Material, util_38, gx_displaylist_2, vtxAttrFormats;
+    return {
+        setters: [
+            function (GX_Material_4) {
+                GX_Material = GX_Material_4;
+            },
+            function (util_38_1) {
+                util_38 = util_38_1;
+            },
+            function (gx_displaylist_2_1) {
+                gx_displaylist_2 = gx_displaylist_2_1;
+            }
+        ],
+        execute: function () {
+            exports_65("vtxAttrFormats", vtxAttrFormats = [
+                { vtxAttrib: 9 /* POS */, mask: 0x00000003, compCount: 3 },
+                { vtxAttrib: 10 /* NRM */, mask: 0x0000000C, compCount: 3 },
+                { vtxAttrib: 11 /* CLR0 */, mask: 0x00000030, compCount: 4 },
+                { vtxAttrib: 12 /* CLR1 */, mask: 0x000000C0, compCount: 4 },
+                { vtxAttrib: 13 /* TEX0 */, mask: 0x00000300, compCount: 2 },
+                { vtxAttrib: 14 /* TEX1 */, mask: 0x00000C00, compCount: 2 },
+                { vtxAttrib: 15 /* TEX2 */, mask: 0x00003000, compCount: 2 },
+                { vtxAttrib: 16 /* TEX3 */, mask: 0x0000C000, compCount: 2 },
+                { vtxAttrib: 17 /* TEX4 */, mask: 0x00030000, compCount: 2 },
+                { vtxAttrib: 18 /* TEX5 */, mask: 0x000C0000, compCount: 2 },
+                { vtxAttrib: 19 /* TEX6 */, mask: 0x00300000, compCount: 2 },
+            ]);
+        }
+    };
+});
+// Implements Retro's STRG (string table resource group) format as seen in Metroid Prime 1.
+System.register("metroid_prime/strg", ["util"], function (exports_66, context_66) {
+    "use strict";
+    var __moduleName = context_66 && context_66.id;
+    function readUTF16String(buffer, offs) {
+        var arr = buffer.createTypedArray(Uint8Array, offs, 0xFF);
+        var raw = utf16Decoder.decode(arr);
+        var nul = raw.indexOf('\u0000');
+        var str;
+        if (nul >= 0)
+            str = raw.slice(0, nul);
+        else
+            str = raw;
+        return str;
+    }
+    function parse(resourceSystem, buffer) {
+        var view = buffer.createDataView();
+        util_39.assert(view.getUint32(0x00) === 0x87654321);
+        var version = view.getUint32(0x04);
+        util_39.assert(version === 0x00); // Metroid Prime 1
+        var languageCount = view.getUint32(0x08);
+        var stringCount = view.getUint32(0x0C);
+        var languageTableOffs = 0x10;
+        var stringsTableOffs = languageTableOffs + languageCount * 0x08;
+        var languageTableIdx = languageTableOffs;
+        var strings = [];
+        for (var i = 0; i < languageCount; i++) {
+            var languageID = util_39.readString(buffer, languageTableIdx + 0x00, 4, false);
+            var languageStringsOffs = view.getUint32(languageTableIdx + 0x04);
+            languageTableIdx += 0x08;
+            // Load English for now because I am a dirty American.
+            if (languageID === 'ENGL') {
+                var stringTableIdx = stringsTableOffs + languageStringsOffs;
+                var stringTableSize = view.getUint32(stringTableIdx + 0x00);
+                stringTableIdx += 0x04;
+                var stringTableDataOffs = stringTableIdx;
+                for (var j = 0; j < stringCount; j++) {
+                    var stringOffs = view.getUint32(stringTableIdx);
+                    var string = readUTF16String(buffer, stringTableDataOffs + stringOffs);
+                    strings.push(string);
+                    stringTableIdx += 0x04;
+                }
+            }
+        }
+        return { strings: strings };
+    }
+    exports_66("parse", parse);
+    var util_39, utf16Decoder;
+    return {
+        setters: [
+            function (util_39_1) {
+                util_39 = util_39_1;
+            }
+        ],
+        execute: function () {
+            utf16Decoder = new TextDecoder('utf-16be');
+        }
+    };
+});
+// Resource System
+System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_67, context_67) {
+    "use strict";
+    var __moduleName = context_67 && context_67.id;
+    var pako_1, MLVL, MREA, STRG, TXTR, util_40, ArrayBufferSlice_7, FourCCLoaders, ResourceSystem;
+    return {
+        setters: [
+            function (pako_1_1) {
+                pako_1 = pako_1_1;
+            },
+            function (MLVL_1) {
+                MLVL = MLVL_1;
+            },
+            function (MREA_1) {
+                MREA = MREA_1;
+            },
+            function (STRG_1) {
+                STRG = STRG_1;
+            },
+            function (TXTR_1) {
+                TXTR = TXTR_1;
+            },
+            function (util_40_1) {
+                util_40 = util_40_1;
+            },
+            function (ArrayBufferSlice_7_1) {
+                ArrayBufferSlice_7 = ArrayBufferSlice_7_1;
+            }
+        ],
+        execute: function () {
+            FourCCLoaders = {
+                'MLVL': MLVL.parse,
+                'MREA': MREA.parse,
+                'STRG': STRG.parse,
+                'TXTR': TXTR.parse,
+            };
+            ResourceSystem = /** @class */ (function () {
+                function ResourceSystem(paks) {
+                    this.paks = paks;
+                    this._cache = new Map();
+                }
+                ResourceSystem.prototype.loadResourceBuffer = function (resource) {
+                    if (resource.isCompressed) {
+                        var deflated = resource.buffer.createTypedArray(Uint8Array);
+                        var inflated = pako_1.default.inflate(deflated);
+                        return new ArrayBufferSlice_7.default(inflated.buffer);
+                    }
+                    else {
+                        return resource.buffer;
+                    }
+                };
+                ResourceSystem.prototype.findResourceByID = function (assetID) {
+                    util_40.assert(assetID.length === 4);
+                    try {
+                        for (var _a = __values(this.paks), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var pak = _b.value;
+                            var resource = pak.resourceTable.get(assetID);
+                            if (resource)
+                                return resource;
+                        }
+                    }
+                    catch (e_57_1) { e_57 = { error: e_57_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_57) throw e_57.error; }
+                    }
+                    return null;
+                    var e_57, _c;
+                };
+                ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
+                    var cached = this._cache.get(assetID);
+                    if (cached !== undefined)
+                        return cached;
+                    var loaderFunc = FourCCLoaders[fourCC];
+                    if (!loaderFunc)
+                        return null;
+                    var resource = this.findResourceByID(assetID);
+                    util_40.assert(resource.fourCC === fourCC);
+                    var buffer = this.loadResourceBuffer(resource);
+                    var inst = loaderFunc(this, buffer);
+                    this._cache.set(assetID, inst);
+                    return inst;
+                };
+                return ResourceSystem;
+            }());
+            exports_67("ResourceSystem", ResourceSystem);
+        }
+    };
+});
+// Implements Retro's MLVL format as seen in Metroid Prime 1.
+System.register("metroid_prime/mlvl", ["util"], function (exports_68, context_68) {
+    "use strict";
+    var __moduleName = context_68 && context_68.id;
+    function parse(resourceSystem, buffer) {
+        var view = buffer.createDataView();
+        util_41.assert(view.getUint32(0x00) == 0xDEAFBABE);
+        var version = view.getUint32(0x04);
+        // Version that appears in Metroid Prime 1.
+        util_41.assert(version === 0x11);
+        // STRG file ID?
+        var worldNameSTRGID = util_41.readString(buffer, 0x08, 4, false);
+        var worldNameSTRG = resourceSystem.findResourceByID(worldNameSTRGID);
+        resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
+        var worldSaveID = view.getUint32(0x0C);
+        var skyboxID = view.getUint32(0x10);
+        // Memory Relay junk.
+        var memoryRelayTableIdx = 0x14;
+        var memoryRelayTableCount = view.getUint32(memoryRelayTableIdx + 0x00);
+        memoryRelayTableIdx += 0x04;
+        for (var i = 0; i < memoryRelayTableCount; i++) {
+            var memoryRelayInstanceID = view.getUint32(memoryRelayTableIdx + 0x00);
+            var targetInstanceID = view.getUint32(memoryRelayTableIdx + 0x04);
+            var messageType = view.getUint16(memoryRelayTableIdx + 0x08);
+            var active = !!view.getUint8(memoryRelayTableIdx + 0x0A);
+            memoryRelayTableIdx += 0x0B;
+        }
+        var areaTableOffs = memoryRelayTableIdx;
+        var areaTableCount = view.getUint32(areaTableOffs + 0x00);
+        util_41.assert(view.getUint32(areaTableOffs + 0x04) === 0x01);
+        var areaTableIdx = areaTableOffs + 0x08;
+        var areaTable = [];
+        for (var i = 0; i < areaTableCount; i++) {
+            var areaSTRGID = util_41.readString(buffer, areaTableIdx, 4, false);
+            var areaSTRG = resourceSystem.findResourceByID(areaSTRGID);
+            util_41.assert(areaSTRG !== null);
+            areaTableIdx += 0x04;
+            areaTableIdx += 0x04 * 12; // Transform matrix
+            areaTableIdx += 0x04 * 6; // AABB
+            var areaMREAID = util_41.readString(buffer, areaTableIdx + 0x00, 4, false);
+            var areaMREA = resourceSystem.findResourceByID(areaMREAID);
+            util_41.assert(areaMREA !== null);
+            var areaInternalID = view.getUint32(areaTableIdx + 0x04);
+            areaTableIdx += 0x08;
+            var attachedAreaCount = view.getUint32(areaTableIdx + 0x00);
+            areaTableIdx += 0x04;
+            for (var j = 0; j < attachedAreaCount; j++) {
+                areaTableIdx += 0x02; // Attached Area Index Array
+            }
+            // TODO(jstpierre): Verify with Aruki. Seems to be undocumented?
+            areaTableIdx += 0x04;
+            var dependencyTableCount = view.getUint32(areaTableIdx);
+            areaTableIdx += 0x04;
+            for (var j = 0; j < dependencyTableCount; j++) {
+                var dependencyID = view.getUint32(areaTableIdx + 0x00);
+                var dependencyFOURCC = view.getUint32(areaTableIdx + 0x04);
+                areaTableIdx += 0x08;
+            }
+            var dependencyOffsetTableCount = view.getUint32(areaTableIdx);
+            areaTableIdx += 0x04;
+            for (var j = 0; j < dependencyOffsetTableCount; j++) {
+                var dependencyOffset = view.getUint32(areaTableIdx + 0x00);
+                areaTableIdx += 0x04;
+            }
+            var dockCount = view.getUint32(areaTableIdx);
+            areaTableIdx += 0x04;
+            for (var j = 0; j < dockCount; j++) {
+                var connectingDockCount = view.getUint32(areaTableIdx);
+                areaTableIdx += 0x04;
+                for (var k = 0; k < connectingDockCount; k++) {
+                    var connectingDockAreaIndex = view.getUint32(areaTableIdx + 0x00);
+                    var connectingDockDockIndex = view.getUint32(areaTableIdx + 0x04);
+                    areaTableIdx += 0x08;
+                }
+                var dockCoordinateCount = view.getUint32(areaTableIdx);
+                areaTableIdx += 0x04;
+                for (var k = 0; k < dockCoordinateCount; k++) {
+                    areaTableIdx += 0x0C; // xyz floats
+                }
+            }
+            areaTable.push({ areaSTRGID: areaSTRGID, areaMREAID: areaMREAID });
+        }
+        return { areaTable: areaTable };
+    }
+    exports_68("parse", parse);
+    var util_41;
+    return {
+        setters: [
+            function (util_41_1) {
+                util_41 = util_41_1;
+            }
+        ],
+        execute: function () {
         }
     };
 });
@@ -16953,7 +16940,7 @@ System.register("luigis_mansion/bin", ["util", "gl-matrix", "gx/gx_displaylist",
             vat[10 /* NRM */] = { compCnt: nbt3 ? 2 /* NRM_NBT3 */ : 1 /* NRM_NBT */, compType: 4 /* F32 */, compShift: 0 };
             // Set up our input vertex description.
             var vcd = [];
-            for (var i = 0; i < 25 /* MAX */; i++) {
+            for (var i = 0; i < 20 /* MAX */; i++) {
                 if ((attributes & (1 << i)) !== 0) {
                     // Only care about TEX0 and POS for now...
                     var enableOutput = (i === 9 /* POS */ || i === 13 /* TEX0 */);
