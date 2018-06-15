@@ -6,7 +6,6 @@ import * as BRRES from './brres';
 import * as GX from '../gx/gx_enum';
 import * as GX_Texture from '../gx/gx_texture';
 import * as GX_Material from '../gx/gx_material';
-import { getNumComponents, GX_VtxAttrFmt } from "../gx/gx_displaylist";
 import { align, assert } from "../util";
 import { mat3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";

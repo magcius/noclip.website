@@ -4,7 +4,7 @@ import { readString, assert } from "../util";
 import { mat4, vec3, quat } from "gl-matrix";
 
 import * as GX from "../gx/gx_enum";
-import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, VattrLayout, LoadedVertexData } from '../gx/gx_displaylist';
+import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import * as GX_Material from '../gx/gx_material';
 
 export interface BIN {
@@ -32,8 +32,8 @@ export interface Material {
 
 export interface Batch {
     vat: GX_VtxAttrFmt[];
-    vattrLayout: VattrLayout;
-    loadedVtxData: LoadedVertexData;
+    loadedVertexLayout: LoadedVertexLayout;
+    loadedVertexData: LoadedVertexData;
 }
 
 export interface SceneGraphPart {
@@ -110,47 +110,44 @@ export function parse(buffer: ArrayBufferSlice): BIN {
 
         // Should always have position.
         assert((attributes & (1 << GX.VertexAttribute.POS)) !== 0);
-        vat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16 };
+        vat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 0 };
         // Should always have tex0.
         if (!(attributes & (1 << GX.VertexAttribute.TEX0))) {
             // If we don't have TEX0, then skip this batch...
             console.warn(`Batch ${index} does not have TEX0. WTF? / Attributes: ${attributes.toString(16)}`);
             return null;
         }
-        vat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32 };
-
-        vat[GX.VertexAttribute.NRM] = { 
-            compCnt: nbt3 ? GX.CompCnt.NRM_NBT3 : GX.CompCnt.NRM_NBT, compType: GX.CompType.F32,
-            // Don't write NRM entries. They just have to be specified for the NBT3 flag.
-            enableOutput: false,
-        };
+        vat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift: 0 };
+        vat[GX.VertexAttribute.NRM] = { compCnt: nbt3 ? GX.CompCnt.NRM_NBT3 : GX.CompCnt.NRM_NBT, compType: GX.CompType.F32, compShift: 0 };
 
         // Set up our input vertex description.
         const vtxDescs: GX_VtxDesc[] = [];
         for (let i = 0; i < GX.VertexAttribute.MAX; i++) {
-            if ((attributes & (1 << i)) !== 0)
-                vtxDescs[i] = { type: GX.AttrType.INDEX16 };
+            if ((attributes & (1 << i)) !== 0) {
+                // Only care about TEX0 and POS for now...
+                const enableOutput = (i === GX.VertexAttribute.POS || i === GX.VertexAttribute.TEX0);
+                vtxDescs[i] = { type: GX.AttrType.INDEX16, enableOutput };
+            }
         }
 
         const vtxLoader = compileVtxLoader(vat, vtxDescs);
-        const vattrLayout = vtxLoader.vattrLayout;
+        const loadedVertexLayout = vtxLoader.loadedVertexLayout;
         const displayListBuffer = buffer.subarray(displayListOffset, displayListSize);
 
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.VertexAttribute.POS] = { buffer, offs: positionBufferOffs };
         vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: tex0BufferOffs };
 
-        let loadedVtxData;
+        let loadedVertexData;
         try {
-            loadedVtxData = vtxLoader.runVertices(vtxArrays, displayListBuffer);
+            loadedVertexData = vtxLoader.runVertices(vtxArrays, displayListBuffer);
         } catch(e) {
             // Could not parse batch.
             console.warn(`Batch ${index} had parse error: ${e} / Attributes: ${attributes.toString(16)}`);
             return null;
         }
 
-        assert(loadedVtxData.indexData.length === loadedVtxData.totalTriangleCount * 3);
-        return { vat, vattrLayout, loadedVtxData };
+        return { vat, loadedVertexLayout, loadedVertexData };
     }
 
     function parseMaterial(index: number): Material {

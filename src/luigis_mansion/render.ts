@@ -6,28 +6,18 @@ import { BIN, Sampler, Batch, Material, SceneGraphNode, SceneGraphPart } from ".
 import * as GX from '../gx/gx_enum';
 import * as GX_Texture from '../gx/gx_texture';
 import * as GX_Material from '../gx/gx_material';
-import { getNumComponents, GX_VtxAttrFmt } from "../gx/gx_displaylist";
 import { align, assert } from "../util";
 import { mat3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
+import { AttributeFormat } from "../gx/gx_displaylist";
 
-function translateCompType(gl: WebGL2RenderingContext, compType: GX.CompType): { type: GLenum, normalized: boolean } {
-    switch (compType) {
-    case GX.CompType.F32:
+function translateAttribType(gl: WebGL2RenderingContext, attribFormat: AttributeFormat): { type: GLenum, normalized: boolean } {
+    switch (attribFormat) {
+    case AttributeFormat.F32:
         return { type: gl.FLOAT, normalized: false };
-    case GX.CompType.S8:
-        return { type: gl.BYTE, normalized: false };
-    case GX.CompType.S16:
-        return { type: gl.SHORT, normalized: false };
-    case GX.CompType.U16:
-        return { type: gl.UNSIGNED_SHORT, normalized: false };
-    case GX.CompType.U8:
-        return { type: gl.UNSIGNED_BYTE, normalized: false };
-    case GX.CompType.RGBA8: // XXX: Is this right?
-        return { type: gl.UNSIGNED_BYTE, normalized: true };
     default:
-        throw new Error(`Unknown CompType ${compType}`);
+        throw "whoops";
     }
 }
 
@@ -160,7 +150,7 @@ class Command_Batch {
         gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
 
         gl.bindVertexArray(this.vao);
-        gl.drawElements(gl.TRIANGLES, this.batch.loadedVtxData.totalTriangleCount * 3, gl.UNSIGNED_SHORT, this.coalescedBuffers.indexBuffer.offset);
+        gl.drawElements(gl.TRIANGLES, this.batch.loadedVertexData.totalTriangleCount * 3, gl.UNSIGNED_SHORT, this.coalescedBuffers.indexBuffer.offset);
         if (gl.getError() !== gl.NO_ERROR)
             throw new Error("WTF");
         gl.bindVertexArray(null);
@@ -180,22 +170,19 @@ class Command_Batch {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.coalescedBuffers.indexBuffer.buffer);
 
         const bufferSize = gl.getBufferParameter(gl.ELEMENT_ARRAY_BUFFER, gl.BUFFER_SIZE);
-        assert(bufferSize >= batch.loadedVtxData.indexData.byteLength);
+        assert(bufferSize >= batch.loadedVertexData.indexData.byteLength);
 
-        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < batch.vat.length; vtxAttrib++) {
-            if (batch.vattrLayout.dstAttrOffsets[vtxAttrib] === undefined)
-                continue;
-
-            const attrFmt: GX_VtxAttrFmt = batch.vat[vtxAttrib];
-            const { type, normalized } = translateCompType(gl, attrFmt.compType);
+        for (const attrib of batch.loadedVertexLayout.dstVertexAttributeLayouts) {
+            const vtxAttrib = attrib.vtxAttrib;
             const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
+            const { type, normalized } = translateAttribType(gl, attrib.format);
             gl.enableVertexAttribArray(attribLocation);
             gl.vertexAttribPointer(
                 attribLocation,
-                getNumComponents(vtxAttrib, attrFmt.compCnt),
+                attrib.componentCount,
                 type, normalized,
-                batch.vattrLayout.dstVertexSize,
-                this.coalescedBuffers.vertexBuffer.offset + batch.vattrLayout.dstAttrOffsets[vtxAttrib],
+                batch.loadedVertexLayout.dstVertexSize,
+                this.coalescedBuffers.vertexBuffer.offset + attrib.offset,
             );
         }
         gl.bindVertexArray(null);
@@ -338,8 +325,8 @@ export class BinScene implements Viewer.MainScene {
 
         // Coalesce buffers.
         this.bufferCoalescer = new BufferCoalescer(gl,
-            this.batches.map((batch) => new ArrayBufferSlice(batch.loadedVtxData.packedVertexData.buffer)),
-            this.batches.map((batch) => new ArrayBufferSlice(batch.loadedVtxData.indexData.buffer)),
+            this.batches.map((batch) => new ArrayBufferSlice(batch.loadedVertexData.packedVertexData)),
+            this.batches.map((batch) => new ArrayBufferSlice(batch.loadedVertexData.indexData)),
         );
 
         this.commands = [];

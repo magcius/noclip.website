@@ -7,7 +7,7 @@ import * as GX from '../gx/gx_enum';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import * as GX_Material from '../gx/gx_material';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, getNumComponents, getComponentSize, VattrLayout } from '../gx/gx_displaylist';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getComponentSizeRaw, getComponentCountRaw } from '../gx/gx_displaylist';
 import { vec3, mat4, quat } from 'gl-matrix';
 
 interface ResDicEntry {
@@ -604,8 +604,8 @@ function parseMDL0_VtxData(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribu
         compShift = 0;
     }
 
-    const numComponents = getNumComponents(vtxAttrib, compCnt);
-    const compSize = getComponentSize(compType);
+    const numComponents = getComponentCountRaw(vtxAttrib, compCnt);
+    const compSize = getComponentSizeRaw(compType);
     const compByteSize = numComponents * compSize;
     const dataByteSize = compByteSize * count;
 
@@ -642,8 +642,8 @@ function parseInputVertexBuffers(buffer: ArrayBufferSlice, vtxPosResDic: ResDicE
 
 interface MDL0_ShapeEntry {
     name: string;
-    vattrLayout: VattrLayout;
-    loadedVtxData: LoadedVertexData;
+    loadedVertexLayout: LoadedVertexLayout;
+    loadedVertexData: LoadedVertexData;
 };
 
 function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVertexBuffers): MDL0_ShapeEntry {
@@ -752,21 +752,21 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     const vatB = r.cp[GX.CPRegister.VAT_B_ID + GX.VtxFmt.VTXFMT0];
     const vatC = r.cp[GX.CPRegister.VAT_C_ID + GX.VtxFmt.VTXFMT0];
 
-    // TODO(jstpierre): Support compShift during the conversion rather than in AttrScale in the shader...
+    // TODO(jstpierre): Support compShift during the conversion...
     const vat: GX_VtxAttrFmt[] = [];
-    vat[GX.VertexAttribute.POS]  = { compCnt: (vatA >>>  0) & 0x01, compType: (vatA >>>  1) & 0x07 };
+    vat[GX.VertexAttribute.POS]  = { compCnt: (vatA >>>  0) & 0x01, compType: (vatA >>>  1) & 0x07, compShift: 0 };
     const nrm3 = !!(vatA >>> 31);
-    vat[GX.VertexAttribute.NRM]  = { compCnt: nrm3 ? GX.CompCnt.NRM_NBT3 : (vatA >>> 9) & 0x01, compType: (vatA >>> 10) & 0x07 };
-    vat[GX.VertexAttribute.CLR0] = { compCnt: (vatA >>> 13) & 0x01, compType: (vatA >>> 14) & 0x07 };
-    vat[GX.VertexAttribute.CLR1] = { compCnt: (vatA >>> 17) & 0x01, compType: (vatA >>> 18) & 0x07 };
-    vat[GX.VertexAttribute.TEX0] = { compCnt: (vatA >>> 21) & 0x01, compType: (vatA >>> 22) & 0x07 };
-    vat[GX.VertexAttribute.TEX1] = { compCnt: (vatB >>>  0) & 0x01, compType: (vatB >>>  1) & 0x07 };
-    vat[GX.VertexAttribute.TEX2] = { compCnt: (vatB >>>  9) & 0x01, compType: (vatB >>> 10) & 0x07 };
-    vat[GX.VertexAttribute.TEX3] = { compCnt: (vatB >>> 18) & 0x01, compType: (vatB >>> 19) & 0x07 };
-    vat[GX.VertexAttribute.TEX4] = { compCnt: (vatB >>> 27) & 0x01, compType: (vatB >>> 28) & 0x07 };
-    vat[GX.VertexAttribute.TEX5] = { compCnt: (vatC >>>  5) & 0x01, compType: (vatC >>>  6) & 0x07 };
-    vat[GX.VertexAttribute.TEX6] = { compCnt: (vatC >>> 14) & 0x01, compType: (vatC >>> 15) & 0x07 };
-    vat[GX.VertexAttribute.TEX7] = { compCnt: (vatC >>> 23) & 0x01, compType: (vatC >>> 24) & 0x07 };
+    vat[GX.VertexAttribute.NRM]  = { compCnt: nrm3 ? GX.CompCnt.NRM_NBT3 : (vatA >>> 9) & 0x01, compType: (vatA >>> 10) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.CLR0] = { compCnt: (vatA >>> 13) & 0x01, compType: (vatA >>> 14) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.CLR1] = { compCnt: (vatA >>> 17) & 0x01, compType: (vatA >>> 18) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.TEX0] = { compCnt: (vatA >>> 21) & 0x01, compType: (vatA >>> 22) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.TEX1] = { compCnt: (vatB >>>  0) & 0x01, compType: (vatB >>>  1) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.TEX2] = { compCnt: (vatB >>>  9) & 0x01, compType: (vatB >>> 10) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.TEX3] = { compCnt: (vatB >>> 18) & 0x01, compType: (vatB >>> 19) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.TEX4] = { compCnt: (vatB >>> 27) & 0x01, compType: (vatB >>> 28) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.TEX5] = { compCnt: (vatC >>>  5) & 0x01, compType: (vatC >>>  6) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.TEX6] = { compCnt: (vatC >>> 14) & 0x01, compType: (vatC >>> 15) & 0x07, compShift: 0 };
+    vat[GX.VertexAttribute.TEX7] = { compCnt: (vatC >>> 23) & 0x01, compType: (vatC >>> 24) & 0x07, compShift: 0 };
 
     const vtxArrays: GX_Array[] = [];
     vtxArrays[GX.VertexAttribute.POS] = { buffer: inputBuffers.pos[idVtxPos].data, offs: 0 };
@@ -794,11 +794,11 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
         vtxArrays[GX.VertexAttribute.TEX7] = { buffer: inputBuffers.txc[idVtxTxc7].data, offs: 0 };
 
     const vtxLoader = compileVtxLoader(vat, vtxDescs);
-    const vattrLayout = vtxLoader.vattrLayout;
-    const loadedVtxData = vtxLoader.runVertices(vtxArrays, buffer.subarray(primDLOffs, primDLSize));
-    assert(loadedVtxData.totalVertexCount === numVertices);
+    const loadedVertexLayout = vtxLoader.loadedVertexLayout;
+    const loadedVertexData = vtxLoader.runVertices(vtxArrays, buffer.subarray(primDLOffs, primDLSize));
+    assert(loadedVertexData.totalVertexCount === numVertices);
 
-    return { name, vattrLayout, loadedVtxData };
+    return { name, loadedVertexLayout, loadedVertexData };
 }
 
 const enum NodeFlags {
