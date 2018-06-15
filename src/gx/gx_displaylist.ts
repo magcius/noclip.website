@@ -1,11 +1,37 @@
 
-// GX display list parsing.
+// GX Display List parsing.
 
-// A Display List contains a number of primitive draw calls. However, instead of having
-// one global index into an index buffer pointing to vertex data, the GX instead can allow
-// specifying separate indices per attribute. So you can have POS's indexes be 0 1 2 3 and
-// and NRM's indexes be 0 0 0 0. Additionally, each draw call can specify one of 8 different
-// vertex attribute formats, though in most cases games tend to use one VAT.
+// The Display List is natively interpreted by the GX GPU. It consists of two kinds of
+// commands: primitive draws (GX.Command.DRAW_*) and register loads (GX.Command.LOAD_*).
+// Most serialized model formats have some form of serialized Display List with
+// primitive draw commands. We call a Display List composed entirely of such draw commands
+// a "Shape Display List".
+
+// Primitive commands specify a kind of primitive (quad, triangle, tristrip, etc.), a
+// vertex format, a primitive count, and then a number of vertices. Unlike modern APIs which
+// contain one global index into pointing to all of the attribute data for that vertex, the
+// GX can support the attribute data either being in-line in the command, or specify an
+// index per-attribute into a larger set of arrays. That is, you can have a vertex with
+// POS's indexes being 0 1 2 3 and NRM's indexes being 0 0 0 0.
+
+// We support this by compiling the data down into a vertex buffer. This is what the
+// "vertex loader" does, and it's inspired by the Vertex Loader JIT in Dolphin. Instead of
+// JITting x64 code, though, we compile a JavaScript file for VAT/VCD pair.
+
+// The "VAT" (Vertex Attribute Table) contains the details on the vertex format, e.g. data
+// types and component counts of the POS, NRM, TEX0, etc. There are eight vertex formats,
+// though most games use only one. We make the user specify a VAT with an array of
+// GX_VtxAttrFmt structures. By default, compileVtxLoader only takes VTXFMT0. You can use
+// compileVtxLoaderFormats to specify a VAT with more than just VTXFMT0.
+
+// The "VCD" (Vertex Control Descriptor) contains the details on whether an attribute exists
+// inline in the vertex data ("direct"), or is an index into an array. We emulate this by
+// making the user pass in an array of GX_VtxDesc structures when they construct their
+// vertex loader.
+
+// On actual hardware, the VAT/VCD exist in the CP registers, however most data formats
+// don't have the display list that sets these registers serialized and instead just use
+// standard formats.
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import MemoizeCache from '../MemoizeCache';
@@ -13,7 +39,6 @@ import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
-import { vtxAttrFormats } from '../metroid_prime/mrea';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -52,8 +77,8 @@ export function getComponentSizeRaw(compType: GX.CompType): CompSize {
     }
 }
 
-function getComponentSize(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): CompSize {
-    // MTXIDX fields don't have VAT entries.
+// PNMTXIDX, TEXnMTXIDX are special cases in GX.
+function isVtxAttribMtxIdx(vtxAttrib: GX.VertexAttribute): boolean {
     switch (vtxAttrib) {
     case GX.VertexAttribute.PNMTXIDX:
     case GX.VertexAttribute.TEX0MTXIDX:
@@ -64,10 +89,18 @@ function getComponentSize(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFm
     case GX.VertexAttribute.TEX5MTXIDX:
     case GX.VertexAttribute.TEX6MTXIDX:
     case GX.VertexAttribute.TEX7MTXIDX:
-        return 1;
+        return true;
     default:
-        return getComponentSizeRaw(vatFormat.compType);
+        return false;
     }
+}
+
+function getComponentSize(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): CompSize {
+    // MTXIDX fields don't have VAT entries.
+    if (isVtxAttribMtxIdx(vtxAttrib))
+        return 1;
+
+    return getComponentSizeRaw(vatFormat.compType);
 }
 
 export function getComponentCountRaw(vtxAttrib: GX.VertexAttribute, compCnt: GX.CompCnt): number {
@@ -78,7 +111,6 @@ export function getComponentCountRaw(vtxAttrib: GX.VertexAttribute, compCnt: GX.
         else if (compCnt === GX.CompCnt.POS_XYZ)
             return 3;
     case GX.VertexAttribute.NRM:
-    case GX.VertexAttribute.NBT:
         if (compCnt === GX.CompCnt.NRM_XYZ)
             return 3;
         // NBT*XYZ
@@ -113,20 +145,11 @@ export function getComponentCountRaw(vtxAttrib: GX.VertexAttribute, compCnt: GX.
 }
 
 function getComponentCount(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
-    switch (vtxAttrib) {
-    case GX.VertexAttribute.PNMTXIDX:
-    case GX.VertexAttribute.TEX0MTXIDX:
-    case GX.VertexAttribute.TEX1MTXIDX:
-    case GX.VertexAttribute.TEX2MTXIDX:
-    case GX.VertexAttribute.TEX3MTXIDX:
-    case GX.VertexAttribute.TEX4MTXIDX:
-    case GX.VertexAttribute.TEX5MTXIDX:
-    case GX.VertexAttribute.TEX6MTXIDX:
-    case GX.VertexAttribute.TEX7MTXIDX:
+    // MTXIDX fields don't have VAT entries.
+    if (isVtxAttribMtxIdx(vtxAttrib))
         return 1;
-    default:
-        return getComponentCountRaw(vtxAttrib, vatFormat.compCnt);
-    }
+
+    return getComponentCountRaw(vtxAttrib, vatFormat.compCnt);
 }
 
 function getComponentShiftRaw(compType: GX.CompType, compShift: number): number {
@@ -143,24 +166,14 @@ function getComponentShiftRaw(compType: GX.CompType, compShift: number): number 
 }
 
 function getComponentShift(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
-    switch (vtxAttrib) {
-    case GX.VertexAttribute.PNMTXIDX:
-    case GX.VertexAttribute.TEX0MTXIDX:
-    case GX.VertexAttribute.TEX1MTXIDX:
-    case GX.VertexAttribute.TEX2MTXIDX:
-    case GX.VertexAttribute.TEX3MTXIDX:
-    case GX.VertexAttribute.TEX4MTXIDX:
-    case GX.VertexAttribute.TEX5MTXIDX:
-    case GX.VertexAttribute.TEX6MTXIDX:
-    case GX.VertexAttribute.TEX7MTXIDX:
+    // MTXIDX fields don't have VAT entries.
+    if (isVtxAttribMtxIdx(vtxAttrib))
         return 0;
-    default:
-        return getComponentShiftRaw(vatFormat.compType, vatFormat.compShift);
-    }
+
+    return getComponentShiftRaw(vatFormat.compType, vatFormat.compShift);
 }
 
 function getIndexNumComponents(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
-    // TODO(jstpierre): Figure out how GX_VA_NBT works.
     switch (vtxAttrib) {
     case GX.VertexAttribute.NRM:
         if (vatFormat.compCnt === GX.CompCnt.NRM_NBT3)
@@ -184,7 +197,6 @@ function getAttrName(vtxAttrib: GX.VertexAttribute): string {
     case GX.VertexAttribute.TEX7MTXIDX: return `TEX7MTXIDX`;
     case GX.VertexAttribute.POS:        return `POS`;
     case GX.VertexAttribute.NRM:        return `NRM`;
-    case GX.VertexAttribute.NBT:        return `NBT`;
     case GX.VertexAttribute.CLR0:       return `CLR0`;
     case GX.VertexAttribute.CLR1:       return `CLR1`;
     case GX.VertexAttribute.TEX0:       return `TEX0`;
@@ -195,7 +207,8 @@ function getAttrName(vtxAttrib: GX.VertexAttribute): string {
     case GX.VertexAttribute.TEX5:       return `TEX5`;
     case GX.VertexAttribute.TEX6:       return `TEX6`;
     case GX.VertexAttribute.TEX7:       return `TEX7`;
-    case GX.VertexAttribute.NULL: throw new Error("whoops");
+    default:
+        throw new Error("whoops");
     }
 }
 
@@ -255,6 +268,10 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
 
         // TODO(jstpierre): Find a better way to do NBT3.
         const srcIndexComponentCount = getIndexNumComponents(vtxAttrib, vtxAttrFmt);
+
+        // MTXIDX entries can only be DIRECT if they exist.
+        if (isVtxAttribMtxIdx(vtxAttrib))
+            assert(vtxAttrDesc.type === GX.AttrType.DIRECT);
 
         switch (vtxAttrDesc.type) {
         case GX.AttrType.DIRECT: {
