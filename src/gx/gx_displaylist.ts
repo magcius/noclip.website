@@ -246,7 +246,9 @@ export interface LoadedVertexLayout {
     // Packed vertex size.
     dstVertexSize: number;
     dstVertexAttributeLayouts: VertexAttributeLayout[];
+}
 
+interface VertexLayout extends LoadedVertexLayout {
     // Source layout.
     vatLayouts: VatLayout[];
 }
@@ -293,7 +295,7 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
     return { srcVertexSize, vatFormat, vcd };
 }
 
-function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): LoadedVertexLayout {
+function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VertexLayout {
     // Create source VAT layouts.
     const vatLayouts = vat.map((vatFormat) => translateVatLayout(vatFormat, vcd));
 
@@ -334,8 +336,8 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Loade
 }
 
 export interface LoadedVertexData {
-    indexData: ArrayBuffer;
     indexFormat: AttributeFormat;
+    indexData: ArrayBuffer;
     packedVertexData: ArrayBuffer;
     totalTriangleCount: number;
     totalVertexCount: number;
@@ -349,7 +351,7 @@ export interface VtxLoader {
 }
 
 function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader {
-    const loadedVertexLayout: LoadedVertexLayout = translateVertexLayout(vat, vcd);
+    const loadedVertexLayout: VertexLayout = translateVertexLayout(vat, vcd);
 
     function makeLoaderName(): string {
         let name = 'VtxLoader';
@@ -701,7 +703,7 @@ ${compileVatFormats()}
 if (dstIndexData.length !== totalTriangleCount * 3)
     throw new Error("Number of indexes does not match triangle count");
 
-return { indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };
+return { indexFormat: ${AttributeFormat.U16}, indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };
 
 };
 `;

@@ -7,9 +7,11 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import { Endianness } from 'endian';
 import { assert, readString } from 'util';
 
-import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, VertexAttributeLayout } from 'gx/gx_displaylist';
+import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, VertexAttributeLayout, LoadedVertexLayout } from 'gx/gx_displaylist';
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
+import { MaterialParams } from '../gx/gx_render';
+import { ColorOverride } from './render';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
@@ -387,29 +389,14 @@ export const enum ShapeDisplayFlags {
 
 export interface Shape {
     displayFlags: ShapeDisplayFlags;
-    indexData: ArrayBufferSlice;
-    // The vertex data. Converted to a modern-esque buffer per-shape.
-    packedData: ArrayBufferSlice;
-    // The size of an individual vertex.
-    packedVertexSize: number;
-    packedVertexAttributes: VertexAttributeLayout[];
+    loadedVertexData: LoadedVertexData;
+    loadedVertexLayout: LoadedVertexLayout;
     packets: Packet[];
 }
 
 export interface SHP1 {
     vat: GX_VtxAttrFmt[];
     shapes: Shape[];
-}
-
-function readIndex(view: DataView, offs: number, type: GX.AttrType) {
-    switch (type) {
-    case GX.AttrType.INDEX8:
-        return view.getUint8(offs);
-    case GX.AttrType.INDEX16:
-        return view.getUint16(offs);
-    default:
-        throw new Error(`Unknown index data type ${type}!`);
-    }
 }
 
 function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
@@ -468,9 +455,6 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 
         const vtxLoader = compileVtxLoader(vat, vcd);
 
-        const packedVertexAttributes = vtxLoader.loadedVertexLayout.dstVertexAttributeLayouts;
-        const packedVertexSize = vtxLoader.loadedVertexLayout.dstVertexSize;
-
         // Now parse out the packets.
         let packetIdx = packetTableOffs + (firstPacket * 0x08);
         const packets: Packet[] = [];
@@ -507,11 +491,11 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         // Coalesce shape data.
         // TODO(jstpierre): coalesceLoadedData is basically completely busted.
         assert(loadedDatas.length === 1);
-        const indexData = new ArrayBufferSlice(loadedDatas[0].indexData);
-        const packedData = new ArrayBufferSlice(loadedDatas[0].packedVertexData);
+        const loadedVertexData = loadedDatas[0];
+        const loadedVertexLayout = vtxLoader.loadedVertexLayout;
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ displayFlags, indexData, packedData, packedVertexSize, packedVertexAttributes, packets });
+        shapes.push({ displayFlags, loadedVertexData, loadedVertexLayout, packets });
 
         shapeIdx += 0x28;
     }
@@ -1450,7 +1434,7 @@ export class BTK {
 interface PaletteAnimationEntry {
     materialName: string;
     remapIndex: number;
-    colorId: number; // register or constant index
+    colorOverride: ColorOverride;
     r: AnimationTrack;
     g: AnimationTrack;
     b: AnimationTrack;
@@ -1458,8 +1442,7 @@ interface PaletteAnimationEntry {
 }
 
 export interface TRK1 extends AnimationBase {
-    registerAnimationEntries: PaletteAnimationEntry[];
-    konstantAnimationEntries: PaletteAnimationEntry[];
+    animationEntries: PaletteAnimationEntry[];
 }
 
 function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
@@ -1503,12 +1486,12 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
     }
 
+    const animationEntries: PaletteAnimationEntry[] = [];
+
     const registerRTable = buffer.createTypedArray(Int16Array, registerROffs, registerRCount, Endianness.BIG_ENDIAN);
     const registerGTable = buffer.createTypedArray(Int16Array, registerGOffs, registerGCount, Endianness.BIG_ENDIAN);
     const registerBTable = buffer.createTypedArray(Int16Array, registerBOffs, registerBCount, Endianness.BIG_ENDIAN);
     const registerATable = buffer.createTypedArray(Int16Array, registerAOffs, registerACount, Endianness.BIG_ENDIAN);
-
-    const registerAnimationEntries: PaletteAnimationEntry[] = [];
 
     animationTableIdx = registerColorAnimationTableOffs;
     for (let i = 0; i < registerColorAnimationTableCount; i++) {
@@ -1519,16 +1502,15 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const b = readAnimationTrack(registerBTable);
         const a = readAnimationTrack(registerATable);
         const colorId = view.getUint8(animationTableIdx);
+        const colorOverride = ColorOverride.CPREV + colorId;
         animationTableIdx += 0x04;
-        registerAnimationEntries.push({ materialName, remapIndex, colorId, r, g, b, a });
+        animationEntries.push({ materialName, remapIndex, colorOverride, r, g, b, a });
     }
 
     const konstantRTable = buffer.createTypedArray(Int16Array, konstantROffs, konstantRCount, Endianness.BIG_ENDIAN);
     const konstantGTable = buffer.createTypedArray(Int16Array, konstantGOffs, konstantGCount, Endianness.BIG_ENDIAN);
     const konstantBTable = buffer.createTypedArray(Int16Array, konstantBOffs, konstantBCount, Endianness.BIG_ENDIAN);
     const konstantATable = buffer.createTypedArray(Int16Array, konstantAOffs, konstantACount, Endianness.BIG_ENDIAN);
-
-    const konstantAnimationEntries: PaletteAnimationEntry[] = [];
 
     animationTableIdx = konstantColorAnimationTableOffs;
     for (let i = 0; i < konstantColorAnimationTableCount; i++) {
@@ -1539,11 +1521,12 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const b = readAnimationTrack(konstantBTable);
         const a = readAnimationTrack(konstantATable);
         const colorId = view.getUint8(animationTableIdx);
+        const colorOverride = ColorOverride.K0 + colorId;
         animationTableIdx += 0x04;
-        konstantAnimationEntries.push({ materialName, remapIndex, colorId, r, g, b, a });
+        animationEntries.push({ materialName, remapIndex, colorOverride, r, g, b, a });
     }
 
-    return { duration, loopMode, registerAnimationEntries, konstantAnimationEntries };
+    return { duration, loopMode, animationEntries };
 }
 //#endregion
 
@@ -1560,32 +1543,17 @@ export class BRK {
         return brk;
     }
 
-    public calcColorOverrides(dst: Float32Array, offs: number, materialName: string, frame: number): void {
+    public calcColorOverride(dst: GX_Material.Color, materialName: string, colorOverride: ColorOverride, frame: number): boolean {
+        const animationEntry = this.trk1.animationEntries.find((e) => e.materialName === materialName && e.colorOverride === colorOverride);
+        if (!animationEntry)
+            return false;
+
         const animFrame = getAnimFrame(this.trk1, frame);
-
-        for (let i = 0; i < 4; i++) {
-            const animationEntry = this.trk1.konstantAnimationEntries.find((e) => e.materialName === materialName && e.colorId === i);
-            if (!animationEntry)
-                continue;
-
-            dst[offs + i*4 + 0] = sampleAnimationData(animationEntry.r, animFrame);
-            dst[offs + i*4 + 1] = sampleAnimationData(animationEntry.g, animFrame);
-            dst[offs + i*4 + 2] = sampleAnimationData(animationEntry.b, animFrame);
-            dst[offs + i*4 + 3] = sampleAnimationData(animationEntry.a, animFrame);
-        }
-        offs += 4*4;
-
-        for (let i = 0; i < 4; i++) {
-            const animationEntry = this.trk1.registerAnimationEntries.find((e) => e.materialName === materialName && e.colorId === i);
-            if (!animationEntry)
-                continue;
-
-            dst[offs + i*4 + 0] = sampleAnimationData(animationEntry.r, animFrame);
-            dst[offs + i*4 + 1] = sampleAnimationData(animationEntry.g, animFrame);
-            dst[offs + i*4 + 2] = sampleAnimationData(animationEntry.b, animFrame);
-            dst[offs + i*4 + 3] = sampleAnimationData(animationEntry.a, animFrame);
-        }
-        offs += 4*4;
+        dst.r = sampleAnimationData(animationEntry.r, animFrame);
+        dst.g = sampleAnimationData(animationEntry.r, animFrame);
+        dst.b = sampleAnimationData(animationEntry.r, animFrame);
+        dst.a = sampleAnimationData(animationEntry.r, animFrame);
+        return true;
     }
 
     public trk1: TRK1;

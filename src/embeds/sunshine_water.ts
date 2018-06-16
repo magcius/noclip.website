@@ -13,23 +13,17 @@ import * as GX_Material from 'gx/gx_material';
 
 import { BMD, BMT, BTK, MaterialEntry, TEX1, BTI_Texture, TEX1_TextureData, TEX1_Sampler, BRK } from 'j3d/j3d';
 import * as RARC from 'j3d/rarc';
-import { Command_Material, Scene as J3DScene, TextureBindData, SceneLoader } from 'j3d/render';
+import { Command_Material, Scene as J3DScene, SceneLoader } from 'j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from 'j3d/sms_scenes';
 import * as Yaz0 from 'yaz0';
+import { GXRenderHelper, TextureMapping, SceneParams, PacketParams, fillSceneParamsFromRenderState } from '../gx/gx_render';
 
 const scale = 200;
 const posMtx = mat4.create();
 mat4.fromScaling(posMtx, [scale, scale, scale]);
-const packetParamsData = new Float32Array(11 * 16);
-for (let i = 0; i < 11; i++) {
-    packetParamsData.set(posMtx, i * 16);
-}
 
-const sceneParamsData = new Float32Array(4*4 + 4);
 class SeaPlaneScene implements Scene {
     public textures: Texture[];
-
-    public sceneParamsBuffer: WebGLBuffer;
 
     public animationScale: number = 5;
 
@@ -39,6 +33,9 @@ class SeaPlaneScene implements Scene {
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: number[] = [];
     public currentMaterialCommand: Command_Material;
+    public renderHelper: GXRenderHelper;
+
+    private sceneParams = new SceneParams();
 
     // Play make-believe for translateTextures
     public bmt: BMT = null;
@@ -63,7 +60,7 @@ class SeaPlaneScene implements Scene {
         this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
         this.plane = new PlaneShape(gl);
 
-        this.sceneParamsBuffer = gl.createBuffer();
+        this.renderHelper = new GXRenderHelper(gl);
     }
 
     public makeMaterialCommand(gl: WebGL2RenderingContext, material: MaterialEntry, configName: string) {
@@ -119,45 +116,33 @@ class SeaPlaneScene implements Scene {
     public render(state: RenderState) {
         const gl = state.gl;
 
-        // Update our SceneParams UBO.
-        let offs = 0;
-        sceneParamsData.set(state.projection, offs);
-        offs += 4*4;
-        sceneParamsData[offs++] = GX_Material.getTextureLODBias(state);
+        this.renderHelper.bindUniformBuffers(state);
 
-        gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
-        gl.bufferData(gl.UNIFORM_BUFFER, sceneParamsData, gl.DYNAMIC_DRAW);
+        fillSceneParamsFromRenderState(this.sceneParams, state);
+        this.renderHelper.bindSceneParams(state, this.sceneParams);
 
         this.seaCmd.exec(state);
-        this.plane.render(state);
+        this.plane.render(state, this.renderHelper);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.plane.destroy(gl);
         this.seaCmd.destroy(gl);
-        gl.deleteBuffer(this.sceneParamsBuffer);
+        this.renderHelper.destroy(gl);
     }
 
     public getTimeInFrames(milliseconds: number) {
         return (milliseconds / 1000) * this.fps * this.animationScale;
     }
 
-    public getTextureBindData(texIndex: number): TextureBindData {
+    public fillTextureMapping(m: TextureMapping, texIndex: number): void {
         const tex1Sampler = this.tex1Samplers[texIndex];
-
-        const glTexture: WebGLTexture = this.glTextures[tex1Sampler.textureDataIndex];
         const tex1TextureData = this.tex1TextureDatas[tex1Sampler.textureDataIndex];
-        const width = tex1TextureData.width;
-        const height = tex1TextureData.height;
-
-        const glSampler = this.glSamplers[tex1Sampler.index];
-        return {
-            glSampler,
-            glTexture,
-            width,
-            height,
-            lodBias: tex1Sampler.lodBias,
-        };
+        m.glTexture = this.glTextures[tex1Sampler.textureDataIndex];
+        m.glSampler = this.glSamplers[tex1Sampler.index];
+        m.width = tex1TextureData.width;
+        m.height = tex1TextureData.height;
+        m.lodBias = tex1Sampler.lodBias;
     }
 }
 
@@ -165,23 +150,18 @@ class PlaneShape {
     private vao: WebGLVertexArrayObject;
     private posBuffer: WebGLBuffer;
     private txcBuffer: WebGLBuffer;
-    private packetParamsBuffer: WebGLBuffer;
+    private packetParams = new PacketParams();
 
     constructor(gl: WebGL2RenderingContext) {
         this.createBuffers(gl);
-        this.packetParamsBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
-        gl.bufferData(gl.UNIFORM_BUFFER, packetParamsData, gl.STATIC_DRAW);
     }
 
-    public render(state: RenderState) {
+    public render(state: RenderState, renderHelper: GXRenderHelper) {
         const gl = state.gl;
 
-        packetParamsData.set(state.updateModelView(), 0);
-        gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
-        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, packetParamsData, 0, 16);
-
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
+        mat4.copy(this.packetParams.u_ModelView, state.updateModelView());
+        mat4.copy(this.packetParams.u_PosMtx[0], posMtx);
+        renderHelper.bindPacketParams(state, this.packetParams);
 
         gl.bindVertexArray(this.vao);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -192,7 +172,6 @@ class PlaneShape {
         gl.deleteVertexArray(this.vao);
         gl.deleteBuffer(this.posBuffer);
         gl.deleteBuffer(this.txcBuffer);
-        gl.deleteBuffer(this.packetParamsBuffer);
     }
 
     private createBuffers(gl: WebGL2RenderingContext) {
