@@ -3,37 +3,38 @@ import * as Viewer from "../viewer";
 import { RenderState, RenderFlags } from "../render";
 import { BIN, Sampler, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
-import * as GX from '../gx/gx_enum';
-import * as GX_Texture from '../gx/gx_texture';
-import * as GX_Material from '../gx/gx_material';
-import { align, assert } from "../util";
-import { mat3 } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import * as GX from 'gx/gx_enum';
+import * as GX_Texture from 'gx/gx_texture';
+import * as GX_Material from 'gx/gx_material';
+import { AttributeFormat } from 'gx/gx_displaylist';
+import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, loadedDataCoalescer } from 'gx/gx_render';
+
+import { assert } from "../util";
+import { mat4 } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
-import { AttributeFormat } from "../gx/gx_displaylist";
 
-function translateAttribType(gl: WebGL2RenderingContext, attribFormat: AttributeFormat): { type: GLenum, normalized: boolean } {
-    switch (attribFormat) {
-    case AttributeFormat.F32:
-        return { type: gl.FLOAT, normalized: false };
-    default:
-        throw "whoops";
-    }
-}
-
-const materialParamsData = new Float32Array(4*2 + 4*2 + 4*8 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8);
 class Command_Material {
-    static matrixScratch = mat3.create();
-    static colorScratch = new Float32Array(4 * 8);
-
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
-    private materialParamsBuffer: WebGLBuffer;
+    private materialParams = new MaterialParams();
 
     constructor(gl: WebGL2RenderingContext, public scene: BinScene, public material: Material) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
-        this.materialParamsBuffer = gl.createBuffer();
+
+        // We don't animate, so we only need to compute this once.
+        this.fillMaterialParams(this.materialParams);
+    }
+
+    private fillMaterialParams(materialParams: MaterialParams): void {
+        // All we care about is textures...
+        for (let i = 0; i < this.material.samplerIndexes.length; i++) {
+            const samplerIndex = this.material.samplerIndexes[i];
+            if (samplerIndex >= 0) {
+                const m = this.materialParams.m_TextureMapping[i];
+                m.glTexture = this.scene.glTextures[samplerIndex];
+            }
+        }
     }
 
     public exec(state: RenderState) {
@@ -42,149 +43,39 @@ class Command_Material {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
-        // Bind new textures.
-        for (let i = 0; i < this.material.samplerIndexes.length; i++) {
-            const samplerIndex = this.material.samplerIndexes[i];
-            if (samplerIndex < 0)
-                continue;
-
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, this.scene.glTextures[samplerIndex]);
-        }
-
-        // Buffers.
-        let offs = 0;
-
-        // color mat regs not used.
-        offs += 4*2;
-        // amb mat regs not used.
-        offs += 4*2;
-        // tev color registers are not used.
-        offs += 4*4;
-        // tev color constants are not used.
-        offs += 4*4;
-
-        const matrixScratch = Command_Material.matrixScratch;
-        for (let i = 0; i < 10; i++) {
-            const finalMatrix = matrixScratch;
-            materialParamsData[offs + i*12 +  0] = finalMatrix[0];
-            materialParamsData[offs + i*12 +  1] = finalMatrix[3];
-            materialParamsData[offs + i*12 +  2] = finalMatrix[6];
-            materialParamsData[offs + i*12 +  3] = 0;
-            materialParamsData[offs + i*12 +  4] = finalMatrix[1];
-            materialParamsData[offs + i*12 +  5] = finalMatrix[4];
-            materialParamsData[offs + i*12 +  6] = finalMatrix[7];
-            materialParamsData[offs + i*12 +  7] = 0;
-            materialParamsData[offs + i*12 +  8] = finalMatrix[2];
-            materialParamsData[offs + i*12 +  9] = finalMatrix[5];
-            materialParamsData[offs + i*12 + 10] = finalMatrix[8];
-            materialParamsData[offs + i*12 + 11] = 0;
-        }
-        offs += 4*3*10;
-
-        for (let i = 0; i < 20; i++) {
-            const finalMatrix = matrixScratch;
-            materialParamsData[offs + i*12 +  0] = finalMatrix[0];
-            materialParamsData[offs + i*12 +  1] = finalMatrix[3];
-            materialParamsData[offs + i*12 +  2] = finalMatrix[6];
-            materialParamsData[offs + i*12 +  3] = 0;
-            materialParamsData[offs + i*12 +  4] = finalMatrix[1];
-            materialParamsData[offs + i*12 +  5] = finalMatrix[4];
-            materialParamsData[offs + i*12 +  6] = finalMatrix[7];
-            materialParamsData[offs + i*12 +  7] = 0;
-            materialParamsData[offs + i*12 +  8] = finalMatrix[2];
-            materialParamsData[offs + i*12 +  9] = finalMatrix[5];
-            materialParamsData[offs + i*12 + 10] = finalMatrix[8];
-            materialParamsData[offs + i*12 + 11] = 0;
-        }
-        offs += 4*3*20;
-
-        // IndTexMtx. Indirect texturing isn't used.
-        offs += 4*3*2;
-
-        // Texture parameters. SizeX/SizeY are only used for indtex, and LodBias is always 0.
-        // We can leave this blank.
-        offs += 4*8;
-
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, this.scene.sceneParamsBuffer);
-
-        gl.bindBuffer(gl.UNIFORM_BUFFER, this.materialParamsBuffer);
-        gl.bufferData(gl.UNIFORM_BUFFER, materialParamsData, gl.DYNAMIC_DRAW);
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_MaterialParams, this.materialParamsBuffer);
+        this.scene.renderHelper.bindMaterialParams(state, this.materialParams);
+        this.scene.renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.program.destroy(gl);
-        gl.deleteBuffer(this.materialParamsBuffer);
     }
 }
 
-const packetParamsData = new Float32Array(11 * 16);
 class Command_Batch {
-    private vao: WebGLVertexArrayObject;
-    private packetParamsBuffer: WebGLBuffer;
+    private shapeHelper: GXShapeHelper;
+    private packetParams = new PacketParams();
 
-    constructor(gl: WebGL2RenderingContext, private sceneGraphNode: SceneGraphNode, private batch: Batch, private coalescedBuffers: CoalescedBuffers) {
-        this.translateBatch(gl, batch);
-        this.packetParamsBuffer = gl.createBuffer();
+    constructor(gl: WebGL2RenderingContext, private scene: BinScene, private sceneGraphNode: SceneGraphNode, private batch: Batch, private coalescedBuffers: CoalescedBuffers) {
+        this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
-    public exec(renderState: RenderState): void {
-        const gl = renderState.gl;
+    private computeModelView(dst: mat4, state: RenderState): void {
+        mat4.copy(dst, state.updateModelView(false, this.sceneGraphNode.modelMatrix));
+    }
 
-        // MV matrix.
-        let offs = 0;
-        packetParamsData.set(renderState.updateModelView(false, this.sceneGraphNode.modelMatrix), offs);
-        offs += 4*4;
+    public exec(state: RenderState): void {
+        const gl = state.gl;
 
-        // Position matrix.
-        packetParamsData[offs + 0] = 1;
-        packetParamsData[offs + 5] = 1;
-        packetParamsData[offs + 10] = 1;
-        packetParamsData[offs + 15] = 1;
-        offs += 4*4;
+        this.computeModelView(this.packetParams.u_ModelView, state);
+        this.scene.renderHelper.bindPacketParams(state, this.packetParams);
 
-        gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
-        gl.bufferData(gl.UNIFORM_BUFFER, packetParamsData, gl.DYNAMIC_DRAW);
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, this.packetParamsBuffer);
-
-        gl.bindVertexArray(this.vao);
-        gl.drawElements(gl.TRIANGLES, this.batch.loadedVertexData.totalTriangleCount * 3, gl.UNSIGNED_SHORT, this.coalescedBuffers.indexBuffer.offset);
-        if (gl.getError() !== gl.NO_ERROR)
-            throw new Error("WTF");
-        gl.bindVertexArray(null);
-
-        renderState.drawCallCount++;
+        this.shapeHelper.drawSimple(gl);
+        state.drawCallCount++;
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
-        gl.deleteVertexArray(this.vao);
-    }
-
-    private translateBatch(gl: WebGL2RenderingContext, batch: Batch) {
-        this.vao = gl.createVertexArray();
-        gl.bindVertexArray(this.vao);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.coalescedBuffers.vertexBuffer.buffer);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.coalescedBuffers.indexBuffer.buffer);
-
-        const bufferSize = gl.getBufferParameter(gl.ELEMENT_ARRAY_BUFFER, gl.BUFFER_SIZE);
-        assert(bufferSize >= batch.loadedVertexData.indexData.byteLength);
-
-        for (const attrib of batch.loadedVertexLayout.dstVertexAttributeLayouts) {
-            const vtxAttrib = attrib.vtxAttrib;
-            const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
-            const { type, normalized } = translateAttribType(gl, attrib.format);
-            gl.enableVertexAttribArray(attribLocation);
-            gl.vertexAttribPointer(
-                attribLocation,
-                attrib.componentCount,
-                type, normalized,
-                batch.loadedVertexLayout.dstVertexSize,
-                this.coalescedBuffers.vertexBuffer.offset + attrib.offset,
-            );
-        }
-        gl.bindVertexArray(null);
+        this.shapeHelper.destroy(gl);
     }
 }
 
@@ -201,43 +92,41 @@ export class BinScene implements Viewer.MainScene {
     private batches: Batch[];
 
     public glTextures: WebGLTexture[];
-    public sceneParamsBuffer: WebGLBuffer;
     public visible: boolean = true;
+
+    public renderHelper: GXRenderHelper;
+    private sceneParams = new SceneParams();
 
     constructor(gl: WebGL2RenderingContext, private bin: BIN) {
         this.translateModel(gl, bin);
-        this.sceneParamsBuffer = gl.createBuffer();
+        this.renderHelper = new GXRenderHelper(gl);
     }
 
     public setVisible(visible: boolean) {
         this.visible = visible;
     }
 
-    public render(renderState: RenderState): void {
+    public render(state: RenderState): void {
         if (!this.visible)
             return;
 
-        const gl = renderState.gl;
+        const gl = state.gl;
 
-        renderState.setClipPlanes(10, 500000);
+        state.setClipPlanes(10, 500000);
 
-        // Update our SceneParams UBO.
-        let offs = 0;
-        sceneParamsData.set(renderState.projection, offs);
-        offs += 4*4;
-        sceneParamsData[offs++] = GX_Material.getTextureLODBias(renderState);
+        this.renderHelper.bindUniformBuffers(state);
 
-        gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
-        gl.bufferData(gl.UNIFORM_BUFFER, sceneParamsData, gl.DYNAMIC_DRAW);
+        fillSceneParamsFromRenderState(this.sceneParams, state);
+        this.renderHelper.bindSceneParams(state, this.sceneParams);
 
         this.commands.forEach((command) => {
-            command.exec(renderState);
+            command.exec(state);
         });
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
         this.glTextures.forEach((textureId) => gl.deleteTexture(textureId));
-        gl.deleteBuffer(this.sceneParamsBuffer);
+        this.renderHelper.destroy(gl);
         this.bufferCoalescer.destroy(gl);
     }
 
@@ -293,7 +182,7 @@ export class BinScene implements Viewer.MainScene {
         const batch = part.batch;
         const batchIndex = this.batches.indexOf(batch);
         assert(batchIndex >= 0);
-        const batchCommand = new Command_Batch(gl, node, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
+        const batchCommand = new Command_Batch(gl, this, node, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
         this.commands.push(batchCommand);
     }
 
@@ -320,10 +209,7 @@ export class BinScene implements Viewer.MainScene {
         this.collectBatches(this.batches, bin.rootNode);
 
         // Coalesce buffers.
-        this.bufferCoalescer = new BufferCoalescer(gl,
-            this.batches.map((batch) => new ArrayBufferSlice(batch.loadedVertexData.packedVertexData)),
-            this.batches.map((batch) => new ArrayBufferSlice(batch.loadedVertexData.indexData)),
-        );
+        this.bufferCoalescer = loadedDataCoalescer(gl, this.batches.map((batch) => batch.loadedVertexData));
 
         this.commands = [];
         this.translateSceneGraph(gl, bin.rootNode);

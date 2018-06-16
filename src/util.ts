@@ -63,6 +63,13 @@ export function generateFormID() {
     return `FormGeneratedID_${counter++}`;
 }
 
+export function nArray<T>(n: number, c: () => T): T[] {
+    const d = new Array(n);
+    while (n--)
+        d[n] = c();
+    return d;
+}
+
 function hexzero(n: number, spaces: number): string {
     let S = n.toString(16);
     while (S.length < spaces)
@@ -93,10 +100,12 @@ export function hexdump(buffer: ArrayBufferSlice, offs: number = 0, length: numb
     console.log(S);
 }
 
-// Debugging.
+// Debug utilities.
 declare global {
     interface Window {
         hexdump: any;
+        debug: boolean;
     }
 }
 window.hexdump = hexdump;
+window.debug = false;

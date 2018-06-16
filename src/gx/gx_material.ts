@@ -9,6 +9,7 @@ import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontF
 import { BaseProgram } from '../Program';
 import { align } from '../util';
 
+// TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
 export const EFB_HEIGHT = 528;
 
@@ -38,7 +39,18 @@ export interface GXMaterial {
 }
 
 export class Color {
-    constructor(public r: number, public g: number, public b: number, public a: number) {
+    constructor(
+        public r: number = 0,
+        public g: number = 0,
+        public b: number = 0,
+        public a: number = 0
+    ) {}
+
+    public copy(c: Color, a: number = c.a) {
+        this.r = c.r;
+        this.g = c.g;
+        this.b = c.b;
+        this.a = a;
     }
 }
 
@@ -183,7 +195,6 @@ export class GX_Program extends BaseProgram {
         gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_SceneParams`), GX_Program.ub_SceneParams);
         gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_MaterialParams`), GX_Program.ub_MaterialParams);
         gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_PacketParams`), GX_Program.ub_PacketParams);
-
         this.u_Texture = gl.getUniformLocation(prog, `u_Texture`);
     }
 
@@ -201,14 +212,14 @@ export class GX_Program extends BaseProgram {
     // Color Channels
     private generateMaterialSource(chan: ColorChannelControl, i: number) {
         switch (chan.matColorSource) {
-            case GX.ColorSrc.VTX: return `ReadAttrib_Color${i}()`;
+            case GX.ColorSrc.VTX: return `a_Color${i}`;
             case GX.ColorSrc.REG: return `u_ColorMatReg[${i}]`;
         }
     }
 
     private generateAmbientSource(chan: ColorChannelControl, i: number) {
         switch (chan.ambColorSource) {
-            case GX.ColorSrc.VTX: return `ReadAttrib_Color${i}()`;
+            case GX.ColorSrc.VTX: return `a_Color${i}`;
             case GX.ColorSrc.REG: return `u_ColorAmbReg[${i}]`;
         }
     }
@@ -240,18 +251,18 @@ export class GX_Program extends BaseProgram {
     // TexGen
     private generateTexGenSource(src: GX.TexGenSrc) {
         switch (src) {
-        case GX.TexGenSrc.POS:       return `v_Position`;
-        case GX.TexGenSrc.NRM:       return `v_Normal`;
-        case GX.TexGenSrc.COLOR0:    return `v_Color0`;
-        case GX.TexGenSrc.COLOR1:    return `v_Color1`;
-        case GX.TexGenSrc.TEX0:      return `vec3(ReadAttrib_Tex0(), 1.0)`;
-        case GX.TexGenSrc.TEX1:      return `vec3(ReadAttrib_Tex1(), 1.0)`;
-        case GX.TexGenSrc.TEX2:      return `vec3(ReadAttrib_Tex2(), 1.0)`;
-        case GX.TexGenSrc.TEX3:      return `vec3(ReadAttrib_Tex3(), 1.0)`;
-        case GX.TexGenSrc.TEX4:      return `vec3(ReadAttrib_Tex4(), 1.0)`;
-        case GX.TexGenSrc.TEX5:      return `vec3(ReadAttrib_Tex5(), 1.0)`;
-        case GX.TexGenSrc.TEX6:      return `vec3(ReadAttrib_Tex6(), 1.0)`;
-        case GX.TexGenSrc.TEX7:      return `vec3(ReadAttrib_Tex7(), 1.0)`;
+        case GX.TexGenSrc.POS:       return `a_Position`;
+        case GX.TexGenSrc.NRM:       return `a_Normal`;
+        case GX.TexGenSrc.COLOR0:    return `a_Color0`;
+        case GX.TexGenSrc.COLOR1:    return `a_Color1`;
+        case GX.TexGenSrc.TEX0:      return `vec3(a_Tex0, 1.0)`;
+        case GX.TexGenSrc.TEX1:      return `vec3(a_Tex1, 1.0)`;
+        case GX.TexGenSrc.TEX2:      return `vec3(a_Tex2, 1.0)`;
+        case GX.TexGenSrc.TEX3:      return `vec3(a_Tex3, 1.0)`;
+        case GX.TexGenSrc.TEX4:      return `vec3(a_Tex4, 1.0)`;
+        case GX.TexGenSrc.TEX5:      return `vec3(a_Tex5, 1.0)`;
+        case GX.TexGenSrc.TEX6:      return `vec3(a_Tex6, 1.0)`;
+        case GX.TexGenSrc.TEX7:      return `vec3(a_Tex7, 1.0)`;
         // Use a previously generated texcoordgen.
         case GX.TexGenSrc.TEXCOORD0: return `v_TexCoord0`;
         case GX.TexGenSrc.TEXCOORD1: return `v_TexCoord1`;
@@ -686,19 +697,14 @@ export class GX_Program extends BaseProgram {
 
     private generateVertAttributeDefs() {
         return vtxAttributeGenDefs.map((a, i) => {
-            return `
-layout(location = ${i}) in ${a.storage} a_${a.name};
-${a.storage} ReadAttrib_${a.name}() {
-    return a_${a.name};
-}
-`;
-        }).join('');
+            return `layout(location = ${i}) in ${a.storage} a_${a.name};`;
+        }).join('\n');
     }
 
     private generateUBO() {
         return `
 // Expected to be constant across the entire scene.
-layout(std140) uniform ub_SceneParams {
+layout(row_major, std140) uniform ub_SceneParams {
     mat4 u_Projection;
     vec4 u_Misc0;
 };
@@ -719,9 +725,10 @@ layout(row_major, std140) uniform ub_MaterialParams {
 };
 
 // Expected to change with each shape packet.
-layout(std140) uniform ub_PacketParams {
-    mat4 u_ModelView;
-    mat4 u_PosMtx[10];
+layout(row_major, std140) uniform ub_PacketParams {
+    // TODO(jstpierre): Remove MV matrix. Should be replaced by the PNMTX below.
+    mat4x3 u_ModelView;
+    mat4x3 u_PosMtx[10];
 };
 `;
     }
@@ -748,13 +755,14 @@ out vec3 v_TexCoord6;
 out vec3 v_TexCoord7;
 
 void main() {
-    mat4 t_PosMtx = u_PosMtx[int(ReadAttrib_PosMtxIdx() / 3.0)];
-    vec4 t_Position = t_PosMtx * vec4(ReadAttrib_Position(), 1.0);
+    mat4 t_PosMtx = mat4(u_PosMtx[int(a_PosMtxIdx / 3.0)]);
+    mat4 t_PosModelView = (mat4(u_ModelView) * t_PosMtx);
+    vec4 t_Position = t_PosModelView * vec4(a_Position, 1.0);
     v_Position = t_Position.xyz;
-    v_Normal = ReadAttrib_Normal();
+    v_Normal = a_Normal;
 ${this.generateLightChannels()}
 ${this.generateTexGens(this.material.texGens)}
-    gl_Position = u_Projection * u_ModelView * t_Position;
+    gl_Position = u_Projection * t_Position;
 }
 `;
 
@@ -921,17 +929,6 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
     return renderFlags;
 }
 // #endregion
-
-// XXX(jstpierre): Put this somewhere better.
-// Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
-// which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
-// make sure textures are sampled correctly...
-export function getTextureLODBias(state: RenderState): number {
-    const viewportWidth = state.onscreenColorTarget.width;
-    const viewportHeight = state.onscreenColorTarget.height;
-    const textureLODBias = Math.log2(Math.min(viewportWidth / EFB_WIDTH, viewportHeight / EFB_HEIGHT));
-    return textureLODBias;
-}
 
 export function getRasColorChannelID(v: GX.ColorChannelId): GX.RasColorChannelID {
     switch (v) {
