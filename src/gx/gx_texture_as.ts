@@ -1,4 +1,5 @@
 
+// http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
 @inline
 function expand3to8(n: u8): u8 {
     return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
