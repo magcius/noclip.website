@@ -8,7 +8,7 @@ const fs = require('fs');
 function buildBinaryArray(binary) {
     const binData = new Uint8Array(binary.buffer);
     const binStr = binData.join(',');
-    const src = `new Uint8Array([${binStr}]);`;
+    const src = `new Uint8Array([${binStr}])`;
     return src;
 }
 
