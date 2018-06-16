@@ -6,6 +6,7 @@ import { mat4, vec4, mat2d } from 'gl-matrix';
 import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 import * as GX_Texture from 'gx/gx_texture';
+import * as Viewer from '../viewer';
 
 import { RenderState } from '../render';
 import { assert, nArray } from '../util';
@@ -324,4 +325,43 @@ export function loadedDataCoalescer(gl: WebGL2RenderingContext, loadedVertexData
         loadedVertexDatas.map((data) => new ArrayBufferSlice(data.packedVertexData)),
         loadedVertexDatas.map((data) => new ArrayBufferSlice(data.indexData))
     );
+}
+
+export interface LoadedTexture {
+    glTexture: WebGLTexture;
+    viewerTexture: Viewer.Texture;
+}
+
+export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX_Texture.MipChain): LoadedTexture {
+    const glTexture = gl.createTexture();
+    (<any> glTexture).name = mipChain.name;
+    gl.bindTexture(gl.TEXTURE_2D, glTexture);
+
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, mipChain.mipLevels.length - 1);
+
+    const surfaces = [];
+
+    for (let i = 0; i < mipChain.mipLevels.length; i++) {
+        const level = i;
+        const mipLevel = mipChain.mipLevels[i];
+
+        const canvas = document.createElement('canvas');
+        canvas.width = mipLevel.width;
+        canvas.height = mipLevel.height;
+        canvas.title = mipLevel.name;
+        surfaces.push(canvas);
+
+        GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
+            gl.bindTexture(gl.TEXTURE_2D, glTexture);
+            gl.texImage2D(gl.TEXTURE_2D, level, gl.RGBA8, mipLevel.width, mipLevel.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgbaTexture.pixels);
+
+            const ctx = canvas.getContext('2d');
+            const imgData = new ImageData(mipLevel.width, mipLevel.height);
+            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
+            ctx.putImageData(imgData, 0, 0);
+        });
+    }
+
+    const viewerTexture: Viewer.Texture = { name: mipChain.name, surfaces };
+    return { glTexture, viewerTexture };
 }

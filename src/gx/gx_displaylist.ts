@@ -173,6 +173,13 @@ function getComponentShift(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrF
     return getComponentShiftRaw(vatFormat.compType, vatFormat.compShift);
 }
 
+function getComponentType(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): GX.CompType {
+    if (isVtxAttribMtxIdx(vtxAttrib))
+        return GX.CompType.U8;
+
+    return vatFormat.compType;
+}
+
 function getIndexNumComponents(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
     switch (vtxAttrib) {
     case GX.VertexAttribute.NRM:
@@ -431,7 +438,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
         }
 
         function compileReadOneComponentF32(viewName: string, attrOffset: string): string {
-            switch (vtxAttrFmt.compType) {
+            switch (getComponentType(vtxAttrib, vtxAttrFmt)) {
             case GX.CompType.F32:
                 return `${viewName}.getFloat32(${attrOffset})`;
             case GX.CompType.RGBA8:

@@ -4,7 +4,7 @@
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 import * as GX from './gx_enum';
-import { align } from '../util';
+import { align, assert } from '../util';
 import { gx_texture_asInstance, gx_texture_asExports } from '../wat_modules';
 import WasmMemoryManager from '../WasmMemoryManager';
 
@@ -82,14 +82,32 @@ export function calcTextureSize(format: GX.TexFormat, width: number, height: num
     }
 }
 
-export function calcFullTextureSize(format: GX.TexFormat, width: number, height: number, mipCount: number) {
+export interface MipChain {
+    name: string;
+    mipLevels: Texture[];
+    fullTextureSize: number;
+}
+
+export function calcMipChain(texture: Texture, mipCount: number = 0xFF): MipChain {
+    const mipLevels: Texture[] = [];
+    const name = texture.name;
+
     let textureSize = 0;
-    while (mipCount--) {
-        textureSize += calcTextureSize(format, width, height);
+    let mipLevel = 0;
+    const format = texture.format;
+    let width = texture.width;
+    let height = texture.height;
+    while (width > 0 && height > 0 && mipLevel < mipCount) {
+        const mipSize = calcTextureSize(format, width, height);
+        const data = texture.data !== null ? texture.data.subarray(textureSize) : null;
+        mipLevels.push({ name: `${texture.name} mip level ${mipLevel}`, format, width, height, data });
+        mipLevel++;
+        textureSize += mipSize;
         width /= 2;
         height /= 2;
     }
-    return textureSize;
+
+    return { name, mipLevels, fullTextureSize: textureSize };
 }
 
 // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances

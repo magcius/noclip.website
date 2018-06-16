@@ -436,6 +436,7 @@ class SceneSelect extends Panel {
 function cloneCanvas(dst: HTMLCanvasElement, src: HTMLCanvasElement): void {
     dst.width = src.width;
     dst.height = src.height;
+    dst.title = src.title;
     const ctx = dst.getContext('2d');
     ctx.drawImage(src, 0, 0);
 }
@@ -447,7 +448,7 @@ const TEXTURES_ICON = `<svg viewBox="0 0 512 512" height="20" fill="white"><path
 export class TextureViewer extends Panel {
     private scrollList: SingleSelect;
     private surfaceView: HTMLElement;
-    private fullSurfaceView: HTMLCanvasElement;
+    private fullSurfaceView: HTMLElement;
     private properties: HTMLElement;
     private textureList: Viewer.Texture[] = [];
 
@@ -479,9 +480,6 @@ export class TextureViewer extends Panel {
             this.surfaceView.style.backgroundColor = 'black';
             this.surfaceView.style.backgroundImage = '';
         };
-        this.surfaceView.onclick = () => {
-            this.fullSurfaceView.style.display = 'block';
-        };
         this.surfaceView.onmouseout(null);
 
         this.contents.appendChild(this.surfaceView);
@@ -489,21 +487,32 @@ export class TextureViewer extends Panel {
         this.properties = document.createElement('div');
         this.contents.appendChild(this.properties);
 
-        this.fullSurfaceView = document.createElement('canvas');
-        this.fullSurfaceView.style.backgroundColor = 'white';
-        this.fullSurfaceView.style.backgroundImage = CHECKERBOARD_IMAGE;
-        this.fullSurfaceView.style.display = 'none';
+        this.fullSurfaceView = document.createElement('div');
+        this.fullSurfaceView.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
+        this.fullSurfaceView.style.padding = '20px';
         this.extraRack.appendChild(this.fullSurfaceView);
     }
 
-    private selectSurface(surface: HTMLCanvasElement) {
+    private showInSurfaceView(surface: HTMLCanvasElement) {
         this.surfaceView.innerHTML = '';
         surface.style.width = '100%';
         surface.style.height = '100%';
         surface.style.objectFit = 'scale-down';
         this.surfaceView.appendChild(surface);
+    }
 
-        cloneCanvas(this.fullSurfaceView, surface);
+    private showInFullSurfaceView(surfaces: HTMLCanvasElement[]) {
+        this.fullSurfaceView.innerHTML = '';
+
+        for (const surface of surfaces) {
+            const newCanvas = document.createElement('canvas');
+            cloneCanvas(newCanvas, surface);
+            newCanvas.style.display = 'block';
+            newCanvas.style.backgroundColor = 'white';
+            newCanvas.style.backgroundImage = CHECKERBOARD_IMAGE;
+
+            this.fullSurfaceView.appendChild(newCanvas);
+        }
     }
 
     private selectTexture(i: number) {
@@ -517,8 +526,8 @@ export class TextureViewer extends Panel {
 <span>Height</span><span style="text-align: right">${texture.surfaces[0].height}</span>
 </div>
 `;
-        this.selectSurface(texture.surfaces[0]);
-        this.fullSurfaceView.style.display = 'none';
+        this.showInSurfaceView(texture.surfaces[0]);
+        this.showInFullSurfaceView(texture.surfaces);
     }
 
     public setTextureList(textures: Viewer.Texture[]) {

@@ -8,7 +8,7 @@ import { TXTR } from './txtr';
 import * as GX_Texture from 'gx/gx_texture';
 import * as GX_Material from 'gx/gx_material';
 import { AttributeFormat } from 'gx/gx_displaylist';
-import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping } from 'gx/gx_render';
+import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping, loadTextureFromMipChain } from 'gx/gx_render';
 
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
@@ -32,8 +32,8 @@ const textureMappingScratch: TextureMapping[] = nArray(8, () => new TextureMappi
 
 export class Scene implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
+    private glTextures: WebGLTexture[] = [];
 
-    public glTextures: WebGLTexture[] = [];
     private bufferCoalescer: BufferCoalescer;
     private materialCommands: Command_Material[] = [];
     private surfaceCommands: Command_Surface[] = [];
@@ -43,41 +43,24 @@ export class Scene implements Viewer.MainScene {
 
     constructor(gl: WebGL2RenderingContext, public mrea: MREA) {
         this.renderHelper = new GXRenderHelper(gl);
-        const textureSet = this.mrea.materialSet.textures;
-        this.glTextures = textureSet.map((txtr, i) => Scene.translateTexture(gl, `Texture${i}`, txtr));
+        this.translateTextures(gl);
         this.translateModel(gl);
-        this.textures = textureSet.map((txtr, i) => this.translateTXTRToViewer(`Texture${i}`, txtr));
     }
 
-    private static translateTexture(gl: WebGL2RenderingContext, name: string, texture: TXTR): WebGLTexture {
-        const texId = gl.createTexture();
-        (<any> texId).name = name;
-        gl.bindTexture(gl.TEXTURE_2D, texId);
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, texture.mipCount - 1);
-
-        const format = texture.format;
-
-        let offs = 0, width = texture.width, height = texture.height;
-        for (let i = 0; i < texture.mipCount; i++) {
-            const name = "";
-            const size = GX_Texture.calcTextureSize(format, width, height);
-            const data = texture.data.subarray(offs, size);
-            const surface = { name, format, width, height, data };
-            GX_Texture.decodeTexture(surface).then((rgbaTexture) => {
-                gl.bindTexture(gl.TEXTURE_2D, texId);
-                gl.texImage2D(gl.TEXTURE_2D, i, gl.RGBA8, surface.width, surface.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgbaTexture.pixels);
-            });
-            offs += size;
-            width /= 2;
-            height /= 2;
+    private translateTextures(gl: WebGL2RenderingContext): void {
+        const textureSet = this.mrea.materialSet.textures;
+        for (let i = 0; i < textureSet.length; i++) {
+            const texture = textureSet[i];
+            const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
+            const { glTexture, viewerTexture } = loadTextureFromMipChain(gl, mipChain);
+            // glTexture is already bound by loadTextureFromMipChain.
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            this.glTextures.push(glTexture);
+            this.textures.push(viewerTexture);
         }
-
-        return texId;
     }
 
     private coalesceSurfaces(): Surface[] {
@@ -120,34 +103,6 @@ export class Scene implements Viewer.MainScene {
             this.surfaceCommands.push(new Command_Surface(gl, this, surface, this.bufferCoalescer.coalescedBuffers[i]));
             ++i;
         });
-    }
-
-    private translateTXTRToViewer(name: string, texture: TXTR): Viewer.Texture {
-        const surfaces = [];
-
-        let width = texture.width, height = texture.height, offs = 0;
-        const format = texture.format;
-        for (let i = 0; i < texture.mipCount; i++) {
-            const size = GX_Texture.calcTextureSize(format, width, height);
-            const data = texture.data.subarray(offs, size);
-            const surface = { name, format, width, height, data };
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            GX_Texture.decodeTexture(surface).then((rgbaTexture) => {
-                const ctx = canvas.getContext('2d');
-                const imgData = new ImageData(surface.width, surface.height);
-                imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-                ctx.putImageData(imgData, 0, 0);
-            });
-            surfaces.push(canvas);
-
-            offs += size;
-            width /= 2;
-            height /= 2;
-        }
-
-        return { name: `${name}`, surfaces };
     }
 
     public render(state: RenderState) {

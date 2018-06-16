@@ -527,7 +527,7 @@ function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice,
     return [geometry, sectionIndex];
 }
 
-export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice): MREA {
+export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MREA {
     const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) === 0xDEADBEEF);

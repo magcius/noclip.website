@@ -22,6 +22,7 @@ const txtrFormatRemap = [
 ];
 
 export interface TXTR {
+    name: string;
     format: GX.TexFormat;
     width: number;
     height: number;
@@ -31,10 +32,11 @@ export interface TXTR {
     paletteData: ArrayBufferSlice;
 }
 
-export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice): TXTR {
+export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): TXTR {
     const view = buffer.createDataView();
 
     const txtrFormat = view.getUint32(0x00);
+    const name = assetID;
     const format: GX.TexFormat = txtrFormatRemap[txtrFormat];
     const width = view.getUint16(0x04);
     const height = view.getUint16(0x06);
@@ -60,5 +62,5 @@ export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice):
     }
 
     const data = buffer.slice(offs);
-    return { format, width, height, mipCount, data, paletteFormat, paletteData };
+    return { name, format, width, height, mipCount, data, paletteFormat, paletteData };
 }
