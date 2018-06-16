@@ -7,7 +7,7 @@ import * as GX from 'gx/gx_enum';
 import * as GX_Texture from 'gx/gx_texture';
 import * as GX_Material from 'gx/gx_material';
 import { AttributeFormat } from 'gx/gx_displaylist';
-import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, loadedDataCoalescer } from 'gx/gx_render';
+import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, loadedDataCoalescer, loadTextureFromMipChain } from 'gx/gx_render';
 
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
@@ -85,13 +85,13 @@ const sceneParamsData = new Float32Array(4*4 + 4);
 
 export class BinScene implements Viewer.MainScene {
     public name: string;
-    public textures: Viewer.Texture[];
+    public textures: Viewer.Texture[] = [];
 
     private commands: RenderCommand[];
     private bufferCoalescer: BufferCoalescer;
     private batches: Batch[];
 
-    public glTextures: WebGLTexture[];
+    public glTextures: WebGLTexture[] = [];
     public visible: boolean = true;
 
     public renderHelper: GXRenderHelper;
@@ -141,41 +141,6 @@ export class BinScene implements Viewer.MainScene {
         }
     }
 
-    private translateSamplerToViewer(sampler: Sampler): Viewer.Texture {
-        const canvas = document.createElement('canvas');
-        const texture = { ...sampler.texture, name: '' };
-        canvas.width = texture.width;
-        canvas.height = texture.height;
-        GX_Texture.decodeTexture(texture).then((rgbaTexture) => {
-            const ctx = canvas.getContext('2d');
-            const imgData = new ImageData(texture.width, texture.height);
-            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-            ctx.putImageData(imgData, 0, 0);
-        });
-        const surfaces = [canvas];
-        return { name: 'unknown', surfaces };
-    }
-
-    private translateSampler(gl: WebGL2RenderingContext, sampler: Sampler): WebGLTexture {
-        // Translate texture data.
-        const texture: GX_Texture.Texture = { ...sampler.texture, name: '' };
-
-        const texId = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texId);
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, sampler.wrapS));
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, sampler.wrapT));
-
-        GX_Texture.decodeTexture(texture).then((rgbaTexture) => {
-            gl.bindTexture(gl.TEXTURE_2D, texId);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgbaTexture.pixels);
-        });
-
-        return texId;
-    }
-
     private translatePart(gl: WebGL2RenderingContext, node: SceneGraphNode, part: SceneGraphPart): void {
         const materialCommand = new Command_Material(gl, this, part.material);
         this.commands.push(materialCommand);
@@ -201,8 +166,21 @@ export class BinScene implements Viewer.MainScene {
     }
 
     private translateModel(gl: WebGL2RenderingContext, bin: BIN): void {
-        this.textures = bin.samplers.map((sampler) => this.translateSamplerToViewer(sampler));
-        this.glTextures = bin.samplers.map((sampler) => this.translateSampler(gl, sampler));
+        for (let i = 0; i < bin.samplers.length; i++) {
+            const sampler = bin.samplers[i];
+            const texture: GX_Texture.Texture = { ...sampler.texture, name: `unknown ${i}` };
+            const mipChain = GX_Texture.calcMipChain(texture, 1);
+            const { glTexture, viewerTexture } = loadTextureFromMipChain(gl, mipChain);
+
+            // GL texture is bound by loadTextureFromMipChain.
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, sampler.wrapS));
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, sampler.wrapT));
+
+            this.glTextures.push(glTexture);
+            this.textures.push(viewerTexture);
+        }
 
         // First, collect all the batches we're rendering.
         this.batches = [];

@@ -13,7 +13,7 @@ import * as TXTR from './txtr';
 import { assert } from "../util";
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
-type ParseFunc<T> = (resourceSystem: ResourceSystem, buffer: ArrayBufferSlice) => T;
+type ParseFunc<T> = (resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice) => T;
 type Resource = any;
 
 const FourCCLoaders: { [n: string]: ParseFunc<Resource> } = {
@@ -62,7 +62,7 @@ export class ResourceSystem {
         const resource = this.findResourceByID(assetID);
         assert(resource.fourCC === fourCC);
         const buffer = this.loadResourceBuffer(resource);
-        const inst = loaderFunc(this, buffer);
+        const inst = loaderFunc(this, assetID, buffer);
         this._cache.set(assetID, inst);
         return inst;
     }

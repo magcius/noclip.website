@@ -23,7 +23,7 @@ function readUTF16String(buffer: ArrayBufferSlice, offs: number): string {
     return str;
 }
 
-export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice): STRG {
+export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): STRG {
     const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) === 0x87654321);

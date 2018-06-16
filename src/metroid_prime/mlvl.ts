@@ -4,6 +4,7 @@
 import { ResourceSystem } from "./resource";
 import { assert, readString } from "../util";
 import ArrayBufferSlice from "ArrayBufferSlice";
+import { FileResource } from "./pak";
 
 interface Area {
     areaSTRGID: string;
@@ -14,7 +15,7 @@ export interface MLVL {
     areaTable: Area[];
 }
 
-export function parse(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice): MLVL {
+export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MLVL {
     const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) == 0xDEAFBABE);
