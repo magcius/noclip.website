@@ -14,7 +14,7 @@ import * as GX_Material from 'gx/gx_material';
 
 import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
-import { ColorOverride, Scene, SceneLoader } from './render';
+import { ColorOverride, Scene, SceneLoader, J3DTextureHolder } from './render';
 import { CameraController, Camera } from '../Camera';
 
 class CameraPos {
@@ -257,7 +257,9 @@ class WindWakerRenderer implements Viewer.MainScene {
         const brkFile = rarc.findFile(`brk/${name}.brk`);
         const bckFile = rarc.findFile(`bck/${name}.bck`);
         const bdl = BMD.parse(bdlFile.buffer);
-        const sceneLoader = new SceneLoader(bdl, null);
+        const textureHolder = new J3DTextureHolder();
+        textureHolder.addJ3DTextures(gl, bdl);
+        const sceneLoader = new SceneLoader(textureHolder, bdl, null);
         const scene = sceneLoader.createScene(gl);
         scene.setBTK(btkFile !== null ? BTK.parse(btkFile.buffer) : null);
         scene.setBRK(brkFile !== null ? BRK.parse(brkFile.buffer) : null);

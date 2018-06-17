@@ -8,17 +8,10 @@ import Program, { FullscreenProgram } from '../Program';
 import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK } from './j3d';
-import { Scene, TextureOverride } from './render';
+import { Scene, J3DTextureHolder } from './render';
 import { createScenesFromBuffer } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
-
-function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
-    const textures: Viewer.Texture[] = [];
-    for (const scene of scenes)
-        if (scene)
-            textures.push.apply(textures, scene.textures);
-    return textures;
-}
+import { TextureOverride, TextureHolder } from '../gx/gx_render';
 
 // Should I try to do this with GX? lol.
 class BloomPassBlurProgram extends FullscreenProgram {
@@ -139,12 +132,14 @@ class SMGRenderer implements Viewer.MainScene {
 
     constructor(
         gl: WebGL2RenderingContext,
+        private textureHolder: J3DTextureHolder,
         private mainScene: Scene,
         private skyboxScene: Scene,
         private bloomScene: Scene,
         private indirectScene: Scene,
     ) {
-        this.textures = collectTextures([mainScene, skyboxScene, bloomScene, indirectScene]);
+        this.textures = textureHolder.viewerTextures;
+        // this.textures = collectTextures([mainScene, skyboxScene, bloomScene, indirectScene]);
         this.bloomCombineFlags = new RenderFlags();
 
         this.bloomCombineFlags.blendMode = BlendMode.ADD;
@@ -178,7 +173,7 @@ class SMGRenderer implements Viewer.MainScene {
             texProjection[0] = state.projection[0];
             texProjection[5] = -state.projection[5];
             const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
-            this.indirectScene.setTextureOverride("IndDummy", textureOverride);
+            this.textureHolder.setTextureOverride("IndDummy", textureOverride);
             this.indirectScene.bindState(state);
             this.indirectScene.renderOpaque(state);
         }
@@ -253,26 +248,28 @@ class SMGSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+        const textureHolder: J3DTextureHolder = new J3DTextureHolder();
+
         return Progressable.all([
-            this.fetchScene(gl, this.mainScenePath, false),
-            this.fetchScene(gl, this.skyboxScenePath, true),
-            this.fetchScene(gl, this.bloomScenePath, false),
-            this.fetchScene(gl, this.indirectScenePath, false),
+            this.fetchScene(gl, textureHolder, this.mainScenePath, false),
+            this.fetchScene(gl, textureHolder, this.skyboxScenePath, true),
+            this.fetchScene(gl, textureHolder, this.bloomScenePath, false),
+            this.fetchScene(gl, textureHolder, this.indirectScenePath, false),
         ]).then((scenes: Scene[]) => {
             const [mainScene, skyboxScene, bloomScene, indirectScene] = scenes;
-            return new SMGRenderer(gl, mainScene, skyboxScene, bloomScene, indirectScene);
+            return new SMGRenderer(gl, textureHolder, mainScene, skyboxScene, bloomScene, indirectScene);
         });
     }
 
-    private fetchScene(gl: WebGL2RenderingContext, filename: string, isSkybox: boolean): Progressable<Scene> {
+    private fetchScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, filename: string, isSkybox: boolean): Progressable<Scene> {
         if (filename === null)
             return new Progressable<Scene>(Promise.resolve(null));
         const path: string = `data/j3d/smg/${filename}`;
-        return fetch(path).then((buffer: ArrayBufferSlice) => this.createSceneFromBuffer(gl, buffer, isSkybox));
+        return fetch(path).then((buffer: ArrayBufferSlice) => this.createSceneFromBuffer(gl, textureHolder, buffer, isSkybox));
     }
 
-    private createSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean): Promise<Scene> {
-        return createScenesFromBuffer(gl, buffer).then((scenes) => {
+    private createSceneFromBuffer(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, buffer: ArrayBufferSlice, isSkybox: boolean): Promise<Scene> {
+        return createScenesFromBuffer(gl, textureHolder, buffer).then((scenes) => {
             assert(scenes.length === 1);
             const scene: Scene = scenes[0];
             scene.setFPS(60);
