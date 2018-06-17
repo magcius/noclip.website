@@ -24,6 +24,11 @@ export class RRESTextureHolder {
         this.glTextures.forEach((texture) => gl.deleteTexture(texture));
     }
 
+    public hasTexture(name: string): boolean {
+        const tex0Entry = this.tex0.find((entry) => entry.name === name);
+        return tex0Entry !== null;
+    }
+
     public fillTextureMapping(textureMapping: TextureMapping, name: string): boolean {
         const textureOverride = this.textureOverrides.get(name);
         if (textureOverride) {
@@ -46,6 +51,9 @@ export class RRESTextureHolder {
     }
 
     public setTextureOverride(name: string, textureOverride: TextureOverride): void {
+        // Only allow setting texture overrides for textures that exist.
+        if (!this.hasTexture(name))
+            throw new Error(`Trying to override non-existent texture ${name}`);
         this.textureOverrides.set(name, textureOverride);
     }
 
@@ -68,7 +76,7 @@ export class ModelRenderer {
     private renderHelper: GXRenderHelper;
     private sceneParams: SceneParams = new SceneParams();
     private packetParams: PacketParams = new PacketParams();
-    private matrixArray: mat4[] = nArray(32, () => mat4.create());
+    private matrixArray: mat4[] = nArray(64, () => mat4.create());
     private bufferCoalescer: BufferCoalescer;
 
     public visible: boolean = true;

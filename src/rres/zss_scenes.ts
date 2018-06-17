@@ -115,9 +115,9 @@ class SkywardSwordScene implements Viewer.MainScene {
             this.spawnModel(gl, mdl0, stageRRES, 'stage');
         }
 
-        // Hide IndTex until we get that working.
         outer:
         for (const modelRenderer of this.models) {
+            // Hide IndTex until we get that working.
             for (const material of modelRenderer.mdl0.materials) {
                 for (const sampler of material.samplers) {
                     if (sampler.name === 'DummyWater') {
@@ -125,6 +125,11 @@ class SkywardSwordScene implements Viewer.MainScene {
                         continue outer;
                     }
                 }
+            }
+
+            // Hide future variations by default.
+            if (modelRenderer.mdl0.name.startsWith('model_obj')) {
+                modelRenderer.setVisible(false);
             }
         }
     }
@@ -207,19 +212,11 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SkywardSwordSceneDesc("F201_3", "Eldon Volcano - Despacito 201_3"),
     new SkywardSwordSceneDesc("F201_4", "Eldon Volcano - Despacito 201_4"),
     new SkywardSwordSceneDesc("F202_1", "Eldon Volcano - Despacito 202_1"),
-    new SkywardSwordSceneDesc("F210", "Eldon Volcano - Despacito 210"),
-    new SkywardSwordSceneDesc("F211", "Eldon Volcano - Despacito 211"),
-    new SkywardSwordSceneDesc("F221", "Eldon Volcano - Despacito 221"),
-    new SkywardSwordSceneDesc("F400", "Sacred Grounds - Despacito 400"),
-    new SkywardSwordSceneDesc("F401", "Sacred Grounds - Despacito 401"),
-    new SkywardSwordSceneDesc("F402", "Sacred Grounds - Despacito 402"),
-    new SkywardSwordSceneDesc("F403", "Sacred Grounds - Despacito 403"),
-    new SkywardSwordSceneDesc("F404", "Sacred Grounds - Despacito 404"),
-    new SkywardSwordSceneDesc("F405", "Sacred Grounds - Despacito 405"),
-    new SkywardSwordSceneDesc("F406", "Sacred Grounds - Despacito 406"),
-    new SkywardSwordSceneDesc("F407", "Sacred Grounds - Despacito 407"),
-    new SkywardSwordSceneDesc("F300", "Lanayru Desert - Despacito 300"),
-    new SkywardSwordSceneDesc("F301", "Lanayru Desert - Despacito 301"),
+    new SkywardSwordSceneDesc("F210",   "Eldon Volcano - Despacito 210"),
+    new SkywardSwordSceneDesc("F211",   "Eldon Volcano - Despacito 211"),
+    new SkywardSwordSceneDesc("F221",   "Eldon Volcano - Despacito 221"),
+    new SkywardSwordSceneDesc("F300",   "Lanayru Desert - Despacito 300"),
+    new SkywardSwordSceneDesc("F301",   "Lanayru Desert - Despacito 301"),
     new SkywardSwordSceneDesc("F300_1", "Lanayru Desert - Despacito 300_1"),
     new SkywardSwordSceneDesc("F300_2", "Lanayru Desert - Despacito 300_2"),
     new SkywardSwordSceneDesc("F300_3", "Lanayru Desert - Despacito 300_3"),
@@ -232,8 +229,16 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SkywardSwordSceneDesc("F301_5", "Lanayru Desert - Despacito 301_5"),
     new SkywardSwordSceneDesc("F301_6", "Lanayru Desert - Despacito 301_6"),
     new SkywardSwordSceneDesc("F301_7", "Lanayru Desert - Despacito 301_7"),
-    new SkywardSwordSceneDesc("F302", "Lanayru Desert - Despacito 302"),
-    new SkywardSwordSceneDesc("F303", "Lanayru Desert - Despacito 303"),
+    new SkywardSwordSceneDesc("F302",   "Lanayru Desert - Despacito 302"),
+    new SkywardSwordSceneDesc("F303",   "Lanayru Desert - Despacito 303"),
+    new SkywardSwordSceneDesc("F400",   "Sacred Grounds - Despacito 400"),
+    new SkywardSwordSceneDesc("F401",   "Sacred Grounds - Despacito 401"),
+    new SkywardSwordSceneDesc("F402",   "Sacred Grounds - Despacito 402"),
+    new SkywardSwordSceneDesc("F403",   "Sacred Grounds - Despacito 403"),
+    new SkywardSwordSceneDesc("F404",   "Sacred Grounds - Despacito 404"),
+    new SkywardSwordSceneDesc("F405",   "Sacred Grounds - Despacito 405"),
+    new SkywardSwordSceneDesc("F406",   "Sacred Grounds - Despacito 406"),
+    new SkywardSwordSceneDesc("F407",   "Sacred Grounds - Despacito 407"),
 ];
 
 
