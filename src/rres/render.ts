@@ -34,7 +34,7 @@ export class RRESTextureHolder {
         }
 
         const textureEntryIndex = this.tex0.findIndex((entry) => entry.name === name);
-        if (textureEntryIndex) {
+        if (textureEntryIndex >= 0) {
             textureMapping.glTexture = this.glTextures[textureEntryIndex];
             const tex0Entry = this.tex0[textureEntryIndex];
             textureMapping.width = tex0Entry.width;
@@ -68,16 +68,16 @@ export class ModelRenderer {
     private renderHelper: GXRenderHelper;
     private sceneParams: SceneParams = new SceneParams();
     private packetParams: PacketParams = new PacketParams();
-    private matrixArray: mat4[] = nArray(8, () => mat4.create());
+    private matrixArray: mat4[] = nArray(32, () => mat4.create());
     private bufferCoalescer: BufferCoalescer;
 
     public visible: boolean = true;
     public name: string;
 
-    constructor(gl: WebGL2RenderingContext, public textureHolder: RRESTextureHolder, public mdl0: BRRES.MDL0) {
+    constructor(gl: WebGL2RenderingContext, public textureHolder: RRESTextureHolder, public mdl0: BRRES.MDL0, public namePrefix: string = '') {
         this.renderHelper = new GXRenderHelper(gl);
         this.translateModel(gl);
-        this.name = mdl0.name;
+        this.name = `${namePrefix}/${mdl0.name}`;
     }
 
     public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {

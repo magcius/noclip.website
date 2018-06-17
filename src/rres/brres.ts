@@ -1430,7 +1430,14 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     if (modelsEntry) {
         const modelsResDic = parseResDic(buffer, modelsEntry.offs);
         for (const mdl0Entry of modelsResDic) {
-            const mdl0 = parseMDL0(buffer.subarray(mdl0Entry.offs));
+            let mdl0;
+            try {
+                mdl0 = parseMDL0(buffer.subarray(mdl0Entry.offs));
+            } catch(e) {
+                console.warn(`Error parsing ${mdl0Entry.name}: ${e}`);
+                continue;
+            }
+
             assert(mdl0.name === mdl0Entry.name);
             models.push(mdl0);
         }
