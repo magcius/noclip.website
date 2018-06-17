@@ -362,7 +362,10 @@ export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX
         });
     }
 
-    const viewerTexture: Viewer.Texture = { name: mipChain.name, surfaces };
+    const viewerExtraInfo = new Map<string, string>();
+    viewerExtraInfo.set('Format', GX_Texture.getFormatName(mipChain.mipLevels[0].format));
+
+    const viewerTexture: Viewer.Texture = { name: mipChain.name, surfaces, extraInfo: viewerExtraInfo };
     return { glTexture, viewerTexture };
 }
 

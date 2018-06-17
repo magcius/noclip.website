@@ -3349,7 +3349,6 @@ System.register("ui", ["util", "Camera"], function (exports_16, context_16) {
                     _this.surfaceView = document.createElement('div');
                     _this.surfaceView.style.width = '100%';
                     _this.surfaceView.style.height = '200px';
-                    _this.surfaceView.style.cursor = 'pointer';
                     // TODO(jstpierre): Explicit icons.
                     _this.surfaceView.onmouseover = function () {
                         // Checkerboard
@@ -4968,6 +4967,35 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         pixels.fill(0xFF);
         return { pixels: pixels };
     }
+    function getFormatName(format) {
+        switch (format) {
+            case 0 /* I4 */:
+                return "I4";
+            case 1 /* I8 */:
+                return "I8";
+            case 2 /* IA4 */:
+                return "IA4";
+            case 3 /* IA8 */:
+                return "IA8";
+            case 4 /* RGB565 */:
+                return "RGB565";
+            case 5 /* RGB5A3 */:
+                return "RGB5A3";
+            case 6 /* RGBA8 */:
+                return "RGBA8";
+            case 14 /* CMPR */:
+                return "CMPR";
+            case 8 /* C4 */:
+                return "C4 (TODO)";
+            case 9 /* C8 */:
+                return "C8 (TODO)";
+            case 10 /* C14X2 */:
+                return "C14X2 (TODO)";
+            default:
+                return "invalid";
+        }
+    }
+    exports_23("getFormatName", getFormatName);
     function decodeTexture(texture) {
         if (texture.data === null)
             return Promise.resolve(decode_Dummy(texture));
@@ -5190,7 +5218,9 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
         for (var i = 0; i < mipChain.mipLevels.length; i++) {
             _loop_5(i);
         }
-        var viewerTexture = { name: mipChain.name, surfaces: surfaces };
+        var viewerExtraInfo = new Map();
+        viewerExtraInfo.set('Format', GX_Texture.getFormatName(mipChain.mipLevels[0].format));
+        var viewerTexture = { name: mipChain.name, surfaces: surfaces, extraInfo: viewerExtraInfo };
         return { glTexture: glTexture, viewerTexture: viewerTexture };
     }
     exports_24("loadTextureFromMipChain", loadTextureFromMipChain);
