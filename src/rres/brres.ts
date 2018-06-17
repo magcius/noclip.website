@@ -10,6 +10,22 @@ import * as GX_Material from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getComponentSizeRaw, getComponentCountRaw } from '../gx/gx_displaylist';
 import { vec3, mat4, quat } from 'gl-matrix';
 
+function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const theta = Math.PI / 180 * rotation;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleT * -sinR;
+    dst[12] = translationS;
+
+    dst[1]  = scaleS *  sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = translationT;
+}
+
 interface ResDicEntry {
     name: string;
     offs: number;
@@ -213,6 +229,14 @@ function parseMDL0_TevEntry(buffer: ArrayBufferSlice, r: DisplayListRegisters, n
     runDisplayListRegisters(r, buffer.subarray(dlOffs, 480));
 }
 
+export interface MDL0_TexSrtEntry {
+    refCamera: number;
+    refLight: number;
+    mapMode: number;
+    srtMtx: mat4;
+    effectMtx: mat4;
+}
+
 interface MDL0_MaterialSamplerEntry {
     name: string;
     namePalette: string;
@@ -223,25 +247,13 @@ interface MDL0_MaterialSamplerEntry {
     lodBias: number;
 }
 
-interface SRT {
-    scaleS: number;
-    scaleT: number;
-    rotation: number;
-    translationS: number;
-    translationT: number;
-}
-
-export interface MDL0_TexSrtEntry {
-    texSrt: SRT;
-    texMtx: mat4;
-}
-
 export interface MDL0_MaterialEntry {
     index: number;
     name: string;
     translucent: boolean;
     gxMaterial: GX_Material.GXMaterial;
     samplers: MDL0_MaterialSamplerEntry[];
+    texSrts: MDL0_TexSrtEntry[];
 }
 
 function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
@@ -570,6 +582,11 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
     }
 
     // Samplers
+    const srtFlags = view.getUint32(0x1a8);
+    const texMtxMode = view.getUint32(0x1ac);
+    let texSrtTableIdx = 0x1b0;
+    let texMtxTableIdx = 0x250;
+
     const samplers: MDL0_MaterialSamplerEntry[] = [];
     for (let i = 0; i < numTexPltt; i++) {
         const texPlttInfoOffs = texPlttOffs + i * 0x34;
@@ -593,12 +610,9 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         samplers[texMapId] = { name, namePalette, lodBias, wrapS, wrapT, minFilter, magFilter };
     }
 
-    // SRT
-    const srtFlags = view.getUint32(0x1a8);
-    const texMtxMode = view.getUint32(0x1ac);
-    let texSrtTableIdx = 0x1b0;
-    let texMtxTableIdx = 0x250;
+    const texSrts: MDL0_TexSrtEntry[] = [];
     for (let i = 0; i < 8; i++) {
+        // SRT
         const scaleS = view.getFloat32(texSrtTableIdx + 0x00);
         const scaleT = view.getFloat32(texSrtTableIdx + 0x04);
         const rotation = view.getFloat32(texSrtTableIdx + 0x08);
@@ -622,18 +636,23 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         const m21 = view.getFloat32(texMtxTableIdx + 0x28);
         const m22 = view.getFloat32(texMtxTableIdx + 0x2C);
         const m23 = view.getFloat32(texMtxTableIdx + 0x30);
-        const matrix = mat4.fromValues(
+        const effectMtx = mat4.fromValues(
             m00, m10, m20, 0,
             m01, m11, m21, 0,
             m02, m12, m22, 0,
             m03, m13, m23, 1,
         );
 
+        const srtMtx = mat4.create();
+        calcTexMtx(srtMtx, scaleS, scaleT, rotation, translationS, translationT);
+        const texSrt: MDL0_TexSrtEntry = { refCamera, refLight, mapMode, srtMtx, effectMtx };
+        texSrts.push(texSrt);
+
         texSrtTableIdx += 0x14;
         texMtxTableIdx += 0x34;
     }
 
-    return { index, name, translucent, gxMaterial, samplers };
+    return { index, name, translucent, gxMaterial, samplers, texSrts };
 }
 
 interface VtxBufferData {
@@ -1089,9 +1108,293 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
     return { name, materials, shapes, nodes, sceneGraph };
 }
 
+export const enum LoopMode {
+    ONCE = 0x00,
+    REPEAT = 0x01,
+}
+
+interface AnimationBase {
+    name: string;
+    duration: number;
+    loopMode: LoopMode;
+}
+
+interface AnimationKeyframe {
+    time: number;
+    value: number;
+    tangent: number;
+}
+
+function applyLoopMode(t: number, loopMode: LoopMode) {
+    switch (loopMode) {
+    case LoopMode.ONCE:
+        return Math.min(t, 1);
+    case LoopMode.REPEAT:
+        return t % 1;
+    }
+}
+
+function getAnimFrame(anim: AnimationBase, frame: number): number {
+    const lastFrame = anim.duration - 1;
+    const normTime = frame / lastFrame;
+    const animFrame = applyLoopMode(normTime, anim.loopMode) * lastFrame;
+    return animFrame;
+}
+
+function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number): number {
+    return (((cf0 * t + cf1) * t + cf2) * t + cf3);
+}
+
+function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number): number {
+    const length = k1.time - k0.time;
+    const p0 = k0.value;
+    const p1 = k1.value;
+    const s0 = k0.tangent * length;
+    const s1 = k1.tangent * length;
+    const cf0 = (p0 *  2) + (p1 * -2) + (s0 *  1) +  (s1 *  1);
+    const cf1 = (p0 * -3) + (p1 *  3) + (s0 * -2) +  (s1 * -1);
+    const cf2 = (p0 *  0) + (p1 *  0) + (s0 *  1) +  (s1 *  0);
+    const cf3 = (p0 *  1) + (p1 *  0) + (s0 *  0) +  (s1 *  0);
+    return cubicEval(cf0, cf1, cf2, cf3, t);
+}
+
+interface AnimationTrack {
+    frames: AnimationKeyframe[];
+}
+
+function sampleAnimationData(track: AnimationTrack, frame: number) {
+    const frames = track.frames;
+
+    if (frames.length === 1)
+        return frames[0].value;
+
+    // Find the first frame.
+    const idx1 = frames.findIndex((key) => (frame < key.time));
+    if (idx1 < 0)
+        return frames[frames.length - 1].value;
+    const idx0 = idx1 - 1;
+
+    const k0 = frames[idx0];
+    const k1 = frames[idx1];
+
+    // HACK(jstpierre): Nintendo sometimes uses weird "reset" tangents
+    // which aren't supposed to be visible. They are visible for us because
+    // "frame" can have a non-zero fractional component. In this case, pick
+    // a value completely.
+    if ((k1.time - k0.time) === 1)
+        return k0.value;
+
+    const t = (frame - k0.time) / (k1.time - k0.time);
+    return hermiteInterpolate(k0, k1, t);
+}
+
+function parseAnimationTrack(buffer: ArrayBufferSlice, isConstant: boolean): AnimationTrack {
+    const view = buffer.createDataView();
+
+    if (isConstant) {
+        const value = view.getFloat32(0x00);
+        const fakeAnimationKeyframe: AnimationKeyframe = { time: 0, value, tangent: 0 };
+        return { frames: [fakeAnimationKeyframe] };
+    } else {
+        const anmDataOffs = view.getUint32(0x00);
+        const numKeyframes = view.getUint16(anmDataOffs + 0x00);
+        const invKeyframeRange = view.getFloat32(anmDataOffs + 0x04);
+        let keyframeTableIdx = anmDataOffs + 0x08;
+        const frames: AnimationKeyframe[] = [];
+        for (let i = 0; i < numKeyframes; i++) {
+            const time = view.getFloat32(keyframeTableIdx + 0x00);
+            const value = view.getFloat32(keyframeTableIdx + 0x04);
+            const tangent = view.getFloat32(keyframeTableIdx + 0x08);
+            const keyframe = { time, value, tangent };
+            frames.push(keyframe);
+            keyframeTableIdx += 0x0C;
+        }
+        return { frames };
+    }
+}
+
+export interface SRT0_TexData {
+    scaleS: AnimationTrack | null;
+    scaleT: AnimationTrack | null;
+    rotation: AnimationTrack | null;
+    translationS: AnimationTrack | null;
+    translationT: AnimationTrack | null;
+}
+
+export interface SRT0_MatData {
+    materialName: string;
+    texAnimations: SRT0_TexData[];
+}
+
+export interface SRT0 extends AnimationBase {
+    matAnimations: SRT0_MatData[];
+}
+
+export class AnimationController {
+    public fps: number = 60;
+    private timeMilliseconds: number;
+
+    public getTimeInFrames(): number {
+        const ms = this.timeMilliseconds;
+        return (ms / 1000) * this.fps;
+    }
+
+    public updateTime(newTime: number): void {
+        this.timeMilliseconds = newTime;
+    }
+}
+
+export class TexSrtAnimator {
+    constructor(public animationController: AnimationController, public srt0: SRT0, public texData: SRT0_TexData) {
+    }
+
+    public calcTexMtx(dst: mat4): void {
+        const texData = this.texData;
+
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.srt0, frame);
+
+        const scaleS = texData.scaleS ? sampleAnimationData(texData.scaleS, animFrame) : 1;
+        const scaleT = texData.scaleT ? sampleAnimationData(texData.scaleT, animFrame) : 1;
+        const rotation = texData.rotation ? sampleAnimationData(texData.rotation, animFrame) : 0;
+        const translationS = texData.translationS ? sampleAnimationData(texData.translationS, animFrame) : 0;
+        const translationT = texData.translationS ? sampleAnimationData(texData.translationT, animFrame) : 0;
+        calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT);
+    }
+}
+
+function findAnimationData_SRT0(srt0: SRT0, materialName: string, texMtxIndex: number): SRT0_TexData | null {
+    const matData: SRT0_MatData = srt0.matAnimations.find((m) => m.materialName === materialName);
+    if (matData === undefined)
+        return null;
+
+    const texData: SRT0_TexData = matData.texAnimations[texMtxIndex];
+    if (texData === undefined)
+        return null;
+
+    return texData;
+}
+
+export function bindTexAnimator(animationController: AnimationController, srt0: SRT0, materialName: string, texMtxIndex: number): TexSrtAnimator | null {
+    const texData: SRT0_TexData | null = findAnimationData_SRT0(srt0, materialName, texMtxIndex);
+    if (texData === null)
+        return null;
+    return new TexSrtAnimator(animationController, srt0, texData);
+}
+
+function parseSRT0_TexData(buffer: ArrayBufferSlice): SRT0_TexData {
+    const view = buffer.createDataView();
+
+    const enum Flags {
+        SCALE_ONE        = 0x002,
+        ROT_ZERO         = 0x004,
+        TRANS_ZERO       = 0x008,
+        SCALE_UNIFORM    = 0x010,
+        SCALE_S_CONSTANT = 0x020,
+        SCALE_T_CONSTANT = 0x040,
+        ROT_CONSTANT     = 0x080,
+        TRANS_S_CONSTANT = 0x100,
+        TRANS_T_CONSTANT = 0x200,
+    }
+
+    const flags: Flags = view.getUint32(0x00);
+
+    let scaleS: AnimationTrack | null = null;
+    let scaleT: AnimationTrack | null = null;
+    let rotation: AnimationTrack | null = null;
+    let translationS: AnimationTrack | null = null;
+    let translationT: AnimationTrack | null = null;
+
+    let animationTableIdx = 0x04;
+    function nextAnimationTrack(isConstant: boolean): AnimationTrack {
+        const animationTrack: AnimationTrack = parseAnimationTrack(buffer.slice(animationTableIdx), isConstant);
+        animationTableIdx += 0x04;
+        return animationTrack;
+    }
+
+    if (!(flags & Flags.SCALE_ONE))
+        scaleS = nextAnimationTrack(!!(flags & Flags.SCALE_S_CONSTANT));
+
+    if (!(flags & Flags.SCALE_UNIFORM))
+        scaleT = nextAnimationTrack(!!(flags & Flags.SCALE_T_CONSTANT));
+    else
+        scaleT = scaleS;
+
+    if (!(flags & Flags.ROT_ZERO))
+        rotation = nextAnimationTrack(!!(flags & Flags.ROT_CONSTANT));
+
+    if (!(flags & Flags.TRANS_ZERO)) {
+        translationS = nextAnimationTrack(!!(flags & Flags.TRANS_S_CONSTANT));
+        translationT = nextAnimationTrack(!!(flags & Flags.TRANS_T_CONSTANT));
+    }
+
+    return { scaleS, scaleT, rotation, translationS, translationT };
+}
+
+function parseSRT0_MatData(buffer: ArrayBufferSlice): SRT0_MatData {
+    const view = buffer.createDataView();
+
+    const materialNameOffs = view.getUint32(0x00);
+    const materialName = readString(buffer, materialNameOffs);
+    const flags = view.getUint32(0x04);
+    const indFlags = view.getUint32(0x08);
+
+    const texAnimations: SRT0_TexData[] = [];
+    let texAnimationTableIdx = 0x0C;
+    for (let i = 0; i < 8; i++) {
+        if (!(flags & (1 << i)))
+            continue;
+
+        const texAnimationOffs = view.getUint32(texAnimationTableIdx);
+        texAnimationTableIdx += 0x04;
+
+        texAnimations[i] = parseSRT0_TexData(buffer.slice(texAnimationOffs));
+    }
+
+    const indTexAnimations: SRT0_TexData[] = [];
+    for (let i = 0; i < 3; i++) {
+        if (!(indFlags & (1 << i)))
+            continue;
+
+        const texAnimationOffs = view.getUint32(texAnimationTableIdx);
+        texAnimationTableIdx += 0x04;
+
+        indTexAnimations[i] = parseSRT0_TexData(buffer.slice(texAnimationOffs));
+    }
+
+    return { materialName, texAnimations };
+}
+
+function parseSRT0(buffer: ArrayBufferSlice): SRT0 {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'SRT0');
+    const version = view.getUint32(0x08);
+    assert(version === 0x05);
+
+    const texSrtMatDataResDicOffs = view.getUint32(0x10);
+    const texSrtMatDataResDic = parseResDic(buffer, texSrtMatDataResDicOffs);
+
+    const nameOffs = view.getUint32(0x18);
+    const name = readString(buffer, nameOffs);
+    const duration = view.getUint16(0x20);
+    const numMaterials = view.getUint16(0x22);
+    const texMtxMode = view.getUint32(0x24);
+    const loopMode: LoopMode = view.getUint32(0x28);
+
+    const matAnimations: SRT0_MatData[] = [];
+    for (const texSrtMatEntry of texSrtMatDataResDic) {
+        const matData = parseSRT0_MatData(buffer.slice(texSrtMatEntry.offs));
+        matAnimations.push(matData);
+    }
+
+    return { name, loopMode, duration, matAnimations };
+}
+
 export interface RRES {
     models: MDL0[];
     textures: TEX0[];
+    texSrtAnimations: SRT0[];
 }
 
 export function parse(buffer: ArrayBufferSlice): RRES {
@@ -1126,11 +1429,10 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     const modelsEntry = rootResDic.find((entry) => entry.name === '3DModels(NW4R)');
     if (modelsEntry) {
         const modelsResDic = parseResDic(buffer, modelsEntry.offs);
-        for (let i = 0; i < modelsResDic.length; i++) {
-            const modelEntry = modelsResDic[i];
-            const model = parseMDL0(buffer.subarray(modelEntry.offs));
-            assert(model.name === modelEntry.name);
-            models.push(model);
+        for (const mdl0Entry of modelsResDic) {
+            const mdl0 = parseMDL0(buffer.subarray(mdl0Entry.offs));
+            assert(mdl0.name === mdl0Entry.name);
+            models.push(mdl0);
         }
     }
 
@@ -1139,12 +1441,24 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     const texturesEntry = rootResDic.find((entry) => entry.name === 'Textures(NW4R)');
     if (texturesEntry) {
         const texturesResDic = parseResDic(buffer, texturesEntry.offs);
-        for (const textureEntry of texturesResDic) {
-            const texture = parseTEX0(buffer.subarray(textureEntry.offs));
-            assert(texture.name === textureEntry.name);
-            textures.push(texture);
+        for (const tex0Entry of texturesResDic) {
+            const tex0 = parseTEX0(buffer.subarray(tex0Entry.offs));
+            assert(tex0.name === tex0Entry.name);
+            textures.push(tex0);
         }
     }
 
-    return { models, textures };
+    // Tex SRT Animations
+    const texSrtAnimations: SRT0[] = [];
+    const animTexSrtsEntry = rootResDic.find((entry) => entry.name === 'AnmTexSrt(NW4R)');
+    if (animTexSrtsEntry) {
+        const animTexSrtResDic = parseResDic(buffer, animTexSrtsEntry.offs);
+        for (const srt0Entry of animTexSrtResDic) {
+            const srt0 = parseSRT0(buffer.subarray(srt0Entry.offs));
+            assert(srt0.name === srt0Entry.name);
+            texSrtAnimations.push(srt0);
+        }
+    }
+
+    return { models, textures, texSrtAnimations };
 }

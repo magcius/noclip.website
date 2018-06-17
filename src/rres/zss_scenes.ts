@@ -24,9 +24,11 @@ class SkywardSwordScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
     public models: ModelRenderer[] = [];
+    public animationController: BRRES.AnimationController;
 
     constructor(gl: WebGL2RenderingContext, public textureRRESes: BRRES.RRES[], public stageRRES: BRRES.RRES, public roomRRESes: BRRES.RRES[]) {
         this.textureHolder = new RRESTextureHolder();
+        this.animationController = new BRRES.AnimationController();
 
         this.textures = this.textureHolder.viewerTextures;
 
@@ -42,7 +44,7 @@ class SkywardSwordScene implements Viewer.MainScene {
             this.textureHolder.addTextures(gl, roomRRES.textures);
 
             for (const mdl0 of roomRRES.models) {
-                this.spawnModel(gl, mdl0);
+                this.spawnModel(gl, mdl0, roomRRES);
             }
         }
 
@@ -73,7 +75,7 @@ class SkywardSwordScene implements Viewer.MainScene {
             if (!mdl0.name.includes('Water'))
                 continue;
 
-            this.spawnModel(gl, mdl0);
+            this.spawnModel(gl, mdl0, stageRRES);
         }
 
         // Hide IndTex until we get that working.
@@ -96,14 +98,23 @@ class SkywardSwordScene implements Viewer.MainScene {
     }
 
     public render(state: RenderState): void {
+        this.animationController.updateTime(state.time);
+
         this.models.forEach((model) => {
             model.render(state);
         });
     }
 
-    private spawnModel(gl: WebGL2RenderingContext, mdl0: BRRES.MDL0): void {
+    private spawnModel(gl: WebGL2RenderingContext, mdl0: BRRES.MDL0, rres: BRRES.RRES): ModelRenderer {
         const modelRenderer = new ModelRenderer(gl, this.textureHolder, mdl0);
         this.models.push(modelRenderer);
+
+        // Bind animations.
+        for (const srt0 of rres.texSrtAnimations) {
+            modelRenderer.bindSRT0(this.animationController, srt0);
+        }
+
+        return modelRenderer;
     }
 }
 

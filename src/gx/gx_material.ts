@@ -303,6 +303,8 @@ export class GX_Program extends BaseProgram {
             // Expected to be used with colors, I suspect...
             return `vec3(${src}.rg, 1.0)`;
         case GX.TexGenType.MTX2x4:
+            if (texCoordGen.matrix === GX.TexGenMatrix.IDENTITY)
+                return src;
             return `vec3(${this.generateTexGenMatrix(`vec3(${src}.xy, 1.0)`, texCoordGen)}.xy, 1.0)`;
         case GX.TexGenType.MTX3x4:
             return `${this.generateTexGenMatrix(src, texCoordGen)}`;

@@ -75,9 +75,16 @@ export class ModelRenderer {
     public name: string;
 
     constructor(gl: WebGL2RenderingContext, public textureHolder: RRESTextureHolder, public mdl0: BRRES.MDL0) {
+        this.renderHelper = new GXRenderHelper(gl);
         this.translateModel(gl);
         this.name = mdl0.name;
-        this.renderHelper = new GXRenderHelper(gl);
+    }
+
+    public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {
+        for (let i = 0; i < this.materialCommands.length; i++) {
+            const cmd = this.materialCommands[i];
+            cmd.bindSRT0(animationController, srt0);
+        }
     }
 
     public setVisible(visible: boolean): void {
@@ -191,15 +198,24 @@ class Command_Material {
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
     private glSamplers: WebGLSampler[] = [];
+    private srtAnimators: BRRES.TexSrtAnimator[] = [];
 
     constructor(gl: WebGL2RenderingContext, public textureHolder: RRESTextureHolder, public material: BRRES.MDL0_MaterialEntry, public name: string = material.name) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
         this.translateSamplers(gl);
+    }
 
-        // We don't animate, so we only need to compute this once.
-        this.fillMaterialParams(this.materialParams);
+    public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {
+        for (let i = 0; i < 8; i++) {
+            if (!this.material.samplers[i])
+                continue;
+
+            const srtAnimator = BRRES.bindTexAnimator(animationController, srt0, this.material.name, i);
+            if (srtAnimator)
+                this.srtAnimators[i] = srtAnimator;
+        }
     }
 
     private translateSamplers(gl: WebGL2RenderingContext): void {
@@ -215,6 +231,14 @@ class Command_Material {
             gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
 
             this.glSamplers[i] = glSampler;
+        }
+    }
+
+    private calcTexMtx(dst: mat4, texMtxIdx: number): void {
+        if (this.srtAnimators[texMtxIdx]) {
+            this.srtAnimators[texMtxIdx].calcTexMtx(dst);
+        } else {
+            mat4.copy(dst, this.material.texSrts[texMtxIdx].srtMtx);
         }
     }
 
@@ -235,6 +259,8 @@ class Command_Material {
             materialParams.u_Color[i] = this.material.gxMaterial.colorRegisters[i];
         for (let i = 0; i < 4; i++)
             materialParams.u_KonstColor[i] = this.material.gxMaterial.colorConstants[i];
+        for (let i = 0; i < 8; i++)
+            this.calcTexMtx(materialParams.u_PostTexMtx[i], i);
     }
 
     public exec(state: RenderState, renderHelper: GXRenderHelper): void {
@@ -242,6 +268,8 @@ class Command_Material {
 
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
+
+        this.fillMaterialParams(this.materialParams);
 
         renderHelper.bindMaterialParams(state, this.materialParams);
         renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
