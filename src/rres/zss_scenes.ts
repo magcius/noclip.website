@@ -10,8 +10,10 @@ import * as U8 from './u8';
 import { fetch, assert } from '../util';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RenderState } from '../render';
+import { RenderState, ColorTarget } from '../render';
 import { RRESTextureHolder, ModelRenderer } from './render';
+import { TextureOverride } from '../gx/gx_render';
+import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 
 const SAND_CLOCK_ICON = '<svg viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
 
@@ -20,6 +22,10 @@ class SkywardSwordScene implements Viewer.MainScene {
     public textureHolder: RRESTextureHolder;
     public models: ModelRenderer[] = [];
     public animationController: BRRES.AnimationController;
+    private mainColorTarget: ColorTarget = new ColorTarget();
+
+    // Uses WaterDummy. Have to render after everything else. TODO(jstpierre): How does engine know this?
+    private indirectModels: ModelRenderer[] = [];
 
     constructor(gl: WebGL2RenderingContext, public stageId: string, public textureRRESes: BRRES.RRES[], public stageArchive: U8.U8Archive) {
         this.textureHolder = new RRESTextureHolder();
@@ -125,12 +131,12 @@ class SkywardSwordScene implements Viewer.MainScene {
         }
 
         outer:
+        // Find any indirect scenes.
         for (const modelRenderer of this.models) {
-            // Hide IndTex until we get that working.
             for (const material of modelRenderer.mdl0.materials) {
                 for (const sampler of material.samplers) {
                     if (sampler.name === 'DummyWater') {
-                        modelRenderer.setVisible(false);
+                        this.indirectModels.push(modelRenderer);
                         continue outer;
                     }
                 }
@@ -186,10 +192,30 @@ class SkywardSwordScene implements Viewer.MainScene {
     }
 
     public render(state: RenderState): void {
+        const gl = state.gl;
         this.animationController.updateTime(state.time);
 
+        this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+        state.useRenderTarget(this.mainColorTarget);
+        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+
         this.models.forEach((model) => {
+            if (this.indirectModels.includes(model))
+                return;
             model.render(state);
+        });
+
+        // Copy to main render target.
+        state.useRenderTarget(state.onscreenColorTarget);
+        state.blitColorTarget(this.mainColorTarget);
+
+        if (this.indirectModels.length) {
+            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            this.textureHolder.setTextureOverride("DummyWater", textureOverride);
+        }
+
+        this.indirectModels.forEach((modelRenderer) => {
+            modelRenderer.render(state);
         });
     }
 
@@ -292,6 +318,5 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SkywardSwordSceneDesc("F406",   "Sacred Grounds - Despacito 406"),
     new SkywardSwordSceneDesc("F407",   "Sacred Grounds - Despacito 407"),
 ];
-
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

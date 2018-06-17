@@ -238,10 +238,18 @@ function parseMDL0_TevEntry(buffer: ArrayBufferSlice, r: DisplayListRegisters, n
     runDisplayListRegisters(r, buffer.subarray(dlOffs, 480));
 }
 
+export const enum MapMode {
+    TEXCOORD = 0x00,
+    ENV_CAMERA = 0x01,
+    PROJECTION = 0x02,
+    ENV_LIGHT = 0x03,
+    ENV_SPEC = 0x04,
+}
+
 export interface MDL0_TexSrtEntry {
     refCamera: number;
     refLight: number;
-    mapMode: number;
+    mapMode: MapMode;
     srtMtx: mat4;
     effectMtx: mat4;
 }
@@ -669,7 +677,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
 
         const refCamera = view.getInt8(texMtxTableIdx + 0x00);
         const refLight = view.getInt8(texMtxTableIdx + 0x01);
-        const mapMode = view.getInt8(texMtxTableIdx + 0x02);
+        const mapMode: MapMode = view.getInt8(texMtxTableIdx + 0x02);
         const miscFlags = view.getInt8(texMtxTableIdx + 0x03);
 
         const m00 = view.getFloat32(texMtxTableIdx + 0x04);
@@ -690,6 +698,20 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
             m02, m12, m22, 0,
             m03, m13, m23, 1,
         );
+
+        switch (mapMode) {
+        case MapMode.TEXCOORD:
+            // No matrix needed.
+            break;
+        case MapMode.PROJECTION:
+        case MapMode.ENV_CAMERA:
+        case MapMode.ENV_LIGHT:
+            // Set ourselves to have a texture matrix.
+            // This is a bit of a hack. In actuality, we should be using PNMTX0,
+            // but we don't put the MV matrix in there yet... sigh...
+            texGens[i].matrix = GX.TexGenMatrix.TEXMTX0 + (i * 3);
+            break;
+        }
 
         const srtMtx = mat4.create();
         calcTexMtx(srtMtx, scaleS, scaleT, rotation, translationS, translationT);

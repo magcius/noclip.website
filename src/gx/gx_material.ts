@@ -295,9 +295,14 @@ export class GX_Program extends BaseProgram {
         const matrix = texCoordGen.matrix;
         if (matrix === GX.TexGenMatrix.IDENTITY) {
             return `${src}`;
+        } else if (matrix >= GX.TexGenMatrix.TEXMTX0) {
+            const texMtxIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
+            return `(u_TexMtx[${texMtxIdx}] * vec4(${src}, 1.0))`;
+        } else if (matrix >= GX.TexGenMatrix.PNMTX0) {
+            const pnMtxIdx = (matrix - GX.TexGenMatrix.PNMTX0) / 3;
+            return `(u_PosMtx[${pnMtxIdx}] * vec4(${src}, 1.0))`;
         } else {
-            const matrixIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
-            return `(u_TexMtx[${matrixIdx}] * vec4(${src}, 1.0))`;
+            throw "whoops";
         }
     }
 

@@ -380,6 +380,11 @@ export class RenderState {
         this.bindViewport();
     }
 
+    public getAspect(): number {
+        const width = this.currentColorTarget.width, height = this.currentColorTarget.height;
+        return width / height;
+    }
+
     public bindViewport(): void {
         const gl = this.gl;
         const width = this.currentColorTarget.width, height = this.currentColorTarget.height;
@@ -391,8 +396,7 @@ export class RenderState {
         this.nearClipPlane = near;
         this.farClipPlane = far;
         if (this.currentColorTarget) {
-            const width = this.currentColorTarget.width, height = this.currentColorTarget.height;
-            mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+            mat4.perspective(this.projection, this.fov, this.getAspect(), this.nearClipPlane, this.farClipPlane);
         }
     }
 

@@ -14,8 +14,33 @@ import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateW
 
 export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {}
 
+function texProjMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number) {
+    const angle = fov * 0.5;
+    const cot = 1.0 / angle;
+
+    dst[0] = (cot / aspect) * scaleS;
+    dst[4] = 0.0;
+    dst[8] = -transS;
+    dst[12] = 0.0;
+
+    dst[1] = 0.0;
+    dst[5] = cot * scaleT;
+    dst[9] = -transT;
+    dst[13] = 0.0;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = -1.0;
+    dst[14] = 0.0;
+
+    dst[3] = 0.0;
+    dst[7] = 0.0;
+    dst[11] = 0.0;
+    dst[15] = 1.0;
+}
+
 export class ModelRenderer {
-    private materialCommands: Command_Material[] = [];
+    public materialCommands: Command_Material[] = [];
     private shapeCommands: Command_Shape[] = [];
     private renderHelper: GXRenderHelper;
     private sceneParams: SceneParams = new SceneParams();
@@ -145,6 +170,7 @@ class Command_Shape {
     }
 }
 
+const matrixScratch = mat4.create();
 class Command_Material {
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
@@ -190,14 +216,47 @@ class Command_Material {
         }
     }
 
-    private calcTexMtx(dst: mat4, texIdx: number): void {
-        const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
-        // TODO(jstpierre): effects
-        if (this.srtAnimators[texMtxIdx]) {
-            this.srtAnimators[texMtxIdx].calcTexMtx(dst);
-        } else {
-            mat4.copy(dst, this.material.texSrts[texIdx].srtMtx);
+    private calcTexMtx(dst: mat4, texIdx: number, state: RenderState): void {
+        const texSrt = this.material.texSrts[texIdx];
+
+        if (texSrt.mapMode === BRRES.MapMode.TEXCOORD) {
+            // Identity.
+            mat4.identity(dst);
+        } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
+            // Environment mapping. Technically, a normal matrix should be used, but
+            // we don't have a normal matrix.
+            mat4.copy(dst, state.view);
+        } else if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
+            // Projection mapping.
+            mat4.copy(dst, state.view);
         }
+    }
+
+    private calcPostTexMtx(dst: mat4, texIdx: number, state: RenderState): void {
+        const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
+        const texSrt = this.material.texSrts[texIdx];
+
+        if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
+            // Apply camera projection matrix.
+            // TODO(jstpierre): Why is this flipped?
+            texProjMtx(dst, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+        } else {
+            mat4.identity(dst);
+        }
+
+        if (texSrt.mapMode !== BRRES.MapMode.TEXCOORD) {
+            // Effect mtx.
+            mat4.mul(dst, dst, this.material.texSrts[texIdx].effectMtx);
+        }
+
+        // Calculate SRT.
+        if (this.srtAnimators[texMtxIdx]) {
+            this.srtAnimators[texMtxIdx].calcTexMtx(matrixScratch);
+        } else {
+            mat4.copy(matrixScratch, this.material.texSrts[texIdx].srtMtx);
+        }
+
+        mat4.mul(dst, dst, matrixScratch);
     }
 
     private calcIndMtx(dst: mat2d, indIdx: number): void {
@@ -209,7 +268,7 @@ class Command_Material {
         }
     }
 
-    private fillMaterialParams(materialParams: MaterialParams): void {
+    private fillMaterialParams(materialParams: MaterialParams, state: RenderState): void {
         for (let i = 0; i < 8; i++) {
             const sampler = this.material.samplers[i];
             if (!sampler)
@@ -227,7 +286,9 @@ class Command_Material {
         for (let i = 0; i < 4; i++)
             materialParams.u_KonstColor[i] = this.material.gxMaterial.colorConstants[i];
         for (let i = 0; i < 8; i++)
-            this.calcTexMtx(materialParams.u_PostTexMtx[i], i);
+            this.calcTexMtx(materialParams.u_TexMtx[i], i, state);
+        for (let i = 0; i < 8; i++)
+            this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state);
         for (let i = 0; i < 3; i++)
             this.calcIndMtx(materialParams.u_IndTexMtx[i], i);
     }
@@ -238,7 +299,7 @@ class Command_Material {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
-        this.fillMaterialParams(this.materialParams);
+        this.fillMaterialParams(this.materialParams, state);
 
         renderHelper.bindMaterialParams(state, this.materialParams);
         renderHelper.bindMaterialTextures(state, this.materialParams, this.program);

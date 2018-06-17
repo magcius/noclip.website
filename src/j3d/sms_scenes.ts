@@ -329,7 +329,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         const brkFile = rarc.findFile(`${basename}.brk`);
         const bckFile = rarc.findFile(`${basename}.bck`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+        const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile, );
         scene.name = basename;
         scene.setIsSkybox(isSkybox);
         return scene;
