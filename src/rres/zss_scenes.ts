@@ -21,13 +21,15 @@ function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     return textures;
 }
 
+const SAND_CLOCK_ICON = '<svg viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
+
 class SkywardSwordScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
     public models: ModelRenderer[] = [];
     public animationController: BRRES.AnimationController;
 
-    constructor(gl: WebGL2RenderingContext, public textureRRESes: BRRES.RRES[], public stageArchive: U8.U8Archive) {
+    constructor(gl: WebGL2RenderingContext, public stageId: string, public textureRRESes: BRRES.RRES[], public stageArchive: U8.U8Archive) {
         this.textureHolder = new RRESTextureHolder();
         this.animationController = new BRRES.AnimationController();
 
@@ -62,7 +64,22 @@ class SkywardSwordScene implements Viewer.MainScene {
                 'model0',   // Main geometry
                 'model0_s', // Main geometry decals.
                 'model1',   // Indirect water.
+                'model1_s', // Lanayru Sand Sea "past" decal. Only seen there so far.
                 'model2',   // Other transparent objects.
+
+                // Future variations in Lanayru.
+                'model_obj0',
+                'model_obj0_s',
+                'model_obj1',
+                'model_obj1_s',
+                'model_obj2',
+                'model_obj2_s',
+                'model_obj3',
+                'model_obj3_s',
+                'model_obj4',
+                'model_obj4_s',
+                'model_obj5',
+                'model_obj5_s',
             ];
             const idx = modelSorts.indexOf(modelRenderer.mdl0.name);
 
@@ -126,18 +143,49 @@ class SkywardSwordScene implements Viewer.MainScene {
                     }
                 }
             }
-
-            // Hide future variations by default.
-            if (modelRenderer.mdl0.name.startsWith('model_obj')) {
-                modelRenderer.setVisible(false);
-            }
         }
     }
 
     public createPanels(): UI.Panel[] {
-        const layers = new UI.LayerPanel();
-        layers.setLayers(this.models);
-        return [layers];
+        const panels: UI.Panel[] = [];
+
+        const layersPanel = new UI.LayerPanel();
+        layersPanel.setLayers(this.models);
+        panels.push(layersPanel);
+
+        // Construct a list of past/future models.
+        const futureModels: ModelRenderer[] = [];
+        const pastModels: ModelRenderer[] = [];
+        for (const modelRenderer of this.models) {
+            if (modelRenderer.mdl0.name.startsWith('model_obj'))
+                futureModels.push(modelRenderer);
+
+            // Lanayru Sand Sea has a "past" decal on top of a future zone.
+            if (this.stageId === 'F301_1' && modelRenderer.mdl0.name === 'model1_s')
+                pastModels.push(modelRenderer);
+        }
+
+        if (futureModels.length || pastModels.length) {
+            const futurePanel = new UI.Panel();
+            futurePanel.setTitle(SAND_CLOCK_ICON, "Time Stones");
+    
+            const selector = new UI.SimpleSingleSelect();
+            selector.setStrings([ 'Past', 'Future' ]);
+            selector.onselectionchange = (index: number) => {
+                const isFuture = (index === 1);
+                for (const modelRenderer of futureModels)
+                    modelRenderer.setVisible(isFuture);
+                for (const modelRenderer of pastModels)
+                    modelRenderer.setVisible(!isFuture);
+                layersPanel.syncLayerVisibility();
+            };
+            selector.selectItem(0); // Past
+            futurePanel.contents.appendChild(selector.elem);
+    
+            panels.push(futurePanel);
+        }
+
+        return panels;
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
@@ -184,13 +232,16 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
             textureRRESes.push(systemRRES);
 
             const objPackArchive = U8.parse(LZ77.decompress(objPackBuffer));
-            const skyCmnArchive = U8.parse(objPackArchive.findFile('oarc/SkyCmn.arc').buffer);
-            const skyCmnRRES = BRRES.parse(skyCmnArchive.findFile('g3d/model.brres').buffer);
-            textureRRESes.push(skyCmnRRES);
+            const needsSkyCmn = this.id.startsWith('F0');
+            if (needsSkyCmn) {
+                const skyCmnArchive = U8.parse(objPackArchive.findFile('oarc/SkyCmn.arc').buffer);
+                const skyCmnRRES = BRRES.parse(skyCmnArchive.findFile('g3d/model.brres').buffer);
+                textureRRESes.push(skyCmnRRES);
+            }
 
             const stageArchive = U8.parse(LZ77.decompress(stageBuffer));
 
-            return new SkywardSwordScene(gl, textureRRESes, stageArchive);
+            return new SkywardSwordScene(gl, this.id, textureRRESes, stageArchive);
         });
     }
 }
@@ -216,13 +267,13 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SkywardSwordSceneDesc("F211",   "Eldon Volcano - Despacito 211"),
     new SkywardSwordSceneDesc("F221",   "Eldon Volcano - Despacito 221"),
     new SkywardSwordSceneDesc("F300",   "Lanayru Desert - Despacito 300"),
-    new SkywardSwordSceneDesc("F301",   "Lanayru Desert - Despacito 301"),
     new SkywardSwordSceneDesc("F300_1", "Lanayru Desert - Despacito 300_1"),
     new SkywardSwordSceneDesc("F300_2", "Lanayru Desert - Despacito 300_2"),
     new SkywardSwordSceneDesc("F300_3", "Lanayru Desert - Despacito 300_3"),
     new SkywardSwordSceneDesc("F300_4", "Lanayru Desert - Despacito 300_4"),
     new SkywardSwordSceneDesc("F300_5", "Lanayru Desert - Despacito 300_5"),
-    new SkywardSwordSceneDesc("F301_1", "Lanayru Desert - Despacito 301_1"),
+    new SkywardSwordSceneDesc("F301",   "Lanayru Sand Sea - Docks"),
+    new SkywardSwordSceneDesc("F301_1", "Lanayru Sand Sea - The Sea"),
     new SkywardSwordSceneDesc("F301_2", "Lanayru Desert - Despacito 301_2"),
     new SkywardSwordSceneDesc("F301_3", "Lanayru Desert - Despacito 301_3"),
     new SkywardSwordSceneDesc("F301_4", "Lanayru Desert - Despacito 301_4"),
