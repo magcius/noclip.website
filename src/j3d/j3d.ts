@@ -513,7 +513,7 @@ export const enum TexMtxProjection {
 export interface TexMtx {
     type: number;
     projection: TexMtxProjection;
-    projectionMatrix: mat4;
+    effectMatrix: mat4;
     matrix: mat4;
 }
 
@@ -920,7 +920,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const p32 = view.getFloat32(texMtxOffs + 0x5C);
         const p33 = view.getFloat32(texMtxOffs + 0x60);
 
-        const projectionMatrix = mat4.fromValues(
+        const effectMatrix = mat4.fromValues(
             p00, p10, p20, p30,
             p01, p11, p21, p31,
             p02, p12, p22, p32,
@@ -930,7 +930,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const matrix = mat4.create();
         createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
 
-        const texMtx: TexMtx = { type, projection, projectionMatrix, matrix };
+        const texMtx: TexMtx = { type, projection, effectMatrix, matrix };
         return texMtx;
     }
 
