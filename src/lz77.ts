@@ -66,7 +66,7 @@ export function decompressLZ10(srcView: DataView) {
 //       Literal: copy one byte from src to dest.
 
 export function decompressLZ11(srcView: DataView) {
-    let uncompressedSize = srcView.getUint32(0x00, true) >> 8;
+    let uncompressedSize = srcView.getUint32(0x00, true) >>> 8;
     const dstBuffer = new Uint8Array(uncompressedSize);
 
     let srcOffs = 0x04;

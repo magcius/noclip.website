@@ -7,7 +7,7 @@ import * as Viewer from '../viewer';
 
 import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontFaceMode, RenderFlags, RenderState } from '../render';
 import { BaseProgram } from '../Program';
-import { align } from '../util';
+import { align, assert } from '../util';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -56,6 +56,7 @@ export class Color {
 
 export interface ColorChannelControl {
     lightingEnabled: boolean;
+    lightingFudge?: string;
     matColorSource: GX.ColorSrc;
     ambColorSource: GX.ColorSrc;
 }
@@ -225,12 +226,21 @@ export class GX_Program extends BaseProgram {
     }
 
     private generateColorChannel(chan: ColorChannelControl, i: number) {
+        // HACK.
+        if (chan.lightingFudge) {
+            const amb = `u_ColorAmbReg[${i}]`;
+            const mat = `u_ColorMatReg[${i}]`;
+            const vtx = `a_Color${i}`;
+            const fudgeExpr = chan.lightingFudge.replace('$AMB$', amb).replace('$MAT$', mat).replace('$VTX$', vtx);
+            return `vec4(${fudgeExpr})`;
+        }
+
         // TODO(jstpierre): amb & lighting
         const matSource = this.generateMaterialSource(chan, i);
 
         if (chan.lightingEnabled) {
-            // XXX(jstpierre): This is awful but seems to work.
             const ambSource = this.generateAmbientSource(chan, i);
+            // XXX(jstpierre): This is awful but seems to work.
             return `(0.5 * (${ambSource} + 0.6) * ${matSource})`;
         } else {
             // If lighting is off, it's the material color.
@@ -448,6 +458,7 @@ export class GX_Program extends BaseProgram {
     }
 
     private generateTexAccess(stage: TevStage) {
+        assert(stage.texMap !== GX.TexMapID.TEXMAP_NULL);
         return `TextureSample(${stage.texMap}, t_TexCoord)`;
     }
 
@@ -573,7 +584,13 @@ export class GX_Program extends BaseProgram {
     }
 
     private generateTevTexCoordWrap(stage: TevStage): string {
-        const baseCoord = `ReadTexCoord${stage.texCoordId}()`;
+        let texGenId = stage.texCoordId;
+
+        const lastTexGenId = this.material.texGens.length - 1;
+        if (texGenId >= lastTexGenId)
+            texGenId = lastTexGenId;
+
+        const baseCoord = `ReadTexCoord${texGenId}()`;
         if (stage.indTexWrapS === GX.IndTexWrap.OFF && stage.indTexWrapT === GX.IndTexWrap.OFF)
             return baseCoord;
         else

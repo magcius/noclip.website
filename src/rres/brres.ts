@@ -45,8 +45,8 @@ export interface TEX0 {
     height: number;
     format: GX.TexFormat;
     mipCount: number;
-    minLod: number;
-    maxLod: number;
+    minLOD: number;
+    maxLOD: number;
     data: ArrayBufferSlice;
 }
 
@@ -66,11 +66,11 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     const height = view.getUint16(0x1E);
     const format: GX.TexFormat = view.getUint32(0x20);
     const mipCount = view.getUint32(0x24);
-    const minLod = view.getFloat32(0x28);
-    const maxLod = view.getFloat32(0x2C);
+    const minLOD = view.getFloat32(0x28) * 1/8;
+    const maxLOD = view.getFloat32(0x2C) * 1/8;
 
     const data = buffer.subarray(dataOffs);
-    return { name, width, height, format, mipCount, minLod, maxLod, data };
+    return { name, width, height, format, mipCount, minLOD, maxLOD, data };
 }
 
 export interface MDL0 {
@@ -121,6 +121,7 @@ class DisplayListRegisters {
         idx -= 0x1000;
         this.xf[idx * 0x10 + sub] = v;
     }
+
     public xfg(idx: GX.XFRegister, sub: number = 0): number {
         assert(idx >= 0x1000);
         idx -= 0x1000;
@@ -212,21 +213,35 @@ function parseMDL0_TevEntry(buffer: ArrayBufferSlice, r: DisplayListRegisters, n
     runDisplayListRegisters(r, buffer.subarray(dlOffs, 480));
 }
 
-interface MDL0_MaterialTextureEntry {
+interface MDL0_MaterialSamplerEntry {
     name: string;
     namePalette: string;
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
     minFilter: GX.TexFilter;
     magFilter: GX.TexFilter;
+    lodBias: number;
 }
 
-interface MDL0_MaterialEntry {
+interface SRT {
+    scaleS: number;
+    scaleT: number;
+    rotation: number;
+    translationS: number;
+    translationT: number;
+}
+
+export interface MDL0_TexSrtEntry {
+    texSrt: SRT;
+    texMtx: mat4;
+}
+
+export interface MDL0_MaterialEntry {
     index: number;
     name: string;
     translucent: boolean;
     gxMaterial: GX_Material.GXMaterial;
-    textures: MDL0_MaterialTextureEntry[];
+    samplers: MDL0_MaterialSamplerEntry[];
 }
 
 function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
@@ -284,7 +299,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
     const texGens: GX_Material.TexGen[] = [];
 
     for (let i = 0; i < numTexGens; i++) {
-        const v = r.xfg((GX.XFRegister.XF_TEX0_ID + i) * 0x10);
+        const v = r.xfg(GX.XFRegister.XF_TEX0_ID + i);
 
         const enum TexProjection {
             ST = 0x00,
@@ -364,7 +379,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         const postMatrix: GX.PostTexGenMatrix = ((dv >>> 0) & 0xFF) + GX.PostTexGenMatrix.PTTEXMTX0;
         const normalize: boolean = !!((dv >>> 8) & 0x01);
 
-        texGens.push({ index, type: texGenType, source: texGenSrc, matrix, normalize, postMatrix });
+        texGens.push({ index: i, type: texGenType, source: texGenSrc, matrix, normalize, postMatrix });
     }
 
     // TEV stages.
@@ -391,24 +406,23 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         const te1: boolean =           !!((v >>> 18) & 0x01);
         const cc1: GX.RasColorChannelID = (v >>> 19) & 0x07;
 
-        // TEV stages should be sequential.
-        if (!te0)
+        if (i*2+0 >= numTevs)
             break;
 
         const order0 = {
-            texMapId: ti0,
+            texMapId: te0 ? ti0 : GX.TexMapID.TEXMAP_NULL,
             texCoordId: tc0,
             channelId: cc0,
         };
         tevOrders.push(order0);
 
-        if (!te1)
+        if (i*2+1 >= numTevs)
             break;
 
         const order1 = {
-            texMapId: ti0,
-            texCoordId: tc0,
-            channelId: cc0,
+            texMapId: te1 ? ti1 : GX.TexMapID.TEXMAP_NULL,
+            texCoordId: tc1,
+            channelId: cc1,
         };
         tevOrders.push(order1);
     }
@@ -424,8 +438,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         const colorInB: GX.CombineColorInput = (color >>>  8) & 0x0F;
         const colorInA: GX.CombineColorInput = (color >>> 12) & 0x0F;
         const colorBias: GX.TevBias =          (color >>> 16) & 0x03;
-        const colorSub: boolean =            !!(color >>> 18);
-        const colorClamp: boolean =          !!(color >>> 19);
+        const colorSub: boolean =           !!((color >>> 18) & 0x01);
+        const colorClamp: boolean =         !!((color >>> 19) & 0x01);
         const colorScale: GX.TevScale =        (color >>> 20) & 0x03;
         const colorRegId: GX.Register =        (color >>> 22) & 0x03;
 
@@ -440,8 +454,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         const alphaInB: GX.CombineAlphaInput = (alpha >>> 10) & 0x07;
         const alphaInA: GX.CombineAlphaInput = (alpha >>> 13) & 0x07;
         const alphaBias: GX.TevBias =          (alpha >>> 16) & 0x03;
-        const alphaSub: boolean =            !!(alpha >>> 18);
-        const alphaClamp: boolean =          !!(alpha >>> 19);
+        const alphaSub: boolean =           !!((alpha >>> 18) & 0x01);
+        const alphaClamp: boolean =         !!((alpha >>> 19) & 0x01);
         const alphaScale: GX.TevScale =        (alpha >>> 20) & 0x03;
         const alphaRegId: GX.Register =        (alpha >>> 22) & 0x03;
 
@@ -501,8 +515,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
     // Alpha test.
     const ap = r.bp[GX.BPRegister.TEV_ALPHAFUNC_ID];
     const alphaTest: GX_Material.AlphaTest = {
-        referenceA: ((ap >>>  0) & 0x0F) / 0xFF,
-        referenceB: ((ap >>>  8) & 0x0F) / 0xFF,
+        referenceA: ((ap >>>  0) & 0xFF) / 0xFF,
+        referenceB: ((ap >>>  8) & 0xFF) / 0xFF,
         compareA:    (ap >>> 16) & 0x07,
         compareB:    (ap >>> 19) & 0x07,
         op:          (ap >>> 22) & 0x07,
@@ -533,7 +547,16 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
     };
 
     // TODO(jstpierre): Light channels
-    const lightChannels: GX_Material.LightChannelControl[] = [];
+    const lightChannels: GX_Material.LightChannelControl[] = [
+        {
+            colorChannel: { lightingFudge: '0.6 * $VTX$', lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.VTX },
+            alphaChannel: { lightingFudge: '1.0 * $VTX$', lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.VTX },
+        },
+        {
+            colorChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.VTX },
+            alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.VTX },
+        },
+    ];
 
     // TODO(jstpierre): Indirect texture stages
     const indTexStages: GX_Material.IndTexStage[] = [];
@@ -546,8 +569,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         indTexStages, alphaTest, ropInfo,
     }
 
-    // Textures.
-    const textures: MDL0_MaterialTextureEntry[] = [];
+    // Samplers
+    const samplers: MDL0_MaterialSamplerEntry[] = [];
     for (let i = 0; i < numTexPltt; i++) {
         const texPlttInfoOffs = texPlttOffs + i * 0x34;
         const nameTexOffs = view.getUint32(texPlttInfoOffs + 0x00);
@@ -560,17 +583,57 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         const wrapT: GX.WrapMode = view.getUint32(texPlttInfoOffs + 0x1C);
         const minFilter: GX.TexFilter = view.getUint32(texPlttInfoOffs + 0x20);
         const magFilter: GX.TexFilter = view.getUint32(texPlttInfoOffs + 0x24);
-        const lodBias = view.getFloat32(texPlttInfoOffs + 0x28);
+        const lodBias = view.getFloat32(texPlttInfoOffs + 0x28) * 1/8;
         const maxAniso = view.getUint32(texPlttInfoOffs + 0x2C);
         const biasClamp = view.getUint8(texPlttInfoOffs + 0x30);
         const edgeLod = view.getUint8(texPlttInfoOffs + 0x31);
 
-        const name = readString(buffer, texPlttOffs + nameTexOffs);
-        const namePalette = (namePltOffs !== 0) ? readString(buffer, texPlttOffs + namePltOffs) : null;
-        textures[texMapId] = { name, namePalette, wrapS, wrapT, minFilter, magFilter };
+        const name = readString(buffer, texPlttInfoOffs + nameTexOffs);
+        const namePalette = (namePltOffs !== 0) ? readString(buffer, texPlttInfoOffs + namePltOffs) : null;
+        samplers[texMapId] = { name, namePalette, lodBias, wrapS, wrapT, minFilter, magFilter };
     }
 
-    return { index, name, translucent, gxMaterial, textures };
+    // SRT
+    const srtFlags = view.getUint32(0x1a8);
+    const texMtxMode = view.getUint32(0x1ac);
+    let texSrtTableIdx = 0x1b0;
+    let texMtxTableIdx = 0x250;
+    for (let i = 0; i < 8; i++) {
+        const scaleS = view.getFloat32(texSrtTableIdx + 0x00);
+        const scaleT = view.getFloat32(texSrtTableIdx + 0x04);
+        const rotation = view.getFloat32(texSrtTableIdx + 0x08);
+        const translationS = view.getFloat32(texSrtTableIdx + 0x0C);
+        const translationT = view.getFloat32(texSrtTableIdx + 0x10);
+
+        const refCamera = view.getInt8(texMtxTableIdx + 0x00);
+        const refLight = view.getInt8(texMtxTableIdx + 0x01);
+        const mapMode = view.getInt8(texMtxTableIdx + 0x02);
+        const miscFlags = view.getInt8(texMtxTableIdx + 0x03);
+
+        const m00 = view.getFloat32(texMtxTableIdx + 0x04);
+        const m01 = view.getFloat32(texMtxTableIdx + 0x08);
+        const m02 = view.getFloat32(texMtxTableIdx + 0x0C);
+        const m03 = view.getFloat32(texMtxTableIdx + 0x10);
+        const m10 = view.getFloat32(texMtxTableIdx + 0x14);
+        const m11 = view.getFloat32(texMtxTableIdx + 0x18);
+        const m12 = view.getFloat32(texMtxTableIdx + 0x1C);
+        const m13 = view.getFloat32(texMtxTableIdx + 0x20);
+        const m20 = view.getFloat32(texMtxTableIdx + 0x24);
+        const m21 = view.getFloat32(texMtxTableIdx + 0x28);
+        const m22 = view.getFloat32(texMtxTableIdx + 0x2C);
+        const m23 = view.getFloat32(texMtxTableIdx + 0x30);
+        const matrix = mat4.fromValues(
+            m00, m10, m20, 0,
+            m01, m11, m21, 0,
+            m02, m12, m22, 0,
+            m03, m13, m23, 1,
+        );
+
+        texSrtTableIdx += 0x14;
+        texMtxTableIdx += 0x34;
+    }
+
+    return { index, name, translucent, gxMaterial, samplers };
 }
 
 interface VtxBufferData {
@@ -640,7 +703,7 @@ function parseInputVertexBuffers(buffer: ArrayBufferSlice, vtxPosResDic: ResDicE
     return { pos, nrm, clr, txc };
 }
 
-interface MDL0_ShapeEntry {
+export interface MDL0_ShapeEntry {
     name: string;
     loadedVertexLayout: LoadedVertexLayout;
     loadedVertexData: LoadedVertexData;
@@ -753,24 +816,31 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     const vatB = r.cp[GX.CPRegister.VAT_B_ID + GX.VtxFmt.VTXFMT0];
     const vatC = r.cp[GX.CPRegister.VAT_C_ID + GX.VtxFmt.VTXFMT0];
 
-    // TODO(jstpierre): Support compShift during the conversion...
+    function vatFmt(compCnt: GX.CompCnt, compType: GX.CompType, compShift: number): GX_VtxAttrFmt {
+        return { compCnt, compType, compShift };
+    }
+
     const vat: GX_VtxAttrFmt[] = [];
-    vat[GX.VertexAttribute.POS]  = { compCnt: (vatA >>>  0) & 0x01, compType: (vatA >>>  1) & 0x07, compShift: 0 };
+    //                                        compCnt               compType              compShift
+    vat[GX.VertexAttribute.POS]      = vatFmt((vatA >>>  0) & 0x01, (vatA >>>  1) & 0x07, (vatA >>>  4) & 0x1F);
     const nrm3 = !!(vatA >>> 31);
-    vat[GX.VertexAttribute.NRM]  = { compCnt: nrm3 ? GX.CompCnt.NRM_NBT3 : (vatA >>> 9) & 0x01, compType: (vatA >>> 10) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.CLR0] = { compCnt: (vatA >>> 13) & 0x01, compType: (vatA >>> 14) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.CLR1] = { compCnt: (vatA >>> 17) & 0x01, compType: (vatA >>> 18) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.TEX0] = { compCnt: (vatA >>> 21) & 0x01, compType: (vatA >>> 22) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.TEX1] = { compCnt: (vatB >>>  0) & 0x01, compType: (vatB >>>  1) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.TEX2] = { compCnt: (vatB >>>  9) & 0x01, compType: (vatB >>> 10) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.TEX3] = { compCnt: (vatB >>> 18) & 0x01, compType: (vatB >>> 19) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.TEX4] = { compCnt: (vatB >>> 27) & 0x01, compType: (vatB >>> 28) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.TEX5] = { compCnt: (vatC >>>  5) & 0x01, compType: (vatC >>>  6) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.TEX6] = { compCnt: (vatC >>> 14) & 0x01, compType: (vatC >>> 15) & 0x07, compShift: 0 };
-    vat[GX.VertexAttribute.TEX7] = { compCnt: (vatC >>> 23) & 0x01, compType: (vatC >>> 24) & 0x07, compShift: 0 };
+    const nrmCnt = nrm3 ? GX.CompCnt.NRM_NBT3:(vatA >>>  9) & 0x01;
+    vat[GX.VertexAttribute.NRM]      = vatFmt(nrmCnt,               (vatA >>> 10) & 0x07, 0);
+    vat[GX.VertexAttribute.CLR0]     = vatFmt((vatA >>> 13) & 0x01, (vatA >>> 14) & 0x07, 0);
+    vat[GX.VertexAttribute.CLR1]     = vatFmt((vatA >>> 17) & 0x01, (vatA >>> 18) & 0x07, 0);
+    vat[GX.VertexAttribute.TEX0]     = vatFmt((vatA >>> 21) & 0x01, (vatA >>> 22) & 0x07, (vatA >>> 25) & 0x1F);
+    vat[GX.VertexAttribute.TEX1]     = vatFmt((vatB >>>  0) & 0x01, (vatB >>>  1) & 0x07, (vatB >>>  4) & 0x1F);
+    vat[GX.VertexAttribute.TEX2]     = vatFmt((vatB >>>  9) & 0x01, (vatB >>> 10) & 0x07, (vatB >>> 13) & 0x1F);
+    vat[GX.VertexAttribute.TEX3]     = vatFmt((vatB >>> 18) & 0x01, (vatB >>> 19) & 0x07, (vatB >>> 22) & 0x1F);
+    vat[GX.VertexAttribute.TEX4]     = vatFmt((vatB >>> 27) & 0x01, (vatB >>> 28) & 0x07, (vatC >>>  0) & 0x1F);
+    vat[GX.VertexAttribute.TEX5]     = vatFmt((vatC >>>  5) & 0x01, (vatC >>>  6) & 0x07, (vatC >>>  9) & 0x1F);
+    vat[GX.VertexAttribute.TEX6]     = vatFmt((vatC >>> 14) & 0x01, (vatC >>> 15) & 0x07, (vatC >>> 18) & 0x1F);
+    vat[GX.VertexAttribute.TEX7]     = vatFmt((vatC >>> 23) & 0x01, (vatC >>> 24) & 0x07, (vatC >>> 27) & 0x1F);
 
     const vtxArrays: GX_Array[] = [];
-    vtxArrays[GX.VertexAttribute.POS] = { buffer: inputBuffers.pos[idVtxPos].data, offs: 0 };
+    assert(idVtxPos >= 0);
+    if (idVtxPos >= 0)
+        vtxArrays[GX.VertexAttribute.POS] = { buffer: inputBuffers.pos[idVtxPos].data, offs: 0 };
     if (idVtxNrm >= 0)
         vtxArrays[GX.VertexAttribute.NRM] = { buffer: inputBuffers.nrm[idVtxNrm].data, offs: 0 };
     if (idVtxClr0 >= 0)
@@ -861,7 +931,7 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     return { name, id, mtxId, flags, billboardMode, modelMatrix };
 }
 
-const enum ByteCodeOp {
+export const enum ByteCodeOp {
     NOP = 0x00,
     RET = 0x01,
     NODEDESC = 0x02, // NodeID ParentMtxID
@@ -871,19 +941,19 @@ const enum ByteCodeOp {
     MTXDUP = 0x06, // ToMtxID FromMtxID
 };
 
-interface NodeDescOp {
+export interface NodeDescOp {
     op: ByteCodeOp.NODEDESC;
     nodeId: number;
     parentMtxId: number;
 }
 
-interface MtxDupOp {
+export interface MtxDupOp {
     op: ByteCodeOp.MTXDUP;
     toMtxId: number;
     fromMtxId: number;
 }
 
-type NodeTreeOp = NodeDescOp | MtxDupOp;
+export type NodeTreeOp = NodeDescOp | MtxDupOp;
 
 function parseMDL0_NodeTreeBytecode(buffer: ArrayBufferSlice): NodeTreeOp[] {
     const view = buffer.createDataView();
@@ -911,7 +981,7 @@ function parseMDL0_NodeTreeBytecode(buffer: ArrayBufferSlice): NodeTreeOp[] {
     return nodeTreeOps;
 }
 
-interface DrawOp {
+export interface DrawOp {
     matId: number;
     shpId: number;
     nodeId: number;
