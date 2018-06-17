@@ -517,12 +517,14 @@ export const enum BPRegister {
 
     // IND (INDirect Texture Hardware)
     // SetTevIndirect
+    IND_MTXA0_ID       = 0x06,
+    IND_MTXB0_ID       = 0x07,
+    IND_MTXC0_ID       = 0x08,
     IND_CMD0_ID        = 0x10,
 
     // RAS1 (RASterization)
     // SetIndTexScale
     RAS1_SS0_ID        = 0x25,
-    RAS1_SS1_ID        = 0x26,
     // SetIndTexOrder
     RAS1_IREF_ID       = 0x27,
     // SetTevOrder
@@ -533,7 +535,6 @@ export const enum BPRegister {
     PE_ZMODE_ID        = 0x40,
     // SetBlendMode
     PE_CMODE0_ID       = 0x41,
-    PE_CMODE1_ID       = 0x42,
 
     // TEV (Texture EnVironments)
     // SetTev

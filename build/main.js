@@ -4708,8 +4708,8 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                     switch (op) {
                         case 0 /* ADD */:
                         case 1 /* SUB */:
-                            var o = (op === 0 /* ADD */) ? '+' : '-';
-                            var v = "mix(" + a + ", " + b + ", " + c + ") " + o + " " + d;
+                            var neg = (op === 1 /* SUB */) ? '-' : '';
+                            var v = neg + "mix(" + a + ", " + b + ", " + c + ") + " + d;
                             return this.generateTevOpBiasScaleClamp(v, bias, scale);
                         case 8 /* COMP_R8_GT */: return "((t_TevA.r >  t_TevB.r) ? " + c + " : " + zero + ") + " + d;
                         case 9 /* COMP_R8_EQ */: return "((t_TevA.r == t_TevB.r) ? " + c + " : " + zero + ") + " + d;
@@ -5484,8 +5484,9 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 };
                 TextureHolder.prototype.setTextureOverride = function (name, textureOverride) {
                     // Only allow setting texture overrides for textures that exist.
-                    if (!this.hasTexture(name))
-                        throw new Error("Trying to override non-existent texture " + name);
+                    // TODO(jstpierre): Bring this back when I fix ZTP scene loader.
+                    // if (!this.hasTexture(name))
+                    //    throw new Error(`Trying to override non-existent texture ${name}`);
                     this.textureOverrides.set(name, textureOverride);
                 };
                 TextureHolder.prototype.addTextures = function (gl, textureEntries) {
@@ -17798,6 +17799,14 @@ System.register("luigis_mansion/scenes", ["Progressable", "yay0", "util", "j3d/r
 System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "gl-matrix"], function (exports_76, context_76) {
     "use strict";
     var __moduleName = context_76 && context_76.id;
+    function calc2dMtx(dst, src) {
+        dst[0] = src[0];
+        dst[1] = src[1];
+        dst[2] = src[4];
+        dst[3] = src[5];
+        dst[4] = src[12];
+        dst[5] = src[13];
+    }
     function calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT) {
         var theta = Math.PI / 180 * rotation;
         var sinR = Math.sin(theta);
@@ -18149,8 +18158,39 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 alphaChannel: { lightingEnabled: false, matColorSource: 1 /* VTX */, ambColorSource: 1 /* VTX */ },
             },
         ];
-        // TODO(jstpierre): Indirect texture stages
         var indTexStages = [];
+        var iref = r.bp[39 /* RAS1_IREF_ID */];
+        for (var i = 0; i < numInds; i++) {
+            var index_6 = i;
+            var ss = r.bp[37 /* RAS1_SS0_ID */ + (index_6 >>> 2)];
+            var scaleS = (ss >>> ((0x08 * (i & 1)) + 0x00) & 0x0F);
+            var scaleT = (ss >>> ((0x08 * (i & 1)) + 0x04) & 0x0F);
+            var texture = (iref >>> (0x06 * i)) & 0x07;
+            var texCoordId = (iref >>> (0x06 * i)) & 0x07;
+            indTexStages.push({ index: index_6, scaleS: scaleS, scaleT: scaleT, texCoordId: texCoordId, texture: texture });
+        }
+        var indTexMatrices = [];
+        for (var i = 0; i < 3; i++) {
+            var indTexScaleBase = 10;
+            var indTexScaleBias = 0x11;
+            var indOffs = i * 3;
+            var mtxA = r.bp[6 /* IND_MTXA0_ID */ + indOffs];
+            var mtxB = r.bp[7 /* IND_MTXB0_ID */ + indOffs];
+            var mtxC = r.bp[8 /* IND_MTXC0_ID */ + indOffs];
+            var scaleBitsA = (mtxA >>> 22) & 0x03;
+            var scaleBitsB = (mtxB >>> 22) & 0x03;
+            var scaleBitsC = (mtxC >>> 22) & 0x03;
+            var scaleExp = (scaleBitsC << 4) | (scaleBitsB << 2) | scaleBitsA;
+            var scale = Math.pow(2, (scaleExp - indTexScaleBias - indTexScaleBase));
+            var ma = ((mtxA >>> 0) & 0x07FF) * scale;
+            var mb = ((mtxA >>> 11) & 0x07FF) * scale;
+            var mc = ((mtxB >>> 0) & 0x07FF) * scale;
+            var md = ((mtxB >>> 11) & 0x07FF) * scale;
+            var mx = ((mtxB >>> 0) & 0x07FF) * scale;
+            var my = ((mtxB >>> 11) & 0x07FF) * scale;
+            var mat = gl_matrix_16.mat2d.fromValues(ma, mb, mc, md, mx, my);
+            indTexMatrices.push(mat);
+        }
         var gxMaterial = {
             index: index, name: name,
             lightChannels: lightChannels, cullMode: cullMode,
@@ -18216,7 +18256,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             texSrtTableIdx += 0x14;
             texMtxTableIdx += 0x34;
         }
-        return { index: index, name: name, translucent: translucent, gxMaterial: gxMaterial, samplers: samplers, texSrts: texSrts };
+        return { index: index, name: name, translucent: translucent, gxMaterial: gxMaterial, samplers: samplers, texSrts: texSrts, indTexMatrices: indTexMatrices };
     }
     function parseMDL0_VtxData(buffer, vtxAttrib) {
         var view = buffer.createDataView();
@@ -18661,24 +18701,18 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var view = buffer.createDataView();
         var materialNameOffs = view.getUint32(0x00);
         var materialName = util_49.readString(buffer, materialNameOffs);
-        var flags = view.getUint32(0x04);
+        var texFlags = view.getUint32(0x04);
         var indFlags = view.getUint32(0x08);
-        var texAnimations = [];
+        var flags = indFlags << 8 | texFlags;
         var texAnimationTableIdx = 0x0C;
-        for (var i = 0; i < 8; i++) {
+        var texAnimations = [];
+        // 8 normal animations, 4 indtex animations
+        for (var i = 0; i < TexMtxIndex.COUNT; i++) {
             if (!(flags & (1 << i)))
                 continue;
             var texAnimationOffs = view.getUint32(texAnimationTableIdx);
             texAnimationTableIdx += 0x04;
             texAnimations[i] = parseSRT0_TexData(buffer.slice(texAnimationOffs));
-        }
-        var indTexAnimations = [];
-        for (var i = 0; i < 3; i++) {
-            if (!(indFlags & (1 << i)))
-                continue;
-            var texAnimationOffs = view.getUint32(texAnimationTableIdx);
-            texAnimationTableIdx += 0x04;
-            indTexAnimations[i] = parseSRT0_TexData(buffer.slice(texAnimationOffs));
         }
         return { materialName: materialName, texAnimations: texAnimations };
     }
@@ -18808,7 +18842,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var e_67, _a, e_68, _b, e_69, _c;
     }
     exports_76("parse", parse);
-    var util_49, GX_Material, gx_displaylist_4, gl_matrix_16, DisplayListRegisters, AnimationController, TexSrtAnimator;
+    var util_49, GX_Material, gx_displaylist_4, gl_matrix_16, DisplayListRegisters, AnimationController, TexSrtAnimator, TexMtxIndex;
     return {
         setters: [
             function (util_49_1) {
@@ -18888,6 +18922,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     this.animationController = animationController;
                     this.srt0 = srt0;
                     this.texData = texData;
+                    this.scratch = gl_matrix_16.mat4.create();
                 }
                 TexSrtAnimator.prototype.calcTexMtx = function (dst) {
                     var texData = this.texData;
@@ -18900,9 +18935,30 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     var translationT = texData.translationS ? sampleAnimationData(texData.translationT, animFrame) : 0;
                     calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT);
                 };
+                TexSrtAnimator.prototype.calcIndTexMtx = function (dst) {
+                    this.calcTexMtx(this.scratch);
+                    calc2dMtx(dst, this.scratch);
+                };
                 return TexSrtAnimator;
             }());
             exports_76("TexSrtAnimator", TexSrtAnimator);
+            (function (TexMtxIndex) {
+                // Texture.
+                TexMtxIndex[TexMtxIndex["TEX0"] = 0] = "TEX0";
+                TexMtxIndex[TexMtxIndex["TEX1"] = 1] = "TEX1";
+                TexMtxIndex[TexMtxIndex["TEX2"] = 2] = "TEX2";
+                TexMtxIndex[TexMtxIndex["TEX3"] = 3] = "TEX3";
+                TexMtxIndex[TexMtxIndex["TEX4"] = 4] = "TEX4";
+                TexMtxIndex[TexMtxIndex["TEX5"] = 5] = "TEX5";
+                TexMtxIndex[TexMtxIndex["TEX6"] = 6] = "TEX6";
+                TexMtxIndex[TexMtxIndex["TEX7"] = 7] = "TEX7";
+                // Indirect.
+                TexMtxIndex[TexMtxIndex["IND0"] = 8] = "IND0";
+                TexMtxIndex[TexMtxIndex["IND1"] = 9] = "IND1";
+                TexMtxIndex[TexMtxIndex["IND2"] = 10] = "IND2";
+                TexMtxIndex[TexMtxIndex["COUNT"] = 11] = "COUNT";
+            })(TexMtxIndex || (TexMtxIndex = {}));
+            exports_76("TexMtxIndex", TexMtxIndex);
         }
     };
 });
@@ -19195,7 +19251,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     this.translateSamplers(gl);
                 }
                 Command_Material.prototype.bindSRT0 = function (animationController, srt0) {
-                    for (var i = 0; i < 8; i++) {
+                    for (var i = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
                         if (!this.material.samplers[i])
                             continue;
                         var srtAnimator = BRRES.bindTexAnimator(animationController, srt0, this.material.name, i);
@@ -19219,12 +19275,23 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                         this.glSamplers[i] = glSampler;
                     }
                 };
-                Command_Material.prototype.calcTexMtx = function (dst, texMtxIdx) {
+                Command_Material.prototype.calcTexMtx = function (dst, texIdx) {
+                    var texMtxIdx = BRRES.TexMtxIndex.TEX0 + texIdx;
+                    // TODO(jstpierre): effects
                     if (this.srtAnimators[texMtxIdx]) {
                         this.srtAnimators[texMtxIdx].calcTexMtx(dst);
                     }
                     else {
-                        gl_matrix_17.mat4.copy(dst, this.material.texSrts[texMtxIdx].srtMtx);
+                        gl_matrix_17.mat4.copy(dst, this.material.texSrts[texIdx].srtMtx);
+                    }
+                };
+                Command_Material.prototype.calcIndMtx = function (dst, indIdx) {
+                    var texMtxIdx = BRRES.TexMtxIndex.IND0 + indIdx;
+                    if (this.srtAnimators[texMtxIdx]) {
+                        this.srtAnimators[texMtxIdx].calcIndTexMtx(dst);
+                    }
+                    else {
+                        gl_matrix_17.mat2d.copy(dst, this.material.indTexMatrices[indIdx]);
                     }
                 };
                 Command_Material.prototype.fillMaterialParams = function (materialParams) {
@@ -19244,6 +19311,8 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                         materialParams.u_KonstColor[i] = this.material.gxMaterial.colorConstants[i];
                     for (var i = 0; i < 8; i++)
                         this.calcTexMtx(materialParams.u_PostTexMtx[i], i);
+                    for (var i = 0; i < 3; i++)
+                        this.calcIndMtx(materialParams.u_IndTexMtx[i], i);
                 };
                 Command_Material.prototype.exec = function (state, renderHelper) {
                     var gl = state.gl;

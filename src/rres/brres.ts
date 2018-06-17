@@ -8,7 +8,16 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getComponentSizeRaw, getComponentCountRaw } from '../gx/gx_displaylist';
-import { vec3, mat4, quat } from 'gl-matrix';
+import { vec3, mat4, quat, mat2d } from 'gl-matrix';
+
+function calc2dMtx(dst: mat2d, src: mat4): void {
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[4];
+    dst[3] = src[5];
+    dst[4] = src[12];
+    dst[5] = src[13]
+}
 
 function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
     const theta = Math.PI / 180 * rotation;
@@ -254,6 +263,7 @@ export interface MDL0_MaterialEntry {
     gxMaterial: GX_Material.GXMaterial;
     samplers: MDL0_MaterialSamplerEntry[];
     texSrts: MDL0_TexSrtEntry[];
+    indTexMatrices: mat2d[];
 }
 
 function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
@@ -570,8 +580,46 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         },
     ];
 
-    // TODO(jstpierre): Indirect texture stages
     const indTexStages: GX_Material.IndTexStage[] = [];
+    const iref = r.bp[GX.BPRegister.RAS1_IREF_ID];
+    for (let i = 0; i < numInds; i++) {
+        const index = i;
+        const ss = r.bp[GX.BPRegister.RAS1_SS0_ID + (index >>> 2)];
+        const scaleS: GX.IndTexScale = (ss >>> ((0x08 * (i & 1)) + 0x00) & 0x0F);
+        const scaleT: GX.IndTexScale = (ss >>> ((0x08 * (i & 1)) + 0x04) & 0x0F);
+        const texture: GX.TexMapID = (iref >>> (0x06*i)) & 0x07;
+        const texCoordId: GX.TexCoordID = (iref >>> (0x06*i)) & 0x07;
+        indTexStages.push({ index, scaleS, scaleT, texCoordId, texture });
+    }
+
+    const indTexMatrices: mat2d[] = [];
+    for (let i = 0; i < 3; i++) {
+        const indTexScaleBase = 10;
+        const indTexScaleBias = 0x11;
+
+        const indOffs = i * 3;
+        const mtxA = r.bp[GX.BPRegister.IND_MTXA0_ID + indOffs];
+        const mtxB = r.bp[GX.BPRegister.IND_MTXB0_ID + indOffs];
+        const mtxC = r.bp[GX.BPRegister.IND_MTXC0_ID + indOffs];
+
+        const scaleBitsA = (mtxA >>> 22) & 0x03;
+        const scaleBitsB = (mtxB >>> 22) & 0x03;
+        const scaleBitsC = (mtxC >>> 22) & 0x03;
+        const scaleExp = (scaleBitsC << 4) | (scaleBitsB << 2) | scaleBitsA;
+        const scale = Math.pow(2, (scaleExp - indTexScaleBias - indTexScaleBase));
+
+        const ma = ((mtxA >>>  0) & 0x07FF) * scale;
+        const mb = ((mtxA >>> 11) & 0x07FF) * scale;
+        const mc = ((mtxB >>>  0) & 0x07FF) * scale;
+        const md = ((mtxB >>> 11) & 0x07FF) * scale;
+        const mx = ((mtxB >>>  0) & 0x07FF) * scale;
+        const my = ((mtxB >>> 11) & 0x07FF) * scale;
+
+        const mat = mat2d.fromValues(
+            ma, mb, mc, md, mx, my
+        );
+        indTexMatrices.push(mat);
+    }
 
     const gxMaterial: GX_Material.GXMaterial = {
         index, name,
@@ -652,7 +700,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         texMtxTableIdx += 0x34;
     }
 
-    return { index, name, translucent, gxMaterial, samplers, texSrts };
+    return { index, name, translucent, gxMaterial, samplers, texSrts, indTexMatrices };
 }
 
 interface VtxBufferData {
@@ -1247,6 +1295,8 @@ export class AnimationController {
 }
 
 export class TexSrtAnimator {
+    private scratch = mat4.create();
+
     constructor(public animationController: AnimationController, public srt0: SRT0, public texData: SRT0_TexData) {
     }
 
@@ -1263,6 +1313,11 @@ export class TexSrtAnimator {
         const translationT = texData.translationS ? sampleAnimationData(texData.translationT, animFrame) : 0;
         calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT);
     }
+
+    public calcIndTexMtx(dst: mat2d): void {
+        this.calcTexMtx(this.scratch);
+        calc2dMtx(dst, this.scratch);
+    }
 }
 
 function findAnimationData_SRT0(srt0: SRT0, materialName: string, texMtxIndex: number): SRT0_TexData | null {
@@ -1277,7 +1332,25 @@ function findAnimationData_SRT0(srt0: SRT0, materialName: string, texMtxIndex: n
     return texData;
 }
 
-export function bindTexAnimator(animationController: AnimationController, srt0: SRT0, materialName: string, texMtxIndex: number): TexSrtAnimator | null {
+export enum TexMtxIndex {
+    // Texture.
+    TEX0 = 0,
+    TEX1 = 1,
+    TEX2 = 2,
+    TEX3 = 3,
+    TEX4 = 4,
+    TEX5 = 5,
+    TEX6 = 6,
+    TEX7 = 7,
+
+    // Indirect.
+    IND0 = 8,
+    IND1 = 9,
+    IND2 = 10,
+    COUNT,
+}
+
+export function bindTexAnimator(animationController: AnimationController, srt0: SRT0, materialName: string, texMtxIndex: TexMtxIndex): TexSrtAnimator | null {
     const texData: SRT0_TexData | null = findAnimationData_SRT0(srt0, materialName, texMtxIndex);
     if (texData === null)
         return null;
@@ -1338,30 +1411,19 @@ function parseSRT0_MatData(buffer: ArrayBufferSlice): SRT0_MatData {
 
     const materialNameOffs = view.getUint32(0x00);
     const materialName = readString(buffer, materialNameOffs);
-    const flags = view.getUint32(0x04);
+    const texFlags = view.getUint32(0x04);
     const indFlags = view.getUint32(0x08);
+    const flags = indFlags << 8 | texFlags;
 
-    const texAnimations: SRT0_TexData[] = [];
     let texAnimationTableIdx = 0x0C;
-    for (let i = 0; i < 8; i++) {
+    const texAnimations: SRT0_TexData[] = [];
+    // 8 normal animations, 4 indtex animations
+    for (let i: TexMtxIndex = 0; i < TexMtxIndex.COUNT; i++) {
         if (!(flags & (1 << i)))
             continue;
-
         const texAnimationOffs = view.getUint32(texAnimationTableIdx);
         texAnimationTableIdx += 0x04;
-
         texAnimations[i] = parseSRT0_TexData(buffer.slice(texAnimationOffs));
-    }
-
-    const indTexAnimations: SRT0_TexData[] = [];
-    for (let i = 0; i < 3; i++) {
-        if (!(indFlags & (1 << i)))
-            continue;
-
-        const texAnimationOffs = view.getUint32(texAnimationTableIdx);
-        texAnimationTableIdx += 0x04;
-
-        indTexAnimations[i] = parseSRT0_TexData(buffer.slice(texAnimationOffs));
     }
 
     return { materialName, texAnimations };
