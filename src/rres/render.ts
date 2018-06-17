@@ -7,7 +7,7 @@ import * as GX from '../gx/gx_enum';
 import * as GX_Texture from '../gx/gx_texture';
 import * as GX_Material from '../gx/gx_material';
 import { align, assert, nArray } from "../util";
-import { mat3, mat4 } from "gl-matrix";
+import { mat3, mat4, mat2d } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from "../gx/gx_render";
@@ -160,7 +160,7 @@ class Command_Material {
     }
 
     public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {
-        for (let i = 0; i < 8; i++) {
+        for (let i: BRRES.TexMtxIndex = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
             if (!this.material.samplers[i])
                 continue;
 
@@ -190,11 +190,22 @@ class Command_Material {
         }
     }
 
-    private calcTexMtx(dst: mat4, texMtxIdx: number): void {
+    private calcTexMtx(dst: mat4, texIdx: number): void {
+        const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
+        // TODO(jstpierre): effects
         if (this.srtAnimators[texMtxIdx]) {
             this.srtAnimators[texMtxIdx].calcTexMtx(dst);
         } else {
-            mat4.copy(dst, this.material.texSrts[texMtxIdx].srtMtx);
+            mat4.copy(dst, this.material.texSrts[texIdx].srtMtx);
+        }
+    }
+
+    private calcIndMtx(dst: mat2d, indIdx: number): void {
+        const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.IND0 + indIdx;
+        if (this.srtAnimators[texMtxIdx]) {
+            this.srtAnimators[texMtxIdx].calcIndTexMtx(dst);
+        } else {
+            mat2d.copy(dst, this.material.indTexMatrices[indIdx]);
         }
     }
 
@@ -217,6 +228,8 @@ class Command_Material {
             materialParams.u_KonstColor[i] = this.material.gxMaterial.colorConstants[i];
         for (let i = 0; i < 8; i++)
             this.calcTexMtx(materialParams.u_PostTexMtx[i], i);
+        for (let i = 0; i < 3; i++)
+            this.calcIndMtx(materialParams.u_IndTexMtx[i], i);
     }
 
     public exec(state: RenderState, renderHelper: GXRenderHelper): void {

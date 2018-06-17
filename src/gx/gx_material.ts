@@ -549,8 +549,8 @@ export class GX_Program extends BaseProgram {
         switch (op) {
         case GX.TevOp.ADD:
         case GX.TevOp.SUB:
-            const o = (op === GX.TevOp.ADD) ? '+' : '-';
-            const v = `mix(${a}, ${b}, ${c}) ${o} ${d}`;
+            const neg = (op === GX.TevOp.SUB) ? '-' : '';
+            const v = `${neg}mix(${a}, ${b}, ${c}) + ${d}`;
             return this.generateTevOpBiasScaleClamp(v, bias, scale);
         case GX.TevOp.COMP_R8_GT:     return `((t_TevA.r >  t_TevB.r) ? ${c} : ${zero}) + ${d}`;
         case GX.TevOp.COMP_R8_EQ:     return `((t_TevA.r == t_TevB.r) ? ${c} : ${zero}) + ${d}`;
