@@ -465,7 +465,11 @@ export class GX_Program extends BaseProgram {
     }
 
     private generateTexAccess(stage: TevStage) {
-        assert(stage.texMap !== GX.TexMapID.TEXMAP_NULL);
+        // Skyward Sword is amazing sometimes. I hope you're happy...
+        // assert(stage.texMap !== GX.TexMapID.TEXMAP_NULL);
+        if (stage.texMap === GX.TexMapID.TEXMAP_NULL)
+            return 'vec4(1.0, 1.0, 1.0, 1.0)';
+
         return `TextureSample(${stage.texMap}, t_TexCoord)`;
     }
 

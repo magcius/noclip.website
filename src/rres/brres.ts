@@ -1170,7 +1170,9 @@ function sampleAnimationData(track: AnimationTrack, frame: number) {
 
     // Find the first frame.
     const idx1 = frames.findIndex((key) => (frame < key.time));
-    if (idx1 < 0)
+    if (idx1 === 0)
+        return frames[0].value;
+    else if (idx1 < 0)
         return frames[frames.length - 1].value;
     const idx0 = idx1 - 1;
 
