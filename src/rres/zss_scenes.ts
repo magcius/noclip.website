@@ -13,14 +13,6 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState } from '../render';
 import { RRESTextureHolder, ModelRenderer } from './render';
 
-function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
-    const textures: Viewer.Texture[] = [];
-    for (const scene of scenes)
-        if (scene)
-            textures.push.apply(textures, scene.textures);
-    return textures;
-}
-
 const SAND_CLOCK_ICON = '<svg viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
 
 class SkywardSwordScene implements Viewer.MainScene {
@@ -247,7 +239,7 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
 }
 
 const id = "zss";
-const name = "Skyward Sword";
+const name = "The Legend of Zelda: Skyward Sword";
 const sceneDescs: Viewer.SceneDesc[] = [
     new SkywardSwordSceneDesc("D100",   "Skyview Temple"),
     new SkywardSwordSceneDesc("D101",   "Ancient Cistern"),
