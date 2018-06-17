@@ -7,7 +7,7 @@ import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 import * as GX_Texture from 'gx/gx_texture';
 import { AttributeFormat } from 'gx/gx_displaylist';
-import { TextureMapping, MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, loadTextureFromMipChain } from 'gx/gx_render';
+import { TextureMapping, MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, loadTextureFromMipChain, translateTexFilter, translateWrapMode } from 'gx/gx_render';
 import * as Viewer from 'viewer';
 
 import { CompareMode, RenderFlags, RenderState } from '../render';
@@ -321,6 +321,7 @@ export interface TextureOverride {
     glTexture: WebGLTexture;
     width: number;
     height: number;
+    projectionMatrix?: mat4;
 }
 
 interface HierarchyTraverseContext {
@@ -525,40 +526,12 @@ export class Scene implements Viewer.Scene {
         });
     }
 
-    private static translateTexFilter(gl: WebGL2RenderingContext, texFilter: GX.TexFilter) {
-        switch (texFilter) {
-        case GX.TexFilter.LIN_MIP_NEAR:
-            return gl.LINEAR_MIPMAP_NEAREST;
-        case GX.TexFilter.LIN_MIP_LIN:
-            return gl.LINEAR_MIPMAP_LINEAR;
-        case GX.TexFilter.LINEAR:
-            return gl.LINEAR;
-        case GX.TexFilter.NEAR_MIP_NEAR:
-            return gl.NEAREST_MIPMAP_NEAREST;
-        case GX.TexFilter.NEAR_MIP_LIN:
-            return gl.NEAREST_MIPMAP_LINEAR;
-        case GX.TexFilter.NEAR:
-            return gl.NEAREST;
-        }
-    }
-
-    private static translateWrapMode(gl: WebGL2RenderingContext, wrapMode: GX.WrapMode) {
-        switch (wrapMode) {
-        case GX.WrapMode.CLAMP:
-            return gl.CLAMP_TO_EDGE;
-        case GX.WrapMode.MIRROR:
-            return gl.MIRRORED_REPEAT;
-        case GX.WrapMode.REPEAT:
-            return gl.REPEAT;
-        }
-    }
-
     public static translateSampler(gl: WebGL2RenderingContext, sampler: TEX1_Sampler): WebGLSampler {
         const glSampler = gl.createSampler();
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, this.translateTexFilter(gl, sampler.minFilter));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, this.translateTexFilter(gl, sampler.magFilter));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, sampler.wrapS));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, sampler.wrapT));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
         gl.samplerParameterf(glSampler, gl.TEXTURE_MIN_LOD, sampler.minLOD);
         gl.samplerParameterf(glSampler, gl.TEXTURE_MAX_LOD, sampler.maxLOD);
         return glSampler;
