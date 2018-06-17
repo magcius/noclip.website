@@ -5531,6 +5531,45 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
 System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_render", "Camera"], function (exports_25, context_25) {
     "use strict";
     var __moduleName = context_25 && context_25.id;
+    function texProjPerspMtx(dst, fov, aspect, scaleS, scaleT, transS, transT) {
+        var cot = 1 / Math.tan(fov / 2);
+        dst[0] = (cot / aspect) * scaleS;
+        dst[4] = 0.0;
+        dst[8] = -transS;
+        dst[12] = 0.0;
+        dst[1] = 0.0;
+        dst[5] = cot * scaleT;
+        dst[9] = -transT;
+        dst[13] = 0.0;
+        dst[2] = 0.0;
+        dst[6] = 0.0;
+        dst[10] = -1.0;
+        dst[14] = 0.0;
+        dst[3] = 0.0;
+        dst[7] = 0.0;
+        dst[11] = 0.0;
+        dst[15] = 0.0;
+    }
+    function texProjOrthoMtx(dst, t, b, l, r, scaleS, scaleT, transS, transT) {
+        var h = 1 / (r - l);
+        dst[0] = 2.0 * h * scaleS;
+        dst[4] = 0.0;
+        dst[8] = 0.0;
+        dst[12] = ((-(r + l) * h) * scaleS) + transS;
+        var v = 1 / (t - b);
+        dst[1] = 0.0;
+        dst[5] = 2.0 * v * scaleT;
+        dst[9] = -transT;
+        dst[13] = ((-(t + b) * v) * scaleT) + transT;
+        dst[2] = 0.0;
+        dst[6] = 0.0;
+        dst[10] = -1.0;
+        dst[14] = 0.0;
+        dst[3] = 0.0;
+        dst[7] = 0.0;
+        dst[11] = 0.0;
+        dst[15] = 1.0;
+    }
     var gl_matrix_4, j3d_1, GX_Material, gx_render_1, Camera_3, J3DTextureHolder, scratchModelMatrix, scratchViewMatrix, Command_Shape, Command_Material, ColorOverride, matrixScratch, matrixScratch2, SceneLoaderToken, SceneLoader, Scene;
     return {
         setters: [
@@ -5697,48 +5736,68 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     copyColor(ColorOverride.C1, materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2]);
                     copyColor(ColorOverride.C2, materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3]);
                     // Bind our texture matrices.
-                    var matrixScratch = Command_Material.matrixScratch;
+                    var scratch = Command_Material.matrixScratch;
                     for (var i = 0; i < this.material.texMatrices.length; i++) {
                         var texMtx = this.material.texMatrices[i];
                         if (texMtx === null)
                             continue;
-                        var finalMatrix = matrixScratch;
-                        gl_matrix_4.mat4.copy(finalMatrix, texMtx.matrix);
-                        if (this.scene.btk !== null)
-                            this.scene.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, animationFrame);
+                        var dst = materialParams.u_TexMtx[i];
+                        // First, compute input matrix.
                         switch (texMtx.type) {
-                            case 0x00: // Normal. Does nothing.
-                                break;
-                            case 0x01: // Defino Plaza
+                            case 0x00:
+                            case 0x01: // Delfino Plaza
                             case 0x0B: // Luigi Circuit
+                            case 0x08: // Peach Beach.
+                                // No mapping.
+                                gl_matrix_4.mat4.identity(dst);
                                 break;
                             case 0x06: // Rainbow Road
-                                gl_matrix_4.mat4.mul(finalMatrix, finalMatrix, gl_matrix_4.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 1, 0));
-                                gl_matrix_4.mat4.mul(finalMatrix, finalMatrix, state.view);
-                                finalMatrix[12] = 0;
-                                finalMatrix[13] = 0;
-                                finalMatrix[14] = 0;
-                                break;
                             case 0x07: // Rainbow Road
-                                gl_matrix_4.mat4.mul(finalMatrix, finalMatrix, gl_matrix_4.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 0));
-                                gl_matrix_4.mat4.mul(finalMatrix, finalMatrix, state.view);
-                                finalMatrix[12] = 0;
-                                finalMatrix[13] = 0;
-                                finalMatrix[14] = 0;
+                                // Environment mapping. Uses the normal matrix.
+                                // Normal matrix. Emulated here by the view matrix with the translation lopped off...
+                                gl_matrix_4.mat4.copy(dst, state.view);
+                                dst[12] = 0;
+                                dst[13] = 0;
+                                dst[14] = 0;
                                 break;
-                            case 0x08: // Peach Beach
-                                gl_matrix_4.mat4.mul(finalMatrix, finalMatrix, gl_matrix_4.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 0));
-                                gl_matrix_4.mat4.mul(finalMatrix, finalMatrix, texMtx.projectionMatrix);
-                                break;
-                            case 0x09: // Rainbow Road
-                                gl_matrix_4.mat4.mul(finalMatrix, finalMatrix, gl_matrix_4.mat4.fromValues(0.5, 0, 0, 0, 0, -0.5, 0, 0, 0.5, 0.5, 1, 0, 0, 0, 0, 0));
-                                gl_matrix_4.mat4.mul(finalMatrix, finalMatrix, texMtx.projectionMatrix);
-                                gl_matrix_4.mat4.mul(finalMatrix, finalMatrix, state.view);
+                            case 0x09:
+                                // Projection. Used for indtexwater, mostly.
+                                gl_matrix_4.mat4.copy(dst, state.view);
                                 break;
                             default:
                                 throw "whoops";
                         }
-                        gl_matrix_4.mat4.copy(materialParams.u_TexMtx[i], finalMatrix);
+                        // Now apply effects.
+                        switch (texMtx.type) {
+                            case 0x00:
+                            case 0x01:
+                            case 0x0B:
+                                break;
+                            case 0x06: // Rainbow Road
+                                // Orthographic light mapping.
+                                // TODO(jstpierre): Figure out ortho params properly...
+                                // texProjOrthoMtx(scratch, ?, ?, ?, ?, 0.5, -0.5, 0.5, 0.5);
+                                gl_matrix_4.mat4.set(scratch, 0.5, 0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 1, 0);
+                                gl_matrix_4.mat4.mul(dst, scratch, dst);
+                                gl_matrix_4.mat4.mul(dst, texMtx.effectMatrix, dst);
+                                break;
+                            case 0x07: // Rainbow Road
+                            case 0x08: // Peach Beach
+                            case 0x09: // Rainbow Road
+                                // Perspective.
+                                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+                                gl_matrix_4.mat4.mul(dst, scratch, dst);
+                                // Don't apply effectMatrix to perspective. It appears to be
+                                // a projection matrix preconfigured for GC.
+                                break;
+                            default:
+                                throw "whoops";
+                        }
+                        // Apply SRT.
+                        gl_matrix_4.mat4.copy(scratch, texMtx.matrix);
+                        if (this.scene.btk !== null)
+                            this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
+                        gl_matrix_4.mat4.mul(dst, scratch, dst);
                     }
                     for (var i = 0; i < this.material.postTexMatrices.length; i++) {
                         var postTexMtx = this.material.postTexMatrices[i];
@@ -6712,10 +6771,10 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
             var p31 = view.getFloat32(texMtxOffs + 0x58);
             var p32 = view.getFloat32(texMtxOffs + 0x5C);
             var p33 = view.getFloat32(texMtxOffs + 0x60);
-            var projectionMatrix = gl_matrix_5.mat4.fromValues(p00, p10, p20, p30, p01, p11, p21, p31, p02, p12, p22, p32, p03, p13, p23, p33);
+            var effectMatrix = gl_matrix_5.mat4.fromValues(p00, p10, p20, p30, p01, p11, p21, p31, p02, p12, p22, p32, p03, p13, p23, p33);
             var matrix = gl_matrix_5.mat4.create();
             createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-            var texMtx = { type: type, projection: projection, projectionMatrix: projectionMatrix, matrix: matrix };
+            var texMtx = { type: type, projection: projection, effectMatrix: effectMatrix, matrix: matrix };
             return texMtx;
         }
         return { remapTable: remapTable, materialEntries: materialEntries };
@@ -7540,10 +7599,6 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                         this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
                     }
                     this.indTexScenes.forEach(function (indirectScene) {
-                        var texProjection = indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
-                        // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
-                        texProjection[0] = state.projection[0];
-                        texProjection[5] = -state.projection[5];
                         indirectScene.render(state);
                     });
                     // Transparent.
@@ -8385,10 +8440,6 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                     state.blitColorTarget(this.mainColorTarget);
                     if (this.seaIndirectScene) {
                         var indirectScene = this.seaIndirectScene;
-                        var texProjection = indirectScene.materialCommands[0].material.texMatrices[1].projectionMatrix;
-                        // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
-                        texProjection[0] = state.projection[0];
-                        texProjection[5] = -state.projection[5];
                         var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_2.EFB_WIDTH, height: gx_material_2.EFB_HEIGHT };
                         this.textureHolder.setTextureOverride("indirectdummy", textureOverride);
                         indirectScene.render(state);
@@ -8673,10 +8724,6 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", 
                     state.useRenderTarget(state.onscreenColorTarget);
                     state.blitColorTarget(this.mainColorTarget);
                     if (this.indirectScene) {
-                        var texProjection = this.indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
-                        // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
-                        texProjection[0] = state.projection[0];
-                        texProjection[5] = -state.projection[5];
                         var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_3.EFB_WIDTH, height: gx_material_3.EFB_HEIGHT };
                         this.textureHolder.setTextureOverride("IndDummy", textureOverride);
                         this.indirectScene.bindState(state);
@@ -19113,9 +19160,8 @@ System.register("rres/u8", ["util"], function (exports_77, context_77) {
 System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matrix", "gx/gx_render"], function (exports_78, context_78) {
     "use strict";
     var __moduleName = context_78 && context_78.id;
-    function texProjMtx(dst, fov, aspect, scaleS, scaleT, transS, transT) {
-        var angle = fov * 0.5;
-        var cot = 1.0 / angle;
+    function texProjPerspMtx(dst, fov, aspect, scaleS, scaleT, transS, transT) {
+        var cot = 1 / Math.tan(fov / 2);
         dst[0] = (cot / aspect) * scaleS;
         dst[4] = 0.0;
         dst[8] = -transS;
@@ -19128,6 +19174,44 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
         dst[6] = 0.0;
         dst[10] = -1.0;
         dst[14] = 0.0;
+        dst[3] = 0.0;
+        dst[7] = 0.0;
+        dst[11] = 0.0;
+        dst[15] = 0.0;
+    }
+    function texProjOrthoMtx(dst, t, b, l, r, scaleS, scaleT, transS, transT) {
+        var h = 1 / (r - l);
+        dst[0] = 2.0 * h * scaleS;
+        dst[4] = 0.0;
+        dst[8] = 0.0;
+        dst[12] = ((-(r + l) * h) * scaleS) + transS;
+        var v = 1 / (t - b);
+        dst[1] = 0.0;
+        dst[5] = 2.0 * v * scaleT;
+        dst[9] = -transT;
+        dst[13] = ((-(t + b) * v) * scaleT) + transT;
+        dst[2] = 0.0;
+        dst[6] = 0.0;
+        dst[10] = -1.0;
+        dst[14] = 0.0;
+        dst[3] = 0.0;
+        dst[7] = 0.0;
+        dst[11] = 0.0;
+        dst[15] = 1.0;
+    }
+    function texEnvMatrix(dst, scaleS, scaleT, transS, transT) {
+        dst[0] = scaleS;
+        dst[4] = 0.0;
+        dst[8] = 0.0;
+        dst[12] = transS;
+        dst[1] = 0.0;
+        dst[5] = -scaleT;
+        dst[9] = 0.0;
+        dst[13] = transT;
+        dst[2] = 0.0;
+        dst[6] = 0.0;
+        dst[10] = 0.0;
+        dst[14] = 1.0;
         dst[3] = 0.0;
         dst[7] = 0.0;
         dst[11] = 0.0;
@@ -19328,8 +19412,12 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     }
                     else if (texSrt.mapMode === 1 /* ENV_CAMERA */) {
                         // Environment mapping. Technically, a normal matrix should be used, but
-                        // we don't have a normal matrix.
+                        // we don't have a normal matrix. Pretend to have one by knocking the
+                        // translation out of the MV.
                         gl_matrix_17.mat4.copy(dst, state.view);
+                        dst[12] = 0;
+                        dst[13] = 0;
+                        dst[14] = 0;
                     }
                     else if (texSrt.mapMode === 2 /* PROJECTION */) {
                         // Projection mapping.
@@ -19341,15 +19429,17 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     var texSrt = this.material.texSrts[texIdx];
                     if (texSrt.mapMode === 2 /* PROJECTION */) {
                         // Apply camera projection matrix.
-                        // TODO(jstpierre): Why is this flipped?
-                        texProjMtx(dst, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+                        texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+                    }
+                    else if (texSrt.mapMode === 1 /* ENV_CAMERA */) {
+                        texEnvMatrix(dst, 0.5, 0.5, 0.5, 0.5);
                     }
                     else {
                         gl_matrix_17.mat4.identity(dst);
                     }
                     if (texSrt.mapMode !== 0 /* TEXCOORD */) {
                         // Effect mtx.
-                        gl_matrix_17.mat4.mul(dst, dst, this.material.texSrts[texIdx].effectMtx);
+                        gl_matrix_17.mat4.mul(dst, this.material.texSrts[texIdx].effectMtx, dst);
                     }
                     // Calculate SRT.
                     if (this.srtAnimators[texMtxIdx]) {
@@ -19358,7 +19448,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     else {
                         gl_matrix_17.mat4.copy(matrixScratch, this.material.texSrts[texIdx].srtMtx);
                     }
-                    gl_matrix_17.mat4.mul(dst, dst, matrixScratch);
+                    gl_matrix_17.mat4.mul(dst, matrixScratch, dst);
                 };
                 Command_Material.prototype.calcIndMtx = function (dst, indIdx) {
                     var texMtxIdx = BRRES.TexMtxIndex.IND0 + indIdx;

@@ -168,10 +168,6 @@ class SMGRenderer implements Viewer.MainScene {
         state.blitColorTarget(this.mainColorTarget);
 
         if (this.indirectScene) {
-            const texProjection = this.indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
-            // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
-            texProjection[0] = state.projection[0];
-            texProjection[5] = -state.projection[5];
             const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
             this.textureHolder.setTextureOverride("IndDummy", textureOverride);
             this.indirectScene.bindState(state);

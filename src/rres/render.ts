@@ -14,9 +14,8 @@ import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateW
 
 export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {}
 
-function texProjMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number) {
-    const angle = fov * 0.5;
-    const cot = 1.0 / angle;
+function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const cot = 1 / Math.tan(fov / 2);
 
     dst[0] = (cot / aspect) * scaleS;
     dst[4] = 0.0;
@@ -32,6 +31,52 @@ function texProjMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scal
     dst[6] = 0.0;
     dst[10] = -1.0;
     dst[14] = 0.0;
+
+    dst[3] = 0.0;
+    dst[7] = 0.0;
+    dst[11] = 0.0;
+    dst[15] = 0.0;
+}
+
+function texProjOrthoMtx(dst: mat4, t: number, b: number, l: number, r: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const h = 1 / (r - l);
+    dst[0] = 2.0 * h * scaleS;
+    dst[4] = 0.0;
+    dst[8] = 0.0;
+    dst[12] = ((-(r + l) * h) * scaleS) + transS;
+
+    const v = 1 / (t - b);
+    dst[1] = 0.0;
+    dst[5] = 2.0 * v * scaleT;
+    dst[9] = -transT;
+    dst[13] = ((-(t + b) * v) * scaleT) + transT;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = -1.0;
+    dst[14] = 0.0;
+
+    dst[3] = 0.0;
+    dst[7] = 0.0;
+    dst[11] = 0.0;
+    dst[15] = 1.0;
+}
+
+function texEnvMatrix(dst: mat4, scaleS: number, scaleT: number, transS: number, transT: number) {
+    dst[0] = scaleS;
+    dst[4] = 0.0;
+    dst[8] = 0.0;
+    dst[12] = transS;
+
+    dst[1] = 0.0;
+    dst[5] = -scaleT;
+    dst[9] = 0.0;
+    dst[13] = transT;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = 0.0;
+    dst[14] = 1.0;
 
     dst[3] = 0.0;
     dst[7] = 0.0;
@@ -224,8 +269,12 @@ class Command_Material {
             mat4.identity(dst);
         } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
             // Environment mapping. Technically, a normal matrix should be used, but
-            // we don't have a normal matrix.
+            // we don't have a normal matrix. Pretend to have one by knocking the
+            // translation out of the MV.
             mat4.copy(dst, state.view);
+            dst[12] = 0;
+            dst[13] = 0;
+            dst[14] = 0;
         } else if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
             // Projection mapping.
             mat4.copy(dst, state.view);
@@ -238,15 +287,16 @@ class Command_Material {
 
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
             // Apply camera projection matrix.
-            // TODO(jstpierre): Why is this flipped?
-            texProjMtx(dst, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+            texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+        } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
+            texEnvMatrix(dst, 0.5, 0.5, 0.5, 0.5);
         } else {
             mat4.identity(dst);
         }
 
         if (texSrt.mapMode !== BRRES.MapMode.TEXCOORD) {
             // Effect mtx.
-            mat4.mul(dst, dst, this.material.texSrts[texIdx].effectMtx);
+            mat4.mul(dst, this.material.texSrts[texIdx].effectMtx, dst);
         }
 
         // Calculate SRT.
@@ -256,7 +306,7 @@ class Command_Material {
             mat4.copy(matrixScratch, this.material.texSrts[texIdx].srtMtx);
         }
 
-        mat4.mul(dst, dst, matrixScratch);
+        mat4.mul(dst, matrixScratch, dst);
     }
 
     private calcIndMtx(dst: mat2d, indIdx: number): void {

@@ -23,6 +23,54 @@ export class J3DTextureHolder extends TextureHolder<TEX1_TextureData> {
     }
 }
 
+function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const cot = 1 / Math.tan(fov / 2);
+
+    dst[0] = (cot / aspect) * scaleS;
+    dst[4] = 0.0;
+    dst[8] = -transS;
+    dst[12] = 0.0;
+
+    dst[1] = 0.0;
+    dst[5] = cot * scaleT;
+    dst[9] = -transT;
+    dst[13] = 0.0;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = -1.0;
+    dst[14] = 0.0;
+
+    dst[3] = 0.0;
+    dst[7] = 0.0;
+    dst[11] = 0.0;
+    dst[15] = 0.0;
+}
+
+function texProjOrthoMtx(dst: mat4, t: number, b: number, l: number, r: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const h = 1 / (r - l);
+    dst[0] = 2.0 * h * scaleS;
+    dst[4] = 0.0;
+    dst[8] = 0.0;
+    dst[12] = ((-(r + l) * h) * scaleS) + transS;
+
+    const v = 1 / (t - b);
+    dst[1] = 0.0;
+    dst[5] = 2.0 * v * scaleT;
+    dst[9] = -transT;
+    dst[13] = ((-(t + b) * v) * scaleT) + transT;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = -1.0;
+    dst[14] = 0.0;
+
+    dst[3] = 0.0;
+    dst[7] = 0.0;
+    dst[11] = 0.0;
+    dst[15] = 1.0;
+}
+
 const scratchModelMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
 class Command_Shape {
@@ -205,73 +253,79 @@ export class Command_Material {
         copyColor(ColorOverride.C2, materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3]);
 
         // Bind our texture matrices.
-        const matrixScratch = Command_Material.matrixScratch;
+        const scratch = Command_Material.matrixScratch;
         for (let i = 0; i < this.material.texMatrices.length; i++) {
             const texMtx = this.material.texMatrices[i];
             if (texMtx === null)
                 continue;
 
-            let finalMatrix = matrixScratch;
-            mat4.copy(finalMatrix, texMtx.matrix);
+            const dst = materialParams.u_TexMtx[i];
 
-            if (this.scene.btk !== null)
-                this.scene.btk.calcAnimatedTexMtx(matrixScratch, this.material.name, i, animationFrame);
-
-            switch(texMtx.type) {
-            case 0x00: // Normal. Does nothing.
-                break;
-
-            case 0x01: // Defino Plaza
+            // First, compute input matrix.
+            switch (texMtx.type) {
+            case 0x00:
+            case 0x01: // Delfino Plaza
             case 0x0B: // Luigi Circuit
+            case 0x08: // Peach Beach.
+                // No mapping.
+                mat4.identity(dst);
                 break;
             case 0x06: // Rainbow Road
-                mat4.mul(finalMatrix, finalMatrix, mat4.fromValues(
-                    0.5, 0,   0, 0,
-                    0,  -0.5, 0, 0,
-                    0,   0,   0, 0,
-                    0.5, 0.5, 1, 0,
-                ));
-                mat4.mul(finalMatrix, finalMatrix, state.view);
-                finalMatrix[12] = 0;
-                finalMatrix[13] = 0;
-                finalMatrix[14] = 0;
-                break;
             case 0x07: // Rainbow Road
-                mat4.mul(finalMatrix, finalMatrix, mat4.fromValues(
-                    0.5,  0,   0, 0,
-                    0,   -0.5, 0, 0,
-                    0.5,  0.5, 1, 0,
-                    0,    0,   0, 0,
-                ));
-                mat4.mul(finalMatrix, finalMatrix, state.view);
-                finalMatrix[12] = 0;
-                finalMatrix[13] = 0;
-                finalMatrix[14] = 0;
+                // Environment mapping. Uses the normal matrix.
+                // Normal matrix. Emulated here by the view matrix with the translation lopped off...
+                mat4.copy(dst, state.view);
+                dst[12] = 0;
+                dst[13] = 0;
+                dst[14] = 0;
                 break;
-            case 0x08: // Peach Beach
-                mat4.mul(finalMatrix, finalMatrix, mat4.fromValues(
-                    0.5,  0,   0, 0,
-                    0,   -0.5, 0, 0,
-                    0.5,  0.5, 1, 0,
-                    0,    0,   0, 0,
-                ));
-                mat4.mul(finalMatrix, finalMatrix, texMtx.projectionMatrix);
-                break;
-            case 0x09: // Rainbow Road
-                mat4.mul(finalMatrix, finalMatrix, mat4.fromValues(
-                    0.5,  0,   0, 0,
-                    0,   -0.5, 0, 0,
-                    0.5,  0.5, 1, 0,
-                    0,    0,   0, 0,
-                ));
-                mat4.mul(finalMatrix, finalMatrix, texMtx.projectionMatrix);
-                mat4.mul(finalMatrix, finalMatrix, state.view);
+            case 0x09:
+                // Projection. Used for indtexwater, mostly.
+                mat4.copy(dst, state.view);
                 break;
             default:
                 throw "whoops";
             }
 
-            mat4.copy(materialParams.u_TexMtx[i], finalMatrix);
+            // Now apply effects.
+            switch(texMtx.type) {
+            case 0x00:
+            case 0x01:
+            case 0x0B:
+                break;
+            case 0x06: // Rainbow Road
+                // Orthographic light mapping.
+                // TODO(jstpierre): Figure out ortho params properly...
+                // texProjOrthoMtx(scratch, ?, ?, ?, ?, 0.5, -0.5, 0.5, 0.5);
+                mat4.set(scratch,
+                    0.5, 0,   0, 0,
+                    0,  -0.5, 0, 0,
+                    0,   0,   0, 0,
+                    0.5, 0.5, 1, 0,
+                );
+                mat4.mul(dst, scratch, dst);
+                mat4.mul(dst, texMtx.effectMatrix, dst);
+                break;
+            case 0x07: // Rainbow Road
+            case 0x08: // Peach Beach
+            case 0x09: // Rainbow Road
+                // Perspective.
+                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+                mat4.mul(dst, scratch, dst);
+                // Don't apply effectMatrix to perspective. It appears to be
+                // a projection matrix preconfigured for GC.
+                break;
+            default:
+                throw "whoops";
+            }
+
+            // Apply SRT.
+            mat4.copy(scratch, texMtx.matrix);
+
+            if (this.scene.btk !== null)
+                this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
+
+            mat4.mul(dst, scratch, dst);
         }
 
         for (let i = 0; i < this.material.postTexMatrices.length; i++) {
