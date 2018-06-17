@@ -26,21 +26,19 @@ import { CameraControllerClass, FPSCameraController } from './Camera';
 
 const sceneGroups = [
     ZTP.sceneGroup,
-    MKDD.sceneGroup,
+    ZSS.sceneGroup,
     ZWW.sceneGroup,
     SMS.sceneGroup,
     SMG.sceneGroup,
+    MKDD.sceneGroup,
+    LM.sceneGroup,
     SM64DS.sceneGroup,
+    SPL.sceneGroup,
     MDL0.sceneGroup,
     ZELVIEW.sceneGroup,
     OOT3D.sceneGroup,
-    SPL.sceneGroup,
     DKSIV.sceneGroup,
     MP1.sceneGroup,
-    LM.sceneGroup,
-
-    // Not quite ready yet.
-    ZSS.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {
