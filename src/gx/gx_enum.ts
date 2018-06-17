@@ -335,6 +335,19 @@ export const enum TexGenType {
     SRTG = 10,
 }
 
+export const enum PosNrmMatrix {
+    PNMTX0 = 0,
+    PNMTX1 = 3,
+    PNMTX2 = 6,
+    PNMTX3 = 9,
+    PNMTX4 = 12,
+    PNMTX5 = 15,
+    PNMTX6 = 18,
+    PNMTX7 = 21,
+    PNMTX8 = 24,
+    PNMTX9 = 27,
+}
+
 export const enum TexGenMatrix {
     IDENTITY = 60,
     TEXMTX0 = 30,
@@ -347,6 +360,18 @@ export const enum TexGenMatrix {
     TEXMTX7 = 51,
     TEXMTX8 = 54,
     TEXMTX9 = 57,
+
+    /* Clever games can use PNMTX as inputs to texgen. */
+    PNMTX0 = 0,
+    PNMTX1 = 3,
+    PNMTX2 = 6,
+    PNMTX3 = 9,
+    PNMTX4 = 12,
+    PNMTX5 = 15,
+    PNMTX6 = 18,
+    PNMTX7 = 21,
+    PNMTX8 = 24,
+    PNMTX9 = 27,
 }
 
 export const enum PostTexGenMatrix {

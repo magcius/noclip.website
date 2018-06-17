@@ -2897,6 +2897,10 @@ System.register("render", ["gl-matrix", "util", "Program", "Camera"], function (
                     gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRenderbuffer);
                     this.bindViewport();
                 };
+                RenderState.prototype.getAspect = function () {
+                    var width = this.currentColorTarget.width, height = this.currentColorTarget.height;
+                    return width / height;
+                };
                 RenderState.prototype.bindViewport = function () {
                     var gl = this.gl;
                     var width = this.currentColorTarget.width, height = this.currentColorTarget.height;
@@ -2907,8 +2911,7 @@ System.register("render", ["gl-matrix", "util", "Program", "Camera"], function (
                     this.nearClipPlane = near;
                     this.farClipPlane = far;
                     if (this.currentColorTarget) {
-                        var width = this.currentColorTarget.width, height = this.currentColorTarget.height;
-                        gl_matrix_2.mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
+                        gl_matrix_2.mat4.perspective(this.projection, this.fov, this.getAspect(), this.nearClipPlane, this.farClipPlane);
                     }
                 };
                 RenderState.prototype.compileProgram = function (prog) {
@@ -4484,9 +4487,16 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                     if (matrix === 60 /* IDENTITY */) {
                         return "" + src;
                     }
+                    else if (matrix >= 30 /* TEXMTX0 */) {
+                        var texMtxIdx = (matrix - 30 /* TEXMTX0 */) / 3;
+                        return "(u_TexMtx[" + texMtxIdx + "] * vec4(" + src + ", 1.0))";
+                    }
+                    else if (matrix >= 0 /* PNMTX0 */) {
+                        var pnMtxIdx = (matrix - 0 /* PNMTX0 */) / 3;
+                        return "(u_PosMtx[" + pnMtxIdx + "] * vec4(" + src + ", 1.0))";
+                    }
                     else {
-                        var matrixIdx = (matrix - 30 /* TEXMTX0 */) / 3;
-                        return "(u_TexMtx[" + matrixIdx + "] * vec4(" + src + ", 1.0))";
+                        throw "whoops";
                     }
                 };
                 GX_Program.prototype.generateTexGenType = function (texCoordGen) {
@@ -7509,7 +7519,6 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                     return [layers];
                 };
                 TwilightPrincessRenderer.prototype.render = function (state) {
-                    var _this = this;
                     var gl = state.gl;
                     // Draw skybox + opaque to main RT.
                     this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
@@ -7526,13 +7535,15 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                     state.useRenderTarget(state.onscreenColorTarget);
                     state.blitColorTarget(this.mainColorTarget);
                     // IndTex.
+                    if (this.indTexScenes.length) {
+                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_1.EFB_WIDTH, height: gx_material_1.EFB_HEIGHT };
+                        this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
+                    }
                     this.indTexScenes.forEach(function (indirectScene) {
                         var texProjection = indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
                         // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
                         texProjection[0] = state.projection[0];
                         texProjection[5] = -state.projection[5];
-                        var textureOverride = { glTexture: _this.mainColorTarget.resolvedColorTexture, width: gx_material_1.EFB_WIDTH, height: gx_material_1.EFB_HEIGHT };
-                        _this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
                         indirectScene.render(state);
                     });
                     // Transparent.
@@ -18249,6 +18260,19 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             var m22 = view.getFloat32(texMtxTableIdx + 0x2C);
             var m23 = view.getFloat32(texMtxTableIdx + 0x30);
             var effectMtx = gl_matrix_16.mat4.fromValues(m00, m10, m20, 0, m01, m11, m21, 0, m02, m12, m22, 0, m03, m13, m23, 1);
+            switch (mapMode) {
+                case 0 /* TEXCOORD */:
+                    // No matrix needed.
+                    break;
+                case 2 /* PROJECTION */:
+                case 1 /* ENV_CAMERA */:
+                case 3 /* ENV_LIGHT */:
+                    // Set ourselves to have a texture matrix.
+                    // This is a bit of a hack. In actuality, we should be using PNMTX0,
+                    // but we don't put the MV matrix in there yet... sigh...
+                    texGens[i].matrix = 30 /* TEXMTX0 */ + (i * 3);
+                    break;
+            }
             var srtMtx = gl_matrix_16.mat4.create();
             calcTexMtx(srtMtx, scaleS, scaleT, rotation, translationS, translationT);
             var texSrt = { refCamera: refCamera, refLight: refLight, mapMode: mapMode, srtMtx: srtMtx, effectMtx: effectMtx };
@@ -19089,7 +19113,27 @@ System.register("rres/u8", ["util"], function (exports_77, context_77) {
 System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matrix", "gx/gx_render"], function (exports_78, context_78) {
     "use strict";
     var __moduleName = context_78 && context_78.id;
-    var BRRES, GX_Material, util_51, gl_matrix_17, gx_render_4, RRESTextureHolder, ModelRenderer, Command_Shape, Command_Material;
+    function texProjMtx(dst, fov, aspect, scaleS, scaleT, transS, transT) {
+        var angle = fov * 0.5;
+        var cot = 1.0 / angle;
+        dst[0] = (cot / aspect) * scaleS;
+        dst[4] = 0.0;
+        dst[8] = -transS;
+        dst[12] = 0.0;
+        dst[1] = 0.0;
+        dst[5] = cot * scaleT;
+        dst[9] = -transT;
+        dst[13] = 0.0;
+        dst[2] = 0.0;
+        dst[6] = 0.0;
+        dst[10] = -1.0;
+        dst[14] = 0.0;
+        dst[3] = 0.0;
+        dst[7] = 0.0;
+        dst[11] = 0.0;
+        dst[15] = 1.0;
+    }
+    var BRRES, GX_Material, util_51, gl_matrix_17, gx_render_4, RRESTextureHolder, ModelRenderer, Command_Shape, matrixScratch, Command_Material;
     return {
         setters: [
             function (BRRES_1) {
@@ -19237,6 +19281,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                 };
                 return Command_Shape;
             }());
+            matrixScratch = gl_matrix_17.mat4.create();
             Command_Material = /** @class */ (function () {
                 function Command_Material(gl, textureHolder, material, name) {
                     if (name === void 0) { name = material.name; }
@@ -19275,15 +19320,45 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                         this.glSamplers[i] = glSampler;
                     }
                 };
-                Command_Material.prototype.calcTexMtx = function (dst, texIdx) {
+                Command_Material.prototype.calcTexMtx = function (dst, texIdx, state) {
+                    var texSrt = this.material.texSrts[texIdx];
+                    if (texSrt.mapMode === 0 /* TEXCOORD */) {
+                        // Identity.
+                        gl_matrix_17.mat4.identity(dst);
+                    }
+                    else if (texSrt.mapMode === 1 /* ENV_CAMERA */) {
+                        // Environment mapping. Technically, a normal matrix should be used, but
+                        // we don't have a normal matrix.
+                        gl_matrix_17.mat4.copy(dst, state.view);
+                    }
+                    else if (texSrt.mapMode === 2 /* PROJECTION */) {
+                        // Projection mapping.
+                        gl_matrix_17.mat4.copy(dst, state.view);
+                    }
+                };
+                Command_Material.prototype.calcPostTexMtx = function (dst, texIdx, state) {
                     var texMtxIdx = BRRES.TexMtxIndex.TEX0 + texIdx;
-                    // TODO(jstpierre): effects
-                    if (this.srtAnimators[texMtxIdx]) {
-                        this.srtAnimators[texMtxIdx].calcTexMtx(dst);
+                    var texSrt = this.material.texSrts[texIdx];
+                    if (texSrt.mapMode === 2 /* PROJECTION */) {
+                        // Apply camera projection matrix.
+                        // TODO(jstpierre): Why is this flipped?
+                        texProjMtx(dst, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
                     }
                     else {
-                        gl_matrix_17.mat4.copy(dst, this.material.texSrts[texIdx].srtMtx);
+                        gl_matrix_17.mat4.identity(dst);
                     }
+                    if (texSrt.mapMode !== 0 /* TEXCOORD */) {
+                        // Effect mtx.
+                        gl_matrix_17.mat4.mul(dst, dst, this.material.texSrts[texIdx].effectMtx);
+                    }
+                    // Calculate SRT.
+                    if (this.srtAnimators[texMtxIdx]) {
+                        this.srtAnimators[texMtxIdx].calcTexMtx(matrixScratch);
+                    }
+                    else {
+                        gl_matrix_17.mat4.copy(matrixScratch, this.material.texSrts[texIdx].srtMtx);
+                    }
+                    gl_matrix_17.mat4.mul(dst, dst, matrixScratch);
                 };
                 Command_Material.prototype.calcIndMtx = function (dst, indIdx) {
                     var texMtxIdx = BRRES.TexMtxIndex.IND0 + indIdx;
@@ -19294,7 +19369,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                         gl_matrix_17.mat2d.copy(dst, this.material.indTexMatrices[indIdx]);
                     }
                 };
-                Command_Material.prototype.fillMaterialParams = function (materialParams) {
+                Command_Material.prototype.fillMaterialParams = function (materialParams, state) {
                     for (var i = 0; i < 8; i++) {
                         var sampler = this.material.samplers[i];
                         if (!sampler)
@@ -19310,7 +19385,9 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     for (var i = 0; i < 4; i++)
                         materialParams.u_KonstColor[i] = this.material.gxMaterial.colorConstants[i];
                     for (var i = 0; i < 8; i++)
-                        this.calcTexMtx(materialParams.u_PostTexMtx[i], i);
+                        this.calcTexMtx(materialParams.u_TexMtx[i], i, state);
+                    for (var i = 0; i < 8; i++)
+                        this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state);
                     for (var i = 0; i < 3; i++)
                         this.calcIndMtx(materialParams.u_IndTexMtx[i], i);
                 };
@@ -19318,7 +19395,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     var gl = state.gl;
                     state.useProgram(this.program);
                     state.useFlags(this.renderFlags);
-                    this.fillMaterialParams(this.materialParams);
+                    this.fillMaterialParams(this.materialParams, state);
                     renderHelper.bindMaterialParams(state, this.materialParams);
                     renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
                 };
@@ -19332,10 +19409,10 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
     };
 });
 // Skyward Sword
-System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util", "Progressable", "rres/render"], function (exports_79, context_79) {
+System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util", "Progressable", "render", "rres/render", "gx/gx_material"], function (exports_79, context_79) {
     "use strict";
     var __moduleName = context_79 && context_79.id;
-    var UI, LZ77, BRRES, U8, util_52, Progressable_10, render_28, SAND_CLOCK_ICON, SkywardSwordScene, SkywardSwordSceneDesc, id, name, sceneDescs, sceneGroup;
+    var UI, LZ77, BRRES, U8, util_52, Progressable_10, render_28, render_29, gx_material_4, SAND_CLOCK_ICON, SkywardSwordScene, SkywardSwordSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (UI_5) {
@@ -19358,6 +19435,12 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
             },
             function (render_28_1) {
                 render_28 = render_28_1;
+            },
+            function (render_29_1) {
+                render_29 = render_29_1;
+            },
+            function (gx_material_4_1) {
+                gx_material_4 = gx_material_4_1;
             }
         ],
         execute: function () {
@@ -19368,7 +19451,10 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                     this.textureRRESes = textureRRESes;
                     this.stageArchive = stageArchive;
                     this.models = [];
-                    this.textureHolder = new render_28.RRESTextureHolder();
+                    this.mainColorTarget = new render_28.ColorTarget();
+                    // Uses WaterDummy. Have to render after everything else. TODO(jstpierre): How does engine know this?
+                    this.indirectModels = [];
+                    this.textureHolder = new render_29.RRESTextureHolder();
                     this.animationController = new BRRES.AnimationController();
                     this.textures = this.textureHolder.viewerTextures;
                     try {
@@ -19512,17 +19598,18 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         finally { if (e_77) throw e_77.error; }
                     }
                     try {
-                        outer: for (var _s = __values(this.models), _t = _s.next(); !_t.done; _t = _s.next()) {
+                        outer: 
+                        // Find any indirect scenes.
+                        for (var _s = __values(this.models), _t = _s.next(); !_t.done; _t = _s.next()) {
                             var modelRenderer = _t.value;
                             try {
-                                // Hide IndTex until we get that working.
                                 for (var _u = __values(modelRenderer.mdl0.materials), _v = _u.next(); !_v.done; _v = _u.next()) {
                                     var material = _v.value;
                                     try {
                                         for (var _w = __values(material.samplers), _x = _w.next(); !_x.done; _x = _w.next()) {
                                             var sampler = _x.value;
                                             if (sampler.name === 'DummyWater') {
-                                                modelRenderer.setVisible(false);
+                                                this.indirectModels.push(modelRenderer);
                                                 continue outer;
                                             }
                                         }
@@ -19627,13 +19714,30 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                     this.models.forEach(function (model) { return model.destroy(gl); });
                 };
                 SkywardSwordScene.prototype.render = function (state) {
+                    var _this = this;
+                    var gl = state.gl;
                     this.animationController.updateTime(state.time);
+                    this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
+                    state.useRenderTarget(this.mainColorTarget);
+                    gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
                     this.models.forEach(function (model) {
+                        if (_this.indirectModels.includes(model))
+                            return;
                         model.render(state);
+                    });
+                    // Copy to main render target.
+                    state.useRenderTarget(state.onscreenColorTarget);
+                    state.blitColorTarget(this.mainColorTarget);
+                    if (this.indirectModels.length) {
+                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_4.EFB_WIDTH, height: gx_material_4.EFB_HEIGHT };
+                        this.textureHolder.setTextureOverride("DummyWater", textureOverride);
+                    }
+                    this.indirectModels.forEach(function (modelRenderer) {
+                        modelRenderer.render(state);
                     });
                 };
                 SkywardSwordScene.prototype.spawnModel = function (gl, mdl0, rres, namePrefix) {
-                    var modelRenderer = new render_28.ModelRenderer(gl, this.textureHolder, mdl0, namePrefix);
+                    var modelRenderer = new render_29.ModelRenderer(gl, this.textureHolder, mdl0, namePrefix);
                     this.models.push(modelRenderer);
                     try {
                         // Bind animations.
@@ -19741,9 +19845,71 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
         }
     };
 });
-System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "fres/splatoon_scenes", "dksiv/scenes", "metroid_prime/scenes", "luigis_mansion/scenes", "rres/zss_scenes", "j3d/scenes", "ui", "Camera"], function (exports_80, context_80) {
+// Elebits
+System.register("rres/elb_scenes", ["rres/brres", "util", "rres/render"], function (exports_80, context_80) {
     "use strict";
     var __moduleName = context_80 && context_80.id;
+    var BRRES, util_53, render_30, ElebitsScene, ElebitsSceneDesc, id, name, sceneDescs, sceneGroup;
+    return {
+        setters: [
+            function (BRRES_3) {
+                BRRES = BRRES_3;
+            },
+            function (util_53_1) {
+                util_53 = util_53_1;
+            },
+            function (render_30_1) {
+                render_30 = render_30_1;
+            }
+        ],
+        execute: function () {
+            ElebitsScene = /** @class */ (function () {
+                function ElebitsScene(gl, stageRRES) {
+                    this.stageRRES = stageRRES;
+                    this.models = [];
+                    this.textureHolder = new render_30.RRESTextureHolder();
+                    this.animationController = new BRRES.AnimationController();
+                    this.textures = this.textureHolder.viewerTextures;
+                    this.textureHolder.addTextures(gl, stageRRES.textures);
+                }
+                ElebitsScene.prototype.destroy = function (gl) {
+                    this.textureHolder.destroy(gl);
+                    this.models.forEach(function (model) { return model.destroy(gl); });
+                };
+                ElebitsScene.prototype.render = function (state) {
+                    this.animationController.updateTime(state.time);
+                    this.models.forEach(function (model) {
+                        model.render(state);
+                    });
+                };
+                return ElebitsScene;
+            }());
+            ElebitsSceneDesc = /** @class */ (function () {
+                function ElebitsSceneDesc(id, name) {
+                    this.id = id;
+                    this.name = name;
+                }
+                ElebitsSceneDesc.prototype.createScene = function (gl) {
+                    var path = "data/elb/" + this.id + "_disp01.brres";
+                    return util_53.fetch(path).then(function (buffer) {
+                        var stageRRES = BRRES.parse(buffer);
+                        return new ElebitsScene(gl, stageRRES);
+                    });
+                };
+                return ElebitsSceneDesc;
+            }());
+            id = "elb";
+            name = "Elebits";
+            sceneDescs = [
+                new ElebitsSceneDesc("stg01_01", "stg01_01_disp01"),
+            ];
+            exports_80("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+        }
+    };
+});
+System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "fres/splatoon_scenes", "dksiv/scenes", "metroid_prime/scenes", "luigis_mansion/scenes", "rres/zss_scenes", "j3d/scenes", "ui", "Camera"], function (exports_81, context_81) {
+    "use strict";
+    var __moduleName = context_81 && context_81.id;
     var viewer_1, ArrayBufferSlice_10, Progressable_11, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, SPL, DKSIV, MP1, LM, ZSS, J3D, ui_1, Camera_6, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
     return {
         setters: [
@@ -20070,9 +20236,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
         }
     };
 });
-System.register("embeds/main", ["viewer", "Camera"], function (exports_81, context_81) {
+System.register("embeds/main", ["viewer", "Camera"], function (exports_82, context_82) {
     "use strict";
-    var __moduleName = context_81 && context_81.id;
+    var __moduleName = context_82 && context_82.id;
     var Viewer, Camera_7, FsButton, Main;
     return {
         setters: [
@@ -20163,15 +20329,15 @@ System.register("embeds/main", ["viewer", "Camera"], function (exports_81, conte
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0", "gx/gx_render"], function (exports_82, context_82) {
+System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0", "gx/gx_render"], function (exports_83, context_83) {
     "use strict";
-    var __moduleName = context_82 && context_82.id;
+    var __moduleName = context_83 && context_83.id;
     function createScene(gl, name) {
-        return util_53.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
+        return util_54.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
             return Yaz0.decompress(buffer);
         }).then(function (buffer) {
             var rarc = RARC.parse(buffer);
-            var textureHolder = new render_29.J3DTextureHolder();
+            var textureHolder = new render_31.J3DTextureHolder();
             var skyScene = sms_scenes_1.SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/sky', true);
             var bmdFile = rarc.findFile('map/map/sea.bmd');
             var btkFile = rarc.findFile('map/map/sea.btk');
@@ -20184,15 +20350,15 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             []);
         });
     }
-    exports_82("createScene", createScene);
-    var gl_matrix_18, util_53, GX_Material, j3d_5, RARC, render_29, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
+    exports_83("createScene", createScene);
+    var gl_matrix_18, util_54, GX_Material, j3d_5, RARC, render_31, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
     return {
         setters: [
             function (gl_matrix_18_1) {
                 gl_matrix_18 = gl_matrix_18_1;
             },
-            function (util_53_1) {
-                util_53 = util_53_1;
+            function (util_54_1) {
+                util_54 = util_54_1;
             },
             function (GX_Material_11) {
                 GX_Material = GX_Material_11;
@@ -20203,8 +20369,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             function (RARC_6) {
                 RARC = RARC_6;
             },
-            function (render_29_1) {
-                render_29 = render_29_1;
+            function (render_31_1) {
+                render_31 = render_31_1;
             },
             function (sms_scenes_1_1) {
                 sms_scenes_1 = sms_scenes_1_1;
@@ -20233,8 +20399,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                     this.bmt = null;
                     this.fps = 30;
                     this.btk = btk;
-                    var sceneLoader = new render_29.SceneLoader(textureHolder, bmd, null);
-                    render_29.Scene.prototype.translateTextures.call(this, gl, sceneLoader);
+                    var sceneLoader = new render_31.SceneLoader(textureHolder, bmd, null);
+                    render_31.Scene.prototype.translateTextures.call(this, gl, sceneLoader);
                     var seaMaterial = bmd.mat3.materialEntries.find(function (m) { return m.name === '_umi'; });
                     this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
                     this.plane = new PlaneShape(gl);
@@ -20274,7 +20440,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                             gxMaterial.tevStages.length = 1;
                         }
                     }
-                    var cmd = new render_29.Command_Material(gl, this, material);
+                    var cmd = new render_31.Command_Material(gl, this, material);
                     if (configName.includes('nomip')) {
                         try {
                             for (var _a = __values(this.glSamplers), _b = _a.next(); !_b.done; _b = _a.next()) {
@@ -20384,9 +20550,9 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         }
     };
 });
-System.register("luigis_mansion/jmp", ["util"], function (exports_83, context_83) {
+System.register("luigis_mansion/jmp", ["util"], function (exports_84, context_84) {
     "use strict";
-    var __moduleName = context_83 && context_83.id;
+    var __moduleName = context_84 && context_84.id;
     function nameHash(str) {
         var hash = 0;
         for (var i = 0; i < str.length; i++) {
@@ -20438,7 +20604,7 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_83, context_83
                             value = (view.getUint32(fieldOffs, false) >> field.shift) & field.bitmask;
                             break;
                         case 1 /* String */:
-                            value = util_54.readString(buffer, fieldOffs, 0x20, true);
+                            value = util_55.readString(buffer, fieldOffs, 0x20, true);
                             break;
                         case 2 /* Float */:
                             value = view.getFloat32(fieldOffs, false);
@@ -20460,12 +20626,12 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_83, context_83
         return records;
         var e_86, _a;
     }
-    exports_83("parse", parse);
-    var util_54, nameTable, hashLookup;
+    exports_84("parse", parse);
+    var util_55, nameTable, hashLookup;
     return {
         setters: [
-            function (util_54_1) {
-                util_54 = util_54_1;
+            function (util_55_1) {
+                util_55 = util_55_1;
             }
         ],
         execute: function () {

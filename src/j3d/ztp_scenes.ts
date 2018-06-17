@@ -114,13 +114,16 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
         state.blitColorTarget(this.mainColorTarget);
 
         // IndTex.
+        if (this.indTexScenes.length) {
+            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
+        }
+
         this.indTexScenes.forEach((indirectScene) => {
             const texProjection = indirectScene.materialCommands[0].material.texMatrices[0].projectionMatrix;
             // The normal texture projection is hardcoded for the Gamecube's projection matrix. Copy in our own.
             texProjection[0] = state.projection[0];
             texProjection[5] = -state.projection[5];
-            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
-            this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
             indirectScene.render(state);
         });
 

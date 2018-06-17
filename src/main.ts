@@ -19,6 +19,7 @@ import * as DKSIV from './dksiv/scenes';
 import * as MP1 from './metroid_prime/scenes';
 import * as LM from './luigis_mansion/scenes';
 import * as ZSS from './rres/zss_scenes';
+import * as ELB from './rres/elb_scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI } from './ui';
@@ -39,6 +40,7 @@ const sceneGroups = [
     OOT3D.sceneGroup,
     DKSIV.sceneGroup,
     MP1.sceneGroup,
+    // ELB.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {
