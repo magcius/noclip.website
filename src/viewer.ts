@@ -13,6 +13,7 @@ import { CameraController, Camera, CameraControllerClass } from './Camera';
 export interface Texture {
     name: string;
     surfaces: HTMLCanvasElement[];
+    extraInfo?: Map<string, string>;
 }
 
 export interface Scene {

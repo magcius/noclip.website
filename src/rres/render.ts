@@ -232,6 +232,10 @@ class Command_Material {
             if (!sampler)
                 continue;
 
+            // Check sampler validity.
+            if (!this.textureHolder.hasTexture(sampler.name))
+                console.warn("Missing texture:", sampler.name);
+
             const glSampler = gl.createSampler();
             gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
             gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));

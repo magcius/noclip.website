@@ -51,6 +51,8 @@ export abstract class ScrollSelect implements Widget {
         this.scrollContainer = document.createElement('div');
         this.scrollContainer.style.height = `200px`;
         this.scrollContainer.style.overflow = 'auto';
+        this.scrollContainer.style.userSelect = 'none';
+        this.scrollContainer.style.webkitUserSelect = 'none';
         this.toplevel.appendChild(this.scrollContainer);
 
         this.elem = this.toplevel;
@@ -456,6 +458,7 @@ export class TextureViewer extends Panel {
         super();
 
         this.setTitle(TEXTURES_ICON, 'Textures');
+        this.extraRack.style.pointerEvents = 'none';
 
         this.scrollList = new SingleSelect();
         this.scrollList.elem.style.height = `200px`;
@@ -519,13 +522,29 @@ export class TextureViewer extends Panel {
         const texture: Viewer.Texture = this.textureList[i];
         this.scrollList.setHighlighted(i);
 
-        this.properties.innerHTML = `
-<div style="display: grid; grid-template-columns: 1fr 1fr">
-<span>Mipmaps</span><span style="text-align: right">${texture.surfaces.length}</span>
-<span>Width</span><span style="text-align: right">${texture.surfaces[0].width}</span>
-<span>Height</span><span style="text-align: right">${texture.surfaces[0].height}</span>
-</div>
-`;
+        const properties = new Map<string, string>();
+        properties.set('Name', texture.name);
+        properties.set('Mipmaps', '' + texture.surfaces.length);
+        properties.set('Width', '' + texture.surfaces[0].width);
+        properties.set('Height', '' + texture.surfaces[0].height);
+
+        if (texture.extraInfo) {
+            texture.extraInfo.forEach((value, key) => properties.set(key, value));
+        }
+
+        this.properties.innerHTML = `<div style="display: grid; grid-template-columns: 1fr 1fr"></div>`;
+
+        const div = this.properties.firstElementChild;
+        properties.forEach((value, name) => {
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = name;
+            div.appendChild(nameSpan);
+            const valueSpan = document.createElement('span');
+            valueSpan.style.textAlign = 'right';
+            valueSpan.textContent = value;
+            div.appendChild(valueSpan);
+        });
+
         this.showInSurfaceView(texture.surfaces[0]);
         this.showInFullSurfaceView(texture.surfaces);
     }
@@ -705,6 +724,7 @@ and <a href="https://twitter.com/__Aruki">Aruki</a></p>
 <li> Open <span>by</span> Landan Lloyd
 <li> Nightshift <span>by</span> mikicon
 <li> Layer <span>by</span> Chameleon Design
+<li> Sand Clock <span>by</span> James
 </ul>
 </div>
 `;
@@ -713,6 +733,7 @@ and <a href="https://twitter.com/__Aruki">Aruki</a></p>
 
 export interface Layer {
     name: string;
+    visible: boolean;
     setVisible(v: boolean): void;
 }
 
@@ -734,12 +755,16 @@ export class LayerPanel extends Panel {
         this.layers[index].setVisible(visible);
     }
 
+    public syncLayerVisibility(): void {
+        const isOn = this.layers.map((layer) => layer.visible);
+        this.multiSelect.setItemsSelected(isOn);
+    }
+
     public setLayers(layers: Layer[]): void {
         this.layers = layers;
         const strings = layers.map((layer) => layer.name);
-        const isOn = strings.map(() => true);
         this.multiSelect.setStrings(strings);
-        this.multiSelect.setItemsSelected(isOn);
+        this.syncLayerVisibility();
     }
 }
 
