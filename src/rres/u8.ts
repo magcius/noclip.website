@@ -22,7 +22,7 @@ export interface U8Dir {
 
 type U8Node = U8File | U8Dir;
 
-class U8Archive {
+export class U8Archive {
     public root: U8Dir;
 
     public findDirParts(parts: string[]): U8Dir {

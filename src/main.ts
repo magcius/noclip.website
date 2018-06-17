@@ -306,6 +306,10 @@ class Main {
         const progressable = this.sceneLoader.loadSceneDesc(sceneDesc, cameraState);
         this.ui.sceneSelect.setProgressable(progressable);
 
+        // TODO(jstpierre): Probably a better place to put this.
+        // Set window title.
+        document.title = `${sceneDesc.name} - ${sceneGroup.name} - Model Viewer`;
+
         this._deselectUI();
         this._saveState();
     }

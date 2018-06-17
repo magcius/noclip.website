@@ -177,6 +177,11 @@ export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
     return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrib === vtxAttrib);
 }
 
+enum TevCh {
+    COLOR,
+    ALPHA,
+}
+
 export class GX_Program extends BaseProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -547,6 +552,8 @@ export class GX_Program extends BaseProgram {
         case GX.TevOp.COMP_R8_EQ:     return `((t_TevA.r == t_TevB.r) ? ${c} : ${zero}) + ${d}`;
         case GX.TevOp.COMP_GR16_GT:   return `((TevPack16(t_TevA.rg) >  TevPack16(t_TevB.rg)) ? ${c} : ${zero}) + ${d}`;
         case GX.TevOp.COMP_GR16_EQ:   return `((TevPack16(t_TevA.rg) == TevPack16(t_TevB.rg)) ? ${c} : ${zero}) + ${d}`;
+        case GX.TevOp.COMP_RGB8_GT:   return `(TevPerCompGT(${a}, ${b}) * ${c}) + ${d}`;
+        case GX.TevOp.COMP_RGB8_EQ:   return `(TevPerCompEQ(${a}, ${b}) * ${c}) + ${d}`;
         default:
             throw new Error("whoops");
         }
@@ -586,13 +593,11 @@ export class GX_Program extends BaseProgram {
     }
 
     private generateTevTexCoordWrap(stage: TevStage): string {
-        let texGenId = stage.texCoordId;
-
         const lastTexGenId = this.material.texGens.length - 1;
-        if (texGenId >= lastTexGenId)
-            texGenId = lastTexGenId;
+        if (stage.texCoordId >= lastTexGenId)
+            return `vec2(0.0, 0.0)`;
 
-        const baseCoord = `ReadTexCoord${texGenId}()`;
+        const baseCoord = `ReadTexCoord${stage.texCoordId}()`;
         if (stage.indTexWrapS === GX.IndTexWrap.OFF && stage.indTexWrapT === GX.IndTexWrap.OFF)
             return baseCoord;
         else
@@ -823,6 +828,10 @@ float TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }
 vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
 float TevPack16(vec2 a) { return dot(a, vec2(1.0, 256.0)); }
 float TevPack24(vec3 a) { return dot(a, vec3(1.0, 256.0, 256.0 * 256.0)); }
+float TevPerCompGT(float a, float b) { return float(a >  b); }
+float TevPerCompEQ(float a, float b) { return float(a == b); }
+vec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
+vec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 
 void main() {
     vec4 s_kColor0   = u_KonstColor[0]; // ${this.generateColorConstant(kColors[0])}
