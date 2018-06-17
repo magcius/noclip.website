@@ -594,10 +594,14 @@ export class GX_Program extends BaseProgram {
 
     private generateTevTexCoordWrap(stage: TevStage): string {
         const lastTexGenId = this.material.texGens.length - 1;
-        if (stage.texCoordId >= lastTexGenId)
+        let texGenId = stage.texCoordId;
+
+        if (texGenId >= lastTexGenId)
+            texGenId = lastTexGenId;
+        if (texGenId < 0)
             return `vec2(0.0, 0.0)`;
 
-        const baseCoord = `ReadTexCoord${stage.texCoordId}()`;
+        const baseCoord = `ReadTexCoord${texGenId}()`;
         if (stage.indTexWrapS === GX.IndTexWrap.OFF && stage.indTexWrapT === GX.IndTexWrap.OFF)
             return baseCoord;
         else

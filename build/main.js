@@ -4728,9 +4728,12 @@ System.register("gx/gx_material", ["render", "Program", "util"], function (expor
                 };
                 GX_Program.prototype.generateTevTexCoordWrap = function (stage) {
                     var lastTexGenId = this.material.texGens.length - 1;
-                    if (stage.texCoordId >= lastTexGenId)
+                    var texGenId = stage.texCoordId;
+                    if (texGenId >= lastTexGenId)
+                        texGenId = lastTexGenId;
+                    if (texGenId < 0)
                         return "vec2(0.0, 0.0)";
-                    var baseCoord = "ReadTexCoord" + stage.texCoordId + "()";
+                    var baseCoord = "ReadTexCoord" + texGenId + "()";
                     if (stage.indTexWrapS === 0 /* OFF */ && stage.indTexWrapT === 0 /* OFF */)
                         return baseCoord;
                     else
@@ -18974,6 +18977,10 @@ System.register("rres/render", ["rres/brres", "gx/gx_texture", "gx/gx_material",
                 RRESTextureHolder.prototype.destroy = function (gl) {
                     this.glTextures.forEach(function (texture) { return gl.deleteTexture(texture); });
                 };
+                RRESTextureHolder.prototype.hasTexture = function (name) {
+                    var tex0Entry = this.tex0.find(function (entry) { return entry.name === name; });
+                    return tex0Entry !== null;
+                };
                 RRESTextureHolder.prototype.fillTextureMapping = function (textureMapping, name) {
                     var textureOverride = this.textureOverrides.get(name);
                     if (textureOverride) {
@@ -18993,6 +19000,9 @@ System.register("rres/render", ["rres/brres", "gx/gx_texture", "gx/gx_material",
                     return false;
                 };
                 RRESTextureHolder.prototype.setTextureOverride = function (name, textureOverride) {
+                    // Only allow setting texture overrides for textures that exist.
+                    if (!this.hasTexture(name))
+                        throw new Error("Trying to override non-existent texture " + name);
                     this.textureOverrides.set(name, textureOverride);
                 };
                 RRESTextureHolder.prototype.addTextures = function (gl, tex0) {
@@ -19030,7 +19040,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_texture", "gx/gx_material",
                     this.shapeCommands = [];
                     this.sceneParams = new gx_render_4.SceneParams();
                     this.packetParams = new gx_render_4.PacketParams();
-                    this.matrixArray = util_52.nArray(32, function () { return gl_matrix_17.mat4.create(); });
+                    this.matrixArray = util_52.nArray(64, function () { return gl_matrix_17.mat4.create(); });
                     this.visible = true;
                     this.renderHelper = new gx_render_4.GXRenderHelper(gl);
                     this.translateModel(gl);
@@ -19402,10 +19412,10 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         finally { if (e_81) throw e_81.error; }
                     }
                     try {
-                        // Hide IndTex until we get that working.
                         outer: for (var _s = __values(this.models), _t = _s.next(); !_t.done; _t = _s.next()) {
                             var modelRenderer = _t.value;
                             try {
+                                // Hide IndTex until we get that working.
                                 for (var _u = __values(modelRenderer.mdl0.materials), _v = _u.next(); !_v.done; _v = _u.next()) {
                                     var material = _v.value;
                                     try {
@@ -19432,6 +19442,10 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                                     if (_v && !_v.done && (_z = _u.return)) _z.call(_u);
                                 }
                                 finally { if (e_83) throw e_83.error; }
+                            }
+                            // Hide future variations by default.
+                            if (modelRenderer.mdl0.name.startsWith('model_obj')) {
+                                modelRenderer.setVisible(false);
                             }
                         }
                     }
@@ -19527,14 +19541,6 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                 new SkywardSwordSceneDesc("F210", "Eldon Volcano - Despacito 210"),
                 new SkywardSwordSceneDesc("F211", "Eldon Volcano - Despacito 211"),
                 new SkywardSwordSceneDesc("F221", "Eldon Volcano - Despacito 221"),
-                new SkywardSwordSceneDesc("F400", "Sacred Grounds - Despacito 400"),
-                new SkywardSwordSceneDesc("F401", "Sacred Grounds - Despacito 401"),
-                new SkywardSwordSceneDesc("F402", "Sacred Grounds - Despacito 402"),
-                new SkywardSwordSceneDesc("F403", "Sacred Grounds - Despacito 403"),
-                new SkywardSwordSceneDesc("F404", "Sacred Grounds - Despacito 404"),
-                new SkywardSwordSceneDesc("F405", "Sacred Grounds - Despacito 405"),
-                new SkywardSwordSceneDesc("F406", "Sacred Grounds - Despacito 406"),
-                new SkywardSwordSceneDesc("F407", "Sacred Grounds - Despacito 407"),
                 new SkywardSwordSceneDesc("F300", "Lanayru Desert - Despacito 300"),
                 new SkywardSwordSceneDesc("F301", "Lanayru Desert - Despacito 301"),
                 new SkywardSwordSceneDesc("F300_1", "Lanayru Desert - Despacito 300_1"),
@@ -19551,6 +19557,14 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                 new SkywardSwordSceneDesc("F301_7", "Lanayru Desert - Despacito 301_7"),
                 new SkywardSwordSceneDesc("F302", "Lanayru Desert - Despacito 302"),
                 new SkywardSwordSceneDesc("F303", "Lanayru Desert - Despacito 303"),
+                new SkywardSwordSceneDesc("F400", "Sacred Grounds - Despacito 400"),
+                new SkywardSwordSceneDesc("F401", "Sacred Grounds - Despacito 401"),
+                new SkywardSwordSceneDesc("F402", "Sacred Grounds - Despacito 402"),
+                new SkywardSwordSceneDesc("F403", "Sacred Grounds - Despacito 403"),
+                new SkywardSwordSceneDesc("F404", "Sacred Grounds - Despacito 404"),
+                new SkywardSwordSceneDesc("F405", "Sacred Grounds - Despacito 405"),
+                new SkywardSwordSceneDesc("F406", "Sacred Grounds - Despacito 406"),
+                new SkywardSwordSceneDesc("F407", "Sacred Grounds - Despacito 407"),
             ];
             exports_79("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
