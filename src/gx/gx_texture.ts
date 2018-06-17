@@ -144,6 +144,35 @@ function decode_Dummy(texture: Texture): DecodedTexture {
     return { pixels };
 }
 
+export function getFormatName(format: GX.TexFormat): string {
+    switch (format) {
+    case GX.TexFormat.I4:
+        return "I4";
+    case GX.TexFormat.I8:
+        return "I8";
+    case GX.TexFormat.IA4:
+        return "IA4";
+    case GX.TexFormat.IA8:
+        return "IA8";
+    case GX.TexFormat.RGB565:
+        return "RGB565";
+    case GX.TexFormat.RGB5A3:
+        return "RGB5A3";
+    case GX.TexFormat.RGBA8:
+        return "RGBA8";
+    case GX.TexFormat.CMPR:
+        return "CMPR";
+    case GX.TexFormat.C4:
+        return "C4 (TODO)";
+    case GX.TexFormat.C8:
+        return "C8 (TODO)";
+    case GX.TexFormat.C14X2:
+        return "C14X2 (TODO)";
+    default:
+        return "invalid";
+    }
+}
+
 export function decodeTexture(texture: Texture): Promise<DecodedTexture> {
     if (texture.data === null)
         return Promise.resolve(decode_Dummy(texture));
@@ -173,5 +202,5 @@ export function decodeTexture(texture: Texture): Promise<DecodedTexture> {
             console.error(`Unsupported texture format ${texture.format} on texture ${texture.name}`);
             return decode_Dummy(texture);
         }
-    })
+    });
 }

@@ -471,7 +471,6 @@ export class TextureViewer extends Panel {
         this.surfaceView = document.createElement('div');
         this.surfaceView.style.width = '100%';
         this.surfaceView.style.height = '200px';
-        this.surfaceView.style.cursor = 'pointer';
 
         // TODO(jstpierre): Explicit icons.
         this.surfaceView.onmouseover = () => {
