@@ -11,27 +11,30 @@ import * as GX from '../gx/gx_enum';
 
 import { BMD, BMT, BTK, BTI_Texture, BTI, TEX1_TextureData, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
-import { Scene, TextureOverride, SceneLoader } from './render';
+import { Scene, SceneLoader, J3DTextureHolder } from './render';
 import { RenderState, ColorTarget } from '../render';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
+import { TextureOverride } from '../gx/gx_render';
 
-function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
-    const textures: Viewer.Texture[] = [];
-    for (const scene of scenes)
-        if (scene)
-            textures.push.apply(textures, scene.textures);
-    return textures;
+class ZTPTextureHolder extends J3DTextureHolder {
+    protected tryTextureNameVariants(name: string): string[] {
+        const extraTextureName = `ExtraTex/${name.toLowerCase().replace('.tga', '')}`;
+        return [name, extraTextureName];
+    }
+
+    public addExtraTextures(gl: WebGL2RenderingContext, extraTextures: TEX1_TextureData[]): void {
+        this.addTextures(gl, extraTextures.map((texture) => {
+            const name = `ExtraTex/${texture.name.toLowerCase()}`;
+            return { ...texture, name };
+        }));
+    }
 }
 
-function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile, extraTextures: TEX1_TextureData[]) {
+function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const sceneLoader = new SceneLoader(bmd, bmt);
-    sceneLoader.textureResolveCallback = (name: string): TEX1_TextureData => {
-        const textureName = name.toLowerCase().replace('.tga', '');
-        return extraTextures.find(tex => tex.name.toLowerCase() === textureName);
-    };
-
+    textureHolder.addJ3DTextures(gl, bmd, bmt);
+    const sceneLoader = new SceneLoader(textureHolder, bmd, bmt);
     const scene = sceneLoader.createScene(gl);
     scene.setBTK(btkFile ? BTK.parse(btkFile.buffer) : null);
     scene.setBRK(brkFile ? BRK.parse(brkFile.buffer) : null);
@@ -39,7 +42,7 @@ function createScene(gl: WebGL2RenderingContext, bmdFile: RARC.RARCFile, btkFile
     return scene;
 }
 
-function createScenesFromRARC(gl: WebGL2RenderingContext, rarcName: string, rarc: RARC.RARC, extraTextures: TEX1_TextureData[]): Scene[] {
+function createScenesFromRARC(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarcName: string, rarc: RARC.RARC): Scene[] {
     const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
     const scenes = bmdFiles.map((bmdFile) => {
         const basename = bmdFile.name.split('.')[0];
@@ -47,7 +50,7 @@ function createScenesFromRARC(gl: WebGL2RenderingContext, rarcName: string, rarc
         const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`);
         const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`);
         const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
-        const scene = createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile, extraTextures);
+        const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
         scene.name = `${rarcName}/${basename}`;
         return scene;
     });
@@ -64,8 +67,8 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
     private transparentScenes: Scene[] = [];
     private windowScenes: Scene[] = [];
 
-    constructor(public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: Scene[], public roomScenes: Scene[]) {
-        this.textures = collectTextures([...this.skyboxScenes, ...this.roomScenes]);
+    constructor(private textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: Scene[], public roomScenes: Scene[]) {
+        this.textures = textureHolder.viewerTextures;
 
         this.roomScenes.forEach((scene) => {
             if (scene.name.endsWith('model')) {
@@ -117,7 +120,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
             texProjection[0] = state.projection[0];
             texProjection[5] = -state.projection[5];
             const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
-            indirectScene.setTextureOverride("fbtex_dummy", textureOverride);
+            this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
             indirectScene.render(state);
         });
 
@@ -149,6 +152,9 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const basePath = `data/j3d/ztp/${this.folder}`;
         const paths = [`STG_00.arc`, ...this.roomPaths].map((path) => `${basePath}/${path}`);
+
+        const textureHolder = new ZTPTextureHolder();
+
         return Progressable.all(paths.map(path => this.fetchRarc(path))).then((rarcs: RARC.RARC[]): Viewer.MainScene => {
             const stageRarc = rarcs.shift();
             const texcFolder = stageRarc.findDir(`texc`);
@@ -158,6 +164,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 return BTI.parse(file.buffer, name).texture;
             });
 
+            textureHolder.addExtraTextures(gl, extraTextures);
+
             const skyboxScenes: Scene[] = [`vrbox_sora`, `vrbox_kasumim`].map((basename) => {
                 const bmdFile = stageRarc.findFile(`bmdp/${basename}.bmd`);
                 if (!bmdFile)
@@ -165,7 +173,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 const btkFile = stageRarc.findFile(`btk/${basename}.btk`);
                 const brkFile = stageRarc.findFile(`brk/${basename}.brk`);
                 const bckFile = stageRarc.findFile(`bck/${basename}.bck`);
-                const scene = createScene(gl, bmdFile, btkFile, brkFile, bckFile, null, extraTextures);
+                const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, null);
                 scene.setIsSkybox(true);
                 return scene;
             }).filter((s) => !!s);
@@ -173,12 +181,12 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             const roomRarcs: RARC.RARC[] = rarcs;
             const roomScenes_: Scene[][] = roomRarcs.map((rarc: RARC.RARC, i: number) => {
                 const rarcBasename = this.roomPaths[i].split('.')[0];
-                return createScenesFromRARC(gl, rarcBasename, rarc, extraTextures);
+                return createScenesFromRARC(gl, textureHolder, rarcBasename, rarc);
             });
             const roomScenes: Scene[] = [];
             roomScenes_.forEach((scenes: Scene[]) => roomScenes.push.apply(roomScenes, scenes));
 
-            return new TwilightPrincessRenderer(stageRarc, roomRarcs, skyboxScenes, roomScenes);
+            return new TwilightPrincessRenderer(textureHolder, stageRarc, roomRarcs, skyboxScenes, roomScenes);
         });
     }
 

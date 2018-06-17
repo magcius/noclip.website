@@ -13,10 +13,10 @@ import * as GX_Material from 'gx/gx_material';
 
 import { BMD, BMT, BTK, MaterialEntry, TEX1, BTI_Texture, TEX1_TextureData, TEX1_Sampler, BRK } from 'j3d/j3d';
 import * as RARC from 'j3d/rarc';
-import { Command_Material, Scene as J3DScene, SceneLoader } from 'j3d/render';
+import { Command_Material, Scene as J3DScene, SceneLoader, J3DTextureHolder } from 'j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from 'j3d/sms_scenes';
 import * as Yaz0 from 'yaz0';
-import { GXRenderHelper, TextureMapping, SceneParams, PacketParams, fillSceneParamsFromRenderState } from '../gx/gx_render';
+import { GXRenderHelper, TextureMapping, SceneParams, PacketParams, fillSceneParamsFromRenderState, TextureHolder } from '../gx/gx_render';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -50,10 +50,10 @@ class SeaPlaneScene implements Scene {
     private seaCmd: Command_Material;
     private plane: PlaneShape;
 
-    constructor(gl: WebGL2RenderingContext, bmd: BMD, btk: BTK, configName: string) {
+    constructor(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, bmd: BMD, btk: BTK, configName: string) {
         this.btk = btk;
 
-        const sceneLoader: SceneLoader = new SceneLoader(bmd, null);
+        const sceneLoader: SceneLoader = new SceneLoader(textureHolder, bmd, null);
         J3DScene.prototype.translateTextures.call(this, gl, sceneLoader);
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
@@ -226,15 +226,20 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
     }).then((buffer: ArrayBufferSlice) => {
         const rarc = RARC.parse(buffer);
 
-        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
+        const textureHolder = new J3DTextureHolder();
+
+        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/sky', true);
 
         const bmdFile = rarc.findFile('map/map/sea.bmd');
         const btkFile = rarc.findFile('map/map/sea.btk');
         const bmd = BMD.parse(bmdFile.buffer);
         const btk = BTK.parse(btkFile.buffer);
 
-        const seaScene = new SeaPlaneScene(gl, bmd, btk, name);
+        textureHolder.addJ3DTextures(gl, bmd);
+
+        const seaScene = new SeaPlaneScene(gl, textureHolder, bmd, btk, name);
         return new SunshineRenderer(
+            textureHolder,
             skyScene,
             null, // map
             seaScene,

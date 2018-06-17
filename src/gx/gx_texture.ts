@@ -29,6 +29,7 @@ export interface Texture {
     width: number;
     height: number;
     data: ArrayBufferSlice;
+    mipCount?: number;
 }
 
 export interface DecodedTexture {

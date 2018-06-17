@@ -10,7 +10,7 @@ import { BinScene } from './render';
 import { RenderState } from '../render';
 import * as UI from '../ui';
 import { createScenesFromBuffer } from '../j3d/scenes';
-import { Scene } from '../j3d/render';
+import { Scene, J3DTextureHolder } from '../j3d/render';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
@@ -49,7 +49,8 @@ class LuigisMansionScene implements Viewer.MainScene {
 function fetchVRBScene(gl: WebGL2RenderingContext, path: string): Progressable<LayerScene> {
     return fetch(`data/luigis_mansion/${path}`).then((buffer: ArrayBufferSlice) => {
         const decompressed = Yay0.decompress(buffer);
-        return createScenesFromBuffer(gl, decompressed).then((scenes: Scene[]) => {
+        const textureHolder = new J3DTextureHolder();
+        return createScenesFromBuffer(gl, textureHolder, decompressed).then((scenes: Scene[]) => {
             assert(scenes.length === 1);
             return scenes[0];
         });

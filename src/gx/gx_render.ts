@@ -396,3 +396,86 @@ export function translateWrapMode(gl: WebGL2RenderingContext, wrapMode: GX.WrapM
         return gl.REPEAT;
     }
 }
+
+// Used mostly by indirect texture FB installations...
+export interface TextureOverride {
+    glTexture: WebGLTexture;
+    width: number;
+    height: number;
+    projectionMatrix?: mat4;
+}
+
+export class TextureHolder<TextureType extends GX_Texture.Texture> {
+    public viewerTextures: Viewer.Texture[] = [];
+    public glTextures: WebGLTexture[] = [];
+    public textureEntries: TextureType[] = [];
+    public textureOverrides = new Map<string, TextureOverride>();
+
+    public destroy(gl: WebGL2RenderingContext): void {
+        this.glTextures.forEach((texture) => gl.deleteTexture(texture));
+    }
+
+    protected tryTextureNameVariants(name: string): string[] {
+        // Default implementation.
+        return [name];
+    }
+
+    private findTextureEntryIndex(name: string): number {
+        const nameVariants = this.tryTextureNameVariants(name);
+
+        for (let i = 0; i < nameVariants.length; i++) {
+            const index = this.textureEntries.findIndex((entry) => entry.name === nameVariants[i]);
+            if (index >= 0)
+                return index;
+        }
+
+        console.error("Cannot find texture", name);
+        return -1;
+    }
+
+    public hasTexture(name: string): boolean {
+        return this.findTextureEntryIndex(name) >= 0;
+    }
+
+    public fillTextureMapping(textureMapping: TextureMapping, name: string): boolean {
+        const textureOverride = this.textureOverrides.get(name);
+        if (textureOverride) {
+            textureMapping.glTexture = textureOverride.glTexture;
+            textureMapping.width = textureOverride.width;
+            textureMapping.height = textureOverride.height;
+            return true;
+        }
+
+        const textureEntryIndex = this.findTextureEntryIndex(name);
+        if (textureEntryIndex >= 0) {
+            textureMapping.glTexture = this.glTextures[textureEntryIndex];
+            const tex0Entry = this.textureEntries[textureEntryIndex];
+            textureMapping.width = tex0Entry.width;
+            textureMapping.height = tex0Entry.height;
+            return true;
+        }
+
+        return false;
+    }
+
+    public setTextureOverride(name: string, textureOverride: TextureOverride): void {
+        // Only allow setting texture overrides for textures that exist.
+        if (!this.hasTexture(name))
+            throw new Error(`Trying to override non-existent texture ${name}`);
+        this.textureOverrides.set(name, textureOverride);
+    }
+
+    public addTextures(gl: WebGL2RenderingContext, textureEntries: TextureType[]): void {
+        for (const texture of textureEntries) {
+            // Don't add textures without data.
+            if (texture.data === null)
+                continue;
+
+            const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
+            const { glTexture, viewerTexture } = loadTextureFromMipChain(gl, mipChain);
+            this.textureEntries.push(texture);
+            this.glTextures.push(glTexture);
+            this.viewerTextures.push(viewerTexture);
+        }
+    }
+}

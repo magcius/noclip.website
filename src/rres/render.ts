@@ -10,65 +10,9 @@ import { align, assert, nArray } from "../util";
 import { mat3, mat4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
-import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureMapping } from "../gx/gx_render";
-import { TextureOverride } from "../j3d/render";
+import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from "../gx/gx_render";
 
-// TODO(jstpierre): Move this to GX or core, perhaps?
-export class RRESTextureHolder {
-    public viewerTextures: Viewer.Texture[] = [];
-    public glTextures: WebGLTexture[] = [];
-    public tex0: BRRES.TEX0[] = [];
-    public textureOverrides = new Map<string, TextureOverride>();
-
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.glTextures.forEach((texture) => gl.deleteTexture(texture));
-    }
-
-    public hasTexture(name: string): boolean {
-        const tex0Entry = this.tex0.find((entry) => entry.name === name);
-        return tex0Entry !== null;
-    }
-
-    public fillTextureMapping(textureMapping: TextureMapping, name: string): boolean {
-        const textureOverride = this.textureOverrides.get(name);
-        if (textureOverride) {
-            textureMapping.glTexture = textureOverride.glTexture;
-            textureMapping.width = textureOverride.width;
-            textureMapping.height = textureOverride.height;
-            return true;
-        }
-
-        const textureEntryIndex = this.tex0.findIndex((entry) => entry.name === name);
-        if (textureEntryIndex >= 0) {
-            textureMapping.glTexture = this.glTextures[textureEntryIndex];
-            const tex0Entry = this.tex0[textureEntryIndex];
-            textureMapping.width = tex0Entry.width;
-            textureMapping.height = tex0Entry.height;
-            return true;
-        }
-
-        return false;
-    }
-
-    public setTextureOverride(name: string, textureOverride: TextureOverride): void {
-        // Only allow setting texture overrides for textures that exist.
-        if (!this.hasTexture(name))
-            throw new Error(`Trying to override non-existent texture ${name}`);
-        this.textureOverrides.set(name, textureOverride);
-    }
-
-    public addTextures(gl: WebGL2RenderingContext, tex0: BRRES.TEX0[]): void {
-        for (const texture of tex0) {
-            const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
-            const { glTexture, viewerTexture } = loadTextureFromMipChain(gl, mipChain);
-            gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_LOD, texture.minLOD);
-            gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, texture.maxLOD);
-            this.tex0.push(texture);
-            this.glTextures.push(glTexture);
-            this.viewerTextures.push(viewerTexture);
-        }
-    }
-}
+export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {}
 
 export class ModelRenderer {
     private materialCommands: Command_Material[] = [];

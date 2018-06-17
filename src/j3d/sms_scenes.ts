@@ -8,11 +8,12 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
 import * as RARC from './rarc';
-import { ColorOverride, Scene, TextureOverride } from './render';
+import { ColorOverride, Scene, J3DTextureHolder } from './render';
 import { createScene } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import { BMD, BCK, LoopMode } from './j3d';
+import { TextureOverride, TextureHolder } from '../gx/gx_render';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];
@@ -267,7 +268,7 @@ export class SunshineRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
     private mainColorTarget: ColorTarget = new ColorTarget();
 
-    constructor(public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: Scene, public extraScenes: Scene[], public rarc: RARC.RARC = null) {
+    constructor(private textureHolder: J3DTextureHolder, public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: Scene, public extraScenes: Scene[], public rarc: RARC.RARC = null) {
         this.textures = collectTextures([skyScene, mapScene, seaScene, seaIndirectScene].concat(extraScenes));
     }
 
@@ -303,7 +304,7 @@ export class SunshineRenderer implements Viewer.MainScene {
             texProjection[0] = state.projection[0];
             texProjection[5] = -state.projection[5];
             const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
-            indirectScene.setTextureOverride("indirectdummy", textureOverride);
+            this.textureHolder.setTextureOverride("indirectdummy", textureOverride);
             indirectScene.render(state);
         }
     }
@@ -320,7 +321,7 @@ export class SunshineRenderer implements Viewer.MainScene {
 }
 
 export class SunshineSceneDesc implements Viewer.SceneDesc {
-    public static createSunshineSceneForBasename(gl: WebGL2RenderingContext, rarc: RARC.RARC, basename: string, isSkybox: boolean): Scene {
+    public static createSunshineSceneForBasename(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, basename: string, isSkybox: boolean): Scene {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         if (!bmdFile)
             return null;
@@ -328,7 +329,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         const brkFile = rarc.findFile(`${basename}.brk`);
         const bckFile = rarc.findFile(`${basename}.bck`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const scene = createScene(gl, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+        const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
         scene.name = basename;
         scene.setIsSkybox(isSkybox);
         return scene;
@@ -352,18 +353,19 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const sceneBinObj = readSceneBin(sceneBin.buffer);
             console.log(sceneBinObj);
 
-            const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sky', true);
-            const mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/map', false);
-            const seaScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/sea', false);
-            const seaIndirectScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, 'map/map/seaindirect', false);
+            const textureHolder = new J3DTextureHolder();
+            const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/sky', true);
+            const mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/map', false);
+            const seaScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/sea', false);
+            const seaIndirectScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/seaindirect', false);
 
-            const extraScenes = this.createSceneBinObjects(gl, rarc, sceneBinObj);
+            const extraScenes = this.createSceneBinObjects(gl, textureHolder, rarc, sceneBinObj);
 
-            return new SunshineRenderer(skyScene, mapScene, seaScene, seaIndirectScene, extraScenes, rarc);
+            return new SunshineRenderer(textureHolder, skyScene, mapScene, seaScene, seaIndirectScene, extraScenes, rarc);
         });
     }
 
-    private createSceneBinObjects(gl: WebGL2RenderingContext, rarc: RARC.RARC, obj: SceneBinObj): Scene[] {
+    private createSceneBinObjects(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObj): Scene[] {
         function flatten<T>(L: T[][]): T[] {
             const R: T[] = [];
             for (const Ts of L)
@@ -373,18 +375,18 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
         switch (obj.type) {
         case 'Group':
-            const childTs: Scene[][] = obj.children.map(c => this.createSceneBinObjects(gl, rarc, c));
+            const childTs: Scene[][] = obj.children.map(c => this.createSceneBinObjects(gl, textureHolder, rarc, c));
             const flattened: Scene[] = flatten(childTs).filter(o => !!o);
             return flattened;
         case 'Model':
-            return [this.createSceneForSceneBinModel(gl, rarc, obj)];
+            return [this.createSceneForSceneBinModel(gl, textureHolder, rarc, obj)];
         default:
             // Don't care.
             return undefined;
         }
     }
 
-    private createSceneForSceneBinModel(gl: WebGL2RenderingContext, rarc: RARC.RARC, obj: SceneBinObjModel): Scene {
+    private createSceneForSceneBinModel(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObjModel): Scene {
         interface ModelLookup {
             k: string; // klass
             m: string; // model
@@ -395,13 +397,13 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         function bmtm(bmd: string, bmt: string) {
             const bmdFile = rarc.findFile(bmd);
             const bmtFile = rarc.findFile(bmt);
-            return createScene(gl, bmdFile, null, null, null, bmtFile);
+            return createScene(gl, textureHolder, bmdFile, null, null, null, bmtFile);
         }
 
         function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT) {
             const bmdFile = rarc.findFile(bmdFilename);
             const bckFile = rarc.findFile(bckFilename);
-            const scene = createScene(gl, bmdFile, null, null, bckFile, null);
+            const scene = createScene(gl, textureHolder, bmdFile, null, null, bckFile, null);
             scene.bck.ank1.loopMode = loopMode;
             return scene;
         }
@@ -470,7 +472,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
         let scene = null;
         if (modelEntry.p !== undefined) {
-            scene = SunshineSceneDesc.createSunshineSceneForBasename(gl, rarc, modelEntry.p, false);
+            scene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, modelEntry.p, false);
         } else if (modelEntry.s !== undefined) {
             scene = modelEntry.s();
         }

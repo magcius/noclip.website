@@ -7,7 +7,7 @@ import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 import * as GX_Texture from 'gx/gx_texture';
 import { AttributeFormat } from 'gx/gx_displaylist';
-import { TextureMapping, MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, loadTextureFromMipChain, translateTexFilter, translateWrapMode } from 'gx/gx_render';
+import { TextureMapping, MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, loadTextureFromMipChain, translateTexFilter, translateWrapMode, TextureOverride, TextureHolder } from 'gx/gx_render';
 import * as Viewer from 'viewer';
 
 import { CompareMode, RenderFlags, RenderState } from '../render';
@@ -15,14 +15,11 @@ import { align, assert } from '../util';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 
-function translateAttribType(gl: WebGL2RenderingContext, attribFormat: AttributeFormat): { type: GLenum, normalized: boolean } {
-    switch (attribFormat) {
-    case AttributeFormat.F32:
-        return { type: gl.FLOAT, normalized: false };
-    case AttributeFormat.U16:
-        return { type: gl.UNSIGNED_SHORT, normalized: false };
-    default:
-        throw "whoops";
+export class J3DTextureHolder extends TextureHolder<TEX1_TextureData> {
+    public addJ3DTextures(gl: WebGL2RenderingContext, bmd: BMD, bmt: BMT = null) {
+        this.addTextures(gl, bmd.tex1.textureDatas);
+        if (bmt)
+            this.addTextures(gl, bmt.tex1.textureDatas);
     }
 }
 
@@ -316,14 +313,6 @@ export enum ColorOverride {
     CPREV, C0, C1, C2,
 }
 
-// Used mostly by indirect texture FB installations...
-export interface TextureOverride {
-    glTexture: WebGLTexture;
-    width: number;
-    height: number;
-    projectionMatrix?: mat4;
-}
-
 interface HierarchyTraverseContext {
     commandList: Command[];
     parentJointMatrix: mat4;
@@ -338,25 +327,15 @@ class SceneLoaderToken {
     constructor(public gl: WebGL2RenderingContext) {}
 }
 
-type TextureResolveCallback = (name: string) => TEX1_TextureData;
-
 export class SceneLoader {
     constructor(
+        public textureHolder: J3DTextureHolder,
         public bmd: BMD,
         public bmt: BMT | null = null)
     {}
 
-    public textureResolveCallback: TextureResolveCallback;
-
     public createScene(gl: WebGL2RenderingContext): Scene {
         return new Scene(new SceneLoaderToken(gl), this);
-    }
-
-    public resolveTexture(name: string): TEX1_TextureData {
-        if (this.textureResolveCallback !== null)
-            return this.textureResolveCallback(name);
-        else
-            return null;
     }
 }
 
@@ -384,13 +363,11 @@ export class Scene implements Viewer.Scene {
     public bck: BCK | null = null;
     public brk: BRK | null = null;
     public btk: BTK | null = null;
+    public textureHolder: J3DTextureHolder;
 
     // Texture information.
-    private tex1TextureDatas: TEX1_TextureData[];
     private tex1Samplers: TEX1_Sampler[];
     private glSamplers: WebGLSampler[];
-    private glTextures: WebGLTexture[];
-    public textureOverrides = new Map<string, TextureOverride>();
 
     public currentMaterialCommand: Command_Material;
 
@@ -411,6 +388,11 @@ export class Scene implements Viewer.Scene {
         const gl = sceneLoaderToken.gl;
         this.bmd = sceneLoader.bmd;
         this.bmt = sceneLoader.bmt;
+        this.textureHolder = sceneLoader.textureHolder;
+
+        // TODO(jstpierre): Remove textures from Scene onto MainScene.
+        this.textures = this.textureHolder.viewerTextures;
+
         this.translateModel(gl, sceneLoader);
 
         this.renderHelper = new GXRenderHelper(gl);
@@ -423,7 +405,6 @@ export class Scene implements Viewer.Scene {
         this.materialCommands.forEach((command) => command.destroy(gl));
         this.shapeCommands.forEach((command) => command.destroy(gl));
         this.glSamplers.forEach((sampler) => gl.deleteSampler(sampler));
-        this.glTextures.forEach((texture) => gl.deleteTexture(texture));
     }
 
     public setColorOverride(i: ColorOverride, color: GX_Material.Color) {
@@ -440,10 +421,6 @@ export class Scene implements Viewer.Scene {
 
     public setFPS(v: number) {
         this.fps = v;
-    }
-
-    public setTextureOverride(name: string, override: TextureOverride) {
-        this.textureOverrides.set(name, override);
     }
 
     public setVisible(v: boolean): void {
@@ -464,19 +441,8 @@ export class Scene implements Viewer.Scene {
 
     public fillTextureMapping(m: TextureMapping, texIndex: number): void {
         const tex1Sampler = this.tex1Samplers[texIndex];
-        const textureOverride: TextureOverride = this.textureOverrides.get(tex1Sampler.name);
 
-        if (textureOverride !== undefined) {
-            m.glTexture = textureOverride.glTexture;
-            m.width = textureOverride.width;
-            m.height = textureOverride.height;
-        } else {
-            m.glTexture = this.glTextures[tex1Sampler.textureDataIndex];
-            const tex1TextureData = this.tex1TextureDatas[tex1Sampler.textureDataIndex];
-            m.width = tex1TextureData.width;
-            m.height = tex1TextureData.height;
-        }
-
+        this.textureHolder.fillTextureMapping(m, tex1Sampler.name);
         m.glSampler = this.glSamplers[tex1Sampler.index];
         m.lodBias = tex1Sampler.lodBias;
     }
@@ -543,25 +509,11 @@ export class Scene implements Viewer.Scene {
         // TODO(jstpierre): How does separable textureData / sampler work with external
         // texture resolve?
 
-        this.glTextures = [];
-        this.textures = [];
-        for (let textureData of tex1.textureDatas) {
-            if (textureData.data === null) {
-                textureData = sceneLoader.resolveTexture(textureData.name);
-            }
-
-            const mipChain = GX_Texture.calcMipChain(textureData, textureData.mipCount);
-            const { glTexture, viewerTexture } = loadTextureFromMipChain(gl, mipChain);
-            this.glTextures.push(glTexture);
-            this.textures.push(viewerTexture);
-        }
-
         this.glSamplers = [];
         for (let sampler of tex1.samplers) {
             this.glSamplers.push(Scene.translateSampler(gl, sampler));
         }
 
-        this.tex1TextureDatas = tex1.textureDatas;
         this.tex1Samplers = tex1.samplers;
     }
 

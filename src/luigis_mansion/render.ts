@@ -7,7 +7,7 @@ import * as GX from 'gx/gx_enum';
 import * as GX_Texture from 'gx/gx_texture';
 import * as GX_Material from 'gx/gx_material';
 import { AttributeFormat } from 'gx/gx_displaylist';
-import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, loadedDataCoalescer, loadTextureFromMipChain } from 'gx/gx_render';
+import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, loadedDataCoalescer, loadTextureFromMipChain, translateWrapMode } from 'gx/gx_render';
 
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
@@ -130,17 +130,6 @@ export class BinScene implements Viewer.MainScene {
         this.bufferCoalescer.destroy(gl);
     }
 
-    private translateWrapMode(gl: WebGL2RenderingContext, wrapMode: GX.WrapMode) {
-        switch (wrapMode) {
-        case GX.WrapMode.CLAMP:
-            return gl.CLAMP_TO_EDGE;
-        case GX.WrapMode.MIRROR:
-            return gl.MIRRORED_REPEAT;
-        case GX.WrapMode.REPEAT:
-            return gl.REPEAT;
-        }
-    }
-
     private translatePart(gl: WebGL2RenderingContext, node: SceneGraphNode, part: SceneGraphPart): void {
         const materialCommand = new Command_Material(gl, this, part.material);
         this.commands.push(materialCommand);
@@ -175,8 +164,8 @@ export class BinScene implements Viewer.MainScene {
             // GL texture is bound by loadTextureFromMipChain.
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, this.translateWrapMode(gl, sampler.wrapS));
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, this.translateWrapMode(gl, sampler.wrapT));
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
 
             this.glTextures.push(glTexture);
             this.textures.push(viewerTexture);
