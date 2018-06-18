@@ -688,6 +688,50 @@ System.register("Camera", ["gl-matrix"], function (exports_7, context_7) {
     function clampRange(v, lim) {
         return clamp(v, -lim, lim);
     }
+    // Probably don't belong in here, but are helpful nonetheless.
+    function texProjPerspMtx(dst, fov, aspect, scaleS, scaleT, transS, transT) {
+        var cot = 1 / Math.tan(fov / 2);
+        dst[0] = (cot / aspect) * scaleS;
+        dst[4] = 0.0;
+        dst[8] = -transS;
+        dst[12] = 0.0;
+        dst[1] = 0.0;
+        dst[5] = cot * scaleT;
+        dst[9] = -transT;
+        dst[13] = 0.0;
+        dst[2] = 0.0;
+        dst[6] = 0.0;
+        dst[10] = -1.0;
+        dst[14] = 0.0;
+        // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+        // since this is supposed to generate a mat4x3 matrix.
+        dst[3] = 9999.0;
+        dst[7] = 9999.0;
+        dst[11] = 9999.0;
+        dst[15] = 9999.0;
+    }
+    exports_7("texProjPerspMtx", texProjPerspMtx);
+    function texEnvMtx(dst, scaleS, scaleT, transS, transT) {
+        dst[0] = scaleS;
+        dst[4] = 0.0;
+        dst[8] = 0.0;
+        dst[12] = transS;
+        dst[1] = 0.0;
+        dst[5] = -scaleT;
+        dst[9] = 0.0;
+        dst[13] = transT;
+        dst[2] = 0.0;
+        dst[6] = 0.0;
+        dst[10] = 0.0;
+        dst[14] = 1.0;
+        // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+        // since this is supposed to generate a mat4x3 matrix.
+        dst[3] = 9999.0;
+        dst[7] = 9999.0;
+        dst[11] = 9999.0;
+        dst[15] = 9999.0;
+    }
+    exports_7("texEnvMtx", texEnvMtx);
     var gl_matrix_1, Camera, FPSCameraController, OrbitCameraController;
     return {
         setters: [
@@ -5768,6 +5812,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         var dst = materialParams.u_TexMtx[i];
                         var flipY = materialParams.m_TextureMapping[i].flipY;
                         var flipYScale = flipY ? -1.0 : 1.0;
+                        var usingMapping = false;
                         // First, compute input matrix.
                         switch (texMtx.type) {
                             case 0x00:
@@ -5781,6 +5826,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             case 0x07: // Rainbow Road
                                 // Environment mapping. Uses the normal matrix.
                                 // Normal matrix. Emulated here by the view matrix with the translation lopped off...
+                                usingMapping = true;
                                 gl_matrix_4.mat4.copy(dst, state.view);
                                 dst[12] = 0;
                                 dst[13] = 0;
@@ -5788,6 +5834,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                                 break;
                             case 0x09:
                                 // Projection. Used for indtexwater, mostly.
+                                usingMapping = true;
                                 gl_matrix_4.mat4.copy(dst, state.view);
                                 break;
                             default:
@@ -5800,10 +5847,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             case 0x0B:
                                 break;
                             case 0x06: // Rainbow Road
-                                // Orthographic light mapping.
-                                // TODO(jstpierre): Figure out ortho params properly...
-                                // texProjOrthoMtx(scratch, ?, ?, ?, ?, 0.5, -0.5, 0.5, 0.5);
-                                gl_matrix_4.mat4.set(scratch, 0.5, 0, 0, 0, 0, -0.5 * flipYScale, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 1, 0);
+                                // Environment mapping
+                                Camera_3.texEnvMtx(scratch, -0.5, -0.5 * flipYScale, 0.5, 0.5);
                                 gl_matrix_4.mat4.mul(dst, scratch, dst);
                                 gl_matrix_4.mat4.mul(dst, texMtx.effectMatrix, dst);
                                 break;
@@ -5813,6 +5858,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                                 // Perspective.
                                 texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
                                 gl_matrix_4.mat4.mul(dst, scratch, dst);
+                                // mat4.mul(dst, texMtx.effectMatrix, dst);
                                 // Don't apply effectMatrix to perspective. It appears to be
                                 // a projection matrix preconfigured for GC.
                                 break;
@@ -5823,6 +5869,15 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         gl_matrix_4.mat4.copy(scratch, texMtx.matrix);
                         if (this.scene.btk !== null)
                             this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
+                        if (usingMapping) {
+                            // TODO(jstpierre): Just rewrite the texProjMatrices instead of doing this swap...
+                            var tx = scratch[12];
+                            scratch[12] = scratch[8];
+                            scratch[8] = tx;
+                            var ty = scratch[13];
+                            scratch[13] = scratch[9];
+                            scratch[9] = tx;
+                        }
                         gl_matrix_4.mat4.mul(dst, scratch, dst);
                     }
                     for (var i = 0; i < this.material.postTexMatrices.length; i++) {
@@ -7745,12 +7800,20 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                     var brkFile = rarc_1.files.find(function (f) { return f.name === basename + ".brk"; });
                     var bckFile = rarc_1.files.find(function (f) { return f.name === basename + ".bck"; });
                     var bmtFile = rarc_1.files.find(function (f) { return f.name === basename + ".bmt"; });
-                    var scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+                    var scene;
+                    try {
+                        scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+                    }
+                    catch (e) {
+                        console.warn("File " + basename + " failed to parse:", e);
+                        return null;
+                    }
                     scene.name = basename;
                     if (basename.includes('_sky'))
                         scene.setIsSkybox(true);
                     return scene;
                 });
+                scenes = scenes.filter(function (scene) { return !!scene; });
                 // Sort skyboxen before non-skyboxen.
                 scenes = scenes.sort(function (a, b) {
                     return boolSort(a.isSkybox, b.isSkybox);
@@ -19216,69 +19279,10 @@ System.register("rres/u8", ["util"], function (exports_77, context_77) {
         }
     };
 });
-System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matrix", "gx/gx_render"], function (exports_78, context_78) {
+System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matrix", "gx/gx_render", "Camera"], function (exports_78, context_78) {
     "use strict";
     var __moduleName = context_78 && context_78.id;
-    function texProjPerspMtx(dst, fov, aspect, scaleS, scaleT, transS, transT) {
-        var cot = 1 / Math.tan(fov / 2);
-        dst[0] = (cot / aspect) * scaleS;
-        dst[4] = 0.0;
-        dst[8] = -transS;
-        dst[12] = 0.0;
-        dst[1] = 0.0;
-        dst[5] = cot * scaleT;
-        dst[9] = -transT;
-        dst[13] = 0.0;
-        dst[2] = 0.0;
-        dst[6] = 0.0;
-        dst[10] = -1.0;
-        dst[14] = 0.0;
-        // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-        // since this is supposed to generate a mat4x3 matrix.
-        dst[3] = 9999.0;
-        dst[7] = 9999.0;
-        dst[11] = 9999.0;
-        dst[15] = 9999.0;
-    }
-    function texProjOrthoMtx(dst, t, b, l, r, scaleS, scaleT, transS, transT) {
-        var h = 1 / (r - l);
-        dst[0] = 2.0 * h * scaleS;
-        dst[4] = 0.0;
-        dst[8] = 0.0;
-        dst[12] = ((-(r + l) * h) * scaleS) + transS;
-        var v = 1 / (t - b);
-        dst[1] = 0.0;
-        dst[5] = 2.0 * v * scaleT;
-        dst[9] = -transT;
-        dst[13] = ((-(t + b) * v) * scaleT) + transT;
-        dst[2] = 0.0;
-        dst[6] = 0.0;
-        dst[10] = -1.0;
-        dst[14] = 0.0;
-        dst[3] = 0.0;
-        dst[7] = 0.0;
-        dst[11] = 0.0;
-        dst[15] = 1.0;
-    }
-    function texEnvMatrix(dst, scaleS, scaleT, transS, transT) {
-        dst[0] = scaleS;
-        dst[4] = 0.0;
-        dst[8] = 0.0;
-        dst[12] = transS;
-        dst[1] = 0.0;
-        dst[5] = -scaleT;
-        dst[9] = 0.0;
-        dst[13] = transT;
-        dst[2] = 0.0;
-        dst[6] = 0.0;
-        dst[10] = 0.0;
-        dst[14] = 1.0;
-        dst[3] = 0.0;
-        dst[7] = 0.0;
-        dst[11] = 0.0;
-        dst[15] = 1.0;
-    }
-    var BRRES, GX_Material, util_51, gl_matrix_17, gx_render_4, RRESTextureHolder, ModelRenderer, Command_Shape, matrixScratch, Command_Material;
+    var BRRES, GX_Material, util_51, gl_matrix_17, gx_render_4, Camera_6, RRESTextureHolder, ModelRenderer, Command_Shape, matrixScratch, Command_Material;
     return {
         setters: [
             function (BRRES_1) {
@@ -19295,6 +19299,9 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
             },
             function (gx_render_4_1) {
                 gx_render_4 = gx_render_4_1;
+            },
+            function (Camera_6_1) {
+                Camera_6 = Camera_6_1;
             }
         ],
         execute: function () {
@@ -19495,11 +19502,10 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     var texSrt = this.material.texSrts[texIdx];
                     var flipYScale = flipY ? -1.0 : 1.0;
                     if (texSrt.mapMode === 2 /* PROJECTION */) {
-                        // Apply camera projection matrix.
-                        texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                        Camera_6.texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
                     }
                     else if (texSrt.mapMode === 1 /* ENV_CAMERA */) {
-                        texEnvMatrix(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                        Camera_6.texEnvMtx(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
                     }
                     else {
                         gl_matrix_17.mat4.identity(dst);
@@ -20187,7 +20193,7 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
 System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "fres/splatoon_scenes", "dksiv/scenes", "metroid_prime/scenes", "luigis_mansion/scenes", "rres/zss_scenes", "rres/elb_scenes", "j3d/scenes", "ui", "Camera"], function (exports_81, context_81) {
     "use strict";
     var __moduleName = context_81 && context_81.id;
-    var viewer_1, ArrayBufferSlice_10, Progressable_12, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, SPL, DKSIV, MP1, LM, ZSS, ELB, J3D, ui_1, Camera_6, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
+    var viewer_1, ArrayBufferSlice_10, Progressable_12, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, SPL, DKSIV, MP1, LM, ZSS, ELB, J3D, ui_1, Camera_7, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
     return {
         setters: [
             function (viewer_1_1) {
@@ -20253,8 +20259,8 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
             function (ui_1_1) {
                 ui_1 = ui_1_1;
             },
-            function (Camera_6_1) {
-                Camera_6 = Camera_6_1;
+            function (Camera_7_1) {
+                Camera_7 = Camera_7_1;
             }
         ],
         execute: function () {
@@ -20332,7 +20338,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                     if (sceneDesc !== null)
                         cameraControllerClass = sceneDesc.defaultCameraController;
                     if (cameraControllerClass === undefined)
-                        cameraControllerClass = Camera_6.FPSCameraController;
+                        cameraControllerClass = Camera_7.FPSCameraController;
                     var cameraController = new cameraControllerClass();
                     this.viewer.setCameraController(cameraController);
                     if (cameraState !== null) {
@@ -20522,14 +20528,14 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
 System.register("embeds/main", ["viewer", "Camera"], function (exports_82, context_82) {
     "use strict";
     var __moduleName = context_82 && context_82.id;
-    var Viewer, Camera_7, FsButton, Main;
+    var Viewer, Camera_8, FsButton, Main;
     return {
         setters: [
             function (Viewer_1) {
                 Viewer = Viewer_1;
             },
-            function (Camera_7_1) {
-                Camera_7 = Camera_7_1;
+            function (Camera_8_1) {
+                Camera_8 = Camera_8_1;
             }
         ],
         execute: function () {
@@ -20596,7 +20602,7 @@ System.register("embeds/main", ["viewer", "Camera"], function (exports_82, conte
                     System.import("embeds/" + file).then(function (embedModule) {
                         var gl = _this.viewer.renderState.gl;
                         embedModule.createScene(gl, name).then(function (scene) {
-                            _this.viewer.setCameraController(new Camera_7.OrbitCameraController());
+                            _this.viewer.setCameraController(new Camera_8.OrbitCameraController());
                             _this.viewer.setScene(scene);
                         });
                     });

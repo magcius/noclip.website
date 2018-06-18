@@ -76,13 +76,21 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, textureHolder
                 const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`);
                 const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`);
                 const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
-                const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+                let scene;
+                try {
+                    scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+                } catch(e) {
+                    console.warn(`File ${basename} failed to parse:`, e);
+                    return null;
+                }
                 scene.name = basename;
                 if (basename.includes('_sky'))
                     scene.setIsSkybox(true);
                 return scene;
             });
-    
+
+            scenes = scenes.filter((scene) => !!scene);
+
             // Sort skyboxen before non-skyboxen.
             scenes = scenes.sort((a, b) => {
                 return boolSort(a.isSkybox, b.isSkybox);

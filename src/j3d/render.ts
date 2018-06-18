@@ -12,7 +12,7 @@ import * as Viewer from 'viewer';
 
 import { CompareMode, RenderFlags, RenderState } from '../render';
 import { align, assert } from '../util';
-import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox } from '../Camera';
+import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 
 export class J3DTextureHolder extends TextureHolder<TEX1_TextureData> {
@@ -275,6 +275,8 @@ export class Command_Material {
             const flipY = materialParams.m_TextureMapping[i].flipY;
             const flipYScale = flipY ? -1.0 : 1.0;
 
+            let usingMapping = false;
+
             // First, compute input matrix.
             switch (texMtx.type) {
             case 0x00:
@@ -288,6 +290,7 @@ export class Command_Material {
             case 0x07: // Rainbow Road
                 // Environment mapping. Uses the normal matrix.
                 // Normal matrix. Emulated here by the view matrix with the translation lopped off...
+                usingMapping = true;
                 mat4.copy(dst, state.view);
                 dst[12] = 0;
                 dst[13] = 0;
@@ -295,6 +298,7 @@ export class Command_Material {
                 break;
             case 0x09:
                 // Projection. Used for indtexwater, mostly.
+                usingMapping = true;
                 mat4.copy(dst, state.view);
                 break;
             default:
@@ -308,15 +312,8 @@ export class Command_Material {
             case 0x0B:
                 break;
             case 0x06: // Rainbow Road
-                // Orthographic light mapping.
-                // TODO(jstpierre): Figure out ortho params properly...
-                // texProjOrthoMtx(scratch, ?, ?, ?, ?, 0.5, -0.5, 0.5, 0.5);
-                mat4.set(scratch,
-                    0.5, 0,   0, 0,
-                    0,  -0.5 * flipYScale, 0, 0,
-                    0,   0,   0, 0,
-                    0.5, 0.5, 1, 0,
-                );
+                // Environment mapping
+                texEnvMtx(scratch, -0.5, -0.5 * flipYScale, 0.5, 0.5);
                 mat4.mul(dst, scratch, dst);
                 mat4.mul(dst, texMtx.effectMatrix, dst);
                 break;
@@ -326,6 +323,7 @@ export class Command_Material {
                 // Perspective.
                 texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
                 mat4.mul(dst, scratch, dst);
+                // mat4.mul(dst, texMtx.effectMatrix, dst);
                 // Don't apply effectMatrix to perspective. It appears to be
                 // a projection matrix preconfigured for GC.
                 break;
@@ -338,6 +336,14 @@ export class Command_Material {
 
             if (this.scene.btk !== null)
                 this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
+
+            if (usingMapping) {
+                // TODO(jstpierre): Just rewrite the texProjMatrices instead of doing this swap...
+                const tx = scratch[12];
+                scratch[12] = scratch[8]; scratch[8] = tx;
+                const ty = scratch[13];
+                scratch[13] = scratch[9]; scratch[9] = tx;
+            }
 
             mat4.mul(dst, scratch, dst);
         }
