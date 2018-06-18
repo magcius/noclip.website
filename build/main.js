@@ -5810,14 +5810,10 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                                 throw "whoops";
                         }
                         // Apply SRT.
-                        /*
-                        mat4.copy(scratch, texMtx.matrix);
-            
+                        gl_matrix_4.mat4.copy(scratch, texMtx.matrix);
                         if (this.scene.btk !== null)
                             this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
-            
-                        mat4.mul(dst, scratch, dst);
-                        */
+                        gl_matrix_4.mat4.mul(dst, scratch, dst);
                     }
                     for (var i = 0; i < this.material.postTexMatrices.length; i++) {
                         var postTexMtx = this.material.postTexMatrices[i];
