@@ -180,6 +180,8 @@ export interface LightingFudgeParams {
     vtx: string;
     amb: string;
     mat: string;
+    ambSource: string;
+    matSource: string;
 }
 
 type LightingFudgeGenerator = (p: LightingFudgeParams) => string;
@@ -235,23 +237,24 @@ export class GX_Program extends BaseProgram {
     }
 
     private generateColorChannel(chan: ColorChannelControl, i: number, isAlpha: boolean) {
-        // HACK.
-        if (this.hacks) {
-            const fudger = isAlpha ? this.hacks.alphaLightingFudge : this.hacks.colorLightingFudge;
-            if (fudger) {
-                const vtx = `a_Color${i}`;
-                const amb = `u_ColorAmbReg[${i}]`;
-                const mat = `u_ColorMatReg[${i}]`;
-                const fudged = fudger({ vtx, amb, mat });
-                return `vec4(${fudged})`;
-            }
-        }
-
         // TODO(jstpierre): amb & lighting
         const matSource = this.generateMaterialSource(chan, i);
 
         if (chan.lightingEnabled) {
             const ambSource = this.generateAmbientSource(chan, i);
+
+            // HACK.
+            if (this.hacks) {
+                const fudger = isAlpha ? this.hacks.alphaLightingFudge : this.hacks.colorLightingFudge;
+                if (fudger) {
+                    const vtx = `a_Color${i}`;
+                    const amb = `u_ColorAmbReg[${i}]`;
+                    const mat = `u_ColorMatReg[${i}]`;
+                    const fudged = fudger({ vtx, amb, mat, ambSource, matSource });
+                    return `vec4(${fudged})`;
+                }
+            }
+
             // XXX(jstpierre): This is awful but seems to work.
             return `(0.5 * (${ambSource} + 0.6) * ${matSource})`;
         } else {
