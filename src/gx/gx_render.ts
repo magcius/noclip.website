@@ -26,6 +26,9 @@ export class TextureMapping {
     public width: number = 0;
     public height: number = 0;
     public lodBias: number = 0;
+    // GL fucking sucks. This is a convenience when building texture matrices.
+    // gx_render does *not* use this parameter at all!
+    public flipY: boolean = false;
 }
 
 export class MaterialParams {
@@ -400,7 +403,7 @@ export interface TextureOverride {
     glTexture: WebGLTexture;
     width: number;
     height: number;
-    projectionMatrix?: mat4;
+    flipY: boolean;
 }
 
 export class TextureHolder<TextureType extends GX_Texture.Texture> {
@@ -441,6 +444,7 @@ export class TextureHolder<TextureType extends GX_Texture.Texture> {
             textureMapping.glTexture = textureOverride.glTexture;
             textureMapping.width = textureOverride.width;
             textureMapping.height = textureOverride.height;
+            textureMapping.flipY = textureOverride.flipY;
             return true;
         }
 
@@ -450,6 +454,7 @@ export class TextureHolder<TextureType extends GX_Texture.Texture> {
             const tex0Entry = this.textureEntries[textureEntryIndex];
             textureMapping.width = tex0Entry.width;
             textureMapping.height = tex0Entry.height;
+            textureMapping.flipY = false;
             return true;
         }
 

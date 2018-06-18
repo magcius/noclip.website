@@ -273,9 +273,6 @@ class Command_Material {
 
     public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {
         for (let i: BRRES.TexMtxIndex = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
-            if (!this.material.samplers[i])
-                continue;
-
             const srtAnimator = BRRES.bindTexAnimator(animationController, srt0, this.material.name, i);
             if (srtAnimator)
                 this.srtAnimators[i] = srtAnimator;
@@ -302,15 +299,16 @@ class Command_Material {
         }
     }
 
-    private calcPostTexMtx(dst: mat4, texIdx: number, state: RenderState): void {
+    private calcPostTexMtx(dst: mat4, texIdx: number, state: RenderState, flipY: boolean): void {
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
         const texSrt = this.material.texSrts[texIdx];
+        const flipYScale = flipY ? -1.0 : 1.0;
 
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
             // Apply camera projection matrix.
-            texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+            texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
         } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
-            texEnvMatrix(dst, 0.5, 0.5, 0.5, 0.5);
+            texEnvMatrix(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
         } else {
             mat4.identity(dst);
         }
@@ -323,6 +321,13 @@ class Command_Material {
         // Calculate SRT.
         if (this.srtAnimators[texMtxIdx]) {
             this.srtAnimators[texMtxIdx].calcTexMtx(matrixScratch);
+
+            if (texSrt.mapMode !== BRRES.MapMode.TEXCOORD) {
+                const tx = matrixScratch[12];
+                matrixScratch[12] = matrixScratch[8]; matrixScratch[8] = tx;
+                const ty = matrixScratch[13];
+                matrixScratch[13] = matrixScratch[9]; matrixScratch[9] = tx;
+            }
         } else {
             mat4.copy(matrixScratch, this.material.texSrts[texIdx].srtMtx);
         }
@@ -361,7 +366,7 @@ class Command_Material {
         for (let i = 0; i < 4; i++)
             materialParams.u_KonstColor[i].copy(this.material.gxMaterial.colorConstants[i]);
         for (let i = 0; i < 8; i++)
-            this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state);
+            this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state, materialParams.m_TextureMapping[i].flipY);
         for (let i = 0; i < 3; i++)
             this.calcIndMtx(materialParams.u_IndTexMtx[i], i);
     }

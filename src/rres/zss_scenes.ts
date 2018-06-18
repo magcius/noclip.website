@@ -217,7 +217,7 @@ class SkywardSwordScene implements Viewer.MainScene {
         state.blitColorTarget(this.mainColorTarget);
 
         if (this.indirectModels.length) {
-            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("DummyWater", textureOverride);
         }
 

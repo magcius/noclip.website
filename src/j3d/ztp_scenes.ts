@@ -115,7 +115,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
 
         // IndTex.
         if (this.indTexScenes.length) {
-            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
         }
 
