@@ -614,14 +614,14 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
         const scaleBitsB = (mtxB >>> 22) & 0x03;
         const scaleBitsC = (mtxC >>> 22) & 0x03;
         const scaleExp = (scaleBitsC << 4) | (scaleBitsB << 2) | scaleBitsA;
-        const scale = Math.pow(2, (scaleExp - indTexScaleBias - indTexScaleBase));
+        const scale = Math.pow(2, scaleExp - indTexScaleBias - indTexScaleBase);
 
-        const ma = ((mtxA >>>  0) & 0x07FF) * scale;
-        const mb = ((mtxA >>> 11) & 0x07FF) * scale;
-        const mc = ((mtxB >>>  0) & 0x07FF) * scale;
-        const md = ((mtxB >>> 11) & 0x07FF) * scale;
-        const mx = ((mtxB >>>  0) & 0x07FF) * scale;
-        const my = ((mtxB >>> 11) & 0x07FF) * scale;
+        const ma = ((((mtxA >>>  0) & 0x07FF) << 21) >> 21) * scale;
+        const mb = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21) * scale;
+        const mc = ((((mtxB >>>  0) & 0x07FF) << 21) >> 21) * scale;
+        const md = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21) * scale;
+        const mx = ((((mtxC >>>  0) & 0x07FF) << 21) >> 21) * scale;
+        const my = ((((mtxC >>> 11) & 0x07FF) << 21) >> 21) * scale;
 
         const mat = mat2d.fromValues(
             ma, mb, mc, md, mx, my
