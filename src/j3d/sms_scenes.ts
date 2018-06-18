@@ -299,7 +299,7 @@ export class SunshineRenderer implements Viewer.MainScene {
 
         if (this.seaIndirectScene) {
             const indirectScene = this.seaIndirectScene;
-            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
+            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("indirectdummy", textureOverride);
             indirectScene.render(state);
         }

@@ -5309,6 +5309,9 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                     this.width = 0;
                     this.height = 0;
                     this.lodBias = 0;
+                    // GL fucking sucks. This is a convenience when building texture matrices.
+                    // gx_render does *not* use this parameter at all!
+                    this.flipY = false;
                 }
                 return TextureMapping;
             }());
@@ -5487,6 +5490,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                         textureMapping.glTexture = textureOverride.glTexture;
                         textureMapping.width = textureOverride.width;
                         textureMapping.height = textureOverride.height;
+                        textureMapping.flipY = textureOverride.flipY;
                         return true;
                     }
                     var textureEntryIndex = this.findTextureEntryIndex(name);
@@ -5495,6 +5499,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                         var tex0Entry = this.textureEntries[textureEntryIndex];
                         textureMapping.width = tex0Entry.width;
                         textureMapping.height = tex0Entry.height;
+                        textureMapping.flipY = false;
                         return true;
                     }
                     return false;
@@ -5744,6 +5749,16 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     copyColor(ColorOverride.C0, materialParams.u_Color[1], this.material.gxMaterial.colorRegisters[1]);
                     copyColor(ColorOverride.C1, materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2]);
                     copyColor(ColorOverride.C2, materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3]);
+                    // Bind textures.
+                    for (var i = 0; i < this.material.textureIndexes.length; i++) {
+                        var texIndex = this.material.textureIndexes[i];
+                        if (texIndex >= 0) {
+                            this.scene.fillTextureMapping(materialParams.m_TextureMapping[i], texIndex);
+                        }
+                        else {
+                            materialParams.m_TextureMapping[i].glTexture = null;
+                        }
+                    }
                     // Bind our texture matrices.
                     var scratch = Command_Material.matrixScratch;
                     for (var i = 0; i < this.material.texMatrices.length; i++) {
@@ -5751,6 +5766,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         if (texMtx === null)
                             continue;
                         var dst = materialParams.u_TexMtx[i];
+                        var flipY = materialParams.m_TextureMapping[i].flipY;
+                        var flipYScale = flipY ? -1.0 : 1.0;
                         // First, compute input matrix.
                         switch (texMtx.type) {
                             case 0x00:
@@ -5786,7 +5803,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                                 // Orthographic light mapping.
                                 // TODO(jstpierre): Figure out ortho params properly...
                                 // texProjOrthoMtx(scratch, ?, ?, ?, ?, 0.5, -0.5, 0.5, 0.5);
-                                gl_matrix_4.mat4.set(scratch, 0.5, 0, 0, 0, 0, -0.5, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 1, 0);
+                                gl_matrix_4.mat4.set(scratch, 0.5, 0, 0, 0, 0, -0.5 * flipYScale, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 1, 0);
                                 gl_matrix_4.mat4.mul(dst, scratch, dst);
                                 gl_matrix_4.mat4.mul(dst, texMtx.effectMatrix, dst);
                                 break;
@@ -5794,7 +5811,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             case 0x08: // Peach Beach
                             case 0x09: // Rainbow Road
                                 // Perspective.
-                                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+                                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
                                 gl_matrix_4.mat4.mul(dst, scratch, dst);
                                 // Don't apply effectMatrix to perspective. It appears to be
                                 // a projection matrix preconfigured for GC.
@@ -5822,16 +5839,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         var a = indTexMtx[0], c = indTexMtx[1], tx = indTexMtx[2];
                         var b = indTexMtx[3], d = indTexMtx[4], ty = indTexMtx[5];
                         gl_matrix_4.mat2d.set(materialParams.u_IndTexMtx[i], a, b, c, d, tx, ty);
-                    }
-                    // Bind textures.
-                    for (var i = 0; i < this.material.textureIndexes.length; i++) {
-                        var texIndex = this.material.textureIndexes[i];
-                        if (texIndex >= 0) {
-                            this.scene.fillTextureMapping(materialParams.m_TextureMapping[i], texIndex);
-                        }
-                        else {
-                            materialParams.m_TextureMapping[i].glTexture = null;
-                        }
                     }
                 };
                 Command_Material.matrixScratch = gl_matrix_4.mat4.create();
@@ -7606,7 +7613,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                     state.blitColorTarget(this.mainColorTarget);
                     // IndTex.
                     if (this.indTexScenes.length) {
-                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_1.EFB_WIDTH, height: gx_material_1.EFB_HEIGHT };
+                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_1.EFB_WIDTH, height: gx_material_1.EFB_HEIGHT, flipY: true };
                         this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
                     }
                     this.indTexScenes.forEach(function (indirectScene) {
@@ -8451,7 +8458,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                     state.blitColorTarget(this.mainColorTarget);
                     if (this.seaIndirectScene) {
                         var indirectScene = this.seaIndirectScene;
-                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_2.EFB_WIDTH, height: gx_material_2.EFB_HEIGHT };
+                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_2.EFB_WIDTH, height: gx_material_2.EFB_HEIGHT, flipY: true };
                         this.textureHolder.setTextureOverride("indirectdummy", textureOverride);
                         indirectScene.render(state);
                     }
@@ -8735,7 +8742,7 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", 
                     state.useRenderTarget(state.onscreenColorTarget);
                     state.blitColorTarget(this.mainColorTarget);
                     if (this.indirectScene) {
-                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_3.EFB_WIDTH, height: gx_material_3.EFB_HEIGHT };
+                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_3.EFB_WIDTH, height: gx_material_3.EFB_HEIGHT, flipY: true };
                         this.textureHolder.setTextureOverride("IndDummy", textureOverride);
                         this.indirectScene.bindState(state);
                         this.indirectScene.renderOpaque(state);
@@ -19462,8 +19469,6 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                 }
                 Command_Material.prototype.bindSRT0 = function (animationController, srt0) {
                     for (var i = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
-                        if (!this.material.samplers[i])
-                            continue;
                         var srtAnimator = BRRES.bindTexAnimator(animationController, srt0, this.material.name, i);
                         if (srtAnimator)
                             this.srtAnimators[i] = srtAnimator;
@@ -19485,15 +19490,16 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                         this.glSamplers[i] = glSampler;
                     }
                 };
-                Command_Material.prototype.calcPostTexMtx = function (dst, texIdx, state) {
+                Command_Material.prototype.calcPostTexMtx = function (dst, texIdx, state, flipY) {
                     var texMtxIdx = BRRES.TexMtxIndex.TEX0 + texIdx;
                     var texSrt = this.material.texSrts[texIdx];
+                    var flipYScale = flipY ? -1.0 : 1.0;
                     if (texSrt.mapMode === 2 /* PROJECTION */) {
                         // Apply camera projection matrix.
-                        texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+                        texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
                     }
                     else if (texSrt.mapMode === 1 /* ENV_CAMERA */) {
-                        texEnvMatrix(dst, 0.5, 0.5, 0.5, 0.5);
+                        texEnvMatrix(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
                     }
                     else {
                         gl_matrix_17.mat4.identity(dst);
@@ -19505,6 +19511,14 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     // Calculate SRT.
                     if (this.srtAnimators[texMtxIdx]) {
                         this.srtAnimators[texMtxIdx].calcTexMtx(matrixScratch);
+                        if (texSrt.mapMode !== 0 /* TEXCOORD */) {
+                            var tx = matrixScratch[12];
+                            matrixScratch[12] = matrixScratch[8];
+                            matrixScratch[8] = tx;
+                            var ty = matrixScratch[13];
+                            matrixScratch[13] = matrixScratch[9];
+                            matrixScratch[9] = tx;
+                        }
                     }
                     else {
                         gl_matrix_17.mat4.copy(matrixScratch, this.material.texSrts[texIdx].srtMtx);
@@ -19540,7 +19554,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     for (var i = 0; i < 4; i++)
                         materialParams.u_KonstColor[i].copy(this.material.gxMaterial.colorConstants[i]);
                     for (var i = 0; i < 8; i++)
-                        this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state);
+                        this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state, materialParams.m_TextureMapping[i].flipY);
                     for (var i = 0; i < 3; i++)
                         this.calcIndMtx(materialParams.u_IndTexMtx[i], i);
                 };
@@ -19888,7 +19902,7 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                     state.useRenderTarget(state.onscreenColorTarget);
                     state.blitColorTarget(this.mainColorTarget);
                     if (this.indirectModels.length) {
-                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_4.EFB_WIDTH, height: gx_material_4.EFB_HEIGHT };
+                        var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_4.EFB_WIDTH, height: gx_material_4.EFB_HEIGHT, flipY: true };
                         this.textureHolder.setTextureOverride("DummyWater", textureOverride);
                     }
                     this.indirectModels.forEach(function (modelRenderer) {

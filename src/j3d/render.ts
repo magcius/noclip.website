@@ -254,6 +254,16 @@ export class Command_Material {
         copyColor(ColorOverride.C1, materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2]);
         copyColor(ColorOverride.C2, materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3]);
 
+        // Bind textures.
+        for (let i = 0; i < this.material.textureIndexes.length; i++) {
+            const texIndex = this.material.textureIndexes[i];
+            if (texIndex >= 0) {
+                this.scene.fillTextureMapping(materialParams.m_TextureMapping[i], texIndex);
+            } else {
+                materialParams.m_TextureMapping[i].glTexture = null;
+            }
+        }
+
         // Bind our texture matrices.
         const scratch = Command_Material.matrixScratch;
         for (let i = 0; i < this.material.texMatrices.length; i++) {
@@ -262,6 +272,8 @@ export class Command_Material {
                 continue;
 
             const dst = materialParams.u_TexMtx[i];
+            const flipY = materialParams.m_TextureMapping[i].flipY;
+            const flipYScale = flipY ? -1.0 : 1.0;
 
             // First, compute input matrix.
             switch (texMtx.type) {
@@ -301,7 +313,7 @@ export class Command_Material {
                 // texProjOrthoMtx(scratch, ?, ?, ?, ?, 0.5, -0.5, 0.5, 0.5);
                 mat4.set(scratch,
                     0.5, 0,   0, 0,
-                    0,  -0.5, 0, 0,
+                    0,  -0.5 * flipYScale, 0, 0,
                     0,   0,   0, 0,
                     0.5, 0.5, 1, 0,
                 );
@@ -312,7 +324,7 @@ export class Command_Material {
             case 0x08: // Peach Beach
             case 0x09: // Rainbow Road
                 // Perspective.
-                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, 0.5, 0.5, 0.5);
+                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
                 mat4.mul(dst, scratch, dst);
                 // Don't apply effectMatrix to perspective. It appears to be
                 // a projection matrix preconfigured for GC.
@@ -347,16 +359,6 @@ export class Command_Material {
             const a = indTexMtx[0], c = indTexMtx[1], tx = indTexMtx[2];
             const b = indTexMtx[3], d = indTexMtx[4], ty = indTexMtx[5];
             mat2d.set(materialParams.u_IndTexMtx[i], a, b, c, d, tx, ty);
-        }
-
-        // Bind textures.
-        for (let i = 0; i < this.material.textureIndexes.length; i++) {
-            const texIndex = this.material.textureIndexes[i];
-            if (texIndex >= 0) {
-                this.scene.fillTextureMapping(materialParams.m_TextureMapping[i], texIndex);
-            } else {
-                materialParams.m_TextureMapping[i].glTexture = null;
-            }
         }
     }
 }
