@@ -19979,7 +19979,7 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         var systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
                         commonRRESes.push(systemRRES);
                         var objPackArchive = U8.parse(LZ77.decompress(objPackBuffer));
-                        var needsSkyCmn = _this.id.startsWith('F0');
+                        var needsSkyCmn = _this.id.startsWith('F0') || _this.id === 'F406';
                         if (needsSkyCmn) {
                             var skyCmnArchive = U8.parse(objPackArchive.findFile('oarc/SkyCmn.arc').buffer);
                             var skyCmnRRES = BRRES.parse(skyCmnArchive.findFile('g3d/model.brres').buffer);

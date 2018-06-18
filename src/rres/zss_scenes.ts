@@ -264,7 +264,7 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
 
             const objPackArchive = U8.parse(LZ77.decompress(objPackBuffer));
 
-            const needsSkyCmn = this.id.startsWith('F0');
+            const needsSkyCmn = this.id.startsWith('F0') || this.id === 'F406';
             if (needsSkyCmn) {
                 const skyCmnArchive = U8.parse(objPackArchive.findFile('oarc/SkyCmn.arc').buffer);
                 const skyCmnRRES = BRRES.parse(skyCmnArchive.findFile('g3d/model.brres').buffer);
