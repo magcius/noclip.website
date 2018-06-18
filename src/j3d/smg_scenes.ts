@@ -169,7 +169,7 @@ class SMGRenderer implements Viewer.MainScene {
 
         if (this.indirectScene) {
             const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT };
-            this.textureHolder.setTextureOverride("IndDummy", textureOverride);
+            // this.textureHolder.setTextureOverride("IndDummy", textureOverride);
             this.indirectScene.bindState(state);
             this.indirectScene.renderOpaque(state);
         }

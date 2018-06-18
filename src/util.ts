@@ -109,8 +109,8 @@ export function hexdump(buffer: ArrayBufferSlice, offs: number = 0, length: numb
 declare global {
     interface Window {
         hexdump: any;
-        debug: boolean;
+        debug: any;
     }
 }
 window.hexdump = hexdump;
-window.debug = false;
+window.debug = null;

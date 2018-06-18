@@ -32,10 +32,12 @@ function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number,
     dst[10] = -1.0;
     dst[14] = 0.0;
 
-    dst[3] = 0.0;
-    dst[7] = 0.0;
-    dst[11] = 0.0;
-    dst[15] = 0.0;
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
 }
 
 function texProjOrthoMtx(dst: mat4, t: number, b: number, l: number, r: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
@@ -297,26 +299,6 @@ class Command_Material {
         }
     }
 
-    private calcTexMtx(dst: mat4, texIdx: number, state: RenderState): void {
-        const texSrt = this.material.texSrts[texIdx];
-
-        if (texSrt.mapMode === BRRES.MapMode.TEXCOORD) {
-            // Identity.
-            mat4.identity(dst);
-        } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
-            // Environment mapping. Technically, a normal matrix should be used, but
-            // we don't have a normal matrix. Pretend to have one by knocking the
-            // translation out of the MV.
-            mat4.copy(dst, state.view);
-            dst[12] = 0;
-            dst[13] = 0;
-            dst[14] = 0;
-        } else if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
-            // Projection mapping.
-            mat4.copy(dst, state.view);
-        }
-    }
-
     private calcPostTexMtx(dst: mat4, texIdx: number, state: RenderState): void {
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
         const texSrt = this.material.texSrts[texIdx];
@@ -375,8 +357,6 @@ class Command_Material {
             materialParams.u_Color[i].copy(this.material.gxMaterial.colorRegisters[i]);
         for (let i = 0; i < 4; i++)
             materialParams.u_KonstColor[i].copy(this.material.gxMaterial.colorConstants[i]);
-        for (let i = 0; i < 8; i++)
-            this.calcTexMtx(materialParams.u_TexMtx[i], i, state);
         for (let i = 0; i < 8; i++)
             this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state);
         for (let i = 0; i < 3; i++)

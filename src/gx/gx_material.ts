@@ -276,26 +276,26 @@ export class GX_Program extends BaseProgram {
     // TexGen
     private generateTexGenSource(src: GX.TexGenSrc) {
         switch (src) {
-        case GX.TexGenSrc.POS:       return `a_Position`;
-        case GX.TexGenSrc.NRM:       return `a_Normal`;
-        case GX.TexGenSrc.COLOR0:    return `a_Color0`;
-        case GX.TexGenSrc.COLOR1:    return `a_Color1`;
-        case GX.TexGenSrc.TEX0:      return `vec3(a_Tex0, 1.0)`;
-        case GX.TexGenSrc.TEX1:      return `vec3(a_Tex1, 1.0)`;
-        case GX.TexGenSrc.TEX2:      return `vec3(a_Tex2, 1.0)`;
-        case GX.TexGenSrc.TEX3:      return `vec3(a_Tex3, 1.0)`;
-        case GX.TexGenSrc.TEX4:      return `vec3(a_Tex4, 1.0)`;
-        case GX.TexGenSrc.TEX5:      return `vec3(a_Tex5, 1.0)`;
-        case GX.TexGenSrc.TEX6:      return `vec3(a_Tex6, 1.0)`;
-        case GX.TexGenSrc.TEX7:      return `vec3(a_Tex7, 1.0)`;
+        case GX.TexGenSrc.POS:       return `vec4(a_Position, 1.0)`;
+        case GX.TexGenSrc.NRM:       return `vec4(a_Normal, 1.0)`;
+        case GX.TexGenSrc.COLOR0:    return `vec4(a_Color0, 1.0)`;
+        case GX.TexGenSrc.COLOR1:    return `vec4(a_Color1, 1.0)`;
+        case GX.TexGenSrc.TEX0:      return `vec4(a_Tex0, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX1:      return `vec4(a_Tex1, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX2:      return `vec4(a_Tex2, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX3:      return `vec4(a_Tex3, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX4:      return `vec4(a_Tex4, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX5:      return `vec4(a_Tex5, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX6:      return `vec4(a_Tex6, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX7:      return `vec4(a_Tex7, 1.0, 1.0)`;
         // Use a previously generated texcoordgen.
-        case GX.TexGenSrc.TEXCOORD0: return `v_TexCoord0`;
-        case GX.TexGenSrc.TEXCOORD1: return `v_TexCoord1`;
-        case GX.TexGenSrc.TEXCOORD2: return `v_TexCoord2`;
-        case GX.TexGenSrc.TEXCOORD3: return `v_TexCoord3`;
-        case GX.TexGenSrc.TEXCOORD4: return `v_TexCoord4`;
-        case GX.TexGenSrc.TEXCOORD5: return `v_TexCoord5`;
-        case GX.TexGenSrc.TEXCOORD6: return `v_TexCoord6`;
+        case GX.TexGenSrc.TEXCOORD0: return `vec4(v_TexCoord0, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD1: return `vec4(v_TexCoord1, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD2: return `vec4(v_TexCoord2, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD3: return `vec4(v_TexCoord3, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD4: return `vec4(v_TexCoord4, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD5: return `vec4(v_TexCoord5, 1.0)`;
+        case GX.TexGenSrc.TEXCOORD6: return `vec4(v_TexCoord6, 1.0)`;
         default:
             throw new Error("whoops");
         }
@@ -304,13 +304,13 @@ export class GX_Program extends BaseProgram {
     private generateTexGenMatrix(src: string, texCoordGen: TexGen) {
         const matrix = texCoordGen.matrix;
         if (matrix === GX.TexGenMatrix.IDENTITY) {
-            return `${src}`;
+            return `${src}.xyz`;
         } else if (matrix >= GX.TexGenMatrix.TEXMTX0) {
             const texMtxIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
-            return `(u_TexMtx[${texMtxIdx}] * vec4(${src}, 1.0))`;
+            return `(u_TexMtx[${texMtxIdx}] * ${src})`;
         } else if (matrix >= GX.TexGenMatrix.PNMTX0) {
             const pnMtxIdx = (matrix - GX.TexGenMatrix.PNMTX0) / 3;
-            return `(u_PosMtx[${pnMtxIdx}] * vec4(${src}, 1.0))`;
+            return `(u_PosMtx[${pnMtxIdx}] * ${src})`;
         } else {
             throw "whoops";
         }
@@ -321,11 +321,11 @@ export class GX_Program extends BaseProgram {
         switch (texCoordGen.type) {
         case GX.TexGenType.SRTG:
             // Expected to be used with colors, I suspect...
-            return `vec3(${src}.rg, 1.0)`;
+            return `${src}.xyz`;
         case GX.TexGenType.MTX2x4:
             if (texCoordGen.matrix === GX.TexGenMatrix.IDENTITY)
-                return src;
-            return `vec3(${this.generateTexGenMatrix(`vec3(${src}.xy, 1.0)`, texCoordGen)}.xy, 1.0)`;
+                return `${src}.xyz`;
+            return `vec3(${this.generateTexGenMatrix(src, texCoordGen)}.xy, 1.0)`;
         case GX.TexGenType.MTX3x4:
             return `${this.generateTexGenMatrix(src, texCoordGen)}`;
         default:
@@ -342,12 +342,12 @@ export class GX_Program extends BaseProgram {
     }
 
     private generateTexGenPost(texCoordGen: TexGen) {
-        const nrm = this.generateTexGenNrm(texCoordGen);
+        const tex = this.generateTexGenNrm(texCoordGen);
         if (texCoordGen.postMatrix === GX.PostTexGenMatrix.PTIDENTITY) {
-            return nrm;
+            return tex;
         } else {
             const matrixIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
-            return `u_PostTexMtx[${matrixIdx}] * vec4(${nrm}, 1.0)`;
+            return `u_PostTexMtx[${matrixIdx}] * vec4(${tex}, 1.0)`;
         }
     }
 
@@ -773,8 +773,6 @@ layout(row_major, std140) uniform ub_MaterialParams {
 
 // Expected to change with each shape packet.
 layout(row_major, std140) uniform ub_PacketParams {
-    // TODO(jstpierre): Remove MV matrix. Should be replaced by the PNMTX below.
-    mat4x3 u_ModelView;
     mat4x3 u_PosMtx[10];
 };
 `;
@@ -803,7 +801,7 @@ out vec3 v_TexCoord7;
 
 void main() {
     mat4 t_PosMtx = mat4(u_PosMtx[int(a_PosMtxIdx / 3.0)]);
-    mat4 t_PosModelView = (mat4(u_ModelView) * t_PosMtx);
+    mat4 t_PosModelView = t_PosMtx;
     vec4 t_Position = t_PosModelView * vec4(a_Position, 1.0);
     v_Position = t_Position.xyz;
     v_Normal = a_Normal;

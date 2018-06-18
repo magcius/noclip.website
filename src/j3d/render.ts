@@ -41,10 +41,12 @@ function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number,
     dst[10] = -1.0;
     dst[14] = 0.0;
 
-    dst[3] = 0.0;
-    dst[7] = 0.0;
-    dst[11] = 0.0;
-    dst[15] = 0.0;
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
 }
 
 function texProjOrthoMtx(dst: mat4, t: number, b: number, l: number, r: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
@@ -320,12 +322,14 @@ export class Command_Material {
             }
 
             // Apply SRT.
+            /*
             mat4.copy(scratch, texMtx.matrix);
 
             if (this.scene.btk !== null)
                 this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
 
             mat4.mul(dst, scratch, dst);
+            */
         }
 
         for (let i = 0; i < this.material.postTexMatrices.length; i++) {

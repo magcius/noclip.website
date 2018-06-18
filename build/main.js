@@ -239,7 +239,7 @@ System.register("util", ["ArrayBufferSlice", "Progressable"], function (exports_
         execute: function () {
             counter = 0;
             window.hexdump = hexdump;
-            window.debug = false;
+            window.debug = null;
         }
     };
 });
@@ -4467,26 +4467,26 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                 // TexGen
                 GX_Program.prototype.generateTexGenSource = function (src) {
                     switch (src) {
-                        case 0 /* POS */: return "a_Position";
-                        case 1 /* NRM */: return "a_Normal";
-                        case 19 /* COLOR0 */: return "a_Color0";
-                        case 20 /* COLOR1 */: return "a_Color1";
-                        case 4 /* TEX0 */: return "vec3(a_Tex0, 1.0)";
-                        case 5 /* TEX1 */: return "vec3(a_Tex1, 1.0)";
-                        case 6 /* TEX2 */: return "vec3(a_Tex2, 1.0)";
-                        case 7 /* TEX3 */: return "vec3(a_Tex3, 1.0)";
-                        case 8 /* TEX4 */: return "vec3(a_Tex4, 1.0)";
-                        case 9 /* TEX5 */: return "vec3(a_Tex5, 1.0)";
-                        case 10 /* TEX6 */: return "vec3(a_Tex6, 1.0)";
-                        case 11 /* TEX7 */: return "vec3(a_Tex7, 1.0)";
+                        case 0 /* POS */: return "vec4(a_Position, 1.0)";
+                        case 1 /* NRM */: return "vec4(a_Normal, 1.0)";
+                        case 19 /* COLOR0 */: return "vec4(a_Color0, 1.0)";
+                        case 20 /* COLOR1 */: return "vec4(a_Color1, 1.0)";
+                        case 4 /* TEX0 */: return "vec4(a_Tex0, 1.0, 1.0)";
+                        case 5 /* TEX1 */: return "vec4(a_Tex1, 1.0, 1.0)";
+                        case 6 /* TEX2 */: return "vec4(a_Tex2, 1.0, 1.0)";
+                        case 7 /* TEX3 */: return "vec4(a_Tex3, 1.0, 1.0)";
+                        case 8 /* TEX4 */: return "vec4(a_Tex4, 1.0, 1.0)";
+                        case 9 /* TEX5 */: return "vec4(a_Tex5, 1.0, 1.0)";
+                        case 10 /* TEX6 */: return "vec4(a_Tex6, 1.0, 1.0)";
+                        case 11 /* TEX7 */: return "vec4(a_Tex7, 1.0, 1.0)";
                         // Use a previously generated texcoordgen.
-                        case 12 /* TEXCOORD0 */: return "v_TexCoord0";
-                        case 13 /* TEXCOORD1 */: return "v_TexCoord1";
-                        case 14 /* TEXCOORD2 */: return "v_TexCoord2";
-                        case 15 /* TEXCOORD3 */: return "v_TexCoord3";
-                        case 16 /* TEXCOORD4 */: return "v_TexCoord4";
-                        case 17 /* TEXCOORD5 */: return "v_TexCoord5";
-                        case 18 /* TEXCOORD6 */: return "v_TexCoord6";
+                        case 12 /* TEXCOORD0 */: return "vec4(v_TexCoord0, 1.0)";
+                        case 13 /* TEXCOORD1 */: return "vec4(v_TexCoord1, 1.0)";
+                        case 14 /* TEXCOORD2 */: return "vec4(v_TexCoord2, 1.0)";
+                        case 15 /* TEXCOORD3 */: return "vec4(v_TexCoord3, 1.0)";
+                        case 16 /* TEXCOORD4 */: return "vec4(v_TexCoord4, 1.0)";
+                        case 17 /* TEXCOORD5 */: return "vec4(v_TexCoord5, 1.0)";
+                        case 18 /* TEXCOORD6 */: return "vec4(v_TexCoord6, 1.0)";
                         default:
                             throw new Error("whoops");
                     }
@@ -4494,15 +4494,15 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                 GX_Program.prototype.generateTexGenMatrix = function (src, texCoordGen) {
                     var matrix = texCoordGen.matrix;
                     if (matrix === 60 /* IDENTITY */) {
-                        return "" + src;
+                        return src + ".xyz";
                     }
                     else if (matrix >= 30 /* TEXMTX0 */) {
                         var texMtxIdx = (matrix - 30 /* TEXMTX0 */) / 3;
-                        return "(u_TexMtx[" + texMtxIdx + "] * vec4(" + src + ", 1.0))";
+                        return "(u_TexMtx[" + texMtxIdx + "] * " + src + ")";
                     }
                     else if (matrix >= 0 /* PNMTX0 */) {
                         var pnMtxIdx = (matrix - 0 /* PNMTX0 */) / 3;
-                        return "(u_PosMtx[" + pnMtxIdx + "] * vec4(" + src + ", 1.0))";
+                        return "(u_PosMtx[" + pnMtxIdx + "] * " + src + ")";
                     }
                     else {
                         throw "whoops";
@@ -4513,11 +4513,11 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                     switch (texCoordGen.type) {
                         case 10 /* SRTG */:
                             // Expected to be used with colors, I suspect...
-                            return "vec3(" + src + ".rg, 1.0)";
+                            return src + ".xyz";
                         case 1 /* MTX2x4 */:
                             if (texCoordGen.matrix === 60 /* IDENTITY */)
-                                return src;
-                            return "vec3(" + this.generateTexGenMatrix("vec3(" + src + ".xy, 1.0)", texCoordGen) + ".xy, 1.0)";
+                                return src + ".xyz";
+                            return "vec3(" + this.generateTexGenMatrix(src, texCoordGen) + ".xy, 1.0)";
                         case 0 /* MTX3x4 */:
                             return "" + this.generateTexGenMatrix(src, texCoordGen);
                         default:
@@ -4532,13 +4532,13 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                         return type;
                 };
                 GX_Program.prototype.generateTexGenPost = function (texCoordGen) {
-                    var nrm = this.generateTexGenNrm(texCoordGen);
+                    var tex = this.generateTexGenNrm(texCoordGen);
                     if (texCoordGen.postMatrix === 125 /* PTIDENTITY */) {
-                        return nrm;
+                        return tex;
                     }
                     else {
                         var matrixIdx = (texCoordGen.postMatrix - 64 /* PTTEXMTX0 */) / 3;
-                        return "u_PostTexMtx[" + matrixIdx + "] * vec4(" + nrm + ", 1.0)";
+                        return "u_PostTexMtx[" + matrixIdx + "] * vec4(" + tex + ", 1.0)";
                     }
                 };
                 GX_Program.prototype.generateTexGen = function (texCoordGen) {
@@ -4872,11 +4872,11 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                     }).join('\n');
                 };
                 GX_Program.prototype.generateUBO = function () {
-                    return "\n// Expected to be constant across the entire scene.\nlayout(row_major, std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_ColorAmbReg[2];\n    vec4 u_KonstColor[4];\n    vec4 u_Color[4];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    mat4x2 u_IndTexMtx[3];\n    // SizeX, SizeY, 0, Bias\n    vec4 u_TextureParams[8];\n};\n\n// Expected to change with each shape packet.\nlayout(row_major, std140) uniform ub_PacketParams {\n    // TODO(jstpierre): Remove MV matrix. Should be replaced by the PNMTX below.\n    mat4x3 u_ModelView;\n    mat4x3 u_PosMtx[10];\n};\n";
+                    return "\n// Expected to be constant across the entire scene.\nlayout(row_major, std140) uniform ub_SceneParams {\n    mat4 u_Projection;\n    vec4 u_Misc0;\n};\n\n#define u_SceneTextureLODBias u_Misc0[0]\n\n// Expected to change with each material.\nlayout(row_major, std140) uniform ub_MaterialParams {\n    vec4 u_ColorMatReg[2];\n    vec4 u_ColorAmbReg[2];\n    vec4 u_KonstColor[4];\n    vec4 u_Color[4];\n    mat4x3 u_TexMtx[10];\n    mat4x3 u_PostTexMtx[20];\n    mat4x2 u_IndTexMtx[3];\n    // SizeX, SizeY, 0, Bias\n    vec4 u_TextureParams[8];\n};\n\n// Expected to change with each shape packet.\nlayout(row_major, std140) uniform ub_PacketParams {\n    mat4x3 u_PosMtx[10];\n};\n";
                 };
                 GX_Program.prototype.generateShaders = function () {
                     var ubo = this.generateUBO();
-                    this.vert = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\n" + this.generateVertAttributeDefs() + "\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    mat4 t_PosMtx = mat4(u_PosMtx[int(a_PosMtxIdx / 3.0)]);\n    mat4 t_PosModelView = (mat4(u_ModelView) * t_PosMtx);\n    vec4 t_Position = t_PosModelView * vec4(a_Position, 1.0);\n    v_Position = t_Position.xyz;\n    v_Normal = a_Normal;\n" + this.generateLightChannels() + "\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_Projection * t_Position;\n}\n";
+                    this.vert = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\n" + this.generateVertAttributeDefs() + "\nout vec3 v_Position;\nout vec3 v_Normal;\nout vec4 v_Color0;\nout vec4 v_Color1;\nout vec3 v_TexCoord0;\nout vec3 v_TexCoord1;\nout vec3 v_TexCoord2;\nout vec3 v_TexCoord3;\nout vec3 v_TexCoord4;\nout vec3 v_TexCoord5;\nout vec3 v_TexCoord6;\nout vec3 v_TexCoord7;\n\nvoid main() {\n    mat4 t_PosMtx = mat4(u_PosMtx[int(a_PosMtxIdx / 3.0)]);\n    mat4 t_PosModelView = t_PosMtx;\n    vec4 t_Position = t_PosModelView * vec4(a_Position, 1.0);\n    v_Position = t_Position.xyz;\n    v_Normal = a_Normal;\n" + this.generateLightChannels() + "\n" + this.generateTexGens(this.material.texGens) + "\n    gl_Position = u_Projection * t_Position;\n}\n";
                     var tevStages = this.material.tevStages;
                     var indTexStages = this.material.indTexStages;
                     var alphaTest = this.material.alphaTest;
@@ -5175,9 +5175,10 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
     exports_24("fillMaterialParamsData", fillMaterialParamsData);
     function fillPacketParamsData(d, packetParams) {
         var offs = 0;
-        offs += fillMatrix4x3(d, offs, packetParams.u_ModelView);
-        for (var i = 0; i < 10; i++)
-            offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[i]);
+        for (var i = 0; i < 10; i++) {
+            gl_matrix_3.mat4.mul(matrixScratch, packetParams.u_ModelView, packetParams.u_PosMtx[i]);
+            offs += fillMatrix4x3(d, offs, matrixScratch);
+        }
         util_11.assert(offs === u_PacketParamsBufferSize);
         util_11.assert(d.length >= offs);
     }
@@ -5271,7 +5272,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
         }
     }
     exports_24("translateWrapMode", translateWrapMode);
-    var gl_matrix_3, GX_Material, GX_Texture, util_11, BufferCoalescer_1, ArrayBufferSlice_5, SceneParams, TextureMapping, MaterialParams, PacketParams, u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize, bufferDataScratchSize, GXRenderHelper, GXShapeHelper, TextureHolder;
+    var gl_matrix_3, GX_Material, GX_Texture, util_11, BufferCoalescer_1, ArrayBufferSlice_5, SceneParams, TextureMapping, MaterialParams, PacketParams, u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize, matrixScratch, bufferDataScratchSize, GXRenderHelper, GXShapeHelper, TextureHolder;
     return {
         setters: [
             function (gl_matrix_3_1) {
@@ -5330,15 +5331,17 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
             exports_24("MaterialParams", MaterialParams);
             PacketParams = /** @class */ (function () {
                 function PacketParams() {
+                    // TODO(jstpierre): Remove. This is for convenience.
                     this.u_ModelView = gl_matrix_3.mat4.create();
                     this.u_PosMtx = util_11.nArray(10, function () { return gl_matrix_3.mat4.create(); });
                 }
                 return PacketParams;
             }());
             exports_24("PacketParams", PacketParams);
-            exports_24("u_PacketParamsBufferSize", u_PacketParamsBufferSize = 4 * 3 * 11);
+            exports_24("u_PacketParamsBufferSize", u_PacketParamsBufferSize = 4 * 3 * 10);
             exports_24("u_MaterialParamsBufferSize", u_MaterialParamsBufferSize = 4 * 2 + 4 * 2 + 4 * 4 + 4 * 4 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 4 * 8);
             exports_24("u_SceneParamsBufferSize", u_SceneParamsBufferSize = 4 * 4 + 4);
+            matrixScratch = gl_matrix_3.mat4.create();
             bufferDataScratchSize = Math.max(u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize);
             GXRenderHelper = /** @class */ (function () {
                 function GXRenderHelper(gl) {
@@ -5465,6 +5468,8 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                     return [name];
                 };
                 TextureHolder.prototype.findTextureEntryIndex = function (name) {
+                    if (name === 'IndDummy')
+                        name = 'MiniFlag';
                     var nameVariants = this.tryTextureNameVariants(name);
                     var _loop_6 = function (i) {
                         var index = this_3.textureEntries.findIndex(function (entry) { return entry.name === nameVariants[i]; });
@@ -5554,10 +5559,12 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
         dst[6] = 0.0;
         dst[10] = -1.0;
         dst[14] = 0.0;
-        dst[3] = 0.0;
-        dst[7] = 0.0;
-        dst[11] = 0.0;
-        dst[15] = 0.0;
+        // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+        // since this is supposed to generate a mat4x3 matrix.
+        dst[3] = 9999.0;
+        dst[7] = 9999.0;
+        dst[11] = 9999.0;
+        dst[15] = 9999.0;
     }
     function texProjOrthoMtx(dst, t, b, l, r, scaleS, scaleT, transS, transT) {
         var h = 1 / (r - l);
@@ -5803,10 +5810,14 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                                 throw "whoops";
                         }
                         // Apply SRT.
-                        gl_matrix_4.mat4.copy(scratch, texMtx.matrix);
+                        /*
+                        mat4.copy(scratch, texMtx.matrix);
+            
                         if (this.scene.btk !== null)
                             this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
-                        gl_matrix_4.mat4.mul(dst, scratch, dst);
+            
+                        mat4.mul(dst, scratch, dst);
+                        */
                     }
                     for (var i = 0; i < this.material.postTexMatrices.length; i++) {
                         var postTexMtx = this.material.postTexMatrices[i];
@@ -8736,7 +8747,7 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", 
                     state.blitColorTarget(this.mainColorTarget);
                     if (this.indirectScene) {
                         var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_3.EFB_WIDTH, height: gx_material_3.EFB_HEIGHT };
-                        this.textureHolder.setTextureOverride("IndDummy", textureOverride);
+                        // this.textureHolder.setTextureOverride("IndDummy", textureOverride);
                         this.indirectScene.bindState(state);
                         this.indirectScene.renderOpaque(state);
                     }
@@ -18311,10 +18322,9 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 case 2 /* PROJECTION */:
                 case 1 /* ENV_CAMERA */:
                 case 3 /* ENV_LIGHT */:
-                    // Set ourselves to have a texture matrix.
-                    // This is a bit of a hack. In actuality, we should be using PNMTX0,
-                    // but we don't put the MV matrix in there yet... sigh...
-                    texGens[i].matrix = 30 /* TEXMTX0 */ + (i * 3);
+                    // Use the PNMTX0 matrix for projection and environment.
+                    // TODO(jstpierre): normal matrix for env camera / light.
+                    texGens[i].matrix = 0 /* PNMTX0 */;
                     break;
             }
             var srtMtx = gl_matrix_16.mat4.create();
@@ -19227,10 +19237,12 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
         dst[6] = 0.0;
         dst[10] = -1.0;
         dst[14] = 0.0;
-        dst[3] = 0.0;
-        dst[7] = 0.0;
-        dst[11] = 0.0;
-        dst[15] = 0.0;
+        // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+        // since this is supposed to generate a mat4x3 matrix.
+        dst[3] = 9999.0;
+        dst[7] = 9999.0;
+        dst[11] = 9999.0;
+        dst[15] = 9999.0;
     }
     function texProjOrthoMtx(dst, t, b, l, r, scaleS, scaleT, transS, transT) {
         var h = 1 / (r - l);
@@ -19482,26 +19494,6 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                         this.glSamplers[i] = glSampler;
                     }
                 };
-                Command_Material.prototype.calcTexMtx = function (dst, texIdx, state) {
-                    var texSrt = this.material.texSrts[texIdx];
-                    if (texSrt.mapMode === 0 /* TEXCOORD */) {
-                        // Identity.
-                        gl_matrix_17.mat4.identity(dst);
-                    }
-                    else if (texSrt.mapMode === 1 /* ENV_CAMERA */) {
-                        // Environment mapping. Technically, a normal matrix should be used, but
-                        // we don't have a normal matrix. Pretend to have one by knocking the
-                        // translation out of the MV.
-                        gl_matrix_17.mat4.copy(dst, state.view);
-                        dst[12] = 0;
-                        dst[13] = 0;
-                        dst[14] = 0;
-                    }
-                    else if (texSrt.mapMode === 2 /* PROJECTION */) {
-                        // Projection mapping.
-                        gl_matrix_17.mat4.copy(dst, state.view);
-                    }
-                };
                 Command_Material.prototype.calcPostTexMtx = function (dst, texIdx, state) {
                     var texMtxIdx = BRRES.TexMtxIndex.TEX0 + texIdx;
                     var texSrt = this.material.texSrts[texIdx];
@@ -19556,8 +19548,6 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                         materialParams.u_Color[i].copy(this.material.gxMaterial.colorRegisters[i]);
                     for (var i = 0; i < 4; i++)
                         materialParams.u_KonstColor[i].copy(this.material.gxMaterial.colorConstants[i]);
-                    for (var i = 0; i < 8; i++)
-                        this.calcTexMtx(materialParams.u_TexMtx[i], i, state);
                     for (var i = 0; i < 8; i++)
                         this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state);
                     for (var i = 0; i < 3; i++)
