@@ -1964,6 +1964,9 @@ System.register("Program", ["MemoizeCache", "CodeEditor", "util"], function (exp
             BaseProgram = /** @class */ (function () {
                 function BaseProgram() {
                     this.name = '(unnamed)';
+                    // Add some extra fields so that the monstrosity of frag/vert doesn't show up in Firefox's debugger.
+                    this._pad0 = false;
+                    this._pad1 = false;
                     this.vert = '';
                     this.frag = '';
                     this.forceRecompile = false;
@@ -4879,7 +4882,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                     var alphaTest = this.material.alphaTest;
                     var kColors = this.material.colorConstants;
                     var rColors = this.material.colorRegisters;
-                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n" + this.generateTexCoordGetters() + "\n\nfloat TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }\nvec2 TextureSize(int index) { return u_TextureParams[index].xy; }\nvec4 TextureSample(int index, vec2 coord) { return texture(u_Texture[index], coord, TextureLODBias(index)); }\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nfloat TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }\nvec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }\nfloat TevPack16(vec2 a) { return dot(a, vec2(1.0, 256.0)); }\nfloat TevPack24(vec3 a) { return dot(a, vec3(1.0, 256.0, 256.0 * 256.0)); }\nfloat TevPerCompGT(float a, float b) { return float(a >  b); }\nfloat TevPerCompEQ(float a, float b) { return float(a == b); }\nvec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }\nvec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_Color0    = u_Color[0]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_Color[1]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_Color[2]; // " + this.generateColorConstant(rColors[2]) + "\n    vec4 t_ColorPrev = u_Color[3]; // " + this.generateColorConstant(rColors[3]) + "\n\n    vec2 t_TexCoord = vec2(0.0, 0.0);\n" + this.generateIndTexStages(indTexStages) + "\n    vec4 t_TevA, t_TevB, t_TevC, t_TevD;\n" + this.generateTevStages(tevStages) + "\n\n    t_ColorPrev = TevOverflow(t_ColorPrev);\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
+                    this.frag = "\n// " + this.material.name + "\nprecision mediump float;\n" + ubo + "\nuniform sampler2D u_Texture[8];\n\nin vec3 v_Position;\nin vec3 v_Normal;\nin vec4 v_Color0;\nin vec4 v_Color1;\nin vec3 v_TexCoord0;\nin vec3 v_TexCoord1;\nin vec3 v_TexCoord2;\nin vec3 v_TexCoord3;\nin vec3 v_TexCoord4;\nin vec3 v_TexCoord5;\nin vec3 v_TexCoord6;\nin vec3 v_TexCoord7;\n" + this.generateTexCoordGetters() + "\n\nfloat TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }\nvec2 TextureSize(int index) { return u_TextureParams[index].xy; }\nvec4 TextureSample(int index, vec2 coord) { return texture(u_Texture[index], coord, TextureLODBias(index)); }\n\nvec3 TevBias(vec3 a, float b) { return a + vec3(b); }\nfloat TevBias(float a, float b) { return a + b; }\nvec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }\nfloat TevSaturate(float a) { return clamp(a, 0.0, 1.0); }\nfloat TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }\nvec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }\nfloat TevPack16(vec2 a) { return dot(a, vec2(1.0, 256.0)); }\nfloat TevPack24(vec3 a) { return dot(a, vec3(1.0, 256.0, 256.0 * 256.0)); }\nfloat TevPerCompGT(float a, float b) { return float(a >  b); }\nfloat TevPerCompEQ(float a, float b) { return float(a == b); }\nvec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }\nvec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }\n\nvoid main() {\n    vec4 s_kColor0   = u_KonstColor[0]; // " + this.generateColorConstant(kColors[0]) + "\n    vec4 s_kColor1   = u_KonstColor[1]; // " + this.generateColorConstant(kColors[1]) + "\n    vec4 s_kColor2   = u_KonstColor[2]; // " + this.generateColorConstant(kColors[2]) + "\n    vec4 s_kColor3   = u_KonstColor[3]; // " + this.generateColorConstant(kColors[3]) + "\n\n    vec4 t_ColorPrev = u_Color[0]; // " + this.generateColorConstant(rColors[3]) + "\n    vec4 t_Color0    = u_Color[1]; // " + this.generateColorConstant(rColors[0]) + "\n    vec4 t_Color1    = u_Color[2]; // " + this.generateColorConstant(rColors[1]) + "\n    vec4 t_Color2    = u_Color[3]; // " + this.generateColorConstant(rColors[2]) + "\n\n    vec2 t_TexCoord = vec2(0.0, 0.0);\n" + this.generateIndTexStages(indTexStages) + "\n    vec4 t_TevA, t_TevB, t_TevC, t_TevD;\n" + this.generateTevStages(tevStages) + "\n\n    t_ColorPrev = TevOverflow(t_ColorPrev);\n" + this.generateAlphaTest(alphaTest) + "\n    gl_FragColor = t_ColorPrev;\n}\n";
                 };
                 GX_Program.ub_SceneParams = 0;
                 GX_Program.ub_MaterialParams = 1;
@@ -6570,6 +6573,8 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                 var color = readColorShort(view, colorRegisterTableOffs + colorIndex * 0x08);
                 colorRegisters.push(color);
             }
+            // BMD stores CPREV at the end. We store CPREV at the beginning.
+            colorRegisters.unshift(colorRegisters.pop());
             var textureIndexTableIdx = materialEntryIdx + 0x84;
             var textureIndexes = [];
             for (var j = 0; j < 8; j++) {
@@ -8035,35 +8040,35 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "yaz0", 
                     var colors = timeOfDay === 0 ? undefined : WindWakerRenderer.getColorsFromDZS(dzsFile.buffer, this.roomIdx, timeOfDay - 1);
                     if (colors !== undefined) {
                         this.model.setColorOverride(render_7.ColorOverride.K0, colors.light);
-                        this.model.setColorOverride(render_7.ColorOverride.CPREV, colors.amb);
+                        this.model.setColorOverride(render_7.ColorOverride.C0, colors.amb);
                         if (this.model1) {
                             this.model1.setColorOverride(render_7.ColorOverride.K0, colors.ocean);
-                            this.model1.setColorOverride(render_7.ColorOverride.CPREV, colors.wave);
-                            this.model1.setColorOverride(render_7.ColorOverride.C0, colors.splash);
+                            this.model1.setColorOverride(render_7.ColorOverride.C0, colors.wave);
+                            this.model1.setColorOverride(render_7.ColorOverride.C1, colors.splash);
                             this.model1.setColorOverride(render_7.ColorOverride.K1, colors.splash2);
                         }
                         if (this.model3)
-                            this.model3.setColorOverride(render_7.ColorOverride.CPREV, colors.doors);
+                            this.model3.setColorOverride(render_7.ColorOverride.C0, colors.doors);
                         this.vr_sky.setColorOverride(render_7.ColorOverride.K0, colors.vr_sky);
                         this.vr_uso_umi.setColorOverride(render_7.ColorOverride.K0, colors.vr_uso_umi);
-                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.CPREV, colors.vr_kasumi_mae);
+                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.C0, colors.vr_kasumi_mae);
                         this.vr_back_cloud.setColorOverride(render_7.ColorOverride.K0, colors.vr_back_cloud);
                         this.vr_back_cloud.setAlphaOverride(render_7.ColorOverride.K0, colors.vr_back_cloud.a);
                     }
                     else {
                         this.model.setColorOverride(render_7.ColorOverride.K0, undefined);
-                        this.model.setColorOverride(render_7.ColorOverride.CPREV, undefined);
+                        this.model.setColorOverride(render_7.ColorOverride.C0, undefined);
                         if (this.model1) {
                             this.model1.setColorOverride(render_7.ColorOverride.K0, undefined);
-                            this.model1.setColorOverride(render_7.ColorOverride.CPREV, undefined);
                             this.model1.setColorOverride(render_7.ColorOverride.C0, undefined);
+                            this.model1.setColorOverride(render_7.ColorOverride.C1, undefined);
                             this.model1.setColorOverride(render_7.ColorOverride.K1, undefined);
                         }
                         if (this.model3)
                             this.model3.setColorOverride(render_7.ColorOverride.C0, undefined);
                         this.vr_sky.setColorOverride(render_7.ColorOverride.K0, undefined);
                         this.vr_uso_umi.setColorOverride(render_7.ColorOverride.K0, undefined);
-                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.CPREV, undefined);
+                        this.vr_kasumi_mae.setColorOverride(render_7.ColorOverride.C0, undefined);
                         this.vr_back_cloud.setColorOverride(render_7.ColorOverride.K0, undefined);
                         this.vr_back_cloud.setAlphaOverride(render_7.ColorOverride.K0, undefined);
                     }
@@ -19341,8 +19346,10 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     var lastMatId = -1;
                     for (var i = 0; i < opList.length; i++) {
                         var op = opList[i];
+                        var matCommand = this.materialCommands[op.matId];
+                        if (!matCommand.visible)
+                            continue;
                         if (op.matId != lastMatId) {
-                            var matCommand = this.materialCommands[op.matId];
                             matCommand.exec(state, this.renderHelper);
                             lastMatId = op.matId;
                         }
@@ -19444,7 +19451,9 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     this.materialParams = new gx_render_4.MaterialParams();
                     this.glSamplers = [];
                     this.srtAnimators = [];
+                    this.visible = true;
                     this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
+                    this.program.name = this.material.name;
                     this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
                     this.translateSamplers(gl);
                 }

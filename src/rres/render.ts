@@ -146,8 +146,11 @@ export class ModelRenderer {
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
 
+            const matCommand = this.materialCommands[op.matId];
+            if (!matCommand.visible)
+                continue;
+
             if (op.matId != lastMatId) {
-                const matCommand = this.materialCommands[op.matId];
                 matCommand.exec(state, this.renderHelper);
                 lastMatId = op.matId;
             }
@@ -249,6 +252,7 @@ class Command_Material {
     private materialParams = new MaterialParams();
     private glSamplers: WebGLSampler[] = [];
     private srtAnimators: BRRES.TexSrtAnimator[] = [];
+    public visible: boolean = true;
 
     constructor(gl: WebGL2RenderingContext,
         public textureHolder: RRESTextureHolder,
@@ -256,6 +260,7 @@ class Command_Material {
         public materialHacks: GX_Material.GXMaterialHacks,
     ) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
+        this.program.name = this.material.name;
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
         this.translateSamplers(gl);

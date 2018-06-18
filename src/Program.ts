@@ -38,6 +38,9 @@ function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
 
 export abstract class BaseProgram {
     public name: string = '(unnamed)';
+    // Add some extra fields so that the monstrosity of frag/vert doesn't show up in Firefox's debugger.
+    public _pad0 = false;
+    public _pad1 = false;
     public vert: string = '';
     public frag: string = '';
 

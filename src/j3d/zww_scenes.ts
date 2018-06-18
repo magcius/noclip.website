@@ -160,30 +160,30 @@ class WindWakerRenderer implements Viewer.MainScene {
 
         if (colors !== undefined) {
             this.model.setColorOverride(ColorOverride.K0, colors.light);
-            this.model.setColorOverride(ColorOverride.CPREV, colors.amb);
+            this.model.setColorOverride(ColorOverride.C0, colors.amb);
 
             if (this.model1) {
                 this.model1.setColorOverride(ColorOverride.K0, colors.ocean);
-                this.model1.setColorOverride(ColorOverride.CPREV, colors.wave);
-                this.model1.setColorOverride(ColorOverride.C0, colors.splash);
+                this.model1.setColorOverride(ColorOverride.C0, colors.wave);
+                this.model1.setColorOverride(ColorOverride.C1, colors.splash);
                 this.model1.setColorOverride(ColorOverride.K1, colors.splash2);
             }
             if (this.model3)
-                this.model3.setColorOverride(ColorOverride.CPREV, colors.doors);
+                this.model3.setColorOverride(ColorOverride.C0, colors.doors);
 
             this.vr_sky.setColorOverride(ColorOverride.K0, colors.vr_sky);
             this.vr_uso_umi.setColorOverride(ColorOverride.K0, colors.vr_uso_umi);
-            this.vr_kasumi_mae.setColorOverride(ColorOverride.CPREV, colors.vr_kasumi_mae);
+            this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, colors.vr_kasumi_mae);
             this.vr_back_cloud.setColorOverride(ColorOverride.K0, colors.vr_back_cloud);
             this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, colors.vr_back_cloud.a);
         } else {
             this.model.setColorOverride(ColorOverride.K0, undefined);
-            this.model.setColorOverride(ColorOverride.CPREV, undefined);
+            this.model.setColorOverride(ColorOverride.C0, undefined);
 
             if (this.model1) {
                 this.model1.setColorOverride(ColorOverride.K0, undefined);
-                this.model1.setColorOverride(ColorOverride.CPREV, undefined);
                 this.model1.setColorOverride(ColorOverride.C0, undefined);
+                this.model1.setColorOverride(ColorOverride.C1, undefined);
                 this.model1.setColorOverride(ColorOverride.K1, undefined);
             }
             if (this.model3)
@@ -191,7 +191,7 @@ class WindWakerRenderer implements Viewer.MainScene {
 
             this.vr_sky.setColorOverride(ColorOverride.K0, undefined);
             this.vr_uso_umi.setColorOverride(ColorOverride.K0, undefined);
-            this.vr_kasumi_mae.setColorOverride(ColorOverride.CPREV, undefined);
+            this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, undefined);
             this.vr_back_cloud.setColorOverride(ColorOverride.K0, undefined);
             this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, undefined);
         }
