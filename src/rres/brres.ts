@@ -693,10 +693,9 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         case MapMode.PROJECTION:
         case MapMode.ENV_CAMERA:
         case MapMode.ENV_LIGHT:
-            // Set ourselves to have a texture matrix.
-            // This is a bit of a hack. In actuality, we should be using PNMTX0,
-            // but we don't put the MV matrix in there yet... sigh...
-            texGens[i].matrix = GX.TexGenMatrix.TEXMTX0 + (i * 3);
+            // Use the PNMTX0 matrix for projection and environment.
+            // TODO(jstpierre): normal matrix for env camera / light.
+            texGens[i].matrix = GX.TexGenMatrix.PNMTX0;
             break;
         }
 
