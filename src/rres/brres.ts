@@ -1527,7 +1527,7 @@ function parseSRT0(buffer: ArrayBufferSlice): SRT0 {
     const duration = view.getUint16(offs + 0x08);
     const numMaterials = view.getUint16(offs + 0x0A);
     const texMtxMode = view.getUint32(offs + 0x0C);
-    const loopMode: LoopMode = view.getUint32(offs + 0x0E);
+    const loopMode: LoopMode = view.getUint32(offs + 0x10);
 
     const matAnimations: SRT0_MatData[] = [];
     for (const texSrtMatEntry of texSrtMatDataResDic) {

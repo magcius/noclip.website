@@ -18852,7 +18852,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var duration = view.getUint16(offs + 0x08);
         var numMaterials = view.getUint16(offs + 0x0A);
         var texMtxMode = view.getUint32(offs + 0x0C);
-        var loopMode = view.getUint32(offs + 0x0E);
+        var loopMode = view.getUint32(offs + 0x10);
         var matAnimations = [];
         try {
             for (var texSrtMatDataResDic_1 = __values(texSrtMatDataResDic), texSrtMatDataResDic_1_1 = texSrtMatDataResDic_1.next(); !texSrtMatDataResDic_1_1.done; texSrtMatDataResDic_1_1 = texSrtMatDataResDic_1.next()) {
@@ -19622,9 +19622,9 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                 alphaLightingFudge: function (p) { return "1.0"; },
             };
             SkywardSwordScene = /** @class */ (function () {
-                function SkywardSwordScene(gl, stageId, textureRRESes, stageArchive) {
+                function SkywardSwordScene(gl, stageId, commonRRESes, stageArchive) {
                     this.stageId = stageId;
-                    this.textureRRESes = textureRRESes;
+                    this.commonRRESes = commonRRESes;
                     this.stageArchive = stageArchive;
                     this.models = [];
                     this.mainColorTarget = new render_28.ColorTarget();
@@ -19635,15 +19635,15 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                     this.textures = this.textureHolder.viewerTextures;
                     try {
                         // First, load in the system and common textures.
-                        for (var textureRRESes_1 = __values(textureRRESes), textureRRESes_1_1 = textureRRESes_1.next(); !textureRRESes_1_1.done; textureRRESes_1_1 = textureRRESes_1.next()) {
-                            var textureRRES = textureRRESes_1_1.value;
-                            this.textureHolder.addTextures(gl, textureRRES.textures);
+                        for (var commonRRESes_1 = __values(commonRRESes), commonRRESes_1_1 = commonRRESes_1.next(); !commonRRESes_1_1.done; commonRRESes_1_1 = commonRRESes_1.next()) {
+                            var commonRRES = commonRRESes_1_1.value;
+                            this.textureHolder.addTextures(gl, commonRRES.textures);
                         }
                     }
                     catch (e_72_1) { e_72 = { error: e_72_1 }; }
                     finally {
                         try {
-                            if (textureRRESes_1_1 && !textureRRESes_1_1.done && (_a = textureRRESes_1.return)) _a.call(textureRRESes_1);
+                            if (commonRRESes_1_1 && !commonRRESes_1_1.done && (_a = commonRRESes_1.return)) _a.call(commonRRESes_1);
                         }
                         finally { if (e_72) throw e_72.error; }
                     }
@@ -19931,8 +19931,33 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         }
                         finally { if (e_84) throw e_84.error; }
                     }
+                    try {
+                        for (var _d = __values(this.commonRRESes), _e = _d.next(); !_e.done; _e = _d.next()) {
+                            var commonRRES = _e.value;
+                            try {
+                                for (var _f = __values(commonRRES.texSrtAnimations), _g = _f.next(); !_g.done; _g = _f.next()) {
+                                    var srt0 = _g.value;
+                                    modelRenderer.bindSRT0(this.animationController, srt0);
+                                }
+                            }
+                            catch (e_85_1) { e_85 = { error: e_85_1 }; }
+                            finally {
+                                try {
+                                    if (_g && !_g.done && (_h = _f.return)) _h.call(_f);
+                                }
+                                finally { if (e_85) throw e_85.error; }
+                            }
+                        }
+                    }
+                    catch (e_86_1) { e_86 = { error: e_86_1 }; }
+                    finally {
+                        try {
+                            if (_e && !_e.done && (_j = _d.return)) _j.call(_d);
+                        }
+                        finally { if (e_86) throw e_86.error; }
+                    }
                     return modelRenderer;
-                    var e_84, _c;
+                    var e_84, _c, e_86, _j, e_85, _h;
                 };
                 return SkywardSwordScene;
             }());
@@ -19949,19 +19974,23 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                     var stagePath = basePath + "/" + this.id + "_stg_l0.arc.LZ";
                     return Progressable_10.default.all([util_52.fetch(systemPath), util_52.fetch(objPackPath), util_52.fetch(stagePath)]).then(function (buffers) {
                         var _a = __read(buffers, 3), systemBuffer = _a[0], objPackBuffer = _a[1], stageBuffer = _a[2];
-                        var textureRRESes = [];
+                        var commonRRESes = [];
                         var systemArchive = U8.parse(systemBuffer);
                         var systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
-                        textureRRESes.push(systemRRES);
+                        commonRRESes.push(systemRRES);
                         var objPackArchive = U8.parse(LZ77.decompress(objPackBuffer));
                         var needsSkyCmn = _this.id.startsWith('F0');
                         if (needsSkyCmn) {
                             var skyCmnArchive = U8.parse(objPackArchive.findFile('oarc/SkyCmn.arc').buffer);
                             var skyCmnRRES = BRRES.parse(skyCmnArchive.findFile('g3d/model.brres').buffer);
-                            textureRRESes.push(skyCmnRRES);
+                            commonRRESes.push(skyCmnRRES);
                         }
+                        // Water animations appear in Common.arc.
+                        var commonArchive = U8.parse(objPackArchive.findFile('oarc/Common.arc').buffer);
+                        var commonRRES = BRRES.parse(commonArchive.findFile('g3d/model.brres').buffer);
+                        commonRRESes.push(commonRRES);
                         var stageArchive = U8.parse(LZ77.decompress(stageBuffer));
-                        return new SkywardSwordScene(gl, _this.id, textureRRESes, stageArchive);
+                        return new SkywardSwordScene(gl, _this.id, commonRRESes, stageArchive);
                     });
                 };
                 return SkywardSwordSceneDesc;
@@ -20088,23 +20117,23 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
                                     modelRenderer.bindSRT0(this.animationController, srt0);
                                 }
                             }
-                            catch (e_85_1) { e_85 = { error: e_85_1 }; }
+                            catch (e_87_1) { e_87 = { error: e_87_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_85) throw e_85.error; }
+                                finally { if (e_87) throw e_87.error; }
                             }
                         }
                     }
-                    catch (e_86_1) { e_86 = { error: e_86_1 }; }
+                    catch (e_88_1) { e_88 = { error: e_88_1 }; }
                     finally {
                         try {
                             if (stageRRESes_1_1 && !stageRRESes_1_1.done && (_d = stageRRESes_1.return)) _d.call(stageRRESes_1);
                         }
-                        finally { if (e_86) throw e_86.error; }
+                        finally { if (e_88) throw e_88.error; }
                     }
-                    var e_86, _d, e_85, _c;
+                    var e_88, _d, e_87, _c;
                 }
                 BasicRRESScene.prototype.createPanels = function () {
                     var panels = [];
@@ -20708,16 +20737,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_87_1) { e_87 = { error: e_87_1 }; }
+                        catch (e_89_1) { e_89 = { error: e_89_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_87) throw e_87.error; }
+                            finally { if (e_89) throw e_89.error; }
                         }
                     }
                     return cmd;
-                    var e_87, _c;
+                    var e_89, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
@@ -20872,18 +20901,18 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_84, context_84
                     record[field.name] = value;
                 }
             }
-            catch (e_88_1) { e_88 = { error: e_88_1 }; }
+            catch (e_90_1) { e_90 = { error: e_90_1 }; }
             finally {
                 try {
                     if (fields_1_1 && !fields_1_1.done && (_a = fields_1.return)) _a.call(fields_1);
                 }
-                finally { if (e_88) throw e_88.error; }
+                finally { if (e_90) throw e_90.error; }
             }
             records.push(record);
             recordTableIdx += recordSize;
         }
         return records;
-        var e_88, _a;
+        var e_90, _a;
     }
     exports_84("parse", parse);
     var util_55, nameTable, hashLookup;
