@@ -11,83 +11,12 @@ import { mat3, mat4, mat2d } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from "../gx/gx_render";
+import { texProjPerspMtx, texEnvMtx } from "../Camera";
 
 export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
         this.addTextures(gl, rres.textures);
     }
-}
-
-function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    const cot = 1 / Math.tan(fov / 2);
-
-    dst[0] = (cot / aspect) * scaleS;
-    dst[4] = 0.0;
-    dst[8] = -transS;
-    dst[12] = 0.0;
-
-    dst[1] = 0.0;
-    dst[5] = cot * scaleT;
-    dst[9] = -transT;
-    dst[13] = 0.0;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = -1.0;
-    dst[14] = 0.0;
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
-
-function texProjOrthoMtx(dst: mat4, t: number, b: number, l: number, r: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    const h = 1 / (r - l);
-    dst[0] = 2.0 * h * scaleS;
-    dst[4] = 0.0;
-    dst[8] = 0.0;
-    dst[12] = ((-(r + l) * h) * scaleS) + transS;
-
-    const v = 1 / (t - b);
-    dst[1] = 0.0;
-    dst[5] = 2.0 * v * scaleT;
-    dst[9] = -transT;
-    dst[13] = ((-(t + b) * v) * scaleT) + transT;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = -1.0;
-    dst[14] = 0.0;
-
-    dst[3] = 0.0;
-    dst[7] = 0.0;
-    dst[11] = 0.0;
-    dst[15] = 1.0;
-}
-
-function texEnvMatrix(dst: mat4, scaleS: number, scaleT: number, transS: number, transT: number) {
-    dst[0] = scaleS;
-    dst[4] = 0.0;
-    dst[8] = 0.0;
-    dst[12] = transS;
-
-    dst[1] = 0.0;
-    dst[5] = -scaleT;
-    dst[9] = 0.0;
-    dst[13] = transT;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = 0.0;
-    dst[14] = 1.0;
-
-    dst[3] = 0.0;
-    dst[7] = 0.0;
-    dst[11] = 0.0;
-    dst[15] = 1.0;
 }
 
 export class ModelRenderer {
@@ -305,10 +234,9 @@ class Command_Material {
         const flipYScale = flipY ? -1.0 : 1.0;
 
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
-            // Apply camera projection matrix.
             texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
         } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
-            texEnvMatrix(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+            texEnvMtx(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
         } else {
             mat4.identity(dst);
         }
