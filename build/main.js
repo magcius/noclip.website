@@ -239,7 +239,6 @@ System.register("util", ["ArrayBufferSlice", "Progressable"], function (exports_
         execute: function () {
             counter = 0;
             window.hexdump = hexdump;
-            window.debug = null;
         }
     };
 });
@@ -17938,6 +17937,7 @@ System.register("luigis_mansion/scenes", ["Progressable", "yay0", "util", "j3d/r
 System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "gl-matrix"], function (exports_76, context_76) {
     "use strict";
     var __moduleName = context_76 && context_76.id;
+    //#region Utility
     function calc2dMtx(dst, src) {
         dst[0] = src[0];
         dst[1] = src[1];
@@ -17957,6 +17957,30 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         dst[1] = scaleS * sinR;
         dst[5] = scaleT * cosR;
         dst[13] = translationT;
+    }
+    function calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ) {
+        var rX = Math.PI / 180 * rotationX;
+        var rY = Math.PI / 180 * rotationY;
+        var rZ = Math.PI / 180 * rotationZ;
+        var sinX = Math.sin(rX), cosX = Math.cos(rX);
+        var sinY = Math.sin(rY), cosY = Math.cos(rY);
+        var sinZ = Math.sin(rZ), cosZ = Math.cos(rZ);
+        dst[0] = scaleX * (cosY * cosZ);
+        dst[1] = scaleX * (sinZ * cosY);
+        dst[2] = scaleX * (-sinY);
+        dst[3] = 0.0;
+        dst[4] = scaleY * (sinX * cosZ * sinY - cosX * sinZ);
+        dst[5] = scaleY * (sinX * sinZ * sinY + cosX * cosZ);
+        dst[6] = scaleY * (sinX * cosY);
+        dst[7] = 0.0;
+        dst[8] = scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
+        dst[9] = scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
+        dst[10] = scaleZ * (cosY * cosX);
+        dst[11] = 0.0;
+        dst[12] = translationX;
+        dst[13] = translationY;
+        dst[14] = translationZ;
+        dst[15] = 1.0;
     }
     function parseResDic(buffer, tableOffs) {
         if (tableOffs === 0)
@@ -18613,12 +18637,8 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var translationX = view.getFloat32(0x38);
         var translationY = view.getFloat32(0x3C);
         var translationZ = view.getFloat32(0x40);
-        var scale = gl_matrix_16.vec3.fromValues(scaleX, scaleY, scaleZ);
-        var rotation = gl_matrix_16.quat.create();
-        gl_matrix_16.quat.fromEuler(rotation, rotationX, rotationY, rotationZ);
-        var translation = gl_matrix_16.vec3.fromValues(translationX, translationY, translationZ);
         var modelMatrix = gl_matrix_16.mat4.create();
-        gl_matrix_16.mat4.fromRotationTranslationScale(modelMatrix, rotation, translation, scale);
+        calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         return { name: name, id: id, mtxId: mtxId, flags: flags, billboardMode: billboardMode, modelMatrix: modelMatrix };
     }
     function parseMDL0_NodeTreeBytecode(buffer) {
@@ -18765,19 +18785,22 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         return { name: name, materials: materials, shapes: shapes, nodes: nodes, sceneGraph: sceneGraph };
         var e_64, _a, e_65, _b;
     }
-    function applyLoopMode(t, loopMode) {
-        switch (loopMode) {
-            case 0 /* ONCE */:
-                return Math.min(t, 1);
-            case 1 /* REPEAT */:
-                return t % 1;
-        }
-    }
     function getAnimFrame(anim, frame) {
-        var lastFrame = anim.duration - 1;
-        var normTime = frame / lastFrame;
-        var animFrame = applyLoopMode(normTime, anim.loopMode) * lastFrame;
-        return animFrame;
+        // Be careful of floating point precision.
+        var lastFrame = anim.duration;
+        if (anim.loopMode === 0 /* ONCE */) {
+            if (frame > lastFrame)
+                frame = lastFrame;
+            return frame;
+        }
+        else if (anim.loopMode === 1 /* REPEAT */) {
+            while (frame > lastFrame)
+                frame -= lastFrame;
+            return frame;
+        }
+        else {
+            throw "whoops";
+        }
     }
     function cubicEval(cf0, cf1, cf2, cf3, t) {
         return (((cf0 * t + cf1) * t + cf2) * t + cf3);
@@ -18794,7 +18817,16 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var cf3 = (p0 * 1) + (p1 * 0) + (s0 * 0) + (s1 * 0);
         return cubicEval(cf0, cf1, cf2, cf3, t);
     }
-    function sampleAnimationData(track, frame) {
+    /*
+    function hermiteInterpolate(v0: number, t0: number, v1: number, t1: number, p: number, d: number) {
+        const invd = 1 / d;
+        const s = p * invd;
+        const s_1 = s - 1;
+    
+        return v0 + (v0 - v1) * (2 * s - 3) * s * s + p * s_1 * (s_1 * t0 + s * t1);
+    }
+    */
+    function sampleAnimationDataHermite(track, frame) {
         var frames = track.frames;
         if (frames.length === 1)
             return frames[0].value;
@@ -18813,32 +18845,146 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         // a value completely.
         if ((k1.time - k0.time) === 1)
             return k0.value;
+        var curFrameDelta = frame - k0.time;
+        var keyFrameDelta = k1.time - k0.time;
         var t = (frame - k0.time) / (k1.time - k0.time);
         return hermiteInterpolate(k0, k1, t);
     }
-    function parseAnimationTrack(buffer, isConstant) {
+    function lerp(k0, k1, t) {
+        return k0 + (k1 - k0) * t;
+    }
+    function sampleAnimationDataLinear(track, frame) {
+        var frames = track.frames;
+        var n = frames.length;
+        if (n === 1)
+            return frames[0];
+        if (frame === 0)
+            return frames[0];
+        else if (frame > n - 1)
+            return frames[n - 1];
+        // Find the first frame.
+        var idx0 = (frame | 0);
+        var idx1 = idx0 + 1;
+        var k0 = frames[idx0];
+        var k1 = frames[idx1];
+        var t = (frame - idx0);
+        return lerp(k0, k1, t);
+    }
+    function sampleAnimationData(track, frame) {
+        if (track.type === 0 /* LINEAR */)
+            return sampleAnimationDataLinear(track, frame);
+        else if (track.type === 1 /* HERMITE */)
+            return sampleAnimationDataHermite(track, frame);
+        else
+            throw "whoops";
+    }
+    function makeConstantAnimationTrack(value) {
+        return { type: 0 /* LINEAR */, frames: Float32Array.of(value) };
+    }
+    function parseAnimationTrackC32(buffer, numKeyframes) {
         var view = buffer.createDataView();
-        if (isConstant) {
-            var value = view.getFloat32(0x00);
-            var fakeAnimationKeyframe = { time: 0, value: value, tangent: 0 };
-            return { frames: [fakeAnimationKeyframe] };
+        var frames = buffer.createTypedArray(Float32Array, 0x00, numKeyframes + 1, 1 /* BIG_ENDIAN */);
+        return { type: 0 /* LINEAR */, frames: frames };
+    }
+    function parseAnimationTrackF48(buffer) {
+        var view = buffer.createDataView();
+        var numKeyframes = view.getUint16(0x00);
+        var invKeyframeRange = view.getFloat32(0x04);
+        var scale = view.getFloat32(0x08);
+        var offset = view.getFloat32(0x0C);
+        var keyframeTableIdx = 0x10;
+        var frames = [];
+        for (var i = 0; i < numKeyframes; i++) {
+            var time = view.getInt16(keyframeTableIdx + 0x00) / 0x20; // S10.5
+            var value = view.getUint16(keyframeTableIdx + 0x02) * scale + offset;
+            var tangent = view.getInt16(keyframeTableIdx + 0x04) / 0x100; // S7.8
+            var keyframe = { time: time, value: value, tangent: tangent };
+            frames.push(keyframe);
+            keyframeTableIdx += 0x06;
         }
-        else {
-            var anmDataOffs = view.getUint32(0x00);
-            var numKeyframes = view.getUint16(anmDataOffs + 0x00);
-            var invKeyframeRange = view.getFloat32(anmDataOffs + 0x04);
-            var keyframeTableIdx = anmDataOffs + 0x08;
-            var frames_3 = [];
-            for (var i = 0; i < numKeyframes; i++) {
-                var time = view.getFloat32(keyframeTableIdx + 0x00);
-                var value = view.getFloat32(keyframeTableIdx + 0x04);
-                var tangent = view.getFloat32(keyframeTableIdx + 0x08);
-                var keyframe = { time: time, value: value, tangent: tangent };
-                frames_3.push(keyframe);
-                keyframeTableIdx += 0x0C;
+        return { type: 1 /* HERMITE */, frames: frames };
+    }
+    function parseAnimationTrackF96(buffer) {
+        var view = buffer.createDataView();
+        var numKeyframes = view.getUint16(0x00);
+        var invKeyframeRange = view.getFloat32(0x04);
+        var keyframeTableIdx = 0x08;
+        var frames = [];
+        for (var i = 0; i < numKeyframes; i++) {
+            var time = view.getFloat32(keyframeTableIdx + 0x00);
+            var value = view.getFloat32(keyframeTableIdx + 0x04);
+            var tangent = view.getFloat32(keyframeTableIdx + 0x08);
+            var keyframe = { time: time, value: value, tangent: tangent };
+            frames.push(keyframe);
+            keyframeTableIdx += 0x0C;
+        }
+        return { type: 1 /* HERMITE */, frames: frames };
+    }
+    function stepF(f, maxt, step, callback) {
+        for (var t = 0; t < maxt; t += step) {
+            callback(t, f(t));
+        }
+    }
+    function graphF(ctx, color, f, maxt, step) {
+        if (step === void 0) { step = 1; }
+        var canvas = ctx.canvas;
+        var minv = undefined, maxv = undefined;
+        stepF(f, maxt, step, function (t, v) {
+            if (minv === undefined)
+                minv = v;
+            if (maxv === undefined)
+                maxv = v;
+            minv = Math.min(minv, v);
+            maxv = Math.max(maxv, v);
+        });
+        var tmt = minv, tmx = maxv;
+        ctx.font = '16px sans-serif';
+        ctx.fillStyle = 'black';
+        // pad
+        minv -= 5;
+        maxv += 5;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        stepF(f, maxt, step, function (t, v) {
+            var xa = (t / maxt) * 1 / step;
+            var ya = (v - minv) / (maxv - minv);
+            var x = xa * canvas.width;
+            var y = (1 - ya) * canvas.height;
+            ctx.lineTo(x, y);
+            if (v === tmt) {
+                ctx.fillText('' + v, x, y + 16);
+                tmt = undefined;
             }
-            return { frames: frames_3 };
-        }
+            if (v === tmx) {
+                ctx.fillText('' + v, x, y - 16);
+                tmx = undefined;
+            }
+        });
+        ctx.stroke();
+    }
+    function cv() {
+        var canvas = document.createElement('canvas');
+        canvas.width = 800;
+        canvas.height = 400;
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        [].forEach.call(document.querySelectorAll('canvas.cv'), function (e) { return document.body.removeChild(e); });
+        canvas.classList.add('cv');
+        document.body.appendChild(canvas);
+        return ctx;
+    }
+    function visualizeTrack(base, track, offt, maxt, step) {
+        if (step === void 0) { step = 1; }
+        var c = cv();
+        graphF(c, 'red', function (t) {
+            var m = getAnimFrame(base, offt + t);
+            return sampleAnimationData(track, m);
+        }, maxt, step);
     }
     function findAnimationData_SRT0(srt0, materialName, texMtxIndex) {
         var matData = srt0.matAnimations.find(function (m) { return m.materialName === materialName; });
@@ -18849,13 +18995,6 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             return null;
         return texData;
     }
-    function bindTexAnimator(animationController, srt0, materialName, texMtxIndex) {
-        var texData = findAnimationData_SRT0(srt0, materialName, texMtxIndex);
-        if (texData === null)
-            return null;
-        return new TexSrtAnimator(animationController, srt0, texData);
-    }
-    exports_76("bindTexAnimator", bindTexAnimator);
     function parseSRT0_TexData(buffer) {
         var view = buffer.createDataView();
         var flags = view.getUint32(0x00);
@@ -18866,7 +19005,16 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var translationT = null;
         var animationTableIdx = 0x04;
         function nextAnimationTrack(isConstant) {
-            var animationTrack = parseAnimationTrack(buffer.slice(animationTableIdx), isConstant);
+            var animationTrack;
+            if (isConstant) {
+                var value = view.getFloat32(animationTableIdx);
+                animationTrack = makeConstantAnimationTrack(value);
+            }
+            else {
+                // Relative to the table idx.
+                var animationTrackOffs = animationTableIdx + view.getUint32(animationTableIdx);
+                animationTrack = parseAnimationTrackF96(buffer.slice(animationTrackOffs));
+            }
             animationTableIdx += 0x04;
             return animationTrack;
         }
@@ -18937,9 +19085,171 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             }
             finally { if (e_66) throw e_66.error; }
         }
+        util_49.assert(matAnimations.length === numMaterials);
         return { name: name, loopMode: loopMode, duration: duration, matAnimations: matAnimations };
         var e_66, _a;
     }
+    function bindTexAnimator(animationController, srt0, materialName, texMtxIndex) {
+        var texData = findAnimationData_SRT0(srt0, materialName, texMtxIndex);
+        if (texData === null)
+            return null;
+        return new TexSrtAnimator(animationController, srt0, texData);
+    }
+    exports_76("bindTexAnimator", bindTexAnimator);
+    function parseCHR0_NodeData(buffer, numKeyframes) {
+        ;
+        var TrackFormat;
+        (function (TrackFormat) {
+            TrackFormat[TrackFormat["CONSTANT"] = 0] = "CONSTANT";
+            TrackFormat[TrackFormat["_32"] = 1] = "_32";
+            TrackFormat[TrackFormat["_48"] = 2] = "_48";
+            TrackFormat[TrackFormat["_96"] = 3] = "_96";
+            TrackFormat[TrackFormat["FRM_8"] = 4] = "FRM_8";
+            TrackFormat[TrackFormat["FRM_16"] = 5] = "FRM_16";
+            TrackFormat[TrackFormat["FRM_32"] = 6] = "FRM_32";
+        })(TrackFormat || (TrackFormat = {}));
+        ;
+        var view = buffer.createDataView();
+        var nodeNameOffs = view.getUint32(0x00);
+        var nodeName = util_49.readString(buffer, nodeNameOffs);
+        var flags = view.getUint32(0x04);
+        var scaleS = null;
+        var scaleT = null;
+        var rotation = null;
+        var translationS = null;
+        var translationT = null;
+        var animationTableIdx = 0x08;
+        function nextAnimationTrack(trackFormat, isConstant) {
+            var animationTrack;
+            if (isConstant || trackFormat === TrackFormat.CONSTANT) {
+                var value = view.getFloat32(animationTableIdx);
+                animationTrack = makeConstantAnimationTrack(value);
+            }
+            else if (trackFormat === TrackFormat._96) {
+                // Relative to the beginning of the node.
+                var animationTrackOffs = view.getUint32(animationTableIdx);
+                animationTrack = parseAnimationTrackF96(buffer.slice(animationTrackOffs));
+            }
+            else if (trackFormat === TrackFormat._48) {
+                var animationTrackOffs = view.getUint32(animationTableIdx);
+                animationTrack = parseAnimationTrackF48(buffer.slice(animationTrackOffs));
+            }
+            else if (trackFormat === TrackFormat.FRM_32) {
+                var animationTrackOffs = view.getUint32(animationTableIdx);
+                animationTrack = parseAnimationTrackC32(buffer.slice(animationTrackOffs), numKeyframes);
+            }
+            else {
+                console.warn("Unsupported animation track format", trackFormat);
+                animationTrack = null;
+            }
+            animationTableIdx += 0x04;
+            return animationTrack;
+        }
+        var scaleFormat = (flags >>> 25) & 0x03;
+        var rotationFormat = (flags >>> 27) & 0x07;
+        var translationFormat = (flags >>> 30) & 0x03;
+        var scaleX = null, scaleY = null, scaleZ = null;
+        if (!(flags & 138 /* SCALE_NOT_EXIST */))
+            scaleX = nextAnimationTrack(scaleFormat, !!(flags & 8192 /* SCALE_X_CONSTANT */));
+        if (!(flags & 16 /* SCALE_UNIFORM */)) {
+            scaleY = nextAnimationTrack(scaleFormat, !!(flags & 16384 /* SCALE_Y_CONSTANT */));
+            scaleZ = nextAnimationTrack(scaleFormat, !!(flags & 32768 /* SCALE_Z_CONSTANT */));
+        }
+        else {
+            scaleY = scaleX;
+            scaleZ = scaleX;
+        }
+        var rotationX = null, rotationY = null, rotationZ = null;
+        if (!(flags & 294 /* ROTATE_NOT_EXIST */)) {
+            rotationX = nextAnimationTrack(rotationFormat, !!(flags & 65536 /* ROTATE_X_CONSTANT */));
+            rotationY = nextAnimationTrack(rotationFormat, !!(flags & 131072 /* ROTATE_Y_CONSTANT */));
+            rotationZ = nextAnimationTrack(rotationFormat, !!(flags & 262144 /* ROTATE_Z_CONSTANT */));
+        }
+        var translationX = null, translationY = null, translationZ = null;
+        if (!(flags & 582 /* TRANS_NOT_EXIST */)) {
+            translationX = nextAnimationTrack(translationFormat, !!(flags & 524288 /* TRANS_X_CONSTANT */));
+            translationY = nextAnimationTrack(translationFormat, !!(flags & 1048576 /* TRANS_Y_CONSTANT */));
+            translationZ = nextAnimationTrack(translationFormat, !!(flags & 2097152 /* TRANS_Z_CONSTANT */));
+        }
+        return {
+            nodeName: nodeName,
+            scaleX: scaleX, scaleY: scaleY, scaleZ: scaleZ,
+            rotationX: rotationX, rotationY: rotationY, rotationZ: rotationZ,
+            translationX: translationX, translationY: translationY, translationZ: translationZ,
+        };
+    }
+    function parseCHR0(buffer) {
+        var view = buffer.createDataView();
+        util_49.assert(util_49.readString(buffer, 0x00, 0x04) === 'CHR0');
+        var version = view.getUint32(0x08);
+        var supportedVersions = [0x05];
+        util_49.assert(supportedVersions.includes(version));
+        var chrNodeDataResDicOffs = view.getUint32(0x10);
+        var chrNodeDataResDic = parseResDic(buffer, chrNodeDataResDicOffs);
+        var offs = 0x14;
+        if (version >= 0x05) {
+            // user data
+            offs += 0x04;
+        }
+        var nameOffs = view.getUint32(offs + 0x00);
+        var name = util_49.readString(buffer, nameOffs);
+        var duration = view.getUint16(offs + 0x08);
+        var numNodes = view.getUint16(offs + 0x0A);
+        var loopMode = view.getUint32(offs + 0x0C);
+        var scalingRule = view.getUint32(offs + 0x10);
+        var nodeAnimations = [];
+        try {
+            for (var chrNodeDataResDic_1 = __values(chrNodeDataResDic), chrNodeDataResDic_1_1 = chrNodeDataResDic_1.next(); !chrNodeDataResDic_1_1.done; chrNodeDataResDic_1_1 = chrNodeDataResDic_1.next()) {
+                var chrNodeEntry = chrNodeDataResDic_1_1.value;
+                var nodeData = parseCHR0_NodeData(buffer.slice(chrNodeEntry.offs), duration);
+                nodeAnimations.push(nodeData);
+            }
+        }
+        catch (e_67_1) { e_67 = { error: e_67_1 }; }
+        finally {
+            try {
+                if (chrNodeDataResDic_1_1 && !chrNodeDataResDic_1_1.done && (_a = chrNodeDataResDic_1.return)) _a.call(chrNodeDataResDic_1);
+            }
+            finally { if (e_67) throw e_67.error; }
+        }
+        util_49.assert(nodeAnimations.length === numNodes);
+        return { name: name, loopMode: loopMode, duration: duration, nodeAnimations: nodeAnimations };
+        var e_67, _a;
+    }
+    function findAnimationData_CHR0(chr0, nodeName) {
+        var nodeData = chr0.nodeAnimations.find(function (node) { return node.nodeName === nodeName; });
+        if (!nodeData)
+            return null;
+        return nodeData;
+    }
+    function bindCHR0NodesAnimator(animationController, chr0, nodes) {
+        var nodeData = [];
+        var _loop_12 = function (nodeAnimation) {
+            var node = nodes.find(function (node) { return node.name === nodeAnimation.nodeName; });
+            if (!node)
+                return "continue";
+            nodeData[node.id] = nodeAnimation;
+        };
+        try {
+            for (var _a = __values(chr0.nodeAnimations), _b = _a.next(); !_b.done; _b = _a.next()) {
+                var nodeAnimation = _b.value;
+                _loop_12(nodeAnimation);
+            }
+        }
+        catch (e_68_1) { e_68 = { error: e_68_1 }; }
+        finally {
+            try {
+                if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+            }
+            finally { if (e_68) throw e_68.error; }
+        }
+        // No nodes found.
+        if (nodeData.length === 0)
+            return null;
+        return new CHR0NodesAnimator(animationController, chr0, nodeData);
+        var e_68, _c;
+    }
+    exports_76("bindCHR0NodesAnimator", bindCHR0NodesAnimator);
     function parse(buffer) {
         var view = buffer.createDataView();
         util_49.assert(util_49.readString(buffer, 0x00, 0x04) === 'bres');
@@ -18981,12 +19291,12 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     models.push(mdl0);
                 }
             }
-            catch (e_67_1) { e_67 = { error: e_67_1 }; }
+            catch (e_69_1) { e_69 = { error: e_69_1 }; }
             finally {
                 try {
                     if (modelsResDic_1_1 && !modelsResDic_1_1.done && (_a = modelsResDic_1.return)) _a.call(modelsResDic_1);
                 }
-                finally { if (e_67) throw e_67.error; }
+                finally { if (e_69) throw e_69.error; }
             }
         }
         // Textures
@@ -19002,12 +19312,12 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     textures.push(tex0);
                 }
             }
-            catch (e_68_1) { e_68 = { error: e_68_1 }; }
+            catch (e_70_1) { e_70 = { error: e_70_1 }; }
             finally {
                 try {
                     if (texturesResDic_1_1 && !texturesResDic_1_1.done && (_b = texturesResDic_1.return)) _b.call(texturesResDic_1);
                 }
-                finally { if (e_68) throw e_68.error; }
+                finally { if (e_70) throw e_70.error; }
             }
         }
         // Tex SRT Animations
@@ -19023,19 +19333,40 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     texSrtAnimations.push(srt0);
                 }
             }
-            catch (e_69_1) { e_69 = { error: e_69_1 }; }
+            catch (e_71_1) { e_71 = { error: e_71_1 }; }
             finally {
                 try {
                     if (animTexSrtResDic_1_1 && !animTexSrtResDic_1_1.done && (_c = animTexSrtResDic_1.return)) _c.call(animTexSrtResDic_1);
                 }
-                finally { if (e_69) throw e_69.error; }
+                finally { if (e_71) throw e_71.error; }
             }
         }
-        return { models: models, textures: textures, texSrtAnimations: texSrtAnimations };
-        var e_67, _a, e_68, _b, e_69, _c;
+        // Node Animations
+        var chr0 = [];
+        var animChrsEntry = rootResDic.find(function (entry) { return entry.name === 'AnmChr(NW4R)'; });
+        if (animChrsEntry) {
+            var animChrResDic = parseResDic(buffer, animChrsEntry.offs);
+            try {
+                for (var animChrResDic_1 = __values(animChrResDic), animChrResDic_1_1 = animChrResDic_1.next(); !animChrResDic_1_1.done; animChrResDic_1_1 = animChrResDic_1.next()) {
+                    var chr0Entry = animChrResDic_1_1.value;
+                    var chr0_ = parseCHR0(buffer.subarray(chr0Entry.offs));
+                    util_49.assert(chr0_.name === chr0Entry.name);
+                    chr0.push(chr0_);
+                }
+            }
+            catch (e_72_1) { e_72 = { error: e_72_1 }; }
+            finally {
+                try {
+                    if (animChrResDic_1_1 && !animChrResDic_1_1.done && (_d = animChrResDic_1.return)) _d.call(animChrResDic_1);
+                }
+                finally { if (e_72) throw e_72.error; }
+            }
+        }
+        return { models: models, textures: textures, texSrtAnimations: texSrtAnimations, chr0: chr0 };
+        var e_69, _a, e_70, _b, e_71, _c, e_72, _d;
     }
     exports_76("parse", parse);
-    var util_49, GX_Material, gx_displaylist_4, gl_matrix_16, DisplayListRegisters, AnimationController, TexSrtAnimator, TexMtxIndex;
+    var util_49, GX_Material, gx_displaylist_4, gl_matrix_16, DisplayListRegisters, AnimationController, TexSrtAnimator, TexMtxIndex, CHR0NodesAnimator;
     return {
         setters: [
             function (util_49_1) {
@@ -19052,6 +19383,8 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             }
         ],
         execute: function () {
+            //#endregion
+            //#region MDL0
             DisplayListRegisters = /** @class */ (function () {
                 function DisplayListRegisters() {
                     this.bp = new Uint32Array(0x100);
@@ -19110,6 +19443,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 return AnimationController;
             }());
             exports_76("AnimationController", AnimationController);
+            window.debug = { visualizeTrack: visualizeTrack, graphF: graphF, getAnimFrame: getAnimFrame, applyLoopMode: applyLoopMode };
             TexSrtAnimator = /** @class */ (function () {
                 function TexSrtAnimator(animationController, srt0, texData) {
                     this.animationController = animationController;
@@ -19152,6 +19486,37 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 TexMtxIndex[TexMtxIndex["COUNT"] = 11] = "COUNT";
             })(TexMtxIndex || (TexMtxIndex = {}));
             exports_76("TexMtxIndex", TexMtxIndex);
+            CHR0NodesAnimator = /** @class */ (function () {
+                function CHR0NodesAnimator(animationController, chr0, nodeData) {
+                    this.animationController = animationController;
+                    this.chr0 = chr0;
+                    this.nodeData = nodeData;
+                    this.scratch = gl_matrix_16.mat4.create();
+                    this.disabled = [];
+                }
+                CHR0NodesAnimator.prototype.calcModelMtx = function (dst, nodeId) {
+                    var nodeData = this.nodeData[nodeId];
+                    if (!nodeData)
+                        return false;
+                    if (this.disabled[nodeId])
+                        return false;
+                    var frame = this.animationController.getTimeInFrames();
+                    var animFrame = getAnimFrame(this.chr0, frame);
+                    var scaleX = nodeData.scaleX ? sampleAnimationData(nodeData.scaleX, animFrame) : 1;
+                    var scaleY = nodeData.scaleY ? sampleAnimationData(nodeData.scaleY, animFrame) : 1;
+                    var scaleZ = nodeData.scaleZ ? sampleAnimationData(nodeData.scaleZ, animFrame) : 1;
+                    var rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, animFrame) : 0;
+                    var rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, animFrame) : 0;
+                    var rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, animFrame) : 0;
+                    var translationX = nodeData.translationX ? sampleAnimationData(nodeData.translationX, animFrame) : 0;
+                    var translationY = nodeData.translationY ? sampleAnimationData(nodeData.translationY, animFrame) : 0;
+                    var translationZ = nodeData.translationZ ? sampleAnimationData(nodeData.translationZ, animFrame) : 0;
+                    calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+                    return true;
+                };
+                return CHR0NodesAnimator;
+            }());
+            exports_76("CHR0NodesAnimator", CHR0NodesAnimator);
         }
     };
 });
@@ -19236,7 +19601,7 @@ System.register("rres/u8", ["util"], function (exports_77, context_77) {
                 }
                 U8Archive.prototype.findDirParts = function (parts) {
                     var dir = this.root;
-                    var _loop_12 = function (part) {
+                    var _loop_13 = function (part) {
                         dir = dir.subdirs.find(function (subdir) { return subdir.name === part; });
                         if (dir === undefined)
                             return { value: null };
@@ -19244,20 +19609,20 @@ System.register("rres/u8", ["util"], function (exports_77, context_77) {
                     try {
                         for (var parts_2 = __values(parts), parts_2_1 = parts_2.next(); !parts_2_1.done; parts_2_1 = parts_2.next()) {
                             var part = parts_2_1.value;
-                            var state_3 = _loop_12(part);
+                            var state_3 = _loop_13(part);
                             if (typeof state_3 === "object")
                                 return state_3.value;
                         }
                     }
-                    catch (e_70_1) { e_70 = { error: e_70_1 }; }
+                    catch (e_73_1) { e_73 = { error: e_73_1 }; }
                     finally {
                         try {
                             if (parts_2_1 && !parts_2_1.done && (_a = parts_2.return)) _a.call(parts_2);
                         }
-                        finally { if (e_70) throw e_70.error; }
+                        finally { if (e_73) throw e_73.error; }
                     }
                     return dir;
-                    var e_70, _a;
+                    var e_73, _a;
                 };
                 U8Archive.prototype.findDir = function (path) {
                     return this.findDirParts(path.split('/'));
@@ -19329,11 +19694,16 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     this.sceneParams = new gx_render_4.SceneParams();
                     this.packetParams = new gx_render_4.PacketParams();
                     this.matrixArray = util_51.nArray(16, function () { return gl_matrix_17.mat4.create(); });
+                    this.matrixScratch = gl_matrix_17.mat4.create();
+                    this.modelMatrix = gl_matrix_17.mat4.create();
                     this.visible = true;
                     this.renderHelper = new gx_render_4.GXRenderHelper(gl);
                     this.translateModel(gl);
                     this.name = namePrefix + "/" + mdl0.name;
                 }
+                ModelRenderer.prototype.bindCHR0 = function (animationController, chr0) {
+                    this.chr0NodeAnimator = BRRES.bindCHR0NodesAnimator(animationController, chr0, this.mdl0.nodes);
+                };
                 ModelRenderer.prototype.bindSRT0 = function (animationController, srt0) {
                     for (var i = 0; i < this.materialCommands.length; i++) {
                         var cmd = this.materialCommands[i];
@@ -19403,15 +19773,21 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                     }
                 };
                 ModelRenderer.prototype.execNodeTreeOpList = function (opList) {
-                    gl_matrix_17.mat4.identity(this.matrixArray[0]);
+                    gl_matrix_17.mat4.copy(this.matrixArray[0], this.modelMatrix);
                     for (var i = 0; i < opList.length; i++) {
                         var op = opList[i];
                         if (op.op === 2 /* NODEDESC */) {
                             var node = this.mdl0.nodes[op.nodeId];
                             var parentMtxId = op.parentMtxId;
                             var dstMtxId = node.mtxId;
-                            // This is more complicated, but for now...
-                            gl_matrix_17.mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], node.modelMatrix);
+                            var modelMatrix = void 0;
+                            if (this.chr0NodeAnimator && this.chr0NodeAnimator.calcModelMtx(this.matrixScratch, op.nodeId)) {
+                                modelMatrix = this.matrixScratch;
+                            }
+                            else {
+                                modelMatrix = node.modelMatrix;
+                            }
+                            gl_matrix_17.mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], modelMatrix);
                         }
                         else if (op.op === 6 /* MTXDUP */) {
                             var srcMtxId = op.fromMtxId;
@@ -19428,19 +19804,19 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                             this.materialCommands.push(new Command_Material(gl, this.textureHolder, material, this.materialHacks));
                         }
                     }
-                    catch (e_71_1) { e_71 = { error: e_71_1 }; }
+                    catch (e_74_1) { e_74 = { error: e_74_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_71) throw e_71.error; }
+                        finally { if (e_74) throw e_74.error; }
                     }
                     this.bufferCoalescer = gx_render_4.loadedDataCoalescer(gl, this.mdl0.shapes.map(function (shape) { return shape.loadedVertexData; }));
                     for (var i = 0; i < this.mdl0.shapes.length; i++) {
                         var shape = this.mdl0.shapes[i];
                         this.shapeCommands.push(new Command_Shape(gl, this.bufferCoalescer.coalescedBuffers[i], shape));
                     }
-                    var e_71, _c;
+                    var e_74, _c;
                 };
                 return ModelRenderer;
             }());
@@ -19582,10 +19958,10 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
     };
 });
 // Skyward Sword
-System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util", "Progressable", "render", "rres/render", "gx/gx_material"], function (exports_79, context_79) {
+System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util", "Progressable", "render", "rres/render", "gx/gx_material", "gl-matrix"], function (exports_79, context_79) {
     "use strict";
     var __moduleName = context_79 && context_79.id;
-    var UI, LZ77, BRRES, U8, util_52, Progressable_10, render_28, render_29, gx_material_4, SAND_CLOCK_ICON, materialHacks, SkywardSwordScene, SkywardSwordSceneDesc, id, name, sceneDescs, sceneGroup;
+    var UI, LZ77, BRRES, U8, util_52, Progressable_10, render_28, render_29, gx_material_4, gl_matrix_18, SAND_CLOCK_ICON, materialHacks, ModelArchiveCollection, SkywardSwordScene, SkywardSwordSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (UI_5) {
@@ -19614,6 +19990,9 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
             },
             function (gx_material_4_1) {
                 gx_material_4 = gx_material_4_1;
+            },
+            function (gl_matrix_18_1) {
+                gl_matrix_18 = gl_matrix_18_1;
             }
         ],
         execute: function () {
@@ -19622,65 +20001,107 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                 colorLightingFudge: function (p) { return "0.5 * " + p.matSource; },
                 alphaLightingFudge: function (p) { return "1.0"; },
             };
+            ModelArchiveCollection = /** @class */ (function () {
+                function ModelArchiveCollection() {
+                    this.search = [];
+                    this.loaded = new Map();
+                }
+                ModelArchiveCollection.prototype.addSearchPath = function (archive) {
+                    this.search.push(archive);
+                };
+                ModelArchiveCollection.prototype.findFile = function (path) {
+                    try {
+                        for (var _a = __values(this.search), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var archive = _b.value;
+                            var file = archive.findFile(path);
+                            console.log(path, archive, file);
+                            if (file)
+                                return file;
+                        }
+                    }
+                    catch (e_75_1) { e_75 = { error: e_75_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_75) throw e_75.error; }
+                    }
+                    return null;
+                    var e_75, _c;
+                };
+                ModelArchiveCollection.prototype.loadRRESFromArc = function (gl, textureHolder, path) {
+                    if (this.loaded.has(path))
+                        return this.loaded.get(path);
+                    var file = util_52.assertExists(this.findFile(path));
+                    var arch = U8.parse(file.buffer);
+                    var rres = BRRES.parse(arch.findFile('g3d/model.brres').buffer);
+                    textureHolder.addRRESTextures(gl, rres);
+                    this.loaded.set(path, rres);
+                    return rres;
+                };
+                return ModelArchiveCollection;
+            }());
             SkywardSwordScene = /** @class */ (function () {
-                function SkywardSwordScene(gl, stageId, commonRRESes, stageArchive) {
+                function SkywardSwordScene(gl, stageId, systemArchive, objPackArchive, stageArchive) {
                     this.stageId = stageId;
-                    this.commonRRESes = commonRRESes;
+                    this.systemArchive = systemArchive;
+                    this.objPackArchive = objPackArchive;
                     this.stageArchive = stageArchive;
                     this.models = [];
                     this.mainColorTarget = new render_28.ColorTarget();
+                    this.roomBZSes = [];
                     // Uses WaterDummy. Have to render after everything else. TODO(jstpierre): How does engine know this?
                     this.indirectModels = [];
+                    this.oarcCollection = new ModelArchiveCollection();
                     this.textureHolder = new render_29.RRESTextureHolder();
                     this.animationController = new BRRES.AnimationController();
                     this.textures = this.textureHolder.viewerTextures;
-                    try {
-                        // First, load in the system and common textures.
-                        for (var commonRRESes_1 = __values(commonRRESes), commonRRESes_1_1 = commonRRESes_1.next(); !commonRRESes_1_1.done; commonRRESes_1_1 = commonRRESes_1.next()) {
-                            var commonRRES = commonRRESes_1_1.value;
-                            this.textureHolder.addRRESTextures(gl, commonRRES);
-                        }
-                    }
-                    catch (e_72_1) { e_72 = { error: e_72_1 }; }
-                    finally {
-                        try {
-                            if (commonRRESes_1_1 && !commonRRESes_1_1.done && (_a = commonRRESes_1.return)) _a.call(commonRRESes_1);
-                        }
-                        finally { if (e_72) throw e_72.error; }
-                    }
+                    this.oarcCollection.addSearchPath(this.stageArchive);
+                    this.oarcCollection.addSearchPath(this.objPackArchive);
+                    var systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
+                    this.textureHolder.addRRESTextures(gl, systemRRES);
+                    var needsSkyCmn = this.stageId.startsWith('F0') || this.stageId === 'F406';
+                    if (needsSkyCmn)
+                        this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, 'oarc/SkyCmn.arc');
+                    // Water animations appear in Common.arc.
+                    this.commonRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, 'oarc/Common.arc');
                     // Load stage.
-                    var stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
-                    this.textureHolder.addRRESTextures(gl, stageRRES);
+                    this.stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
+                    this.textureHolder.addRRESTextures(gl, this.stageRRES);
                     // Load rooms.
                     var roomArchivesDir = stageArchive.findDir('rarc');
                     if (roomArchivesDir) {
                         try {
-                            for (var _b = __values(roomArchivesDir.files), _c = _b.next(); !_c.done; _c = _b.next()) {
-                                var roomArchiveFile = _c.value;
+                            for (var _a = __values(roomArchivesDir.files), _b = _a.next(); !_b.done; _b = _a.next()) {
+                                var roomArchiveFile = _b.value;
                                 var roomArchive = U8.parse(roomArchiveFile.buffer);
                                 var roomRRES = BRRES.parse(roomArchive.findFile('g3d/room.brres').buffer);
                                 this.textureHolder.addRRESTextures(gl, roomRRES);
                                 try {
-                                    for (var _d = __values(roomRRES.models), _e = _d.next(); !_e.done; _e = _d.next()) {
-                                        var mdl0 = _e.value;
+                                    for (var _c = __values(roomRRES.models), _d = _c.next(); !_d.done; _d = _c.next()) {
+                                        var mdl0 = _d.value;
                                         this.spawnModel(gl, mdl0, roomRRES, roomArchiveFile.name);
                                     }
                                 }
-                                catch (e_73_1) { e_73 = { error: e_73_1 }; }
+                                catch (e_76_1) { e_76 = { error: e_76_1 }; }
                                 finally {
                                     try {
-                                        if (_e && !_e.done && (_f = _d.return)) _f.call(_d);
+                                        if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
                                     }
-                                    finally { if (e_73) throw e_73.error; }
+                                    finally { if (e_76) throw e_76.error; }
                                 }
+                                var roomBZS = this.parseRoomBZS(roomArchive.findFile('dat/room.bzs').buffer);
+                                this.roomBZSes.push(roomBZS);
+                                var layout = roomBZS.layouts[0];
+                                this.spawnRoomLayout(gl, layout);
                             }
                         }
-                        catch (e_74_1) { e_74 = { error: e_74_1 }; }
+                        catch (e_77_1) { e_77 = { error: e_77_1 }; }
                         finally {
                             try {
-                                if (_c && !_c.done && (_g = _b.return)) _g.call(_b);
+                                if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
                             }
-                            finally { if (e_74) throw e_74.error; }
+                            finally { if (e_77) throw e_77.error; }
                         }
                     }
                     // Sort models based on type.
@@ -19714,79 +20135,22 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         }
                         return idx;
                     }
-                    this.models.sort(function (a, b) {
-                        return sortKey(a) - sortKey(b);
-                    });
-                    // Instantiate known-good stage objects. In the engine, this would be done through room.bzs.
-                    // I haven't finished reverse engineering that file though...
-                    var oarcDir = stageArchive.findDir('oarc');
-                    if (oarcDir) {
-                        try {
-                            for (var _h = __values(oarcDir.files), _j = _h.next(); !_j.done; _j = _h.next()) {
-                                var oarcFile = _j.value;
-                                var whitelisted = false;
-                                // Sometimes water appears as an object.
-                                if (oarcFile.name.includes('WaterF100'))
-                                    whitelisted = true;
-                                if (oarcFile.name.includes('LavaF200'))
-                                    whitelisted = true;
-                                if (oarcFile.name.includes('DowsingZone'))
-                                    whitelisted = true;
-                                if (whitelisted) {
-                                    var oarcArchive = U8.parse(oarcFile.buffer);
-                                    var oarcBRRES = BRRES.parse(oarcArchive.findFile('g3d/model.brres').buffer);
-                                    this.textureHolder.addRRESTextures(gl, oarcBRRES);
-                                    try {
-                                        for (var _k = __values(oarcBRRES.models), _l = _k.next(); !_l.done; _l = _k.next()) {
-                                            var mdl0 = _l.value;
-                                            this.spawnModel(gl, mdl0, oarcBRRES, oarcFile.name);
-                                        }
-                                    }
-                                    catch (e_75_1) { e_75 = { error: e_75_1 }; }
-                                    finally {
-                                        try {
-                                            if (_l && !_l.done && (_m = _k.return)) _m.call(_k);
-                                        }
-                                        finally { if (e_75) throw e_75.error; }
-                                    }
-                                }
-                            }
-                        }
-                        catch (e_76_1) { e_76 = { error: e_76_1 }; }
-                        finally {
-                            try {
-                                if (_j && !_j.done && (_o = _h.return)) _o.call(_h);
-                            }
-                            finally { if (e_76) throw e_76.error; }
-                        }
-                    }
                     try {
-                        // Now create models for any water that might spawn.
-                        for (var _p = __values(stageRRES.models), _q = _p.next(); !_q.done; _q = _p.next()) {
-                            var mdl0 = _q.value;
-                            if (!mdl0.name.includes('Water'))
-                                continue;
-                            this.spawnModel(gl, mdl0, stageRRES, 'stage');
-                        }
-                    }
-                    catch (e_77_1) { e_77 = { error: e_77_1 }; }
-                    finally {
-                        try {
-                            if (_q && !_q.done && (_r = _p.return)) _r.call(_p);
-                        }
-                        finally { if (e_77) throw e_77.error; }
-                    }
-                    try {
+                        /*
+                        this.models.sort((a, b) => {
+                            return sortKey(a) - sortKey(b);
+                        });
+                        */
                         outer: 
                         // Find any indirect scenes.
-                        for (var _s = __values(this.models), _t = _s.next(); !_t.done; _t = _s.next()) {
-                            var modelRenderer = _t.value;
+                        for (var _g = __values(this.models), _h = _g.next(); !_h.done; _h = _g.next()) {
+                            var modelRenderer = _h.value;
                             try {
-                                for (var _u = __values(modelRenderer.mdl0.materials), _v = _u.next(); !_v.done; _v = _u.next()) {
-                                    var material = _v.value;
+                                for (var _j = __values(modelRenderer.mdl0.materials), _k = _j.next(); !_k.done; _k = _j.next()) {
+                                    var material = _k.value;
                                     try {
-                                        for (var _w = __values(material.samplers), _x = _w.next(); !_x.done; _x = _w.next()) {
-                                            var sampler = _x.value;
+                                        for (var _l = __values(material.samplers), _m = _l.next(); !_m.done; _m = _l.next()) {
+                                            var sampler = _m.value;
                                             if (sampler.name === 'DummyWater') {
                                                 this.indirectModels.push(modelRenderer);
                                                 continue outer;
@@ -19796,7 +20160,7 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                                     catch (e_78_1) { e_78 = { error: e_78_1 }; }
                                     finally {
                                         try {
-                                            if (_x && !_x.done && (_y = _w.return)) _y.call(_w);
+                                            if (_m && !_m.done && (_o = _l.return)) _o.call(_l);
                                         }
                                         finally { if (e_78) throw e_78.error; }
                                     }
@@ -19805,7 +20169,7 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                             catch (e_79_1) { e_79 = { error: e_79_1 }; }
                             finally {
                                 try {
-                                    if (_v && !_v.done && (_z = _u.return)) _z.call(_u);
+                                    if (_k && !_k.done && (_p = _j.return)) _p.call(_j);
                                 }
                                 finally { if (e_79) throw e_79.error; }
                             }
@@ -19814,11 +20178,11 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                     catch (e_80_1) { e_80 = { error: e_80_1 }; }
                     finally {
                         try {
-                            if (_t && !_t.done && (_0 = _s.return)) _0.call(_s);
+                            if (_h && !_h.done && (_q = _g.return)) _q.call(_g);
                         }
                         finally { if (e_80) throw e_80.error; }
                     }
-                    var e_72, _a, e_74, _g, e_73, _f, e_76, _o, e_75, _m, e_77, _r, e_80, _0, e_79, _z, e_78, _y;
+                    var e_77, _f, e_76, _e, e_80, _q, e_79, _p, e_78, _o;
                 }
                 SkywardSwordScene.prototype.createPanels = function () {
                     var panels = [];
@@ -19933,32 +20297,171 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         finally { if (e_84) throw e_84.error; }
                     }
                     try {
-                        for (var _d = __values(this.commonRRESes), _e = _d.next(); !_e.done; _e = _d.next()) {
-                            var commonRRES = _e.value;
-                            try {
-                                for (var _f = __values(commonRRES.texSrtAnimations), _g = _f.next(); !_g.done; _g = _f.next()) {
-                                    var srt0 = _g.value;
-                                    modelRenderer.bindSRT0(this.animationController, srt0);
-                                }
-                            }
-                            catch (e_85_1) { e_85 = { error: e_85_1 }; }
-                            finally {
-                                try {
-                                    if (_g && !_g.done && (_h = _f.return)) _h.call(_f);
-                                }
-                                finally { if (e_85) throw e_85.error; }
-                            }
+                        // Water animations are in the common archive.
+                        for (var _d = __values(this.commonRRES.texSrtAnimations), _e = _d.next(); !_e.done; _e = _d.next()) {
+                            var srt0 = _e.value;
+                            modelRenderer.bindSRT0(this.animationController, srt0);
                         }
                     }
-                    catch (e_86_1) { e_86 = { error: e_86_1 }; }
+                    catch (e_85_1) { e_85 = { error: e_85_1 }; }
                     finally {
                         try {
-                            if (_e && !_e.done && (_j = _d.return)) _j.call(_d);
+                            if (_e && !_e.done && (_f = _d.return)) _f.call(_d);
                         }
-                        finally { if (e_86) throw e_86.error; }
+                        finally { if (e_85) throw e_85.error; }
                     }
                     return modelRenderer;
-                    var e_84, _c, e_86, _j, e_85, _h;
+                    var e_84, _c, e_85, _f;
+                };
+                SkywardSwordScene.prototype.spawnModelName = function (gl, rres, modelName, namePrefix) {
+                    var mdl0 = rres.models.find(function (model) { return model.name === modelName; });
+                    return this.spawnModel(gl, mdl0, rres, namePrefix);
+                };
+                SkywardSwordScene.prototype.spawnObj = function (gl, name) {
+                    // In the actual engine, each obj is handled by a separate .rel (runtime module)
+                    // which knows the actual layout. The mapping of obj name to .rel is stored in main.dol.
+                    // We emulate that here.
+                    var models = [];
+                    if (name === 'CityWtr') {
+                        // For City Water, we spawn three objects, the second one being an indirect object.
+                        models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Water0', name));
+                        models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Water1', name));
+                        models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Water2', name));
+                    }
+                    else if (name === 'Grave') {
+                        models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Grave', name));
+                    }
+                    else if (name === 'Shed') {
+                        // Door to Batreaux's lair
+                        models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Shed', name));
+                    }
+                    else if (name === 'Windmil') {
+                        var model = this.spawnModelName(gl, this.stageRRES, 'StageF000Windmill', name);
+                        var StageF000WindmillCHR0 = this.stageRRES.chr0.find(function (c) { return c.name === 'StageF000Windmill'; });
+                        model.bindCHR0(this.animationController, StageF000WindmillCHR0);
+                        models.push(model);
+                    }
+                    else if (name === 'Blade') {
+                        // Skyloft decorations... flags, pinwheels, etc.
+                        var StageF000Blade = this.stageRRES.models.find(function (model) { return model.name === 'StageF000Blade'; });
+                        var model = this.spawnModelName(gl, this.stageRRES, 'StageF000Blade', name);
+                        var StageF000BladeCHR0 = this.stageRRES.chr0.find(function (c) { return c.name === 'StageF000Blade'; });
+                        model.bindCHR0(this.animationController, StageF000BladeCHR0);
+                        models.push(model);
+                    }
+                    else if (name === 'LHHarp') {
+                        // "Lighthouse Harp"
+                        models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Harp', name));
+                    }
+                    else if (name === 'LHLight') {
+                        // "Lighthouse Light"
+                        models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Light', name));
+                    }
+                    else if (name === 'Heartf') {
+                        var FlowerHeartRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, 'oarc/FlowerHeart.arc');
+                        models.push(this.spawnModelName(gl, FlowerHeartRRES, 'FlowerHeart', name));
+                    }
+                    else if (name === 'Pumpkin') {
+                        var PumpkinRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, 'oarc/Pumpkin.arc');
+                        models.push(this.spawnModelName(gl, PumpkinRRES, 'Pumpkin', name));
+                    }
+                    else if (name === 'DmtGate') {
+                        // "Dormitory Gate"
+                        // Seems it can also use StageF400Gate, probably when Skyloft crashes to the ground (spoilers).
+                        // Seems to make two of them... skip for now, not that important...
+                    }
+                    else {
+                        console.log("Unknown object", name);
+                    }
+                    return models;
+                };
+                SkywardSwordScene.prototype.spawnRoomLayout = function (gl, layout) {
+                    var q = gl_matrix_18.quat.create();
+                    try {
+                        for (var _a = __values(layout.obj), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var obj = _b.value;
+                            var models = this.spawnObj(gl, obj.name);
+                            // Set model matrix.
+                            var rotation = 180 * (obj.rotY / 0x7FFF);
+                            gl_matrix_18.quat.fromEuler(q, 0, rotation, 0);
+                            try {
+                                for (var models_1 = __values(models), models_1_1 = models_1.next(); !models_1_1.done; models_1_1 = models_1.next()) {
+                                    var modelRenderer = models_1_1.value;
+                                    gl_matrix_18.mat4.fromRotationTranslation(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz]);
+                                }
+                            }
+                            catch (e_86_1) { e_86 = { error: e_86_1 }; }
+                            finally {
+                                try {
+                                    if (models_1_1 && !models_1_1.done && (_c = models_1.return)) _c.call(models_1);
+                                }
+                                finally { if (e_86) throw e_86.error; }
+                            }
+                        }
+                    }
+                    catch (e_87_1) { e_87 = { error: e_87_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
+                        }
+                        finally { if (e_87) throw e_87.error; }
+                    }
+                    var e_87, _d, e_86, _c;
+                };
+                SkywardSwordScene.prototype.parseRoomBZS = function (buffer) {
+                    var view = buffer.createDataView();
+                    function parseChunkTable(tableOffs, count) {
+                        var chunks = [];
+                        var tableIdx = tableOffs;
+                        for (var i = 0; i < count; i++) {
+                            var name_17 = util_52.readString(buffer, tableIdx + 0x00, 0x04, false);
+                            var count_1 = view.getUint16(tableIdx + 0x04);
+                            // pad
+                            // offs is relative to this entry.
+                            var offs = tableIdx + view.getUint32(tableIdx + 0x08);
+                            chunks.push({ name: name_17, count: count_1, offs: offs });
+                            tableIdx += 0x0C;
+                        }
+                        return chunks;
+                    }
+                    // Header.
+                    var headerChunkTable = parseChunkTable(0x00, 0x01);
+                    util_52.assert(headerChunkTable.length === 1);
+                    var v001 = headerChunkTable[0];
+                    util_52.assert(v001.name === 'V001' && v001.offs === 0x0C);
+                    var roomChunkTable = parseChunkTable(v001.offs, v001.count);
+                    function parseObj(offs) {
+                        var unk1 = view.getUint32(offs + 0x00);
+                        var unk2 = view.getUint32(offs + 0x04);
+                        var tx = view.getFloat32(offs + 0x08);
+                        var ty = view.getFloat32(offs + 0x0C);
+                        var tz = view.getFloat32(offs + 0x10);
+                        var unk3 = view.getUint16(offs + 0x14);
+                        var rotY = view.getInt16(offs + 0x16);
+                        var unk4 = view.getUint16(offs + 0x18);
+                        var unk5 = view.getUint8(offs + 0x1A);
+                        var unk6 = view.getUint8(offs + 0x1B);
+                        var name = util_52.readString(buffer, offs + 0x01C, 0x08, true);
+                        return { unk1: unk1, unk2: unk2, tx: tx, ty: ty, tz: tz, unk3: unk3, rotY: rotY, unk4: unk4, unk5: unk5, unk6: unk6, name: name };
+                    }
+                    var layoutsChunk = roomChunkTable.find(function (chunk) { return chunk.name === 'LAY '; });
+                    // Parse layouts table.
+                    function parseLayout(index) {
+                        var layoutsTableIdx = layoutsChunk.offs + (index * 0x08);
+                        var layoutChunkTableCount = view.getUint16(layoutsTableIdx + 0x00);
+                        // pad
+                        var layoutChunkTableOffs = layoutsTableIdx + view.getUint32(layoutsTableIdx + 0x04);
+                        var layoutChunkTable = parseChunkTable(layoutChunkTableOffs, layoutChunkTableCount);
+                        // Look for objects table.
+                        var objChunk = layoutChunkTable.find(function (chunk) { return chunk.name === 'OBJ '; });
+                        var obj = [];
+                        for (var i = 0; i < objChunk.count; i++)
+                            obj.push(parseObj(objChunk.offs + i * 0x24));
+                        return { obj: obj };
+                    }
+                    var layouts = [];
+                    layouts.push(parseLayout(0));
+                    return { layouts: layouts };
                 };
                 return SkywardSwordScene;
             }());
@@ -19977,21 +20480,9 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         var _a = __read(buffers, 3), systemBuffer = _a[0], objPackBuffer = _a[1], stageBuffer = _a[2];
                         var commonRRESes = [];
                         var systemArchive = U8.parse(systemBuffer);
-                        var systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
-                        commonRRESes.push(systemRRES);
                         var objPackArchive = U8.parse(LZ77.decompress(objPackBuffer));
-                        var needsSkyCmn = _this.id.startsWith('F0') || _this.id === 'F406';
-                        if (needsSkyCmn) {
-                            var skyCmnArchive = U8.parse(objPackArchive.findFile('oarc/SkyCmn.arc').buffer);
-                            var skyCmnRRES = BRRES.parse(skyCmnArchive.findFile('g3d/model.brres').buffer);
-                            commonRRESes.push(skyCmnRRES);
-                        }
-                        // Water animations appear in Common.arc.
-                        var commonArchive = U8.parse(objPackArchive.findFile('oarc/Common.arc').buffer);
-                        var commonRRES = BRRES.parse(commonArchive.findFile('g3d/model.brres').buffer);
-                        commonRRESes.push(commonRRES);
                         var stageArchive = U8.parse(LZ77.decompress(stageBuffer));
-                        return new SkywardSwordScene(gl, _this.id, commonRRESes, stageArchive);
+                        return new SkywardSwordScene(gl, _this.id, systemArchive, objPackArchive, stageArchive);
                     });
                 };
                 return SkywardSwordSceneDesc;
@@ -20118,23 +20609,23 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
                                     modelRenderer.bindSRT0(this.animationController, srt0);
                                 }
                             }
-                            catch (e_87_1) { e_87 = { error: e_87_1 }; }
+                            catch (e_88_1) { e_88 = { error: e_88_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_87) throw e_87.error; }
+                                finally { if (e_88) throw e_88.error; }
                             }
                         }
                     }
-                    catch (e_88_1) { e_88 = { error: e_88_1 }; }
+                    catch (e_89_1) { e_89 = { error: e_89_1 }; }
                     finally {
                         try {
                             if (stageRRESes_1_1 && !stageRRESes_1_1.done && (_d = stageRRESes_1.return)) _d.call(stageRRESes_1);
                         }
-                        finally { if (e_88) throw e_88.error; }
+                        finally { if (e_89) throw e_89.error; }
                     }
-                    var e_88, _d, e_87, _c;
+                    var e_89, _d, e_88, _c;
                 }
                 BasicRRESScene.prototype.createPanels = function () {
                     var panels = [];
@@ -20640,11 +21131,11 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         });
     }
     exports_83("createScene", createScene);
-    var gl_matrix_18, util_54, GX_Material, j3d_5, RARC, render_31, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
+    var gl_matrix_19, util_54, GX_Material, j3d_5, RARC, render_31, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
     return {
         setters: [
-            function (gl_matrix_18_1) {
-                gl_matrix_18 = gl_matrix_18_1;
+            function (gl_matrix_19_1) {
+                gl_matrix_19 = gl_matrix_19_1;
             },
             function (util_54_1) {
                 util_54 = util_54_1;
@@ -20673,8 +21164,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         ],
         execute: function () {
             scale = 200;
-            posMtx = gl_matrix_18.mat4.create();
-            gl_matrix_18.mat4.fromScaling(posMtx, [scale, scale, scale]);
+            posMtx = gl_matrix_19.mat4.create();
+            gl_matrix_19.mat4.fromScaling(posMtx, [scale, scale, scale]);
             SeaPlaneScene = /** @class */ (function () {
                 function SeaPlaneScene(gl, textureHolder, bmd, btk, configName) {
                     this.textureHolder = textureHolder;
@@ -20739,16 +21230,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_89_1) { e_89 = { error: e_89_1 }; }
+                        catch (e_90_1) { e_90 = { error: e_90_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_89) throw e_89.error; }
+                            finally { if (e_90) throw e_90.error; }
                         }
                     }
                     return cmd;
-                    var e_89, _c;
+                    var e_90, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
@@ -20781,7 +21272,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                 }
                 PlaneShape.prototype.render = function (state, renderHelper) {
                     var gl = state.gl;
-                    gl_matrix_18.mat4.mul(this.packetParams.u_PosMtx[0], state.updateModelView(), posMtx);
+                    gl_matrix_19.mat4.mul(this.packetParams.u_PosMtx[0], state.updateModelView(), posMtx);
                     renderHelper.bindPacketParams(state, this.packetParams);
                     gl.bindVertexArray(this.vao);
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -20872,8 +21363,8 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_84, context_84
             var recordOffset = view.getUint16(fieldTableIdx + 0x08);
             var shift = view.getInt8(fieldTableIdx + 0x0A);
             var type = view.getUint8(fieldTableIdx + 0x0B);
-            var name_17 = findNameFromHash(nameHash_2);
-            fields.push({ nameHash: nameHash_2, name: name_17, bitmask: bitmask, recordOffset: recordOffset, shift: shift, type: type });
+            var name_18 = findNameFromHash(nameHash_2);
+            fields.push({ nameHash: nameHash_2, name: name_18, bitmask: bitmask, recordOffset: recordOffset, shift: shift, type: type });
             fieldTableIdx += 0x0C;
         }
         var recordTableIdx = recordOffs;
@@ -20899,18 +21390,18 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_84, context_84
                     record[field.name] = value;
                 }
             }
-            catch (e_90_1) { e_90 = { error: e_90_1 }; }
+            catch (e_91_1) { e_91 = { error: e_91_1 }; }
             finally {
                 try {
                     if (fields_1_1 && !fields_1_1.done && (_a = fields_1.return)) _a.call(fields_1);
                 }
-                finally { if (e_90) throw e_90.error; }
+                finally { if (e_91) throw e_91.error; }
             }
             records.push(record);
             recordTableIdx += recordSize;
         }
         return records;
-        var e_90, _a;
+        var e_91, _a;
     }
     exports_84("parse", parse);
     var util_55, nameTable, hashLookup;

@@ -27,7 +27,10 @@ export class ModelRenderer {
     private packetParams: PacketParams = new PacketParams();
     private matrixArray: mat4[] = nArray(16, () => mat4.create());
     private bufferCoalescer: BufferCoalescer;
+    private chr0NodeAnimator: BRRES.CHR0NodesAnimator;
+    private matrixScratch: mat4 = mat4.create();
 
+    public modelMatrix: mat4 = mat4.create();
     public visible: boolean = true;
     public name: string;
 
@@ -40,6 +43,10 @@ export class ModelRenderer {
         this.renderHelper = new GXRenderHelper(gl);
         this.translateModel(gl);
         this.name = `${namePrefix}/${mdl0.name}`;
+    }
+
+    public bindCHR0(animationController: BRRES.AnimationController, chr0: BRRES.CHR0): void {
+        this.chr0NodeAnimator = BRRES.bindCHR0NodesAnimator(animationController, chr0, this.mdl0.nodes);
     }
 
     public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {
@@ -128,7 +135,7 @@ export class ModelRenderer {
     }
 
     private execNodeTreeOpList(opList: BRRES.NodeTreeOp[]): void {
-        mat4.identity(this.matrixArray[0]);
+        mat4.copy(this.matrixArray[0], this.modelMatrix);
 
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
@@ -137,8 +144,13 @@ export class ModelRenderer {
                 const node = this.mdl0.nodes[op.nodeId];
                 const parentMtxId = op.parentMtxId;
                 const dstMtxId = node.mtxId;
-                // This is more complicated, but for now...
-                mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], node.modelMatrix);
+                let modelMatrix;
+                if (this.chr0NodeAnimator && this.chr0NodeAnimator.calcModelMtx(this.matrixScratch, op.nodeId)) {
+                    modelMatrix = this.matrixScratch;
+                } else {
+                    modelMatrix = node.modelMatrix;
+                }
+                mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], modelMatrix);
             } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
                 const srcMtxId = op.fromMtxId;
                 const dstMtxId = op.toMtxId;

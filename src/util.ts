@@ -113,4 +113,3 @@ declare global {
     }
 }
 window.hexdump = hexdump;
-window.debug = null;
