@@ -19443,7 +19443,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 return AnimationController;
             }());
             exports_76("AnimationController", AnimationController);
-            window.debug = { visualizeTrack: visualizeTrack, graphF: graphF, getAnimFrame: getAnimFrame, applyLoopMode: applyLoopMode };
+            window.debug = { visualizeTrack: visualizeTrack, graphF: graphF, getAnimFrame: getAnimFrame };
             TexSrtAnimator = /** @class */ (function () {
                 function TexSrtAnimator(animationController, srt0, texData) {
                     this.animationController = animationController;
