@@ -56,7 +56,6 @@ export class Color {
 
 export interface ColorChannelControl {
     lightingEnabled: boolean;
-    lightingFudge?: string;
     matColorSource: GX.ColorSrc;
     ambColorSource: GX.ColorSrc;
 }
@@ -177,9 +176,17 @@ export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
     return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrib === vtxAttrib);
 }
 
-enum TevCh {
-    COLOR,
-    ALPHA,
+export interface LightingFudgeParams {
+    vtx: string;
+    amb: string;
+    mat: string;
+}
+
+type LightingFudgeGenerator = (p: LightingFudgeParams) => string;
+
+export interface GXMaterialHacks {
+    colorLightingFudge?: LightingFudgeGenerator;
+    alphaLightingFudge?: LightingFudgeGenerator;
 }
 
 export class GX_Program extends BaseProgram {
@@ -189,11 +196,8 @@ export class GX_Program extends BaseProgram {
 
     public u_Texture: WebGLUniformLocation;
 
-    private material: GXMaterial;
-
-    constructor(material: GXMaterial) {
+    constructor(private material: GXMaterial, private hacks: GXMaterialHacks = null) {
         super();
-        this.material = material;
         this.generateShaders();
     }
 
@@ -230,14 +234,17 @@ export class GX_Program extends BaseProgram {
         }
     }
 
-    private generateColorChannel(chan: ColorChannelControl, i: number) {
+    private generateColorChannel(chan: ColorChannelControl, i: number, isAlpha: boolean) {
         // HACK.
-        if (chan.lightingFudge) {
-            const amb = `u_ColorAmbReg[${i}]`;
-            const mat = `u_ColorMatReg[${i}]`;
-            const vtx = `a_Color${i}`;
-            const fudgeExpr = chan.lightingFudge.replace('$AMB$', amb).replace('$MAT$', mat).replace('$VTX$', vtx);
-            return `vec4(${fudgeExpr})`;
+        if (this.hacks) {
+            const fudger = isAlpha ? this.hacks.alphaLightingFudge : this.hacks.colorLightingFudge;
+            if (fudger) {
+                const vtx = `a_Color${i}`;
+                const amb = `u_ColorAmbReg[${i}]`;
+                const mat = `u_ColorMatReg[${i}]`;
+                const fudged = fudger({ vtx, amb, mat });
+                return `vec4(${fudged})`;
+            }
         }
 
         // TODO(jstpierre): amb & lighting
@@ -254,7 +261,7 @@ export class GX_Program extends BaseProgram {
     }
 
     private generateLightChannel(lightChannel: LightChannelControl, i: number) {
-        return `vec4(${this.generateColorChannel(lightChannel.colorChannel, i)}.rgb, ${this.generateColorChannel(lightChannel.alphaChannel, i)}.a)`;
+        return `vec4(${this.generateColorChannel(lightChannel.colorChannel, i, false)}.rgb, ${this.generateColorChannel(lightChannel.alphaChannel, i, true)}.a)`;
     }
 
     private generateLightChannels(): string {
