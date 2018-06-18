@@ -90,13 +90,18 @@ export class ModelRenderer {
     private renderHelper: GXRenderHelper;
     private sceneParams: SceneParams = new SceneParams();
     private packetParams: PacketParams = new PacketParams();
-    private matrixArray: mat4[] = nArray(64, () => mat4.create());
+    private matrixArray: mat4[] = nArray(16, () => mat4.create());
     private bufferCoalescer: BufferCoalescer;
 
     public visible: boolean = true;
     public name: string;
 
-    constructor(gl: WebGL2RenderingContext, public textureHolder: RRESTextureHolder, public mdl0: BRRES.MDL0, public namePrefix: string = '') {
+    constructor(gl: WebGL2RenderingContext,
+        public textureHolder: RRESTextureHolder,
+        public mdl0: BRRES.MDL0,
+        public namePrefix: string = '',
+        public materialHacks: GX_Material.GXMaterialHacks = null
+    ) {
         this.renderHelper = new GXRenderHelper(gl);
         this.translateModel(gl);
         this.name = `${namePrefix}/${mdl0.name}`;
@@ -165,6 +170,26 @@ export class ModelRenderer {
         }
     }
 
+    private growMatrixArray(opList: BRRES.NodeTreeOp[]): void {
+        for (let i = 0; i < opList.length; i++) {
+            const op = opList[i];
+
+            let dstMtxId;
+            if (op.op === BRRES.ByteCodeOp.NODEDESC) {
+                const node = this.mdl0.nodes[op.nodeId];
+                dstMtxId = node.mtxId;
+            } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
+                dstMtxId = op.toMtxId;
+            } else {
+                throw "whoops";
+            }
+
+            const newSize = dstMtxId + 1;
+            while (this.matrixArray.length < newSize)
+                this.matrixArray.push(mat4.create());
+        }
+    }
+
     private execNodeTreeOpList(opList: BRRES.NodeTreeOp[]): void {
         mat4.identity(this.matrixArray[0]);
 
@@ -178,16 +203,18 @@ export class ModelRenderer {
                 // This is more complicated, but for now...
                 mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], node.modelMatrix);
             } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
-                const dstMtxId = op.fromMtxId;
-                const srcMtxId = op.toMtxId;
+                const srcMtxId = op.fromMtxId;
+                const dstMtxId = op.toMtxId;
                 mat4.copy(this.matrixArray[dstMtxId], this.matrixArray[srcMtxId]);
             }
         }
     }
 
     private translateModel(gl: WebGL2RenderingContext): void {
+        this.growMatrixArray(this.mdl0.sceneGraph.nodeTreeOps);
+
         for (const material of this.mdl0.materials)
-            this.materialCommands.push(new Command_Material(gl, this.textureHolder, material));
+            this.materialCommands.push(new Command_Material(gl, this.textureHolder, material, this.materialHacks));
 
         this.bufferCoalescer = loadedDataCoalescer(gl, this.mdl0.shapes.map((shape) => shape.loadedVertexData));
 
@@ -223,8 +250,12 @@ class Command_Material {
     private glSamplers: WebGLSampler[] = [];
     private srtAnimators: BRRES.TexSrtAnimator[] = [];
 
-    constructor(gl: WebGL2RenderingContext, public textureHolder: RRESTextureHolder, public material: BRRES.MDL0_MaterialEntry, public name: string = material.name) {
-        this.program = new GX_Material.GX_Program(this.material.gxMaterial);
+    constructor(gl: WebGL2RenderingContext,
+        public textureHolder: RRESTextureHolder,
+        public material: BRRES.MDL0_MaterialEntry,
+        public materialHacks: GX_Material.GXMaterialHacks,
+    ) {
+        this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
         this.translateSamplers(gl);

@@ -32,6 +32,7 @@ const sceneGroups = [
     SMS.sceneGroup,
     SMG.sceneGroup,
     MKDD.sceneGroup,
+    ELB.sceneGroup,
     LM.sceneGroup,
     SM64DS.sceneGroup,
     SPL.sceneGroup,
@@ -40,7 +41,6 @@ const sceneGroups = [
     OOT3D.sceneGroup,
     DKSIV.sceneGroup,
     MP1.sceneGroup,
-    // ELB.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {
@@ -77,6 +77,9 @@ class DroppedFileSceneDesc implements SceneDesc {
     }
 
     private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBufferSlice): Promise<MainScene> {
+        if (file.name.endsWith('.brres'))
+            return Promise.resolve(ELB.createBasicRRESSceneFromBuffer(gl, buffer));
+
         if (file.name.endsWith('.bfres'))
             return Promise.resolve(FRES.createSceneFromFRESBuffer(gl, buffer));
 

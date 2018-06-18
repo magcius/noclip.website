@@ -80,7 +80,8 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'TEX0');
     const version = view.getUint32(0x08);
-    assert(version === 0x03);
+    const supportedVersions = [0x01, 0x03];
+    assert(supportedVersions.includes(version));
 
     const dataOffs = view.getUint32(0x10);
     const nameOffs = view.getUint32(0x14);
@@ -274,7 +275,7 @@ export interface MDL0_MaterialEntry {
     indTexMatrices: mat2d[];
 }
 
-function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
+function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL0_MaterialEntry {
     const view = buffer.createDataView();
 
     const size = view.getUint32(0x00);
@@ -310,13 +311,17 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
 
     const numTexPltt = view.getUint32(0x2C);
     const texPlttOffs = view.getUint32(0x30);
-    // fur
-    // user data
+
+    let endOfHeaderOffs = 0x34;
+    if (version >= 0x0A) {
+        endOfHeaderOffs += 0x04; // Fur
+    }
+    endOfHeaderOffs += 0x04; // user data
 
     // Run the mat DLs.
     const r = new DisplayListRegisters();
 
-    const matDLOffs = view.getUint32(0x3C);
+    const matDLOffs = view.getUint32(endOfHeaderOffs);
     const matDLSize = 32 + 128 + 64 + 160;
     runDisplayListRegisters(r, buffer.subarray(matDLOffs, matDLSize));
 
@@ -579,12 +584,12 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
     // TODO(jstpierre): Light channels
     const lightChannels: GX_Material.LightChannelControl[] = [
         {
-            colorChannel: { lightingFudge: '0.6 * $VTX$', lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.VTX },
-            alphaChannel: { lightingFudge: '1.0 * $VTX$', lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.VTX },
+            colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.REG },
+            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.REG },
         },
         {
-            colorChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.VTX },
-            alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.VTX },
+            colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.REG },
+            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.REG },
         },
     ];
 
@@ -640,8 +645,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice): MDL0_MaterialEntry {
     // Samplers
     const srtFlags = view.getUint32(0x1a8);
     const texMtxMode = view.getUint32(0x1ac);
-    let texSrtTableIdx = 0x1b0;
-    let texMtxTableIdx = 0x250;
+    let texSrtTableIdx = endOfHeaderOffs + 0x174;
+    let texMtxTableIdx = endOfHeaderOffs + 0x214;
 
     const samplers: MDL0_MaterialSamplerEntry[] = [];
     for (let i = 0; i < numTexPltt; i++) {
@@ -1132,26 +1137,43 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'MDL0');
     const version = view.getUint32(0x08);
-    assert(version === 0x0B);
+    const supportedVersions = [ 0x08, 0x0B ];
+    assert(supportedVersions.includes(version));
 
-    const byteCodeResDic = parseResDic(buffer, view.getUint32(0x10));
-    const nodeResDic = parseResDic(buffer, view.getUint32(0x14));
-    const vtxPosResDic = parseResDic(buffer, view.getUint32(0x18));
-    const vtxNrmResDic = parseResDic(buffer, view.getUint32(0x1C));
-    const vtxClrResDic = parseResDic(buffer, view.getUint32(0x20));
-    const vtxTxcResDic = parseResDic(buffer, view.getUint32(0x24));
-    const furVecResDic = parseResDic(buffer, view.getUint32(0x28));
-    const furPosResDic = parseResDic(buffer, view.getUint32(0x2C));
-    const materialResDic = parseResDic(buffer, view.getUint32(0x30));
-    const tevResDic = parseResDic(buffer, view.getUint32(0x34));
-    const shpResDic = parseResDic(buffer, view.getUint32(0x38));
+    let offs = 0x10;
+    function nextResDic(): ResDicEntry[] {
+        const resDic = parseResDic(buffer, view.getUint32(offs));
+        offs += 0x04;
+        return resDic;
+    }
 
-    const nameOffs = view.getUint32(0x48);
+    const byteCodeResDic = nextResDic();
+    const nodeResDic = nextResDic();
+    const vtxPosResDic = nextResDic();
+    const vtxNrmResDic = nextResDic();
+    const vtxClrResDic = nextResDic();
+    const vtxTxcResDic = nextResDic();
+    if (version >= 0x0A) {
+        const furVecResDic = nextResDic();
+        const furPosResDic = nextResDic();
+    }
+    const materialResDic = nextResDic();
+    const tevResDic = nextResDic();
+    const shpResDic = nextResDic();
+
+    offs += 0x04; // Texture information
+    offs += 0x04; // Palette information
+
+    if (version >= 0x0A) {
+        offs += 0x04; // User data
+    }
+
+    const nameOffs = view.getUint32(offs);
     const name = readString(buffer, nameOffs);
 
     const materials: MDL0_MaterialEntry[] = [];
     for (const materialResDicEntry of materialResDic) {
-        const material = parseMDL0_MaterialEntry(buffer.subarray(materialResDicEntry.offs));
+        const material = parseMDL0_MaterialEntry(buffer.subarray(materialResDicEntry.offs), version);
         assert(material.name === materialResDicEntry.name);
         materials.push(material);
     }
@@ -1303,7 +1325,7 @@ export interface SRT0 extends AnimationBase {
 }
 
 export class AnimationController {
-    public fps: number = 60;
+    public fps: number = 30;
     private timeMilliseconds: number;
 
     public getTimeInFrames(): number {
@@ -1456,17 +1478,24 @@ function parseSRT0(buffer: ArrayBufferSlice): SRT0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'SRT0');
     const version = view.getUint32(0x08);
-    assert(version === 0x05);
+    const supportedVersions = [0x04, 0x05];
+    assert(supportedVersions.includes(version));
 
     const texSrtMatDataResDicOffs = view.getUint32(0x10);
     const texSrtMatDataResDic = parseResDic(buffer, texSrtMatDataResDicOffs);
 
-    const nameOffs = view.getUint32(0x18);
+    let offs = 0x14;
+    if (version >= 0x05) {
+        // user data
+        offs += 0x04;
+    }
+
+    const nameOffs = view.getUint32(offs + 0x00);
     const name = readString(buffer, nameOffs);
-    const duration = view.getUint16(0x20);
-    const numMaterials = view.getUint16(0x22);
-    const texMtxMode = view.getUint32(0x24);
-    const loopMode: LoopMode = view.getUint32(0x28);
+    const duration = view.getUint16(offs + 0x08);
+    const numMaterials = view.getUint16(offs + 0x0A);
+    const texMtxMode = view.getUint32(offs + 0x0C);
+    const loopMode: LoopMode = view.getUint32(offs + 0x0E);
 
     const matAnimations: SRT0_MatData[] = [];
     for (const texSrtMatEntry of texSrtMatDataResDic) {

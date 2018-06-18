@@ -70,11 +70,16 @@ export function nArray<T>(n: number, c: () => T): T[] {
     return d;
 }
 
-function hexzero(n: number, spaces: number): string {
-    let S = n.toString(16);
+// Eat your heart out, npm.
+export function leftPad(S: string, spaces: number): string {
     while (S.length < spaces)
         S = `0${S}`;
     return S;
+}
+
+function hexzero(n: number, spaces: number): string {
+    let S = n.toString(16);
+    return leftPad(S, spaces);
 }
 
 export function hexdump(buffer: ArrayBufferSlice, offs: number = 0, length: number = 0x100): void {
