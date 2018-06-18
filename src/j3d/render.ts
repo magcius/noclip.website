@@ -322,14 +322,12 @@ export class Command_Material {
             }
 
             // Apply SRT.
-            /*
             mat4.copy(scratch, texMtx.matrix);
 
             if (this.scene.btk !== null)
                 this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
 
             mat4.mul(dst, scratch, dst);
-            */
         }
 
         for (let i = 0; i < this.material.postTexMatrices.length; i++) {
