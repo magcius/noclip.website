@@ -1545,7 +1545,7 @@ function visualizeTrack(base: AnimationBase, track: AnimationTrack, offt: number
     }, maxt, step);
 }
 
-window.debug = { visualizeTrack, graphF, getAnimFrame, applyLoopMode };
+window.debug = { visualizeTrack, graphF, getAnimFrame };
 
 //#endregion
 
