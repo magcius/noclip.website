@@ -167,8 +167,7 @@ export class ModelRenderer {
             const nodeModelMtx = this.matrixArray[node.mtxId];
             const modelView = state.updateModelView(false, nodeModelMtx);
 
-            // TODO(jstpierre): Remove u_ModelView, replace solely with PNMTX.
-            mat4.copy(this.packetParams.u_ModelView, modelView);
+            mat4.copy(this.packetParams.u_PosMtx[0], modelView);
             this.renderHelper.bindPacketParams(state, this.packetParams);
 
             shpCommand.exec(state);

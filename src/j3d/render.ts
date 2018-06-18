@@ -85,7 +85,7 @@ class Command_Shape {
         this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, this.shape.loadedVertexLayout, this.shape.loadedVertexData);
     }
 
-    private computeModelView(dst: mat4, state: RenderState): void {
+    private computeModelView(state: RenderState): mat4 {
         mat4.copy(scratchModelMatrix, this.scene.modelMatrix);
 
         switch (this.shape.displayFlags) {
@@ -112,7 +112,8 @@ class Command_Shape {
             computeViewMatrix(scratchViewMatrix, state.camera);
         }
 
-        mat4.mul(dst, scratchViewMatrix, scratchModelMatrix);
+        mat4.mul(scratchViewMatrix, scratchViewMatrix, scratchModelMatrix);
+        return scratchViewMatrix;
     }
 
     public exec(state: RenderState) {
@@ -123,10 +124,9 @@ class Command_Shape {
 
         this.shapeHelper.drawPrologue(gl);
 
-        let needsUpload = false;
+        const modelView = this.computeModelView(state);
 
-        this.computeModelView(this.packetParams.u_ModelView, state);
-        needsUpload = true;
+        let needsUpload = false;
 
         this.shape.packets.forEach((packet, packetIndex) => {
             // Update our matrix table.
@@ -138,7 +138,7 @@ class Command_Shape {
                     continue;
 
                 const posMtx = this.scene.weightedJointMatrices[weightedJointIndex];
-                mat4.copy(this.packetParams.u_PosMtx[i], posMtx);
+                mat4.mul(this.packetParams.u_PosMtx[i], modelView, posMtx);
                 needsUpload = true;
             }
 

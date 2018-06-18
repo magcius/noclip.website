@@ -4469,8 +4469,8 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                     switch (src) {
                         case 0 /* POS */: return "vec4(a_Position, 1.0)";
                         case 1 /* NRM */: return "vec4(a_Normal, 1.0)";
-                        case 19 /* COLOR0 */: return "vec4(a_Color0, 1.0)";
-                        case 20 /* COLOR1 */: return "vec4(a_Color1, 1.0)";
+                        case 19 /* COLOR0 */: return "a_Color0";
+                        case 20 /* COLOR1 */: return "a_Color1";
                         case 4 /* TEX0 */: return "vec4(a_Tex0, 1.0, 1.0)";
                         case 5 /* TEX1 */: return "vec4(a_Tex1, 1.0, 1.0)";
                         case 6 /* TEX2 */: return "vec4(a_Tex2, 1.0, 1.0)";
@@ -5175,10 +5175,8 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
     exports_24("fillMaterialParamsData", fillMaterialParamsData);
     function fillPacketParamsData(d, packetParams) {
         var offs = 0;
-        for (var i = 0; i < 10; i++) {
-            gl_matrix_3.mat4.mul(matrixScratch, packetParams.u_ModelView, packetParams.u_PosMtx[i]);
-            offs += fillMatrix4x3(d, offs, matrixScratch);
-        }
+        for (var i = 0; i < 10; i++)
+            offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[i]);
         util_11.assert(offs === u_PacketParamsBufferSize);
         util_11.assert(d.length >= offs);
     }
@@ -5272,7 +5270,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
         }
     }
     exports_24("translateWrapMode", translateWrapMode);
-    var gl_matrix_3, GX_Material, GX_Texture, util_11, BufferCoalescer_1, ArrayBufferSlice_5, SceneParams, TextureMapping, MaterialParams, PacketParams, u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize, matrixScratch, bufferDataScratchSize, GXRenderHelper, GXShapeHelper, TextureHolder;
+    var gl_matrix_3, GX_Material, GX_Texture, util_11, BufferCoalescer_1, ArrayBufferSlice_5, SceneParams, TextureMapping, MaterialParams, PacketParams, u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize, bufferDataScratchSize, GXRenderHelper, GXShapeHelper, TextureHolder;
     return {
         setters: [
             function (gl_matrix_3_1) {
@@ -5331,8 +5329,6 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
             exports_24("MaterialParams", MaterialParams);
             PacketParams = /** @class */ (function () {
                 function PacketParams() {
-                    // TODO(jstpierre): Remove. This is for convenience.
-                    this.u_ModelView = gl_matrix_3.mat4.create();
                     this.u_PosMtx = util_11.nArray(10, function () { return gl_matrix_3.mat4.create(); });
                 }
                 return PacketParams;
@@ -5341,7 +5337,6 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
             exports_24("u_PacketParamsBufferSize", u_PacketParamsBufferSize = 4 * 3 * 10);
             exports_24("u_MaterialParamsBufferSize", u_MaterialParamsBufferSize = 4 * 2 + 4 * 2 + 4 * 4 + 4 * 4 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 4 * 8);
             exports_24("u_SceneParamsBufferSize", u_SceneParamsBufferSize = 4 * 4 + 4);
-            matrixScratch = gl_matrix_3.mat4.create();
             bufferDataScratchSize = Math.max(u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize);
             GXRenderHelper = /** @class */ (function () {
                 function GXRenderHelper(gl) {
@@ -5468,8 +5463,6 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                     return [name];
                 };
                 TextureHolder.prototype.findTextureEntryIndex = function (name) {
-                    if (name === 'IndDummy')
-                        name = 'MiniFlag';
                     var nameVariants = this.tryTextureNameVariants(name);
                     var _loop_6 = function (i) {
                         var index = this_3.textureEntries.findIndex(function (entry) { return entry.name === nameVariants[i]; });
@@ -5630,7 +5623,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     this.bmd = sceneLoader.bmd;
                     this.shapeHelper = new gx_render_1.GXShapeHelper(gl, coalescedBuffers, this.shape.loadedVertexLayout, this.shape.loadedVertexData);
                 }
-                Command_Shape.prototype.computeModelView = function (dst, state) {
+                Command_Shape.prototype.computeModelView = function (state) {
                     gl_matrix_4.mat4.copy(scratchModelMatrix, this.scene.modelMatrix);
                     switch (this.shape.displayFlags) {
                         case 0 /* NORMAL */:
@@ -5654,7 +5647,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                     else {
                         Camera_3.computeViewMatrix(scratchViewMatrix, state.camera);
                     }
-                    gl_matrix_4.mat4.mul(dst, scratchViewMatrix, scratchModelMatrix);
+                    gl_matrix_4.mat4.mul(scratchViewMatrix, scratchViewMatrix, scratchModelMatrix);
+                    return scratchViewMatrix;
                 };
                 Command_Shape.prototype.exec = function (state) {
                     var _this = this;
@@ -5662,9 +5656,8 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         return;
                     var gl = state.gl;
                     this.shapeHelper.drawPrologue(gl);
+                    var modelView = this.computeModelView(state);
                     var needsUpload = false;
-                    this.computeModelView(this.packetParams.u_ModelView, state);
-                    needsUpload = true;
                     this.shape.packets.forEach(function (packet, packetIndex) {
                         // Update our matrix table.
                         for (var i = 0; i < packet.weightedJointTable.length; i++) {
@@ -5673,7 +5666,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             if (weightedJointIndex === 0xFFFF)
                                 continue;
                             var posMtx = _this.scene.weightedJointMatrices[weightedJointIndex];
-                            gl_matrix_4.mat4.copy(_this.packetParams.u_PosMtx[i], posMtx);
+                            gl_matrix_4.mat4.mul(_this.packetParams.u_PosMtx[i], modelView, posMtx);
                             needsUpload = true;
                         }
                         if (needsUpload) {
@@ -8743,7 +8736,7 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", 
                     state.blitColorTarget(this.mainColorTarget);
                     if (this.indirectScene) {
                         var textureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: gx_material_3.EFB_WIDTH, height: gx_material_3.EFB_HEIGHT };
-                        // this.textureHolder.setTextureOverride("IndDummy", textureOverride);
+                        this.textureHolder.setTextureOverride("IndDummy", textureOverride);
                         this.indirectScene.bindState(state);
                         this.indirectScene.renderOpaque(state);
                     }
@@ -16876,7 +16869,7 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_texture", "gx/gx_ma
                     this.renderHelper.bindUniformBuffers(state);
                     gx_render_2.fillSceneParamsFromRenderState(this.sceneParams, state);
                     this.renderHelper.bindSceneParams(state, this.sceneParams);
-                    this.computeModelView(this.packetParams.u_ModelView, state);
+                    this.computeModelView(this.packetParams.u_PosMtx[0], state);
                     this.renderHelper.bindPacketParams(state, this.packetParams);
                     var currentMaterialIndex = -1;
                     var currentGroupIndex = -1;
@@ -17509,7 +17502,7 @@ System.register("luigis_mansion/render", ["gx/gx_texture", "gx/gx_material", "gx
                 };
                 Command_Batch.prototype.exec = function (state) {
                     var gl = state.gl;
-                    this.computeModelView(this.packetParams.u_ModelView, state);
+                    this.computeModelView(this.packetParams.u_PosMtx[0], state);
                     this.scene.renderHelper.bindPacketParams(state, this.packetParams);
                     this.shapeHelper.drawSimple(gl);
                     state.drawCallCount++;
@@ -19368,8 +19361,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                             throw "whoops";
                         var nodeModelMtx = this.matrixArray[node.mtxId];
                         var modelView = state.updateModelView(false, nodeModelMtx);
-                        // TODO(jstpierre): Remove u_ModelView, replace solely with PNMTX.
-                        gl_matrix_17.mat4.copy(this.packetParams.u_ModelView, modelView);
+                        gl_matrix_17.mat4.copy(this.packetParams.u_PosMtx[0], modelView);
                         this.renderHelper.bindPacketParams(state, this.packetParams);
                         shpCommand.exec(state);
                     }
@@ -20662,6 +20654,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             gl_matrix_18.mat4.fromScaling(posMtx, [scale, scale, scale]);
             SeaPlaneScene = /** @class */ (function () {
                 function SeaPlaneScene(gl, textureHolder, bmd, btk, configName) {
+                    this.textureHolder = textureHolder;
                     this.animationScale = 5;
                     // Play make-believe for Command_Material.
                     this.btk = null;
@@ -20752,11 +20745,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                 };
                 SeaPlaneScene.prototype.fillTextureMapping = function (m, texIndex) {
                     var tex1Sampler = this.tex1Samplers[texIndex];
-                    var tex1TextureData = this.tex1TextureDatas[tex1Sampler.textureDataIndex];
-                    m.glTexture = this.glTextures[tex1Sampler.textureDataIndex];
+                    this.textureHolder.fillTextureMapping(m, tex1Sampler.name);
                     m.glSampler = this.glSamplers[tex1Sampler.index];
-                    m.width = tex1TextureData.width;
-                    m.height = tex1TextureData.height;
                     m.lodBias = tex1Sampler.lodBias;
                 };
                 return SeaPlaneScene;
@@ -20768,8 +20758,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                 }
                 PlaneShape.prototype.render = function (state, renderHelper) {
                     var gl = state.gl;
-                    gl_matrix_18.mat4.copy(this.packetParams.u_ModelView, state.updateModelView());
-                    gl_matrix_18.mat4.copy(this.packetParams.u_PosMtx[0], posMtx);
+                    gl_matrix_18.mat4.mul(this.packetParams.u_PosMtx[0], state.updateModelView(), posMtx);
                     renderHelper.bindPacketParams(state, this.packetParams);
                     gl.bindVertexArray(this.vao);
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

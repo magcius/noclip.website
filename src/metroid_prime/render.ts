@@ -113,7 +113,7 @@ export class Scene implements Viewer.MainScene {
         fillSceneParamsFromRenderState(this.sceneParams, state);
         this.renderHelper.bindSceneParams(state, this.sceneParams);
 
-        this.computeModelView(this.packetParams.u_ModelView, state);
+        this.computeModelView(this.packetParams.u_PosMtx[0], state);
         this.renderHelper.bindPacketParams(state, this.packetParams);
 
         let currentMaterialIndex = -1;
