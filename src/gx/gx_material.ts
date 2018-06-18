@@ -862,10 +862,10 @@ void main() {
     vec4 s_kColor2   = u_KonstColor[2]; // ${this.generateColorConstant(kColors[2])}
     vec4 s_kColor3   = u_KonstColor[3]; // ${this.generateColorConstant(kColors[3])}
 
-    vec4 t_Color0    = u_Color[0]; // ${this.generateColorConstant(rColors[0])}
-    vec4 t_Color1    = u_Color[1]; // ${this.generateColorConstant(rColors[1])}
-    vec4 t_Color2    = u_Color[2]; // ${this.generateColorConstant(rColors[2])}
-    vec4 t_ColorPrev = u_Color[3]; // ${this.generateColorConstant(rColors[3])}
+    vec4 t_ColorPrev = u_Color[0]; // ${this.generateColorConstant(rColors[3])}
+    vec4 t_Color0    = u_Color[1]; // ${this.generateColorConstant(rColors[0])}
+    vec4 t_Color1    = u_Color[2]; // ${this.generateColorConstant(rColors[1])}
+    vec4 t_Color2    = u_Color[3]; // ${this.generateColorConstant(rColors[2])}
 
     vec2 t_TexCoord = vec2(0.0, 0.0);
 ${this.generateIndTexStages(indTexStages)}
