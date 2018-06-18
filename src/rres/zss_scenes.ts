@@ -40,11 +40,11 @@ class SkywardSwordScene implements Viewer.MainScene {
 
         // First, load in the system and common textures.
         for (const commonRRES of commonRRESes)
-            this.textureHolder.addTextures(gl, commonRRES.textures);
+            this.textureHolder.addRRESTextures(gl, commonRRES);
 
         // Load stage.
         const stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
-        this.textureHolder.addTextures(gl, stageRRES.textures);
+        this.textureHolder.addRRESTextures(gl, stageRRES);
 
         // Load rooms.
         const roomArchivesDir = stageArchive.findDir('rarc');
@@ -53,7 +53,7 @@ class SkywardSwordScene implements Viewer.MainScene {
                 const roomArchive = U8.parse(roomArchiveFile.buffer);
                 const roomRRES = BRRES.parse(roomArchive.findFile('g3d/room.brres').buffer);
 
-                this.textureHolder.addTextures(gl, roomRRES.textures);
+                this.textureHolder.addRRESTextures(gl, roomRRES);
 
                 for (const mdl0 of roomRRES.models) {
                     this.spawnModel(gl, mdl0, roomRRES, roomArchiveFile.name);
@@ -120,7 +120,7 @@ class SkywardSwordScene implements Viewer.MainScene {
                 if (whitelisted) {
                     const oarcArchive = U8.parse(oarcFile.buffer);
                     const oarcBRRES = BRRES.parse(oarcArchive.findFile('g3d/model.brres').buffer);
-                    this.textureHolder.addTextures(gl, oarcBRRES.textures);
+                    this.textureHolder.addRRESTextures(gl, oarcBRRES);
 
                     for (const mdl0 of oarcBRRES.models) {
                         this.spawnModel(gl, mdl0, oarcBRRES, oarcFile.name);

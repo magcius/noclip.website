@@ -12,7 +12,11 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from "../gx/gx_render";
 
-export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {}
+export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {
+    public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
+        this.addTextures(gl, rres.textures);
+    }
+}
 
 function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
     const cot = 1 / Math.tan(fov / 2);
