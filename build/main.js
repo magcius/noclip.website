@@ -18239,13 +18239,13 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             var scaleBitsB = (mtxB >>> 22) & 0x03;
             var scaleBitsC = (mtxC >>> 22) & 0x03;
             var scaleExp = (scaleBitsC << 4) | (scaleBitsB << 2) | scaleBitsA;
-            var scale = Math.pow(2, (scaleExp - indTexScaleBias - indTexScaleBase));
-            var ma = ((mtxA >>> 0) & 0x07FF) * scale;
-            var mb = ((mtxA >>> 11) & 0x07FF) * scale;
-            var mc = ((mtxB >>> 0) & 0x07FF) * scale;
-            var md = ((mtxB >>> 11) & 0x07FF) * scale;
-            var mx = ((mtxB >>> 0) & 0x07FF) * scale;
-            var my = ((mtxB >>> 11) & 0x07FF) * scale;
+            var scale = Math.pow(2, scaleExp - indTexScaleBias - indTexScaleBase);
+            var ma = ((((mtxA >>> 0) & 0x07FF) << 21) >> 21) * scale;
+            var mb = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21) * scale;
+            var mc = ((((mtxB >>> 0) & 0x07FF) << 21) >> 21) * scale;
+            var md = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21) * scale;
+            var mx = ((((mtxC >>> 0) & 0x07FF) << 21) >> 21) * scale;
+            var my = ((((mtxC >>> 11) & 0x07FF) << 21) >> 21) * scale;
             var mat = gl_matrix_16.mat2d.fromValues(ma, mb, mc, md, mx, my);
             indTexMatrices.push(mat);
         }
