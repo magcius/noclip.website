@@ -7,13 +7,14 @@ import * as LZ77 from '../lz77';
 import * as BRRES from './brres';
 import * as U8 from './u8';
 
-import { fetch, assert } from '../util';
+import { fetch, assert, readString, assertExists } from '../util';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState, ColorTarget } from '../render';
 import { RRESTextureHolder, ModelRenderer } from './render';
-import { TextureOverride } from '../gx/gx_render';
+import { TextureOverride, TextureHolder } from '../gx/gx_render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
+import { mat4, quat } from 'gl-matrix';
 
 const SAND_CLOCK_ICON = '<svg viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
 
@@ -22,29 +23,95 @@ const materialHacks: GXMaterialHacks = {
     alphaLightingFudge: (p) => `1.0`,
 };
 
+interface Obj {
+    unk1: number; // 0x00. Appears to be object-specific parameters.
+    unk2: number; // 0x04. Appears to be object-specific parameters.
+    tx: number;   // 0x08
+    ty: number;   // 0x0C
+    tz: number;   // 0x10
+    unk3: number; // 0x14. Always zero so far.
+    rotY: number; // 0x16. Rotation around Y (-0x7FFF maps to -180, 0x7FFF maps to 180)
+    unk4: number; // 0x18. Always zero so far (for OBJ. OBJS have it filled in.). Probably padding...
+    unk5: number; // 0x1A. Object group perhaps? Tends to be a small number of things...
+    unk6: number; // 0x1B. Object ID perhaps? Counts up...
+    name: string; // 0x1C. Object name. Matched with a table in main.dol, which points to a .rel (DLL), and *that* loads the model.
+}
+
+interface RoomLayout {
+    obj: Obj[];
+}
+
+interface BZS {
+    layouts: RoomLayout[];
+}
+
+class ModelArchiveCollection {
+    private search: U8.U8Archive[] = [];
+    private loaded = new Map<string, BRRES.RRES>();
+
+    public addSearchPath(archive: U8.U8Archive): void {
+        this.search.push(archive);
+    }
+
+    private findFile(path: string): U8.U8File | null {
+        for (const archive of this.search) {
+            const file = archive.findFile(path);
+            console.log(path, archive, file);
+            if (file)
+                return file;
+        }
+        return null;
+    }
+
+    public loadRRESFromArc(gl: WebGL2RenderingContext, textureHolder: RRESTextureHolder, path: string): BRRES.RRES {
+        if (this.loaded.has(path))
+            return this.loaded.get(path);
+
+        const file = assertExists(this.findFile(path));
+        const arch = U8.parse(file.buffer);
+        const rres = BRRES.parse(arch.findFile('g3d/model.brres').buffer);
+        textureHolder.addRRESTextures(gl, rres);
+        this.loaded.set(path, rres);
+        return rres;
+    }
+}
+
 class SkywardSwordScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
     public models: ModelRenderer[] = [];
     public animationController: BRRES.AnimationController;
     private mainColorTarget: ColorTarget = new ColorTarget();
+    private roomBZSes: BZS[] = [];
+    private stageRRES: BRRES.RRES;
+    private commonRRES: BRRES.RRES;
 
     // Uses WaterDummy. Have to render after everything else. TODO(jstpierre): How does engine know this?
     private indirectModels: ModelRenderer[] = [];
+    private oarcCollection = new ModelArchiveCollection();
 
-    constructor(gl: WebGL2RenderingContext, public stageId: string, public commonRRESes: BRRES.RRES[], public stageArchive: U8.U8Archive) {
+    constructor(gl: WebGL2RenderingContext, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.textureHolder = new RRESTextureHolder();
         this.animationController = new BRRES.AnimationController();
 
         this.textures = this.textureHolder.viewerTextures;
 
-        // First, load in the system and common textures.
-        for (const commonRRES of commonRRESes)
-            this.textureHolder.addRRESTextures(gl, commonRRES);
+        this.oarcCollection.addSearchPath(this.stageArchive);
+        this.oarcCollection.addSearchPath(this.objPackArchive);
+
+        const systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
+        this.textureHolder.addRRESTextures(gl, systemRRES);
+
+        const needsSkyCmn = this.stageId.startsWith('F0') || this.stageId === 'F406';
+        if (needsSkyCmn)
+            this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, 'oarc/SkyCmn.arc');
+
+        // Water animations appear in Common.arc.
+        this.commonRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, 'oarc/Common.arc');
 
         // Load stage.
-        const stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
-        this.textureHolder.addRRESTextures(gl, stageRRES);
+        this.stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
+        this.textureHolder.addRRESTextures(gl, this.stageRRES);
 
         // Load rooms.
         const roomArchivesDir = stageArchive.findDir('rarc');
@@ -58,6 +125,11 @@ class SkywardSwordScene implements Viewer.MainScene {
                 for (const mdl0 of roomRRES.models) {
                     this.spawnModel(gl, mdl0, roomRRES, roomArchiveFile.name);
                 }
+
+                const roomBZS = this.parseRoomBZS(roomArchive.findFile('dat/room.bzs').buffer);
+                this.roomBZSes.push(roomBZS);
+                const layout = roomBZS.layouts[0];
+                this.spawnRoomLayout(gl, layout);
             }
         }
 
@@ -96,46 +168,11 @@ class SkywardSwordScene implements Viewer.MainScene {
             return idx;
         }
 
+        /*
         this.models.sort((a, b) => {
             return sortKey(a) - sortKey(b);
         });
-
-        // Instantiate known-good stage objects. In the engine, this would be done through room.bzs.
-        // I haven't finished reverse engineering that file though...
-        const oarcDir = stageArchive.findDir('oarc');
-        if (oarcDir) {
-            for (const oarcFile of oarcDir.files) {
-                let whitelisted = false;
-
-                // Sometimes water appears as an object.
-                if (oarcFile.name.includes('WaterF100'))
-                    whitelisted = true;
-
-                if (oarcFile.name.includes('LavaF200'))
-                    whitelisted = true;
-
-                if (oarcFile.name.includes('DowsingZone'))
-                    whitelisted = true;
-
-                if (whitelisted) {
-                    const oarcArchive = U8.parse(oarcFile.buffer);
-                    const oarcBRRES = BRRES.parse(oarcArchive.findFile('g3d/model.brres').buffer);
-                    this.textureHolder.addRRESTextures(gl, oarcBRRES);
-
-                    for (const mdl0 of oarcBRRES.models) {
-                        this.spawnModel(gl, mdl0, oarcBRRES, oarcFile.name);
-                    }
-                }
-            }
-        }
-
-        // Now create models for any water that might spawn.
-        for (const mdl0 of stageRRES.models) {
-            if (!mdl0.name.includes('Water'))
-                continue;
-
-            this.spawnModel(gl, mdl0, stageRRES, 'stage');
-        }
+        */
 
         outer:
         // Find any indirect scenes.
@@ -235,14 +272,163 @@ class SkywardSwordScene implements Viewer.MainScene {
             modelRenderer.bindSRT0(this.animationController, srt0);
         }
 
-        for (const commonRRES of this.commonRRESes) {
-            for (const srt0 of commonRRES.texSrtAnimations) {
-                modelRenderer.bindSRT0(this.animationController, srt0);
-            }
+        // Water animations are in the common archive.
+        for (const srt0 of this.commonRRES.texSrtAnimations) {
+            modelRenderer.bindSRT0(this.animationController, srt0);
         }
 
         return modelRenderer;
     }
+
+
+    private spawnModelName(gl: WebGL2RenderingContext, rres: BRRES.RRES, modelName: string, namePrefix: string): ModelRenderer {
+        const mdl0 = rres.models.find((model) => model.name === modelName);
+        return this.spawnModel(gl, mdl0, rres, namePrefix);
+    }
+
+    private spawnObj(gl: WebGL2RenderingContext, name: string): ModelRenderer[] {
+        // In the actual engine, each obj is handled by a separate .rel (runtime module)
+        // which knows the actual layout. The mapping of obj name to .rel is stored in main.dol.
+        // We emulate that here.
+
+        const models: ModelRenderer[] = [];
+
+        if (name === 'CityWtr') {
+            // For City Water, we spawn three objects, the second one being an indirect object.
+            models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Water0', name));
+            models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Water1', name));
+            models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Water2', name));
+        } else if (name === 'Grave') {
+            models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Grave', name));
+        } else if (name === 'Shed') {
+            // Door to Batreaux's lair
+            models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Shed', name));
+        } else if (name === 'Windmil') {
+            const model = this.spawnModelName(gl, this.stageRRES, 'StageF000Windmill', name);
+            const StageF000WindmillCHR0 = this.stageRRES.chr0.find((c) => c.name === 'StageF000Windmill');
+            model.bindCHR0(this.animationController, StageF000WindmillCHR0);
+            models.push(model);
+        } else if (name === 'Blade') {
+            // Skyloft decorations... flags, pinwheels, etc.
+            const StageF000Blade = this.stageRRES.models.find((model) => model.name === 'StageF000Blade');
+            const model = this.spawnModelName(gl, this.stageRRES, 'StageF000Blade', name);
+            const StageF000BladeCHR0 = this.stageRRES.chr0.find((c) => c.name === 'StageF000Blade');
+            model.bindCHR0(this.animationController, StageF000BladeCHR0);
+            models.push(model);
+        } else if (name === 'LHHarp') {
+            // "Lighthouse Harp"
+            models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Harp', name));
+        } else if (name === 'LHLight') {
+            // "Lighthouse Light"
+            models.push(this.spawnModelName(gl, this.stageRRES, 'StageF000Light', name));
+        } else if (name === 'Heartf') {
+            const FlowerHeartRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, 'oarc/FlowerHeart.arc');
+            models.push(this.spawnModelName(gl, FlowerHeartRRES, 'FlowerHeart', name));
+        } else if (name === 'Pumpkin') {
+            const PumpkinRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, 'oarc/Pumpkin.arc');
+            models.push(this.spawnModelName(gl, PumpkinRRES, 'Pumpkin', name));
+        } else if (name === 'DmtGate') {
+            // "Dormitory Gate"
+            // Seems it can also use StageF400Gate, probably when Skyloft crashes to the ground (spoilers).
+            // Seems to make two of them... skip for now, not that important...
+        } else {
+            console.log("Unknown object", name);
+        }
+
+        return models;
+    }
+
+    private spawnRoomLayout(gl: WebGL2RenderingContext, layout: RoomLayout): void {
+        const q = quat.create();
+
+        for (const obj of layout.obj) {
+            const models = this.spawnObj(gl, obj.name);
+
+            // Set model matrix.
+            const rotation = 180 * (obj.rotY / 0x7FFF);
+            quat.fromEuler(q, 0, rotation, 0);
+    
+            for (const modelRenderer of models) {
+                mat4.fromRotationTranslation(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz]);
+            }
+        }
+    }
+
+    private parseRoomBZS(buffer: ArrayBufferSlice): BZS {
+        interface Chunk {
+            name: string;
+            count: number;
+            offs: number;
+        }
+
+        const view = buffer.createDataView();
+        function parseChunkTable(tableOffs: number, count: number): Chunk[] {
+            const chunks: Chunk[] = [];
+            let tableIdx = tableOffs;
+            for (let i = 0; i < count; i++) {
+                const name = readString(buffer, tableIdx + 0x00, 0x04, false);
+                const count = view.getUint16(tableIdx + 0x04);
+                // pad
+                // offs is relative to this entry.
+                const offs = tableIdx + view.getUint32(tableIdx + 0x08);
+                chunks.push({ name, count, offs });
+                tableIdx += 0x0C;
+            }
+            return chunks;
+        }
+
+        // Header.
+        const headerChunkTable = parseChunkTable(0x00, 0x01);
+        assert(headerChunkTable.length === 1);
+
+        const v001 = headerChunkTable[0];
+        assert(v001.name === 'V001' && v001.offs === 0x0C);
+
+        const roomChunkTable = parseChunkTable(v001.offs, v001.count);
+
+        function parseObj(offs: number): Obj {
+            const unk1 = view.getUint32(offs + 0x00);
+            const unk2 = view.getUint32(offs + 0x04);
+            const tx = view.getFloat32(offs + 0x08);
+            const ty = view.getFloat32(offs + 0x0C);
+            const tz = view.getFloat32(offs + 0x10);
+            const unk3 = view.getUint16(offs + 0x14);
+            const rotY = view.getInt16(offs + 0x16);
+            const unk4 = view.getUint16(offs + 0x18);
+            const unk5 = view.getUint8(offs + 0x1A);
+            const unk6 = view.getUint8(offs + 0x1B);
+            const name = readString(buffer, offs + 0x01C, 0x08, true);
+            return { unk1, unk2, tx, ty, tz, unk3, rotY, unk4, unk5, unk6, name };
+        }
+
+        const layoutsChunk = roomChunkTable.find((chunk) => chunk.name === 'LAY ');
+
+        // Parse layouts table.
+
+        function parseLayout(index: number): RoomLayout {
+            const layoutsTableIdx = layoutsChunk.offs + (index * 0x08);
+            const layoutChunkTableCount = view.getUint16(layoutsTableIdx + 0x00);
+            // pad
+            const layoutChunkTableOffs = layoutsTableIdx + view.getUint32(layoutsTableIdx + 0x04);
+    
+            const layoutChunkTable = parseChunkTable(layoutChunkTableOffs, layoutChunkTableCount);
+
+            // Look for objects table.
+            const objChunk = layoutChunkTable.find((chunk) => chunk.name === 'OBJ ');
+    
+            const obj: Obj[] = [];
+            for (let i = 0; i < objChunk.count; i++)
+                obj.push(parseObj(objChunk.offs + i * 0x24));
+
+            return { obj };
+        }
+
+        const layouts = [];
+        layouts.push(parseLayout(0));
+
+        return { layouts };
+    }
+
 }
 
 class SkywardSwordSceneDesc implements Viewer.SceneDesc {
@@ -259,26 +445,10 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
             const commonRRESes: BRRES.RRES[] = [];
 
             const systemArchive = U8.parse(systemBuffer);
-            const systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
-            commonRRESes.push(systemRRES);
-
             const objPackArchive = U8.parse(LZ77.decompress(objPackBuffer));
-
-            const needsSkyCmn = this.id.startsWith('F0') || this.id === 'F406';
-            if (needsSkyCmn) {
-                const skyCmnArchive = U8.parse(objPackArchive.findFile('oarc/SkyCmn.arc').buffer);
-                const skyCmnRRES = BRRES.parse(skyCmnArchive.findFile('g3d/model.brres').buffer);
-                commonRRESes.push(skyCmnRRES);
-            }
-
-            // Water animations appear in Common.arc.
-            const commonArchive = U8.parse(objPackArchive.findFile('oarc/Common.arc').buffer);
-            const commonRRES = BRRES.parse(commonArchive.findFile('g3d/model.brres').buffer);
-            commonRRESes.push(commonRRES);
-
             const stageArchive = U8.parse(LZ77.decompress(stageBuffer));
 
-            return new SkywardSwordScene(gl, this.id, commonRRESes, stageArchive);
+            return new SkywardSwordScene(gl, this.id, systemArchive, objPackArchive, stageArchive);
         });
     }
 }

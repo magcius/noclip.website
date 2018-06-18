@@ -5,11 +5,13 @@
 import * as GX from '../gx/gx_enum';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
+import { assert, readString, nArray } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getComponentSizeRaw, getComponentCountRaw } from '../gx/gx_displaylist';
 import { vec3, mat4, quat, mat2d } from 'gl-matrix';
+import { Endianness } from '../endian';
 
+//#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {
     dst[0] = src[0];
     dst[1] = src[1];
@@ -35,6 +37,38 @@ function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number,
     dst[13] = translationT;
 }
 
+function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
+    const rX = Math.PI / 180 * rotationX;
+    const rY = Math.PI / 180 * rotationY;
+    const rZ = Math.PI / 180 * rotationZ;
+
+    const sinX = Math.sin(rX), cosX = Math.cos(rX);
+    const sinY = Math.sin(rY), cosY = Math.cos(rY);
+    const sinZ = Math.sin(rZ), cosZ = Math.cos(rZ);
+
+    dst[0] =  scaleX * (cosY * cosZ);
+    dst[1] =  scaleX * (sinZ * cosY);
+    dst[2] =  scaleX * (-sinY);
+    dst[3] =  0.0;
+
+    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ);
+    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
+    dst[6] =  scaleY * (sinX * cosY);
+    dst[7] =  0.0;
+
+    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
+    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
+    dst[10] = scaleZ * (cosY * cosX);
+    dst[11] = 0.0;
+
+    dst[12] = translationX;
+    dst[13] = translationY;
+    dst[14] = translationZ;
+    dst[15] = 1.0;
+}
+//#endregion
+
+//#region ResDic
 interface ResDicEntry {
     name: string;
     offs: number;
@@ -63,7 +97,9 @@ function parseResDic(buffer: ArrayBufferSlice, tableOffs: number): ResDicEntry[]
 
     return entries;
 }
+//#endregion
 
+//#region TEX0
 export interface TEX0 {
     name: string;
     width: number;
@@ -98,15 +134,9 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     const data = buffer.subarray(dataOffs);
     return { name, width, height, format, mipCount, minLOD, maxLOD, data };
 }
+//#endregion
 
-export interface MDL0 {
-    name: string;
-    materials: MDL0_MaterialEntry[];
-    shapes: MDL0_ShapeEntry[];
-    nodes: MDL0_NodeEntry[];
-    sceneGraph: MDL0_SceneGraph;
-}
-
+//#region MDL0
 class DisplayListRegisters {
     public bp: Uint32Array = new Uint32Array(0x100);
     public cp: Uint32Array = new Uint32Array(0x100);
@@ -1045,13 +1075,8 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const translationY = view.getFloat32(0x3C);
     const translationZ = view.getFloat32(0x40);
 
-    const scale = vec3.fromValues(scaleX, scaleY, scaleZ);
-    const rotation = quat.create();
-    quat.fromEuler(rotation, rotationX, rotationY, rotationZ);
-    const translation = vec3.fromValues(translationX, translationY, translationZ);
-
     const modelMatrix = mat4.create();
-    mat4.fromRotationTranslationScale(modelMatrix, rotation, translation, scale);
+    calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
     return { name, id, mtxId, flags, billboardMode, modelMatrix };
 }
@@ -1163,6 +1188,14 @@ function parseMDL0_SceneGraph(buffer: ArrayBufferSlice, byteCodeResDic: ResDicEn
     return { nodeTreeOps, drawOpaOps, drawXluOps };
 }
 
+export interface MDL0 {
+    name: string;
+    materials: MDL0_MaterialEntry[];
+    shapes: MDL0_ShapeEntry[];
+    nodes: MDL0_NodeEntry[];
+    sceneGraph: MDL0_SceneGraph;
+}
+
 function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
     const view = buffer.createDataView();
 
@@ -1230,11 +1263,36 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     return { name, materials, shapes, nodes, sceneGraph };
 }
+//#endregion
 
+//#region Animation Core
 export const enum LoopMode {
     ONCE = 0x00,
     REPEAT = 0x01,
 }
+
+const enum AnimationTrackType {
+    LINEAR,
+    HERMITE,
+}
+
+interface AnimationKeyframeHermite {
+    time: number;
+    value: number;
+    tangent: number;
+}
+
+interface AnimationTrackLinear {
+    type: AnimationTrackType.LINEAR;
+    frames: Float32Array;
+}
+
+interface AnimationTrackHermite {
+    type: AnimationTrackType.HERMITE;
+    frames: AnimationKeyframeHermite[];
+}
+
+type AnimationTrack = AnimationTrackLinear | AnimationTrackHermite;
 
 interface AnimationBase {
     name: string;
@@ -1242,33 +1300,27 @@ interface AnimationBase {
     loopMode: LoopMode;
 }
 
-interface AnimationKeyframe {
-    time: number;
-    value: number;
-    tangent: number;
-}
-
-function applyLoopMode(t: number, loopMode: LoopMode) {
-    switch (loopMode) {
-    case LoopMode.ONCE:
-        return Math.min(t, 1);
-    case LoopMode.REPEAT:
-        return t % 1;
-    }
-}
-
 function getAnimFrame(anim: AnimationBase, frame: number): number {
-    const lastFrame = anim.duration - 1;
-    const normTime = frame / lastFrame;
-    const animFrame = applyLoopMode(normTime, anim.loopMode) * lastFrame;
-    return animFrame;
+    // Be careful of floating point precision.
+    const lastFrame = anim.duration;
+    if (anim.loopMode === LoopMode.ONCE) {
+        if (frame > lastFrame)
+            frame = lastFrame;
+        return frame;
+    } else if (anim.loopMode === LoopMode.REPEAT) {
+        while (frame > lastFrame)
+            frame -= lastFrame;
+        return frame;
+    } else {
+        throw "whoops";
+    }
 }
 
 function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number): number {
     return (((cf0 * t + cf1) * t + cf2) * t + cf3);
 }
 
-function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number): number {
+function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number): number {
     const length = k1.time - k0.time;
     const p0 = k0.value;
     const p1 = k1.value;
@@ -1281,11 +1333,17 @@ function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: num
     return cubicEval(cf0, cf1, cf2, cf3, t);
 }
 
-interface AnimationTrack {
-    frames: AnimationKeyframe[];
-}
+/*
+function hermiteInterpolate(v0: number, t0: number, v1: number, t1: number, p: number, d: number) {
+    const invd = 1 / d;
+    const s = p * invd;
+    const s_1 = s - 1;
 
-function sampleAnimationData(track: AnimationTrack, frame: number) {
+    return v0 + (v0 - v1) * (2 * s - 3) * s * s + p * s_1 * (s_1 * t0 + s * t1);
+}
+*/
+
+function sampleAnimationDataHermite(track: AnimationTrackHermite, frame: number): number {
     const frames = track.frames;
 
     if (frames.length === 1)
@@ -1309,35 +1367,189 @@ function sampleAnimationData(track: AnimationTrack, frame: number) {
     if ((k1.time - k0.time) === 1)
         return k0.value;
 
+    const curFrameDelta = frame - k0.time;
+    const keyFrameDelta = k1.time - k0.time;
     const t = (frame - k0.time) / (k1.time - k0.time);
     return hermiteInterpolate(k0, k1, t);
 }
 
-function parseAnimationTrack(buffer: ArrayBufferSlice, isConstant: boolean): AnimationTrack {
-    const view = buffer.createDataView();
+function lerp(k0: number, k1: number, t: number) {
+    return k0 + (k1 - k0) * t;
+}
 
-    if (isConstant) {
-        const value = view.getFloat32(0x00);
-        const fakeAnimationKeyframe: AnimationKeyframe = { time: 0, value, tangent: 0 };
-        return { frames: [fakeAnimationKeyframe] };
-    } else {
-        const anmDataOffs = view.getUint32(0x00);
-        const numKeyframes = view.getUint16(anmDataOffs + 0x00);
-        const invKeyframeRange = view.getFloat32(anmDataOffs + 0x04);
-        let keyframeTableIdx = anmDataOffs + 0x08;
-        const frames: AnimationKeyframe[] = [];
-        for (let i = 0; i < numKeyframes; i++) {
-            const time = view.getFloat32(keyframeTableIdx + 0x00);
-            const value = view.getFloat32(keyframeTableIdx + 0x04);
-            const tangent = view.getFloat32(keyframeTableIdx + 0x08);
-            const keyframe = { time, value, tangent };
-            frames.push(keyframe);
-            keyframeTableIdx += 0x0C;
-        }
-        return { frames };
+function sampleAnimationDataLinear(track: AnimationTrackLinear, frame: number): number {
+    const frames = track.frames;
+
+    const n = frames.length;
+    if (n === 1)
+        return frames[0];
+
+    if (frame === 0)
+        return frames[0];
+    else if (frame > n - 1)
+        return frames[n - 1];
+
+    // Find the first frame.
+    const idx0 = (frame | 0);
+    const idx1 = idx0 + 1;
+    const k0 = frames[idx0];
+    const k1 = frames[idx1];
+
+    const t = (frame - idx0);
+    return lerp(k0, k1, t);
+}
+
+function sampleAnimationData(track: AnimationTrack, frame: number): number {
+    if (track.type === AnimationTrackType.LINEAR)
+        return sampleAnimationDataLinear(track, frame);
+    else if (track.type === AnimationTrackType.HERMITE)
+        return sampleAnimationDataHermite(track, frame);
+    else
+        throw "whoops";
+}
+
+function makeConstantAnimationTrack(value: number): AnimationTrack {
+    return { type: AnimationTrackType.LINEAR, frames: Float32Array.of(value) };
+}
+
+function parseAnimationTrackC32(buffer: ArrayBufferSlice, numKeyframes: number): AnimationTrack {
+    const view = buffer.createDataView();
+    const frames: Float32Array = buffer.createTypedArray(Float32Array, 0x00, numKeyframes + 1, Endianness.BIG_ENDIAN);
+    return { type: AnimationTrackType.LINEAR, frames };
+}
+
+function parseAnimationTrackF48(buffer: ArrayBufferSlice): AnimationTrack {
+    const view = buffer.createDataView();
+    const numKeyframes = view.getUint16(0x00);
+    const invKeyframeRange = view.getFloat32(0x04);
+    const scale = view.getFloat32(0x08);
+    const offset = view.getFloat32(0x0C);
+    let keyframeTableIdx = 0x10;
+    const frames: AnimationKeyframeHermite[] = [];
+    for (let i = 0; i < numKeyframes; i++) {
+        const time = view.getInt16(keyframeTableIdx + 0x00) / 0x20; // S10.5
+        const value = view.getUint16(keyframeTableIdx + 0x02) * scale + offset;
+        const tangent = view.getInt16(keyframeTableIdx + 0x04) / 0x100; // S7.8
+        const keyframe = { time, value, tangent };
+        frames.push(keyframe);
+        keyframeTableIdx += 0x06;
+    }
+    return { type: AnimationTrackType.HERMITE, frames };
+}
+
+function parseAnimationTrackF96(buffer: ArrayBufferSlice): AnimationTrack {
+    const view = buffer.createDataView();
+    const numKeyframes = view.getUint16(0x00);
+    const invKeyframeRange = view.getFloat32(0x04);
+    let keyframeTableIdx = 0x08;
+    const frames: AnimationKeyframeHermite[] = [];
+    for (let i = 0; i < numKeyframes; i++) {
+        const time = view.getFloat32(keyframeTableIdx + 0x00);
+        const value = view.getFloat32(keyframeTableIdx + 0x04);
+        const tangent = view.getFloat32(keyframeTableIdx + 0x08);
+        const keyframe = { time, value, tangent };
+        frames.push(keyframe);
+        keyframeTableIdx += 0x0C;
+    }
+    return { type: AnimationTrackType.HERMITE, frames };
+}
+
+export class AnimationController {
+    public fps: number = 30;
+    private timeMilliseconds: number;
+
+    public getTimeInFrames(): number {
+        const ms = this.timeMilliseconds;
+        return (ms / 1000) * this.fps;
+    }
+
+    public updateTime(newTime: number): void {
+        this.timeMilliseconds = newTime;
     }
 }
 
+function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
+    for (let t = 0; t < maxt; t += step) {
+        callback(t, f(t));
+    }
+}
+
+function graphF(ctx: CanvasRenderingContext2D, color: string, f: (t: number) => number, maxt: number, step: number = 1): void {
+    const canvas = ctx.canvas;
+
+    let minv: number = undefined, maxv: number = undefined;
+    stepF(f, maxt, step, (t, v) => {
+        if (minv === undefined)
+            minv = v;
+        if (maxv === undefined)
+            maxv = v;
+        minv = Math.min(minv, v);
+        maxv = Math.max(maxv, v);
+    });
+
+    let tmt = minv, tmx = maxv;
+    ctx.font = '16px sans-serif';
+    ctx.fillStyle = 'black';
+    // pad
+    minv -= 5;
+    maxv += 5;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    stepF(f, maxt, step, (t, v) => {
+        const xa = (t / maxt) * 1/step;
+        const ya = (v - minv) / (maxv - minv);
+        const x = xa * canvas.width;
+        const y = (1-ya) * canvas.height;
+        ctx.lineTo(x, y);
+
+        if (v === tmt) {
+            ctx.fillText('' + v, x, y + 16);
+            tmt = undefined;
+        }
+
+        if (v === tmx) {
+            ctx.fillText('' + v, x, y - 16);
+            tmx = undefined;
+        }
+    });
+    ctx.stroke();
+}
+
+function cv(): CanvasRenderingContext2D {    
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+
+    [].forEach.call(document.querySelectorAll('canvas.cv'), (e: HTMLElement) => document.body.removeChild(e));
+    canvas.classList.add('cv');
+    document.body.appendChild(canvas);
+
+    return ctx;
+}
+
+function visualizeTrack(base: AnimationBase, track: AnimationTrack, offt: number, maxt: number, step: number = 1): void {
+    const c = cv();
+
+    graphF(c, 'red', (t) => {
+        const m = getAnimFrame(base, offt + t);
+        return sampleAnimationData(track, m);
+    }, maxt, step);
+}
+
+window.debug = { visualizeTrack, graphF, getAnimFrame, applyLoopMode };
+
+//#endregion
+
+//#region SRT0
 export interface SRT0_TexData {
     scaleS: AnimationTrack | null;
     scaleT: AnimationTrack | null;
@@ -1355,46 +1567,6 @@ export interface SRT0 extends AnimationBase {
     matAnimations: SRT0_MatData[];
 }
 
-export class AnimationController {
-    public fps: number = 30;
-    private timeMilliseconds: number;
-
-    public getTimeInFrames(): number {
-        const ms = this.timeMilliseconds;
-        return (ms / 1000) * this.fps;
-    }
-
-    public updateTime(newTime: number): void {
-        this.timeMilliseconds = newTime;
-    }
-}
-
-export class TexSrtAnimator {
-    private scratch = mat4.create();
-
-    constructor(public animationController: AnimationController, public srt0: SRT0, public texData: SRT0_TexData) {
-    }
-
-    public calcTexMtx(dst: mat4): void {
-        const texData = this.texData;
-
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.srt0, frame);
-
-        const scaleS = texData.scaleS ? sampleAnimationData(texData.scaleS, animFrame) : 1;
-        const scaleT = texData.scaleT ? sampleAnimationData(texData.scaleT, animFrame) : 1;
-        const rotation = texData.rotation ? sampleAnimationData(texData.rotation, animFrame) : 0;
-        const translationS = texData.translationS ? sampleAnimationData(texData.translationS, animFrame) : 0;
-        const translationT = texData.translationS ? sampleAnimationData(texData.translationT, animFrame) : 0;
-        calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT);
-    }
-
-    public calcIndTexMtx(dst: mat2d): void {
-        this.calcTexMtx(this.scratch);
-        calc2dMtx(dst, this.scratch);
-    }
-}
-
 function findAnimationData_SRT0(srt0: SRT0, materialName: string, texMtxIndex: number): SRT0_TexData | null {
     const matData: SRT0_MatData = srt0.matAnimations.find((m) => m.materialName === materialName);
     if (matData === undefined)
@@ -1405,31 +1577,6 @@ function findAnimationData_SRT0(srt0: SRT0, materialName: string, texMtxIndex: n
         return null;
 
     return texData;
-}
-
-export enum TexMtxIndex {
-    // Texture.
-    TEX0 = 0,
-    TEX1 = 1,
-    TEX2 = 2,
-    TEX3 = 3,
-    TEX4 = 4,
-    TEX5 = 5,
-    TEX6 = 6,
-    TEX7 = 7,
-
-    // Indirect.
-    IND0 = 8,
-    IND1 = 9,
-    IND2 = 10,
-    COUNT,
-}
-
-export function bindTexAnimator(animationController: AnimationController, srt0: SRT0, materialName: string, texMtxIndex: TexMtxIndex): TexSrtAnimator | null {
-    const texData: SRT0_TexData | null = findAnimationData_SRT0(srt0, materialName, texMtxIndex);
-    if (texData === null)
-        return null;
-    return new TexSrtAnimator(animationController, srt0, texData);
 }
 
 function parseSRT0_TexData(buffer: ArrayBufferSlice): SRT0_TexData {
@@ -1457,7 +1604,15 @@ function parseSRT0_TexData(buffer: ArrayBufferSlice): SRT0_TexData {
 
     let animationTableIdx = 0x04;
     function nextAnimationTrack(isConstant: boolean): AnimationTrack {
-        const animationTrack: AnimationTrack = parseAnimationTrack(buffer.slice(animationTableIdx), isConstant);
+        let animationTrack: AnimationTrack;
+        if (isConstant) {
+            const value = view.getFloat32(animationTableIdx);
+            animationTrack = makeConstantAnimationTrack(value);
+        } else {
+            // Relative to the table idx.
+            const animationTrackOffs = animationTableIdx + view.getUint32(animationTableIdx);
+            animationTrack = parseAnimationTrackF96(buffer.slice(animationTrackOffs));
+        }
         animationTableIdx += 0x04;
         return animationTrack;
     }
@@ -1533,14 +1688,296 @@ function parseSRT0(buffer: ArrayBufferSlice): SRT0 {
         const matData = parseSRT0_MatData(buffer.slice(texSrtMatEntry.offs));
         matAnimations.push(matData);
     }
+    assert(matAnimations.length === numMaterials);
 
     return { name, loopMode, duration, matAnimations };
 }
+
+export class TexSrtAnimator {
+    private scratch = mat4.create();
+
+    constructor(public animationController: AnimationController, public srt0: SRT0, public texData: SRT0_TexData) {
+    }
+
+    public calcTexMtx(dst: mat4): void {
+        const texData = this.texData;
+
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.srt0, frame);
+
+        const scaleS = texData.scaleS ? sampleAnimationData(texData.scaleS, animFrame) : 1;
+        const scaleT = texData.scaleT ? sampleAnimationData(texData.scaleT, animFrame) : 1;
+        const rotation = texData.rotation ? sampleAnimationData(texData.rotation, animFrame) : 0;
+        const translationS = texData.translationS ? sampleAnimationData(texData.translationS, animFrame) : 0;
+        const translationT = texData.translationS ? sampleAnimationData(texData.translationT, animFrame) : 0;
+        calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT);
+    }
+
+    public calcIndTexMtx(dst: mat2d): void {
+        this.calcTexMtx(this.scratch);
+        calc2dMtx(dst, this.scratch);
+    }
+}
+
+export enum TexMtxIndex {
+    // Texture.
+    TEX0 = 0,
+    TEX1 = 1,
+    TEX2 = 2,
+    TEX3 = 3,
+    TEX4 = 4,
+    TEX5 = 5,
+    TEX6 = 6,
+    TEX7 = 7,
+
+    // Indirect.
+    IND0 = 8,
+    IND1 = 9,
+    IND2 = 10,
+    COUNT,
+}
+
+export function bindTexAnimator(animationController: AnimationController, srt0: SRT0, materialName: string, texMtxIndex: TexMtxIndex): TexSrtAnimator | null {
+    const texData: SRT0_TexData | null = findAnimationData_SRT0(srt0, materialName, texMtxIndex);
+    if (texData === null)
+        return null;
+    return new TexSrtAnimator(animationController, srt0, texData);
+}
+//#endregion
+
+//#region CHR0
+interface CHR0_NodeData {
+    nodeName: string;
+
+    scaleX: AnimationTrack | null;
+    scaleY: AnimationTrack | null;
+    scaleZ: AnimationTrack | null;
+    rotationX: AnimationTrack | null;
+    rotationY: AnimationTrack | null;
+    rotationZ: AnimationTrack | null;
+    translationX: AnimationTrack | null;
+    translationY: AnimationTrack | null;
+    translationZ: AnimationTrack | null;
+}
+
+function parseCHR0_NodeData(buffer: ArrayBufferSlice, numKeyframes: number): CHR0_NodeData {
+    const enum Flags {
+        IDENTITY                = (1 <<  1),
+        RT_ZERO                 = (1 <<  2),
+        SCALE_ONE               = (1 <<  3),
+        SCALE_UNIFORM           = (1 <<  4),
+        ROTATE_ZERO             = (1 <<  5),
+        TRANS_ZERO              = (1 <<  6),
+        SCALE_USE_MODEL         = (1 <<  7),
+        ROTATE_USE_MODEL        = (1 <<  8),
+        TRANS_USE_MODEL         = (1 <<  9),
+        SCALE_COMPENSATE_APPLY  = (1 << 10),
+        SCALE_COMPENSATE_PARENT = (1 << 11),
+        CLASSIC_SCALE_OFF       = (1 << 12),
+        SCALE_X_CONSTANT        = (1 << 13),
+        SCALE_Y_CONSTANT        = (1 << 14),
+        SCALE_Z_CONSTANT        = (1 << 15),
+        ROTATE_X_CONSTANT       = (1 << 16),
+        ROTATE_Y_CONSTANT       = (1 << 17),
+        ROTATE_Z_CONSTANT       = (1 << 18),
+        TRANS_X_CONSTANT        = (1 << 19),
+        TRANS_Y_CONSTANT        = (1 << 20),
+        TRANS_Z_CONSTANT        = (1 << 21),
+        REQUIRE_SCALE           = (1 << 22),
+        REQUIRE_ROTATE          = (1 << 23),
+        REQUIRE_TRANS           = (1 << 24),
+
+        SCALE_NOT_EXIST   = (IDENTITY | SCALE_ONE | SCALE_USE_MODEL),
+        ROTATE_NOT_EXIST  = (IDENTITY | RT_ZERO | ROTATE_ZERO | ROTATE_USE_MODEL),
+        TRANS_NOT_EXIST   = (IDENTITY | RT_ZERO | TRANS_ZERO | TRANS_USE_MODEL),
+    };
+
+    enum TrackFormat
+    {
+        CONSTANT,
+        _32,
+        _48,
+        _96,
+        FRM_8,
+        FRM_16,
+        FRM_32,
+    };
+
+    const view = buffer.createDataView();
+    const nodeNameOffs = view.getUint32(0x00);
+    const nodeName = readString(buffer, nodeNameOffs);
+    const flags: Flags = view.getUint32(0x04);
+
+    let scaleS: AnimationTrack | null = null;
+    let scaleT: AnimationTrack | null = null;
+    let rotation: AnimationTrack | null = null;
+    let translationS: AnimationTrack | null = null;
+    let translationT: AnimationTrack | null = null;
+
+    let animationTableIdx = 0x08;
+    function nextAnimationTrack(trackFormat: TrackFormat, isConstant: boolean): AnimationTrack {
+        let animationTrack: AnimationTrack;
+        if (isConstant || trackFormat === TrackFormat.CONSTANT) {
+            const value = view.getFloat32(animationTableIdx);
+            animationTrack = makeConstantAnimationTrack(value);
+        } else if (trackFormat === TrackFormat._96) {
+            // Relative to the beginning of the node.
+            const animationTrackOffs = view.getUint32(animationTableIdx);
+            animationTrack = parseAnimationTrackF96(buffer.slice(animationTrackOffs));
+        } else if (trackFormat === TrackFormat._48) {
+            const animationTrackOffs = view.getUint32(animationTableIdx);
+            animationTrack = parseAnimationTrackF48(buffer.slice(animationTrackOffs));
+        } else if (trackFormat === TrackFormat.FRM_32) {
+            const animationTrackOffs = view.getUint32(animationTableIdx);
+            animationTrack = parseAnimationTrackC32(buffer.slice(animationTrackOffs), numKeyframes);
+        } else {
+            console.warn("Unsupported animation track format", trackFormat);
+            animationTrack = null;
+        }
+        animationTableIdx += 0x04;
+        return animationTrack;
+    }
+
+    const scaleFormat: TrackFormat = (flags >>> 25) & 0x03;
+    const rotationFormat: TrackFormat = (flags >>> 27) & 0x07;
+    const translationFormat: TrackFormat = (flags >>> 30) & 0x03;
+
+    let scaleX = null, scaleY = null, scaleZ = null;
+    if (!(flags & Flags.SCALE_NOT_EXIST))
+        scaleX = nextAnimationTrack(scaleFormat, !!(flags & Flags.SCALE_X_CONSTANT));
+
+    if (!(flags & Flags.SCALE_UNIFORM)) {
+        scaleY = nextAnimationTrack(scaleFormat, !!(flags & Flags.SCALE_Y_CONSTANT));
+        scaleZ = nextAnimationTrack(scaleFormat, !!(flags & Flags.SCALE_Z_CONSTANT));
+    } else {
+        scaleY = scaleX;
+        scaleZ = scaleX;
+    }
+
+    let rotationX = null, rotationY = null, rotationZ = null;
+    if (!(flags & Flags.ROTATE_NOT_EXIST)) {
+        rotationX = nextAnimationTrack(rotationFormat, !!(flags & Flags.ROTATE_X_CONSTANT));
+        rotationY = nextAnimationTrack(rotationFormat, !!(flags & Flags.ROTATE_Y_CONSTANT));
+        rotationZ = nextAnimationTrack(rotationFormat, !!(flags & Flags.ROTATE_Z_CONSTANT));
+    }
+
+    let translationX = null, translationY = null, translationZ = null;
+    if (!(flags & Flags.TRANS_NOT_EXIST)) {
+        translationX = nextAnimationTrack(translationFormat, !!(flags & Flags.TRANS_X_CONSTANT));
+        translationY = nextAnimationTrack(translationFormat, !!(flags & Flags.TRANS_Y_CONSTANT));
+        translationZ = nextAnimationTrack(translationFormat, !!(flags & Flags.TRANS_Z_CONSTANT));
+    }
+
+    return {
+        nodeName,
+        scaleX, scaleY, scaleZ,
+        rotationX, rotationY, rotationZ,
+        translationX, translationY, translationZ,
+    };
+}
+
+export interface CHR0 extends AnimationBase {
+    nodeAnimations: CHR0_NodeData[];
+}
+
+function parseCHR0(buffer: ArrayBufferSlice): CHR0 {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'CHR0');
+    const version = view.getUint32(0x08);
+    const supportedVersions = [0x05];
+    assert(supportedVersions.includes(version));
+
+    const chrNodeDataResDicOffs = view.getUint32(0x10);
+    const chrNodeDataResDic = parseResDic(buffer, chrNodeDataResDicOffs);
+
+    let offs = 0x14;
+    if (version >= 0x05) {
+        // user data
+        offs += 0x04;
+    }
+
+    const nameOffs = view.getUint32(offs + 0x00);
+    const name = readString(buffer, nameOffs);
+    const duration = view.getUint16(offs + 0x08);
+    const numNodes = view.getUint16(offs + 0x0A);
+    const loopMode: LoopMode = view.getUint32(offs + 0x0C);
+    const scalingRule = view.getUint32(offs + 0x10);
+
+    const nodeAnimations: CHR0_NodeData[] = [];
+    for (const chrNodeEntry of chrNodeDataResDic) {
+        const nodeData = parseCHR0_NodeData(buffer.slice(chrNodeEntry.offs), duration);
+        nodeAnimations.push(nodeData);
+    }
+    assert(nodeAnimations.length === numNodes);
+
+    return { name, loopMode, duration, nodeAnimations };
+}
+
+function findAnimationData_CHR0(chr0: CHR0, nodeName: string): CHR0_NodeData {
+    const nodeData = chr0.nodeAnimations.find((node) => node.nodeName === nodeName);
+    if (!nodeData)
+        return null;
+    return nodeData;
+}
+
+export class CHR0NodesAnimator {
+    private scratch = mat4.create();
+    public disabled: boolean[] = [];
+
+    constructor(public animationController: AnimationController, public chr0: CHR0, private nodeData: CHR0_NodeData[]) {
+    }
+
+    public calcModelMtx(dst: mat4, nodeId: number): boolean {
+        const nodeData = this.nodeData[nodeId];
+        if (!nodeData)
+            return false;
+
+        if (this.disabled[nodeId])
+            return false;
+
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.chr0, frame);
+
+        const scaleX = nodeData.scaleX ? sampleAnimationData(nodeData.scaleX, animFrame) : 1;
+        const scaleY = nodeData.scaleY ? sampleAnimationData(nodeData.scaleY, animFrame) : 1;
+        const scaleZ = nodeData.scaleZ ? sampleAnimationData(nodeData.scaleZ, animFrame) : 1;
+
+        const rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, animFrame) : 0;
+        const rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, animFrame) : 0;
+        const rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, animFrame) : 0;
+
+        const translationX = nodeData.translationX ? sampleAnimationData(nodeData.translationX, animFrame) : 0;
+        const translationY = nodeData.translationY ? sampleAnimationData(nodeData.translationY, animFrame) : 0;
+        const translationZ = nodeData.translationZ ? sampleAnimationData(nodeData.translationZ, animFrame) : 0;
+
+        calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        return true;
+    }
+}
+
+export function bindCHR0NodesAnimator(animationController: AnimationController, chr0: CHR0, nodes: MDL0_NodeEntry[]): CHR0NodesAnimator | null {
+    const nodeData: CHR0_NodeData[] = [];
+    for (const nodeAnimation of chr0.nodeAnimations) {
+        const node = nodes.find((node) => node.name === nodeAnimation.nodeName);
+        if (!node)
+            continue;
+        nodeData[node.id] = nodeAnimation;
+    }
+
+    // No nodes found.
+    if (nodeData.length === 0)
+        return null;
+
+    return new CHR0NodesAnimator(animationController, chr0, nodeData);
+}
+//#endregion
 
 export interface RRES {
     models: MDL0[];
     textures: TEX0[];
     texSrtAnimations: SRT0[];
+    chr0: CHR0[];
 }
 
 export function parse(buffer: ArrayBufferSlice): RRES {
@@ -1613,5 +2050,17 @@ export function parse(buffer: ArrayBufferSlice): RRES {
         }
     }
 
-    return { models, textures, texSrtAnimations };
+    // Node Animations
+    const chr0: CHR0[] = [];
+    const animChrsEntry = rootResDic.find((entry) => entry.name === 'AnmChr(NW4R)');
+    if (animChrsEntry) {
+        const animChrResDic = parseResDic(buffer, animChrsEntry.offs);
+        for (const chr0Entry of animChrResDic) {
+            const chr0_ = parseCHR0(buffer.subarray(chr0Entry.offs));
+            assert(chr0_.name === chr0Entry.name);
+            chr0.push(chr0_);
+        }
+    }
+
+    return { models, textures, texSrtAnimations, chr0 };
 }
