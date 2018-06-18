@@ -46,7 +46,7 @@ export function decode_I4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): 
                 for (let x: u8 = 0; x < bw; x++) {
                     let dstPixel: u32 = (w * (yy + y)) + xx + x;
                     let dstOffs: u32 = pDst + dstPixel * 4;
-                    let ii: u8 = get(pSrc + (srcOffs >> 1));
+                    let ii: u8 = get(pSrc + (srcOffs >>> 1));
                     let i4: u8 = ii >>> ((srcOffs & 1) ? 0 : 4) & 0x0F;
                     let i: u8 = expand4to8(i4);
                     set(dstOffs + 0, i);
@@ -144,9 +144,9 @@ export function decode_RGB565(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u3
                     let dstPixel: u32 = (w * (yy + y)) + xx + x;
                     let dstOffs: u32 = pDst + dstPixel * 4;
                     let p: u16 = get16be(pSrc + srcOffs);
-                    set(dstOffs + 0, expand5to8(<u8> (p >> 11) & 0x1F));
-                    set(dstOffs + 1, expand6to8(<u8> (p >> 5) & 0x3F));
-                    set(dstOffs + 2, expand5to8(<u8> p & 0x1F));
+                    set(dstOffs + 0, expand5to8(<u8> (p >>> 11) & 0x1F));
+                    set(dstOffs + 1, expand6to8(<u8> (p >>> 5) & 0x3F));
+                    set(dstOffs + 2, expand5to8(<u8> (p & 0x1F)));
                     set(dstOffs + 3, 0xFF);
                     srcOffs += 2;
                 }
@@ -169,16 +169,16 @@ export function decode_RGB5A3(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u3
                     let p: u16 = get16be(pSrc + srcOffs);
                     if (p & 0x8000) {
                         // RGB5
-                        set(dstOffs + 0, expand5to8(<u8> (p >> 10) & 0x1F));
-                        set(dstOffs + 1, expand5to8(<u8> (p >> 5) & 0x1F));
-                        set(dstOffs + 2, expand5to8(<u8> p & 0x1F));
+                        set(dstOffs + 0, expand5to8(<u8> (p >>> 10) & 0x1F));
+                        set(dstOffs + 1, expand5to8(<u8> (p >>> 5) & 0x1F));
+                        set(dstOffs + 2, expand5to8(<u8> (p & 0x1F)));
                         set(dstOffs + 3, 0xFF);
                     } else {
                         // A3RGB4
-                        set(dstOffs + 0, expand4to8(<u8> (p >> 8) & 0x0F));
-                        set(dstOffs + 1, expand4to8(<u8> (p >> 4) & 0x0F));
-                        set(dstOffs + 2, expand4to8(<u8> p & 0x0F));
-                        set(dstOffs + 3, expand3to8(<u8> p >> 12));
+                        set(dstOffs + 0, expand4to8(<u8> (p >>> 8) & 0x0F));
+                        set(dstOffs + 1, expand4to8(<u8> (p >>> 4) & 0x0F));
+                        set(dstOffs + 2, expand4to8(<u8> (p & 0x0F)));
+                        set(dstOffs + 3, expand3to8(<u8> (p >>> 12)));
                     }
                     srcOffs += 2;
                 }
@@ -244,13 +244,13 @@ export function decode_CMPR(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32)
                     let color2: u16 = get16be(srcOffs + 0x02);
 
                     // Fill in first two colors in color table.
-                    set(colorTable + 0, expand5to8(<u8> ((color1 >> 11) & 0x1F)));
-                    set(colorTable + 1, expand6to8(<u8> ((color1 >> 5) & 0x3F)));
+                    set(colorTable + 0, expand5to8(<u8> ((color1 >>> 11) & 0x1F)));
+                    set(colorTable + 1, expand6to8(<u8> ((color1 >>> 5) & 0x3F)));
                     set(colorTable + 2, expand5to8(<u8> (color1 & 0x1F)));
                     set(colorTable + 3, 0xFF);
 
-                    set(colorTable + 4, expand5to8(<u8> ((color2 >> 11) & 0x1F)));
-                    set(colorTable + 5, expand6to8(<u8> ((color2 >> 5) & 0x3F)));
+                    set(colorTable + 4, expand5to8(<u8> ((color2 >>> 11) & 0x1F)));
+                    set(colorTable + 5, expand6to8(<u8> ((color2 >>> 5) & 0x3F)));
                     set(colorTable + 6, expand5to8(<u8> (color2 & 0x1F)));
                     set(colorTable + 7, 0xFF);
 

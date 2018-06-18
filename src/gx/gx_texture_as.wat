@@ -1721,7 +1721,7 @@
                          (i32.shr_u
                           (i32.and
                            (get_local $13)
-                           (i32.const 255)
+                           (i32.const 65535)
                           )
                           (i32.const 12)
                          )
@@ -1746,7 +1746,10 @@
                             )
                            )
                            (i32.shr_u
-                            (get_local $35)
+                            (i32.and
+                             (get_local $35)
+                             (i32.const 255)
+                            )
                             (i32.sub
                              (i32.const 9)
                              (i32.const 8)
