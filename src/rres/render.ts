@@ -362,10 +362,14 @@ class Command_Material {
             m.lodBias = sampler.lodBias;
         }
 
+        for (let i = 0; i < 2; i++)
+            materialParams.u_ColorAmbReg[i].copy(this.material.colorAmbRegs[i]);
+        for (let i = 0; i < 2; i++)
+            materialParams.u_ColorMatReg[i].copy(this.material.colorMatRegs[i]);
         for (let i = 0; i < 4; i++)
-            materialParams.u_Color[i] = this.material.gxMaterial.colorRegisters[i];
+            materialParams.u_Color[i].copy(this.material.gxMaterial.colorRegisters[i]);
         for (let i = 0; i < 4; i++)
-            materialParams.u_KonstColor[i] = this.material.gxMaterial.colorConstants[i];
+            materialParams.u_KonstColor[i].copy(this.material.gxMaterial.colorConstants[i]);
         for (let i = 0; i < 8; i++)
             this.calcTexMtx(materialParams.u_TexMtx[i], i, state);
         for (let i = 0; i < 8; i++)

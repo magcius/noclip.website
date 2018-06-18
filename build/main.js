@@ -4429,21 +4429,21 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                     }
                 };
                 GX_Program.prototype.generateColorChannel = function (chan, i, isAlpha) {
-                    // HACK.
-                    if (this.hacks) {
-                        var fudger = isAlpha ? this.hacks.alphaLightingFudge : this.hacks.colorLightingFudge;
-                        if (fudger) {
-                            var vtx = "a_Color" + i;
-                            var amb = "u_ColorAmbReg[" + i + "]";
-                            var mat = "u_ColorMatReg[" + i + "]";
-                            var fudged = fudger({ vtx: vtx, amb: amb, mat: mat });
-                            return "vec4(" + fudged + ")";
-                        }
-                    }
                     // TODO(jstpierre): amb & lighting
                     var matSource = this.generateMaterialSource(chan, i);
                     if (chan.lightingEnabled) {
                         var ambSource = this.generateAmbientSource(chan, i);
+                        // HACK.
+                        if (this.hacks) {
+                            var fudger = isAlpha ? this.hacks.alphaLightingFudge : this.hacks.colorLightingFudge;
+                            if (fudger) {
+                                var vtx = "a_Color" + i;
+                                var amb = "u_ColorAmbReg[" + i + "]";
+                                var mat = "u_ColorMatReg[" + i + "]";
+                                var fudged = fudger({ vtx: vtx, amb: amb, mat: mat, ambSource: ambSource, matSource: matSource });
+                                return "vec4(" + fudged + ")";
+                            }
+                        }
                         // XXX(jstpierre): This is awful but seems to work.
                         return "(0.5 * (" + ambSource + " + 0.6) * " + matSource + ")";
                     }
@@ -18215,17 +18215,6 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var ropInfo = {
             blendMode: blendMode, depthFunc: depthFunc, depthTest: depthTest, depthWrite: depthWrite,
         };
-        // TODO(jstpierre): Light channels
-        var lightChannels = [
-            {
-                colorChannel: { lightingEnabled: false, ambColorSource: 1 /* VTX */, matColorSource: 0 /* REG */ },
-                alphaChannel: { lightingEnabled: false, ambColorSource: 1 /* VTX */, matColorSource: 0 /* REG */ },
-            },
-            {
-                colorChannel: { lightingEnabled: false, ambColorSource: 1 /* VTX */, matColorSource: 0 /* REG */ },
-                alphaChannel: { lightingEnabled: false, ambColorSource: 1 /* VTX */, matColorSource: 0 /* REG */ },
-            },
-        ];
         var indTexStages = [];
         var iref = r.bp[39 /* RAS1_IREF_ID */];
         for (var i = 0; i < numInds; i++) {
@@ -18259,18 +18248,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             var mat = gl_matrix_16.mat2d.fromValues(ma, mb, mc, md, mx, my);
             indTexMatrices.push(mat);
         }
-        var gxMaterial = {
-            index: index, name: name,
-            lightChannels: lightChannels, cullMode: cullMode,
-            tevStages: tevStages, texGens: texGens,
-            colorRegisters: colorRegisters, colorConstants: colorConstants,
-            indTexStages: indTexStages, alphaTest: alphaTest, ropInfo: ropInfo,
-        };
         // Samplers
-        var srtFlags = view.getUint32(0x1a8);
-        var texMtxMode = view.getUint32(0x1ac);
-        var texSrtTableIdx = endOfHeaderOffs + 0x174;
-        var texMtxTableIdx = endOfHeaderOffs + 0x214;
         var samplers = [];
         for (var i = 0; i < numTexPltt; i++) {
             var texPlttInfoOffs = texPlttOffs + i * 0x34;
@@ -18292,6 +18270,10 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             var namePalette = (namePltOffs !== 0) ? util_49.readString(buffer, texPlttInfoOffs + namePltOffs) : null;
             samplers[texMapId] = { name: name_16, namePalette: namePalette, lodBias: lodBias, wrapS: wrapS, wrapT: wrapT, minFilter: minFilter, magFilter: magFilter };
         }
+        var srtFlags = view.getUint32(endOfHeaderOffs + 0x16C);
+        var texMtxMode = view.getUint32(endOfHeaderOffs + 0x170);
+        var texSrtTableIdx = endOfHeaderOffs + 0x174;
+        var texMtxTableIdx = endOfHeaderOffs + 0x214;
         var texSrts = [];
         for (var i = 0; i < 8; i++) {
             // SRT
@@ -18337,7 +18319,43 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             texSrtTableIdx += 0x14;
             texMtxTableIdx += 0x34;
         }
-        return { index: index, name: name, translucent: translucent, gxMaterial: gxMaterial, samplers: samplers, texSrts: texSrts, indTexMatrices: indTexMatrices };
+        var lightChannels = [];
+        var colorMatRegs = [];
+        var colorAmbRegs = [];
+        var lightChannelTableIdx = endOfHeaderOffs + 0x3B4;
+        for (var i = 0; i < 2; i++) {
+            var flags_2 = view.getUint32(lightChannelTableIdx + 0x00);
+            var matColorR = view.getUint8(lightChannelTableIdx + 0x04) / 0xFF;
+            var matColorG = view.getUint8(lightChannelTableIdx + 0x05) / 0xFF;
+            var matColorB = view.getUint8(lightChannelTableIdx + 0x06) / 0xFF;
+            var matColorA = view.getUint8(lightChannelTableIdx + 0x07) / 0xFF;
+            var ambColorR = view.getUint8(lightChannelTableIdx + 0x08) / 0xFF;
+            var ambColorG = view.getUint8(lightChannelTableIdx + 0x09) / 0xFF;
+            var ambColorB = view.getUint8(lightChannelTableIdx + 0x0A) / 0xFF;
+            var ambColorA = view.getUint8(lightChannelTableIdx + 0x0B) / 0xFF;
+            var chanCtrlC = view.getUint32(lightChannelTableIdx + 0x0C);
+            var chanCtrlA = view.getUint32(lightChannelTableIdx + 0x10);
+            var chanCtrlCMatSrc = (chanCtrlC >>> 0) & 0x01;
+            var chanCtrlCEnable = !!((chanCtrlC >>> 1) & 0x01);
+            var chanCtrlCAmbSrc = (chanCtrlC >>> 6) & 0x01;
+            var colorChannel = { lightingEnabled: chanCtrlCEnable, matColorSource: chanCtrlCMatSrc, ambColorSource: chanCtrlCAmbSrc };
+            var chanCtrlAMatSrc = (chanCtrlA >>> 0) & 0x01;
+            var chanCtrlAEnable = !!((chanCtrlA >>> 1) & 0x01);
+            var chanCtrlAAmbSrc = (chanCtrlA >>> 6) & 0x01;
+            var alphaChannel = { lightingEnabled: chanCtrlAEnable, matColorSource: chanCtrlAMatSrc, ambColorSource: chanCtrlAAmbSrc };
+            colorMatRegs.push(new GX_Material.Color(matColorR, matColorG, matColorB, matColorA));
+            colorAmbRegs.push(new GX_Material.Color(ambColorR, ambColorG, ambColorB, ambColorA));
+            lightChannels.push({ colorChannel: colorChannel, alphaChannel: alphaChannel });
+            lightChannelTableIdx += 0x14;
+        }
+        var gxMaterial = {
+            index: index, name: name,
+            lightChannels: lightChannels, cullMode: cullMode,
+            tevStages: tevStages, texGens: texGens,
+            colorRegisters: colorRegisters, colorConstants: colorConstants,
+            indTexStages: indTexStages, alphaTest: alphaTest, ropInfo: ropInfo,
+        };
+        return { index: index, name: name, translucent: translucent, gxMaterial: gxMaterial, samplers: samplers, texSrts: texSrts, indTexMatrices: indTexMatrices, colorMatRegs: colorMatRegs, colorAmbRegs: colorAmbRegs };
     }
     function parseMDL0_VtxData(buffer, vtxAttrib) {
         var view = buffer.createDataView();
@@ -19521,10 +19539,14 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                         m.glSampler = this.glSamplers[i];
                         m.lodBias = sampler.lodBias;
                     }
+                    for (var i = 0; i < 2; i++)
+                        materialParams.u_ColorAmbReg[i].copy(this.material.colorAmbRegs[i]);
+                    for (var i = 0; i < 2; i++)
+                        materialParams.u_ColorMatReg[i].copy(this.material.colorMatRegs[i]);
                     for (var i = 0; i < 4; i++)
-                        materialParams.u_Color[i] = this.material.gxMaterial.colorRegisters[i];
+                        materialParams.u_Color[i].copy(this.material.gxMaterial.colorRegisters[i]);
                     for (var i = 0; i < 4; i++)
-                        materialParams.u_KonstColor[i] = this.material.gxMaterial.colorConstants[i];
+                        materialParams.u_KonstColor[i].copy(this.material.gxMaterial.colorConstants[i]);
                     for (var i = 0; i < 8; i++)
                         this.calcTexMtx(materialParams.u_TexMtx[i], i, state);
                     for (var i = 0; i < 8; i++)
@@ -19587,7 +19609,7 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
         execute: function () {
             SAND_CLOCK_ICON = '<svg viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
             materialHacks = {
-                colorLightingFudge: function (p) { return "0.6 * " + p.vtx; },
+                colorLightingFudge: function (p) { return "0.5 * " + p.matSource; },
                 alphaLightingFudge: function (p) { return "1.0"; },
             };
             SkywardSwordScene = /** @class */ (function () {
@@ -19672,6 +19694,8 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                             'model_obj4_s',
                             'model_obj5',
                             'model_obj5_s',
+                            'model_obj6',
+                            'model_obj6_s',
                         ];
                         var idx = modelSorts.indexOf(modelRenderer.mdl0.name);
                         if (idx < 0) {
@@ -20032,7 +20056,7 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
         ],
         execute: function () {
             materialHacks = {
-                colorLightingFudge: function (p) { return '1.0'; },
+                colorLightingFudge: function (p) { return "" + p.matSource; },
                 alphaLightingFudge: function (p) { return '1.0'; },
             };
             BasicRRESScene = /** @class */ (function () {

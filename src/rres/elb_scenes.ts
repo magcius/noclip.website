@@ -13,7 +13,7 @@ import { RRESTextureHolder, ModelRenderer } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
 
 const materialHacks: GXMaterialHacks = {
-    colorLightingFudge: (p) => '1.0',
+    colorLightingFudge: (p) => `${p.matSource}`,
     alphaLightingFudge: (p) => '1.0',
 };
 
