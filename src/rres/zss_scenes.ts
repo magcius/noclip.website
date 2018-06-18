@@ -32,15 +32,15 @@ class SkywardSwordScene implements Viewer.MainScene {
     // Uses WaterDummy. Have to render after everything else. TODO(jstpierre): How does engine know this?
     private indirectModels: ModelRenderer[] = [];
 
-    constructor(gl: WebGL2RenderingContext, public stageId: string, public textureRRESes: BRRES.RRES[], public stageArchive: U8.U8Archive) {
+    constructor(gl: WebGL2RenderingContext, public stageId: string, public commonRRESes: BRRES.RRES[], public stageArchive: U8.U8Archive) {
         this.textureHolder = new RRESTextureHolder();
         this.animationController = new BRRES.AnimationController();
 
         this.textures = this.textureHolder.viewerTextures;
 
         // First, load in the system and common textures.
-        for (const textureRRES of textureRRESes)
-            this.textureHolder.addTextures(gl, textureRRES.textures);
+        for (const commonRRES of commonRRESes)
+            this.textureHolder.addTextures(gl, commonRRES.textures);
 
         // Load stage.
         const stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
@@ -235,6 +235,12 @@ class SkywardSwordScene implements Viewer.MainScene {
             modelRenderer.bindSRT0(this.animationController, srt0);
         }
 
+        for (const commonRRES of this.commonRRESes) {
+            for (const srt0 of commonRRES.texSrtAnimations) {
+                modelRenderer.bindSRT0(this.animationController, srt0);
+            }
+        }
+
         return modelRenderer;
     }
 }
@@ -250,23 +256,29 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
         return Progressable.all([fetch(systemPath), fetch(objPackPath), fetch(stagePath)]).then((buffers: ArrayBufferSlice[]) => {
             const [systemBuffer, objPackBuffer, stageBuffer] = buffers;
 
-            const textureRRESes: BRRES.RRES[] = [];
+            const commonRRESes: BRRES.RRES[] = [];
 
             const systemArchive = U8.parse(systemBuffer);
             const systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
-            textureRRESes.push(systemRRES);
+            commonRRESes.push(systemRRES);
 
             const objPackArchive = U8.parse(LZ77.decompress(objPackBuffer));
+
             const needsSkyCmn = this.id.startsWith('F0');
             if (needsSkyCmn) {
                 const skyCmnArchive = U8.parse(objPackArchive.findFile('oarc/SkyCmn.arc').buffer);
                 const skyCmnRRES = BRRES.parse(skyCmnArchive.findFile('g3d/model.brres').buffer);
-                textureRRESes.push(skyCmnRRES);
+                commonRRESes.push(skyCmnRRES);
             }
+
+            // Water animations appear in Common.arc.
+            const commonArchive = U8.parse(objPackArchive.findFile('oarc/Common.arc').buffer);
+            const commonRRES = BRRES.parse(commonArchive.findFile('g3d/model.brres').buffer);
+            commonRRESes.push(commonRRES);
 
             const stageArchive = U8.parse(LZ77.decompress(stageBuffer));
 
-            return new SkywardSwordScene(gl, this.id, textureRRESes, stageArchive);
+            return new SkywardSwordScene(gl, this.id, commonRRESes, stageArchive);
         });
     }
 }
