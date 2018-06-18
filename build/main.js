@@ -18245,10 +18245,10 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             var scaleExp = (scaleBitsC << 4) | (scaleBitsB << 2) | scaleBitsA;
             var scale = Math.pow(2, scaleExp - indTexScaleBias - indTexScaleBase);
             var ma = ((((mtxA >>> 0) & 0x07FF) << 21) >> 21) * scale;
-            var mb = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21) * scale;
-            var mc = ((((mtxB >>> 0) & 0x07FF) << 21) >> 21) * scale;
-            var md = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21) * scale;
-            var mx = ((((mtxC >>> 0) & 0x07FF) << 21) >> 21) * scale;
+            var mc = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21) * scale;
+            var mx = ((((mtxB >>> 0) & 0x07FF) << 21) >> 21) * scale;
+            var mb = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21) * scale;
+            var md = ((((mtxC >>> 0) & 0x07FF) << 21) >> 21) * scale;
             var my = ((((mtxC >>> 11) & 0x07FF) << 21) >> 21) * scale;
             var mat = gl_matrix_16.mat2d.fromValues(ma, mb, mc, md, mx, my);
             indTexMatrices.push(mat);
@@ -19296,6 +19296,9 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "util", "gl-matr
                 function RRESTextureHolder() {
                     return _super !== null && _super.apply(this, arguments) || this;
                 }
+                RRESTextureHolder.prototype.addRRESTextures = function (gl, rres) {
+                    this.addTextures(gl, rres.textures);
+                };
                 return RRESTextureHolder;
             }(gx_render_4.TextureHolder));
             exports_78("RRESTextureHolder", RRESTextureHolder);
@@ -19615,7 +19618,7 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         // First, load in the system and common textures.
                         for (var commonRRESes_1 = __values(commonRRESes), commonRRESes_1_1 = commonRRESes_1.next(); !commonRRESes_1_1.done; commonRRESes_1_1 = commonRRESes_1.next()) {
                             var commonRRES = commonRRESes_1_1.value;
-                            this.textureHolder.addTextures(gl, commonRRES.textures);
+                            this.textureHolder.addRRESTextures(gl, commonRRES);
                         }
                     }
                     catch (e_72_1) { e_72 = { error: e_72_1 }; }
@@ -19627,7 +19630,7 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                     }
                     // Load stage.
                     var stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
-                    this.textureHolder.addTextures(gl, stageRRES.textures);
+                    this.textureHolder.addRRESTextures(gl, stageRRES);
                     // Load rooms.
                     var roomArchivesDir = stageArchive.findDir('rarc');
                     if (roomArchivesDir) {
@@ -19636,7 +19639,7 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                                 var roomArchiveFile = _c.value;
                                 var roomArchive = U8.parse(roomArchiveFile.buffer);
                                 var roomRRES = BRRES.parse(roomArchive.findFile('g3d/room.brres').buffer);
-                                this.textureHolder.addTextures(gl, roomRRES.textures);
+                                this.textureHolder.addRRESTextures(gl, roomRRES);
                                 try {
                                     for (var _d = __values(roomRRES.models), _e = _d.next(); !_e.done; _e = _d.next()) {
                                         var mdl0 = _e.value;
@@ -19712,7 +19715,7 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                                 if (whitelisted) {
                                     var oarcArchive = U8.parse(oarcFile.buffer);
                                     var oarcBRRES = BRRES.parse(oarcArchive.findFile('g3d/model.brres').buffer);
-                                    this.textureHolder.addTextures(gl, oarcBRRES.textures);
+                                    this.textureHolder.addRRESTextures(gl, oarcBRRES);
                                     try {
                                         for (var _k = __values(oarcBRRES.models), _l = _k.next(); !_l.done; _l = _k.next()) {
                                             var mdl0 = _l.value;
@@ -20085,7 +20088,7 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
                     try {
                         for (var stageRRESes_1 = __values(stageRRESes), stageRRESes_1_1 = stageRRESes_1.next(); !stageRRESes_1_1.done; stageRRESes_1_1 = stageRRESes_1.next()) {
                             var stageRRES = stageRRESes_1_1.value;
-                            this.textureHolder.addTextures(gl, stageRRES.textures);
+                            this.textureHolder.addRRESTextures(gl, stageRRES);
                             util_53.assert(stageRRES.models.length === 1);
                             var modelRenderer = new render_30.ModelRenderer(gl, this.textureHolder, stageRRES.models[0], '', materialHacks);
                             this.models.push(modelRenderer);

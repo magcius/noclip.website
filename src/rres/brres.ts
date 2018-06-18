@@ -612,10 +612,10 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const scale = Math.pow(2, scaleExp - indTexScaleBias - indTexScaleBase);
 
         const ma = ((((mtxA >>>  0) & 0x07FF) << 21) >> 21) * scale;
-        const mb = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21) * scale;
-        const mc = ((((mtxB >>>  0) & 0x07FF) << 21) >> 21) * scale;
-        const md = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21) * scale;
-        const mx = ((((mtxC >>>  0) & 0x07FF) << 21) >> 21) * scale;
+        const mc = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21) * scale;
+        const mx = ((((mtxB >>>  0) & 0x07FF) << 21) >> 21) * scale;
+        const mb = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21) * scale;
+        const md = ((((mtxC >>>  0) & 0x07FF) << 21) >> 21) * scale;
         const my = ((((mtxC >>> 11) & 0x07FF) << 21) >> 21) * scale;
 
         const mat = mat2d.fromValues(

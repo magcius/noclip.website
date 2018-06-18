@@ -30,7 +30,7 @@ export class BasicRRESScene implements Viewer.MainScene {
         this.textures = this.textureHolder.viewerTextures;
 
         for (const stageRRES of stageRRESes) {
-            this.textureHolder.addTextures(gl, stageRRES.textures);
+            this.textureHolder.addRRESTextures(gl, stageRRES);
             assert(stageRRES.models.length === 1);
 
             const modelRenderer = new ModelRenderer(gl, this.textureHolder, stageRRES.models[0], '', materialHacks);
