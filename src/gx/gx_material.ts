@@ -278,8 +278,8 @@ export class GX_Program extends BaseProgram {
         switch (src) {
         case GX.TexGenSrc.POS:       return `vec4(a_Position, 1.0)`;
         case GX.TexGenSrc.NRM:       return `vec4(a_Normal, 1.0)`;
-        case GX.TexGenSrc.COLOR0:    return `vec4(a_Color0, 1.0)`;
-        case GX.TexGenSrc.COLOR1:    return `vec4(a_Color1, 1.0)`;
+        case GX.TexGenSrc.COLOR0:    return `a_Color0`;
+        case GX.TexGenSrc.COLOR1:    return `a_Color1`;
         case GX.TexGenSrc.TEX0:      return `vec4(a_Tex0, 1.0, 1.0)`;
         case GX.TexGenSrc.TEX1:      return `vec4(a_Tex1, 1.0, 1.0)`;
         case GX.TexGenSrc.TEX2:      return `vec4(a_Tex2, 1.0, 1.0)`;

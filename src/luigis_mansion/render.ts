@@ -67,7 +67,7 @@ class Command_Batch {
     public exec(state: RenderState): void {
         const gl = state.gl;
 
-        this.computeModelView(this.packetParams.u_ModelView, state);
+        this.computeModelView(this.packetParams.u_PosMtx[0], state);
         this.scene.renderHelper.bindPacketParams(state, this.packetParams);
 
         this.shapeHelper.drawSimple(gl);

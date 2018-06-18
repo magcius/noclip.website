@@ -50,7 +50,7 @@ class SeaPlaneScene implements Scene {
     private seaCmd: Command_Material;
     private plane: PlaneShape;
 
-    constructor(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, bmd: BMD, btk: BTK, configName: string) {
+    constructor(gl: WebGL2RenderingContext, private textureHolder: J3DTextureHolder, bmd: BMD, btk: BTK, configName: string) {
         this.btk = btk;
 
         const sceneLoader: SceneLoader = new SceneLoader(textureHolder, bmd, null);
@@ -137,11 +137,9 @@ class SeaPlaneScene implements Scene {
 
     public fillTextureMapping(m: TextureMapping, texIndex: number): void {
         const tex1Sampler = this.tex1Samplers[texIndex];
-        const tex1TextureData = this.tex1TextureDatas[tex1Sampler.textureDataIndex];
-        m.glTexture = this.glTextures[tex1Sampler.textureDataIndex];
+
+        this.textureHolder.fillTextureMapping(m, tex1Sampler.name);
         m.glSampler = this.glSamplers[tex1Sampler.index];
-        m.width = tex1TextureData.width;
-        m.height = tex1TextureData.height;
         m.lodBias = tex1Sampler.lodBias;
     }
 }
@@ -159,8 +157,7 @@ class PlaneShape {
     public render(state: RenderState, renderHelper: GXRenderHelper) {
         const gl = state.gl;
 
-        mat4.copy(this.packetParams.u_ModelView, state.updateModelView());
-        mat4.copy(this.packetParams.u_PosMtx[0], posMtx);
+        mat4.mul(this.packetParams.u_PosMtx[0], state.updateModelView(), posMtx);
         renderHelper.bindPacketParams(state, this.packetParams);
 
         gl.bindVertexArray(this.vao);

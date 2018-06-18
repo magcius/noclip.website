@@ -40,8 +40,6 @@ export class MaterialParams {
 }
 
 export class PacketParams {
-    // TODO(jstpierre): Remove. This is for convenience.
-    public u_ModelView: mat4 = mat4.create();
     public u_PosMtx: mat4[] = nArray(10, () => mat4.create());
 }
 
@@ -154,14 +152,11 @@ export function fillMaterialParamsData(d: Float32Array, materialParams: Material
     assert(d.length >= offs);
 }
 
-const matrixScratch = mat4.create();
 export function fillPacketParamsData(d: Float32Array, packetParams: PacketParams): void {
     let offs = 0;
 
-    for (let i = 0; i < 10; i++) {
-        mat4.mul(matrixScratch, packetParams.u_ModelView, packetParams.u_PosMtx[i]);
-        offs += fillMatrix4x3(d, offs, matrixScratch);
-    }
+    for (let i = 0; i < 10; i++)
+        offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[i]);
 
     assert(offs === u_PacketParamsBufferSize);
     assert(d.length >= offs);
@@ -424,9 +419,6 @@ export class TextureHolder<TextureType extends GX_Texture.Texture> {
     }
 
     private findTextureEntryIndex(name: string): number {
-        if (name === 'IndDummy')
-            name = 'MiniFlag';
-
         const nameVariants = this.tryTextureNameVariants(name);
 
         for (let i = 0; i < nameVariants.length; i++) {
