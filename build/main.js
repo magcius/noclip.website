@@ -4386,7 +4386,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
         }
     }
     exports_22("getRasColorChannelID", getRasColorChannelID);
-    var render_2, Program_2, EFB_WIDTH, EFB_HEIGHT, Color, vtxAttributeGenDefs, GX_Program;
+    var render_2, Program_2, EFB_WIDTH, EFB_HEIGHT, Color, vtxAttributeGenDefs, textureSamplerIdentities, GX_Program;
     return {
         setters: [
             function (render_2_1) {
@@ -4436,6 +4436,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                 { attrib: 19 /* TEX6 */, name: "Tex6", storage: "vec2" },
                 { attrib: 20 /* TEX7 */, name: "Tex7", storage: "vec2" },
             ];
+            textureSamplerIdentities = Int32Array.of(0, 1, 2, 3, 4, 5, 6, 7);
             GX_Program = /** @class */ (function (_super) {
                 __extends(GX_Program, _super);
                 function GX_Program(material, hacks) {
@@ -4443,6 +4444,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                     var _this = _super.call(this) || this;
                     _this.material = material;
                     _this.hacks = hacks;
+                    _this.boundTextureSamplerIdentities = false;
                     _this.generateShaders();
                     return _this;
                 }
@@ -4451,6 +4453,12 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_22, c
                     gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, "ub_MaterialParams"), GX_Program.ub_MaterialParams);
                     gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, "ub_PacketParams"), GX_Program.ub_PacketParams);
                     this.u_Texture = gl.getUniformLocation(prog, "u_Texture");
+                };
+                GX_Program.prototype.bindTextureSamplerIdentities = function (gl) {
+                    if (!this.boundTextureSamplerIdentities) {
+                        gl.uniform1iv(this.u_Texture, textureSamplerIdentities);
+                        this.boundTextureSamplerIdentities = true;
+                    }
                 };
                 GX_Program.prototype.generateFloat = function (v) {
                     var s = v.toString();
@@ -5420,8 +5428,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                         gl.bindTexture(gl.TEXTURE_2D, m.glTexture);
                         gl.bindSampler(i, m.glSampler);
                     }
-                    // TODO(jstpierre): Find a better place to put this. Maybe in GX_Program?
-                    gl.uniform1iv(prog.u_Texture, [0, 1, 2, 3, 4, 5, 6, 7]);
+                    prog.bindTextureSamplerIdentities(gl);
                 };
                 GXRenderHelper.prototype.bindMaterialTextures = function (state, materialParams, prog) {
                     var gl = state.gl;
@@ -5504,22 +5511,33 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 TextureHolder.prototype.destroy = function (gl) {
                     this.glTextures.forEach(function (texture) { return gl.deleteTexture(texture); });
                 };
+                // TODO(jstpierre): Optimize interface to not require an array construct every frame...
                 TextureHolder.prototype.tryTextureNameVariants = function (name) {
                     // Default implementation.
-                    return [name];
+                    return null;
+                };
+                TextureHolder.prototype.findTextureEntryIndexRaw = function (name) {
+                    for (var i = 0; i < this.textureEntries.length; i++) {
+                        if (this.textureEntries[i].name === name)
+                            return i;
+                    }
+                    return -1;
                 };
                 TextureHolder.prototype.findTextureEntryIndex = function (name) {
                     var nameVariants = this.tryTextureNameVariants(name);
-                    var _loop_6 = function (i) {
-                        var index = this_3.textureEntries.findIndex(function (entry) { return entry.name === nameVariants[i]; });
-                        if (index >= 0)
-                            return { value: index };
-                    };
-                    var this_3 = this;
-                    for (var i = 0; i < nameVariants.length; i++) {
-                        var state_1 = _loop_6(i);
-                        if (typeof state_1 === "object")
-                            return state_1.value;
+                    if (nameVariants !== null) {
+                        for (var j = 0; j < nameVariants.length; j++) {
+                            for (var i = 0; i < this.textureEntries.length; i++) {
+                                if (this.textureEntries[i].name === nameVariants[j])
+                                    return i;
+                            }
+                        }
+                    }
+                    else {
+                        for (var i = 0; i < this.textureEntries.length; i++) {
+                            if (this.textureEntries[i].name === name)
+                                return i;
+                        }
                     }
                     console.error("Cannot find texture", name);
                     return -1;
@@ -6882,7 +6900,7 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
         var nameTable = readStringTable(buffer, nameTableOffs);
         var samplers = [];
         var textureDatas = [];
-        var _loop_7 = function (i) {
+        var _loop_6 = function (i) {
             var textureIdx = textureHeaderOffs + i * 0x20;
             var name_3 = nameTable[i];
             var btiTexture = readBTI_Texture(buffer.slice(textureIdx), name_3);
@@ -6919,7 +6937,7 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
             samplers.push(sampler);
         };
         for (var i = 0; i < textureCount; i++) {
-            _loop_7(i);
+            _loop_6(i);
         }
         return { textureDatas: textureDatas, samplers: samplers };
     }
@@ -7488,7 +7506,7 @@ System.register("j3d/rarc", ["util"], function (exports_27, context_27) {
                 }
                 RARC.prototype.findDirParts = function (parts) {
                     var dir = this.root;
-                    var _loop_8 = function (part) {
+                    var _loop_7 = function (part) {
                         dir = dir.subdirs.find(function (subdir) { return subdir.name === part; });
                         if (dir === undefined)
                             return { value: null };
@@ -7496,9 +7514,9 @@ System.register("j3d/rarc", ["util"], function (exports_27, context_27) {
                     try {
                         for (var parts_1 = __values(parts), parts_1_1 = parts_1.next(); !parts_1_1.done; parts_1_1 = parts_1.next()) {
                             var part = parts_1_1.value;
-                            var state_2 = _loop_8(part);
-                            if (typeof state_2 === "object")
-                                return state_2.value;
+                            var state_1 = _loop_7(part);
+                            if (typeof state_1 === "object")
+                                return state_1.value;
                         }
                     }
                     catch (e_26_1) { e_26 = { error: e_26_1 }; }
@@ -15221,7 +15239,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         state.bindModelView(_this.isSkybox);
                         gl.uniformMatrix4fv(prog.u_view, false, state.view);
                         state.useFlags(renderFlags);
-                        var _loop_9 = function (i) {
+                        var _loop_8 = function (i) {
                             var attribName = attribNames[i];
                             gl.activeTexture(gl.TEXTURE0 + i);
                             var uniformLocation = prog.getTextureUniformLocation(attribName);
@@ -15248,7 +15266,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         };
                         // Textures.
                         for (var i = 0; i < attribNames.length; i++) {
-                            _loop_9(i);
+                            _loop_8(i);
                         }
                     };
                     var e_48, _a;
@@ -15408,7 +15426,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                     var texture = textureEntry.texture;
                     var surface = texture.surface;
                     var canvases = [];
-                    var _loop_10 = function (i) {
+                    var _loop_9 = function (i) {
                         var mipLevel = i;
                         var canvas = document.createElement('canvas');
                         canvas.width = 0;
@@ -15468,7 +15486,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
                         });
                     };
                     for (var i = 0; i < surface.numMips; i++) {
-                        _loop_10(i);
+                        _loop_9(i);
                     }
                     this.textures.push({ name: textureEntry.entry.name, surfaces: canvases });
                     return glTexture;
@@ -16040,7 +16058,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_64, context_64)
         // Regular resource table.
         var resourceTableCount = view.getUint32(offs + 0x00);
         offs += 0x04;
-        var _loop_11 = function (i) {
+        var _loop_10 = function (i) {
             var isCompressed = !!view.getUint32(offs + 0x00);
             var fourCC = util_38.readString(buffer, offs + 0x04, 4, false);
             var fileID = util_38.readString(buffer, offs + 0x08, 4, false);
@@ -16074,7 +16092,7 @@ System.register("metroid_prime/pak", ["util"], function (exports_64, context_64)
                 namedResourceTable.set(fileResource.name, fileResource);
         };
         for (var i = 0; i < resourceTableCount; i++) {
-            _loop_11(i);
+            _loop_10(i);
         }
         return { namedResourceTable: namedResourceTable, resourceTable: resourceTable };
     }
@@ -18787,7 +18805,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
     }
     function getAnimFrame(anim, frame) {
         // Be careful of floating point precision.
-        var lastFrame = anim.duration;
+        var lastFrame = anim.duration - 1;
         if (anim.loopMode === 0 /* ONCE */) {
             if (frame > lastFrame)
                 frame = lastFrame;
@@ -18817,36 +18835,23 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var cf3 = (p0 * 1) + (p1 * 0) + (s0 * 0) + (s1 * 0);
         return cubicEval(cf0, cf1, cf2, cf3, t);
     }
-    /*
-    function hermiteInterpolate(v0: number, t0: number, v1: number, t1: number, p: number, d: number) {
-        const invd = 1 / d;
-        const s = p * invd;
-        const s_1 = s - 1;
-    
-        return v0 + (v0 - v1) * (2 * s - 3) * s * s + p * s_1 * (s_1 * t0 + s * t1);
-    }
-    */
     function sampleAnimationDataHermite(track, frame) {
         var frames = track.frames;
         if (frames.length === 1)
             return frames[0].value;
         // Find the first frame.
-        var idx1 = frames.findIndex(function (key) { return (frame < key.time); });
+        var idx1 = 0;
+        for (; idx1 < frames.length; idx1++) {
+            if (frame < frames[idx1].time)
+                break;
+        }
         if (idx1 === 0)
             return frames[0].value;
-        else if (idx1 < 0)
+        else if (idx1 === frames.length)
             return frames[frames.length - 1].value;
         var idx0 = idx1 - 1;
         var k0 = frames[idx0];
         var k1 = frames[idx1];
-        // HACK(jstpierre): Nintendo sometimes uses weird "reset" tangents
-        // which aren't supposed to be visible. They are visible for us because
-        // "frame" can have a non-zero fractional component. In this case, pick
-        // a value completely.
-        if ((k1.time - k0.time) === 1)
-            return k0.value;
-        var curFrameDelta = frame - k0.time;
-        var keyFrameDelta = k1.time - k0.time;
         var t = (frame - k0.time) / (k1.time - k0.time);
         return hermiteInterpolate(k0, k1, t);
     }
@@ -18864,8 +18869,8 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             return frames[n - 1];
         // Find the first frame.
         var idx0 = (frame | 0);
-        var idx1 = idx0 + 1;
         var k0 = frames[idx0];
+        var idx1 = idx0 + 1;
         var k1 = frames[idx1];
         var t = (frame - idx0);
         return lerp(k0, k1, t);
@@ -18925,44 +18930,6 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             callback(t, f(t));
         }
     }
-    function graphF(ctx, color, f, maxt, step) {
-        if (step === void 0) { step = 1; }
-        var canvas = ctx.canvas;
-        var minv = undefined, maxv = undefined;
-        stepF(f, maxt, step, function (t, v) {
-            if (minv === undefined)
-                minv = v;
-            if (maxv === undefined)
-                maxv = v;
-            minv = Math.min(minv, v);
-            maxv = Math.max(maxv, v);
-        });
-        var tmt = minv, tmx = maxv;
-        ctx.font = '16px sans-serif';
-        ctx.fillStyle = 'black';
-        // pad
-        minv -= 5;
-        maxv += 5;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        stepF(f, maxt, step, function (t, v) {
-            var xa = (t / maxt) * 1 / step;
-            var ya = (v - minv) / (maxv - minv);
-            var x = xa * canvas.width;
-            var y = (1 - ya) * canvas.height;
-            ctx.lineTo(x, y);
-            if (v === tmt) {
-                ctx.fillText('' + v, x, y + 16);
-                tmt = undefined;
-            }
-            if (v === tmx) {
-                ctx.fillText('' + v, x, y - 16);
-                tmx = undefined;
-            }
-        });
-        ctx.stroke();
-    }
     function cv() {
         var canvas = document.createElement('canvas');
         canvas.width = 800;
@@ -18977,14 +18944,6 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         canvas.classList.add('cv');
         document.body.appendChild(canvas);
         return ctx;
-    }
-    function visualizeTrack(base, track, offt, maxt, step) {
-        if (step === void 0) { step = 1; }
-        var c = cv();
-        graphF(c, 'red', function (t) {
-            var m = getAnimFrame(base, offt + t);
-            return sampleAnimationData(track, m);
-        }, maxt, step);
     }
     function findAnimationData_SRT0(srt0, materialName, texMtxIndex) {
         var matData = srt0.matAnimations.find(function (m) { return m.materialName === materialName; });
@@ -19224,7 +19183,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
     }
     function bindCHR0NodesAnimator(animationController, chr0, nodes) {
         var nodeData = [];
-        var _loop_12 = function (nodeAnimation) {
+        var _loop_11 = function (nodeAnimation) {
             var node = nodes.find(function (node) { return node.name === nodeAnimation.nodeName; });
             if (!node)
                 return "continue";
@@ -19233,7 +19192,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         try {
             for (var _a = __values(chr0.nodeAnimations), _b = _a.next(); !_b.done; _b = _a.next()) {
                 var nodeAnimation = _b.value;
-                _loop_12(nodeAnimation);
+                _loop_11(nodeAnimation);
             }
         }
         catch (e_68_1) { e_68 = { error: e_68_1 }; }
@@ -19366,7 +19325,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var e_69, _a, e_70, _b, e_71, _c, e_72, _d;
     }
     exports_76("parse", parse);
-    var util_49, GX_Material, gx_displaylist_4, gl_matrix_16, DisplayListRegisters, AnimationController, TexSrtAnimator, TexMtxIndex, CHR0NodesAnimator;
+    var util_49, GX_Material, gx_displaylist_4, gl_matrix_16, DisplayListRegisters, AnimationController, Graph, TexSrtAnimator, TexMtxIndex, CHR0NodesAnimator;
     return {
         setters: [
             function (util_49_1) {
@@ -19443,7 +19402,43 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 return AnimationController;
             }());
             exports_76("AnimationController", AnimationController);
-            window.debug = { visualizeTrack: visualizeTrack, graphF: graphF, getAnimFrame: getAnimFrame };
+            Graph = /** @class */ (function () {
+                function Graph(ctx) {
+                    this.minv = undefined;
+                    this.maxv = undefined;
+                    this.ctx = ctx;
+                }
+                Graph.prototype.graphF = function (color, f, range) {
+                    var _this = this;
+                    var step = 1;
+                    stepF(f, range, step, function (t, v) {
+                        if (_this.minv === undefined)
+                            _this.minv = v;
+                        if (_this.maxv === undefined)
+                            _this.maxv = v;
+                        _this.minv = Math.min(_this.minv, v);
+                        _this.maxv = Math.max(_this.maxv, v);
+                    });
+                    // pad
+                    var displayMinV = this.minv - 5;
+                    var displayMaxV = this.maxv + 5;
+                    var ctx = this.ctx;
+                    var width = ctx.canvas.width;
+                    var height = ctx.canvas.height;
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    stepF(f, range, step, function (t, v) {
+                        var xa = (t / range) * 1 / step;
+                        var ya = (v - displayMinV) / (displayMaxV - displayMinV);
+                        var x = xa * width;
+                        var y = (1 - ya) * height;
+                        ctx.lineTo(x, y);
+                    });
+                    ctx.stroke();
+                };
+                return Graph;
+            }());
             TexSrtAnimator = /** @class */ (function () {
                 function TexSrtAnimator(animationController, srt0, texData) {
                     this.animationController = animationController;
@@ -19493,7 +19488,47 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     this.nodeData = nodeData;
                     this.scratch = gl_matrix_16.mat4.create();
                     this.disabled = [];
+                    this.vizNodeId = undefined;
                 }
+                CHR0NodesAnimator.prototype.viz = function (nodeId) {
+                    this.vizNodeId = nodeId;
+                    this.vizGraph = new Graph(cv());
+                };
+                CHR0NodesAnimator.prototype.updviz = function (animFrame, nodeData) {
+                    var _this = this;
+                    var numFrames = this.chr0.duration;
+                    var ctx = this.vizGraph.ctx;
+                    var scale = 10;
+                    var maxt = (numFrames / scale) | 0;
+                    var offt = animFrame - maxt / 2;
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                    if (nodeData.rotationX) {
+                        this.vizGraph.graphF('red', function (t) {
+                            var animFrame = getAnimFrame(_this.chr0, t + offt);
+                            return sampleAnimationData(nodeData.rotationX, animFrame);
+                        }, maxt);
+                    }
+                    if (nodeData.rotationY) {
+                        this.vizGraph.graphF('green', function (t) {
+                            var animFrame = getAnimFrame(_this.chr0, t + offt);
+                            return sampleAnimationData(nodeData.rotationY, animFrame);
+                        }, maxt);
+                    }
+                    if (nodeData.rotationZ) {
+                        this.vizGraph.graphF('blue', function (t) {
+                            var animFrame = getAnimFrame(_this.chr0, t + offt);
+                            return sampleAnimationData(nodeData.rotationZ, animFrame);
+                        }, maxt);
+                    }
+                    // const xa = (animFrame / numFrames) * ctx.canvas.width;
+                    var xa = (0.5) * ctx.canvas.width;
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'black';
+                    ctx.lineTo(xa, 0);
+                    ctx.lineTo(xa, ctx.canvas.height);
+                    ctx.stroke();
+                };
                 CHR0NodesAnimator.prototype.calcModelMtx = function (dst, nodeId) {
                     var nodeData = this.nodeData[nodeId];
                     if (!nodeData)
@@ -19502,12 +19537,16 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                         return false;
                     var frame = this.animationController.getTimeInFrames();
                     var animFrame = getAnimFrame(this.chr0, frame);
+                    if (this.vizNodeId === nodeId)
+                        this.updviz(animFrame, nodeData);
                     var scaleX = nodeData.scaleX ? sampleAnimationData(nodeData.scaleX, animFrame) : 1;
                     var scaleY = nodeData.scaleY ? sampleAnimationData(nodeData.scaleY, animFrame) : 1;
                     var scaleZ = nodeData.scaleZ ? sampleAnimationData(nodeData.scaleZ, animFrame) : 1;
-                    var rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, animFrame) : 0;
-                    var rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, animFrame) : 0;
-                    var rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, animFrame) : 0;
+                    // Don't interpolate rotation across frames... the animation data hasn't been validated for it.
+                    var floorAnimFrame = animFrame | 0;
+                    var rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, floorAnimFrame) : 0;
+                    var rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, floorAnimFrame) : 0;
+                    var rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, floorAnimFrame) : 0;
                     var translationX = nodeData.translationX ? sampleAnimationData(nodeData.translationX, animFrame) : 0;
                     var translationY = nodeData.translationY ? sampleAnimationData(nodeData.translationY, animFrame) : 0;
                     var translationZ = nodeData.translationZ ? sampleAnimationData(nodeData.translationZ, animFrame) : 0;
@@ -19601,7 +19640,7 @@ System.register("rres/u8", ["util"], function (exports_77, context_77) {
                 }
                 U8Archive.prototype.findDirParts = function (parts) {
                     var dir = this.root;
-                    var _loop_13 = function (part) {
+                    var _loop_12 = function (part) {
                         dir = dir.subdirs.find(function (subdir) { return subdir.name === part; });
                         if (dir === undefined)
                             return { value: null };
@@ -19609,9 +19648,9 @@ System.register("rres/u8", ["util"], function (exports_77, context_77) {
                     try {
                         for (var parts_2 = __values(parts), parts_2_1 = parts_2.next(); !parts_2_1.done; parts_2_1 = parts_2.next()) {
                             var part = parts_2_1.value;
-                            var state_3 = _loop_13(part);
-                            if (typeof state_3 === "object")
-                                return state_3.value;
+                            var state_2 = _loop_12(part);
+                            if (typeof state_2 === "object")
+                                return state_2.value;
                         }
                     }
                     catch (e_73_1) { e_73 = { error: e_73_1 }; }
@@ -20014,7 +20053,6 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         for (var _a = __values(this.search), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var archive = _b.value;
                             var file = archive.findFile(path);
-                            console.log(path, archive, file);
                             if (file)
                                 return file;
                         }

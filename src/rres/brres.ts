@@ -1035,7 +1035,7 @@ const enum NodeFlags {
     SCALE_HOMO   = 0x10,
 }
 
-const enum BillboardMode {
+export const enum BillboardMode {
     NONE = 0,
     BILLBOARD,
     PERSP_BILLBOARD,
@@ -1302,7 +1302,7 @@ interface AnimationBase {
 
 function getAnimFrame(anim: AnimationBase, frame: number): number {
     // Be careful of floating point precision.
-    const lastFrame = anim.duration;
+    const lastFrame = anim.duration - 1;
     if (anim.loopMode === LoopMode.ONCE) {
         if (frame > lastFrame)
             frame = lastFrame;
@@ -1333,16 +1333,6 @@ function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeH
     return cubicEval(cf0, cf1, cf2, cf3, t);
 }
 
-/*
-function hermiteInterpolate(v0: number, t0: number, v1: number, t1: number, p: number, d: number) {
-    const invd = 1 / d;
-    const s = p * invd;
-    const s_1 = s - 1;
-
-    return v0 + (v0 - v1) * (2 * s - 3) * s * s + p * s_1 * (s_1 * t0 + s * t1);
-}
-*/
-
 function sampleAnimationDataHermite(track: AnimationTrackHermite, frame: number): number {
     const frames = track.frames;
 
@@ -1350,25 +1340,21 @@ function sampleAnimationDataHermite(track: AnimationTrackHermite, frame: number)
         return frames[0].value;
 
     // Find the first frame.
-    const idx1 = frames.findIndex((key) => (frame < key.time));
+    let idx1 = 0;
+    for (; idx1 < frames.length; idx1++) {
+        if (frame < frames[idx1].time)
+            break;
+    }
+    
     if (idx1 === 0)
         return frames[0].value;
-    else if (idx1 < 0)
+    else if (idx1 === frames.length)
         return frames[frames.length - 1].value;
     const idx0 = idx1 - 1;
 
     const k0 = frames[idx0];
     const k1 = frames[idx1];
 
-    // HACK(jstpierre): Nintendo sometimes uses weird "reset" tangents
-    // which aren't supposed to be visible. They are visible for us because
-    // "frame" can have a non-zero fractional component. In this case, pick
-    // a value completely.
-    if ((k1.time - k0.time) === 1)
-        return k0.value;
-
-    const curFrameDelta = frame - k0.time;
-    const keyFrameDelta = k1.time - k0.time;
     const t = (frame - k0.time) / (k1.time - k0.time);
     return hermiteInterpolate(k0, k1, t);
 }
@@ -1391,8 +1377,8 @@ function sampleAnimationDataLinear(track: AnimationTrackLinear, frame: number): 
 
     // Find the first frame.
     const idx0 = (frame | 0);
-    const idx1 = idx0 + 1;
     const k0 = frames[idx0];
+    const idx1 = idx0 + 1;
     const k1 = frames[idx1];
 
     const t = (frame - idx0);
@@ -1474,46 +1460,47 @@ function stepF(f: (t: number) => number, maxt: number, step: number, callback: (
     }
 }
 
-function graphF(ctx: CanvasRenderingContext2D, color: string, f: (t: number) => number, maxt: number, step: number = 1): void {
-    const canvas = ctx.canvas;
+type F = (t: number) => number;
 
-    let minv: number = undefined, maxv: number = undefined;
-    stepF(f, maxt, step, (t, v) => {
-        if (minv === undefined)
-            minv = v;
-        if (maxv === undefined)
-            maxv = v;
-        minv = Math.min(minv, v);
-        maxv = Math.max(maxv, v);
-    });
+class Graph {
+    public minv: number = undefined;
+    public maxv: number = undefined;
+    public ctx: CanvasRenderingContext2D;
 
-    let tmt = minv, tmx = maxv;
-    ctx.font = '16px sans-serif';
-    ctx.fillStyle = 'black';
-    // pad
-    minv -= 5;
-    maxv += 5;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    stepF(f, maxt, step, (t, v) => {
-        const xa = (t / maxt) * 1/step;
-        const ya = (v - minv) / (maxv - minv);
-        const x = xa * canvas.width;
-        const y = (1-ya) * canvas.height;
-        ctx.lineTo(x, y);
+    constructor(ctx: CanvasRenderingContext2D) {
+        this.ctx = ctx;
+    }
 
-        if (v === tmt) {
-            ctx.fillText('' + v, x, y + 16);
-            tmt = undefined;
-        }
+    public graphF(color: string, f: F, range: number): void {
+        const step = 1;
 
-        if (v === tmx) {
-            ctx.fillText('' + v, x, y - 16);
-            tmx = undefined;
-        }
-    });
-    ctx.stroke();
+        stepF(f, range, step, (t, v) => {
+            if (this.minv === undefined)
+                this.minv = v;
+            if (this.maxv === undefined)
+                this.maxv = v;
+            this.minv = Math.min(this.minv, v);
+            this.maxv = Math.max(this.maxv, v);
+        });
+
+        // pad
+        const displayMinV = this.minv - 5;
+        const displayMaxV = this.maxv + 5;
+        const ctx = this.ctx;
+        const width = ctx.canvas.width;
+        const height = ctx.canvas.height;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        stepF(f, range, step, (t, v) => {
+            const xa = (t / range) * 1/step;
+            const ya = (v - displayMinV) / (displayMaxV - displayMinV);
+            const x = xa * width;
+            const y = (1-ya) * height;
+            ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    }
 }
 
 function cv(): CanvasRenderingContext2D {    
@@ -1535,17 +1522,6 @@ function cv(): CanvasRenderingContext2D {
 
     return ctx;
 }
-
-function visualizeTrack(base: AnimationBase, track: AnimationTrack, offt: number, maxt: number, step: number = 1): void {
-    const c = cv();
-
-    graphF(c, 'red', (t) => {
-        const m = getAnimFrame(base, offt + t);
-        return sampleAnimationData(track, m);
-    }, maxt, step);
-}
-
-window.debug = { visualizeTrack, graphF, getAnimFrame };
 
 //#endregion
 
@@ -1928,6 +1904,54 @@ export class CHR0NodesAnimator {
     constructor(public animationController: AnimationController, public chr0: CHR0, private nodeData: CHR0_NodeData[]) {
     }
 
+    private vizNodeId: number = undefined;
+    private vizGraph: Graph;
+    public viz(nodeId: number) {
+        this.vizNodeId = nodeId;
+        this.vizGraph = new Graph(cv());
+    }
+
+    private updviz(animFrame: number, nodeData: CHR0_NodeData) {
+        const numFrames = this.chr0.duration;
+        const ctx = this.vizGraph.ctx;
+
+        const scale = 10;
+        const maxt = (numFrames / scale) | 0;
+        const offt = animFrame - maxt / 2;
+
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+        if (nodeData.rotationX) {
+            this.vizGraph.graphF('red', (t: number) => {
+                const animFrame = getAnimFrame(this.chr0, t + offt);
+                return sampleAnimationData(nodeData.rotationX, animFrame);
+            }, maxt);
+        }
+
+        if (nodeData.rotationY) {
+            this.vizGraph.graphF('green', (t: number) => {
+                const animFrame = getAnimFrame(this.chr0, t + offt);
+                return sampleAnimationData(nodeData.rotationY, animFrame);
+            }, maxt);
+        }
+
+        if (nodeData.rotationZ) {
+            this.vizGraph.graphF('blue', (t: number) => {
+                const animFrame = getAnimFrame(this.chr0, t + offt);
+                return sampleAnimationData(nodeData.rotationZ, animFrame);
+            }, maxt);
+        }
+
+        // const xa = (animFrame / numFrames) * ctx.canvas.width;
+        const xa = (0.5) * ctx.canvas.width;
+        ctx.beginPath();
+        ctx.strokeStyle = 'black';
+        ctx.lineTo(xa, 0);
+        ctx.lineTo(xa, ctx.canvas.height);
+        ctx.stroke();
+    }
+
     public calcModelMtx(dst: mat4, nodeId: number): boolean {
         const nodeData = this.nodeData[nodeId];
         if (!nodeData)
@@ -1939,13 +1963,18 @@ export class CHR0NodesAnimator {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.chr0, frame);
 
+        if (this.vizNodeId === nodeId)
+            this.updviz(animFrame, nodeData);
+
         const scaleX = nodeData.scaleX ? sampleAnimationData(nodeData.scaleX, animFrame) : 1;
         const scaleY = nodeData.scaleY ? sampleAnimationData(nodeData.scaleY, animFrame) : 1;
         const scaleZ = nodeData.scaleZ ? sampleAnimationData(nodeData.scaleZ, animFrame) : 1;
 
-        const rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, animFrame) : 0;
-        const rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, animFrame) : 0;
-        const rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, animFrame) : 0;
+        // Don't interpolate rotation across frames... the animation data hasn't been validated for it.
+        const floorAnimFrame = animFrame | 0;
+        const rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, floorAnimFrame) : 0;
+        const rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, floorAnimFrame) : 0;
+        const rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, floorAnimFrame) : 0;
 
         const translationX = nodeData.translationX ? sampleAnimationData(nodeData.translationX, animFrame) : 0;
         const translationY = nodeData.translationY ? sampleAnimationData(nodeData.translationY, animFrame) : 0;
