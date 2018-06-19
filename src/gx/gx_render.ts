@@ -215,8 +215,7 @@ export class GXRenderHelper {
             gl.bindTexture(gl.TEXTURE_2D, m.glTexture);
             gl.bindSampler(i, m.glSampler);
         }
-        // TODO(jstpierre): Find a better place to put this. Maybe in GX_Program?
-        gl.uniform1iv(prog.u_Texture, [0, 1, 2, 3, 4, 5, 6, 7]);
+        prog.bindTextureSamplerIdentities(gl);
     }
 
     public bindMaterialTextures(state: RenderState, materialParams: MaterialParams, prog: GX_Material.GX_Program): void {
@@ -416,18 +415,35 @@ export class TextureHolder<TextureType extends GX_Texture.Texture> {
         this.glTextures.forEach((texture) => gl.deleteTexture(texture));
     }
 
+    // TODO(jstpierre): Optimize interface to not require an array construct every frame...
     protected tryTextureNameVariants(name: string): string[] {
         // Default implementation.
-        return [name];
+        return null;
+    }
+
+    private findTextureEntryIndexRaw(name: string): number {
+        for (let i = 0; i < this.textureEntries.length; i++) {
+            if (this.textureEntries[i].name === name)
+                return i;
+        }
+        return -1;
     }
 
     private findTextureEntryIndex(name: string): number {
         const nameVariants = this.tryTextureNameVariants(name);
 
-        for (let i = 0; i < nameVariants.length; i++) {
-            const index = this.textureEntries.findIndex((entry) => entry.name === nameVariants[i]);
-            if (index >= 0)
-                return index;
+        if (nameVariants !== null) {
+            for (let j = 0; j < nameVariants.length; j++) {
+                for (let i = 0; i < this.textureEntries.length; i++) {
+                    if (this.textureEntries[i].name === nameVariants[j])
+                        return i;
+                }
+            }
+        } else {
+            for (let i = 0; i < this.textureEntries.length; i++) {
+                if (this.textureEntries[i].name === name)
+                    return i;
+            }
         }
 
         console.error("Cannot find texture", name);

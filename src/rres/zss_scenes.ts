@@ -56,7 +56,6 @@ class ModelArchiveCollection {
     private findFile(path: string): U8.U8File | null {
         for (const archive of this.search) {
             const file = archive.findFile(path);
-            console.log(path, archive, file);
             if (file)
                 return file;
         }

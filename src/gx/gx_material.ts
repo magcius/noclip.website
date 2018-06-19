@@ -191,12 +191,14 @@ export interface GXMaterialHacks {
     alphaLightingFudge?: LightingFudgeGenerator;
 }
 
+const textureSamplerIdentities = Int32Array.of(0, 1, 2, 3, 4, 5, 6, 7);
 export class GX_Program extends BaseProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
 
     public u_Texture: WebGLUniformLocation;
+    private boundTextureSamplerIdentities: boolean = false;
 
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks = null) {
         super();
@@ -208,6 +210,13 @@ export class GX_Program extends BaseProgram {
         gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_MaterialParams`), GX_Program.ub_MaterialParams);
         gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_PacketParams`), GX_Program.ub_PacketParams);
         this.u_Texture = gl.getUniformLocation(prog, `u_Texture`);
+    }
+
+    public bindTextureSamplerIdentities(gl: WebGL2RenderingContext): void {
+        if (!this.boundTextureSamplerIdentities) {
+            gl.uniform1iv(this.u_Texture, textureSamplerIdentities);
+            this.boundTextureSamplerIdentities = true;
+        }
     }
 
     private generateFloat(v: number): string {
