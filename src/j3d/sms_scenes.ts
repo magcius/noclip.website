@@ -3,7 +3,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 import { fetch, readString, assert } from 'util';
 
-import { RenderState, ColorTarget } from '../render';
+import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 
@@ -282,6 +282,7 @@ export class SunshineRenderer implements Viewer.MainScene {
 
         if (this.skyScene) {
             this.skyScene.render(state);
+            state.useFlags(depthClearFlags);
             gl.clear(gl.DEPTH_BUFFER_BIT);
         }
 

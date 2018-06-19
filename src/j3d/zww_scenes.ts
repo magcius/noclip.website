@@ -5,7 +5,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
 import { fetch, readString } from 'util';
 
-import { RenderState } from '../render';
+import { RenderState, depthClearFlags } from '../render';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../yaz0';
 import * as UI from '../ui';
@@ -227,6 +227,7 @@ class WindWakerRenderer implements Viewer.MainScene {
         this.vr_kasumi_mae.render(state);
         this.vr_uso_umi.render(state);
         this.vr_back_cloud.render(state);
+        state.useFlags(depthClearFlags);
         gl.clear(gl.DEPTH_BUFFER_BIT);
 
         this.model.render(state);

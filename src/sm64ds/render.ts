@@ -8,7 +8,7 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, RenderFlags, RenderState, BlendMode } from '../render';
+import { CullMode, RenderFlags, RenderState, BlendMode, depthClearFlags } from '../render';
 import Program from '../Program';
 import Progressable from 'Progressable';
 import RenderArena from '../RenderArena';
@@ -333,6 +333,7 @@ class SM64DSRenderer implements Viewer.MainScene {
 
         if (this.skyboxBMD) {
             this.runCommands(renderState, this.skyboxBMD.opaqueCommands);
+            renderState.useFlags(depthClearFlags);
             gl.clear(gl.DEPTH_BUFFER_BIT);
         } else {
             // No skybox? Black.

@@ -198,7 +198,6 @@ export class GX_Program extends BaseProgram {
     public static ub_PacketParams = 2;
 
     public u_Texture: WebGLUniformLocation;
-    private boundTextureSamplerIdentities: boolean = false;
 
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks = null) {
         super();
@@ -213,10 +212,7 @@ export class GX_Program extends BaseProgram {
     }
 
     public bindTextureSamplerIdentities(gl: WebGL2RenderingContext): void {
-        if (!this.boundTextureSamplerIdentities) {
-            gl.uniform1iv(this.u_Texture, textureSamplerIdentities);
-            this.boundTextureSamplerIdentities = true;
-        }
+        gl.uniform1iv(this.u_Texture, textureSamplerIdentities);
     }
 
     private generateFloat(v: number): string {
@@ -715,27 +711,41 @@ export class GX_Program extends BaseProgram {
         return tevStages.map((s) => this.generateTevStage(s)).join(`\n`);
     }
 
+    private generateTevStagesLastMinuteFixup(tevStages: TevStage[]) {
+        // Despite having a destination register, the output of the last stage
+        // is what gets output from the color combinations...
+        const lastTevStage = tevStages[tevStages.length - 1];
+        const colorReg = this.generateTevRegister(lastTevStage.colorRegId);
+        const alphaReg = this.generateTevRegister(lastTevStage.alphaRegId);
+        if (colorReg === alphaReg) {
+            return `
+    vec4 t_TevOutput = ${colorReg};`;
+        } else {
+            return `
+    vec4 t_TevOutput = vec4(${colorReg}.rgb, ${alphaReg}.a);`;
+        }
+    }
+
     private generateAlphaTestCompare(compare: GX.CompareType, reference: number) {
-        const reg = this.generateTevRegister(GX.Register.PREV);
         const ref = this.generateFloat(reference);
         switch (compare) {
         case GX.CompareType.NEVER:   return `false`;
-        case GX.CompareType.LESS:    return `${reg}.a <  ${ref}`;
-        case GX.CompareType.EQUAL:   return `${reg}.a == ${ref}`;
-        case GX.CompareType.LEQUAL:  return `${reg}.a <= ${ref}`;
-        case GX.CompareType.GREATER: return `${reg}.a >  ${ref}`;
-        case GX.CompareType.NEQUAL:  return `${reg}.a != ${ref}`;
-        case GX.CompareType.GEQUAL:  return `${reg}.a >= ${ref}`;
+        case GX.CompareType.LESS:    return `t_TevOutput.a <  ${ref}`;
+        case GX.CompareType.EQUAL:   return `t_TevOutput.a == ${ref}`;
+        case GX.CompareType.LEQUAL:  return `t_TevOutput.a <= ${ref}`;
+        case GX.CompareType.GREATER: return `t_TevOutput.a >  ${ref}`;
+        case GX.CompareType.NEQUAL:  return `t_TevOutput.a != ${ref}`;
+        case GX.CompareType.GEQUAL:  return `t_TevOutput.a >= ${ref}`;
         case GX.CompareType.ALWAYS:  return `true`;
         }
     }
 
     private generateAlphaTestOp(op: GX.AlphaOp) {
         switch (op) {
-        case GX.AlphaOp.AND:  return `t_alphaTestA && t_alphaTestB`;
-        case GX.AlphaOp.OR:   return `t_alphaTestA || t_alphaTestB`;
-        case GX.AlphaOp.XOR:  return `t_alphaTestA != t_alphaTestB`;
-        case GX.AlphaOp.XNOR: return `t_alphaTestA == t_alphaTestB`;
+        case GX.AlphaOp.AND:  return `t_AlphaTestA && t_AlphaTestB`;
+        case GX.AlphaOp.OR:   return `t_AlphaTestA || t_AlphaTestB`;
+        case GX.AlphaOp.XOR:  return `t_AlphaTestA != t_AlphaTestB`;
+        case GX.AlphaOp.XNOR: return `t_AlphaTestA == t_AlphaTestB`;
         }
     }
 
@@ -744,8 +754,8 @@ export class GX_Program extends BaseProgram {
     // Alpha Test: Op ${alphaTest.op}
     // Compare A: ${alphaTest.compareA} Reference A: ${this.generateFloat(alphaTest.referenceA)}
     // Compare B: ${alphaTest.compareB} Reference B: ${this.generateFloat(alphaTest.referenceB)}
-    bool t_alphaTestA = ${this.generateAlphaTestCompare(alphaTest.compareA, alphaTest.referenceA)};
-    bool t_alphaTestB = ${this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB)};
+    bool t_AlphaTestA = ${this.generateAlphaTestCompare(alphaTest.compareA, alphaTest.referenceA)};
+    bool t_AlphaTestB = ${this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB)};
     if (!(${this.generateAlphaTestOp(alphaTest.op)}))
         discard;
 `;
@@ -879,9 +889,10 @@ ${this.generateIndTexStages(indTexStages)}
     vec4 t_TevA, t_TevB, t_TevC, t_TevD;
 ${this.generateTevStages(tevStages)}
 
-    t_ColorPrev = TevOverflow(t_ColorPrev);
+${this.generateTevStagesLastMinuteFixup(tevStages)}
+    t_TevOutput = TevOverflow(t_TevOutput);
 ${this.generateAlphaTest(alphaTest)}
-    gl_FragColor = t_ColorPrev;
+    gl_FragColor = t_TevOutput;
 }
 `;
     }
