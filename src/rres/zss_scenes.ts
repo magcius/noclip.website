@@ -10,11 +10,12 @@ import * as U8 from './u8';
 import { fetch, assert, readString, assertExists } from '../util';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RenderState, ColorTarget } from '../render';
+import { RenderState, ColorTarget, RenderFlags, depthClearFlags } from '../render';
 import { RRESTextureHolder, ModelRenderer } from './render';
 import { TextureOverride, TextureHolder } from '../gx/gx_render';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
+import { ColorOverride } from '../j3d/render';
 
 const SAND_CLOCK_ICON = '<svg viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
 
@@ -37,8 +38,26 @@ interface Obj {
     name: string; // 0x1C. Object name. Matched with a table in main.dol, which points to a .rel (DLL), and *that* loads the model.
 }
 
+// "S"calable "OBJ"ect, perhaps?
+interface Sobj {
+    unk1: number; // 0x00. Appears to be object-specific parameters.
+    unk2: number; // 0x04. Appears to be object-specific parameters.
+    tx: number;   // 0x08
+    ty: number;   // 0x0C
+    tz: number;   // 0x10
+    sx: number;   // 0x14. Either scale or bounding box.
+    sy: number;   // 0x18. Either scale or bounding box.
+    sz: number;   // 0x1C. Either scale or bounding box.
+    rotY: number; // 0x20. Another per-object parameter?
+    unk4: number; // 0x22. Always zero so far (for OBJ. OBJS have it filled in.). Probably padding...
+    unk5: number; // 0x26. Object group perhaps? Tends to be a small number of things...
+    unk6: number; // 0x27. Object ID perhaps? Counts up...
+    name: string; // 0x28. Object name. Matched with a table in main.dol, which points to a .rel (DLL), and *that* loads the model.
+}
+
 interface RoomLayout {
     obj: Obj[];
+    sobj: Sobj[];
 }
 
 interface BZS {
@@ -78,16 +97,19 @@ class ModelArchiveCollection {
 class SkywardSwordScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
-    public models: ModelRenderer[] = [];
     public animationController: BRRES.AnimationController;
     private mainColorTarget: ColorTarget = new ColorTarget();
-    private roomBZSes: BZS[] = [];
     private stageRRES: BRRES.RRES;
+    private stageBZS: BZS = null;
+    private roomBZSes: BZS[] = [];
     private commonRRES: BRRES.RRES;
+    private oarcCollection = new ModelArchiveCollection();
 
+    private models: ModelRenderer[] = [];
     // Uses WaterDummy. Have to render after everything else. TODO(jstpierre): How does engine know this?
     private indirectModels: ModelRenderer[] = [];
-    private oarcCollection = new ModelArchiveCollection();
+    // Skybox is rendered specially...
+    private vrboxModel: ModelRenderer = null;
 
     constructor(gl: WebGL2RenderingContext, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.textureHolder = new RRESTextureHolder();
@@ -112,6 +134,10 @@ class SkywardSwordScene implements Viewer.MainScene {
         this.stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
         this.textureHolder.addRRESTextures(gl, this.stageRRES);
 
+        this.stageBZS = this.parseBZS(stageArchive.findFile('dat/stage.bzs').buffer);
+        const stageLayout = this.stageBZS.layouts[0];
+        this.spawnLayout(gl, stageLayout);
+
         // Load rooms.
         const roomArchivesDir = stageArchive.findDir('rarc');
         if (roomArchivesDir) {
@@ -125,53 +151,12 @@ class SkywardSwordScene implements Viewer.MainScene {
                     this.spawnModel(gl, mdl0, roomRRES, roomArchiveFile.name);
                 }
 
-                const roomBZS = this.parseRoomBZS(roomArchive.findFile('dat/room.bzs').buffer);
+                const roomBZS = this.parseBZS(roomArchive.findFile('dat/room.bzs').buffer);
                 this.roomBZSes.push(roomBZS);
                 const layout = roomBZS.layouts[0];
-                this.spawnRoomLayout(gl, layout);
+                this.spawnLayout(gl, layout);
             }
         }
-
-        // Sort models based on type.
-        function sortKey(modelRenderer: ModelRenderer) {
-            const modelSorts = [
-                'model0',   // Main geometry
-                'model0_s', // Main geometry decals.
-                'model1',   // Indirect water.
-                'model1_s', // Lanayru Sand Sea "past" decal. Only seen there so far.
-                'model2',   // Other transparent objects.
-
-                // Future variations in Lanayru.
-                'model_obj0',
-                'model_obj0_s',
-                'model_obj1',
-                'model_obj1_s',
-                'model_obj2',
-                'model_obj2_s',
-                'model_obj3',
-                'model_obj3_s',
-                'model_obj4',
-                'model_obj4_s',
-                'model_obj5',
-                'model_obj5_s',
-                'model_obj6',
-                'model_obj6_s',
-            ];
-            const idx = modelSorts.indexOf(modelRenderer.mdl0.name);
-
-            if (idx < 0) {
-                console.error(`Unknown model name ${modelRenderer.mdl0.name}`);
-                return 9999;
-            }
-
-            return idx;
-        }
-
-        /*
-        this.models.sort((a, b) => {
-            return sortKey(a) - sortKey(b);
-        });
-        */
 
         outer:
         // Find any indirect scenes.
@@ -242,6 +227,18 @@ class SkywardSwordScene implements Viewer.MainScene {
         state.useRenderTarget(this.mainColorTarget);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
 
+        // Skybox is rendered first. Also, use larger clip planes for the skybox, since it's so large.
+        // The actual game probably renders this with a different reference camera..
+        state.setClipPlanes(10, 90000000);
+        if (this.vrboxModel) {
+            this.vrboxModel.render(state);
+        }
+
+        state.useFlags(depthClearFlags);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+
+        state.setClipPlanes(10, 5000000);
+
         this.models.forEach((model) => {
             if (this.indirectModels.includes(model))
                 return;
@@ -285,7 +282,7 @@ class SkywardSwordScene implements Viewer.MainScene {
         return this.spawnModel(gl, mdl0, rres, namePrefix);
     }
 
-    private spawnObj(gl: WebGL2RenderingContext, name: string): ModelRenderer[] {
+    private spawnObj(gl: WebGL2RenderingContext, name: string, unk1: number, unk2: number): ModelRenderer[] {
         // In the actual engine, each obj is handled by a separate .rel (runtime module)
         // which knows the actual layout. The mapping of obj name to .rel is stored in main.dol.
         // We emulate that here.
@@ -330,6 +327,60 @@ class SkywardSwordScene implements Viewer.MainScene {
             // "Dormitory Gate"
             // Seems it can also use StageF400Gate, probably when Skyloft crashes to the ground (spoilers).
             // Seems to make two of them... skip for now, not that important...
+        } else if (name === 'IslLOD') {
+            // First parameter appears to contain the island LOD to load...
+            const islId = unk1 & 0x0F;
+            const islName = [ 'IslLODA', 'IslLODB', 'IslLODC', 'IslLODD', 'IslLODE' ][islId];
+            const IslLODRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/${islName}.arc`);
+            const model = this.spawnModelName(gl, IslLODRRES, islName, name);
+            models.push(model);
+        } else if (name === 'ClawSTg') {
+            // Clawshot Target
+            const ShotMarkRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/ShotMark.arc`);
+            models.push(this.spawnModelName(gl, ShotMarkRRES, 'ShotMark', name));
+        } else if (name === 'Vrbox') {
+            // First parameter appears to contain the Vrbox to load.
+            const boxId = unk1 & 0x0F;
+            const boxName = [ 'Vrbox00', 'Vrbox01', 'Vrbox02', 'Vrbox03' ][boxId];
+            const VrboxRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/${boxName}.arc`);
+            const model = this.spawnModelName(gl, VrboxRRES, boxName, name);
+            model.isSkybox = true;
+            this.vrboxModel = model;
+            // This color is probably set by the day/night system...
+            model.setColorOverride(ColorOverride.C2, new Color(1, 1, 1, 1));
+            model.setColorOverride(ColorOverride.K3, new Color(1, 1, 1, 1));
+            models.push(model);
+        } else if (name === 'CmCloud') {
+            // Cumulus Cloud
+            const F020CloudRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/F020Cloud.arc`);
+            const model = this.spawnModelName(gl, F020CloudRRES, 'F020Cloud', name);
+            models.push(model);
+        } else if (name === 'UdCloud') {
+            // Under Clouds
+            const F020UnderCloudRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/F020UnderCloud.arc`);
+            const model = this.spawnModelName(gl, F020UnderCloudRRES, 'F020UnderCloud', name);
+            models.push(model);
+        } else if (name === 'ObjBld') {
+            // Object Building. Appears to only be used for the dowsing station? Why?
+            const DowsingZoneE300RRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/DowsingZoneE300.arc`);
+            models.push(this.spawnModelName(gl, DowsingZoneE300RRES, 'DowsingZoneE300', name));
+        } else if (name === 'WtrF100') {
+            const WaterF100RRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/WaterF100.arc`);
+            models.push(this.spawnModelName(gl, WaterF100RRES, 'model0', name));
+            models.push(this.spawnModelName(gl, WaterF100RRES, 'model1', name));
+            models.push(this.spawnModelName(gl, WaterF100RRES, 'model2', name));
+            models.push(this.spawnModelName(gl, WaterF100RRES, 'model3', name));
+        } else if (name === 'GodCube') {
+            const GoddessCubeRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/GoddessCube.arc`);
+            models.push(this.spawnModelName(gl, GoddessCubeRRES, 'GoddessCube', name));
+        } else if (name === 'LavF200') {
+            const LavaF200RRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/LavaF200.arc`);
+            models.push(this.spawnModelName(gl, LavaF200RRES, 'LavaF200', name));
+        } else if (name === 'UDLava') {
+            const UpdwnLavaRRES = this.oarcCollection.loadRRESFromArc(gl, this.textureHolder, `oarc/UpdwnLava.arc`);
+            models.push(this.spawnModelName(gl, UpdwnLavaRRES, 'UpdwnLavaA', name));
+            models.push(this.spawnModelName(gl, UpdwnLavaRRES, 'UpdwnLavaB', name));
+            models.push(this.spawnModelName(gl, UpdwnLavaRRES, 'UpdwnLavaC', name));
         } else {
             console.log("Unknown object", name);
         }
@@ -337,11 +388,11 @@ class SkywardSwordScene implements Viewer.MainScene {
         return models;
     }
 
-    private spawnRoomLayout(gl: WebGL2RenderingContext, layout: RoomLayout): void {
+    private spawnLayout(gl: WebGL2RenderingContext, layout: RoomLayout): void {
         const q = quat.create();
 
         for (const obj of layout.obj) {
-            const models = this.spawnObj(gl, obj.name);
+            const models = this.spawnObj(gl, obj.name, obj.unk1, obj.unk2);
 
             // Set model matrix.
             const rotation = 180 * (obj.rotY / 0x7FFF);
@@ -351,9 +402,22 @@ class SkywardSwordScene implements Viewer.MainScene {
                 mat4.fromRotationTranslation(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz]);
             }
         }
+
+        // Now do scalable objects...
+        for (const obj of layout.sobj) {
+            const models = this.spawnObj(gl, obj.name, obj.unk1, obj.unk2);
+
+            // Set model matrix.
+            const rotation = 180 * (obj.rotY / 0x7FFF);
+            quat.fromEuler(q, 0, rotation, 0);
+    
+            for (const modelRenderer of models) {
+                mat4.fromRotationTranslationScale(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz], [obj.sx, obj.sy, obj.sz]);
+            }
+        }
     }
 
-    private parseRoomBZS(buffer: ArrayBufferSlice): BZS {
+    private parseBZS(buffer: ArrayBufferSlice): BZS {
         interface Chunk {
             name: string;
             count: number;
@@ -396,8 +460,25 @@ class SkywardSwordScene implements Viewer.MainScene {
             const unk4 = view.getUint16(offs + 0x18);
             const unk5 = view.getUint8(offs + 0x1A);
             const unk6 = view.getUint8(offs + 0x1B);
-            const name = readString(buffer, offs + 0x01C, 0x08, true);
+            const name = readString(buffer, offs + 0x1C, 0x08, true);
             return { unk1, unk2, tx, ty, tz, unk3, rotY, unk4, unk5, unk6, name };
+        }
+
+        function parseSobj(offs: number): Sobj {
+            const unk1 = view.getUint32(offs + 0x00);
+            const unk2 = view.getUint32(offs + 0x04);
+            const tx = view.getFloat32(offs + 0x08);
+            const ty = view.getFloat32(offs + 0x0C);
+            const tz = view.getFloat32(offs + 0x10);
+            const sx = view.getFloat32(offs + 0x14);
+            const sy = view.getFloat32(offs + 0x18);
+            const sz = view.getFloat32(offs + 0x1C);
+            const rotY = view.getInt16(offs + 0x20);
+            const unk4 = view.getUint16(offs + 0x22);
+            const unk5 = view.getUint8(offs + 0x26);
+            const unk6 = view.getUint8(offs + 0x27);
+            const name = readString(buffer, offs + 0x28, 0x08, true);
+            return { unk1, unk2, tx, ty, tz, sx, sy, sz, rotY, unk4, unk5, unk6, name };
         }
 
         const layoutsChunk = roomChunkTable.find((chunk) => chunk.name === 'LAY ');
@@ -413,13 +494,24 @@ class SkywardSwordScene implements Viewer.MainScene {
             const layoutChunkTable = parseChunkTable(layoutChunkTableOffs, layoutChunkTableCount);
 
             // Look for objects table.
-            const objChunk = layoutChunkTable.find((chunk) => chunk.name === 'OBJ ');
-    
             const obj: Obj[] = [];
-            for (let i = 0; i < objChunk.count; i++)
-                obj.push(parseObj(objChunk.offs + i * 0x24));
+            const objChunk = layoutChunkTable.find((chunk) => chunk.name === 'OBJ ');
+            if (objChunk)
+                for (let i = 0; i < objChunk.count; i++)
+                    obj.push(parseObj(objChunk.offs + i * 0x24));
 
-            return { obj };
+            const sobj: Sobj[] = [];
+            const sobjChunk = layoutChunkTable.find((chunk) => chunk.name === 'SOBJ');
+            if (sobjChunk)
+                for (let i = 0; i < sobjChunk.count; i++)
+                    sobj.push(parseSobj(sobjChunk.offs + i * 0x30));
+
+            const stagChunk = layoutChunkTable.find((chunk) => chunk.name === 'STAG');
+            if (stagChunk)
+                for (let i = 0; i < stagChunk.count; i++)
+                    sobj.push(parseSobj(stagChunk.offs + i * 0x30));
+
+            return { obj, sobj };
         }
 
         const layouts = [];

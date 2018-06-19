@@ -12,7 +12,7 @@ import * as GX from '../gx/gx_enum';
 import { BMD, BMT, BTK, BTI_Texture, BTI, TEX1_TextureData, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { Scene, SceneLoader, J3DTextureHolder } from './render';
-import { RenderState, ColorTarget } from '../render';
+import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { TextureOverride } from '../gx/gx_render';
 
@@ -103,6 +103,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
         this.skyboxScenes.forEach((scene) => {
             scene.render(state);
         });
+        state.useFlags(depthClearFlags);
         gl.clear(gl.DEPTH_BUFFER_BIT);
 
         this.opaqueScenes.forEach((scene) => {

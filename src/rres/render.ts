@@ -12,6 +12,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from "../gx/gx_render";
 import { texProjPerspMtx, texEnvMtx } from "../Camera";
+import { ColorOverride } from "../j3d/render";
 
 export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
@@ -20,7 +21,7 @@ export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {
 }
 
 export class ModelRenderer {
-    public materialCommands: Command_Material[] = [];
+    private materialCommands: Command_Material[] = [];
     private shapeCommands: Command_Shape[] = [];
     private renderHelper: GXRenderHelper;
     private sceneParams: SceneParams = new SceneParams();
@@ -30,9 +31,12 @@ export class ModelRenderer {
     private chr0NodeAnimator: BRRES.CHR0NodesAnimator;
     private matrixScratch: mat4 = mat4.create();
 
+    public colorOverrides: GX_Material.Color[] = [];
+
     public modelMatrix: mat4 = mat4.create();
     public visible: boolean = true;
     public name: string;
+    public isSkybox: boolean;
 
     constructor(gl: WebGL2RenderingContext,
         public textureHolder: RRESTextureHolder,
@@ -56,6 +60,10 @@ export class ModelRenderer {
         }
     }
 
+    public setColorOverride(i: ColorOverride, color: GX_Material.Color): void {
+        this.colorOverrides[i] = color;
+    }
+
     public setVisible(visible: boolean): void {
         this.visible = visible;
     }
@@ -67,7 +75,6 @@ export class ModelRenderer {
         // First, update our matrix state.
         this.execNodeTreeOpList(this.mdl0.sceneGraph.nodeTreeOps);
 
-        state.setClipPlanes(10, 500000);
         this.renderHelper.bindUniformBuffers(state);
 
         fillSceneParamsFromRenderState(this.sceneParams, state);
@@ -163,7 +170,7 @@ export class ModelRenderer {
         this.growMatrixArray(this.mdl0.sceneGraph.nodeTreeOps);
 
         for (const material of this.mdl0.materials)
-            this.materialCommands.push(new Command_Material(gl, this.textureHolder, material, this.materialHacks));
+            this.materialCommands.push(new Command_Material(gl, this, this.textureHolder, material, this.materialHacks));
 
         this.bufferCoalescer = loadedDataCoalescer(gl, this.mdl0.shapes.map((shape) => shape.loadedVertexData));
 
@@ -201,6 +208,7 @@ class Command_Material {
     public visible: boolean = true;
 
     constructor(gl: WebGL2RenderingContext,
+        public model: ModelRenderer,
         public textureHolder: RRESTextureHolder,
         public material: BRRES.MDL0_MaterialEntry,
         public materialHacks: GX_Material.GXMaterialHacks,
@@ -246,7 +254,13 @@ class Command_Material {
         const flipYScale = flipY ? -1.0 : 1.0;
 
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
-            texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+            // XXX(jstpierre): ZSS hack.
+            if (texSrt.refCamera === 31) {
+                // Clouds. The game probably sets up a camera from way up above. Kill them.
+                dst[0] = 0;
+            } else {
+                texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+            }
         } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
             texEnvMtx(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
         } else {
@@ -297,14 +311,32 @@ class Command_Material {
             m.lodBias = sampler.lodBias;
         }
 
-        for (let i = 0; i < 2; i++)
-            materialParams.u_ColorAmbReg[i].copy(this.material.colorAmbRegs[i]);
-        for (let i = 0; i < 2; i++)
-            materialParams.u_ColorMatReg[i].copy(this.material.colorMatRegs[i]);
-        for (let i = 0; i < 4; i++)
-            materialParams.u_Color[i].copy(this.material.gxMaterial.colorRegisters[i]);
-        for (let i = 0; i < 4; i++)
-            materialParams.u_KonstColor[i].copy(this.material.gxMaterial.colorConstants[i]);
+        const copyColor = (i: ColorOverride, dst: GX_Material.Color, fallbackColor: GX_Material.Color) => {
+            let color: GX_Material.Color;
+            if (this.model.colorOverrides[i]) {
+                color = this.model.colorOverrides[i];
+            } else {
+                color = fallbackColor;
+            }
+
+            dst.copy(color);
+        };
+
+        copyColor(ColorOverride.MAT0, materialParams.u_ColorMatReg[0], this.material.colorMatRegs[0]);
+        copyColor(ColorOverride.MAT1, materialParams.u_ColorMatReg[1], this.material.colorMatRegs[1]);
+        copyColor(ColorOverride.AMB0, materialParams.u_ColorAmbReg[0], this.material.colorAmbRegs[0]);
+        copyColor(ColorOverride.AMB1, materialParams.u_ColorAmbReg[1], this.material.colorAmbRegs[1]);
+
+        copyColor(ColorOverride.K0, materialParams.u_KonstColor[0], this.material.gxMaterial.colorConstants[0]);
+        copyColor(ColorOverride.K1, materialParams.u_KonstColor[1], this.material.gxMaterial.colorConstants[1]);
+        copyColor(ColorOverride.K2, materialParams.u_KonstColor[2], this.material.gxMaterial.colorConstants[2]);
+        copyColor(ColorOverride.K3, materialParams.u_KonstColor[3], this.material.gxMaterial.colorConstants[3]);
+
+        copyColor(ColorOverride.CPREV, materialParams.u_Color[0], this.material.gxMaterial.colorRegisters[0]);
+        copyColor(ColorOverride.C0, materialParams.u_Color[1], this.material.gxMaterial.colorRegisters[1]);
+        copyColor(ColorOverride.C1, materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2]);
+        copyColor(ColorOverride.C2, materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3]);
+
         for (let i = 0; i < 8; i++)
             this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state, materialParams.m_TextureMapping[i].flipY);
         for (let i = 0; i < 3; i++)

@@ -250,6 +250,9 @@ export class DepthTarget {
     }
 }
 
+export const depthClearFlags = new RenderFlags();
+depthClearFlags.depthWrite = true;
+
 // XXX(jstpierre): This is becoming a lot more than just some render state.
 // Rename to "SceneRenderer" at some point?
 export class RenderState {
