@@ -18976,11 +18976,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var bboxMaxX = view.getFloat32(0x50);
         var bboxMaxY = view.getFloat32(0x54);
         var bboxMaxZ = view.getFloat32(0x58);
-        var bbox = null;
-        // Some nodes (root nodes?) don't appear to have a bbox.
-        if (bboxMinX !== 0 && bboxMinY !== 0 && bboxMinZ !== 0 &&
-            bboxMaxX !== 0 && bboxMaxY !== 0 && bboxMaxZ !== 0)
-            bbox = new Camera_9.AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+        var bbox = new Camera_9.AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         var modelMatrix = gl_matrix_16.mat4.create();
         calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         return { name: name, id: id, mtxId: mtxId, flags: flags, billboardMode: billboardMode, modelMatrix: modelMatrix, bbox: bbox };
@@ -20181,12 +20177,6 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                             var node = this.mdl0.nodes[op.nodeId];
                             var parentMtxId = op.parentMtxId;
                             var dstMtxId = node.mtxId;
-                            // If parent is out, no need to update...
-                            var parentVisibility = this.matrixVisibility[parentMtxId];
-                            if (parentVisibility === Camera_10.IntersectionState.FULLY_OUTSIDE) {
-                                this.matrixVisibility[dstMtxId] = Camera_10.IntersectionState.FULLY_OUTSIDE;
-                                continue;
-                            }
                             var modelMatrix = void 0;
                             if (this.chr0NodeAnimator && this.chr0NodeAnimator.calcModelMtx(this.matrixScratch, op.nodeId)) {
                                 modelMatrix = this.matrixScratch;
@@ -20195,21 +20185,9 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                                 modelMatrix = node.modelMatrix;
                             }
                             gl_matrix_17.mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], modelMatrix);
-                            if (node.bbox !== null) {
-                                // If parent is fully in, don't attempt to cull.
-                                if (parentVisibility === Camera_10.IntersectionState.PARTIAL_INTERSECT) {
-                                    var bboxScratch = this.bboxScratch;
-                                    bboxScratch.transform(node.bbox, this.matrixArray[dstMtxId]);
-                                    this.matrixVisibility[dstMtxId] = state.camera.frustum.intersect(bboxScratch);
-                                }
-                                else {
-                                    this.matrixVisibility[dstMtxId] = Camera_10.IntersectionState.FULLY_INSIDE;
-                                }
-                            }
-                            else {
-                                // If we don't have a bbox, copy our parent's state.
-                                this.matrixVisibility[dstMtxId] = parentVisibility;
-                            }
+                            var bboxScratch = this.bboxScratch;
+                            bboxScratch.transform(node.bbox, this.matrixArray[dstMtxId]);
+                            this.matrixVisibility[dstMtxId] = state.camera.frustum.intersect(bboxScratch);
                         }
                         else if (op.op === 6 /* MTXDUP */) {
                             var srcMtxId = op.fromMtxId;
@@ -20218,8 +20196,6 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                             this.matrixVisibility[dstMtxId] = this.matrixVisibility[srcMtxId];
                         }
                     }
-                    if (this.namePrefix === 'Blade')
-                        window.debug = false;
                 };
                 ModelRenderer.prototype.translateModel = function (gl) {
                     this.growMatrixArray(this.mdl0.sceneGraph.nodeTreeOps);

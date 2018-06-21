@@ -168,13 +168,6 @@ export class ModelRenderer {
                 const parentMtxId = op.parentMtxId;
                 const dstMtxId = node.mtxId;
 
-                // If parent is out, no need to update...
-                const parentVisibility = this.matrixVisibility[parentMtxId];
-                if (parentVisibility === IntersectionState.FULLY_OUTSIDE) {
-                    this.matrixVisibility[dstMtxId] = IntersectionState.FULLY_OUTSIDE;
-                    continue;
-                }
-
                 let modelMatrix;
                 if (this.chr0NodeAnimator && this.chr0NodeAnimator.calcModelMtx(this.matrixScratch, op.nodeId)) {
                     modelMatrix = this.matrixScratch;
@@ -183,19 +176,9 @@ export class ModelRenderer {
                 }
                 mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], modelMatrix);
 
-                if (node.bbox !== null) {
-                    // If parent is fully in, don't attempt to cull.
-                    if (parentVisibility === IntersectionState.PARTIAL_INTERSECT) {
-                        const bboxScratch = this.bboxScratch;
-                        bboxScratch.transform(node.bbox, this.matrixArray[dstMtxId]);
-                        this.matrixVisibility[dstMtxId] = state.camera.frustum.intersect(bboxScratch);
-                    } else {
-                        this.matrixVisibility[dstMtxId] = IntersectionState.FULLY_INSIDE;
-                    }
-                } else {
-                    // If we don't have a bbox, copy our parent's state.
-                    this.matrixVisibility[dstMtxId] = parentVisibility;
-                }
+                const bboxScratch = this.bboxScratch;
+                bboxScratch.transform(node.bbox, this.matrixArray[dstMtxId]);
+                this.matrixVisibility[dstMtxId] = state.camera.frustum.intersect(bboxScratch);
             } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
                 const srcMtxId = op.fromMtxId;
                 const dstMtxId = op.toMtxId;
@@ -203,9 +186,6 @@ export class ModelRenderer {
                 this.matrixVisibility[dstMtxId] = this.matrixVisibility[srcMtxId];
             }
         }
-
-        if (this.namePrefix === 'Blade')
-            window.debug = false;
     }
 
     private translateModel(gl: WebGL2RenderingContext): void {

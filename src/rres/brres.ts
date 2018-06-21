@@ -1053,7 +1053,7 @@ interface MDL0_NodeEntry {
     flags: NodeFlags;
     billboardMode: BillboardMode;
     modelMatrix: mat4;
-    bbox: AABB | null;
+    bbox: AABB;
 }
 
 function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
@@ -1084,12 +1084,7 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const bboxMaxX = view.getFloat32(0x50);
     const bboxMaxY = view.getFloat32(0x54);
     const bboxMaxZ = view.getFloat32(0x58);
-    let bbox: AABB | null = null;
-
-    // Some nodes (root nodes?) don't appear to have a bbox.
-    if (bboxMinX !== 0 && bboxMinY !== 0 && bboxMinZ !== 0 &&
-        bboxMaxX !== 0 && bboxMaxY !== 0 && bboxMaxZ !== 0)
-        bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+    const bbox: AABB = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
     const modelMatrix = mat4.create();
     calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
