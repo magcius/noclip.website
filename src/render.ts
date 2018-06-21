@@ -269,8 +269,6 @@ export class RenderState {
     public fov: number;
     public time: number;
 
-    // TODO(jstpierre): Move projection matrix to Camera.
-    public projection: mat4;
     public camera: Camera;
 
     public nearClipPlane: number;
@@ -294,7 +292,6 @@ export class RenderState {
         this.time = 0;
         this.fov = Math.PI / 4;
 
-        this.projection = mat4.create();
         this.camera = new Camera();
         this.scratchMatrix = mat4.create();
 
@@ -322,6 +319,7 @@ export class RenderState {
         this.frameStartTime = window.performance.now();
         this.useRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
         this.useFlags(RenderFlags.default);
+        this.camera.newFrame();
     }
 
     // XXX(jstpierre): Design a better API than this.
@@ -388,10 +386,14 @@ export class RenderState {
         return width / height;
     }
 
+    private updateProjection(): void {
+        this.camera.setPerspective(this.fov, this.getAspect(), this.nearClipPlane, this.farClipPlane);
+    }
+
     public bindViewport(): void {
+        this.updateProjection();
         const gl = this.gl;
         const width = this.currentColorTarget.width, height = this.currentColorTarget.height;
-        mat4.perspective(this.projection, this.fov, width / height, this.nearClipPlane, this.farClipPlane);
         gl.viewport(0, 0, width, height);
     }
 
@@ -399,7 +401,7 @@ export class RenderState {
         this.nearClipPlane = near;
         this.farClipPlane = far;
         if (this.currentColorTarget) {
-            mat4.perspective(this.projection, this.fov, this.getAspect(), this.nearClipPlane, this.farClipPlane);
+            this.updateProjection();
         }
     }
 
@@ -434,7 +436,7 @@ export class RenderState {
         const gl = this.gl;
         const prog = <Program> this.currentProgram;
         const scratch = this.updateModelView(isSkybox, model);
-        gl.uniformMatrix4fv(prog.projectionLocation, false, this.projection);
+        gl.uniformMatrix4fv(prog.projectionLocation, false, this.camera.projectionMatrix);
         gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);
     }
 

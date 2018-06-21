@@ -12,6 +12,7 @@ import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
 import { MaterialParams } from '../gx/gx_render';
 import { ColorOverride } from './render';
+import { AABB } from '../Camera';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
@@ -318,6 +319,7 @@ export interface Bone {
     scaleX: number;
     scaleY: number;
     scaleZ: number;
+    bbox: AABB;
 }
 
 export interface JNT1 {
@@ -360,11 +362,17 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const translationX = view.getFloat32(boneDataTableIdx + 0x18);
         const translationY = view.getFloat32(boneDataTableIdx + 0x1C);
         const translationZ = view.getFloat32(boneDataTableIdx + 0x20);
-        // Skipping bounding box data for now.
-
+        const boundingSphereRadius = view.getFloat32(boneDataTableIdx + 0x24);
+        const bboxMinX = view.getFloat32(boneDataTableIdx + 0x28);
+        const bboxMinY = view.getFloat32(boneDataTableIdx + 0x2C);
+        const bboxMinZ = view.getFloat32(boneDataTableIdx + 0x30);
+        const bboxMaxX = view.getFloat32(boneDataTableIdx + 0x34);
+        const bboxMaxY = view.getFloat32(boneDataTableIdx + 0x38);
+        const bboxMaxZ = view.getFloat32(boneDataTableIdx + 0x3C);
+        const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         const matrix = mat4.create();
         createJointMatrix(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        bones.push({ name, matrix, scaleX, scaleY, scaleZ });
+        bones.push({ name, matrix, scaleX, scaleY, scaleZ, bbox });
         boneDataTableIdx += 0x40;
     }
 
@@ -392,6 +400,7 @@ export interface Shape {
     loadedVertexData: LoadedVertexData;
     loadedVertexLayout: LoadedVertexLayout;
     packets: Packet[];
+    bbox: AABB;
 }
 
 export interface SHP1 {
@@ -488,6 +497,15 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             packetIdx += 0x08;
         }
 
+        const boundingSphereRadius = view.getFloat32(shapeIdx + 0x0C);
+        const bboxMinX = view.getFloat32(shapeIdx + 0x10);
+        const bboxMinY = view.getFloat32(shapeIdx + 0x14);
+        const bboxMinZ = view.getFloat32(shapeIdx + 0x18);
+        const bboxMaxX = view.getFloat32(shapeIdx + 0x1C);
+        const bboxMaxY = view.getFloat32(shapeIdx + 0x20);
+        const bboxMaxZ = view.getFloat32(shapeIdx + 0x24);
+        const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+
         // Coalesce shape data.
         // TODO(jstpierre): coalesceLoadedData is basically completely busted.
         assert(loadedDatas.length === 1);
@@ -495,7 +513,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const loadedVertexLayout = vtxLoader.loadedVertexLayout;
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ displayFlags, loadedVertexData, loadedVertexLayout, packets });
+        shapes.push({ displayFlags, loadedVertexData, loadedVertexLayout, packets, bbox });
 
         shapeIdx += 0x28;
     }

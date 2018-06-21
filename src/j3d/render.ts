@@ -12,7 +12,7 @@ import * as Viewer from 'viewer';
 
 import { CompareMode, RenderFlags, RenderState } from '../render';
 import { align, assert } from '../util';
-import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx } from '../Camera';
+import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, AABB, IntersectionState } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 
 export class J3DTextureHolder extends TextureHolder<TEX1_TextureData> {
@@ -79,6 +79,7 @@ class Command_Shape {
     private bmd: BMD;
     private packetParams = new PacketParams();
     private shapeHelper: GXShapeHelper;
+    private bboxScratch: AABB = new AABB();
 
     constructor(gl: WebGL2RenderingContext, sceneLoader: SceneLoader, private scene: Scene, private shape: Shape, coalescedBuffers: CoalescedBuffers) {
         this.bmd = sceneLoader.bmd;
@@ -118,6 +119,11 @@ class Command_Shape {
 
     public exec(state: RenderState) {
         if (!this.scene.currentMaterialCommand.visible)
+            return;
+
+        const bbox = this.bboxScratch;
+        bbox.transform(this.shape.bbox, this.scene.modelMatrix);
+        if (state.camera.frustum.intersect(this.bboxScratch) === IntersectionState.FULLY_OUTSIDE)
             return;
 
         const gl = state.gl;
@@ -439,6 +445,7 @@ export class Scene implements Viewer.Scene {
     private shapeCommands: Command_Shape[];
     private jointMatrices: mat4[];
     public weightedJointMatrices: mat4[];
+    private jointVisibility: IntersectionState[] = [];
 
     private bufferCoalescer: BufferCoalescer;
 
