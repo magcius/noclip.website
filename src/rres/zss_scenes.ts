@@ -30,7 +30,7 @@ interface Obj {
     tx: number;   // 0x08
     ty: number;   // 0x0C
     tz: number;   // 0x10
-    unk3: number; // 0x14. Always zero so far.
+    rotX: number; // 0x14. Rotation around X.
     rotY: number; // 0x16. Rotation around Y (-0x7FFF maps to -180, 0x7FFF maps to 180)
     unk4: number; // 0x18. Always zero so far (for OBJ. OBJS have it filled in.). Probably padding...
     unk5: number; // 0x1A. Object group perhaps? Tends to be a small number of things...
@@ -237,7 +237,7 @@ class SkywardSwordScene implements Viewer.MainScene {
         state.useFlags(depthClearFlags);
         gl.clear(gl.DEPTH_BUFFER_BIT);
 
-        state.setClipPlanes(10, 5000000);
+        state.setClipPlanes(10, 500000);
 
         this.models.forEach((model) => {
             if (this.indirectModels.includes(model))
@@ -395,8 +395,9 @@ class SkywardSwordScene implements Viewer.MainScene {
             const models = this.spawnObj(gl, obj.name, obj.unk1, obj.unk2);
 
             // Set model matrix.
-            const rotation = 180 * (obj.rotY / 0x7FFF);
-            quat.fromEuler(q, 0, rotation, 0);
+            const rotationX = 180 * (obj.rotX / 0x7FFF);
+            const rotationY = 180 * (obj.rotY / 0x7FFF);
+            quat.fromEuler(q, rotationX, rotationY, 0);
     
             for (const modelRenderer of models) {
                 mat4.fromRotationTranslation(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz]);
@@ -455,13 +456,13 @@ class SkywardSwordScene implements Viewer.MainScene {
             const tx = view.getFloat32(offs + 0x08);
             const ty = view.getFloat32(offs + 0x0C);
             const tz = view.getFloat32(offs + 0x10);
-            const unk3 = view.getUint16(offs + 0x14);
+            const rotX = view.getInt16(offs + 0x14);
             const rotY = view.getInt16(offs + 0x16);
-            const unk4 = view.getUint16(offs + 0x18);
+            const unk4 = view.getInt16(offs + 0x18);
             const unk5 = view.getUint8(offs + 0x1A);
             const unk6 = view.getUint8(offs + 0x1B);
             const name = readString(buffer, offs + 0x1C, 0x08, true);
-            return { unk1, unk2, tx, ty, tz, unk3, rotY, unk4, unk5, unk6, name };
+            return { unk1, unk2, tx, ty, tz, rotX, rotY, unk4, unk5, unk6, name };
         }
 
         function parseSobj(offs: number): Sobj {

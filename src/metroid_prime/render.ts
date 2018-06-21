@@ -15,6 +15,7 @@ import { RenderState, RenderFlags } from '../render';
 import { align, assert, nArray } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
+import { AABB, IntersectionState } from '../Camera';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0, 0, 0,
@@ -40,6 +41,7 @@ export class Scene implements Viewer.MainScene {
     private renderHelper: GXRenderHelper;
     private sceneParams: SceneParams = new SceneParams();
     private packetParams: PacketParams = new PacketParams();
+    private bboxScratch: AABB = new AABB();
 
     constructor(gl: WebGL2RenderingContext, public mrea: MREA) {
         this.renderHelper = new GXRenderHelper(gl);
@@ -63,16 +65,6 @@ export class Scene implements Viewer.MainScene {
         }
     }
 
-    private coalesceSurfaces(): Surface[] {
-        const surfaces: Surface[] = [];
-        this.mrea.worldModels.forEach((worldModel) => {
-            worldModel.surfaces.forEach((surface) => {
-                surfaces.push(surface);
-            });
-        });
-        return surfaces;
-    }
-
     private translateModel(gl: WebGL2RenderingContext) {
         // Pull out the first material of each group, which should be identical except for textures.
         const groupMaterials: Material[] = [];
@@ -89,19 +81,22 @@ export class Scene implements Viewer.MainScene {
         const vertexDatas: ArrayBufferSlice[] = [];
         const indexDatas: ArrayBufferSlice[] = [];
 
-        const surfaces = this.coalesceSurfaces();
-
-        surfaces.forEach((surface) => {
-            vertexDatas.push(new ArrayBufferSlice(surface.loadedVertexData.packedVertexData));
-            indexDatas.push(new ArrayBufferSlice(surface.loadedVertexData.indexData));
+        // Coalesce surface data.
+        this.mrea.worldModels.forEach((worldModel) => {
+            worldModel.geometry.surfaces.forEach((surface) => {
+                vertexDatas.push(new ArrayBufferSlice(surface.loadedVertexData.packedVertexData));
+                indexDatas.push(new ArrayBufferSlice(surface.loadedVertexData.indexData));
+            });
         });
 
         this.bufferCoalescer = new BufferCoalescer(gl, vertexDatas, indexDatas);
 
         let i = 0;
-        surfaces.forEach((surface) => {
-            this.surfaceCommands.push(new Command_Surface(gl, this, surface, this.bufferCoalescer.coalescedBuffers[i]));
-            ++i;
+        this.mrea.worldModels.forEach((worldModel) => {
+            worldModel.geometry.surfaces.forEach((surface) => {
+                this.surfaceCommands.push(new Command_Surface(gl, this, surface, this.bufferCoalescer.coalescedBuffers[i]));
+                ++i;
+            });
         });
     }
 
@@ -119,29 +114,45 @@ export class Scene implements Viewer.MainScene {
         let currentMaterialIndex = -1;
         let currentGroupIndex = -1;
 
-        const surfaces = this.surfaceCommands;
-        surfaces.forEach((surfaceCmd, i) => {
-            const materialIndex = surfaceCmd.surface.materialIndex;
-            const material = this.mrea.materialSet.materials[materialIndex];
+        let surfaceCmdIndex = 0;
+        const bbox = this.bboxScratch;
+        this.mrea.worldModels.forEach((worldModel) => {
+            const numSurfaces = worldModel.geometry.surfaces.length;
 
-            // Don't render occluder meshes.
-            if (material.flags & MaterialFlags.OCCLUDER)
+            // Frustum cull.
+            bbox.transform(worldModel.bbox, posMtx);
+            if (state.camera.frustum.intersect(bbox) === IntersectionState.FULLY_OUTSIDE) {
+                // TODO(jstpierre): Why doesn't this work?
+                /*
+                surfaceCmdIndex += numSurfaces;
                 return;
-
-            if (currentMaterialIndex !== materialIndex) {
-                const groupIndex = this.mrea.materialSet.materials[materialIndex].groupIndex;
-                const materialCommand = this.materialCommands[groupIndex];
-
-                if (groupIndex !== currentGroupIndex) {
-                    materialCommand.exec(state, this.renderHelper);
-                    currentGroupIndex = groupIndex;
-                }
-
-                this.bindTextures(state, material, materialCommand.program);
-                currentMaterialIndex = materialIndex;
+                */
             }
 
-            surfaceCmd.exec(state, this.renderHelper);
+            for (let i = 0; i < numSurfaces; i++) {
+                const surfaceCmd = this.surfaceCommands[surfaceCmdIndex++];
+                const materialIndex = surfaceCmd.surface.materialIndex;
+                const material = this.mrea.materialSet.materials[materialIndex];
+    
+                // Don't render occluder meshes.
+                if (material.flags & MaterialFlags.OCCLUDER)
+                    continue;
+    
+                if (currentMaterialIndex !== materialIndex) {
+                    const groupIndex = this.mrea.materialSet.materials[materialIndex].groupIndex;
+                    const materialCommand = this.materialCommands[groupIndex];
+
+                    if (groupIndex !== currentGroupIndex) {
+                        materialCommand.exec(state, this.renderHelper);
+                        currentGroupIndex = groupIndex;
+                    }
+
+                    this.bindTextures(state, material, materialCommand.program);
+                    currentMaterialIndex = materialIndex;
+                }
+    
+                surfaceCmd.exec(state, this.renderHelper);
+            }
         });
     }
 

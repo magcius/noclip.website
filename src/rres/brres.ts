@@ -10,6 +10,7 @@ import * as GX_Material from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getComponentSizeRaw, getComponentCountRaw } from '../gx/gx_displaylist';
 import { vec3, mat4, quat, mat2d } from 'gl-matrix';
 import { Endianness } from '../endian';
+import { AABB } from '../Camera';
 
 //#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {
@@ -1052,6 +1053,7 @@ interface MDL0_NodeEntry {
     flags: NodeFlags;
     billboardMode: BillboardMode;
     modelMatrix: mat4;
+    bbox: AABB | null;
 }
 
 function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
@@ -1075,10 +1077,24 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const translationY = view.getFloat32(0x3C);
     const translationZ = view.getFloat32(0x40);
 
+    // TODO(jstpierre): NW4R doesn't appear to use this anymore?
+    const bboxMinX = view.getFloat32(0x44);
+    const bboxMinY = view.getFloat32(0x48);
+    const bboxMinZ = view.getFloat32(0x4C);
+    const bboxMaxX = view.getFloat32(0x50);
+    const bboxMaxY = view.getFloat32(0x54);
+    const bboxMaxZ = view.getFloat32(0x58);
+    let bbox: AABB | null = null;
+
+    // Some nodes (root nodes?) don't appear to have a bbox.
+    if (bboxMinX !== 0 && bboxMinY !== 0 && bboxMinZ !== 0 &&
+        bboxMaxX !== 0 && bboxMaxY !== 0 && bboxMaxZ !== 0)
+        bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+
     const modelMatrix = mat4.create();
     calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
-    return { name, id, mtxId, flags, billboardMode, modelMatrix };
+    return { name, id, mtxId, flags, billboardMode, modelMatrix, bbox };
 }
 
 export const enum ByteCodeOp {
@@ -1190,6 +1206,7 @@ function parseMDL0_SceneGraph(buffer: ArrayBufferSlice, byteCodeResDic: ResDicEn
 
 export interface MDL0 {
     name: string;
+    bbox: AABB | null;
     materials: MDL0_MaterialEntry[];
     shapes: MDL0_ShapeEntry[];
     nodes: MDL0_NodeEntry[];
@@ -1232,8 +1249,27 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
         offs += 0x04; // User data
     }
 
-    const nameOffs = view.getUint32(offs);
+    const nameOffs = view.getUint32(offs + 0x00);
     const name = readString(buffer, nameOffs);
+
+    const infoOffs = offs + 0x04;
+    const scalingRule = view.getUint32(infoOffs + 0x08);
+    const texMtxMode = view.getUint32(infoOffs + 0x0C);
+    const numVerts = view.getUint32(infoOffs + 0x10);
+    const numPolygons = view.getUint32(infoOffs + 0x14);
+
+    const isValidBBox = view.getUint8(infoOffs + 0x26);
+    // TODO(jstpierre): Skyward Sword doesn't use this.
+    let bbox: AABB | null = null;
+    if (isValidBBox) {
+        const bboxMinX = view.getFloat32(infoOffs + 0x28);
+        const bboxMinY = view.getFloat32(infoOffs + 0x2C);
+        const bboxMinZ = view.getFloat32(infoOffs + 0x30);
+        const bboxMaxX = view.getFloat32(infoOffs + 0x34);
+        const bboxMaxY = view.getFloat32(infoOffs + 0x38);
+        const bboxMaxZ = view.getFloat32(infoOffs + 0x3C);
+        bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+    }
 
     const materials: MDL0_MaterialEntry[] = [];
     for (const materialResDicEntry of materialResDic) {
@@ -1261,7 +1297,7 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     const sceneGraph = parseMDL0_SceneGraph(buffer, byteCodeResDic);
 
-    return { name, materials, shapes, nodes, sceneGraph };
+    return { name, bbox, materials, shapes, nodes, sceneGraph };
 }
 //#endregion
 
@@ -1861,7 +1897,7 @@ function parseCHR0(buffer: ArrayBufferSlice): CHR0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'CHR0');
     const version = view.getUint32(0x08);
-    const supportedVersions = [0x05];
+    const supportedVersions = [0x03, 0x05];
     assert(supportedVersions.includes(version));
 
     const chrNodeDataResDicOffs = view.getUint32(0x10);

@@ -275,7 +275,7 @@ class BMDRenderer {
 
         mat4.mul(viewMatrix, viewMatrix, modelMatrix);
 
-        gl.uniformMatrix4fv(prog.projectionLocation, false, state.projection);
+        gl.uniformMatrix4fv(prog.projectionLocation, false, state.camera.projectionMatrix);
         gl.uniformMatrix4fv(prog.modelViewLocation, false, viewMatrix);
     }
 

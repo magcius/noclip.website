@@ -10,10 +10,11 @@ import { ResourceSystem } from "./resource";
 import { assert, readString, align } from "../util";
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import { compileVtxLoader, compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { AABB } from '../Camera';
 
 export interface MREA {
     materialSet: MaterialSet;
-    worldModels: Geometry[];
+    worldModels: WorldModel[];
 }
 
 const enum UVAnimationType {
@@ -338,9 +339,9 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSli
         const cullMode = GX.CullMode.BACK;
 
         const colorRegisters: GX_Material.Color[] = [];
-        colorRegisters.push(new GX_Material.Color(1, 1, 1, 0));
-        colorRegisters.push(new GX_Material.Color(1, 1, 1, 0));
         colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
+        colorRegisters.push(new GX_Material.Color(1, 1, 1, 0));
+        colorRegisters.push(new GX_Material.Color(1, 1, 1, 0));
         colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
 
         const alphaTest: GX_Material.AlphaTest = {
@@ -403,6 +404,11 @@ export interface Surface {
     materialIndex: number;
     loadedVertexData: LoadedVertexData;
     loadedVertexLayout: LoadedVertexLayout;
+}
+
+export interface WorldModel {
+    geometry: Geometry;
+    bbox: AABB;
 }
 
 export interface Geometry {
@@ -569,19 +575,26 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
     const sectionTables = { dataSectionOffsTable, dataSectionSizeTable };
 
     let geometrySectionIndex = worldGeometrySectionIndex + 1;
-    const worldModels: Geometry[] = [];
+    const worldModels: WorldModel[] = [];
     for (let i = 0; i < worldModelCount; i++) {
         // World model header.
         let worldModelHeaderOffs = dataSectionOffsTable[geometrySectionIndex];
         const visorFlags = view.getUint32(worldModelHeaderOffs + 0x00);
         worldModelHeaderOffs += 4 * 12; // World transform matrix
-        worldModelHeaderOffs += 4 * 6; // AABB
+        const bboxMinX = view.getFloat32(worldModelHeaderOffs + 0x00);
+        const bboxMinY = view.getFloat32(worldModelHeaderOffs + 0x04);
+        const bboxMinZ = view.getFloat32(worldModelHeaderOffs + 0x08);
+        const bboxMaxX = view.getFloat32(worldModelHeaderOffs + 0x0C);
+        const bboxMaxY = view.getFloat32(worldModelHeaderOffs + 0x10);
+        const bboxMaxZ = view.getFloat32(worldModelHeaderOffs + 0x14);
+        const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+        worldModelHeaderOffs += 0x14;
 
         geometrySectionIndex += 1;
 
-        let worldModelGeometry: Geometry;
-        [worldModelGeometry, geometrySectionIndex] = parseGeometry(resourceSystem, buffer, materialSet, sectionTables, geometrySectionIndex);
-        worldModels.push(worldModelGeometry);
+        let geometry: Geometry;
+        [geometry, geometrySectionIndex] = parseGeometry(resourceSystem, buffer, materialSet, sectionTables, geometrySectionIndex);
+        worldModels.push({ geometry, bbox });
     }
 
     return { materialSet, worldModels };

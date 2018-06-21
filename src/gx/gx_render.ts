@@ -316,7 +316,7 @@ export function getTextureLODBias(state: RenderState): number {
 }
 
 export function fillSceneParamsFromRenderState(sceneParams: SceneParams, state: RenderState): void {
-    mat4.copy(sceneParams.u_Projection, state.projection);
+    mat4.copy(sceneParams.u_Projection, state.camera.projectionMatrix);
     sceneParams.u_SceneTextureLODBias = getTextureLODBias(state);
 }
 

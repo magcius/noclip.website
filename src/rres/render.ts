@@ -11,7 +11,7 @@ import { mat3, mat4, mat2d } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from "../gx/gx_render";
-import { texProjPerspMtx, texEnvMtx } from "../Camera";
+import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState } from "../Camera";
 import { ColorOverride } from "../j3d/render";
 
 export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {
@@ -26,10 +26,13 @@ export class ModelRenderer {
     private renderHelper: GXRenderHelper;
     private sceneParams: SceneParams = new SceneParams();
     private packetParams: PacketParams = new PacketParams();
-    private matrixArray: mat4[] = nArray(16, () => mat4.create());
     private bufferCoalescer: BufferCoalescer;
     private chr0NodeAnimator: BRRES.CHR0NodesAnimator;
+
+    private matrixVisibility: IntersectionState[] = [];
+    private matrixArray: mat4[] = [];
     private matrixScratch: mat4 = mat4.create();
+    private bboxScratch: AABB = new AABB();
 
     public colorOverrides: GX_Material.Color[] = [];
 
@@ -72,14 +75,23 @@ export class ModelRenderer {
         if (!this.visible)
             return;
 
+        // Frustum cull.
+        if (this.mdl0.bbox !== null) {
+            const bbox = this.bboxScratch;
+            bbox.transform(this.mdl0.bbox, this.modelMatrix);
+            if (state.camera.frustum.intersect(bbox) === IntersectionState.FULLY_OUTSIDE)
+                return;
+        }
+
         // First, update our matrix state.
-        this.execNodeTreeOpList(this.mdl0.sceneGraph.nodeTreeOps);
+        this.execNodeTreeOpList(state, this.mdl0.sceneGraph.nodeTreeOps);
 
         this.renderHelper.bindUniformBuffers(state);
 
         fillSceneParamsFromRenderState(this.sceneParams, state);
         this.renderHelper.bindSceneParams(state, this.sceneParams);
 
+        // TODO(jstpierre): Split into two draws.
         this.execDrawOpList(state, this.mdl0.sceneGraph.drawOpaOps);
         this.execDrawOpList(state, this.mdl0.sceneGraph.drawXluOps);
     }
@@ -95,24 +107,27 @@ export class ModelRenderer {
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
 
+            const node = this.mdl0.nodes[op.nodeId];
+            if (this.matrixVisibility[node.mtxId] === IntersectionState.FULLY_OUTSIDE)
+                continue;
+
             const matCommand = this.materialCommands[op.matId];
             if (!matCommand.visible)
                 continue;
-
-            if (op.matId != lastMatId) {
-                matCommand.exec(state, this.renderHelper);
-                lastMatId = op.matId;
-            }
-
-            const shpCommand = this.shapeCommands[op.shpId];
-            const node = this.mdl0.nodes[op.nodeId];
 
             const usesEnvelope = (node.mtxId < 0);
             if (usesEnvelope)
                 throw "whoops";
 
+            const shpCommand = this.shapeCommands[op.shpId];
+
             const nodeModelMtx = this.matrixArray[node.mtxId];
             const modelView = state.updateModelView(false, nodeModelMtx);
+
+            if (op.matId != lastMatId) {
+                matCommand.exec(state, this.renderHelper);
+                lastMatId = op.matId;
+            }
 
             mat4.copy(this.packetParams.u_PosMtx[0], modelView);
             this.renderHelper.bindPacketParams(state, this.packetParams);
@@ -141,8 +156,9 @@ export class ModelRenderer {
         }
     }
 
-    private execNodeTreeOpList(opList: BRRES.NodeTreeOp[]): void {
+    private execNodeTreeOpList(state: RenderState, opList: BRRES.NodeTreeOp[]): void {
         mat4.copy(this.matrixArray[0], this.modelMatrix);
+        this.matrixVisibility[0] = IntersectionState.PARTIAL_INTERSECT;
 
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
@@ -151,6 +167,14 @@ export class ModelRenderer {
                 const node = this.mdl0.nodes[op.nodeId];
                 const parentMtxId = op.parentMtxId;
                 const dstMtxId = node.mtxId;
+
+                // If parent is out, no need to update...
+                const parentVisibility = this.matrixVisibility[parentMtxId];
+                if (parentVisibility === IntersectionState.FULLY_OUTSIDE) {
+                    this.matrixVisibility[dstMtxId] = IntersectionState.FULLY_OUTSIDE;
+                    continue;
+                }
+
                 let modelMatrix;
                 if (this.chr0NodeAnimator && this.chr0NodeAnimator.calcModelMtx(this.matrixScratch, op.nodeId)) {
                     modelMatrix = this.matrixScratch;
@@ -158,12 +182,30 @@ export class ModelRenderer {
                     modelMatrix = node.modelMatrix;
                 }
                 mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], modelMatrix);
+
+                if (node.bbox !== null) {
+                    // If parent is fully in, don't attempt to cull.
+                    if (parentVisibility === IntersectionState.PARTIAL_INTERSECT) {
+                        const bboxScratch = this.bboxScratch;
+                        bboxScratch.transform(node.bbox, this.matrixArray[dstMtxId]);
+                        this.matrixVisibility[dstMtxId] = state.camera.frustum.intersect(bboxScratch);
+                    } else {
+                        this.matrixVisibility[dstMtxId] = IntersectionState.FULLY_INSIDE;
+                    }
+                } else {
+                    // If we don't have a bbox, copy our parent's state.
+                    this.matrixVisibility[dstMtxId] = parentVisibility;
+                }
             } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
                 const srcMtxId = op.fromMtxId;
                 const dstMtxId = op.toMtxId;
                 mat4.copy(this.matrixArray[dstMtxId], this.matrixArray[srcMtxId]);
+                this.matrixVisibility[dstMtxId] = this.matrixVisibility[srcMtxId];
             }
         }
+
+        if (this.namePrefix === 'Blade')
+            window.debug = false;
     }
 
     private translateModel(gl: WebGL2RenderingContext): void {
