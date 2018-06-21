@@ -231,7 +231,7 @@ class Frustum {
         let ret = IntersectionState.FULLY_INSIDE;
 
         // Test planes.
-        for (let i = 0; i < 1; i++) {
+        for (let i = 0; i < 6; i++) {
             const plane = this.planes[i];
             // Nearest point to the frustum.
             const px = plane.x >= 0 ? aabb.minX : aabb.maxX;

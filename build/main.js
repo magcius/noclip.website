@@ -937,7 +937,7 @@ System.register("Camera", ["gl-matrix", "util"], function (exports_7, context_7)
                         return IntersectionState.FULLY_OUTSIDE;
                     var ret = IntersectionState.FULLY_INSIDE;
                     // Test planes.
-                    for (var i = 0; i < 1; i++) {
+                    for (var i = 0; i < 6; i++) {
                         var plane = this.planes[i];
                         // Nearest point to the frustum.
                         var px = plane.x >= 0 ? aabb.minX : aabb.maxX;
