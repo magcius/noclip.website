@@ -383,7 +383,7 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
 //#region SHP1
 // A packet is a series of draw calls that use the same matrix table.
 interface Packet {
-    weightedJointTable: Uint16Array;
+    matrixTable: Uint16Array;
     firstTriangle: number;
     numTriangles: number;
 }
@@ -482,7 +482,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 
             const packetMatrixTableOffs = matrixTableOffs + matrixFirstIndex * 0x02;
             const packetMatrixTableSize = matrixCount;
-            const weightedJointTable = buffer.createTypedArray(Uint16Array, packetMatrixTableOffs, packetMatrixTableSize, Endianness.BIG_ENDIAN);
+            const matrixTable = buffer.createTypedArray(Uint16Array, packetMatrixTableOffs, packetMatrixTableSize, Endianness.BIG_ENDIAN);
 
             const srcOffs = packetStart;
             const subBuffer = buffer.subarray(srcOffs, packetSize);
@@ -493,7 +493,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             const numTriangles = loadedSubData.totalTriangleCount;
             totalTriangleCount += numTriangles;
 
-            packets.push({ weightedJointTable, firstTriangle, numTriangles });
+            packets.push({ matrixTable, firstTriangle, numTriangles });
             packetIdx += 0x08;
         }
 
