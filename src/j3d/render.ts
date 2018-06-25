@@ -1,5 +1,5 @@
 
-import { mat4, vec3, mat2d } from 'gl-matrix';
+import { mat4, vec3, mat2d, vec4 } from 'gl-matrix';
 
 import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray, BRK, DRW1JointKind, BCK, BTI } from './j3d';
 
@@ -121,11 +121,6 @@ class Command_Shape {
         if (!this.scene.currentMaterialCommand.visible)
             return;
 
-        const bbox = this.bboxScratch;
-        bbox.transform(this.shape.bbox, this.scene.modelMatrix);
-        if (state.camera.frustum.intersect(this.bboxScratch) === IntersectionState.FULLY_OUTSIDE)
-            return;
-
         const gl = state.gl;
 
         this.shapeHelper.drawPrologue(gl);
@@ -134,19 +129,35 @@ class Command_Shape {
 
         let needsUpload = false;
 
-        this.shape.packets.forEach((packet, packetIndex) => {
-            // Update our matrix table.
-            for (let i = 0; i < packet.weightedJointTable.length; i++) {
-                const weightedJointIndex = packet.weightedJointTable[i];
+        const posMtxVisibility: IntersectionState[] = new Array(10);
+        for (let p = 0; p < this.shape.packets.length; p++) {
+            const packet = this.shape.packets[p];
 
-                // Leave existing joint.
-                if (weightedJointIndex === 0xFFFF)
+            // Update our matrix table.
+            for (let i = 0; i < packet.matrixTable.length; i++) {
+                const matrixIndex = packet.matrixTable[i];
+
+                // Leave existing matrix.
+                if (matrixIndex === 0xFFFF)
                     continue;
 
-                const posMtx = this.scene.weightedJointMatrices[weightedJointIndex];
+                const posMtx = this.scene.weightedJointMatrices[matrixIndex];
+                posMtxVisibility[i] = this.scene.matrixVisibility[matrixIndex];
                 mat4.mul(this.packetParams.u_PosMtx[i], modelView, posMtx);
                 needsUpload = true;
             }
+
+            // If all matrices are invisible, we can cull.
+            let frustumCull = true;
+            for (let i = 0; i < posMtxVisibility.length; i++) {
+                if (posMtxVisibility[i] !== IntersectionState.FULLY_OUTSIDE) {
+                    frustumCull = false;
+                    break;
+                }
+            }
+
+            if (frustumCull)
+                return;
 
             if (needsUpload) {
                 this.scene.renderHelper.bindPacketParams(state, this.packetParams);
@@ -154,7 +165,7 @@ class Command_Shape {
             }
 
             this.shapeHelper.drawTriangles(gl, packet.firstTriangle, packet.numTriangles);
-        });
+        }
 
         this.shapeHelper.drawEpilogue(gl);
     }
@@ -186,7 +197,7 @@ export class Command_Material {
 
     private scene: Command_MaterialScene;
     private renderFlags: RenderFlags;
-    private program: GX_Material.GX_Program;
+    public program: GX_Material.GX_Program;
 
     constructor(gl: WebGL2RenderingContext, scene: Command_MaterialScene, material: MaterialEntry) {
         this.name = material.name;
@@ -446,6 +457,8 @@ export class Scene implements Viewer.Scene {
     private jointMatrices: mat4[];
     public weightedJointMatrices: mat4[];
     private jointVisibility: IntersectionState[] = [];
+    public matrixVisibility: IntersectionState[] = [];
+    private bboxScratch: AABB = new AABB();
 
     private bufferCoalescer: BufferCoalescer;
 
@@ -644,6 +657,7 @@ export class Scene implements Viewer.Scene {
     private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4) {
         // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
         const jnt1 = this.bmd.jnt1;
+        const bbox = this.bboxScratch;
 
         switch (node.type) {
         case HierarchyType.Joint:
@@ -655,6 +669,8 @@ export class Scene implements Viewer.Scene {
             }
             const jointMatrix = this.jointMatrices[jointIndex];
             mat4.mul(jointMatrix, parentJointMatrix, boneMatrix);
+            bbox.transform(jnt1.bones[jointIndex].bbox, jointMatrix);
+            this.jointVisibility[jointIndex] = state.camera.frustum.intersect(bbox);
             parentJointMatrix = jointMatrix;
             break;
         }
@@ -674,6 +690,7 @@ export class Scene implements Viewer.Scene {
             const destMtx = this.weightedJointMatrices[i];
             if (joint.kind === DRW1JointKind.NormalJoint) {
                 mat4.copy(destMtx, this.jointMatrices[joint.jointIndex]);
+                this.matrixVisibility[i] = this.jointVisibility[joint.jointIndex];
             } else if (joint.kind === DRW1JointKind.WeightedJoint) {
                 destMtx.fill(0);
                 const envelope = this.bmd.evp1.envelopes[joint.envelopeIndex];
@@ -683,6 +700,8 @@ export class Scene implements Viewer.Scene {
                     mat4.mul(matrixScratch, this.jointMatrices[weightedBone.index], inverseBindPose);
                     mat4.multiplyScalarAndAdd(destMtx, destMtx, matrixScratch, weightedBone.weight);
                 }
+                // TODO(jstpierre): Frustum cull weighted joints.
+                this.matrixVisibility[i] = IntersectionState.FULLY_INSIDE;
             }
         }
     }

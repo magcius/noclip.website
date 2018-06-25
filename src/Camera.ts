@@ -229,7 +229,6 @@ class Frustum {
             return IntersectionState.FULLY_OUTSIDE;
 
         let ret = IntersectionState.FULLY_INSIDE;
-
         // Test planes.
         for (let i = 0; i < 6; i++) {
             const plane = this.planes[i];
