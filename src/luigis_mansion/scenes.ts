@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import Progressable from '../Progressable';
-import * as Yay0 from '../yay0';
+import * as Yay0 from '../compression/Yay0';
 import { fetch, assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as RARC from '../j3d/rarc';

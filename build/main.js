@@ -3219,147 +3219,10 @@ System.register("byml", ["util"], function (exports_15, context_15) {
         }
     };
 });
-System.register("lz77", ["ArrayBufferSlice"], function (exports_16, context_16) {
+// New UI system
+System.register("ui", ["util", "Camera"], function (exports_16, context_16) {
     "use strict";
     var __moduleName = context_16 && context_16.id;
-    // Nintendo DS LZ77 format.
-    // LZ10:
-    // Header (4 bytes):
-    //   Magic: "\x10" (1 byte)
-    //   Uncompressed size (3 bytes, little endian)
-    // Data:
-    //   Flags (1 byte)
-    //   For each bit in the flags byte, from MSB to LSB:
-    //     If flag is 1:
-    //       LZ77 (2 bytes, big endian):
-    //         Length: bits 0-3
-    //         Offset: bits 4-15
-    //         Copy Length+3 bytes from Offset back in the output buffer.
-    //     If flag is 0:
-    //       Literal: copy one byte from src to dest.
-    function decompressLZ10(srcView) {
-        var uncompressedSize = srcView.getUint32(0x00, true) >> 8;
-        var dstBuffer = new Uint8Array(uncompressedSize);
-        var srcOffs = 0x04;
-        var dstOffs = 0x00;
-        while (true) {
-            var commandByte = srcView.getUint8(srcOffs++);
-            var i = 8;
-            while (i--) {
-                if (commandByte & (1 << i)) {
-                    var tmp = srcView.getUint16(srcOffs, false);
-                    srcOffs += 2;
-                    var windowOffset = (tmp & 0x0FFF) + 1;
-                    var windowLength = (tmp >> 12) + 3;
-                    var copyOffs = dstOffs - windowOffset;
-                    uncompressedSize -= windowLength;
-                    while (windowLength--)
-                        dstBuffer[dstOffs++] = dstBuffer[copyOffs++];
-                }
-                else {
-                    // Literal.
-                    uncompressedSize--;
-                    dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
-                }
-                if (uncompressedSize <= 0)
-                    return new ArrayBufferSlice_2.default(dstBuffer.buffer);
-            }
-        }
-    }
-    exports_16("decompressLZ10", decompressLZ10);
-    // LZ11:
-    // Header (4 bytes):
-    //   Magic: "\x11" (1 byte)
-    //   Uncompressed size (3 bytes, little endian)
-    // Data:
-    //   Flags (1 byte)
-    //   For each bit in the flags byte, from MSB to LSB:
-    //     If flag is 1:
-    //       Fancy LZ77. See below for more details. Flag switches on 4-7 of newly read byte.
-    //     If flag is 0:
-    //       Literal: copy one byte from src to dest.
-    function decompressLZ11(srcView) {
-        var uncompressedSize = srcView.getUint32(0x00, true) >>> 8;
-        var dstBuffer = new Uint8Array(uncompressedSize);
-        var srcOffs = 0x04;
-        var dstOffs = 0x00;
-        while (true) {
-            var commandByte = srcView.getUint8(srcOffs++);
-            var i = 8;
-            while (i--) {
-                if (commandByte & (1 << i)) {
-                    var indicator = srcView.getUint8(srcOffs) >>> 4;
-                    var windowOffset = void 0;
-                    var windowLength = void 0;
-                    if (indicator > 1) {
-                        // Two bytes. AB CD
-                        var tmp = srcView.getUint16(srcOffs, false);
-                        // Length: A + 1
-                        // Offset: BCD + 1
-                        windowLength = indicator + 1;
-                        windowOffset = (tmp & 0x0FFF) + 1;
-                        srcOffs += 2;
-                    }
-                    else if (indicator === 0) {
-                        // Three bytes: AB CD EF
-                        var tmp = (srcView.getUint16(srcOffs, false) << 8) | srcView.getUint8(srcOffs + 0x02);
-                        // Length: BC + 0x11
-                        // Offset: DEF + 1
-                        windowLength = (tmp >>> 12) + 0x11;
-                        windowOffset = (tmp & 0x0FFF) + 1;
-                        srcOffs += 3;
-                    }
-                    else if (indicator === 1) {
-                        // Four bytes. AB CD EF GH
-                        var tmp = srcView.getUint32(srcOffs, false);
-                        // Length: BCDE + 0x111
-                        // Offset: FGH + 1
-                        windowLength = ((tmp >>> 12) & 0xFFFF) + 0x111;
-                        windowOffset = (tmp & 0x0FFF) + 1;
-                        srcOffs += 4;
-                    }
-                    var copyOffs = dstOffs - windowOffset;
-                    uncompressedSize -= windowLength;
-                    while (windowLength--)
-                        dstBuffer[dstOffs++] = dstBuffer[copyOffs++];
-                }
-                else {
-                    // Literal.
-                    uncompressedSize--;
-                    dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
-                }
-                if (uncompressedSize <= 0)
-                    return new ArrayBufferSlice_2.default(dstBuffer.buffer);
-            }
-        }
-    }
-    exports_16("decompressLZ11", decompressLZ11);
-    function decompress(srcBuffer) {
-        var srcView = srcBuffer.createDataView();
-        var magic = srcView.getUint8(0x00);
-        if (magic === 0x10)
-            return decompressLZ10(srcView);
-        else if (magic === 0x11)
-            return decompressLZ11(srcView);
-        else
-            throw new Error("Not Nintendo LZ77");
-    }
-    exports_16("decompress", decompress);
-    var ArrayBufferSlice_2;
-    return {
-        setters: [
-            function (ArrayBufferSlice_2_1) {
-                ArrayBufferSlice_2 = ArrayBufferSlice_2_1;
-            }
-        ],
-        execute: function () {
-        }
-    };
-});
-// New UI system
-System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
-    "use strict";
-    var __moduleName = context_17 && context_17.id;
     function createDOMFromString(s) {
         return document.createRange().createContextualFragment(s);
     }
@@ -3462,7 +3325,7 @@ System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
                 };
                 return ScrollSelect;
             }());
-            exports_17("ScrollSelect", ScrollSelect);
+            exports_16("ScrollSelect", ScrollSelect);
             SingleSelect = /** @class */ (function (_super) {
                 __extends(SingleSelect, _super);
                 function SingleSelect() {
@@ -3479,7 +3342,7 @@ System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
                 };
                 return SingleSelect;
             }(ScrollSelect));
-            exports_17("SingleSelect", SingleSelect);
+            exports_16("SingleSelect", SingleSelect);
             SimpleSingleSelect = /** @class */ (function (_super) {
                 __extends(SimpleSingleSelect, _super);
                 function SimpleSingleSelect() {
@@ -3491,7 +3354,7 @@ System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
                 };
                 return SimpleSingleSelect;
             }(SingleSelect));
-            exports_17("SimpleSingleSelect", SimpleSingleSelect);
+            exports_16("SimpleSingleSelect", SimpleSingleSelect);
             MultiSelect = /** @class */ (function (_super) {
                 __extends(MultiSelect, _super);
                 function MultiSelect() {
@@ -3540,7 +3403,7 @@ System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
                 };
                 return MultiSelect;
             }(ScrollSelect));
-            exports_17("MultiSelect", MultiSelect);
+            exports_16("MultiSelect", MultiSelect);
             Panel = /** @class */ (function () {
                 function Panel() {
                     var _this = this;
@@ -3632,7 +3495,7 @@ System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
                 };
                 return Panel;
             }());
-            exports_17("Panel", Panel);
+            exports_16("Panel", Panel);
             OPEN_ICON = "<svg viewBox=\"0 0 100 100\" height=\"20\" fill=\"white\"><path d=\"M84.3765045,45.2316481 L77.2336539,75.2316205 L77.2336539,75.2316205 C77.1263996,75.6820886 76.7239081,76 76.2608477,76 L17.8061496,76 C17.2538649,76 16.8061496,75.5522847 16.8061496,75 C16.8061496,74.9118841 16.817796,74.8241548 16.8407862,74.739091 L24.7487983,45.4794461 C24.9845522,44.607157 25.7758952,44.0012839 26.6794815,44.0012642 L83.4036764,44.0000276 L83.4036764,44.0000276 C83.9559612,44.0000156 84.4036862,44.4477211 84.4036982,45.0000058 C84.4036999,45.0780163 84.3945733,45.155759 84.3765045,45.2316481 L84.3765045,45.2316481 Z M15,24 L26.8277004,24 L26.8277004,24 C27.0616369,24 27.2881698,24.0820162 27.4678848,24.2317787 L31.799078,27.8411064 L31.799078,27.8411064 C32.697653,28.5899189 33.8303175,29 35,29 L75,29 C75.5522847,29 76,29.4477153 76,30 L76,38 L76,38 C76,38.5522847 75.5522847,39 75,39 L25.3280454,39 L25.3280454,39 C23.0690391,39 21.0906235,40.5146929 20.5012284,42.6954549 L14.7844016,63.8477139 L14.7844016,63.8477139 C14.7267632,64.0609761 14.5071549,64.1871341 14.2938927,64.1294957 C14.1194254,64.0823423 13.9982484,63.9240598 13.9982563,63.7433327 L13.9999561,25 L14,25 C14.0000242,24.4477324 14.4477324,24.0000439 15,24.0000439 L15,24 Z\"/></svg>";
             SceneSelect = /** @class */ (function (_super) {
                 __extends(SceneSelect, _super);
@@ -3833,7 +3696,7 @@ System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
                 };
                 return TextureViewer;
             }(Panel));
-            exports_17("TextureViewer", TextureViewer);
+            exports_16("TextureViewer", TextureViewer);
             FRUSTUM_ICON = "<svg viewBox=\"0 0 100 100\" height=\"20\" fill=\"white\"><polygon points=\"48.2573,19.8589 33.8981,15.0724 5,67.8384 48.2573,90.3684\" /><polygon points=\"51.5652,19.8738 51.5652,90.3734 95,67.8392 65.9366,15.2701\" /><polygon points=\"61.3189,13.2756 49.9911,9.6265 38.5411,13.1331 49.9213,16.9268\" /></svg>";
             ViewerSettings = /** @class */ (function (_super) {
                 __extends(ViewerSettings, _super);
@@ -3910,7 +3773,7 @@ System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
                 };
                 return LayerPanel;
             }(Panel));
-            exports_17("LayerPanel", LayerPanel);
+            exports_16("LayerPanel", LayerPanel);
             UI = /** @class */ (function () {
                 function UI(viewer) {
                     this.viewer = viewer;
@@ -3956,14 +3819,14 @@ System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
                 };
                 return UI;
             }());
-            exports_17("UI", UI);
+            exports_16("UI", UI);
         }
     };
 });
 // tslint:disable:no-console
-System.register("viewer", ["render", "InputManager"], function (exports_18, context_18) {
+System.register("viewer", ["render", "InputManager"], function (exports_17, context_17) {
     "use strict";
-    var __moduleName = context_18 && context_18.id;
+    var __moduleName = context_17 && context_17.id;
     var render_1, InputManager_1, Viewer;
     return {
         setters: [
@@ -4049,14 +3912,14 @@ System.register("viewer", ["render", "InputManager"], function (exports_18, cont
                 };
                 return Viewer;
             }());
-            exports_18("Viewer", Viewer);
+            exports_17("Viewer", Viewer);
         }
     };
 });
 // Generated by build_wat.js
-System.register("wat_modules", [], function (exports_19, context_19) {
+System.register("wat_modules", [], function (exports_18, context_18) {
     "use strict";
-    var __moduleName = context_19 && context_19.id;
+    var __moduleName = context_18 && context_18.id;
     function yaz0_asInstance(imports) {
         return WebAssembly.compile(yaz0_asCode).then(function (module) {
             return WebAssembly.instantiate(module, imports);
@@ -4064,7 +3927,7 @@ System.register("wat_modules", [], function (exports_19, context_19) {
             return instance.exports;
         });
     }
-    exports_19("yaz0_asInstance", yaz0_asInstance);
+    exports_18("yaz0_asInstance", yaz0_asInstance);
     function gx_texture_asInstance(imports) {
         return WebAssembly.compile(gx_texture_asCode).then(function (module) {
             return WebAssembly.instantiate(module, imports);
@@ -4072,7 +3935,7 @@ System.register("wat_modules", [], function (exports_19, context_19) {
             return instance.exports;
         });
     }
-    exports_19("gx_texture_asInstance", gx_texture_asInstance);
+    exports_18("gx_texture_asInstance", gx_texture_asInstance);
     var yaz0_asCode, gx_texture_asCode;
     return {
         setters: [],
@@ -4083,9 +3946,9 @@ System.register("wat_modules", [], function (exports_19, context_19) {
     };
 });
 // Nintendo Yaz0 format.
-System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryManager"], function (exports_20, context_20) {
+System.register("compression/yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryManager"], function (exports_19, context_19) {
     "use strict";
-    var __moduleName = context_20 && context_20.id;
+    var __moduleName = context_19 && context_19.id;
     function decompress(srcBuffer) {
         return _wasmInstance.then(function (wasmInstance) {
             var srcView = srcBuffer.createDataView();
@@ -4101,12 +3964,12 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
             heap.set(srcBuffer.createTypedArray(Uint8Array, 0x10), pSrc);
             wasmInstance.decompress(pDst, pSrc, dstSize);
             // Copy the result buffer to a new buffer for memory usage purposes.
-            var result = new ArrayBufferSlice_3.default(heap.buffer).copySlice(pDst, dstSize);
+            var result = new ArrayBufferSlice_2.default(heap.buffer).copySlice(pDst, dstSize);
             return result;
         });
     }
-    exports_20("decompress", decompress);
-    var util_9, wat_modules_1, ArrayBufferSlice_3, WasmMemoryManager_1, _wasmInstance;
+    exports_19("decompress", decompress);
+    var util_9, wat_modules_1, ArrayBufferSlice_2, WasmMemoryManager_1, _wasmInstance;
     return {
         setters: [
             function (util_9_1) {
@@ -4115,8 +3978,8 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
             function (wat_modules_1_1) {
                 wat_modules_1 = wat_modules_1_1;
             },
-            function (ArrayBufferSlice_3_1) {
-                ArrayBufferSlice_3 = ArrayBufferSlice_3_1;
+            function (ArrayBufferSlice_2_1) {
+                ArrayBufferSlice_2 = ArrayBufferSlice_2_1;
             },
             function (WasmMemoryManager_1_1) {
                 WasmMemoryManager_1 = WasmMemoryManager_1_1;
@@ -4131,9 +3994,9 @@ System.register("yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryM
     };
 });
 // GX constants. Mostly taken from libogc.
-System.register("gx/gx_enum", [], function (exports_21, context_21) {
+System.register("gx/gx_enum", [], function (exports_20, context_20) {
     "use strict";
-    var __moduleName = context_21 && context_21.id;
+    var __moduleName = context_20 && context_20.id;
     return {
         setters: [],
         execute: function () {
@@ -4141,9 +4004,9 @@ System.register("gx/gx_enum", [], function (exports_21, context_21) {
     };
 });
 // GX Display List parsing.
-System.register("gx/gx_displaylist", ["MemoizeCache", "util", "endian"], function (exports_22, context_22) {
+System.register("gx/gx_displaylist", ["MemoizeCache", "util", "endian"], function (exports_21, context_21) {
     "use strict";
-    var __moduleName = context_22 && context_22.id;
+    var __moduleName = context_21 && context_21.id;
     function getComponentSizeRaw(compType) {
         switch (compType) {
             case 0 /* U8 */:
@@ -4157,7 +4020,7 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util", "endian"], functio
                 return 4;
         }
     }
-    exports_22("getComponentSizeRaw", getComponentSizeRaw);
+    exports_21("getComponentSizeRaw", getComponentSizeRaw);
     // PNMTXIDX, TEXnMTXIDX are special cases in GX.
     function isVtxAttribMtxIdx(vtxAttrib) {
         switch (vtxAttrib) {
@@ -4221,7 +4084,7 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util", "endian"], functio
                 throw new Error("whoops");
         }
     }
-    exports_22("getComponentCountRaw", getComponentCountRaw);
+    exports_21("getComponentCountRaw", getComponentCountRaw);
     function getComponentCount(vtxAttrib, vatFormat) {
         // MTXIDX fields don't have VAT entries.
         if (isVtxAttribMtxIdx(vtxAttrib))
@@ -4598,19 +4461,19 @@ System.register("gx/gx_displaylist", ["MemoizeCache", "util", "endian"], functio
                 return VtxLoaderCache;
             }(MemoizeCache_2.default));
             cache = new VtxLoaderCache();
-            exports_22("compileVtxLoader", compileVtxLoader = cache.compileVtxLoader);
-            exports_22("compileVtxLoaderMultiVat", compileVtxLoaderMultiVat = cache.compileVtxLoaderMultiVat);
+            exports_21("compileVtxLoader", compileVtxLoader = cache.compileVtxLoader);
+            exports_21("compileVtxLoaderMultiVat", compileVtxLoaderMultiVat = cache.compileVtxLoaderMultiVat);
         }
     };
 });
 // GX materials.
-System.register("gx/gx_material", ["render", "Program"], function (exports_23, context_23) {
+System.register("gx/gx_material", ["render", "Program"], function (exports_22, context_22) {
     "use strict";
-    var __moduleName = context_23 && context_23.id;
+    var __moduleName = context_22 && context_22.id;
     function getVertexAttribLocation(vtxAttrib) {
         return vtxAttributeGenDefs.findIndex(function (genDef) { return genDef.attrib === vtxAttrib; });
     }
-    exports_23("getVertexAttribLocation", getVertexAttribLocation);
+    exports_22("getVertexAttribLocation", getVertexAttribLocation);
     // #endregion
     // #region Material flags generation.
     function translateCullMode(cullMode) {
@@ -4708,7 +4571,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_23, c
         }
         return renderFlags;
     }
-    exports_23("translateRenderFlags", translateRenderFlags);
+    exports_22("translateRenderFlags", translateRenderFlags);
     // #endregion
     function getRasColorChannelID(v) {
         switch (v) {
@@ -4731,7 +4594,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_23, c
                 throw "whoops";
         }
     }
-    exports_23("getRasColorChannelID", getRasColorChannelID);
+    exports_22("getRasColorChannelID", getRasColorChannelID);
     var render_2, Program_3, EFB_WIDTH, EFB_HEIGHT, Color, vtxAttributeGenDefs, textureSamplerIdentities, GX_Program;
     return {
         setters: [
@@ -4744,8 +4607,8 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_23, c
         ],
         execute: function () {
             // TODO(jstpierre): Move somewhere better...
-            exports_23("EFB_WIDTH", EFB_WIDTH = 640);
-            exports_23("EFB_HEIGHT", EFB_HEIGHT = 528);
+            exports_22("EFB_WIDTH", EFB_WIDTH = 640);
+            exports_22("EFB_HEIGHT", EFB_HEIGHT = 528);
             Color = /** @class */ (function () {
                 function Color(r, g, b, a) {
                     if (r === void 0) { r = 0; }
@@ -4766,7 +4629,7 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_23, c
                 };
                 return Color;
             }());
-            exports_23("Color", Color);
+            exports_22("Color", Color);
             vtxAttributeGenDefs = [
                 { attrib: 0 /* PNMTXIDX */, name: "PosMtxIdx", storage: "float" },
                 { attrib: 9 /* POS */, name: "Position", storage: "vec3" },
@@ -5294,14 +5157,14 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_23, c
                 GX_Program.ub_PacketParams = 2;
                 return GX_Program;
             }(Program_3.BaseProgram));
-            exports_23("GX_Program", GX_Program);
+            exports_22("GX_Program", GX_Program);
         }
     };
 });
 // GX texture decoding
-System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "WasmMemoryManager"], function (exports_24, context_24) {
+System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "WasmMemoryManager"], function (exports_23, context_23) {
     "use strict";
-    var __moduleName = context_24 && context_24.id;
+    var __moduleName = context_23 && context_23.id;
     function calcPaletteSize(format, palette) {
         var paletteSize = 0;
         switch (format) {
@@ -5318,7 +5181,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         // All palette-formats are 16-bit.
         return paletteSize * 2;
     }
-    exports_24("calcPaletteSize", calcPaletteSize);
+    exports_23("calcPaletteSize", calcPaletteSize);
     function calcTextureSize(format, width, height) {
         var numPixels = width * height;
         switch (format) {
@@ -5346,7 +5209,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
                 throw new Error("whoops");
         }
     }
-    exports_24("calcTextureSize", calcTextureSize);
+    exports_23("calcTextureSize", calcTextureSize);
     function calcMipChain(texture, mipCount) {
         if (mipCount === void 0) { mipCount = 0xFF; }
         var mipLevels = [];
@@ -5367,7 +5230,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         }
         return { name: name, mipLevels: mipLevels, fullTextureSize: textureSize };
     }
-    exports_24("calcMipChain", calcMipChain);
+    exports_23("calcMipChain", calcMipChain);
     function decode_Wasm(wasmInstance, texture, decoder, scratchSize) {
         if (scratchSize === void 0) { scratchSize = 0; }
         var dstSize = texture.width * texture.height * 4;
@@ -5382,7 +5245,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
         heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
         decoder(pScratch, pDst, pSrc, texture.width, texture.height);
         // Copy the result buffer to a new buffer for memory usage purposes.
-        var pixelsBuffer = new ArrayBufferSlice_4.default(heap.buffer).copyToBuffer(pDst, dstSize);
+        var pixelsBuffer = new ArrayBufferSlice_3.default(heap.buffer).copyToBuffer(pDst, dstSize);
         var pixels = new Uint8Array(pixelsBuffer);
         return { pixels: pixels };
     }
@@ -5419,7 +5282,7 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
                 return "invalid";
         }
     }
-    exports_24("getFormatName", getFormatName);
+    exports_23("getFormatName", getFormatName);
     function decodeTexture(texture) {
         if (texture.data === null)
             return Promise.resolve(decode_Dummy(texture));
@@ -5450,12 +5313,12 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
             }
         });
     }
-    exports_24("decodeTexture", decodeTexture);
-    var ArrayBufferSlice_4, util_11, wat_modules_2, WasmMemoryManager_2, _wasmInstance;
+    exports_23("decodeTexture", decodeTexture);
+    var ArrayBufferSlice_3, util_11, wat_modules_2, WasmMemoryManager_2, _wasmInstance;
     return {
         setters: [
-            function (ArrayBufferSlice_4_1) {
-                ArrayBufferSlice_4 = ArrayBufferSlice_4_1;
+            function (ArrayBufferSlice_3_1) {
+                ArrayBufferSlice_3 = ArrayBufferSlice_3_1;
             },
             function (util_11_1) {
                 util_11 = util_11_1;
@@ -5476,9 +5339,9 @@ System.register("gx/gx_texture", ["ArrayBufferSlice", "util", "wat_modules", "Wa
     };
 });
 // Common helpers for GX rendering.
-System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture", "util", "BufferCoalescer", "ArrayBufferSlice"], function (exports_25, context_25) {
+System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture", "util", "BufferCoalescer", "ArrayBufferSlice"], function (exports_24, context_24) {
     "use strict";
-    var __moduleName = context_25 && context_25.id;
+    var __moduleName = context_24 && context_24.id;
     function fillVec4(d, offs, v0, v1, v2, v3) {
         if (v1 === void 0) { v1 = 0; }
         if (v2 === void 0) { v2 = 0; }
@@ -5554,7 +5417,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
         util_12.assert(offs === u_SceneParamsBufferSize);
         util_12.assert(d.length >= offs);
     }
-    exports_25("fillSceneParamsData", fillSceneParamsData);
+    exports_24("fillSceneParamsData", fillSceneParamsData);
     function fillMaterialParamsData(d, materialParams) {
         // Texture mapping requires special effort.
         var offs = 0;
@@ -5577,7 +5440,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
         util_12.assert(offs === u_MaterialParamsBufferSize);
         util_12.assert(d.length >= offs);
     }
-    exports_25("fillMaterialParamsData", fillMaterialParamsData);
+    exports_24("fillMaterialParamsData", fillMaterialParamsData);
     function fillPacketParamsData(d, packetParams) {
         var offs = 0;
         for (var i = 0; i < 10; i++)
@@ -5585,7 +5448,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
         util_12.assert(offs === u_PacketParamsBufferSize);
         util_12.assert(d.length >= offs);
     }
-    exports_25("fillPacketParamsData", fillPacketParamsData);
+    exports_24("fillPacketParamsData", fillPacketParamsData);
     function translateAttribType(gl, attribFormat) {
         switch (attribFormat) {
             case 1 /* F32 */:
@@ -5605,16 +5468,16 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
         var textureLODBias = Math.log2(Math.min(viewportWidth / GX_Material.EFB_WIDTH, viewportHeight / GX_Material.EFB_HEIGHT));
         return textureLODBias;
     }
-    exports_25("getTextureLODBias", getTextureLODBias);
+    exports_24("getTextureLODBias", getTextureLODBias);
     function fillSceneParamsFromRenderState(sceneParams, state) {
         gl_matrix_3.mat4.copy(sceneParams.u_Projection, state.camera.projectionMatrix);
         sceneParams.u_SceneTextureLODBias = getTextureLODBias(state);
     }
-    exports_25("fillSceneParamsFromRenderState", fillSceneParamsFromRenderState);
+    exports_24("fillSceneParamsFromRenderState", fillSceneParamsFromRenderState);
     function loadedDataCoalescer(gl, loadedVertexDatas) {
-        return new BufferCoalescer_1.default(gl, loadedVertexDatas.map(function (data) { return new ArrayBufferSlice_5.default(data.packedVertexData); }), loadedVertexDatas.map(function (data) { return new ArrayBufferSlice_5.default(data.indexData); }));
+        return new BufferCoalescer_1.default(gl, loadedVertexDatas.map(function (data) { return new ArrayBufferSlice_4.default(data.packedVertexData); }), loadedVertexDatas.map(function (data) { return new ArrayBufferSlice_4.default(data.indexData); }));
     }
-    exports_25("loadedDataCoalescer", loadedDataCoalescer);
+    exports_24("loadedDataCoalescer", loadedDataCoalescer);
     function loadTextureFromMipChain(gl, mipChain) {
         var glTexture = gl.createTexture();
         glTexture.name = mipChain.name;
@@ -5646,7 +5509,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
         var viewerTexture = { name: mipChain.name, surfaces: surfaces, extraInfo: viewerExtraInfo };
         return { glTexture: glTexture, viewerTexture: viewerTexture };
     }
-    exports_25("loadTextureFromMipChain", loadTextureFromMipChain);
+    exports_24("loadTextureFromMipChain", loadTextureFromMipChain);
     function translateTexFilter(gl, texFilter) {
         switch (texFilter) {
             case 3 /* LIN_MIP_NEAR */:
@@ -5663,7 +5526,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 return gl.NEAREST;
         }
     }
-    exports_25("translateTexFilter", translateTexFilter);
+    exports_24("translateTexFilter", translateTexFilter);
     function translateWrapMode(gl, wrapMode) {
         switch (wrapMode) {
             case 0 /* CLAMP */:
@@ -5674,8 +5537,8 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 return gl.REPEAT;
         }
     }
-    exports_25("translateWrapMode", translateWrapMode);
-    var gl_matrix_3, GX_Material, GX_Texture, util_12, BufferCoalescer_1, ArrayBufferSlice_5, SceneParams, TextureMapping, MaterialParams, PacketParams, u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize, bufferDataScratchSize, GXRenderHelper, GXShapeHelper, TextureHolder;
+    exports_24("translateWrapMode", translateWrapMode);
+    var gl_matrix_3, GX_Material, GX_Texture, util_12, BufferCoalescer_1, ArrayBufferSlice_4, SceneParams, TextureMapping, MaterialParams, PacketParams, u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize, bufferDataScratchSize, GXRenderHelper, GXShapeHelper, TextureHolder;
     return {
         setters: [
             function (gl_matrix_3_1) {
@@ -5693,8 +5556,8 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
             function (BufferCoalescer_1_1) {
                 BufferCoalescer_1 = BufferCoalescer_1_1;
             },
-            function (ArrayBufferSlice_5_1) {
-                ArrayBufferSlice_5 = ArrayBufferSlice_5_1;
+            function (ArrayBufferSlice_4_1) {
+                ArrayBufferSlice_4 = ArrayBufferSlice_4_1;
             }
         ],
         execute: function () {
@@ -5706,7 +5569,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 }
                 return SceneParams;
             }());
-            exports_25("SceneParams", SceneParams);
+            exports_24("SceneParams", SceneParams);
             TextureMapping = /** @class */ (function () {
                 function TextureMapping() {
                     this.glTexture = null;
@@ -5720,7 +5583,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 }
                 return TextureMapping;
             }());
-            exports_25("TextureMapping", TextureMapping);
+            exports_24("TextureMapping", TextureMapping);
             MaterialParams = /** @class */ (function () {
                 function MaterialParams() {
                     this.m_TextureMapping = util_12.nArray(8, function () { return new TextureMapping(); });
@@ -5734,17 +5597,17 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 }
                 return MaterialParams;
             }());
-            exports_25("MaterialParams", MaterialParams);
+            exports_24("MaterialParams", MaterialParams);
             PacketParams = /** @class */ (function () {
                 function PacketParams() {
                     this.u_PosMtx = util_12.nArray(10, function () { return gl_matrix_3.mat4.create(); });
                 }
                 return PacketParams;
             }());
-            exports_25("PacketParams", PacketParams);
-            exports_25("u_PacketParamsBufferSize", u_PacketParamsBufferSize = 4 * 3 * 10);
-            exports_25("u_MaterialParamsBufferSize", u_MaterialParamsBufferSize = 4 * 2 + 4 * 2 + 4 * 4 + 4 * 4 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 4 * 8);
-            exports_25("u_SceneParamsBufferSize", u_SceneParamsBufferSize = 4 * 4 + 4);
+            exports_24("PacketParams", PacketParams);
+            exports_24("u_PacketParamsBufferSize", u_PacketParamsBufferSize = 4 * 3 * 10);
+            exports_24("u_MaterialParamsBufferSize", u_MaterialParamsBufferSize = 4 * 2 + 4 * 2 + 4 * 4 + 4 * 4 + 4 * 3 * 10 + 4 * 3 * 20 + 4 * 2 * 3 + 4 * 8);
+            exports_24("u_SceneParamsBufferSize", u_SceneParamsBufferSize = 4 * 4 + 4);
             bufferDataScratchSize = Math.max(u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize);
             GXRenderHelper = /** @class */ (function () {
                 function GXRenderHelper(gl) {
@@ -5801,7 +5664,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 };
                 return GXRenderHelper;
             }());
-            exports_25("GXRenderHelper", GXRenderHelper);
+            exports_24("GXRenderHelper", GXRenderHelper);
             GXShapeHelper = /** @class */ (function () {
                 function GXShapeHelper(gl, coalescedBuffers, loadedVertexLayout, loadedVertexData) {
                     this.coalescedBuffers = coalescedBuffers;
@@ -5854,7 +5717,7 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 };
                 return GXShapeHelper;
             }());
-            exports_25("GXShapeHelper", GXShapeHelper);
+            exports_24("GXShapeHelper", GXShapeHelper);
             TextureHolder = /** @class */ (function () {
                 function TextureHolder() {
                     this.viewerTextures = [];
@@ -5951,13 +5814,13 @@ System.register("gx/gx_render", ["gl-matrix", "gx/gx_material", "gx/gx_texture",
                 };
                 return TextureHolder;
             }());
-            exports_25("TextureHolder", TextureHolder);
+            exports_24("TextureHolder", TextureHolder);
         }
     };
 });
-System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_render", "Camera"], function (exports_26, context_26) {
+System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_render", "Camera"], function (exports_25, context_25) {
     "use strict";
-    var __moduleName = context_26 && context_26.id;
+    var __moduleName = context_25 && context_25.id;
     function texProjPerspMtx(dst, fov, aspect, scaleS, scaleT, transS, transT) {
         var cot = 1 / Math.tan(fov / 2);
         dst[0] = (cot / aspect) * scaleS;
@@ -6032,7 +5895,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 return J3DTextureHolder;
             }(gx_render_1.TextureHolder));
-            exports_26("J3DTextureHolder", J3DTextureHolder);
+            exports_25("J3DTextureHolder", J3DTextureHolder);
             scratchModelMatrix = gl_matrix_4.mat4.create();
             scratchViewMatrix = gl_matrix_4.mat4.create();
             Command_Shape = /** @class */ (function () {
@@ -6288,7 +6151,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 Command_Material.materialParams = new gx_render_1.MaterialParams();
                 return Command_Material;
             }());
-            exports_26("Command_Material", Command_Material);
+            exports_25("Command_Material", Command_Material);
             (function (ColorOverride) {
                 ColorOverride[ColorOverride["MAT0"] = 0] = "MAT0";
                 ColorOverride[ColorOverride["MAT1"] = 1] = "MAT1";
@@ -6303,7 +6166,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 ColorOverride[ColorOverride["C1"] = 10] = "C1";
                 ColorOverride[ColorOverride["C2"] = 11] = "C2";
             })(ColorOverride || (ColorOverride = {}));
-            exports_26("ColorOverride", ColorOverride);
+            exports_25("ColorOverride", ColorOverride);
             matrixScratch = gl_matrix_4.mat4.create(), matrixScratch2 = gl_matrix_4.mat4.create();
             // SceneLoaderToken is a private class that's passed to Scene.
             // Basically, this emulates an internal constructor by making
@@ -6326,7 +6189,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 return SceneLoader;
             }());
-            exports_26("SceneLoader", SceneLoader);
+            exports_25("SceneLoader", SceneLoader);
             Scene = /** @class */ (function () {
                 function Scene(sceneLoaderToken, sceneLoader) {
                     this.name = '';
@@ -6583,14 +6446,14 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 };
                 return Scene;
             }());
-            exports_26("Scene", Scene);
+            exports_25("Scene", Scene);
         }
     };
 });
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
-System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_material", "j3d/render", "Camera"], function (exports_27, context_27) {
+System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_material", "j3d/render", "Camera"], function (exports_26, context_26) {
     "use strict";
-    var __moduleName = context_27 && context_27.id;
+    var __moduleName = context_26 && context_26.id;
     function readStringTable(buffer, offs) {
         var view = buffer.createDataView(offs);
         var stringCount = view.getUint16(0x00);
@@ -7625,14 +7488,14 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                 HierarchyType[HierarchyType["Material"] = 17] = "Material";
                 HierarchyType[HierarchyType["Shape"] = 18] = "Shape";
             })(HierarchyType || (HierarchyType = {}));
-            exports_27("HierarchyType", HierarchyType);
+            exports_26("HierarchyType", HierarchyType);
             //#endregion
             //#region DRW1
             (function (DRW1JointKind) {
                 DRW1JointKind[DRW1JointKind["NormalJoint"] = 0] = "NormalJoint";
                 DRW1JointKind[DRW1JointKind["WeightedJoint"] = 1] = "WeightedJoint";
             })(DRW1JointKind || (DRW1JointKind = {}));
-            exports_27("DRW1JointKind", DRW1JointKind);
+            exports_26("DRW1JointKind", DRW1JointKind);
             quatScratch = gl_matrix_5.quat.create();
             // temp, center, center inverse
             t = gl_matrix_5.mat4.create(), c = gl_matrix_5.mat4.create(), ci = gl_matrix_5.mat4.create();
@@ -7690,7 +7553,7 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                 };
                 return BMD;
             }());
-            exports_27("BMD", BMD);
+            exports_26("BMD", BMD);
             //#endregion
             //#region BMT
             BMT = /** @class */ (function () {
@@ -7710,7 +7573,7 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                 };
                 return BMT;
             }());
-            exports_27("BMT", BMT);
+            exports_26("BMT", BMT);
             //#endregion
             //#region BTI
             BTI = /** @class */ (function () {
@@ -7724,7 +7587,7 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                 };
                 return BTI;
             }());
-            exports_27("BTI", BTI);
+            exports_26("BTI", BTI);
             //#endregion
             //#region BTK
             BTK = /** @class */ (function () {
@@ -7758,7 +7621,7 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                 };
                 return BTK;
             }());
-            exports_27("BTK", BTK);
+            exports_26("BTK", BTK);
             //#endregion
             //#region BRK
             BRK = /** @class */ (function () {
@@ -7784,7 +7647,7 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                 };
                 return BRK;
             }());
-            exports_27("BRK", BRK);
+            exports_26("BRK", BRK);
             //#endregion
             //#region BCK
             BCK = /** @class */ (function () {
@@ -7813,14 +7676,14 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                 };
                 return BCK;
             }());
-            exports_27("BCK", BCK);
+            exports_26("BCK", BCK);
         }
     };
 });
 // Nintendo RARC file format.
-System.register("j3d/rarc", ["util"], function (exports_28, context_28) {
+System.register("j3d/rarc", ["util"], function (exports_27, context_27) {
     "use strict";
-    var __moduleName = context_28 && context_28.id;
+    var __moduleName = context_27 && context_27.id;
     function parse(buffer) {
         var view = buffer.createDataView();
         util_14.assert(util_14.readString(buffer, 0x00, 0x04) === 'RARC');
@@ -7890,7 +7753,7 @@ System.register("j3d/rarc", ["util"], function (exports_28, context_28) {
         rarc.root = root;
         return rarc;
     }
-    exports_28("parse", parse);
+    exports_27("parse", parse);
     var util_14, RARC;
     return {
         setters: [
@@ -7943,13 +7806,13 @@ System.register("j3d/rarc", ["util"], function (exports_28, context_28) {
                 };
                 return RARC;
             }());
-            exports_28("RARC", RARC);
+            exports_27("RARC", RARC);
         }
     };
 });
-System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_29, context_29) {
+System.register("j3d/ztp_scenes", ["Progressable", "util", "compression/yaz0", "ui", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_28, context_28) {
     "use strict";
-    var __moduleName = context_29 && context_29.id;
+    var __moduleName = context_28 && context_28.id;
     function createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile) {
         var bmd = j3d_2.BMD.parse(bmdFile.buffer);
         var bmt = bmtFile ? j3d_2.BMT.parse(bmtFile.buffer) : null;
@@ -8172,13 +8035,13 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "yaz0", "ui", "j3d/j3
                 new TwilightPrincessSceneDesc("Hyrule Field", "F_SP102", ["R00_00.arc"]),
                 new TwilightPrincessSceneDesc("Fishing Pond", "F_SP127", ["R00_00.arc"]),
             ];
-            exports_29("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_28("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_30, context_30) {
+System.register("j3d/scenes", ["util", "compression/yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_29, context_29) {
     "use strict";
-    var __moduleName = context_30 && context_30.id;
+    var __moduleName = context_29 && context_29.id;
     function createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile) {
         var bmd = j3d_3.BMD.parse(bmdFile.buffer);
         var bmt = bmtFile ? j3d_3.BMT.parse(bmtFile.buffer) : null;
@@ -8190,7 +8053,7 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
         scene.setBCK(bckFile ? j3d_3.BCK.parse(bckFile.buffer) : null);
         return scene;
     }
-    exports_30("createScene", createScene);
+    exports_29("createScene", createScene);
     function boolSort(a, b) {
         if (a && !b)
             return -1;
@@ -8247,14 +8110,14 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
             return null;
         });
     }
-    exports_30("createScenesFromBuffer", createScenesFromBuffer);
+    exports_29("createScenesFromBuffer", createScenesFromBuffer);
     function createMultiSceneFromBuffer(gl, buffer) {
         var textureHolder = new render_6.J3DTextureHolder();
         return createScenesFromBuffer(gl, textureHolder, buffer).then(function (scenes) {
             return new MultiScene(scenes);
         });
     }
-    exports_30("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
+    exports_29("createMultiSceneFromBuffer", createMultiSceneFromBuffer);
     var util_16, Yaz0, j3d_3, RARC, render_6, MultiScene;
     return {
         setters: [
@@ -8307,13 +8170,13 @@ System.register("j3d/scenes", ["util", "yaz0", "j3d/j3d", "j3d/rarc", "j3d/rende
                 };
                 return MultiScene;
             }());
-            exports_30("MultiScene", MultiScene);
+            exports_29("MultiScene", MultiScene);
         }
     };
 });
-System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_31, context_31) {
+System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_30, context_30) {
     "use strict";
-    var __moduleName = context_31 && context_31.id;
+    var __moduleName = context_30 && context_30.id;
     var scenes_1, util_17, id, name, MKDDSceneDesc, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -8365,13 +8228,13 @@ System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_31,
                 new MKDDSceneDesc("Bowser's Castle", 'Koopa.arc'),
                 new MKDDSceneDesc("Rainbow Road", 'Rainbow.arc'),
             ];
-            exports_31("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_30("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "render", "yaz0", "ui", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_32, context_32) {
+System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "render", "compression/yaz0", "ui", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_31, context_31) {
     "use strict";
-    var __moduleName = context_32 && context_32.id;
+    var __moduleName = context_31 && context_31.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -8665,13 +8528,13 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "render"
             ];
             id = "zww";
             name = "The Legend of Zelda: The Wind Waker";
-            exports_32("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_31("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/render", "j3d/scenes", "gx/gx_material", "gl-matrix"], function (exports_33, context_33) {
+System.register("j3d/sms_scenes", ["util", "render", "compression/yaz0", "j3d/rarc", "j3d/render", "j3d/scenes", "gx/gx_material", "gl-matrix"], function (exports_32, context_32) {
     "use strict";
-    var __moduleName = context_33 && context_33.id;
+    var __moduleName = context_32 && context_32.id;
     function collectTextures(scenes) {
         var textures = [];
         try {
@@ -8959,7 +8822,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                 };
                 return SunshineRenderer;
             }());
-            exports_33("SunshineRenderer", SunshineRenderer);
+            exports_32("SunshineRenderer", SunshineRenderer);
             SunshineSceneDesc = /** @class */ (function () {
                 function SunshineSceneDesc(path, name) {
                     this.path = path;
@@ -9121,7 +8984,7 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                 };
                 return SunshineSceneDesc;
             }());
-            exports_33("SunshineSceneDesc", SunshineSceneDesc);
+            exports_32("SunshineSceneDesc", SunshineSceneDesc);
             id = "sms";
             name = "Super Mario Sunshine";
             sceneDescs = [
@@ -9137,13 +9000,13 @@ System.register("j3d/sms_scenes", ["util", "render", "yaz0", "j3d/rarc", "j3d/re
                 new SunshineSceneDesc("data/j3d/sms/mare0.szs", "Noki Bay"),
                 new SunshineSceneDesc("data/j3d/sms/monte3.szs", "Pianta Village"),
             ];
-            exports_33("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_32("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
     };
 });
-System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", "j3d/render", "j3d/scenes", "gx/gx_material"], function (exports_34, context_34) {
+System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", "j3d/render", "j3d/scenes", "gx/gx_material"], function (exports_33, context_33) {
     "use strict";
-    var __moduleName = context_34 && context_34.id;
+    var __moduleName = context_33 && context_33.id;
     var Progressable_4, util_20, render_11, Program_4, render_12, scenes_5, gx_material_3, BloomPassBlurProgram, BloomPassBokehProgram, SMGRenderer, SMGSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
@@ -9327,12 +9190,157 @@ System.register("j3d/smg_scenes", ["Progressable", "util", "render", "Program", 
             sceneDescs = [
                 new SMGSceneDesc("Peach's Castle Garden", "PeachCastleGardenPlanet.arc", "GalaxySky.arc", "PeachCastleGardenPlanetBloom.arc", "PeachCastleGardenPlanetIndirect.arc"),
             ];
-            exports_34("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+            exports_33("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+        }
+    };
+});
+System.register("compression/cx", ["ArrayBufferSlice"], function (exports_34, context_34) {
+    "use strict";
+    var __moduleName = context_34 && context_34.id;
+    // Nintendo's "CX" formats.
+    // CX LZ format ("LZ10")
+    // Header (4 bytes):
+    //   Magic: "\x10" (1 byte)
+    //   Uncompressed size (3 bytes, little endian)
+    // Data:
+    //   Flags (1 byte)
+    //   For each bit in the flags byte, from MSB to LSB:
+    //     If flag is 1:
+    //       LZ77 (2 bytes, big endian):
+    //         Length: bits 0-3
+    //         Offset: bits 4-15
+    //         Copy Length+3 bytes from Offset back in the output buffer.
+    //     If flag is 0:
+    //       Literal: copy one byte from src to dest.
+    function decompressLZ_Normal(srcView) {
+        var uncompressedSize = srcView.getUint32(0x00, true) >> 8;
+        var dstBuffer = new Uint8Array(uncompressedSize);
+        var srcOffs = 0x04;
+        var dstOffs = 0x00;
+        while (true) {
+            var commandByte = srcView.getUint8(srcOffs++);
+            var i = 8;
+            while (i--) {
+                if (commandByte & (1 << i)) {
+                    var tmp = srcView.getUint16(srcOffs, false);
+                    srcOffs += 2;
+                    var windowOffset = (tmp & 0x0FFF) + 1;
+                    var windowLength = (tmp >> 12) + 3;
+                    var copyOffs = dstOffs - windowOffset;
+                    uncompressedSize -= windowLength;
+                    while (windowLength--)
+                        dstBuffer[dstOffs++] = dstBuffer[copyOffs++];
+                }
+                else {
+                    // Literal.
+                    uncompressedSize--;
+                    dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
+                }
+                if (uncompressedSize <= 0)
+                    return new ArrayBufferSlice_5.default(dstBuffer.buffer);
+            }
+        }
+    }
+    exports_34("decompressLZ_Normal", decompressLZ_Normal);
+    // CX LZ Extended format ("LZ11")
+    // Header (4 bytes):
+    //   Magic: "\x11" (1 byte)
+    //   Uncompressed size (3 bytes, little endian)
+    // Data:
+    //   Flags (1 byte)
+    //   For each bit in the flags byte, from MSB to LSB:
+    //     If flag is 1:
+    //       Fancy LZ77. See below for more details. Flag switches on 4-7 of newly read byte.
+    //     If flag is 0:
+    //       Literal: copy one byte from src to dest.
+    function decompressLZ_Extended(srcView) {
+        var uncompressedSize = srcView.getUint32(0x00, true) >>> 8;
+        var dstBuffer = new Uint8Array(uncompressedSize);
+        var srcOffs = 0x04;
+        var dstOffs = 0x00;
+        while (true) {
+            var commandByte = srcView.getUint8(srcOffs++);
+            var i = 8;
+            while (i--) {
+                if (commandByte & (1 << i)) {
+                    var indicator = srcView.getUint8(srcOffs) >>> 4;
+                    var windowOffset = void 0;
+                    var windowLength = void 0;
+                    if (indicator > 1) {
+                        // Two bytes. AB CD
+                        var tmp = srcView.getUint16(srcOffs, false);
+                        // Length: A + 1
+                        // Offset: BCD + 1
+                        windowLength = indicator + 1;
+                        windowOffset = (tmp & 0x0FFF) + 1;
+                        srcOffs += 2;
+                    }
+                    else if (indicator === 0) {
+                        // Three bytes: AB CD EF
+                        var tmp = (srcView.getUint16(srcOffs, false) << 8) | srcView.getUint8(srcOffs + 0x02);
+                        // Length: BC + 0x11
+                        // Offset: DEF + 1
+                        windowLength = (tmp >>> 12) + 0x11;
+                        windowOffset = (tmp & 0x0FFF) + 1;
+                        srcOffs += 3;
+                    }
+                    else if (indicator === 1) {
+                        // Four bytes. AB CD EF GH
+                        var tmp = srcView.getUint32(srcOffs, false);
+                        // Length: BCDE + 0x111
+                        // Offset: FGH + 1
+                        windowLength = ((tmp >>> 12) & 0xFFFF) + 0x111;
+                        windowOffset = (tmp & 0x0FFF) + 1;
+                        srcOffs += 4;
+                    }
+                    var copyOffs = dstOffs - windowOffset;
+                    uncompressedSize -= windowLength;
+                    while (windowLength--)
+                        dstBuffer[dstOffs++] = dstBuffer[copyOffs++];
+                }
+                else {
+                    // Literal.
+                    uncompressedSize--;
+                    dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
+                }
+                if (uncompressedSize <= 0)
+                    return new ArrayBufferSlice_5.default(dstBuffer.buffer);
+            }
+        }
+    }
+    exports_34("decompressLZ_Extended", decompressLZ_Extended);
+    function decompress(srcBuffer) {
+        var srcView = srcBuffer.createDataView();
+        var magic = srcView.getUint8(0x00);
+        var compressionType = magic & 0xF0;
+        if (compressionType === CompressionType.LZ) {
+            var extendedFormat = !!(magic & 0x0F);
+            if (extendedFormat)
+                return decompressLZ_Extended(srcView);
+            else
+                return decompressLZ_Normal(srcView);
+        }
+        else {
+            throw new Error("Unsupported CX compression type");
+        }
+    }
+    exports_34("decompress", decompress);
+    var ArrayBufferSlice_5, CompressionType;
+    return {
+        setters: [
+            function (ArrayBufferSlice_5_1) {
+                ArrayBufferSlice_5 = ArrayBufferSlice_5_1;
+            }
+        ],
+        execute: function () {
+            (function (CompressionType) {
+                CompressionType[CompressionType["LZ"] = 16] = "LZ";
+            })(CompressionType || (CompressionType = {}));
         }
     };
 });
 // SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
-System.register("sm64ds/lz77", ["lz77", "util"], function (exports_35, context_35) {
+System.register("sm64ds/lz77", ["compression/cx", "util"], function (exports_35, context_35) {
     "use strict";
     var __moduleName = context_35 && context_35.id;
     function isLZ77(srcBuffer) {
@@ -9341,16 +9349,16 @@ System.register("sm64ds/lz77", ["lz77", "util"], function (exports_35, context_3
     exports_35("isLZ77", isLZ77);
     function maybeDecompress(srcBuffer) {
         if (isLZ77(srcBuffer))
-            return lz77_1.decompress(srcBuffer.slice(4));
+            return cx_1.decompress(srcBuffer.slice(4));
         else
             return srcBuffer;
     }
     exports_35("maybeDecompress", maybeDecompress);
-    var lz77_1, util_21;
+    var cx_1, util_21;
     return {
         setters: [
-            function (lz77_1_1) {
-                lz77_1 = lz77_1_1;
+            function (cx_1_1) {
+                cx_1 = cx_1_1;
             },
             function (util_21_1) {
                 util_21 = util_21_1;
@@ -15933,7 +15941,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
         }
     };
 });
-System.register("fres/scenes", ["fres/bfres", "fres/sarc", "yaz0", "fres/render", "util"], function (exports_60, context_60) {
+System.register("fres/scenes", ["fres/bfres", "fres/sarc", "compression/yaz0", "fres/render", "util"], function (exports_60, context_60) {
     "use strict";
     var __moduleName = context_60 && context_60.id;
     function collectTextures(scenes) {
@@ -17617,12 +17625,12 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
 //     If flag is 1:
 //       Literal: copy one byte from Data substream to dest.
 //     If flag is 0:
-//       Read LZ77 from Data substream (2 bytes, big endian):
+//       Read LZ77 from Lengths substream (2 bytes, big endian):
 //         Length: bits 0-4
-//           If Length = 0, then read additional byte from Data substream, add 16, and add it to Length.
+//           If Length = 0, then read additional byte from Data (not Lengths!) substream, add 16, and add it to Length.
 //         Offset: bits 5-15
 //         Copy Length+2 bytes from Offset back in the output buffer.
-System.register("yay0", ["util", "ArrayBufferSlice"], function (exports_73, context_73) {
+System.register("compression/Yay0", ["util", "ArrayBufferSlice"], function (exports_73, context_73) {
     "use strict";
     var __moduleName = context_73 && context_73.id;
     function decompress(srcBuffer) {
@@ -18153,7 +18161,7 @@ System.register("luigis_mansion/render", ["gx/gx_texture", "gx/gx_material", "gx
         }
     };
 });
-System.register("luigis_mansion/scenes", ["Progressable", "yay0", "util", "j3d/rarc", "luigis_mansion/bin", "luigis_mansion/render", "ui", "j3d/scenes", "j3d/render"], function (exports_76, context_76) {
+System.register("luigis_mansion/scenes", ["Progressable", "compression/Yay0", "util", "j3d/rarc", "luigis_mansion/bin", "luigis_mansion/render", "ui", "j3d/scenes", "j3d/render"], function (exports_76, context_76) {
     "use strict";
     var __moduleName = context_76 && context_76.id;
     function collectTextures(scenes) {
@@ -20495,17 +20503,17 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
     };
 });
 // Skyward Sword
-System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util", "Progressable", "render", "rres/render", "gx/gx_material", "gl-matrix", "j3d/render"], function (exports_80, context_80) {
+System.register("rres/zss_scenes", ["ui", "compression/cx", "rres/brres", "rres/u8", "util", "Progressable", "render", "rres/render", "gx/gx_material", "gl-matrix", "j3d/render"], function (exports_80, context_80) {
     "use strict";
     var __moduleName = context_80 && context_80.id;
-    var UI, LZ77, BRRES, U8, util_52, Progressable_10, render_30, render_31, gx_material_4, gl_matrix_18, render_32, SAND_CLOCK_ICON, materialHacks, ModelArchiveCollection, SkywardSwordScene, SkywardSwordSceneDesc, id, name, sceneDescs, sceneGroup;
+    var UI, CX, BRRES, U8, util_52, Progressable_10, render_30, render_31, gx_material_4, gl_matrix_18, render_32, SAND_CLOCK_ICON, materialHacks, ModelArchiveCollection, SkywardSwordScene, SkywardSwordSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (UI_5) {
                 UI = UI_5;
             },
-            function (LZ77_2) {
-                LZ77 = LZ77_2;
+            function (CX_1) {
+                CX = CX_1;
             },
             function (BRRES_2) {
                 BRRES = BRRES_2;
@@ -21119,8 +21127,8 @@ System.register("rres/zss_scenes", ["ui", "lz77", "rres/brres", "rres/u8", "util
                         var _a = __read(buffers, 3), systemBuffer = _a[0], objPackBuffer = _a[1], stageBuffer = _a[2];
                         var commonRRESes = [];
                         var systemArchive = U8.parse(systemBuffer);
-                        var objPackArchive = U8.parse(LZ77.decompress(objPackBuffer));
-                        var stageArchive = U8.parse(LZ77.decompress(stageBuffer));
+                        var objPackArchive = U8.parse(CX.decompress(objPackBuffer));
+                        var stageArchive = U8.parse(CX.decompress(stageBuffer));
                         return new SkywardSwordScene(gl, _this.id, systemArchive, objPackArchive, stageArchive);
                     });
                 };
@@ -21655,9 +21663,61 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
         }
     };
 });
-System.register("embeds/main", ["viewer", "Camera"], function (exports_83, context_83) {
+// AssemblyScript version of Yaz0.
+System.register("compression/yaz0_as", [], function (exports_83, context_83) {
     "use strict";
     var __moduleName = context_83 && context_83.id;
+    function get(offs) {
+        return load(offs);
+    }
+    function set(offs, b) {
+        store(offs, b);
+    }
+    function get16be(offs) {
+        return (load(offs) << 8) | load(offs + 1);
+    }
+    function decompress(pDst, pSrc, dstSize) {
+        var dstOffs = pDst;
+        var srcOffs = pSrc;
+        while (true) {
+            var commandByte = get(srcOffs++);
+            var i = 8;
+            while (i--) {
+                if (commandByte & (1 << i)) {
+                    // Literal.
+                    dstSize--;
+                    set(dstOffs++, get(srcOffs++));
+                }
+                else {
+                    var tmp = get16be(srcOffs);
+                    srcOffs += 2;
+                    var windowOffset = (tmp & 0x0FFF) + 1;
+                    var windowLength = ((tmp >> 12) + 2) & 0xFF;
+                    if (windowLength == 2) {
+                        // AssemblyScript seems to need a bit of coercing to not wrap this into a u8.
+                        var tmp2 = get(srcOffs++);
+                        windowLength += tmp2 + 0x10;
+                    }
+                    var copyOffs = dstOffs - windowOffset;
+                    dstSize -= windowLength;
+                    while (windowLength--)
+                        set(dstOffs++, get(copyOffs++));
+                }
+                if (dstSize <= 0)
+                    return;
+            }
+        }
+    }
+    exports_83("decompress", decompress);
+    return {
+        setters: [],
+        execute: function () {
+        }
+    };
+});
+System.register("embeds/main", ["viewer", "Camera"], function (exports_84, context_84) {
+    "use strict";
+    var __moduleName = context_84 && context_84.id;
     var Viewer, Camera_12, FsButton, Main;
     return {
         setters: [
@@ -21748,9 +21808,9 @@ System.register("embeds/main", ["viewer", "Camera"], function (exports_83, conte
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "yaz0", "gx/gx_render"], function (exports_84, context_84) {
+System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "compression/yaz0", "gx/gx_render"], function (exports_85, context_85) {
     "use strict";
-    var __moduleName = context_84 && context_84.id;
+    var __moduleName = context_85 && context_85.id;
     function createScene(gl, name) {
         return util_54.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
             return Yaz0.decompress(buffer);
@@ -21769,7 +21829,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             []);
         });
     }
-    exports_84("createScene", createScene);
+    exports_85("createScene", createScene);
     var gl_matrix_19, util_54, GX_Material, j3d_5, RARC, render_34, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
     return {
         setters: [
@@ -21966,9 +22026,9 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         }
     };
 });
-System.register("luigis_mansion/jmp", ["util"], function (exports_85, context_85) {
+System.register("luigis_mansion/jmp", ["util"], function (exports_86, context_86) {
     "use strict";
-    var __moduleName = context_85 && context_85.id;
+    var __moduleName = context_86 && context_86.id;
     function nameHash(str) {
         var hash = 0;
         for (var i = 0; i < str.length; i++) {
@@ -22042,7 +22102,7 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_85, context_85
         return records;
         var e_93, _a;
     }
-    exports_85("parse", parse);
+    exports_86("parse", parse);
     var util_55, nameTable, hashLookup;
     return {
         setters: [

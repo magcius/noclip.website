@@ -5,7 +5,7 @@ import { fetch, readString, assert } from 'util';
 
 import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import * as Viewer from '../viewer';
-import * as Yaz0 from '../yaz0';
+import * as Yaz0 from '../compression/Yaz0';
 
 import * as RARC from './rarc';
 import { ColorOverride, Scene, J3DTextureHolder } from './render';

@@ -17,13 +17,13 @@
 //     If flag is 1:
 //       Literal: copy one byte from Data substream to dest.
 //     If flag is 0:
-//       Read LZ77 from Data substream (2 bytes, big endian):
+//       Read LZ77 from Lengths substream (2 bytes, big endian):
 //         Length: bits 0-4
-//           If Length = 0, then read additional byte from Data substream, add 16, and add it to Length.
+//           If Length = 0, then read additional byte from Data (not Lengths!) substream, add 16, and add it to Length.
 //         Offset: bits 5-15
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
-import { assert, readString } from './util';
+import { assert, readString } from 'util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {

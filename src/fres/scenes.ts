@@ -1,7 +1,7 @@
 
 import * as BFRES from './bfres';
 import * as SARC from './sarc';
-import * as Yaz0 from '../yaz0';
+import * as Yaz0 from '../compression/Yaz0';
 import { Scene } from './render';
 
 import * as Viewer from '../viewer';

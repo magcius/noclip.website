@@ -1,9 +1,9 @@
 
 import ArrayBufferSlice from "ArrayBufferSlice";
 
-// Nintendo DS LZ77 format.
+// Nintendo's "CX" formats.
 
-// LZ10:
+// CX LZ format ("LZ10")
 // Header (4 bytes):
 //   Magic: "\x10" (1 byte)
 //   Uncompressed size (3 bytes, little endian)
@@ -18,7 +18,7 @@ import ArrayBufferSlice from "ArrayBufferSlice";
 //     If flag is 0:
 //       Literal: copy one byte from src to dest.
 
-export function decompressLZ10(srcView: DataView) {
+export function decompressLZ_Normal(srcView: DataView) {
     let uncompressedSize = srcView.getUint32(0x00, true) >> 8;
     const dstBuffer = new Uint8Array(uncompressedSize);
 
@@ -53,7 +53,7 @@ export function decompressLZ10(srcView: DataView) {
     }
 }
 
-// LZ11:
+// CX LZ Extended format ("LZ11")
 // Header (4 bytes):
 //   Magic: "\x11" (1 byte)
 //   Uncompressed size (3 bytes, little endian)
@@ -65,7 +65,7 @@ export function decompressLZ10(srcView: DataView) {
 //     If flag is 0:
 //       Literal: copy one byte from src to dest.
 
-export function decompressLZ11(srcView: DataView) {
+export function decompressLZ_Extended(srcView: DataView) {
     let uncompressedSize = srcView.getUint32(0x00, true) >>> 8;
     const dstBuffer = new Uint8Array(uncompressedSize);
 
@@ -124,14 +124,22 @@ export function decompressLZ11(srcView: DataView) {
     }
 }
 
+enum CompressionType {
+    LZ = 0x10,
+}
+
 export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     const srcView = srcBuffer.createDataView();
 
     const magic = srcView.getUint8(0x00);
-    if (magic === 0x10)
-        return decompressLZ10(srcView);
-    else if (magic === 0x11)
-        return decompressLZ11(srcView);
-    else
-        throw new Error("Not Nintendo LZ77");
+    const compressionType: CompressionType = magic & 0xF0;
+    if (compressionType === CompressionType.LZ) {
+        const extendedFormat = !!(magic & 0x0F);
+        if (extendedFormat)
+            return decompressLZ_Extended(srcView);
+        else
+            return decompressLZ_Normal(srcView);
+    } else {
+        throw new Error("Unsupported CX compression type");
+    }
 }
