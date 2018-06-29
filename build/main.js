@@ -6238,13 +6238,17 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                                 break;
                             case 0x07: // Rainbow Road
                             case 0x08: // Peach Beach
-                            case 0x09: // Rainbow Road
-                                // Perspective.
+                                gl_matrix_4.mat4.mul(dst, texMtx.effectMatrix, dst);
                                 texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
                                 gl_matrix_4.mat4.mul(dst, scratch, dst);
-                                // mat4.mul(dst, texMtx.effectMatrix, dst);
+                                break;
+                            case 0x09: // Rainbow Road
+                                // Perspective.
                                 // Don't apply effectMatrix to perspective. It appears to be
                                 // a projection matrix preconfigured for GC.
+                                // mat4.mul(dst, texMtx.effectMatrix, dst);
+                                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                                gl_matrix_4.mat4.mul(dst, scratch, dst);
                                 break;
                             default:
                                 throw "whoops";
@@ -6262,7 +6266,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             scratch[13] = scratch[9];
                             scratch[9] = tx;
                         }
-                        gl_matrix_4.mat4.mul(dst, scratch, dst);
+                        gl_matrix_4.mat4.mul(dst, dst, scratch);
                     }
                     for (var i = 0; i < this.material.postTexMatrices.length; i++) {
                         var postTexMtx = this.material.postTexMatrices[i];
@@ -20389,14 +20393,17 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                     var texMtxIdx = BRRES.TexMtxIndex.TEX0 + texIdx;
                     var texSrt = this.material.texSrts[texIdx];
                     var flipYScale = flipY ? -1.0 : 1.0;
+                    if (texSrt.mapMode !== 0 /* TEXCOORD */) {
+                        // Effect mtx.
+                        gl_matrix_17.mat4.mul(dst, this.material.texSrts[texIdx].effectMtx, dst);
+                    }
                     if (texSrt.mapMode === 2 /* PROJECTION */) {
-                        // XXX(jstpierre): ZSS hack.
+                        Camera_10.texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                        // XXX(jstpierre): ZSS hack. Reference camera 31 is set up by the game to be an overhead
+                        // camera for clouds. Kill it until we can emulate the camera system in this game...
                         if (texSrt.refCamera === 31) {
-                            // Clouds. The game probably sets up a camera from way up above. Kill them.
                             dst[0] = 0;
-                        }
-                        else {
-                            Camera_10.texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                            dst[5] = 0;
                         }
                     }
                     else if (texSrt.mapMode === 1 /* ENV_CAMERA */) {
@@ -20404,10 +20411,6 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                     }
                     else {
                         gl_matrix_17.mat4.identity(dst);
-                    }
-                    if (texSrt.mapMode !== 0 /* TEXCOORD */) {
-                        // Effect mtx.
-                        gl_matrix_17.mat4.mul(dst, this.material.texSrts[texIdx].effectMtx, dst);
                     }
                     // Calculate SRT.
                     if (this.srtAnimators[texMtxIdx]) {
