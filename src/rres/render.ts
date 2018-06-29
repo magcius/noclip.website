@@ -11,7 +11,7 @@ import { mat3, mat4, mat2d } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from "../gx/gx_render";
-import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState } from "../Camera";
+import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState, computeModelMatrixBillboard } from "../Camera";
 import { ColorOverride } from "../j3d/render";
 
 export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {
@@ -275,23 +275,24 @@ class Command_Material {
         const texSrt = this.material.texSrts[texIdx];
         const flipYScale = flipY ? -1.0 : 1.0;
 
+        if (texSrt.mapMode !== BRRES.MapMode.TEXCOORD) {
+            // Effect mtx.
+            mat4.mul(dst, this.material.texSrts[texIdx].effectMtx, dst);
+        }
+
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
-            // XXX(jstpierre): ZSS hack.
+            texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+
+            // XXX(jstpierre): ZSS hack. Reference camera 31 is set up by the game to be an overhead
+            // camera for clouds. Kill it until we can emulate the camera system in this game...
             if (texSrt.refCamera === 31) {
-                // Clouds. The game probably sets up a camera from way up above. Kill them.
                 dst[0] = 0;
-            } else {
-                texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                dst[5] = 0;
             }
         } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
             texEnvMtx(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
         } else {
             mat4.identity(dst);
-        }
-
-        if (texSrt.mapMode !== BRRES.MapMode.TEXCOORD) {
-            // Effect mtx.
-            mat4.mul(dst, this.material.texSrts[texIdx].effectMtx, dst);
         }
 
         // Calculate SRT.

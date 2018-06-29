@@ -336,13 +336,17 @@ export class Command_Material {
                 break;
             case 0x07: // Rainbow Road
             case 0x08: // Peach Beach
-            case 0x09: // Rainbow Road
-                // Perspective.
+                mat4.mul(dst, texMtx.effectMatrix, dst);
                 texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
                 mat4.mul(dst, scratch, dst);
-                // mat4.mul(dst, texMtx.effectMatrix, dst);
+                break;
+            case 0x09: // Rainbow Road
+                // Perspective.
                 // Don't apply effectMatrix to perspective. It appears to be
                 // a projection matrix preconfigured for GC.
+                // mat4.mul(dst, texMtx.effectMatrix, dst);
+                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                mat4.mul(dst, scratch, dst);
                 break;
             default:
                 throw "whoops";
@@ -362,7 +366,7 @@ export class Command_Material {
                 scratch[13] = scratch[9]; scratch[9] = tx;
             }
 
-            mat4.mul(dst, scratch, dst);
+            mat4.mul(dst, dst, scratch);
         }
 
         for (let i = 0; i < this.material.postTexMatrices.length; i++) {
