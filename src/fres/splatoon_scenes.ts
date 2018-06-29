@@ -1,7 +1,7 @@
 
 import * as BFRES from './bfres';
 import * as SARC from './sarc';
-import * as Yaz0 from '../yaz0';
+import * as Yaz0 from '../compression/Yaz0';
 import { createSceneFromSARCBuffer } from './scenes';
 import { Scene } from './render';
 

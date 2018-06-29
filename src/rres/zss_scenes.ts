@@ -3,7 +3,7 @@
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
-import * as LZ77 from '../lz77';
+import * as CX from '../compression/cx';
 import * as BRRES from './brres';
 import * as U8 from './u8';
 
@@ -537,8 +537,8 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
             const commonRRESes: BRRES.RRES[] = [];
 
             const systemArchive = U8.parse(systemBuffer);
-            const objPackArchive = U8.parse(LZ77.decompress(objPackBuffer));
-            const stageArchive = U8.parse(LZ77.decompress(stageBuffer));
+            const objPackArchive = U8.parse(CX.decompress(objPackBuffer));
+            const stageArchive = U8.parse(CX.decompress(stageBuffer));
 
             return new SkywardSwordScene(gl, this.id, systemArchive, objPackArchive, stageArchive);
         });

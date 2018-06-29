@@ -78,7 +78,7 @@ function buildModulesFile(modules) {
 
 function main() {
     const out = buildModulesFile([
-        { exportName: 'yaz0_as', filename: 'yaz0_as.wat' },
+        { exportName: 'yaz0_as', filename: 'compression/Yaz0_as.wat' },
         { exportName: 'gx_texture_as', filename: 'gx/gx_texture_as.wat' },
     ]);
     fs.writeFileSync(path.join(__dirname, 'wat_modules.ts'), out);

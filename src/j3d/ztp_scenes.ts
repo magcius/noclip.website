@@ -4,7 +4,7 @@ import Progressable from 'Progressable';
 import { assert, fetch, readString, generateFormID } from 'util';
 
 import * as Viewer from '../viewer';
-import * as Yaz0 from '../yaz0';
+import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
 
 import * as GX from '../gx/gx_enum';

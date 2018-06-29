@@ -15,7 +15,7 @@ import { BMD, BMT, BTK, MaterialEntry, TEX1, BTI_Texture, TEX1_TextureData, TEX1
 import * as RARC from 'j3d/rarc';
 import { Command_Material, Scene as J3DScene, SceneLoader, J3DTextureHolder } from 'j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from 'j3d/sms_scenes';
-import * as Yaz0 from 'yaz0';
+import * as Yaz0 from '../compression/Yaz0';
 import { GXRenderHelper, TextureMapping, SceneParams, PacketParams, fillSceneParamsFromRenderState, TextureHolder } from '../gx/gx_render';
 
 const scale = 200;

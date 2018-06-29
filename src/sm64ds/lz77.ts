@@ -1,7 +1,7 @@
 
 // SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
 
-import { decompress } from '../lz77';
+import { decompress } from '../compression/cx';
 import { assert, readString } from 'util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 

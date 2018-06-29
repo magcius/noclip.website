@@ -6,7 +6,7 @@ import { assert, fetch, readString } from '../util';
 
 import * as GX_Material from 'gx/gx_material';
 import * as Viewer from '../viewer';
-import * as Yaz0 from '../yaz0';
+import * as Yaz0 from '../compression/Yaz0';
 
 import { BMD, BMT, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';

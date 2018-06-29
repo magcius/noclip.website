@@ -5,10 +5,8 @@ import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, 
 import { deswizzler } from './gx2_swizzle';
 import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
-import * as SARC from './sarc';
 
 import * as Viewer from '../viewer';
-import * as Yaz0 from '../yaz0';
 
 import Progressable from 'Progressable';
 import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode } from '../render';

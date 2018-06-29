@@ -7,7 +7,7 @@ import { fetch, readString } from 'util';
 
 import { RenderState, depthClearFlags } from '../render';
 import * as Viewer from '../viewer';
-import * as Yaz0 from '../yaz0';
+import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
 
 import * as GX_Material from 'gx/gx_material';
