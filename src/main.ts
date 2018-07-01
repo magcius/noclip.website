@@ -101,14 +101,6 @@ class DroppedFileSceneDesc implements SceneDesc {
     }
 }
 
-interface SceneGroupOption extends HTMLOptionElement {
-    sceneGroup: SceneGroup;
-}
-
-interface SceneDescOption extends HTMLOptionElement {
-    sceneDesc: SceneDesc;
-}
-
 class SceneLoader {
     public currentScene: MainScene;
     public onscenechanged: () => void;
