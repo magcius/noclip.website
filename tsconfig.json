@@ -22,7 +22,6 @@
         "src/"
     ],
     "exclude": [
-        "src/yaz0_as.ts",
-        "src/gx/gx_texture_as.ts"
+        "**/*_as.ts"
     ]
 }

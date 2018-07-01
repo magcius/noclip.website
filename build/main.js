@@ -3946,7 +3946,7 @@ System.register("wat_modules", [], function (exports_18, context_18) {
     };
 });
 // Nintendo Yaz0 format.
-System.register("compression/yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryManager"], function (exports_19, context_19) {
+System.register("compression/Yaz0", ["util", "wat_modules", "ArrayBufferSlice", "WasmMemoryManager"], function (exports_19, context_19) {
     "use strict";
     var __moduleName = context_19 && context_19.id;
     function decompress(srcBuffer) {
@@ -7810,7 +7810,7 @@ System.register("j3d/rarc", ["util"], function (exports_27, context_27) {
         }
     };
 });
-System.register("j3d/ztp_scenes", ["Progressable", "util", "compression/yaz0", "ui", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_28, context_28) {
+System.register("j3d/ztp_scenes", ["Progressable", "util", "compression/Yaz0", "ui", "j3d/j3d", "j3d/rarc", "j3d/render", "render", "gx/gx_material"], function (exports_28, context_28) {
     "use strict";
     var __moduleName = context_28 && context_28.id;
     function createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile) {
@@ -8039,7 +8039,7 @@ System.register("j3d/ztp_scenes", ["Progressable", "util", "compression/yaz0", "
         }
     };
 });
-System.register("j3d/scenes", ["util", "compression/yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_29, context_29) {
+System.register("j3d/scenes", ["util", "compression/Yaz0", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_29, context_29) {
     "use strict";
     var __moduleName = context_29 && context_29.id;
     function createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile) {
@@ -8232,7 +8232,7 @@ System.register("j3d/mkdd_scenes", ["j3d/scenes", "util"], function (exports_30,
         }
     };
 });
-System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "render", "compression/yaz0", "ui", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_31, context_31) {
+System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "render", "compression/Yaz0", "ui", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render"], function (exports_31, context_31) {
     "use strict";
     var __moduleName = context_31 && context_31.id;
     function collectTextures(scenes) {
@@ -8532,7 +8532,7 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "render"
         }
     };
 });
-System.register("j3d/sms_scenes", ["util", "render", "compression/yaz0", "j3d/rarc", "j3d/render", "j3d/scenes", "gx/gx_material", "gl-matrix"], function (exports_32, context_32) {
+System.register("j3d/sms_scenes", ["util", "render", "compression/Yaz0", "j3d/rarc", "j3d/render", "j3d/scenes", "gx/gx_material", "gl-matrix"], function (exports_32, context_32) {
     "use strict";
     var __moduleName = context_32 && context_32.id;
     function collectTextures(scenes) {
@@ -15941,7 +15941,7 @@ System.register("fres/render", ["fres/gx2_swizzle", "fres/gx2_texture", "render"
         }
     };
 });
-System.register("fres/scenes", ["fres/bfres", "fres/sarc", "compression/yaz0", "fres/render", "util"], function (exports_60, context_60) {
+System.register("fres/scenes", ["fres/bfres", "fres/sarc", "compression/Yaz0", "fres/render", "util"], function (exports_60, context_60) {
     "use strict";
     var __moduleName = context_60 && context_60.id;
     function collectTextures(scenes) {
@@ -21663,61 +21663,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
         }
     };
 });
-// AssemblyScript version of Yaz0.
-System.register("compression/yaz0_as", [], function (exports_83, context_83) {
+System.register("embeds/main", ["viewer", "Camera"], function (exports_83, context_83) {
     "use strict";
     var __moduleName = context_83 && context_83.id;
-    function get(offs) {
-        return load(offs);
-    }
-    function set(offs, b) {
-        store(offs, b);
-    }
-    function get16be(offs) {
-        return (load(offs) << 8) | load(offs + 1);
-    }
-    function decompress(pDst, pSrc, dstSize) {
-        var dstOffs = pDst;
-        var srcOffs = pSrc;
-        while (true) {
-            var commandByte = get(srcOffs++);
-            var i = 8;
-            while (i--) {
-                if (commandByte & (1 << i)) {
-                    // Literal.
-                    dstSize--;
-                    set(dstOffs++, get(srcOffs++));
-                }
-                else {
-                    var tmp = get16be(srcOffs);
-                    srcOffs += 2;
-                    var windowOffset = (tmp & 0x0FFF) + 1;
-                    var windowLength = ((tmp >> 12) + 2) & 0xFF;
-                    if (windowLength == 2) {
-                        // AssemblyScript seems to need a bit of coercing to not wrap this into a u8.
-                        var tmp2 = get(srcOffs++);
-                        windowLength += tmp2 + 0x10;
-                    }
-                    var copyOffs = dstOffs - windowOffset;
-                    dstSize -= windowLength;
-                    while (windowLength--)
-                        set(dstOffs++, get(copyOffs++));
-                }
-                if (dstSize <= 0)
-                    return;
-            }
-        }
-    }
-    exports_83("decompress", decompress);
-    return {
-        setters: [],
-        execute: function () {
-        }
-    };
-});
-System.register("embeds/main", ["viewer", "Camera"], function (exports_84, context_84) {
-    "use strict";
-    var __moduleName = context_84 && context_84.id;
     var Viewer, Camera_12, FsButton, Main;
     return {
         setters: [
@@ -21808,9 +21756,9 @@ System.register("embeds/main", ["viewer", "Camera"], function (exports_84, conte
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "compression/yaz0", "gx/gx_render"], function (exports_85, context_85) {
+System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "compression/Yaz0", "gx/gx_render"], function (exports_84, context_84) {
     "use strict";
-    var __moduleName = context_85 && context_85.id;
+    var __moduleName = context_84 && context_84.id;
     function createScene(gl, name) {
         return util_54.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
             return Yaz0.decompress(buffer);
@@ -21829,7 +21777,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             []);
         });
     }
-    exports_85("createScene", createScene);
+    exports_84("createScene", createScene);
     var gl_matrix_19, util_54, GX_Material, j3d_5, RARC, render_34, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
     return {
         setters: [
@@ -22026,9 +21974,9 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         }
     };
 });
-System.register("luigis_mansion/jmp", ["util"], function (exports_86, context_86) {
+System.register("luigis_mansion/jmp", ["util"], function (exports_85, context_85) {
     "use strict";
-    var __moduleName = context_86 && context_86.id;
+    var __moduleName = context_85 && context_85.id;
     function nameHash(str) {
         var hash = 0;
         for (var i = 0; i < str.length; i++) {
@@ -22102,7 +22050,7 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_86, context_86
         return records;
         var e_93, _a;
     }
-    exports_86("parse", parse);
+    exports_85("parse", parse);
     var util_55, nameTable, hashLookup;
     return {
         setters: [
