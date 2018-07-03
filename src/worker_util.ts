@@ -1,4 +1,5 @@
-import { assert, assertExists } from "./util";
+
+import { assertExists } from "./util";
 
 interface WorkerManagerRequest<TReq, TRes> {
     request: TReq;

@@ -14,7 +14,7 @@ import Progressable from 'Progressable';
 import RenderArena from '../RenderArena';
 import { fetch } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
-import { computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
+import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 
 class NITRO_Program extends Program {
     public texCoordMatLocation: WebGLUniformLocation;

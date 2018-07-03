@@ -3,11 +3,8 @@
 
 import * as GX from './gx_enum';
 
-import * as Viewer from '../viewer';
-
-import { BlendFactor, BlendMode as RenderBlendMode, CompareMode,CullMode, FrontFaceMode, RenderFlags, RenderState } from '../render';
+import { BlendFactor, BlendMode as RenderBlendMode, CompareMode, CullMode, FrontFaceMode, RenderFlags } from '../render';
 import { BaseProgram } from '../Program';
-import { align, assert } from '../util';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;

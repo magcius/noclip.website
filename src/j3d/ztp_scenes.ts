@@ -1,15 +1,13 @@
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
-import { assert, fetch, readString, generateFormID } from 'util';
+import { fetch } from 'util';
 
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
 
-import * as GX from '../gx/gx_enum';
-
-import { BMD, BMT, BTK, BTI_Texture, BTI, TEX1_TextureData, BRK, BCK } from './j3d';
+import { BMD, BMT, BTK, BTI, TEX1_TextureData, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { Scene, SceneLoader, J3DTextureHolder } from './render';
 import { RenderState, ColorTarget, depthClearFlags } from '../render';

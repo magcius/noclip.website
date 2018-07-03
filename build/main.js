@@ -9368,6 +9368,7 @@ System.register("sm64ds/lz77", ["compression/cx", "util"], function (exports_35,
         }
     };
 });
+// Read DS texture formats.
 System.register("sm64ds/nitro_tex", [], function (exports_36, context_36) {
     "use strict";
     var __moduleName = context_36 && context_36.id;
@@ -9575,7 +9576,6 @@ System.register("sm64ds/nitro_tex", [], function (exports_36, context_36) {
     return {
         setters: [],
         execute: function () {
-            // Read DS texture formats.
             (function (Format) {
                 Format[Format["Tex_None"] = 0] = "Tex_None";
                 Format[Format["Tex_A3I5"] = 1] = "Tex_A3I5";
@@ -13981,9 +13981,500 @@ System.register("fres/gx2_surface", ["util"], function (exports_53, context_53) 
         }
     };
 });
-System.register("worker_util", ["util"], function (exports_54, context_54) {
+System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_54, context_54) {
     "use strict";
     var __moduleName = context_54 && context_54.id;
+    function readBinPtrT(view, offs, littleEndian) {
+        var offs2 = view.getInt32(offs, littleEndian);
+        if (offs2 === 0)
+            return 0;
+        else
+            return offs + offs2;
+    }
+    function parseResDic(buffer, tableOffs, littleEndian) {
+        if (tableOffs === 0)
+            return [];
+        var view = buffer.createDataView();
+        var tableSize = view.getUint32(tableOffs + 0x00, littleEndian);
+        var tableCount = view.getUint32(tableOffs + 0x04, littleEndian);
+        util_32.assert(tableCount === tableCount);
+        var entries = [];
+        var tableIdx = tableOffs + 0x08;
+        // Skip root entry.
+        tableIdx += 0x10;
+        for (var i = 0; i < tableCount; i++) {
+            // There's a fancy search tree in here which I don't care about at all...
+            var name_6 = util_32.readString(buffer, readBinPtrT(view, tableIdx + 0x08, littleEndian));
+            var offs = readBinPtrT(view, tableIdx + 0x0C, littleEndian);
+            entries.push({ name: name_6, offs: offs });
+            tableIdx += 0x10;
+        }
+        return entries;
+    }
+    function parseFTEX(buffer, entry, littleEndian) {
+        var offs = entry.offs;
+        var view = buffer.createDataView();
+        util_32.assert(util_32.readString(buffer, offs + 0x00, 0x04) === 'FTEX');
+        // GX2 is Wii U which is a little-endian system.
+        util_32.assert(!littleEndian);
+        var gx2SurfaceOffs = offs + 0x04;
+        var surface = gx2_surface_1.parseGX2Surface(buffer, gx2SurfaceOffs);
+        var texDataOffs = readBinPtrT(view, offs + 0xB0, littleEndian);
+        var mipDataOffs = readBinPtrT(view, offs + 0xB4, littleEndian);
+        var texData = buffer.subarray(texDataOffs, surface.texDataSize);
+        var mipData = buffer.subarray(mipDataOffs, surface.mipDataSize);
+        return { surface: surface, texData: texData, mipData: mipData };
+    }
+    function parseFMDL(buffer, entry, littleEndian) {
+        var offs = entry.offs;
+        var view = buffer.createDataView();
+        util_32.assert(util_32.readString(buffer, offs + 0x00, 0x04) === 'FMDL');
+        var fileName = readBinPtrT(view, offs + 0x04, littleEndian);
+        var filePath = readBinPtrT(view, offs + 0x08, littleEndian);
+        var fsklOffs = readBinPtrT(view, offs + 0x0C, littleEndian);
+        var fvtxOffs = readBinPtrT(view, offs + 0x10, littleEndian);
+        var fshpResDic = parseResDic(buffer, readBinPtrT(view, offs + 0x14, littleEndian), littleEndian);
+        var fmatResDic = parseResDic(buffer, readBinPtrT(view, offs + 0x18, littleEndian), littleEndian);
+        var fvtxCount = view.getUint16(offs + 0x20, littleEndian);
+        var fshpCount = view.getUint16(offs + 0x22, littleEndian);
+        var fmatCount = view.getUint16(offs + 0x24, littleEndian);
+        util_32.assert(fshpCount === fshpResDic.length);
+        util_32.assert(fmatCount === fmatResDic.length);
+        function readBufferData(offs) {
+            var size = view.getUint32(offs + 0x04, littleEndian);
+            var stride = view.getUint16(offs + 0x0C, littleEndian);
+            var dataOffs = readBinPtrT(view, offs + 0x14, littleEndian);
+            var data = buffer.subarray(dataOffs, size);
+            return { data: data, stride: stride };
+        }
+        function parseShaderAssignDict(offs) {
+            var resDic = parseResDic(buffer, offs, littleEndian);
+            var entries = [];
+            try {
+                for (var resDic_1 = __values(resDic), resDic_1_1 = resDic_1.next(); !resDic_1_1.done; resDic_1_1 = resDic_1.next()) {
+                    var entry_1 = resDic_1_1.value;
+                    var key = entry_1.name;
+                    var value = util_32.readString(buffer, entry_1.offs);
+                    entries.push({ key: key, value: value });
+                }
+            }
+            catch (e_40_1) { e_40 = { error: e_40_1 }; }
+            finally {
+                try {
+                    if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
+                }
+                finally { if (e_40) throw e_40.error; }
+            }
+            return entries;
+            var e_40, _a;
+        }
+        // Vertex buffers.
+        var fvtxIdx = fvtxOffs;
+        var fvtx = [];
+        for (var i = 0; i < fvtxCount; i++) {
+            util_32.assert(util_32.readString(buffer, fvtxIdx + 0x00, 0x04) === 'FVTX');
+            var attribCount = view.getUint8(fvtxIdx + 0x04);
+            var bufferCount = view.getUint8(fvtxIdx + 0x05);
+            var sectionIndex = view.getUint16(fvtxIdx + 0x06);
+            util_32.assert(i === sectionIndex);
+            var vtxCount = view.getUint32(fvtxIdx + 0x08);
+            var attribArrayOffs = readBinPtrT(view, fvtxIdx + 0x10, littleEndian);
+            var bufferArrayOffs = readBinPtrT(view, fvtxIdx + 0x18, littleEndian);
+            var attribs = [];
+            var attribArrayIdx = attribArrayOffs;
+            for (var j = 0; j < attribCount; j++) {
+                var name_7 = util_32.readString(buffer, readBinPtrT(view, attribArrayIdx + 0x00, littleEndian));
+                var bufferIndex = view.getUint8(attribArrayIdx + 0x04);
+                var bufferStart = view.getUint16(attribArrayIdx + 0x06, littleEndian);
+                var format = view.getUint32(attribArrayIdx + 0x08, littleEndian);
+                attribs.push({ name: name_7, bufferIndex: bufferIndex, bufferStart: bufferStart, format: format });
+                attribArrayIdx += 0x0C;
+            }
+            var buffers = [];
+            var bufferArrayIdx = bufferArrayOffs;
+            for (var j = 0; j < bufferCount; j++) {
+                var bufferData = readBufferData(bufferArrayIdx);
+                buffers.push(bufferData);
+                bufferArrayIdx += 0x18;
+            }
+            fvtx.push({ buffers: buffers, attribs: attribs, vtxCount: vtxCount });
+            fvtxIdx += 0x20;
+        }
+        // Shapes.
+        var fshp = [];
+        try {
+            for (var fshpResDic_1 = __values(fshpResDic), fshpResDic_1_1 = fshpResDic_1.next(); !fshpResDic_1_1.done; fshpResDic_1_1 = fshpResDic_1.next()) {
+                var fshpEntry = fshpResDic_1_1.value;
+                var offs_1 = fshpEntry.offs;
+                util_32.assert(util_32.readString(buffer, offs_1 + 0x00, 0x04) === 'FSHP');
+                var name_8 = util_32.readString(buffer, readBinPtrT(view, offs_1 + 0x04, littleEndian));
+                var fmatIndex = view.getUint16(offs_1 + 0x0E, littleEndian);
+                var fsklIndex = view.getUint16(offs_1 + 0x10, littleEndian);
+                var fvtxIndex = view.getUint16(offs_1 + 0x12, littleEndian);
+                // Each mesh corresponds to one LoD.
+                var meshArrayCount = view.getUint8(offs_1 + 0x17);
+                var meshArrayOffs = readBinPtrT(view, offs_1 + 0x24, littleEndian);
+                var meshArrayIdx = meshArrayOffs;
+                var meshes = [];
+                for (var i = 0; i < meshArrayCount; i++) {
+                    var primType = view.getUint32(meshArrayIdx + 0x00, littleEndian);
+                    var indexFormat = view.getUint32(meshArrayIdx + 0x04, littleEndian);
+                    var indexBufferOffs = readBinPtrT(view, meshArrayIdx + 0x14, littleEndian);
+                    var indexBufferData = readBufferData(indexBufferOffs);
+                    var submeshArrayCount = view.getUint16(meshArrayIdx + 0x0C, littleEndian);
+                    var submeshArrayOffs = readBinPtrT(view, meshArrayIdx + 0x10, littleEndian);
+                    var submeshArrayIdx = submeshArrayOffs;
+                    var submeshes = [];
+                    for (var j = 0; j < submeshArrayCount; j++) {
+                        var indexBufferOffset = view.getUint32(submeshArrayIdx + 0x00, littleEndian);
+                        var indexBufferCount = view.getUint32(submeshArrayIdx + 0x04, littleEndian);
+                        submeshes.push({ indexBufferOffset: indexBufferOffset, indexBufferCount: indexBufferCount });
+                        submeshArrayIdx += 0x08;
+                    }
+                    meshes.push({ primType: primType, indexFormat: indexFormat, indexBufferData: indexBufferData, submeshes: submeshes });
+                    meshArrayIdx += 0x1C;
+                }
+                fshp.push({ name: name_8, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
+            }
+        }
+        catch (e_41_1) { e_41 = { error: e_41_1 }; }
+        finally {
+            try {
+                if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
+            }
+            finally { if (e_41) throw e_41.error; }
+        }
+        // Materials.
+        var fmat = [];
+        try {
+            for (var fmatResDic_1 = __values(fmatResDic), fmatResDic_1_1 = fmatResDic_1.next(); !fmatResDic_1_1.done; fmatResDic_1_1 = fmatResDic_1.next()) {
+                var fmatEntry = fmatResDic_1_1.value;
+                var offs_2 = fmatEntry.offs;
+                util_32.assert(util_32.readString(buffer, offs_2 + 0x00, 0x04) === 'FMAT');
+                var name_9 = util_32.readString(buffer, readBinPtrT(view, offs_2 + 0x04, littleEndian));
+                var renderInfoParameterCount = view.getUint16(offs_2 + 0x0E, littleEndian);
+                var textureReferenceCount = view.getUint8(offs_2 + 0x10);
+                var textureSamplerCount = view.getUint8(offs_2 + 0x11);
+                var materialParameterCount = view.getUint16(offs_2 + 0x12);
+                var materialParameterDataLength = view.getUint16(offs_2 + 0x16);
+                var renderInfoParameterResDic = parseResDic(buffer, readBinPtrT(view, offs_2 + 0x1C, littleEndian), littleEndian);
+                var renderStateOffs = readBinPtrT(view, offs_2 + 0x20, littleEndian);
+                var shaderAssignOffs = readBinPtrT(view, offs_2 + 0x24, littleEndian);
+                var textureReferenceArrayOffs = readBinPtrT(view, offs_2 + 0x28, littleEndian);
+                var textureSamplerArrayOffs = readBinPtrT(view, offs_2 + 0x2C, littleEndian);
+                var materialParameterArrayOffs = readBinPtrT(view, offs_2 + 0x34, littleEndian);
+                var materialParameterDataOffs = readBinPtrT(view, offs_2 + 0x3C, littleEndian);
+                var materialParameterDataBuffer = buffer.subarray(materialParameterDataOffs, materialParameterDataLength);
+                var renderInfoParameters = [];
+                try {
+                    for (var renderInfoParameterResDic_1 = __values(renderInfoParameterResDic), renderInfoParameterResDic_1_1 = renderInfoParameterResDic_1.next(); !renderInfoParameterResDic_1_1.done; renderInfoParameterResDic_1_1 = renderInfoParameterResDic_1.next()) {
+                        var renderInfoParameterEntry = renderInfoParameterResDic_1_1.value;
+                        var offs_3 = renderInfoParameterEntry.offs;
+                        var arrayLength = view.getUint16(offs_3 + 0x00, littleEndian);
+                        var type = view.getUint8(offs_3 + 0x02);
+                        var name_10 = util_32.readString(buffer, readBinPtrT(view, offs_3 + 0x04, littleEndian));
+                        var arrayIdx = offs_3 + 0x08;
+                        switch (type) {
+                            case RenderInfoParameterType.Int: {
+                                var data = [];
+                                for (var i = 0; i < arrayLength; i++) {
+                                    data.push(view.getInt32(arrayIdx, littleEndian));
+                                    arrayIdx += 0x04;
+                                }
+                                renderInfoParameters.push({ type: type, name: name_10, data: data });
+                                break;
+                            }
+                            case RenderInfoParameterType.Float: {
+                                var data = [];
+                                for (var i = 0; i < arrayLength; i++) {
+                                    data.push(view.getFloat32(arrayIdx, littleEndian));
+                                    arrayIdx += 0x04;
+                                }
+                                renderInfoParameters.push({ type: type, name: name_10, data: data });
+                                break;
+                            }
+                            case RenderInfoParameterType.String: {
+                                var data = [];
+                                for (var i = 0; i < arrayLength; i++) {
+                                    data.push(util_32.readString(buffer, readBinPtrT(view, arrayIdx, littleEndian)));
+                                    arrayIdx += 0x04;
+                                }
+                                renderInfoParameters.push({ type: type, name: name_10, data: data });
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (e_42_1) { e_42 = { error: e_42_1 }; }
+                finally {
+                    try {
+                        if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
+                    }
+                    finally { if (e_42) throw e_42.error; }
+                }
+                util_32.assert(textureSamplerCount === textureReferenceCount);
+                var textureSamplerArrayIdx = textureSamplerArrayOffs;
+                var textureReferenceArrayIdx = textureReferenceArrayOffs;
+                var textureAssigns = [];
+                for (var i = 0; i < textureSamplerCount; i++) {
+                    var samplerParam0 = view.getUint32(textureSamplerArrayIdx + 0x00, littleEndian);
+                    var samplerParam1 = view.getUint32(textureSamplerArrayIdx + 0x04, littleEndian);
+                    var samplerParam2 = view.getUint32(textureSamplerArrayIdx + 0x08, littleEndian);
+                    var attribName = util_32.readString(buffer, readBinPtrT(view, textureSamplerArrayIdx + 0x10, littleEndian));
+                    var index = view.getUint8(textureSamplerArrayIdx + 0x14);
+                    util_32.assert(index === i);
+                    textureSamplerArrayIdx += 0x18;
+                    var textureName = util_32.readString(buffer, readBinPtrT(view, textureReferenceArrayIdx + 0x00, littleEndian));
+                    var ftexOffs = readBinPtrT(view, textureReferenceArrayIdx + 0x04, littleEndian);
+                    textureReferenceArrayIdx += 0x08;
+                    var texClampU = (samplerParam0 >>> 0) & 0x07;
+                    var texClampV = (samplerParam0 >>> 3) & 0x07;
+                    var texFilterMag = (samplerParam0 >>> 9) & 0x03;
+                    var texFilterMin = (samplerParam0 >>> 12) & 0x03;
+                    var texFilterMip = (samplerParam0 >>> 17) & 0x03;
+                    textureAssigns.push({ attribName: attribName, textureName: textureName, ftexOffs: ftexOffs, texClampU: texClampU, texClampV: texClampV, texFilterMin: texFilterMin, texFilterMag: texFilterMag, texFilterMip: texFilterMip });
+                }
+                var materialParameterArrayIdx = materialParameterArrayOffs;
+                var materialParameters = [];
+                for (var i = 0; i < materialParameterCount; i++) {
+                    var type = view.getUint8(materialParameterArrayIdx + 0x00);
+                    var size = view.getUint8(materialParameterArrayIdx + 0x01);
+                    var dataOffs = view.getUint16(materialParameterArrayIdx + 0x02, littleEndian);
+                    var dependedIndex = view.getUint16(materialParameterArrayIdx + 0x0C, littleEndian);
+                    var dependIndex = view.getUint16(materialParameterArrayIdx + 0x0E, littleEndian);
+                    var name_11 = util_32.readString(buffer, readBinPtrT(view, materialParameterArrayIdx + 0x10, littleEndian));
+                    materialParameterArrayIdx += 0x14;
+                    materialParameters.push({ type: type, size: size, dataOffs: dataOffs, name: name_11 });
+                }
+                // Shader assign.
+                var shaderArchiveName = util_32.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x00, littleEndian));
+                var shadingModelName = util_32.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x04, littleEndian));
+                var vertShaderInputCount = view.getUint8(shaderAssignOffs + 0x0C);
+                var vertShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x10, littleEndian));
+                util_32.assert(vertShaderInputDict.length === vertShaderInputCount);
+                var fragShaderInputCount = view.getUint8(shaderAssignOffs + 0x0D);
+                var fragShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x14, littleEndian));
+                util_32.assert(fragShaderInputDict.length === fragShaderInputCount);
+                var paramDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x18, littleEndian));
+                var paramCount = view.getUint16(shaderAssignOffs + 0x0E);
+                util_32.assert(paramDict.length === paramCount);
+                var shaderAssign = {
+                    shaderArchiveName: shaderArchiveName,
+                    shadingModelName: shadingModelName,
+                    vertShaderInputDict: vertShaderInputDict,
+                    fragShaderInputDict: fragShaderInputDict,
+                    paramDict: paramDict,
+                };
+                // Render state.
+                var renderState0 = view.getUint32(renderStateOffs + 0x00, littleEndian);
+                var renderState1 = view.getUint32(renderStateOffs + 0x04, littleEndian);
+                var renderState2 = view.getUint32(renderStateOffs + 0x08, littleEndian);
+                var cullFront = !!((renderState1 >>> 0) & 0x01);
+                var cullBack = !!((renderState1 >>> 1) & 0x01);
+                var frontFaceMode = (renderState1 >>> 2) & 0x01;
+                var depthTest = !!((renderState2 >>> 1) & 0x01);
+                var depthWrite = !!((renderState2 >>> 2) & 0x01);
+                var depthCompareFunc = (renderState2 >> 4) & 0x07;
+                var renderState = { cullFront: cullFront, cullBack: cullBack, frontFaceMode: frontFaceMode, depthTest: depthTest, depthWrite: depthWrite, depthCompareFunc: depthCompareFunc };
+                fmat.push({ name: name_9, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
+            }
+        }
+        catch (e_43_1) { e_43 = { error: e_43_1 }; }
+        finally {
+            try {
+                if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
+            }
+            finally { if (e_43) throw e_43.error; }
+        }
+        return { fvtx: fvtx, fshp: fshp, fmat: fmat };
+        var e_41, _a, e_43, _c, e_42, _b;
+    }
+    function parse(buffer) {
+        var view = buffer.createDataView();
+        util_32.assert(util_32.readString(buffer, 0x00, 0x04) === 'FRES');
+        var littleEndian;
+        switch (view.getUint16(0x08, false)) {
+            case 0xFEFF:
+                littleEndian = false;
+                break;
+            case 0xFFFE:
+                littleEndian = true;
+                break;
+            default:
+                throw new Error("Invalid BOM");
+        }
+        var version = view.getUint32(0x04, littleEndian);
+        var supportedVersions = [
+            0x03040001,
+            0x03040002,
+            0x03050003,
+        ];
+        util_32.assert(supportedVersions.includes(version));
+        var fileNameOffs = readBinPtrT(view, 0x14, littleEndian);
+        var fileName = util_32.readString(buffer, fileNameOffs);
+        function parseResDicIdx(idx) {
+            var tableOffs = readBinPtrT(view, 0x20 + idx * 0x04, littleEndian);
+            var tableCount = view.getUint16(0x50 + idx * 0x02, littleEndian);
+            var resDic = parseResDic(buffer, tableOffs, littleEndian);
+            util_32.assert(tableCount === resDic.length);
+            return resDic;
+        }
+        var fmdlTable = parseResDicIdx(0x00);
+        var ftexTable = parseResDicIdx(0x01);
+        var fskaTable = parseResDicIdx(0x02);
+        var textures = [];
+        try {
+            for (var ftexTable_1 = __values(ftexTable), ftexTable_1_1 = ftexTable_1.next(); !ftexTable_1_1.done; ftexTable_1_1 = ftexTable_1.next()) {
+                var entry = ftexTable_1_1.value;
+                var texture = parseFTEX(buffer, entry, littleEndian);
+                textures.push({ entry: entry, texture: texture });
+            }
+        }
+        catch (e_44_1) { e_44 = { error: e_44_1 }; }
+        finally {
+            try {
+                if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
+            }
+            finally { if (e_44) throw e_44.error; }
+        }
+        var models = [];
+        try {
+            for (var fmdlTable_1 = __values(fmdlTable), fmdlTable_1_1 = fmdlTable_1.next(); !fmdlTable_1_1.done; fmdlTable_1_1 = fmdlTable_1.next()) {
+                var entry = fmdlTable_1_1.value;
+                var fmdl = parseFMDL(buffer, entry, littleEndian);
+                models.push({ entry: entry, fmdl: fmdl });
+            }
+        }
+        catch (e_45_1) { e_45 = { error: e_45_1 }; }
+        finally {
+            try {
+                if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
+            }
+            finally { if (e_45) throw e_45.error; }
+        }
+        return { textures: textures, models: models };
+        var e_44, _a, e_45, _b;
+    }
+    exports_54("parse", parse);
+    var gx2_surface_1, util_32, UBOParameterType, RenderInfoParameterType;
+    return {
+        setters: [
+            function (gx2_surface_1_1) {
+                gx2_surface_1 = gx2_surface_1_1;
+            },
+            function (util_32_1) {
+                util_32 = util_32_1;
+            }
+        ],
+        execute: function () {
+            (function (UBOParameterType) {
+                UBOParameterType[UBOParameterType["Bool1"] = 0] = "Bool1";
+                UBOParameterType[UBOParameterType["Bool2"] = 1] = "Bool2";
+                UBOParameterType[UBOParameterType["Bool3"] = 2] = "Bool3";
+                UBOParameterType[UBOParameterType["Bool4"] = 3] = "Bool4";
+                UBOParameterType[UBOParameterType["Int1"] = 4] = "Int1";
+                UBOParameterType[UBOParameterType["Int2"] = 5] = "Int2";
+                UBOParameterType[UBOParameterType["Int3"] = 6] = "Int3";
+                UBOParameterType[UBOParameterType["Int4"] = 7] = "Int4";
+                UBOParameterType[UBOParameterType["Uint1"] = 8] = "Uint1";
+                UBOParameterType[UBOParameterType["Uint2"] = 9] = "Uint2";
+                UBOParameterType[UBOParameterType["Uint3"] = 10] = "Uint3";
+                UBOParameterType[UBOParameterType["Uint4"] = 11] = "Uint4";
+                UBOParameterType[UBOParameterType["Float1"] = 12] = "Float1";
+                UBOParameterType[UBOParameterType["Float2"] = 13] = "Float2";
+                UBOParameterType[UBOParameterType["Float3"] = 14] = "Float3";
+                UBOParameterType[UBOParameterType["Float4"] = 15] = "Float4";
+                UBOParameterType[UBOParameterType["_Reserved_0"] = 16] = "_Reserved_0";
+                UBOParameterType[UBOParameterType["Float2x2"] = 17] = "Float2x2";
+                UBOParameterType[UBOParameterType["Float2x3"] = 18] = "Float2x3";
+                UBOParameterType[UBOParameterType["Float2x4"] = 19] = "Float2x4";
+                UBOParameterType[UBOParameterType["_Reserved_1"] = 20] = "_Reserved_1";
+                UBOParameterType[UBOParameterType["Float3x2"] = 21] = "Float3x2";
+                UBOParameterType[UBOParameterType["Float3x3"] = 22] = "Float3x3";
+                UBOParameterType[UBOParameterType["Float3x4"] = 23] = "Float3x4";
+                UBOParameterType[UBOParameterType["_Reserved_2"] = 24] = "_Reserved_2";
+                UBOParameterType[UBOParameterType["Float4x2"] = 25] = "Float4x2";
+                UBOParameterType[UBOParameterType["Float4x3"] = 26] = "Float4x3";
+                UBOParameterType[UBOParameterType["Float4x4"] = 27] = "Float4x4";
+                UBOParameterType[UBOParameterType["SRT2D"] = 28] = "SRT2D";
+                UBOParameterType[UBOParameterType["SRT3D"] = 29] = "SRT3D";
+                UBOParameterType[UBOParameterType["TextureSRT"] = 30] = "TextureSRT";
+            })(UBOParameterType || (UBOParameterType = {}));
+            (function (RenderInfoParameterType) {
+                RenderInfoParameterType[RenderInfoParameterType["Int"] = 0] = "Int";
+                RenderInfoParameterType[RenderInfoParameterType["Float"] = 1] = "Float";
+                RenderInfoParameterType[RenderInfoParameterType["String"] = 2] = "String";
+            })(RenderInfoParameterType || (RenderInfoParameterType = {}));
+            ;
+        }
+    };
+});
+// Nintendo SARC archive format.
+System.register("fres/sarc", ["util"], function (exports_55, context_55) {
+    "use strict";
+    var __moduleName = context_55 && context_55.id;
+    function parse(buffer) {
+        var view = buffer.createDataView();
+        util_33.assert(util_33.readString(buffer, 0x00, 0x04) === 'SARC');
+        var littleEndian;
+        switch (view.getUint16(0x06, false)) {
+            case 0xFEFF:
+                littleEndian = false;
+                break;
+            case 0xFFFE:
+                littleEndian = true;
+                break;
+            default:
+                throw new Error("Invalid BOM");
+        }
+        util_33.assert(view.getUint16(0x04, littleEndian) === 0x14); // Header length.
+        var dataOffset = view.getUint32(0x0C, littleEndian);
+        var version = view.getUint16(0x10, littleEndian);
+        util_33.assert(version === 0x100);
+        util_33.assert(util_33.readString(buffer, 0x14, 0x04) === 'SFAT');
+        util_33.assert(view.getUint16(0x18, littleEndian) === 0x0C);
+        var fileCount = view.getUint16(0x1A, littleEndian);
+        var sfntTableOffs = 0x20 + 0x10 * fileCount;
+        util_33.assert(util_33.readString(buffer, sfntTableOffs, 0x04) === 'SFNT');
+        util_33.assert(view.getUint16(sfntTableOffs + 0x04, littleEndian) === 0x08);
+        var sfntStringTableOffs = sfntTableOffs + 0x08;
+        var files = [];
+        var fileTableIdx = 0x20;
+        for (var i = 0; i < fileCount; i++) {
+            var nameHash = view.getUint32(fileTableIdx + 0x00, littleEndian);
+            var flags = view.getUint16(fileTableIdx + 0x04, littleEndian);
+            var name_12 = void 0;
+            if (flags & 0x0100) {
+                var nameOffs = (view.getUint16(fileTableIdx + 0x06, littleEndian) * 4);
+                name_12 = util_33.readString(buffer, sfntStringTableOffs + nameOffs, 0xFF);
+            }
+            else {
+                name_12 = null;
+            }
+            var fileStart = view.getUint32(fileTableIdx + 0x08, littleEndian);
+            var fileEnd = view.getUint32(fileTableIdx + 0x0C, littleEndian);
+            var startOffs = dataOffset + fileStart;
+            var endOffs = dataOffset + fileEnd;
+            files.push({ name: name_12, offset: startOffs, buffer: buffer.slice(startOffs, endOffs) });
+            fileTableIdx += 0x10;
+        }
+        return { buffer: buffer, files: files };
+    }
+    exports_55("parse", parse);
+    var util_33;
+    return {
+        setters: [
+            function (util_33_1) {
+                util_33 = util_33_1;
+            }
+        ],
+        execute: function () {
+        }
+    };
+});
+System.register("worker_util", ["util"], function (exports_56, context_56) {
+    "use strict";
+    var __moduleName = context_56 && context_56.id;
     function makeWorkerFromSource(sources) {
         var blob = new Blob(sources, { type: 'application/javascript' });
         var url = window.URL.createObjectURL(blob);
@@ -13991,12 +14482,12 @@ System.register("worker_util", ["util"], function (exports_54, context_54) {
         window.URL.revokeObjectURL(url);
         return w;
     }
-    exports_54("makeWorkerFromSource", makeWorkerFromSource);
-    var util_32, WorkerManager, WorkerPool;
+    exports_56("makeWorkerFromSource", makeWorkerFromSource);
+    var util_34, WorkerManager, WorkerPool;
     return {
         setters: [
-            function (util_32_1) {
-                util_32 = util_32_1;
+            function (util_34_1) {
+                util_34 = util_34_1;
             }
         ],
         execute: function () {
@@ -14009,7 +14500,7 @@ System.register("worker_util", ["util"], function (exports_54, context_54) {
                 }
                 WorkerManager.prototype._workerOnMessage = function (e) {
                     var resp = e.data;
-                    this.currentRequest = util_32.assertExists(this.currentRequest);
+                    this.currentRequest = util_34.assertExists(this.currentRequest);
                     this.currentRequest.resolve(resp);
                     this.currentRequest = null;
                     this.onworkerdone();
@@ -14041,15 +14532,15 @@ System.register("worker_util", ["util"], function (exports_54, context_54) {
                             worker.terminate();
                         }
                     }
-                    catch (e_40_1) { e_40 = { error: e_40_1 }; }
+                    catch (e_46_1) { e_46 = { error: e_46_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_40) throw e_40.error; }
+                        finally { if (e_46) throw e_46.error; }
                     }
                     this.workers = [];
-                    var e_40, _c;
+                    var e_46, _c;
                 };
                 WorkerPool.prototype.build = function () {
                     if (this.workers.length > 0)
@@ -14085,32 +14576,32 @@ System.register("worker_util", ["util"], function (exports_54, context_54) {
                             if (this.outstandingRequests.length === 0)
                                 return;
                             if (worker.isFree()) {
-                                var req = util_32.assertExists(this.outstandingRequests.shift());
+                                var req = util_34.assertExists(this.outstandingRequests.shift());
                                 worker.execute(req);
                             }
                         }
                     }
-                    catch (e_41_1) { e_41 = { error: e_41_1 }; }
+                    catch (e_47_1) { e_47 = { error: e_47_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_41) throw e_41.error; }
+                        finally { if (e_47) throw e_47.error; }
                     }
-                    var e_41, _c;
+                    var e_47, _c;
                 };
                 WorkerPool.prototype._onWorkerDone = function () {
                     this.pumpQueue();
                 };
                 return WorkerPool;
             }());
-            exports_54("WorkerPool", WorkerPool);
+            exports_56("WorkerPool", WorkerPool);
         }
     };
 });
-System.register("fres/gx2_swizzle", ["worker_util"], function (exports_55, context_55) {
+System.register("fres/gx2_swizzle", ["worker_util"], function (exports_57, context_57) {
     "use strict";
-    var __moduleName = context_55 && context_55.id;
+    var __moduleName = context_57 && context_57.id;
     // This is all contained in one function in order to make it easier to Worker-ize.
     function _deswizzle(inSurface, srcBuffer, mipLevel) {
         var numPipes = 2;
@@ -14420,13 +14911,13 @@ System.register("fres/gx2_swizzle", ["worker_util"], function (exports_55, conte
                 };
                 return Deswizzler;
             }());
-            exports_55("deswizzler", deswizzler = new Deswizzler());
+            exports_57("deswizzler", deswizzler = new Deswizzler());
         }
     };
 });
-System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_56, context_56) {
+System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_58, context_58) {
     "use strict";
-    var __moduleName = context_56 && context_56.id;
+    var __moduleName = context_58 && context_58.id;
     // #region Texture Decode
     function expand5to8(n) {
         return (n << (8 - 5)) | (n >>> (10 - 8));
@@ -14699,11 +15190,11 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_56, 
                 return decompressBC45Surface(surface);
         }
     }
-    exports_56("decompressBC", decompressBC);
+    exports_58("decompressBC", decompressBC);
     function deswizzleSurface(surface, texData, mipLevel) {
         return gx2_swizzle_1.deswizzler.deswizzle(surface, texData.castToBuffer(), mipLevel);
     }
-    exports_56("deswizzleSurface", deswizzleSurface);
+    exports_58("deswizzleSurface", deswizzleSurface);
     function decodeSurface(surface, texData, mipData, mipLevel) {
         var levelData;
         if (mipLevel === 0) {
@@ -14745,7 +15236,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_56, 
             }
         });
     }
-    exports_56("decodeSurface", decodeSurface);
+    exports_58("decodeSurface", decodeSurface);
     function surfaceToCanvas(canvas, surface) {
         var ctx = canvas.getContext('2d');
         var width = surface.width;
@@ -14774,7 +15265,7 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_56, 
         }
         ctx.putImageData(imageData, 0, 0);
     }
-    exports_56("surfaceToCanvas", surfaceToCanvas);
+    exports_58("surfaceToCanvas", surfaceToCanvas);
     function decompressSurface(texture) {
         switch (texture.type) {
             case 'RGBA':
@@ -14786,503 +15277,12 @@ System.register("fres/gx2_texture", ["fres/gx2_swizzle"], function (exports_56, 
                 return decompressBC(texture);
         }
     }
-    exports_56("decompressSurface", decompressSurface);
+    exports_58("decompressSurface", decompressSurface);
     var gx2_swizzle_1;
     return {
         setters: [
             function (gx2_swizzle_1_1) {
                 gx2_swizzle_1 = gx2_swizzle_1_1;
-            }
-        ],
-        execute: function () {
-        }
-    };
-});
-System.register("fres/bfres", ["fres/gx2_surface", "util"], function (exports_57, context_57) {
-    "use strict";
-    var __moduleName = context_57 && context_57.id;
-    function readBinPtrT(view, offs, littleEndian) {
-        var offs2 = view.getInt32(offs, littleEndian);
-        if (offs2 === 0)
-            return 0;
-        else
-            return offs + offs2;
-    }
-    function parseResDic(buffer, tableOffs, littleEndian) {
-        if (tableOffs === 0)
-            return [];
-        var view = buffer.createDataView();
-        var tableSize = view.getUint32(tableOffs + 0x00, littleEndian);
-        var tableCount = view.getUint32(tableOffs + 0x04, littleEndian);
-        util_33.assert(tableCount === tableCount);
-        var entries = [];
-        var tableIdx = tableOffs + 0x08;
-        // Skip root entry.
-        tableIdx += 0x10;
-        for (var i = 0; i < tableCount; i++) {
-            // There's a fancy search tree in here which I don't care about at all...
-            var name_6 = util_33.readString(buffer, readBinPtrT(view, tableIdx + 0x08, littleEndian));
-            var offs = readBinPtrT(view, tableIdx + 0x0C, littleEndian);
-            entries.push({ name: name_6, offs: offs });
-            tableIdx += 0x10;
-        }
-        return entries;
-    }
-    function parseFTEX(buffer, entry, littleEndian) {
-        var offs = entry.offs;
-        var view = buffer.createDataView();
-        util_33.assert(util_33.readString(buffer, offs + 0x00, 0x04) === 'FTEX');
-        // GX2 is Wii U which is a little-endian system.
-        util_33.assert(!littleEndian);
-        var gx2SurfaceOffs = offs + 0x04;
-        var surface = gx2_surface_1.parseGX2Surface(buffer, gx2SurfaceOffs);
-        var texDataOffs = readBinPtrT(view, offs + 0xB0, littleEndian);
-        var mipDataOffs = readBinPtrT(view, offs + 0xB4, littleEndian);
-        var texData = buffer.subarray(texDataOffs, surface.texDataSize);
-        var mipData = buffer.subarray(mipDataOffs, surface.mipDataSize);
-        return { surface: surface, texData: texData, mipData: mipData };
-    }
-    function parseFMDL(buffer, entry, littleEndian) {
-        var offs = entry.offs;
-        var view = buffer.createDataView();
-        util_33.assert(util_33.readString(buffer, offs + 0x00, 0x04) === 'FMDL');
-        var fileName = readBinPtrT(view, offs + 0x04, littleEndian);
-        var filePath = readBinPtrT(view, offs + 0x08, littleEndian);
-        var fsklOffs = readBinPtrT(view, offs + 0x0C, littleEndian);
-        var fvtxOffs = readBinPtrT(view, offs + 0x10, littleEndian);
-        var fshpResDic = parseResDic(buffer, readBinPtrT(view, offs + 0x14, littleEndian), littleEndian);
-        var fmatResDic = parseResDic(buffer, readBinPtrT(view, offs + 0x18, littleEndian), littleEndian);
-        var fvtxCount = view.getUint16(offs + 0x20, littleEndian);
-        var fshpCount = view.getUint16(offs + 0x22, littleEndian);
-        var fmatCount = view.getUint16(offs + 0x24, littleEndian);
-        util_33.assert(fshpCount === fshpResDic.length);
-        util_33.assert(fmatCount === fmatResDic.length);
-        function readBufferData(offs) {
-            var size = view.getUint32(offs + 0x04, littleEndian);
-            var stride = view.getUint16(offs + 0x0C, littleEndian);
-            var dataOffs = readBinPtrT(view, offs + 0x14, littleEndian);
-            var data = buffer.subarray(dataOffs, size);
-            return { data: data, stride: stride };
-        }
-        function parseShaderAssignDict(offs) {
-            var resDic = parseResDic(buffer, offs, littleEndian);
-            var entries = [];
-            try {
-                for (var resDic_1 = __values(resDic), resDic_1_1 = resDic_1.next(); !resDic_1_1.done; resDic_1_1 = resDic_1.next()) {
-                    var entry_1 = resDic_1_1.value;
-                    var key = entry_1.name;
-                    var value = util_33.readString(buffer, entry_1.offs);
-                    entries.push({ key: key, value: value });
-                }
-            }
-            catch (e_42_1) { e_42 = { error: e_42_1 }; }
-            finally {
-                try {
-                    if (resDic_1_1 && !resDic_1_1.done && (_a = resDic_1.return)) _a.call(resDic_1);
-                }
-                finally { if (e_42) throw e_42.error; }
-            }
-            return entries;
-            var e_42, _a;
-        }
-        // Vertex buffers.
-        var fvtxIdx = fvtxOffs;
-        var fvtx = [];
-        for (var i = 0; i < fvtxCount; i++) {
-            util_33.assert(util_33.readString(buffer, fvtxIdx + 0x00, 0x04) === 'FVTX');
-            var attribCount = view.getUint8(fvtxIdx + 0x04);
-            var bufferCount = view.getUint8(fvtxIdx + 0x05);
-            var sectionIndex = view.getUint16(fvtxIdx + 0x06);
-            util_33.assert(i === sectionIndex);
-            var vtxCount = view.getUint32(fvtxIdx + 0x08);
-            var attribArrayOffs = readBinPtrT(view, fvtxIdx + 0x10, littleEndian);
-            var bufferArrayOffs = readBinPtrT(view, fvtxIdx + 0x18, littleEndian);
-            var attribs = [];
-            var attribArrayIdx = attribArrayOffs;
-            for (var j = 0; j < attribCount; j++) {
-                var name_7 = util_33.readString(buffer, readBinPtrT(view, attribArrayIdx + 0x00, littleEndian));
-                var bufferIndex = view.getUint8(attribArrayIdx + 0x04);
-                var bufferStart = view.getUint16(attribArrayIdx + 0x06, littleEndian);
-                var format = view.getUint32(attribArrayIdx + 0x08, littleEndian);
-                attribs.push({ name: name_7, bufferIndex: bufferIndex, bufferStart: bufferStart, format: format });
-                attribArrayIdx += 0x0C;
-            }
-            var buffers = [];
-            var bufferArrayIdx = bufferArrayOffs;
-            for (var j = 0; j < bufferCount; j++) {
-                var bufferData = readBufferData(bufferArrayIdx);
-                buffers.push(bufferData);
-                bufferArrayIdx += 0x18;
-            }
-            fvtx.push({ buffers: buffers, attribs: attribs, vtxCount: vtxCount });
-            fvtxIdx += 0x20;
-        }
-        // Shapes.
-        var fshp = [];
-        try {
-            for (var fshpResDic_1 = __values(fshpResDic), fshpResDic_1_1 = fshpResDic_1.next(); !fshpResDic_1_1.done; fshpResDic_1_1 = fshpResDic_1.next()) {
-                var fshpEntry = fshpResDic_1_1.value;
-                var offs_1 = fshpEntry.offs;
-                util_33.assert(util_33.readString(buffer, offs_1 + 0x00, 0x04) === 'FSHP');
-                var name_8 = util_33.readString(buffer, readBinPtrT(view, offs_1 + 0x04, littleEndian));
-                var fmatIndex = view.getUint16(offs_1 + 0x0E, littleEndian);
-                var fsklIndex = view.getUint16(offs_1 + 0x10, littleEndian);
-                var fvtxIndex = view.getUint16(offs_1 + 0x12, littleEndian);
-                // Each mesh corresponds to one LoD.
-                var meshArrayCount = view.getUint8(offs_1 + 0x17);
-                var meshArrayOffs = readBinPtrT(view, offs_1 + 0x24, littleEndian);
-                var meshArrayIdx = meshArrayOffs;
-                var meshes = [];
-                for (var i = 0; i < meshArrayCount; i++) {
-                    var primType = view.getUint32(meshArrayIdx + 0x00, littleEndian);
-                    var indexFormat = view.getUint32(meshArrayIdx + 0x04, littleEndian);
-                    var indexBufferOffs = readBinPtrT(view, meshArrayIdx + 0x14, littleEndian);
-                    var indexBufferData = readBufferData(indexBufferOffs);
-                    var submeshArrayCount = view.getUint16(meshArrayIdx + 0x0C, littleEndian);
-                    var submeshArrayOffs = readBinPtrT(view, meshArrayIdx + 0x10, littleEndian);
-                    var submeshArrayIdx = submeshArrayOffs;
-                    var submeshes = [];
-                    for (var j = 0; j < submeshArrayCount; j++) {
-                        var indexBufferOffset = view.getUint32(submeshArrayIdx + 0x00, littleEndian);
-                        var indexBufferCount = view.getUint32(submeshArrayIdx + 0x04, littleEndian);
-                        submeshes.push({ indexBufferOffset: indexBufferOffset, indexBufferCount: indexBufferCount });
-                        submeshArrayIdx += 0x08;
-                    }
-                    meshes.push({ primType: primType, indexFormat: indexFormat, indexBufferData: indexBufferData, submeshes: submeshes });
-                    meshArrayIdx += 0x1C;
-                }
-                fshp.push({ name: name_8, fmatIndex: fmatIndex, fvtxIndex: fvtxIndex, meshes: meshes });
-            }
-        }
-        catch (e_43_1) { e_43 = { error: e_43_1 }; }
-        finally {
-            try {
-                if (fshpResDic_1_1 && !fshpResDic_1_1.done && (_a = fshpResDic_1.return)) _a.call(fshpResDic_1);
-            }
-            finally { if (e_43) throw e_43.error; }
-        }
-        // Materials.
-        var fmat = [];
-        try {
-            for (var fmatResDic_1 = __values(fmatResDic), fmatResDic_1_1 = fmatResDic_1.next(); !fmatResDic_1_1.done; fmatResDic_1_1 = fmatResDic_1.next()) {
-                var fmatEntry = fmatResDic_1_1.value;
-                var offs_2 = fmatEntry.offs;
-                util_33.assert(util_33.readString(buffer, offs_2 + 0x00, 0x04) === 'FMAT');
-                var name_9 = util_33.readString(buffer, readBinPtrT(view, offs_2 + 0x04, littleEndian));
-                var renderInfoParameterCount = view.getUint16(offs_2 + 0x0E, littleEndian);
-                var textureReferenceCount = view.getUint8(offs_2 + 0x10);
-                var textureSamplerCount = view.getUint8(offs_2 + 0x11);
-                var materialParameterCount = view.getUint16(offs_2 + 0x12);
-                var materialParameterDataLength = view.getUint16(offs_2 + 0x16);
-                var renderInfoParameterResDic = parseResDic(buffer, readBinPtrT(view, offs_2 + 0x1C, littleEndian), littleEndian);
-                var renderStateOffs = readBinPtrT(view, offs_2 + 0x20, littleEndian);
-                var shaderAssignOffs = readBinPtrT(view, offs_2 + 0x24, littleEndian);
-                var textureReferenceArrayOffs = readBinPtrT(view, offs_2 + 0x28, littleEndian);
-                var textureSamplerArrayOffs = readBinPtrT(view, offs_2 + 0x2C, littleEndian);
-                var materialParameterArrayOffs = readBinPtrT(view, offs_2 + 0x34, littleEndian);
-                var materialParameterDataOffs = readBinPtrT(view, offs_2 + 0x3C, littleEndian);
-                var materialParameterDataBuffer = buffer.subarray(materialParameterDataOffs, materialParameterDataLength);
-                var renderInfoParameters = [];
-                try {
-                    for (var renderInfoParameterResDic_1 = __values(renderInfoParameterResDic), renderInfoParameterResDic_1_1 = renderInfoParameterResDic_1.next(); !renderInfoParameterResDic_1_1.done; renderInfoParameterResDic_1_1 = renderInfoParameterResDic_1.next()) {
-                        var renderInfoParameterEntry = renderInfoParameterResDic_1_1.value;
-                        var offs_3 = renderInfoParameterEntry.offs;
-                        var arrayLength = view.getUint16(offs_3 + 0x00, littleEndian);
-                        var type = view.getUint8(offs_3 + 0x02);
-                        var name_10 = util_33.readString(buffer, readBinPtrT(view, offs_3 + 0x04, littleEndian));
-                        var arrayIdx = offs_3 + 0x08;
-                        switch (type) {
-                            case RenderInfoParameterType.Int: {
-                                var data = [];
-                                for (var i = 0; i < arrayLength; i++) {
-                                    data.push(view.getInt32(arrayIdx, littleEndian));
-                                    arrayIdx += 0x04;
-                                }
-                                renderInfoParameters.push({ type: type, name: name_10, data: data });
-                                break;
-                            }
-                            case RenderInfoParameterType.Float: {
-                                var data = [];
-                                for (var i = 0; i < arrayLength; i++) {
-                                    data.push(view.getFloat32(arrayIdx, littleEndian));
-                                    arrayIdx += 0x04;
-                                }
-                                renderInfoParameters.push({ type: type, name: name_10, data: data });
-                                break;
-                            }
-                            case RenderInfoParameterType.String: {
-                                var data = [];
-                                for (var i = 0; i < arrayLength; i++) {
-                                    data.push(util_33.readString(buffer, readBinPtrT(view, arrayIdx, littleEndian)));
-                                    arrayIdx += 0x04;
-                                }
-                                renderInfoParameters.push({ type: type, name: name_10, data: data });
-                                break;
-                            }
-                        }
-                    }
-                }
-                catch (e_44_1) { e_44 = { error: e_44_1 }; }
-                finally {
-                    try {
-                        if (renderInfoParameterResDic_1_1 && !renderInfoParameterResDic_1_1.done && (_b = renderInfoParameterResDic_1.return)) _b.call(renderInfoParameterResDic_1);
-                    }
-                    finally { if (e_44) throw e_44.error; }
-                }
-                util_33.assert(textureSamplerCount === textureReferenceCount);
-                var textureSamplerArrayIdx = textureSamplerArrayOffs;
-                var textureReferenceArrayIdx = textureReferenceArrayOffs;
-                var textureAssigns = [];
-                for (var i = 0; i < textureSamplerCount; i++) {
-                    var samplerParam0 = view.getUint32(textureSamplerArrayIdx + 0x00, littleEndian);
-                    var samplerParam1 = view.getUint32(textureSamplerArrayIdx + 0x04, littleEndian);
-                    var samplerParam2 = view.getUint32(textureSamplerArrayIdx + 0x08, littleEndian);
-                    var attribName = util_33.readString(buffer, readBinPtrT(view, textureSamplerArrayIdx + 0x10, littleEndian));
-                    var index = view.getUint8(textureSamplerArrayIdx + 0x14);
-                    util_33.assert(index === i);
-                    textureSamplerArrayIdx += 0x18;
-                    var textureName = util_33.readString(buffer, readBinPtrT(view, textureReferenceArrayIdx + 0x00, littleEndian));
-                    var ftexOffs = readBinPtrT(view, textureReferenceArrayIdx + 0x04, littleEndian);
-                    textureReferenceArrayIdx += 0x08;
-                    var texClampU = (samplerParam0 >>> 0) & 0x07;
-                    var texClampV = (samplerParam0 >>> 3) & 0x07;
-                    var texFilterMag = (samplerParam0 >>> 9) & 0x03;
-                    var texFilterMin = (samplerParam0 >>> 12) & 0x03;
-                    var texFilterMip = (samplerParam0 >>> 17) & 0x03;
-                    textureAssigns.push({ attribName: attribName, textureName: textureName, ftexOffs: ftexOffs, texClampU: texClampU, texClampV: texClampV, texFilterMin: texFilterMin, texFilterMag: texFilterMag, texFilterMip: texFilterMip });
-                }
-                var materialParameterArrayIdx = materialParameterArrayOffs;
-                var materialParameters = [];
-                for (var i = 0; i < materialParameterCount; i++) {
-                    var type = view.getUint8(materialParameterArrayIdx + 0x00);
-                    var size = view.getUint8(materialParameterArrayIdx + 0x01);
-                    var dataOffs = view.getUint16(materialParameterArrayIdx + 0x02, littleEndian);
-                    var dependedIndex = view.getUint16(materialParameterArrayIdx + 0x0C, littleEndian);
-                    var dependIndex = view.getUint16(materialParameterArrayIdx + 0x0E, littleEndian);
-                    var name_11 = util_33.readString(buffer, readBinPtrT(view, materialParameterArrayIdx + 0x10, littleEndian));
-                    materialParameterArrayIdx += 0x14;
-                    materialParameters.push({ type: type, size: size, dataOffs: dataOffs, name: name_11 });
-                }
-                // Shader assign.
-                var shaderArchiveName = util_33.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x00, littleEndian));
-                var shadingModelName = util_33.readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x04, littleEndian));
-                var vertShaderInputCount = view.getUint8(shaderAssignOffs + 0x0C);
-                var vertShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x10, littleEndian));
-                util_33.assert(vertShaderInputDict.length === vertShaderInputCount);
-                var fragShaderInputCount = view.getUint8(shaderAssignOffs + 0x0D);
-                var fragShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x14, littleEndian));
-                util_33.assert(fragShaderInputDict.length === fragShaderInputCount);
-                var paramDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x18, littleEndian));
-                var paramCount = view.getUint16(shaderAssignOffs + 0x0E);
-                util_33.assert(paramDict.length === paramCount);
-                var shaderAssign = {
-                    shaderArchiveName: shaderArchiveName,
-                    shadingModelName: shadingModelName,
-                    vertShaderInputDict: vertShaderInputDict,
-                    fragShaderInputDict: fragShaderInputDict,
-                    paramDict: paramDict,
-                };
-                // Render state.
-                var renderState0 = view.getUint32(renderStateOffs + 0x00, littleEndian);
-                var renderState1 = view.getUint32(renderStateOffs + 0x04, littleEndian);
-                var renderState2 = view.getUint32(renderStateOffs + 0x08, littleEndian);
-                var cullFront = !!((renderState1 >>> 0) & 0x01);
-                var cullBack = !!((renderState1 >>> 1) & 0x01);
-                var frontFaceMode = (renderState1 >>> 2) & 0x01;
-                var depthTest = !!((renderState2 >>> 1) & 0x01);
-                var depthWrite = !!((renderState2 >>> 2) & 0x01);
-                var depthCompareFunc = (renderState2 >> 4) & 0x07;
-                var renderState = { cullFront: cullFront, cullBack: cullBack, frontFaceMode: frontFaceMode, depthTest: depthTest, depthWrite: depthWrite, depthCompareFunc: depthCompareFunc };
-                fmat.push({ name: name_9, renderInfoParameters: renderInfoParameters, textureAssigns: textureAssigns, materialParameterDataBuffer: materialParameterDataBuffer, materialParameters: materialParameters, shaderAssign: shaderAssign, renderState: renderState });
-            }
-        }
-        catch (e_45_1) { e_45 = { error: e_45_1 }; }
-        finally {
-            try {
-                if (fmatResDic_1_1 && !fmatResDic_1_1.done && (_c = fmatResDic_1.return)) _c.call(fmatResDic_1);
-            }
-            finally { if (e_45) throw e_45.error; }
-        }
-        return { fvtx: fvtx, fshp: fshp, fmat: fmat };
-        var e_43, _a, e_45, _c, e_44, _b;
-    }
-    function parse(buffer) {
-        var view = buffer.createDataView();
-        util_33.assert(util_33.readString(buffer, 0x00, 0x04) === 'FRES');
-        var littleEndian;
-        switch (view.getUint16(0x08, false)) {
-            case 0xFEFF:
-                littleEndian = false;
-                break;
-            case 0xFFFE:
-                littleEndian = true;
-                break;
-            default:
-                throw new Error("Invalid BOM");
-        }
-        var version = view.getUint32(0x04, littleEndian);
-        var supportedVersions = [
-            0x03040001,
-            0x03040002,
-            0x03050003,
-        ];
-        util_33.assert(supportedVersions.includes(version));
-        var fileNameOffs = readBinPtrT(view, 0x14, littleEndian);
-        var fileName = util_33.readString(buffer, fileNameOffs);
-        function parseResDicIdx(idx) {
-            var tableOffs = readBinPtrT(view, 0x20 + idx * 0x04, littleEndian);
-            var tableCount = view.getUint16(0x50 + idx * 0x02, littleEndian);
-            var resDic = parseResDic(buffer, tableOffs, littleEndian);
-            util_33.assert(tableCount === resDic.length);
-            return resDic;
-        }
-        var fmdlTable = parseResDicIdx(0x00);
-        var ftexTable = parseResDicIdx(0x01);
-        var fskaTable = parseResDicIdx(0x02);
-        var textures = [];
-        try {
-            for (var ftexTable_1 = __values(ftexTable), ftexTable_1_1 = ftexTable_1.next(); !ftexTable_1_1.done; ftexTable_1_1 = ftexTable_1.next()) {
-                var entry = ftexTable_1_1.value;
-                var texture = parseFTEX(buffer, entry, littleEndian);
-                textures.push({ entry: entry, texture: texture });
-            }
-        }
-        catch (e_46_1) { e_46 = { error: e_46_1 }; }
-        finally {
-            try {
-                if (ftexTable_1_1 && !ftexTable_1_1.done && (_a = ftexTable_1.return)) _a.call(ftexTable_1);
-            }
-            finally { if (e_46) throw e_46.error; }
-        }
-        var models = [];
-        try {
-            for (var fmdlTable_1 = __values(fmdlTable), fmdlTable_1_1 = fmdlTable_1.next(); !fmdlTable_1_1.done; fmdlTable_1_1 = fmdlTable_1.next()) {
-                var entry = fmdlTable_1_1.value;
-                var fmdl = parseFMDL(buffer, entry, littleEndian);
-                models.push({ entry: entry, fmdl: fmdl });
-            }
-        }
-        catch (e_47_1) { e_47 = { error: e_47_1 }; }
-        finally {
-            try {
-                if (fmdlTable_1_1 && !fmdlTable_1_1.done && (_b = fmdlTable_1.return)) _b.call(fmdlTable_1);
-            }
-            finally { if (e_47) throw e_47.error; }
-        }
-        return { textures: textures, models: models };
-        var e_46, _a, e_47, _b;
-    }
-    exports_57("parse", parse);
-    var gx2_surface_1, util_33, UBOParameterType, RenderInfoParameterType;
-    return {
-        setters: [
-            function (gx2_surface_1_1) {
-                gx2_surface_1 = gx2_surface_1_1;
-            },
-            function (util_33_1) {
-                util_33 = util_33_1;
-            }
-        ],
-        execute: function () {
-            (function (UBOParameterType) {
-                UBOParameterType[UBOParameterType["Bool1"] = 0] = "Bool1";
-                UBOParameterType[UBOParameterType["Bool2"] = 1] = "Bool2";
-                UBOParameterType[UBOParameterType["Bool3"] = 2] = "Bool3";
-                UBOParameterType[UBOParameterType["Bool4"] = 3] = "Bool4";
-                UBOParameterType[UBOParameterType["Int1"] = 4] = "Int1";
-                UBOParameterType[UBOParameterType["Int2"] = 5] = "Int2";
-                UBOParameterType[UBOParameterType["Int3"] = 6] = "Int3";
-                UBOParameterType[UBOParameterType["Int4"] = 7] = "Int4";
-                UBOParameterType[UBOParameterType["Uint1"] = 8] = "Uint1";
-                UBOParameterType[UBOParameterType["Uint2"] = 9] = "Uint2";
-                UBOParameterType[UBOParameterType["Uint3"] = 10] = "Uint3";
-                UBOParameterType[UBOParameterType["Uint4"] = 11] = "Uint4";
-                UBOParameterType[UBOParameterType["Float1"] = 12] = "Float1";
-                UBOParameterType[UBOParameterType["Float2"] = 13] = "Float2";
-                UBOParameterType[UBOParameterType["Float3"] = 14] = "Float3";
-                UBOParameterType[UBOParameterType["Float4"] = 15] = "Float4";
-                UBOParameterType[UBOParameterType["_Reserved_0"] = 16] = "_Reserved_0";
-                UBOParameterType[UBOParameterType["Float2x2"] = 17] = "Float2x2";
-                UBOParameterType[UBOParameterType["Float2x3"] = 18] = "Float2x3";
-                UBOParameterType[UBOParameterType["Float2x4"] = 19] = "Float2x4";
-                UBOParameterType[UBOParameterType["_Reserved_1"] = 20] = "_Reserved_1";
-                UBOParameterType[UBOParameterType["Float3x2"] = 21] = "Float3x2";
-                UBOParameterType[UBOParameterType["Float3x3"] = 22] = "Float3x3";
-                UBOParameterType[UBOParameterType["Float3x4"] = 23] = "Float3x4";
-                UBOParameterType[UBOParameterType["_Reserved_2"] = 24] = "_Reserved_2";
-                UBOParameterType[UBOParameterType["Float4x2"] = 25] = "Float4x2";
-                UBOParameterType[UBOParameterType["Float4x3"] = 26] = "Float4x3";
-                UBOParameterType[UBOParameterType["Float4x4"] = 27] = "Float4x4";
-                UBOParameterType[UBOParameterType["SRT2D"] = 28] = "SRT2D";
-                UBOParameterType[UBOParameterType["SRT3D"] = 29] = "SRT3D";
-                UBOParameterType[UBOParameterType["TextureSRT"] = 30] = "TextureSRT";
-            })(UBOParameterType || (UBOParameterType = {}));
-            (function (RenderInfoParameterType) {
-                RenderInfoParameterType[RenderInfoParameterType["Int"] = 0] = "Int";
-                RenderInfoParameterType[RenderInfoParameterType["Float"] = 1] = "Float";
-                RenderInfoParameterType[RenderInfoParameterType["String"] = 2] = "String";
-            })(RenderInfoParameterType || (RenderInfoParameterType = {}));
-            ;
-        }
-    };
-});
-// Nintendo SARC archive format.
-System.register("fres/sarc", ["util"], function (exports_58, context_58) {
-    "use strict";
-    var __moduleName = context_58 && context_58.id;
-    function parse(buffer) {
-        var view = buffer.createDataView();
-        util_34.assert(util_34.readString(buffer, 0x00, 0x04) === 'SARC');
-        var littleEndian;
-        switch (view.getUint16(0x06, false)) {
-            case 0xFEFF:
-                littleEndian = false;
-                break;
-            case 0xFFFE:
-                littleEndian = true;
-                break;
-            default:
-                throw new Error("Invalid BOM");
-        }
-        util_34.assert(view.getUint16(0x04, littleEndian) === 0x14); // Header length.
-        var dataOffset = view.getUint32(0x0C, littleEndian);
-        var version = view.getUint16(0x10, littleEndian);
-        util_34.assert(version === 0x100);
-        util_34.assert(util_34.readString(buffer, 0x14, 0x04) === 'SFAT');
-        util_34.assert(view.getUint16(0x18, littleEndian) === 0x0C);
-        var fileCount = view.getUint16(0x1A, littleEndian);
-        var sfntTableOffs = 0x20 + 0x10 * fileCount;
-        util_34.assert(util_34.readString(buffer, sfntTableOffs, 0x04) === 'SFNT');
-        util_34.assert(view.getUint16(sfntTableOffs + 0x04, littleEndian) === 0x08);
-        var sfntStringTableOffs = sfntTableOffs + 0x08;
-        var files = [];
-        var fileTableIdx = 0x20;
-        for (var i = 0; i < fileCount; i++) {
-            var nameHash = view.getUint32(fileTableIdx + 0x00, littleEndian);
-            var flags = view.getUint16(fileTableIdx + 0x04, littleEndian);
-            var name_12 = void 0;
-            if (flags & 0x0100) {
-                var nameOffs = (view.getUint16(fileTableIdx + 0x06, littleEndian) * 4);
-                name_12 = util_34.readString(buffer, sfntStringTableOffs + nameOffs, 0xFF);
-            }
-            else {
-                name_12 = null;
-            }
-            var fileStart = view.getUint32(fileTableIdx + 0x08, littleEndian);
-            var fileEnd = view.getUint32(fileTableIdx + 0x0C, littleEndian);
-            var startOffs = dataOffset + fileStart;
-            var endOffs = dataOffset + fileEnd;
-            files.push({ name: name_12, offset: startOffs, buffer: buffer.slice(startOffs, endOffs) });
-            fileTableIdx += 0x10;
-        }
-        return { buffer: buffer, files: files };
-    }
-    exports_58("parse", parse);
-    var util_34;
-    return {
-        setters: [
-            function (util_34_1) {
-                util_34 = util_34_1;
             }
         ],
         execute: function () {
@@ -17274,7 +17274,6 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_70, context_70
         }
     };
 });
-//
 System.register("metroid_prime/render", ["gl-matrix", "gx/gx_texture", "gx/gx_material", "gx/gx_render", "util", "ArrayBufferSlice", "BufferCoalescer", "Camera"], function (exports_71, context_71) {
     "use strict";
     var __moduleName = context_71 && context_71.id;
@@ -21737,7 +21736,7 @@ System.register("embeds/main", ["viewer", "Camera"], function (exports_83, conte
                 Main.prototype.loadScene = function (hash) {
                     var _this = this;
                     var _a = __read(hash.split('/'), 2), file = _a[0], name = _a[1];
-                    System.import("embeds/" + file).then(function (embedModule) {
+                    SystemJS.import("embeds/" + file).then(function (embedModule) {
                         var gl = _this.viewer.renderState.gl;
                         embedModule.createScene(gl, name).then(function (scene) {
                             _this.viewer.setCameraController(new Camera_12.OrbitCameraController());

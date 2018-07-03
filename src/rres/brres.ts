@@ -5,10 +5,10 @@
 import * as GX from '../gx/gx_enum';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, nArray } from "../util";
+import { assert, readString } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getComponentSizeRaw, getComponentCountRaw } from '../gx/gx_displaylist';
-import { vec3, mat4, quat, mat2d } from 'gl-matrix';
+import { mat4, mat2d } from 'gl-matrix';
 import { Endianness } from '../endian';
 import { AABB } from '../Camera';
 

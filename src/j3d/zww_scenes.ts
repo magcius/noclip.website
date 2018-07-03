@@ -15,7 +15,7 @@ import * as GX_Material from 'gx/gx_material';
 import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { ColorOverride, Scene, SceneLoader, J3DTextureHolder } from './render';
-import { CameraController, Camera } from '../Camera';
+import { Camera } from '../Camera';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}

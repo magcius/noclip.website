@@ -1,18 +1,14 @@
 
-//
+import { mat4 } from 'gl-matrix';
 
-import { mat3, mat4 } from 'gl-matrix';
-
-import { MREA, Material, Geometry, Surface, vtxAttrFormats, MaterialFlags } from './mrea';
-import { TXTR } from './txtr';
+import { MREA, Material, Surface, MaterialFlags } from './mrea';
 import * as GX_Texture from 'gx/gx_texture';
 import * as GX_Material from 'gx/gx_material';
-import { AttributeFormat } from 'gx/gx_displaylist';
 import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping, loadTextureFromMipChain } from 'gx/gx_render';
 
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
-import { align, assert, nArray } from '../util';
+import { nArray } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { AABB, IntersectionState } from '../Camera';

@@ -8,7 +8,7 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import Progressable from 'Progressable';
-import { fetch, generateFormID } from '../util';
+import { fetch } from '../util';
 
 const dks1Paths = [
     "data/dksiv/dks1/15-0 Sens Fortress.iv",
