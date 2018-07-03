@@ -31,12 +31,12 @@ export class BasicRRESScene implements Viewer.MainScene {
 
         for (const stageRRES of stageRRESes) {
             this.textureHolder.addRRESTextures(gl, stageRRES);
-            assert(stageRRES.models.length === 1);
+            assert(stageRRES.mdl0.length === 1);
 
-            const modelRenderer = new ModelRenderer(gl, this.textureHolder, stageRRES.models[0], '', materialHacks);
+            const modelRenderer = new ModelRenderer(gl, this.textureHolder, stageRRES.mdl0[0], '', materialHacks);
             this.models.push(modelRenderer);
 
-            for (const srt0 of stageRRES.texSrtAnimations) {
+            for (const srt0 of stageRRES.srt0) {
                 modelRenderer.bindSRT0(this.animationController, srt0);
             }
         }

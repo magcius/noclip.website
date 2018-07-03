@@ -19691,23 +19691,16 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         util_50.assert(util_50.readString(buffer, rootSectionOffs + 0x00, 0x04) === 'root');
         var rootResDic = parseResDic(buffer, rootSectionOffs + 0x08);
         // Models
-        var models = [];
+        var mdl0 = [];
         var modelsEntry = rootResDic.find(function (entry) { return entry.name === '3DModels(NW4R)'; });
         if (modelsEntry) {
             var modelsResDic = parseResDic(buffer, modelsEntry.offs);
             try {
                 for (var modelsResDic_1 = __values(modelsResDic), modelsResDic_1_1 = modelsResDic_1.next(); !modelsResDic_1_1.done; modelsResDic_1_1 = modelsResDic_1.next()) {
                     var mdl0Entry = modelsResDic_1_1.value;
-                    var mdl0 = void 0;
-                    try {
-                        mdl0 = parseMDL0(buffer.subarray(mdl0Entry.offs));
-                    }
-                    catch (e) {
-                        console.warn("Error parsing " + mdl0Entry.name + ": " + e);
-                        continue;
-                    }
-                    util_50.assert(mdl0.name === mdl0Entry.name);
-                    models.push(mdl0);
+                    var mdl0_ = parseMDL0(buffer.subarray(mdl0Entry.offs));
+                    util_50.assert(mdl0_.name === mdl0Entry.name);
+                    mdl0.push(mdl0_);
                 }
             }
             catch (e_69_1) { e_69 = { error: e_69_1 }; }
@@ -19719,16 +19712,16 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             }
         }
         // Textures
-        var textures = [];
+        var tex0 = [];
         var texturesEntry = rootResDic.find(function (entry) { return entry.name === 'Textures(NW4R)'; });
         if (texturesEntry) {
             var texturesResDic = parseResDic(buffer, texturesEntry.offs);
             try {
                 for (var texturesResDic_1 = __values(texturesResDic), texturesResDic_1_1 = texturesResDic_1.next(); !texturesResDic_1_1.done; texturesResDic_1_1 = texturesResDic_1.next()) {
                     var tex0Entry = texturesResDic_1_1.value;
-                    var tex0 = parseTEX0(buffer.subarray(tex0Entry.offs));
-                    util_50.assert(tex0.name === tex0Entry.name);
-                    textures.push(tex0);
+                    var tex0_ = parseTEX0(buffer.subarray(tex0Entry.offs));
+                    util_50.assert(tex0_.name === tex0Entry.name);
+                    tex0.push(tex0_);
                 }
             }
             catch (e_70_1) { e_70 = { error: e_70_1 }; }
@@ -19740,16 +19733,16 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             }
         }
         // Tex SRT Animations
-        var texSrtAnimations = [];
+        var srt0 = [];
         var animTexSrtsEntry = rootResDic.find(function (entry) { return entry.name === 'AnmTexSrt(NW4R)'; });
         if (animTexSrtsEntry) {
             var animTexSrtResDic = parseResDic(buffer, animTexSrtsEntry.offs);
             try {
                 for (var animTexSrtResDic_1 = __values(animTexSrtResDic), animTexSrtResDic_1_1 = animTexSrtResDic_1.next(); !animTexSrtResDic_1_1.done; animTexSrtResDic_1_1 = animTexSrtResDic_1.next()) {
                     var srt0Entry = animTexSrtResDic_1_1.value;
-                    var srt0 = parseSRT0(buffer.subarray(srt0Entry.offs));
-                    util_50.assert(srt0.name === srt0Entry.name);
-                    texSrtAnimations.push(srt0);
+                    var srt0_ = parseSRT0(buffer.subarray(srt0Entry.offs));
+                    util_50.assert(srt0_.name === srt0Entry.name);
+                    srt0.push(srt0_);
                 }
             }
             catch (e_71_1) { e_71 = { error: e_71_1 }; }
@@ -19781,7 +19774,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 finally { if (e_72) throw e_72.error; }
             }
         }
-        return { models: models, textures: textures, texSrtAnimations: texSrtAnimations, chr0: chr0 };
+        return { mdl0: mdl0, tex0: tex0, srt0: srt0, chr0: chr0 };
         var e_69, _a, e_70, _b, e_71, _c, e_72, _d;
     }
     exports_77("parse", parse);
@@ -20178,7 +20171,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                     return _super !== null && _super.apply(this, arguments) || this;
                 }
                 RRESTextureHolder.prototype.addRRESTextures = function (gl, rres) {
-                    this.addTextures(gl, rres.textures);
+                    this.addTextures(gl, rres.tex0);
                 };
                 return RRESTextureHolder;
             }(gx_render_4.TextureHolder));
@@ -20630,7 +20623,7 @@ System.register("rres/zss_scenes", ["ui", "compression/cx", "rres/brres", "rres/
                                 var roomRRES = BRRES.parse(roomArchive.findFile('g3d/room.brres').buffer);
                                 this.textureHolder.addRRESTextures(gl, roomRRES);
                                 try {
-                                    for (var _c = __values(roomRRES.models), _d = _c.next(); !_d.done; _d = _c.next()) {
+                                    for (var _c = __values(roomRRES.mdl0), _d = _c.next(); !_d.done; _d = _c.next()) {
                                         var mdl0 = _d.value;
                                         this.spawnModel(gl, mdl0, roomRRES, roomArchiveFile.name);
                                     }
@@ -20809,7 +20802,7 @@ System.register("rres/zss_scenes", ["ui", "compression/cx", "rres/brres", "rres/
                     this.models.push(modelRenderer);
                     try {
                         // Bind animations.
-                        for (var _a = __values(rres.texSrtAnimations), _b = _a.next(); !_b.done; _b = _a.next()) {
+                        for (var _a = __values(rres.srt0), _b = _a.next(); !_b.done; _b = _a.next()) {
                             var srt0 = _b.value;
                             modelRenderer.bindSRT0(this.animationController, srt0);
                         }
@@ -20823,7 +20816,7 @@ System.register("rres/zss_scenes", ["ui", "compression/cx", "rres/brres", "rres/
                     }
                     try {
                         // Water animations are in the common archive.
-                        for (var _d = __values(this.commonRRES.texSrtAnimations), _e = _d.next(); !_e.done; _e = _d.next()) {
+                        for (var _d = __values(this.commonRRES.srt0), _e = _d.next(); !_e.done; _e = _d.next()) {
                             var srt0 = _e.value;
                             modelRenderer.bindSRT0(this.animationController, srt0);
                         }
@@ -20839,7 +20832,7 @@ System.register("rres/zss_scenes", ["ui", "compression/cx", "rres/brres", "rres/
                     var e_84, _c, e_85, _f;
                 };
                 SkywardSwordScene.prototype.spawnModelName = function (gl, rres, modelName, namePrefix) {
-                    var mdl0 = rres.models.find(function (model) { return model.name === modelName; });
+                    var mdl0 = rres.mdl0.find(function (model) { return model.name === modelName; });
                     return this.spawnModel(gl, mdl0, rres, namePrefix);
                 };
                 SkywardSwordScene.prototype.spawnObj = function (gl, name, unk1, unk2) {
@@ -20868,7 +20861,6 @@ System.register("rres/zss_scenes", ["ui", "compression/cx", "rres/brres", "rres/
                     }
                     else if (name === 'Blade') {
                         // Skyloft decorations... flags, pinwheels, etc.
-                        var StageF000Blade = this.stageRRES.models.find(function (model) { return model.name === 'StageF000Blade'; });
                         var model = this.spawnModelName(gl, this.stageRRES, 'StageF000Blade', name);
                         var StageF000BladeCHR0 = this.stageRRES.chr0.find(function (c) { return c.name === 'StageF000Blade'; });
                         model.bindCHR0(this.animationController, StageF000BladeCHR0);
@@ -21246,11 +21238,11 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
                         for (var stageRRESes_1 = __values(stageRRESes), stageRRESes_1_1 = stageRRESes_1.next(); !stageRRESes_1_1.done; stageRRESes_1_1 = stageRRESes_1.next()) {
                             var stageRRES = stageRRESes_1_1.value;
                             this.textureHolder.addRRESTextures(gl, stageRRES);
-                            util_53.assert(stageRRES.models.length === 1);
-                            var modelRenderer = new render_33.ModelRenderer(gl, this.textureHolder, stageRRES.models[0], '', materialHacks);
+                            util_53.assert(stageRRES.mdl0.length === 1);
+                            var modelRenderer = new render_33.ModelRenderer(gl, this.textureHolder, stageRRES.mdl0[0], '', materialHacks);
                             this.models.push(modelRenderer);
                             try {
-                                for (var _a = __values(stageRRES.texSrtAnimations), _b = _a.next(); !_b.done; _b = _a.next()) {
+                                for (var _a = __values(stageRRES.srt0), _b = _a.next(); !_b.done; _b = _a.next()) {
                                     var srt0 = _b.value;
                                     modelRenderer.bindSRT0(this.animationController, srt0);
                                 }

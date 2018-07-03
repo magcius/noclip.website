@@ -11,7 +11,7 @@ import { ColorOverride } from "../j3d/render";
 
 export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
-        this.addTextures(gl, rres.textures);
+        this.addTextures(gl, rres.tex0);
     }
 }
 

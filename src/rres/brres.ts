@@ -2034,9 +2034,9 @@ export function bindCHR0NodesAnimator(animationController: AnimationController, 
 //#endregion
 
 export interface RRES {
-    models: MDL0[];
-    textures: TEX0[];
-    texSrtAnimations: SRT0[];
+    mdl0: MDL0[];
+    tex0: TEX0[];
+    srt0: SRT0[];
     chr0: CHR0[];
 }
 
@@ -2068,45 +2068,38 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     const rootResDic = parseResDic(buffer, rootSectionOffs + 0x08);
 
     // Models
-    const models: MDL0[] = [];
+    const mdl0: MDL0[] = [];
     const modelsEntry = rootResDic.find((entry) => entry.name === '3DModels(NW4R)');
     if (modelsEntry) {
         const modelsResDic = parseResDic(buffer, modelsEntry.offs);
         for (const mdl0Entry of modelsResDic) {
-            let mdl0;
-            try {
-                mdl0 = parseMDL0(buffer.subarray(mdl0Entry.offs));
-            } catch(e) {
-                console.warn(`Error parsing ${mdl0Entry.name}: ${e}`);
-                continue;
-            }
-
-            assert(mdl0.name === mdl0Entry.name);
-            models.push(mdl0);
+            const mdl0_ = parseMDL0(buffer.subarray(mdl0Entry.offs));
+            assert(mdl0_.name === mdl0Entry.name);
+            mdl0.push(mdl0_);
         }
     }
 
     // Textures
-    const textures: TEX0[] = [];
+    const tex0: TEX0[] = [];
     const texturesEntry = rootResDic.find((entry) => entry.name === 'Textures(NW4R)');
     if (texturesEntry) {
         const texturesResDic = parseResDic(buffer, texturesEntry.offs);
         for (const tex0Entry of texturesResDic) {
-            const tex0 = parseTEX0(buffer.subarray(tex0Entry.offs));
-            assert(tex0.name === tex0Entry.name);
-            textures.push(tex0);
+            const tex0_ = parseTEX0(buffer.subarray(tex0Entry.offs));
+            assert(tex0_.name === tex0Entry.name);
+            tex0.push(tex0_);
         }
     }
 
     // Tex SRT Animations
-    const texSrtAnimations: SRT0[] = [];
+    const srt0: SRT0[] = [];
     const animTexSrtsEntry = rootResDic.find((entry) => entry.name === 'AnmTexSrt(NW4R)');
     if (animTexSrtsEntry) {
         const animTexSrtResDic = parseResDic(buffer, animTexSrtsEntry.offs);
         for (const srt0Entry of animTexSrtResDic) {
-            const srt0 = parseSRT0(buffer.subarray(srt0Entry.offs));
-            assert(srt0.name === srt0Entry.name);
-            texSrtAnimations.push(srt0);
+            const srt0_ = parseSRT0(buffer.subarray(srt0Entry.offs));
+            assert(srt0_.name === srt0Entry.name);
+            srt0.push(srt0_);
         }
     }
 
@@ -2122,5 +2115,5 @@ export function parse(buffer: ArrayBufferSlice): RRES {
         }
     }
 
-    return { models, textures, texSrtAnimations, chr0 };
+    return { mdl0, tex0, srt0, chr0 };
 }
