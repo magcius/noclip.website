@@ -147,7 +147,7 @@ class SkywardSwordScene implements Viewer.MainScene {
 
                 this.textureHolder.addRRESTextures(gl, roomRRES);
 
-                for (const mdl0 of roomRRES.models) {
+                for (const mdl0 of roomRRES.mdl0) {
                     this.spawnModel(gl, mdl0, roomRRES, roomArchiveFile.name);
                 }
 
@@ -264,12 +264,12 @@ class SkywardSwordScene implements Viewer.MainScene {
         this.models.push(modelRenderer);
 
         // Bind animations.
-        for (const srt0 of rres.texSrtAnimations) {
+        for (const srt0 of rres.srt0) {
             modelRenderer.bindSRT0(this.animationController, srt0);
         }
 
         // Water animations are in the common archive.
-        for (const srt0 of this.commonRRES.texSrtAnimations) {
+        for (const srt0 of this.commonRRES.srt0) {
             modelRenderer.bindSRT0(this.animationController, srt0);
         }
 
@@ -278,7 +278,7 @@ class SkywardSwordScene implements Viewer.MainScene {
 
 
     private spawnModelName(gl: WebGL2RenderingContext, rres: BRRES.RRES, modelName: string, namePrefix: string): ModelRenderer {
-        const mdl0 = rres.models.find((model) => model.name === modelName);
+        const mdl0 = rres.mdl0.find((model) => model.name === modelName);
         return this.spawnModel(gl, mdl0, rres, namePrefix);
     }
 
@@ -306,7 +306,6 @@ class SkywardSwordScene implements Viewer.MainScene {
             models.push(model);
         } else if (name === 'Blade') {
             // Skyloft decorations... flags, pinwheels, etc.
-            const StageF000Blade = this.stageRRES.models.find((model) => model.name === 'StageF000Blade');
             const model = this.spawnModelName(gl, this.stageRRES, 'StageF000Blade', name);
             const StageF000BladeCHR0 = this.stageRRES.chr0.find((c) => c.name === 'StageF000Blade');
             model.bindCHR0(this.animationController, StageF000BladeCHR0);
