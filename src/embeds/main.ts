@@ -1,6 +1,4 @@
 
-import { System } from 'systemjs';
-
 import Progressable from 'Progressable';
 import * as Viewer from 'viewer';
 import { OrbitCameraController } from '../Camera';
@@ -82,7 +80,7 @@ class Main {
 
     private loadScene(hash: string) {
         const [file, name] = hash.split('/');
-        System.import(`embeds/${file}`).then((embedModule: EmbedModule) => {
+        SystemJS.import(`embeds/${file}`).then((embedModule: EmbedModule) => {
             const gl = this.viewer.renderState.gl;
             embedModule.createScene(gl, name).then((scene: Viewer.MainScene) => {
                 this.viewer.setCameraController(new OrbitCameraController());

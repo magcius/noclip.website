@@ -7,7 +7,7 @@ import { Scene } from './render';
 import * as Viewer from '../viewer';
 
 import { RenderState } from '../render';
-import { fetch, readString } from '../util';
+import { readString } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {

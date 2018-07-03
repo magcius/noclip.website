@@ -4,14 +4,13 @@ import Progressable from 'Progressable';
 import { assert, fetch } from 'util';
 
 import { RenderState, ColorTarget, RenderFlags, BlendMode, BlendFactor } from '../render';
-import Program, { FullscreenProgram } from '../Program';
+import { FullscreenProgram } from '../Program';
 import * as Viewer from '../viewer';
 
-import { BMD, BMT, BTK } from './j3d';
 import { Scene, J3DTextureHolder } from './render';
 import { createScenesFromBuffer } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
-import { TextureOverride, TextureHolder } from '../gx/gx_render';
+import { TextureOverride } from '../gx/gx_render';
 
 // Should I try to do this with GX? lol.
 class BloomPassBlurProgram extends FullscreenProgram {

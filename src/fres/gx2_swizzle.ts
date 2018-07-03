@@ -2,7 +2,6 @@
 import { GX2SurfaceFormat, GX2TileMode, GX2AAMode } from './gx2_enum';
 import { GX2Surface, DeswizzledSurface } from './gx2_surface';
 
-import { assert } from 'util';
 import { WorkerPool, makeWorkerFromSource } from 'worker_util';
 
 // This is all contained in one function in order to make it easier to Worker-ize.

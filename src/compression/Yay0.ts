@@ -1,3 +1,4 @@
+
 // Nintendo Yay0 format.
 //
 // Similar to Yaz0 (an earlier version, likely), except it packs compressed data

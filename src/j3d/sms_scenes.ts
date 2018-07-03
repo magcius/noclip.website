@@ -8,12 +8,12 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 
 import * as RARC from './rarc';
-import { ColorOverride, Scene, J3DTextureHolder } from './render';
+import { Scene, J3DTextureHolder } from './render';
 import { createScene } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
-import { BMD, BCK, LoopMode } from './j3d';
-import { TextureOverride, TextureHolder } from '../gx/gx_render';
+import { LoopMode } from './j3d';
+import { TextureOverride } from '../gx/gx_render';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];

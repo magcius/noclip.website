@@ -1,12 +1,10 @@
 
 import * as Viewer from "../viewer";
 import { RenderState, RenderFlags } from "../render";
-import { BIN, Sampler, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
+import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
-import * as GX from 'gx/gx_enum';
 import * as GX_Texture from 'gx/gx_texture';
 import * as GX_Material from 'gx/gx_material';
-import { AttributeFormat } from 'gx/gx_displaylist';
 import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, loadedDataCoalescer, loadTextureFromMipChain, translateWrapMode } from 'gx/gx_render';
 
 import { assert } from "../util";

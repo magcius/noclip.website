@@ -1,3 +1,4 @@
+
 import { assertExists } from "./util";
 
 export default abstract class MemoizeCache<TKey, TRes> {

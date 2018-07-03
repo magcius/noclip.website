@@ -1,5 +1,4 @@
 
-import * as GX2Texture from './gx2_texture';
 import { GX2Surface, parseGX2Surface } from './gx2_surface';
 import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode, GX2SurfaceFormat } from './gx2_enum';
 

@@ -1,7 +1,6 @@
 
 import { mat4 } from 'gl-matrix';
-import { assert, align, assertExists } from './util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import { assert, assertExists } from './util';
 import Program, { BaseProgram, FullscreenProgram, ProgramCache } from 'Program';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from './Camera';
 

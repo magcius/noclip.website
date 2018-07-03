@@ -3,7 +3,6 @@ import { GX2SurfaceFormat, GX2TileMode, GX2AAMode } from './gx2_enum';
 import { GX2Surface, DeswizzledSurface } from './gx2_surface';
 import { deswizzler } from './gx2_swizzle';
 import ArrayBufferSlice from 'ArrayBufferSlice';
-import { assert } from '../util';
 
 interface DecodedSurfaceRGBA extends DeswizzledSurface {
     type: 'RGBA';

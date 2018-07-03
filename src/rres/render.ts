@@ -1,17 +1,12 @@
 
-import * as Viewer from "../viewer";
 import { RenderState, RenderFlags } from "../render";
 import * as BRRES from './brres';
 
-import * as GX from '../gx/gx_enum';
-import * as GX_Texture from '../gx/gx_texture';
 import * as GX_Material from '../gx/gx_material';
-import { align, assert, nArray } from "../util";
-import { mat3, mat4, mat2d } from "gl-matrix";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { mat4, mat2d } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
-import { loadTextureFromMipChain, MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from "../gx/gx_render";
-import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState, computeModelMatrixBillboard } from "../Camera";
+import { MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureHolder } from "../gx/gx_render";
+import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState } from "../Camera";
 import { ColorOverride } from "../j3d/render";
 
 export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {

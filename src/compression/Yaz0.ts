@@ -1,3 +1,4 @@
+
 // Nintendo Yaz0 format.
 
 // Header (8 bytes):
@@ -16,7 +17,7 @@
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
 import { assert, readString, align } from 'util';
-import { yaz0_asInstance, yaz0_asExports } from '../wat_modules';
+import { yaz0_asInstance } from '../wat_modules';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import WasmMemoryManager from 'WasmMemoryManager';
 

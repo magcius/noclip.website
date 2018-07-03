@@ -1,17 +1,13 @@
 
-import { mat4, vec3, mat2d, vec4 } from 'gl-matrix';
+import { mat4, mat2d } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, BTI_Texture, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, VertexArray, BRK, DRW1JointKind, BCK, BTI } from './j3d';
+import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, BRK, DRW1JointKind, BCK } from './j3d';
 
-import * as GX from 'gx/gx_enum';
 import * as GX_Material from 'gx/gx_material';
-import * as GX_Texture from 'gx/gx_texture';
-import { AttributeFormat } from 'gx/gx_displaylist';
-import { TextureMapping, MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, loadTextureFromMipChain, translateTexFilter, translateWrapMode, TextureOverride, TextureHolder } from 'gx/gx_render';
+import { TextureMapping, MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, translateTexFilter, translateWrapMode, TextureHolder } from 'gx/gx_render';
 import * as Viewer from 'viewer';
 
-import { CompareMode, RenderFlags, RenderState } from '../render';
-import { align, assert } from '../util';
+import { RenderFlags, RenderState } from '../render';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, AABB, IntersectionState } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 

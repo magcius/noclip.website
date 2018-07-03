@@ -1,6 +1,4 @@
 
-import ArrayBufferSlice from "ArrayBufferSlice";
-
 export const enum Endianness {
     LITTLE_ENDIAN,
     BIG_ENDIAN,

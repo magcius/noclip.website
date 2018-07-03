@@ -4,7 +4,6 @@
 import { ResourceSystem } from "./resource";
 import { assert, readString } from "../util";
 import ArrayBufferSlice from "ArrayBufferSlice";
-import { FileResource } from "./pak";
 
 interface Area {
     areaSTRGID: string;

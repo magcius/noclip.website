@@ -1,9 +1,7 @@
 
 // tslint:disable:no-console
 
-import { mat4, vec3, vec4 } from 'gl-matrix';
-
-import { RenderState, RenderFlags, ColorTarget, DepthTarget } from './render';
+import { RenderState, ColorTarget, DepthTarget } from './render';
 import * as UI from './ui';
 
 import Progressable from 'Progressable';

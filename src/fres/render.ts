@@ -1,6 +1,4 @@
 
-import { mat4 } from 'gl-matrix';
-
 import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat } from './gx2_enum';
 import { deswizzler } from './gx2_swizzle';
 import * as GX2Texture from './gx2_texture';
@@ -8,11 +6,10 @@ import * as BFRES from './bfres';
 
 import * as Viewer from '../viewer';
 
-import Progressable from 'Progressable';
 import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode } from '../render';
 import Program from '../Program';
 import RenderArena from '../RenderArena';
-import { assert, fetch } from '../util';
+import { assert } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import { Endianness } from '../endian';
 import { CoalescedBuffer, coalesceBuffer } from '../BufferCoalescer';
