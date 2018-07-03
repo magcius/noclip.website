@@ -9349,16 +9349,16 @@ System.register("sm64ds/lz77", ["compression/cx", "util"], function (exports_35,
     exports_35("isLZ77", isLZ77);
     function maybeDecompress(srcBuffer) {
         if (isLZ77(srcBuffer))
-            return cx_1.decompress(srcBuffer.slice(4));
+            return CX_1.decompress(srcBuffer.slice(4));
         else
             return srcBuffer;
     }
     exports_35("maybeDecompress", maybeDecompress);
-    var cx_1, util_21;
+    var CX_1, util_21;
     return {
         setters: [
-            function (cx_1_1) {
-                cx_1 = cx_1_1;
+            function (CX_1_1) {
+                CX_1 = CX_1_1;
             },
             function (util_21_1) {
                 util_21 = util_21_1;
@@ -20504,8 +20504,8 @@ System.register("rres/zss_scenes", ["ui", "compression/cx", "rres/brres", "rres/
             function (UI_5) {
                 UI = UI_5;
             },
-            function (CX_1) {
-                CX = CX_1;
+            function (CX_2) {
+                CX = CX_2;
             },
             function (BRRES_2) {
                 BRRES = BRRES_2;

@@ -3,7 +3,7 @@
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
-import * as CX from '../compression/cx';
+import * as CX from '../compression/CX';
 import * as BRRES from './brres';
 import * as U8 from './u8';
 
