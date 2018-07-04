@@ -39,6 +39,7 @@ import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
+import { VtxAttrib } from '../fres/bfres';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -221,12 +222,22 @@ function getAttrName(vtxAttrib: GX.VertexAttribute): string {
 
 // TODO(jstpierre): Make this a core utility?
 export const enum AttributeFormat {
+    U8,
     U16,
     F32,
 }
 
+function getAttributeFormat(vtxAttrib: GX.VertexAttribute): AttributeFormat {
+    if (isVtxAttribMtxIdx(vtxAttrib))
+        return AttributeFormat.U8;
+
+    return AttributeFormat.F32;
+}
+
 function getAttributeFormatSize(attributeFormat: AttributeFormat): number {
     switch (attributeFormat) {
+    case AttributeFormat.U8:
+        return 1;
     case AttributeFormat.U16:
         return 2;
     case AttributeFormat.F32:
@@ -319,8 +330,8 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
             continue;
 
         // TODO(jstpierre): Worth supporting other component types?
-        const format = AttributeFormat.F32;
-        const formatComponentSize = 4;
+        const format = getAttributeFormat(vtxAttrib);
+        const formatComponentSize = getAttributeFormatSize(format);
 
         dstVertexSize = align(dstVertexSize, formatComponentSize);
         const offset = dstVertexSize;
@@ -437,7 +448,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
                 return `(${n} / ${divisor})`;
         }
 
-        function compileReadOneComponentF32(viewName: string, attrOffset: string): string {
+        function compileReadOneComponent(viewName: string, attrOffset: string): string {
             switch (getComponentType(vtxAttrib, vtxAttrFmt)) {
             case GX.CompType.F32:
                 return `${viewName}.getFloat32(${attrOffset})`;
@@ -457,16 +468,24 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
             }
         }
 
-        function compileReadOneComponent(viewName: string, attrOffset: string): string {
-            assert(dstAttribLayout.format === AttributeFormat.F32);
-            return compileReadOneComponentF32(viewName, attrOffset);
+        function compileWriteOneComponentF32(dstOffs: string, value: string): string {
+            const littleEndian = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
+            return `dstVertexDataView.setFloat32(${dstOffs}, ${value}, ${littleEndian})`;
+        }
+
+        function compileWriteOneComponentU8(dstOffs: string, value: string): string {
+            return `dstVertexDataView.setUint8(${dstOffs}, ${value})`;
         }
 
         function compileWriteOneComponent(offs: number, value: string): string {
-            assert(dstAttribLayout.format === AttributeFormat.F32);
-            const littleEndian = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
             const dstOffs = `dstVertexDataOffs + ${offs}`;
-            return `dstVertexDataView.setFloat32(${dstOffs}, ${value}, ${littleEndian})`;
+
+            if (dstAttribLayout.format === AttributeFormat.F32)
+                return compileWriteOneComponentF32(dstOffs, value);
+            else if (dstAttribLayout.format === AttributeFormat.U8)
+                return compileWriteOneComponentU8(dstOffs, value);
+            else
+                throw "whoops";
         }
 
         function compileOneAttrib(viewName: string, attrOffsetBase: string, drawCallIdxIncr: number): string {

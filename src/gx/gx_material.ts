@@ -24,6 +24,7 @@ export interface GXMaterial {
     texGens: TexGen[];
 
     // TEV state
+    // TODO(jstpierre): These are just used for debugging.
     colorRegisters: Color[];
     colorConstants: Color[];
     tevStages: TevStage[];
@@ -154,7 +155,7 @@ interface VertexAttributeGenDef {
 }
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  storage: "float" },
+    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  storage: "uint" },
     { attrib: GX.VertexAttribute.POS,        name: "Position",   storage: "vec3" },
     { attrib: GX.VertexAttribute.NRM,        name: "Normal",     storage: "vec3" },
     { attrib: GX.VertexAttribute.CLR0,       name: "Color0",     storage: "vec4" },
@@ -171,6 +172,10 @@ const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
 
 export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
     return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrib === vtxAttrib);
+}
+
+export function getVertexAttribGenDef(vtxAttrib: GX.VertexAttribute): VertexAttributeGenDef {
+    return vtxAttributeGenDefs.find((genDef) => genDef.attrib === vtxAttrib);
 }
 
 export interface LightingFudgeParams {
@@ -815,8 +820,17 @@ out vec3 v_TexCoord5;
 out vec3 v_TexCoord6;
 out vec3 v_TexCoord7;
 
+mat4 GetPosTexMatrix(uint mtxid) {
+    if (mtxid == ${GX.TexGenMatrix.IDENTITY}u)
+        return mat4(1.0);
+    else if (mtxid >= ${GX.TexGenMatrix.TEXMTX0}u)
+        return mat4(u_TexMtx[(mtxid - 30u) / 3u]);
+    else
+        return mat4(u_PosMtx[mtxid / 3u]);
+}
+
 void main() {
-    mat4 t_PosMtx = mat4(u_PosMtx[int(a_PosMtxIdx / 3.0)]);
+    mat4 t_PosMtx = GetPosTexMatrix(a_PosMtxIdx);
     mat4 t_PosModelView = t_PosMtx;
     vec4 t_Position = t_PosModelView * vec4(a_Position, 1.0);
     v_Position = t_Position.xyz;

@@ -1,14 +1,13 @@
 
 import ArrayBufferSlice from 'ArrayBufferSlice';
-import Progressable from 'Progressable';
 import { RenderState } from '../render';
-import { assert, fetch, readString } from '../util';
+import { readString } from '../util';
 
-import * as GX_Material from 'gx/gx_material';
+import * as UI from '../ui';
 import * as Viewer from '../viewer';
-import * as Yaz0 from '../compression/Yaz0';
 
 import { BMD, BMT, BTK, BRK, BCK } from './j3d';
+import * as Yaz0 from '../compression/Yaz0';
 import * as RARC from './rarc';
 import { Scene, SceneLoader, J3DTextureHolder } from './render';
 
@@ -18,6 +17,12 @@ export class MultiScene implements Viewer.MainScene {
 
     constructor(scenes: Scene[]) {
         this.setScenes(scenes);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const layersPanel = new UI.LayerPanel();
+        layersPanel.setLayers(this.scenes);
+        return [layersPanel];
     }
 
     public render(renderState: RenderState) {
@@ -98,10 +103,9 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, textureHolder
     
             return scenes;
         }
-    
+
         if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
             const bmd = BMD.parse(buffer);
-            const textureHolder = new J3DTextureHolder();
             textureHolder.addJ3DTextures(gl, bmd);
             const sceneLoader = new SceneLoader(textureHolder, bmd);
             const scene = sceneLoader.createScene(gl);
