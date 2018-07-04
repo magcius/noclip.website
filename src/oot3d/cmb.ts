@@ -127,7 +127,7 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
     //
     //  msb lsb
     //  --- ---
-    //   0  0   small colitive value (2nd intensity)
+    //   0  0   small positive value (2nd intensity)
     //   0  1   large positive value (3rd intensity)
     //   1  0   small negative value (1st intensity)
     //   1  1   large negative value (0th intensity)

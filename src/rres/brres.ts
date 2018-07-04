@@ -1815,12 +1815,6 @@ function parseCHR0_NodeData(buffer: ArrayBufferSlice, numKeyframes: number): CHR
     const nodeName = readString(buffer, nodeNameOffs);
     const flags: Flags = view.getUint32(0x04);
 
-    let scaleS: AnimationTrack | null = null;
-    let scaleT: AnimationTrack | null = null;
-    let rotation: AnimationTrack | null = null;
-    let translationS: AnimationTrack | null = null;
-    let translationT: AnimationTrack | null = null;
-
     let animationTableIdx = 0x08;
     function nextAnimationTrack(trackFormat: TrackFormat, isConstant: boolean): AnimationTrack {
         let animationTrack: AnimationTrack;
@@ -1921,15 +1915,7 @@ function parseCHR0(buffer: ArrayBufferSlice): CHR0 {
     return { name, loopMode, duration, nodeAnimations };
 }
 
-function findAnimationData_CHR0(chr0: CHR0, nodeName: string): CHR0_NodeData {
-    const nodeData = chr0.nodeAnimations.find((node) => node.nodeName === nodeName);
-    if (!nodeData)
-        return null;
-    return nodeData;
-}
-
 export class CHR0NodesAnimator {
-    private scratch = mat4.create();
     public disabled: boolean[] = [];
 
     constructor(public animationController: AnimationController, public chr0: CHR0, private nodeData: CHR0_NodeData[]) {

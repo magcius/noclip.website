@@ -36,7 +36,7 @@ export class RARC {
         return this.findDirParts(path.split('/'));
     }
 
-    public findFile(path: string): RARCFile {
+    public findFile(path: string): RARCFile | null {
         const parts = path.split('/');
         const filename = parts.pop();
         const dir = this.findDirParts(parts);

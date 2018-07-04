@@ -239,10 +239,12 @@ export class GXRenderHelper {
 
 function translateAttribType(gl: WebGL2RenderingContext, attribFormat: AttributeFormat): { type: GLenum, normalized: boolean } {
     switch (attribFormat) {
-    case AttributeFormat.F32:
-        return { type: gl.FLOAT, normalized: false };
+    case AttributeFormat.U8:
+        return { type: gl.UNSIGNED_BYTE, normalized: false };
     case AttributeFormat.U16:
         return { type: gl.UNSIGNED_SHORT, normalized: false };
+    case AttributeFormat.F32:
+        return { type: gl.FLOAT, normalized: false };
     default:
         throw "whoops";
     }
@@ -260,19 +262,49 @@ export class GXShapeHelper {
         gl.bindBuffer(gl.ARRAY_BUFFER, coalescedBuffers.vertexBuffer.buffer);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, coalescedBuffers.indexBuffer.buffer);
 
-        for (const attrib of this.loadedVertexLayout.dstVertexAttributeLayouts) {
-            const attribLocation = GX_Material.getVertexAttribLocation(attrib.vtxAttrib);
-            gl.enableVertexAttribArray(attribLocation);
+        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < GX.VertexAttribute.MAX; vtxAttrib++) {
+            const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
 
-            const { type, normalized } = translateAttribType(gl, attrib.format);
+            // TODO(jstpierre): Handle TEXMTXIDX attributes.
+            if (attribLocation === -1)
+                continue;
 
-            gl.vertexAttribPointer(
-                attribLocation,
-                attrib.componentCount,
-                type, normalized,
-                this.loadedVertexLayout.dstVertexSize,
-                coalescedBuffers.vertexBuffer.offset + attrib.offset,
-            );
+            const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
+            const attrib = this.loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
+            if (attrib !== undefined) {
+                const { type, normalized } = translateAttribType(gl, attrib.format);
+
+                const stride = this.loadedVertexLayout.dstVertexSize;
+                const offset = coalescedBuffers.vertexBuffer.offset + attrib.offset;
+
+                gl.enableVertexAttribArray(attribLocation);
+                switch (attribGenDef.storage) {
+                case 'uint':
+                    gl.vertexAttribIPointer(attribLocation, attrib.componentCount, type, stride, offset);
+                    break;
+                case 'vec2':
+                case 'vec3':
+                case 'vec4':
+                    gl.vertexAttribPointer(attribLocation, attrib.componentCount, type, normalized, stride, offset);
+                    break;
+                default:
+                    throw "whoops";
+                }
+            } else {
+                // Set default.
+                switch (attribGenDef.storage) {
+                case 'uint':
+                    gl.vertexAttribI4ui(attribLocation, 0, 0, 0, 0);
+                case 'vec2':
+                case 'vec3':
+                case 'vec4':
+                    // Float defaults don't need to be initialized in GLES.
+                    break;
+                default:
+                    throw "whoops";
+                }
+
+            }
         }
 
         gl.bindVertexArray(null);
@@ -421,14 +453,6 @@ export class TextureHolder<TextureType extends GX_Texture.Texture> {
         return null;
     }
 
-    private findTextureEntryIndexRaw(name: string): number {
-        for (let i = 0; i < this.textureEntries.length; i++) {
-            if (this.textureEntries[i].name === name)
-                return i;
-        }
-        return -1;
-    }
-
     private findTextureEntryIndex(name: string): number {
         const nameVariants = this.tryTextureNameVariants(name);
 
@@ -446,7 +470,7 @@ export class TextureHolder<TextureType extends GX_Texture.Texture> {
             }
         }
 
-        console.error("Cannot find texture", name);
+        // console.error("Cannot find texture", name);
         return -1;
     }
 
@@ -489,6 +513,10 @@ export class TextureHolder<TextureType extends GX_Texture.Texture> {
         for (const texture of textureEntries) {
             // Don't add textures without data.
             if (texture.data === null)
+                continue;
+
+            // Don't add dupes for the same name.
+            if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
                 continue;
 
             const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
