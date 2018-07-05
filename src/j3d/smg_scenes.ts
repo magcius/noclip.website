@@ -138,7 +138,6 @@ class SMGRenderer implements Viewer.MainScene {
         private indirectScene: Scene,
     ) {
         this.textures = textureHolder.viewerTextures;
-        // this.textures = collectTextures([mainScene, skyboxScene, bloomScene, indirectScene]);
         this.bloomCombineFlags = new RenderFlags();
 
         this.bloomCombineFlags.blendMode = BlendMode.ADD;

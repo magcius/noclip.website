@@ -54,7 +54,7 @@ export function decompress(srcBuffer: ArrayBufferSlice): Promise<ArrayBufferSlic
         wasmInstance.decompress(pDst, pSrc, dstSize);
 
         // Copy the result buffer to a new buffer for memory usage purposes.
-        const result = new ArrayBufferSlice(heap.buffer).copySlice(pDst, dstSize);
+        const result = new ArrayBufferSlice(heap.buffer).copyToSlice(pDst, dstSize);
 
         return result;
     });

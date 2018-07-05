@@ -60,7 +60,7 @@ export default class ArrayBufferSlice {
         return ArrayBuffer_slice.call(this.arrayBuffer, start, end);
     }
 
-    public copySlice(offs: number = 0, length?: number): ArrayBufferSlice {
+    public copyToSlice(offs: number = 0, length?: number): ArrayBufferSlice {
         return new ArrayBufferSlice(this.copyToBuffer(offs, length));
     }
 
@@ -138,12 +138,12 @@ export default class ArrayBufferSlice {
         const needsEndianSwap = (componentSize > 1) && (endianness !== getSystemEndianness());
 
         // Typed arrays require alignment.
-        if (isAligned(begin, componentSize) && !needsEndianSwap) {
-            return new clazz(this.arrayBuffer, begin, count);
-        } else if (needsEndianSwap) {
+        if (needsEndianSwap) {
             const componentSize_ = <2 | 4> componentSize;
             const copy = this.subarray(offs, byteLength).bswap(componentSize_);
             return copy.createTypedArray(clazz);
+        } else if (isAligned(begin, componentSize)) {
+            return new clazz(this.arrayBuffer, begin, count);
         } else {
             return new clazz(this.copyToBuffer(offs, byteLength), 0);
         }
