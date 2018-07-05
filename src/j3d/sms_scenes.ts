@@ -15,14 +15,6 @@ import { mat4, quat } from 'gl-matrix';
 import { LoopMode } from './j3d';
 import { TextureOverride } from '../gx/gx_render';
 
-function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
-    const textures: Viewer.Texture[] = [];
-    for (const scene of scenes)
-        if (scene)
-            textures.push.apply(textures, scene.textures);
-    return textures;
-}
-
 const sjisDecoder = new TextDecoder('sjis');
 
 function unpack(buffer: ArrayBufferSlice, sig: string): any[] {
@@ -269,7 +261,7 @@ export class SunshineRenderer implements Viewer.MainScene {
     private mainColorTarget: ColorTarget = new ColorTarget();
 
     constructor(private textureHolder: J3DTextureHolder, public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: Scene, public extraScenes: Scene[], public rarc: RARC.RARC = null) {
-        this.textures = collectTextures([skyScene, mapScene, seaScene, seaIndirectScene].concat(extraScenes));
+        this.textures = textureHolder.viewerTextures;
     }
 
     public render(state: RenderState): void {
