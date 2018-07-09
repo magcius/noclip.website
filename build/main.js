@@ -3259,7 +3259,7 @@ System.register("ui", ["util", "Camera"], function (exports_16, context_16) {
             }
         ],
         execute: function () {
-            HIGHLIGHT_COLOR = 'rgb(255, 66, 95)';
+            HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
             ScrollSelect = /** @class */ (function () {
                 function ScrollSelect() {
                     this.toplevel = document.createElement('div');
@@ -3548,8 +3548,7 @@ System.register("ui", ["util", "Camera"], function (exports_16, context_16) {
                 };
                 SceneSelect.prototype.getLoadingGradient = function () {
                     var pct = Math.round(this.loadProgress * 100) + "%";
-                    var loadingGradient = "linear-gradient(to right, " + HIGHLIGHT_COLOR + " " + pct + ", transparent " + pct + ")";
-                    return loadingGradient;
+                    return "linear-gradient(to right, " + HIGHLIGHT_COLOR + " " + pct + ", transparent " + pct + ")";
                 };
                 SceneSelect.prototype.syncHeaderStyle = function () {
                     _super.prototype.syncHeaderStyle.call(this);
@@ -3564,12 +3563,13 @@ System.register("ui", ["util", "Camera"], function (exports_16, context_16) {
                     var flairs = [{ index: selectedGroupIndex, background: HIGHLIGHT_COLOR, color: 'black' }];
                     var currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
                     if (currentGroupIndex >= 0)
-                        flairs.push({ index: currentGroupIndex, background: '#aaa' });
+                        flairs.push({ index: currentGroupIndex, background: '#666' });
                     this.sceneGroupList.setFlairs(flairs);
                     var selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
                     if (selectedDescIndex >= 0) {
                         var loadingGradient = this.getLoadingGradient();
-                        this.sceneDescList.setFlairs([{ index: selectedDescIndex, background: loadingGradient }]);
+                        var textColor = this.loadProgress > 0.5 ? 'black' : undefined;
+                        this.sceneDescList.setFlairs([{ index: selectedDescIndex, background: loadingGradient, color: textColor }]);
                     }
                 };
                 SceneSelect.prototype.selectSceneGroup = function (i) {
@@ -3742,7 +3742,7 @@ System.register("ui", ["util", "Camera"], function (exports_16, context_16) {
                 function About() {
                     var _this = _super.call(this) || this;
                     _this.setTitle(ABOUT_ICON, 'About');
-                    _this.contents.innerHTML = "\n<div id=\"About\">\n<style>\n#About {\n    padding: 12px;\n    line-height: 1.2;\n}\n#About a {\n    color: white;\n}\n#About li span {\n    color: #aaa;\n}\n#About h2 {\n    vertical-align: middle;\n    font-size: 2em;\n    text-align: center;\n    margin: 0px;\n}\n</style>\n\n<h2><img style=\"vertical-align: middle;\" src=\"logo.png\">MODEL VIEWER</h2>\n\n<p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>\n<p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to go faster than that.\n<strong>B</strong> resets the camera, and <strong>Z</strong> toggles the UI. </p>\n\n<p><strong>CODE PRIMARILY WRITTEN</strong> by <a href=\"https://github.com/magcius\">Jasper</a></p>\n\n<p><strong>MODELS</strong> \u00A9 Nintendo, SEGA, Retro Studios, FROM Software</p>\n\n<p><strong>CODE HELP AND FRIENDSHIP</strong> from\n<a href=\"https://twitter.com/beholdnec\">N.E.C.</a>,\n<a href=\"https://twitter.com/LordNed\">LordNed</a>,\n<a href=\"https://twitter.com/SageOfMirrors\">SageOfMirrors</a>,\n<a href=\"https://github.com/blank63\">blank63</a>,\n<a href=\"https://twitter.com/StapleButter\">StapleButter</a>,\n<a href=\"https://twitter.com/xdanieldzd\">xdanieldzd</a>,\n<a href=\"https://github.com/vlad001\">vlad001</a>,\n<a href=\"https://twitter.com/Jewelots_\">Jewel</a>,\n<a href=\"https://twitter.com/instant_grat\">Instant Grat</a>,\nand <a href=\"https://twitter.com/__Aruki\">Aruki</a></p>\n\n<p><strong>ICONS</strong> from <a href=\"https://thenounproject.com/\">The Noun Project</a>, used under Creative Commons CC-BY:</p>\n<ul>\n<li> Truncated Pyramid <span>by</span> Bohdan Burmich\n<li> Images <span>by</span> Creative Stall\n<li> Help <span>by</span> Gregor Cresnar\n<li> Open <span>by</span> Landan Lloyd\n<li> Nightshift <span>by</span> mikicon\n<li> Layer <span>by</span> Chameleon Design\n<li> Sand Clock <span>by</span> James\n</ul>\n</div>\n";
+                    _this.contents.innerHTML = "\n<div id=\"About\">\n<style>\n#About {\n    padding: 12px;\n    line-height: 1.2;\n}\n#About a {\n    color: white;\n}\n#About li span {\n    color: #aaa;\n}\n#About h2 {\n    vertical-align: middle;\n    font-size: 2em;\n    text-align: center;\n    margin: 0px;\n}\n</style>\n\n<h2><img style=\"vertical-align: middle;\" src=\"logo.png\">MODEL VIEWER</h2>\n\n<p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>\n<p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to go faster than that.\n<strong>B</strong> resets the camera, and <strong>Z</strong> toggles the UI. </p>\n\n<p><strong>CODE PRIMARILY WRITTEN</strong> by <a href=\"https://github.com/magcius\">Jasper</a></p>\n\n<p><strong>MODELS</strong> \u00A9 Nintendo, SEGA, Retro Studios, FROM Software, Konami</p>\n\n<p><strong>CODE HELP AND FRIENDSHIP</strong> from\n<a href=\"https://twitter.com/beholdnec\">N.E.C.</a>,\n<a href=\"https://twitter.com/LordNed\">LordNed</a>,\n<a href=\"https://twitter.com/SageOfMirrors\">SageOfMirrors</a>,\n<a href=\"https://github.com/blank63\">blank63</a>,\n<a href=\"https://twitter.com/StapleButter\">StapleButter</a>,\n<a href=\"https://twitter.com/xdanieldzd\">xdanieldzd</a>,\n<a href=\"https://github.com/vlad001\">vlad001</a>,\n<a href=\"https://twitter.com/Jewelots_\">Jewel</a>,\n<a href=\"https://twitter.com/instant_grat\">Instant Grat</a>,\nand <a href=\"https://twitter.com/__Aruki\">Aruki</a></p>\n\n<p><strong>ICONS</strong> from <a href=\"https://thenounproject.com/\">The Noun Project</a>, used under Creative Commons CC-BY:</p>\n<ul>\n<li> Truncated Pyramid <span>by</span> Bohdan Burmich\n<li> Images <span>by</span> Creative Stall\n<li> Help <span>by</span> Gregor Cresnar\n<li> Open <span>by</span> Landan Lloyd\n<li> Nightshift <span>by</span> mikicon\n<li> Layer <span>by</span> Chameleon Design\n<li> Sand Clock <span>by</span> James\n</ul>\n</div>\n";
                     return _this;
                 }
                 return About;
