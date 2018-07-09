@@ -6,7 +6,7 @@ import Progressable from './Progressable';
 import { assertExists } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController } from './Camera';
 
-const HIGHLIGHT_COLOR = 'rgb(255, 66, 95)';
+const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 
 function createDOMFromString(s: string): DocumentFragment {
     return document.createRange().createContextualFragment(s);
@@ -381,8 +381,7 @@ class SceneSelect extends Panel {
 
     private getLoadingGradient() {
         const pct = `${Math.round(this.loadProgress * 100)}%`;
-        const loadingGradient = `linear-gradient(to right, ${HIGHLIGHT_COLOR} ${pct}, transparent ${pct})`;
-        return loadingGradient;
+        return `linear-gradient(to right, ${HIGHLIGHT_COLOR} ${pct}, transparent ${pct})`;
     }
 
     protected syncHeaderStyle() {
@@ -402,13 +401,14 @@ class SceneSelect extends Panel {
 
         const currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
         if (currentGroupIndex >= 0)
-            flairs.push({ index: currentGroupIndex, background: '#aaa' });
+            flairs.push({ index: currentGroupIndex, background: '#666' });
         this.sceneGroupList.setFlairs(flairs);
 
         const selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
         if (selectedDescIndex >= 0) {
             const loadingGradient = this.getLoadingGradient();
-            this.sceneDescList.setFlairs([ { index: selectedDescIndex, background: loadingGradient } ]);
+            const textColor = this.loadProgress > 0.5 ? 'black' : undefined;
+            this.sceneDescList.setFlairs([ { index: selectedDescIndex, background: loadingGradient, color: textColor } ]);
         }
     }
 
@@ -701,7 +701,7 @@ class About extends Panel {
 
 <p><strong>CODE PRIMARILY WRITTEN</strong> by <a href="https://github.com/magcius">Jasper</a></p>
 
-<p><strong>MODELS</strong> © Nintendo, SEGA, Retro Studios, FROM Software</p>
+<p><strong>MODELS</strong> © Nintendo, SEGA, Retro Studios, FROM Software, Konami</p>
 
 <p><strong>CODE HELP AND FRIENDSHIP</strong> from
 <a href="https://twitter.com/beholdnec">N.E.C.</a>,
