@@ -250,6 +250,7 @@ class WindWakerRenderer implements Viewer.MainScene {
         const bckFile = rarc.findFile(`bck/${name}.bck`);
         const bdl = BMD.parse(bdlFile.buffer);
         const sceneLoader = new SceneLoader(this.textureHolder, bdl, null);
+        this.textureHolder.addJ3DTextures(gl, bdl);
         const scene = sceneLoader.createScene(gl);
         scene.setBTK(btkFile !== null ? BTK.parse(btkFile.buffer) : null);
         scene.setBRK(brkFile !== null ? BRK.parse(brkFile.buffer) : null);
