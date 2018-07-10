@@ -57,7 +57,7 @@ export class Viewer {
         this.onscreenDepthTarget.setParameters(gl, this.canvas.width, this.canvas.height);
         this.renderState.setOnscreenRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
         this.renderState.reset();
-        this.renderState.setClipPlanes(0.2, 50000);
+        this.renderState.setClipPlanes(10, 50000);
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 

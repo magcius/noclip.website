@@ -3863,7 +3863,7 @@ System.register("viewer", ["render", "InputManager"], function (exports_17, cont
                     this.onscreenDepthTarget.setParameters(gl, this.canvas.width, this.canvas.height);
                     this.renderState.setOnscreenRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
                     this.renderState.reset();
-                    this.renderState.setClipPlanes(0.2, 50000);
+                    this.renderState.setClipPlanes(10, 50000);
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                     // Main scene. This renders to the onscreen target.
                     this.scene.render(this.renderState);
@@ -20411,6 +20411,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                     this.colorOverrides = [];
                     this.modelMatrix = gl_matrix_18.mat4.create();
                     this.visible = true;
+                    this.isSkybox = false;
                     this.renderHelper = new gx_render_4.GXRenderHelper(gl);
                     this.translateModel(gl);
                     this.name = namePrefix + "/" + mdl0.name;
@@ -20469,7 +20470,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                             throw "whoops";
                         var shpCommand = this.shapeCommands[op.shpId];
                         var nodeModelMtx = this.matrixArray[node.mtxId];
-                        var modelView = state.updateModelView(false, nodeModelMtx);
+                        var modelView = state.updateModelView(this.isSkybox, nodeModelMtx);
                         if (op.matId != lastMatId) {
                             matCommand.exec(state, this.renderHelper);
                             lastMatId = op.matId;
@@ -21537,10 +21538,10 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
     };
 });
 // Mario Kart Wii
-System.register("rres/mkwii_scenes", ["rres/brres", "rres/u8", "compression/Yaz0", "util", "rres/elb_scenes", "gl-matrix"], function (exports_82, context_82) {
+System.register("rres/mkwii_scenes", ["rres/brres", "rres/u8", "compression/Yaz0", "util", "gl-matrix", "rres/render", "render"], function (exports_82, context_82) {
     "use strict";
     var __moduleName = context_82 && context_82.id;
-    var BRRES, U8, Yaz0, util_54, elb_scenes_1, gl_matrix_20, MarioKartWiiSceneDesc, id, name, sceneDescs, sceneGroup;
+    var BRRES, U8, Yaz0, util_54, gl_matrix_20, render_35, render_36, MarioKartRenderer, MarioKartWiiSceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (BRRES_4) {
@@ -21555,14 +21556,77 @@ System.register("rres/mkwii_scenes", ["rres/brres", "rres/u8", "compression/Yaz0
             function (util_54_1) {
                 util_54 = util_54_1;
             },
-            function (elb_scenes_1_1) {
-                elb_scenes_1 = elb_scenes_1_1;
-            },
             function (gl_matrix_20_1) {
                 gl_matrix_20 = gl_matrix_20_1;
+            },
+            function (render_35_1) {
+                render_35 = render_35_1;
+            },
+            function (render_36_1) {
+                render_36 = render_36_1;
             }
         ],
         execute: function () {
+            MarioKartRenderer = /** @class */ (function () {
+                function MarioKartRenderer(gl, courseRRES, skyboxRRES) {
+                    this.courseRRES = courseRRES;
+                    this.skyboxRRES = skyboxRRES;
+                    this.textureHolder = new render_35.RRESTextureHolder();
+                    this.textures = this.textureHolder.viewerTextures;
+                    this.animationController = new BRRES.AnimationController();
+                    this.textureHolder.addRRESTextures(gl, skyboxRRES);
+                    this.textureHolder.addRRESTextures(gl, courseRRES);
+                    util_54.assert(skyboxRRES.mdl0.length === 1);
+                    this.skyboxRenderer = new render_35.ModelRenderer(gl, this.textureHolder, skyboxRRES.mdl0[0], 'vrbox');
+                    this.skyboxRenderer.isSkybox = true;
+                    util_54.assert(courseRRES.mdl0.length === 1);
+                    this.courseRenderer = new render_35.ModelRenderer(gl, this.textureHolder, courseRRES.mdl0[0], 'course');
+                    // Mario Kart Wii courses appear to be very, very big. Scale them down a bit.
+                    var scaleFactor = 0.1;
+                    gl_matrix_20.mat4.fromScaling(this.courseRenderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+                    gl_matrix_20.mat4.fromScaling(this.skyboxRenderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+                    try {
+                        // Bind SRT animations
+                        for (var _a = __values(skyboxRRES.srt0), _b = _a.next(); !_b.done; _b = _a.next()) {
+                            var srt0 = _b.value;
+                            this.skyboxRenderer.bindSRT0(this.animationController, srt0);
+                        }
+                    }
+                    catch (e_90_1) { e_90 = { error: e_90_1 }; }
+                    finally {
+                        try {
+                            if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
+                        }
+                        finally { if (e_90) throw e_90.error; }
+                    }
+                    try {
+                        for (var _d = __values(courseRRES.srt0), _e = _d.next(); !_e.done; _e = _d.next()) {
+                            var srt0 = _e.value;
+                            this.courseRenderer.bindSRT0(this.animationController, srt0);
+                        }
+                    }
+                    catch (e_91_1) { e_91 = { error: e_91_1 }; }
+                    finally {
+                        try {
+                            if (_e && !_e.done && (_f = _d.return)) _f.call(_d);
+                        }
+                        finally { if (e_91) throw e_91.error; }
+                    }
+                    var e_90, _c, e_91, _f;
+                }
+                MarioKartRenderer.prototype.destroy = function (gl) {
+                    this.textureHolder.destroy(gl);
+                };
+                MarioKartRenderer.prototype.render = function (state) {
+                    var gl = state.gl;
+                    this.animationController.updateTime(state.time);
+                    this.skyboxRenderer.render(state);
+                    state.useFlags(render_36.depthClearFlags);
+                    gl.clear(gl.DEPTH_BUFFER_BIT);
+                    this.courseRenderer.render(state);
+                };
+                return MarioKartRenderer;
+            }());
             MarioKartWiiSceneDesc = /** @class */ (function () {
                 function MarioKartWiiSceneDesc(id, name) {
                     this.id = id;
@@ -21573,11 +21637,9 @@ System.register("rres/mkwii_scenes", ["rres/brres", "rres/u8", "compression/Yaz0
                         return Yaz0.decompress(buffer);
                     }).then(function (buffer) {
                         var arch = U8.parse(buffer);
-                        var rres = BRRES.parse(arch.findFile('./course_model.brres').buffer);
-                        var scene = new elb_scenes_1.BasicRRESScene(gl, [rres]);
-                        // Mario Kart Wii courses appear to be very, very big. Scale them down a bit.
-                        var scaleFactor = 0.1;
-                        gl_matrix_20.mat4.fromScaling(scene.models[0].modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+                        var courseRRES = BRRES.parse(arch.findFile('./course_model.brres').buffer);
+                        var skyboxRRES = BRRES.parse(arch.findFile('./vrcorn_model.brres').buffer);
+                        var scene = new MarioKartRenderer(gl, courseRRES, skyboxRRES);
                         return scene;
                     });
                 };
@@ -21586,8 +21648,22 @@ System.register("rres/mkwii_scenes", ["rres/brres", "rres/u8", "compression/Yaz0
             id = 'mkwii';
             name = 'Mario Kart Wii';
             sceneDescs = [
-                new MarioKartWiiSceneDesc('shopping_course', 'Coconut Mall'),
-                new MarioKartWiiSceneDesc('water_course', 'Koopa Cape'),
+                new MarioKartWiiSceneDesc('beginner_course', "Luigi Circuit"),
+                new MarioKartWiiSceneDesc('farm_course', "Moo Moo Meadows"),
+                new MarioKartWiiSceneDesc('kinoko_course', "Mushroom Gorge"),
+                new MarioKartWiiSceneDesc('factory_course', "Toad's Factory"),
+                new MarioKartWiiSceneDesc('castle_course', "Mario Circuit"),
+                new MarioKartWiiSceneDesc('shopping_course', "Coconut Mall"),
+                new MarioKartWiiSceneDesc('boardcross_course', "DK Summit"),
+                new MarioKartWiiSceneDesc('truck_course', "Wario's Gold Mine"),
+                new MarioKartWiiSceneDesc('senior_course', "Daisy Circuit"),
+                new MarioKartWiiSceneDesc('water_course', "Koopa Cape"),
+                new MarioKartWiiSceneDesc('treehouse_course', "Maple Treeway"),
+                new MarioKartWiiSceneDesc('volcano_course', "Grumble Volcano"),
+                new MarioKartWiiSceneDesc('desert_course', "Dry Dry Ruins"),
+                new MarioKartWiiSceneDesc('ridgehighway_course', "Moonview Highway"),
+                new MarioKartWiiSceneDesc('koopa_course', "Bowser's Castle"),
+                new MarioKartWiiSceneDesc('rainbow_course', "Rainbow Road"),
             ];
             exports_82("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
         }
@@ -21677,8 +21753,8 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                 SMS.sceneGroup,
                 SMG.sceneGroup,
                 MKDD.sceneGroup,
-                ELB.sceneGroup,
                 MKWII.sceneGroup,
+                ELB.sceneGroup,
                 LM.sceneGroup,
                 SM64DS.sceneGroup,
                 SPL.sceneGroup,
@@ -22033,7 +22109,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             return Yaz0.decompress(buffer);
         }).then(function (buffer) {
             var rarc = RARC.parse(buffer);
-            var textureHolder = new render_35.J3DTextureHolder();
+            var textureHolder = new render_37.J3DTextureHolder();
             var skyScene = sms_scenes_1.SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/sky', true);
             var bmdFile = rarc.findFile('map/map/sea.bmd');
             var btkFile = rarc.findFile('map/map/sea.btk');
@@ -22047,7 +22123,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         });
     }
     exports_85("createScene", createScene);
-    var gl_matrix_21, util_55, GX_Material, j3d_6, RARC, render_35, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
+    var gl_matrix_21, util_55, GX_Material, j3d_6, RARC, render_37, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
     return {
         setters: [
             function (gl_matrix_21_1) {
@@ -22065,8 +22141,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             function (RARC_7) {
                 RARC = RARC_7;
             },
-            function (render_35_1) {
-                render_35 = render_35_1;
+            function (render_37_1) {
+                render_37 = render_37_1;
             },
             function (sms_scenes_1_1) {
                 sms_scenes_1 = sms_scenes_1_1;
@@ -22096,8 +22172,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                     this.bmt = null;
                     this.fps = 30;
                     this.btk = btk;
-                    var sceneLoader = new render_35.SceneLoader(textureHolder, bmd, null);
-                    render_35.Scene.prototype.translateTextures.call(this, gl, sceneLoader);
+                    var sceneLoader = new render_37.SceneLoader(textureHolder, bmd, null);
+                    render_37.Scene.prototype.translateTextures.call(this, gl, sceneLoader);
                     var seaMaterial = bmd.mat3.materialEntries.find(function (m) { return m.name === '_umi'; });
                     this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
                     this.plane = new PlaneShape(gl);
@@ -22137,7 +22213,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                             gxMaterial.tevStages.length = 1;
                         }
                     }
-                    var cmd = new render_35.Command_Material(gl, this, material);
+                    var cmd = new render_37.Command_Material(gl, this, material);
                     if (configName.includes('nomip')) {
                         try {
                             for (var _a = __values(this.glSamplers), _b = _a.next(); !_b.done; _b = _a.next()) {
@@ -22146,16 +22222,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_90_1) { e_90 = { error: e_90_1 }; }
+                        catch (e_92_1) { e_92 = { error: e_92_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_90) throw e_90.error; }
+                            finally { if (e_92) throw e_92.error; }
                         }
                     }
                     return cmd;
-                    var e_90, _c;
+                    var e_92, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
@@ -22306,18 +22382,18 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_86, context_86
                     record[field.name] = value;
                 }
             }
-            catch (e_91_1) { e_91 = { error: e_91_1 }; }
+            catch (e_93_1) { e_93 = { error: e_93_1 }; }
             finally {
                 try {
                     if (fields_1_1 && !fields_1_1.done && (_a = fields_1.return)) _a.call(fields_1);
                 }
-                finally { if (e_91) throw e_91.error; }
+                finally { if (e_93) throw e_93.error; }
             }
             records.push(record);
             recordTableIdx += recordSize;
         }
         return records;
-        var e_91, _a;
+        var e_93, _a;
     }
     exports_86("parse", parse);
     var util_56, nameTable, hashLookup;
