@@ -9130,6 +9130,7 @@ System.register("j3d/zww_scenes", ["gl-matrix", "Progressable", "util", "render"
                     var bckFile = rarc.findFile("bck/" + name + ".bck");
                     var bdl = j3d_5.BMD.parse(bdlFile.buffer);
                     var sceneLoader = new render_9.SceneLoader(this.textureHolder, bdl, null);
+                    this.textureHolder.addJ3DTextures(gl, bdl);
                     var scene = sceneLoader.createScene(gl);
                     scene.setBTK(btkFile !== null ? j3d_5.BTK.parse(btkFile.buffer) : null);
                     scene.setBRK(brkFile !== null ? j3d_5.BRK.parse(brkFile.buffer) : null);
