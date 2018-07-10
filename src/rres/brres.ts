@@ -22,7 +22,7 @@ function calc2dMtx(dst: mat2d, src: mat4): void {
     dst[5] = src[13]
 }
 
-function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
     const theta = Math.PI / 180 * rotation;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
@@ -36,6 +36,57 @@ function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number,
     dst[1]  = scaleS *  sinR;
     dst[5]  = scaleT *  cosR;
     dst[13] = translationT;
+}
+
+function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const theta = Math.PI / 180 * rotation;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleS *  sinR;
+    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
+
+    dst[1]  = scaleT * -sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+}
+
+function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const theta = Math.PI / 180 * rotation;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleS *  sinR;
+    dst[12] = (scaleS * -cosR * (translationS + 0.5)) + (scaleS * sinR * (translationT - 0.5)) + 0.5;
+
+    dst[1]  = scaleT * -sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = (scaleT *  sinR * (translationS + 0.5)) + (scaleT * cosR * (translationT - 0.5)) + 0.5;
+}
+
+const enum TexMatrixMode {
+    BASIC = -1,
+    MAYA = 0,
+    MAX = 2,
+};
+
+function calcTexMtx(dst: mat4, texMtxMode: TexMatrixMode, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    switch (texMtxMode) {
+    case TexMatrixMode.BASIC:
+        return calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT);
+    case TexMatrixMode.MAYA:
+        return calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
+    case TexMatrixMode.MAX:
+        return calcTexMtx_Max(dst, scaleS, scaleT, rotation, translationS, translationT);
+    default:
+        throw "whoops";
+    }
 }
 
 function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
@@ -680,7 +731,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     }
 
     const srtFlags = view.getUint32(endOfHeaderOffs + 0x16C);
-    const texMtxMode = view.getUint32(endOfHeaderOffs + 0x170);
+    const texMtxMode: TexMatrixMode = view.getUint32(endOfHeaderOffs + 0x170);
     let texSrtTableIdx = endOfHeaderOffs + 0x174;
     let texMtxTableIdx = endOfHeaderOffs + 0x214;
 
@@ -731,7 +782,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         }
 
         const srtMtx = mat4.create();
-        calcTexMtx(srtMtx, scaleS, scaleT, rotation, translationS, translationT);
+        calcTexMtx(srtMtx, texMtxMode, scaleS, scaleT, rotation, translationS, translationT);
         const texSrt: MDL0_TexSrtEntry = { refCamera, refLight, mapMode, srtMtx, effectMtx };
         texSrts.push(texSrt);
 
@@ -1333,7 +1384,7 @@ interface AnimationBase {
 
 function getAnimFrame(anim: AnimationBase, frame: number): number {
     // Be careful of floating point precision.
-    const lastFrame = anim.duration - 1;
+    const lastFrame = anim.duration;
     if (anim.loopMode === LoopMode.ONCE) {
         if (frame > lastFrame)
             frame = lastFrame;
@@ -1351,8 +1402,9 @@ function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number
     return (((cf0 * t + cf1) * t + cf2) * t + cf3);
 }
 
-function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number): number {
+function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, frame: number): number {
     const length = k1.time - k0.time;
+    const t = (frame - k0.time) / length;
     const p0 = k0.value;
     const p1 = k1.value;
     const s0 = k0.tangent * length;
@@ -1386,8 +1438,7 @@ function sampleAnimationDataHermite(track: AnimationTrackHermite, frame: number)
     const k0 = frames[idx0];
     const k1 = frames[idx1];
 
-    const t = (frame - k0.time) / (k1.time - k0.time);
-    return hermiteInterpolate(k0, k1, t);
+    return hermiteInterpolate(k0, k1, frame);
 }
 
 function lerp(k0: number, k1: number, t: number) {
@@ -1515,8 +1566,8 @@ class Graph {
         });
 
         // pad
-        const displayMinV = this.minv - 5;
-        const displayMaxV = this.maxv + 5;
+        const displayMinV = this.minv;
+        const displayMaxV = this.maxv;
         const ctx = this.ctx;
         const width = ctx.canvas.width;
         const height = ctx.canvas.height;
@@ -1571,6 +1622,7 @@ export interface SRT0_MatData {
 }
 
 export interface SRT0 extends AnimationBase {
+    texMtxMode: TexMatrixMode;
     matAnimations: SRT0_MatData[];
 }
 
@@ -1687,7 +1739,7 @@ function parseSRT0(buffer: ArrayBufferSlice): SRT0 {
     const name = readString(buffer, nameOffs);
     const duration = view.getUint16(offs + 0x08);
     const numMaterials = view.getUint16(offs + 0x0A);
-    const texMtxMode = view.getUint32(offs + 0x0C);
+    const texMtxMode: TexMatrixMode = view.getUint32(offs + 0x0C);
     const loopMode: LoopMode = view.getUint32(offs + 0x10);
 
     const matAnimations: SRT0_MatData[] = [];
@@ -1697,7 +1749,7 @@ function parseSRT0(buffer: ArrayBufferSlice): SRT0 {
     }
     assert(matAnimations.length === numMaterials);
 
-    return { name, loopMode, duration, matAnimations };
+    return { name, loopMode, duration, texMtxMode, matAnimations };
 }
 
 export class TexSrtAnimator {
@@ -1706,7 +1758,7 @@ export class TexSrtAnimator {
     constructor(public animationController: AnimationController, public srt0: SRT0, public texData: SRT0_TexData) {
     }
 
-    public calcTexMtx(dst: mat4): void {
+    private _calcTexMtx(dst: mat4, texMtxMode: TexMatrixMode): void {
         const texData = this.texData;
 
         const frame = this.animationController.getTimeInFrames();
@@ -1717,12 +1769,56 @@ export class TexSrtAnimator {
         const rotation = texData.rotation ? sampleAnimationData(texData.rotation, animFrame) : 0;
         const translationS = texData.translationS ? sampleAnimationData(texData.translationS, animFrame) : 0;
         const translationT = texData.translationS ? sampleAnimationData(texData.translationT, animFrame) : 0;
-        calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT);
+        calcTexMtx(dst, texMtxMode, scaleS, scaleT, rotation, translationS, translationT);
+
+        if (this.vizGraph) {
+            this.updviz(animFrame);
+        }
     }
 
     public calcIndTexMtx(dst: mat2d): void {
-        this.calcTexMtx(this.scratch);
+        this._calcTexMtx(this.scratch, TexMatrixMode.BASIC);
         calc2dMtx(dst, this.scratch);
+    }
+
+    public calcTexMtx(dst: mat4): void {
+        this._calcTexMtx(dst, this.srt0.texMtxMode);
+    }
+
+    private vizGraph: Graph;
+    public viz() {
+        this.vizGraph = new Graph(cv());
+    }
+
+    private updviz(animFrame: number) {
+        const numFrames = this.srt0.duration;
+        const ctx = this.vizGraph.ctx;
+
+        const maxt = numFrames;
+
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+        if (this.texData.translationS) {
+            this.vizGraph.graphF('red', (t: number) => {
+                const animFrame = getAnimFrame(this.srt0, t);
+                return sampleAnimationData(this.texData.translationS, animFrame);
+            }, maxt);
+        }
+
+        if (this.texData.translationT) {
+            this.vizGraph.graphF('green', (t: number) => {
+                const animFrame = getAnimFrame(this.srt0, t);
+                return sampleAnimationData(this.texData.translationT, animFrame);
+            }, maxt);
+        }
+
+        const xa = (animFrame / numFrames) * ctx.canvas.width;
+        ctx.beginPath();
+        ctx.strokeStyle = 'black';
+        ctx.lineTo(xa, 0);
+        ctx.lineTo(xa, ctx.canvas.height);
+        ctx.stroke();
     }
 }
 

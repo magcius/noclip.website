@@ -90,7 +90,6 @@ export function parse(buffer: ArrayBufferSlice): U8Archive {
             const files: U8File[] = [];
             const subdirs: U8Dir[] = [];
 
-            const firstChildIndex = nodeIndex + 1;
             for (let i = nodeIndex + 1; i < nextNodeIndex;) {
                 const subNode = readNode(i, nodeIndex);
 

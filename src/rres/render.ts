@@ -293,15 +293,16 @@ class Command_Material {
         // Calculate SRT.
         if (this.srtAnimators[texMtxIdx]) {
             this.srtAnimators[texMtxIdx].calcTexMtx(matrixScratch);
-
-            if (texSrt.mapMode !== BRRES.MapMode.TEXCOORD) {
-                const tx = matrixScratch[12];
-                matrixScratch[12] = matrixScratch[8]; matrixScratch[8] = tx;
-                const ty = matrixScratch[13];
-                matrixScratch[13] = matrixScratch[9]; matrixScratch[9] = tx;
-            }
         } else {
-            mat4.copy(matrixScratch, this.material.texSrts[texIdx].srtMtx);
+            mat4.copy(matrixScratch, texSrt.srtMtx);
+        }
+
+        // SRT puts translation in fourth column, env/proj in third, so swap SRT so that it matches.
+        if (texSrt.mapMode !== BRRES.MapMode.TEXCOORD) {
+            const tx = matrixScratch[12];
+            matrixScratch[12] = matrixScratch[8]; matrixScratch[8] = tx;
+            const ty = matrixScratch[13];
+            matrixScratch[13] = matrixScratch[9]; matrixScratch[9] = ty;
         }
 
         mat4.mul(dst, matrixScratch, dst);

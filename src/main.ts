@@ -20,6 +20,7 @@ import * as MP1 from './metroid_prime/scenes';
 import * as LM from './luigis_mansion/scenes';
 import * as ZSS from './rres/zss_scenes';
 import * as ELB from './rres/elb_scenes';
+import * as MKWII from './rres/mkwii_scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI } from './ui';
@@ -33,6 +34,7 @@ const sceneGroups = [
     SMG.sceneGroup,
     MKDD.sceneGroup,
     ELB.sceneGroup,
+    MKWII.sceneGroup,
     LM.sceneGroup,
     SM64DS.sceneGroup,
     SPL.sceneGroup,
