@@ -34,7 +34,7 @@ export class ModelRenderer {
     public modelMatrix: mat4 = mat4.create();
     public visible: boolean = true;
     public name: string;
-    public isSkybox: boolean;
+    public isSkybox: boolean = false;
 
     constructor(gl: WebGL2RenderingContext,
         public textureHolder: RRESTextureHolder,
@@ -117,7 +117,7 @@ export class ModelRenderer {
             const shpCommand = this.shapeCommands[op.shpId];
 
             const nodeModelMtx = this.matrixArray[node.mtxId];
-            const modelView = state.updateModelView(false, nodeModelMtx);
+            const modelView = state.updateModelView(this.isSkybox, nodeModelMtx);
 
             if (op.matId != lastMatId) {
                 matCommand.exec(state, this.renderHelper);
