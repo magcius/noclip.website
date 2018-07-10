@@ -18551,7 +18551,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         dst[4] = src[12];
         dst[5] = src[13];
     }
-    function calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT) {
+    function calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT) {
         var theta = Math.PI / 180 * rotation;
         var sinR = Math.sin(theta);
         var cosR = Math.cos(theta);
@@ -18562,6 +18562,42 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         dst[1] = scaleS * sinR;
         dst[5] = scaleT * cosR;
         dst[13] = translationT;
+    }
+    function calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT) {
+        var theta = Math.PI / 180 * rotation;
+        var sinR = Math.sin(theta);
+        var cosR = Math.cos(theta);
+        gl_matrix_17.mat4.identity(dst);
+        dst[0] = scaleS * cosR;
+        dst[4] = scaleS * sinR;
+        dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
+        dst[1] = scaleT * -sinR;
+        dst[5] = scaleT * cosR;
+        dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+    }
+    function calcTexMtx_Max(dst, scaleS, scaleT, rotation, translationS, translationT) {
+        var theta = Math.PI / 180 * rotation;
+        var sinR = Math.sin(theta);
+        var cosR = Math.cos(theta);
+        gl_matrix_17.mat4.identity(dst);
+        dst[0] = scaleS * cosR;
+        dst[4] = scaleS * sinR;
+        dst[12] = (scaleS * -cosR * (translationS + 0.5)) + (scaleS * sinR * (translationT - 0.5)) + 0.5;
+        dst[1] = scaleT * -sinR;
+        dst[5] = scaleT * cosR;
+        dst[13] = (scaleT * sinR * (translationS + 0.5)) + (scaleT * cosR * (translationT - 0.5)) + 0.5;
+    }
+    function calcTexMtx(dst, texMtxMode, scaleS, scaleT, rotation, translationS, translationT) {
+        switch (texMtxMode) {
+            case -1 /* BASIC */:
+                return calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT);
+            case 0 /* MAYA */:
+                return calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
+            case 2 /* MAX */:
+                return calcTexMtx_Max(dst, scaleS, scaleT, rotation, translationS, translationT);
+            default:
+                throw "whoops";
+        }
     }
     function calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ) {
         var rX = Math.PI / 180 * rotationX;
@@ -19016,7 +19052,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     break;
             }
             var srtMtx = gl_matrix_17.mat4.create();
-            calcTexMtx(srtMtx, scaleS, scaleT, rotation, translationS, translationT);
+            calcTexMtx(srtMtx, texMtxMode, scaleS, scaleT, rotation, translationS, translationT);
             var texSrt = { refCamera: refCamera, refLight: refLight, mapMode: mapMode, srtMtx: srtMtx, effectMtx: effectMtx };
             texSrts.push(texSrt);
             texSrtTableIdx += 0x14;
@@ -19417,7 +19453,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
     }
     function getAnimFrame(anim, frame) {
         // Be careful of floating point precision.
-        var lastFrame = anim.duration - 1;
+        var lastFrame = anim.duration;
         if (anim.loopMode === 0 /* ONCE */) {
             if (frame > lastFrame)
                 frame = lastFrame;
@@ -19435,8 +19471,9 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
     function cubicEval(cf0, cf1, cf2, cf3, t) {
         return (((cf0 * t + cf1) * t + cf2) * t + cf3);
     }
-    function hermiteInterpolate(k0, k1, t) {
+    function hermiteInterpolate(k0, k1, frame) {
         var length = k1.time - k0.time;
+        var t = (frame - k0.time) / length;
         var p0 = k0.value;
         var p1 = k1.value;
         var s0 = k0.tangent * length;
@@ -19464,11 +19501,16 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var idx0 = idx1 - 1;
         var k0 = frames[idx0];
         var k1 = frames[idx1];
-        var t = (frame - k0.time) / (k1.time - k0.time);
-        return hermiteInterpolate(k0, k1, t);
+        return hermiteInterpolate(k0, k1, frame);
     }
     function lerp(k0, k1, t) {
         return k0 + (k1 - k0) * t;
+    }
+    function lerpPeriodic(k0, k1, t, kp) {
+        if (kp === void 0) { kp = 360; }
+        var ga = (k1 - k0) % kp;
+        var g = 2 * ga % kp - ga;
+        return k0 + g * t;
     }
     function sampleAnimationDataLinear(track, frame) {
         var frames = track.frames;
@@ -19485,7 +19527,8 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var idx1 = idx0 + 1;
         var k1 = frames[idx1];
         var t = (frame - idx0);
-        return lerp(k0, k1, t);
+        // Linear data is always used only with angles, so we always use periodic lerp here.
+        return lerpPeriodic(k0, k1, t);
     }
     function sampleAnimationData(track, frame) {
         if (track.type === 0 /* LINEAR */)
@@ -19499,7 +19542,6 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         return { type: 0 /* LINEAR */, frames: Float32Array.of(value) };
     }
     function parseAnimationTrackC32(buffer, numKeyframes) {
-        var view = buffer.createDataView();
         var frames = buffer.createTypedArray(Float32Array, 0x00, numKeyframes + 1, 1 /* BIG_ENDIAN */);
         return { type: 0 /* LINEAR */, frames: frames };
     }
@@ -19657,7 +19699,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             finally { if (e_64) throw e_64.error; }
         }
         util_50.assert(matAnimations.length === numMaterials);
-        return { name: name, loopMode: loopMode, duration: duration, matAnimations: matAnimations };
+        return { name: name, loopMode: loopMode, duration: duration, texMtxMode: texMtxMode, matAnimations: matAnimations };
         var e_64, _a;
     }
     function bindTexAnimator(animationController, srt0, materialName, texMtxIndex) {
@@ -19939,6 +19981,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
             }
         ],
         execute: function () {
+            ;
             //#endregion
             //#region MDL0
             DisplayListRegisters = /** @class */ (function () {
@@ -20017,8 +20060,8 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                         _this.maxv = Math.max(_this.maxv, v);
                     });
                     // pad
-                    var displayMinV = this.minv - 5;
-                    var displayMaxV = this.maxv + 5;
+                    var displayMinV = this.minv;
+                    var displayMaxV = this.maxv;
                     var ctx = this.ctx;
                     var width = ctx.canvas.width;
                     var height = ctx.canvas.height;
@@ -20043,7 +20086,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     this.texData = texData;
                     this.scratch = gl_matrix_17.mat4.create();
                 }
-                TexSrtAnimator.prototype.calcTexMtx = function (dst) {
+                TexSrtAnimator.prototype._calcTexMtx = function (dst, texMtxMode) {
                     var texData = this.texData;
                     var frame = this.animationController.getTimeInFrames();
                     var animFrame = getAnimFrame(this.srt0, frame);
@@ -20052,11 +20095,46 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     var rotation = texData.rotation ? sampleAnimationData(texData.rotation, animFrame) : 0;
                     var translationS = texData.translationS ? sampleAnimationData(texData.translationS, animFrame) : 0;
                     var translationT = texData.translationS ? sampleAnimationData(texData.translationT, animFrame) : 0;
-                    calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT);
+                    calcTexMtx(dst, texMtxMode, scaleS, scaleT, rotation, translationS, translationT);
+                    if (this.vizGraph) {
+                        this.updviz(animFrame);
+                    }
                 };
                 TexSrtAnimator.prototype.calcIndTexMtx = function (dst) {
-                    this.calcTexMtx(this.scratch);
+                    this._calcTexMtx(this.scratch, -1 /* BASIC */);
                     calc2dMtx(dst, this.scratch);
+                };
+                TexSrtAnimator.prototype.calcTexMtx = function (dst) {
+                    this._calcTexMtx(dst, this.srt0.texMtxMode);
+                };
+                TexSrtAnimator.prototype.viz = function () {
+                    this.vizGraph = new Graph(cv());
+                };
+                TexSrtAnimator.prototype.updviz = function (animFrame) {
+                    var _this = this;
+                    var numFrames = this.srt0.duration;
+                    var ctx = this.vizGraph.ctx;
+                    var maxt = numFrames;
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                    if (this.texData.translationS) {
+                        this.vizGraph.graphF('red', function (t) {
+                            var animFrame = getAnimFrame(_this.srt0, t);
+                            return sampleAnimationData(_this.texData.translationS, animFrame);
+                        }, maxt);
+                    }
+                    if (this.texData.translationT) {
+                        this.vizGraph.graphF('green', function (t) {
+                            var animFrame = getAnimFrame(_this.srt0, t);
+                            return sampleAnimationData(_this.texData.translationT, animFrame);
+                        }, maxt);
+                    }
+                    var xa = (animFrame / numFrames) * ctx.canvas.width;
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'black';
+                    ctx.lineTo(xa, 0);
+                    ctx.lineTo(xa, ctx.canvas.height);
+                    ctx.stroke();
                 };
                 return TexSrtAnimator;
             }());
@@ -20138,11 +20216,9 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     var scaleX = nodeData.scaleX ? sampleAnimationData(nodeData.scaleX, animFrame) : 1;
                     var scaleY = nodeData.scaleY ? sampleAnimationData(nodeData.scaleY, animFrame) : 1;
                     var scaleZ = nodeData.scaleZ ? sampleAnimationData(nodeData.scaleZ, animFrame) : 1;
-                    // Don't interpolate rotation across frames... the animation data hasn't been validated for it.
-                    var floorAnimFrame = animFrame | 0;
-                    var rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, floorAnimFrame) : 0;
-                    var rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, floorAnimFrame) : 0;
-                    var rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, floorAnimFrame) : 0;
+                    var rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, animFrame) : 0;
+                    var rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, animFrame) : 0;
+                    var rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, animFrame) : 0;
                     var translationX = nodeData.translationX ? sampleAnimationData(nodeData.translationX, animFrame) : 0;
                     var translationY = nodeData.translationY ? sampleAnimationData(nodeData.translationY, animFrame) : 0;
                     var translationZ = nodeData.translationZ ? sampleAnimationData(nodeData.translationZ, animFrame) : 0;
@@ -20191,7 +20267,6 @@ System.register("rres/u8", ["util"], function (exports_78, context_78) {
                 // Recurse.
                 var files = [];
                 var subdirs = [];
-                var firstChildIndex = nodeIndex + 1;
                 for (var i = nodeIndex + 1; i < nextNodeIndex;) {
                     var subNode = readNode(i, nodeIndex);
                     if (subNode.kind === 'directory') {
@@ -20555,17 +20630,18 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                     // Calculate SRT.
                     if (this.srtAnimators[texMtxIdx]) {
                         this.srtAnimators[texMtxIdx].calcTexMtx(matrixScratch);
-                        if (texSrt.mapMode !== 0 /* TEXCOORD */) {
-                            var tx = matrixScratch[12];
-                            matrixScratch[12] = matrixScratch[8];
-                            matrixScratch[8] = tx;
-                            var ty = matrixScratch[13];
-                            matrixScratch[13] = matrixScratch[9];
-                            matrixScratch[9] = tx;
-                        }
                     }
                     else {
-                        gl_matrix_18.mat4.copy(matrixScratch, this.material.texSrts[texIdx].srtMtx);
+                        gl_matrix_18.mat4.copy(matrixScratch, texSrt.srtMtx);
+                    }
+                    // SRT puts translation in fourth column, env/proj in third, so swap SRT so that it matches.
+                    if (texSrt.mapMode !== 0 /* TEXCOORD */) {
+                        var tx = matrixScratch[12];
+                        matrixScratch[12] = matrixScratch[8];
+                        matrixScratch[8] = tx;
+                        var ty = matrixScratch[13];
+                        matrixScratch[13] = matrixScratch[9];
+                        matrixScratch[9] = ty;
                     }
                     gl_matrix_18.mat4.mul(dst, matrixScratch, dst);
                 };
@@ -21459,10 +21535,67 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
         }
     };
 });
-System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "fres/splatoon_scenes", "dksiv/scenes", "metroid_prime/scenes", "luigis_mansion/scenes", "rres/zss_scenes", "rres/elb_scenes", "j3d/scenes", "ui", "Camera"], function (exports_82, context_82) {
+// Mario Kart Wii
+System.register("rres/mkwii_scenes", ["rres/brres", "rres/u8", "compression/Yaz0", "util", "rres/elb_scenes", "gl-matrix"], function (exports_82, context_82) {
     "use strict";
     var __moduleName = context_82 && context_82.id;
-    var viewer_1, ArrayBufferSlice_10, Progressable_12, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, SPL, DKSIV, MP1, LM, ZSS, ELB, J3D, ui_1, Camera_11, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
+    var BRRES, U8, Yaz0, util_54, elb_scenes_1, gl_matrix_20, MarioKartWiiSceneDesc, id, name, sceneDescs, sceneGroup;
+    return {
+        setters: [
+            function (BRRES_4) {
+                BRRES = BRRES_4;
+            },
+            function (U8_2) {
+                U8 = U8_2;
+            },
+            function (Yaz0_6) {
+                Yaz0 = Yaz0_6;
+            },
+            function (util_54_1) {
+                util_54 = util_54_1;
+            },
+            function (elb_scenes_1_1) {
+                elb_scenes_1 = elb_scenes_1_1;
+            },
+            function (gl_matrix_20_1) {
+                gl_matrix_20 = gl_matrix_20_1;
+            }
+        ],
+        execute: function () {
+            MarioKartWiiSceneDesc = /** @class */ (function () {
+                function MarioKartWiiSceneDesc(id, name) {
+                    this.id = id;
+                    this.name = name;
+                }
+                MarioKartWiiSceneDesc.prototype.createScene = function (gl) {
+                    return util_54.fetch("data/mkwii/" + this.id + ".szs").then(function (buffer) {
+                        return Yaz0.decompress(buffer);
+                    }).then(function (buffer) {
+                        var arch = U8.parse(buffer);
+                        var rres = BRRES.parse(arch.findFile('./course_model.brres').buffer);
+                        var scene = new elb_scenes_1.BasicRRESScene(gl, [rres]);
+                        // Mario Kart Wii courses appear to be very, very big. Scale them down a bit.
+                        var scaleFactor = 0.1;
+                        gl_matrix_20.mat4.fromScaling(scene.models[0].modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+                        return scene;
+                    });
+                };
+                return MarioKartWiiSceneDesc;
+            }());
+            id = 'mkwii';
+            name = 'Mario Kart Wii';
+            sceneDescs = [
+                new MarioKartWiiSceneDesc('shopping_course', 'Coconut Mall'),
+                new MarioKartWiiSceneDesc('water_course', 'Koopa Cape'),
+            ];
+            exports_82("sceneGroup", sceneGroup = { id: id, name: name, sceneDescs: sceneDescs });
+        }
+    };
+});
+System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_scenes", "j3d/mkdd_scenes", "j3d/zww_scenes", "j3d/sms_scenes", "j3d/smg_scenes", "sm64ds/scenes", "mdl0/scenes", "zelview/scenes", "oot3d/scenes", "fres/scenes", "fres/splatoon_scenes", "dksiv/scenes", "metroid_prime/scenes", "luigis_mansion/scenes", "rres/zss_scenes", "rres/elb_scenes", "rres/mkwii_scenes", "j3d/scenes", "ui", "Camera"], function (exports_83, context_83) {
+    "use strict";
+    var __moduleName = context_83 && context_83.id;
+    var viewer_1, ArrayBufferSlice_10, Progressable_12, ZTP, MKDD, ZWW, SMS, SMG, SM64DS, MDL0, ZELVIEW, OOT3D, FRES, SPL, DKSIV, MP1, LM, ZSS, ELB, MKWII, J3D, ui_1, Camera_11, sceneGroups, DroppedFileSceneDesc, SceneLoader, Main;
     return {
         setters: [
             function (viewer_1_1) {
@@ -21522,6 +21655,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
             function (ELB_1) {
                 ELB = ELB_1;
             },
+            function (MKWII_1) {
+                MKWII = MKWII_1;
+            },
             function (J3D_1) {
                 J3D = J3D_1;
             },
@@ -21541,6 +21677,7 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
                 SMG.sceneGroup,
                 MKDD.sceneGroup,
                 ELB.sceneGroup,
+                MKWII.sceneGroup,
                 LM.sceneGroup,
                 SM64DS.sceneGroup,
                 SPL.sceneGroup,
@@ -21794,9 +21931,9 @@ System.register("main", ["viewer", "ArrayBufferSlice", "Progressable", "j3d/ztp_
         }
     };
 });
-System.register("embeds/main", ["viewer", "Camera"], function (exports_83, context_83) {
+System.register("embeds/main", ["viewer", "Camera"], function (exports_84, context_84) {
     "use strict";
-    var __moduleName = context_83 && context_83.id;
+    var __moduleName = context_84 && context_84.id;
     var Viewer, Camera_12, FsButton, Main;
     return {
         setters: [
@@ -21887,11 +22024,11 @@ System.register("embeds/main", ["viewer", "Camera"], function (exports_83, conte
         }
     };
 });
-System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "compression/Yaz0", "gx/gx_render"], function (exports_84, context_84) {
+System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material", "j3d/j3d", "j3d/rarc", "j3d/render", "j3d/sms_scenes", "compression/Yaz0", "gx/gx_render"], function (exports_85, context_85) {
     "use strict";
-    var __moduleName = context_84 && context_84.id;
+    var __moduleName = context_85 && context_85.id;
     function createScene(gl, name) {
-        return util_54.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
+        return util_55.fetch("data/j3d/sms/dolpic0.szs").then(function (buffer) {
             return Yaz0.decompress(buffer);
         }).then(function (buffer) {
             var rarc = RARC.parse(buffer);
@@ -21908,15 +22045,15 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             []);
         });
     }
-    exports_84("createScene", createScene);
-    var gl_matrix_20, util_54, GX_Material, j3d_6, RARC, render_35, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
+    exports_85("createScene", createScene);
+    var gl_matrix_21, util_55, GX_Material, j3d_6, RARC, render_35, sms_scenes_1, Yaz0, gx_render_5, scale, posMtx, SeaPlaneScene, PlaneShape;
     return {
         setters: [
-            function (gl_matrix_20_1) {
-                gl_matrix_20 = gl_matrix_20_1;
+            function (gl_matrix_21_1) {
+                gl_matrix_21 = gl_matrix_21_1;
             },
-            function (util_54_1) {
-                util_54 = util_54_1;
+            function (util_55_1) {
+                util_55 = util_55_1;
             },
             function (GX_Material_11) {
                 GX_Material = GX_Material_11;
@@ -21933,8 +22070,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
             function (sms_scenes_1_1) {
                 sms_scenes_1 = sms_scenes_1_1;
             },
-            function (Yaz0_6) {
-                Yaz0 = Yaz0_6;
+            function (Yaz0_7) {
+                Yaz0 = Yaz0_7;
             },
             function (gx_render_5_1) {
                 gx_render_5 = gx_render_5_1;
@@ -21942,8 +22079,8 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         ],
         execute: function () {
             scale = 200;
-            posMtx = gl_matrix_20.mat4.create();
-            gl_matrix_20.mat4.fromScaling(posMtx, [scale, scale, scale]);
+            posMtx = gl_matrix_21.mat4.create();
+            gl_matrix_21.mat4.fromScaling(posMtx, [scale, scale, scale]);
             SeaPlaneScene = /** @class */ (function () {
                 function SeaPlaneScene(gl, textureHolder, bmd, btk, configName) {
                     this.textureHolder = textureHolder;
@@ -22050,7 +22187,7 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                 }
                 PlaneShape.prototype.render = function (state, renderHelper) {
                     var gl = state.gl;
-                    gl_matrix_20.mat4.mul(this.packetParams.u_PosMtx[0], state.updateModelView(), posMtx);
+                    gl_matrix_21.mat4.mul(this.packetParams.u_PosMtx[0], state.updateModelView(), posMtx);
                     renderHelper.bindPacketParams(state, this.packetParams);
                     gl.bindVertexArray(this.vao);
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -22105,9 +22242,9 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
         }
     };
 });
-System.register("luigis_mansion/jmp", ["util"], function (exports_85, context_85) {
+System.register("luigis_mansion/jmp", ["util"], function (exports_86, context_86) {
     "use strict";
-    var __moduleName = context_85 && context_85.id;
+    var __moduleName = context_86 && context_86.id;
     function nameHash(str) {
         var hash = 0;
         for (var i = 0; i < str.length; i++) {
@@ -22159,7 +22296,7 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_85, context_85
                             value = (view.getUint32(fieldOffs, false) >> field.shift) & field.bitmask;
                             break;
                         case 1 /* String */:
-                            value = util_55.readString(buffer, fieldOffs, 0x20, true);
+                            value = util_56.readString(buffer, fieldOffs, 0x20, true);
                             break;
                         case 2 /* Float */:
                             value = view.getFloat32(fieldOffs, false);
@@ -22181,12 +22318,12 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_85, context_85
         return records;
         var e_91, _a;
     }
-    exports_85("parse", parse);
-    var util_55, nameTable, hashLookup;
+    exports_86("parse", parse);
+    var util_56, nameTable, hashLookup;
     return {
         setters: [
-            function (util_55_1) {
-                util_55 = util_55_1;
+            function (util_56_1) {
+                util_56 = util_56_1;
             }
         ],
         execute: function () {
