@@ -1441,8 +1441,14 @@ function sampleAnimationDataHermite(track: AnimationTrackHermite, frame: number)
     return hermiteInterpolate(k0, k1, frame);
 }
 
-function lerp(k0: number, k1: number, t: number) {
+function lerp(k0: number, k1: number, t: number): number {
     return k0 + (k1 - k0) * t;
+}
+
+function lerpPeriodic(k0: number, k1: number, t: number, kp: number = 360): number {
+    const ga = (k1 - k0) % kp;
+    const g = 2 * ga % kp - ga;
+    return k0 + g * t;
 }
 
 function sampleAnimationDataLinear(track: AnimationTrackLinear, frame: number): number {
@@ -1464,7 +1470,8 @@ function sampleAnimationDataLinear(track: AnimationTrackLinear, frame: number): 
     const k1 = frames[idx1];
 
     const t = (frame - idx0);
-    return lerp(k0, k1, t);
+    // Linear data is always used only with angles, so we always use periodic lerp here.
+    return lerpPeriodic(k0, k1, t);
 }
 
 function sampleAnimationData(track: AnimationTrack, frame: number): number {
@@ -1481,7 +1488,6 @@ function makeConstantAnimationTrack(value: number): AnimationTrack {
 }
 
 function parseAnimationTrackC32(buffer: ArrayBufferSlice, numKeyframes: number): AnimationTrack {
-    const view = buffer.createDataView();
     const frames: Float32Array = buffer.createTypedArray(Float32Array, 0x00, numKeyframes + 1, Endianness.BIG_ENDIAN);
     return { type: AnimationTrackType.LINEAR, frames };
 }
@@ -2083,11 +2089,9 @@ export class CHR0NodesAnimator {
         const scaleY = nodeData.scaleY ? sampleAnimationData(nodeData.scaleY, animFrame) : 1;
         const scaleZ = nodeData.scaleZ ? sampleAnimationData(nodeData.scaleZ, animFrame) : 1;
 
-        // Don't interpolate rotation across frames... the animation data hasn't been validated for it.
-        const floorAnimFrame = animFrame | 0;
-        const rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, floorAnimFrame) : 0;
-        const rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, floorAnimFrame) : 0;
-        const rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, floorAnimFrame) : 0;
+        const rotationX = nodeData.rotationX ? sampleAnimationData(nodeData.rotationX, animFrame) : 0;
+        const rotationY = nodeData.rotationY ? sampleAnimationData(nodeData.rotationY, animFrame) : 0;
+        const rotationZ = nodeData.rotationZ ? sampleAnimationData(nodeData.rotationZ, animFrame) : 0;
 
         const translationX = nodeData.translationX ? sampleAnimationData(nodeData.translationX, animFrame) : 0;
         const translationY = nodeData.translationY ? sampleAnimationData(nodeData.translationY, animFrame) : 0;
