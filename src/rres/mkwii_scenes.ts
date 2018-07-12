@@ -42,11 +42,9 @@ class MarioKartRenderer implements Viewer.MainScene {
         mat4.fromScaling(this.courseRenderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
         mat4.fromScaling(this.skyboxRenderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
 
-        // Bind SRT animations
-        for (const srt0 of skyboxRRES.srt0)
-            this.skyboxRenderer.bindSRT0(this.animationController, srt0);
-        for (const srt0 of courseRRES.srt0)
-            this.courseRenderer.bindSRT0(this.animationController, srt0);
+        // Bind animations.
+        this.skyboxRenderer.bindRRESAnimations(this.animationController, skyboxRRES);
+        this.courseRenderer.bindRRESAnimations(this.animationController, courseRRES);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
