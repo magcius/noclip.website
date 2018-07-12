@@ -5116,6 +5116,15 @@ System.register("gx/gx_material", ["render", "Program"], function (exports_25, c
                     this.b = c.b;
                     this.a = a;
                 };
+                Color.prototype.copy32 = function (c) {
+                    this.r = ((c >>> 24) & 0xFF) / 0xFF;
+                    this.g = ((c >>> 16) & 0xFF) / 0xFF;
+                    this.b = ((c >>> 8) & 0xFF) / 0xFF;
+                    this.a = ((c >>> 0) & 0xFF) / 0xFF;
+                };
+                Color.prototype.get32 = function () {
+                    return ((this.r * 0xFF) << 24) | ((this.g * 0xFF) << 16) | ((this.b * 0xFF) << 8) | (this.a * 0xFF);
+                };
                 return Color;
             }());
             exports_25("Color", Color);
@@ -18609,6 +18618,12 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                         cmd.bindPAT0(animationController, pat0);
                     }
                 };
+                ModelRenderer.prototype.bindCLR0 = function (animationController, clr0) {
+                    for (var i = 0; i < this.materialCommands.length; i++) {
+                        var cmd = this.materialCommands[i];
+                        cmd.bindCLR0(animationController, clr0);
+                    }
+                };
                 ModelRenderer.prototype.bindRRESAnimations = function (animationController, rres) {
                     for (var i = 0; i < rres.chr0.length; i++)
                         this.bindCHR0(animationController, rres.chr0[i]);
@@ -18616,6 +18631,8 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                         this.bindSRT0(animationController, rres.srt0[i]);
                     for (var i = 0; i < rres.pat0.length; i++)
                         this.bindPAT0(animationController, rres.pat0[i]);
+                    for (var i = 0; i < rres.clr0.length; i++)
+                        this.bindCLR0(animationController, rres.clr0[i]);
                 };
                 ModelRenderer.prototype.setColorOverride = function (i, color) {
                     this.colorOverrides[i] = color;
@@ -18770,6 +18787,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                     this.glSamplers = [];
                     this.srt0Animators = [];
                     this.pat0Animators = [];
+                    this.clr0Animators = [];
                     this.visible = true;
                     this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
                     this.program.name = this.material.name;
@@ -18788,6 +18806,13 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                         var patAnimator = BRRES.bindPAT0Animator(animationController, pat0, this.material.name, i);
                         if (patAnimator)
                             this.pat0Animators[i] = patAnimator;
+                    }
+                };
+                Command_Material.prototype.bindCLR0 = function (animationController, clr0) {
+                    for (var i = 0; i < BRRES.AnimatableColor.COUNT; i++) {
+                        var clrAnimator = BRRES.bindCLR0Animator(animationController, clr0, this.material.name, i);
+                        if (clrAnimator)
+                            this.clr0Animators[i] = clrAnimator;
                     }
                 };
                 Command_Material.prototype.translateSamplers = function (gl) {
@@ -18873,7 +18898,7 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                         m.glSampler = this.glSamplers[i];
                         m.lodBias = sampler.lodBias;
                     }
-                    var copyColor = function (i, dst, fallbackColor) {
+                    var calcColor = function (dst, fallbackColor, i, a) {
                         var color;
                         if (_this.model.colorOverrides[i]) {
                             color = _this.model.colorOverrides[i];
@@ -18881,20 +18906,25 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                         else {
                             color = fallbackColor;
                         }
-                        dst.copy(color);
+                        if (_this.clr0Animators[a]) {
+                            _this.clr0Animators[a].calcColor(dst, color);
+                        }
+                        else {
+                            dst.copy(color);
+                        }
                     };
-                    copyColor(render_30.ColorOverride.MAT0, materialParams.u_ColorMatReg[0], this.material.colorMatRegs[0]);
-                    copyColor(render_30.ColorOverride.MAT1, materialParams.u_ColorMatReg[1], this.material.colorMatRegs[1]);
-                    copyColor(render_30.ColorOverride.AMB0, materialParams.u_ColorAmbReg[0], this.material.colorAmbRegs[0]);
-                    copyColor(render_30.ColorOverride.AMB1, materialParams.u_ColorAmbReg[1], this.material.colorAmbRegs[1]);
-                    copyColor(render_30.ColorOverride.K0, materialParams.u_KonstColor[0], this.material.gxMaterial.colorConstants[0]);
-                    copyColor(render_30.ColorOverride.K1, materialParams.u_KonstColor[1], this.material.gxMaterial.colorConstants[1]);
-                    copyColor(render_30.ColorOverride.K2, materialParams.u_KonstColor[2], this.material.gxMaterial.colorConstants[2]);
-                    copyColor(render_30.ColorOverride.K3, materialParams.u_KonstColor[3], this.material.gxMaterial.colorConstants[3]);
-                    copyColor(render_30.ColorOverride.CPREV, materialParams.u_Color[0], this.material.gxMaterial.colorRegisters[0]);
-                    copyColor(render_30.ColorOverride.C0, materialParams.u_Color[1], this.material.gxMaterial.colorRegisters[1]);
-                    copyColor(render_30.ColorOverride.C1, materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2]);
-                    copyColor(render_30.ColorOverride.C2, materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3]);
+                    calcColor(materialParams.u_ColorMatReg[0], this.material.colorMatRegs[0], render_30.ColorOverride.MAT0, BRRES.AnimatableColor.MAT0);
+                    calcColor(materialParams.u_ColorMatReg[1], this.material.colorMatRegs[1], render_30.ColorOverride.MAT1, BRRES.AnimatableColor.MAT1);
+                    calcColor(materialParams.u_ColorAmbReg[0], this.material.colorAmbRegs[0], render_30.ColorOverride.AMB0, BRRES.AnimatableColor.AMB0);
+                    calcColor(materialParams.u_ColorAmbReg[1], this.material.colorAmbRegs[1], render_30.ColorOverride.AMB1, BRRES.AnimatableColor.AMB1);
+                    calcColor(materialParams.u_KonstColor[0], this.material.gxMaterial.colorConstants[0], render_30.ColorOverride.K0, BRRES.AnimatableColor.K0);
+                    calcColor(materialParams.u_KonstColor[1], this.material.gxMaterial.colorConstants[1], render_30.ColorOverride.K1, BRRES.AnimatableColor.K1);
+                    calcColor(materialParams.u_KonstColor[2], this.material.gxMaterial.colorConstants[2], render_30.ColorOverride.K2, BRRES.AnimatableColor.K2);
+                    calcColor(materialParams.u_KonstColor[3], this.material.gxMaterial.colorConstants[3], render_30.ColorOverride.K3, BRRES.AnimatableColor.K3);
+                    calcColor(materialParams.u_Color[0], this.material.gxMaterial.colorRegisters[0], render_30.ColorOverride.CPREV, -1);
+                    calcColor(materialParams.u_Color[1], this.material.gxMaterial.colorRegisters[1], render_30.ColorOverride.C0, BRRES.AnimatableColor.C0);
+                    calcColor(materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2], render_30.ColorOverride.C1, BRRES.AnimatableColor.C1);
+                    calcColor(materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3], render_30.ColorOverride.C2, BRRES.AnimatableColor.C2);
                     for (var i = 0; i < 8; i++)
                         this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state, materialParams.m_TextureMapping[i].flipY);
                     for (var i = 0; i < 3; i++)
@@ -20217,6 +20247,125 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         return new PAT0TexAnimator(animationController, pat0, texData);
     }
     exports_78("bindPAT0Animator", bindPAT0Animator);
+    function findAnimationData_CLR0(clr0, materialName, color) {
+        var matData = clr0.matAnimations.find(function (m) { return m.materialName === materialName; });
+        if (matData === undefined)
+            return null;
+        var clrData = matData.clrAnimations[color];
+        if (clrData === undefined)
+            return null;
+        return clrData;
+    }
+    function parseColorDataFrames(buffer, numKeyframes, isConstant) {
+        var view = buffer.createDataView();
+        var frames;
+        if (isConstant) {
+            var color = view.getUint32(0x00);
+            return Uint32Array.of(color);
+        }
+        else {
+            var animationTrackOffs = view.getUint32(0x00);
+            return buffer.createTypedArray(Uint32Array, animationTrackOffs, numKeyframes + 1, 1 /* BIG_ENDIAN */);
+        }
+    }
+    function parseCLR0_MatData(buffer, numKeyframes) {
+        var view = buffer.createDataView();
+        var materialNameOffs = view.getUint32(0x00);
+        var materialName = util_49.readString(buffer, materialNameOffs);
+        var flags = view.getUint32(0x04);
+        ;
+        var animationTableIdx = 0x08;
+        function nextColorData(isConstant) {
+            var mask = view.getUint32(animationTableIdx + 0x00);
+            var frames = parseColorDataFrames(buffer.slice(animationTableIdx + 0x04), numKeyframes, isConstant);
+            animationTableIdx += 0x08;
+            return { mask: mask, frames: frames };
+        }
+        var clrAnimations = [];
+        for (var i = 0; i < AnimatableColor.COUNT; i++) {
+            var clrFlags = (flags >>> (i * 2)) & 0x03;
+            if (!(clrFlags & 1 /* EXISTS */))
+                continue;
+            var isConstant = !!(clrFlags & 2 /* CONSTANT */);
+            clrAnimations[i] = nextColorData(isConstant);
+        }
+        return { materialName: materialName, clrAnimations: clrAnimations };
+    }
+    function parseCLR0(buffer) {
+        var view = buffer.createDataView();
+        util_49.assert(util_49.readString(buffer, 0x00, 0x04) === 'CLR0');
+        var version = view.getUint32(0x08);
+        var supportedVersions = [0x04];
+        util_49.assert(supportedVersions.includes(version));
+        var clrMatDataResDicOffs = view.getUint32(0x10);
+        var clrMatDataResDic = parseResDic(buffer, clrMatDataResDicOffs);
+        var offs = 0x14;
+        if (version >= 0x04) {
+            // user data
+            offs += 0x04;
+        }
+        var nameOffs = view.getUint32(offs + 0x00);
+        var name = util_49.readString(buffer, nameOffs);
+        var duration = view.getUint16(offs + 0x08);
+        var numMaterials = view.getUint16(offs + 0x0A);
+        var loopMode = view.getUint32(offs + 0x0C);
+        var matAnimations = [];
+        try {
+            for (var clrMatDataResDic_1 = __values(clrMatDataResDic), clrMatDataResDic_1_1 = clrMatDataResDic_1.next(); !clrMatDataResDic_1_1.done; clrMatDataResDic_1_1 = clrMatDataResDic_1.next()) {
+                var clrMatEntry = clrMatDataResDic_1_1.value;
+                var matData = parseCLR0_MatData(buffer.slice(clrMatEntry.offs), duration);
+                matAnimations.push(matData);
+            }
+        }
+        catch (e_67_1) { e_67 = { error: e_67_1 }; }
+        finally {
+            try {
+                if (clrMatDataResDic_1_1 && !clrMatDataResDic_1_1.done && (_a = clrMatDataResDic_1.return)) _a.call(clrMatDataResDic_1);
+            }
+            finally { if (e_67) throw e_67.error; }
+        }
+        util_49.assert(matAnimations.length === numMaterials);
+        return { name: name, loopMode: loopMode, duration: duration, matAnimations: matAnimations };
+        var e_67, _a;
+    }
+    function lerpColor(k0, k1, t) {
+        var k0r = (k0 >>> 24) & 0xFF;
+        var k0g = (k0 >>> 16) & 0xFF;
+        var k0b = (k0 >>> 8) & 0xFF;
+        var k0a = (k0 >>> 0) & 0xFF;
+        var k1r = (k1 >>> 24) & 0xFF;
+        var k1g = (k1 >>> 16) & 0xFF;
+        var k1b = (k1 >>> 8) & 0xFF;
+        var k1a = (k1 >>> 0) & 0xFF;
+        var r = lerp(k0r, k1r, t);
+        var g = lerp(k0g, k1g, t);
+        var b = lerp(k0b, k1b, t);
+        var a = lerp(k0a, k1a, t);
+        return (r << 24) | (g << 16) | (b << 8) | a;
+    }
+    function sampleColorData(frames, frame) {
+        var n = frames.length;
+        if (n === 1)
+            return frames[0];
+        if (frame === 0)
+            return frames[0];
+        else if (frame > n - 1)
+            return frames[n - 1];
+        // Find the first frame.
+        var idx0 = (frame | 0);
+        var k0 = frames[idx0];
+        var idx1 = idx0 + 1;
+        var k1 = frames[idx1];
+        var t = (frame - idx0);
+        return lerpColor(k0, k1, t);
+    }
+    function bindCLR0Animator(animationController, clr0, materialName, color) {
+        var clrData = findAnimationData_CLR0(clr0, materialName, color);
+        if (clrData === null)
+            return null;
+        return new CLR0ColorAnimator(animationController, clr0, clrData);
+    }
+    exports_78("bindCLR0Animator", bindCLR0Animator);
     function parseCHR0_NodeData(buffer, numKeyframes) {
         ;
         var TrackFormat;
@@ -20321,16 +20470,16 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 nodeAnimations.push(nodeData);
             }
         }
-        catch (e_67_1) { e_67 = { error: e_67_1 }; }
+        catch (e_68_1) { e_68 = { error: e_68_1 }; }
         finally {
             try {
                 if (chrNodeDataResDic_1_1 && !chrNodeDataResDic_1_1.done && (_a = chrNodeDataResDic_1.return)) _a.call(chrNodeDataResDic_1);
             }
-            finally { if (e_67) throw e_67.error; }
+            finally { if (e_68) throw e_68.error; }
         }
         util_49.assert(nodeAnimations.length === numNodes);
         return { name: name, loopMode: loopMode, duration: duration, nodeAnimations: nodeAnimations };
-        var e_67, _a;
+        var e_68, _a;
     }
     function bindCHR0Animator(animationController, chr0, nodes) {
         var nodeData = [];
@@ -20346,18 +20495,18 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 _loop_13(nodeAnimation);
             }
         }
-        catch (e_68_1) { e_68 = { error: e_68_1 }; }
+        catch (e_69_1) { e_69 = { error: e_69_1 }; }
         finally {
             try {
                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
             }
-            finally { if (e_68) throw e_68.error; }
+            finally { if (e_69) throw e_69.error; }
         }
         // No nodes found.
         if (nodeData.length === 0)
             return null;
         return new CHR0NodesAnimator(animationController, chr0, nodeData);
-        var e_68, _c;
+        var e_69, _c;
     }
     exports_78("bindCHR0Animator", bindCHR0Animator);
     function parse(buffer) {
@@ -20394,12 +20543,12 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     mdl0.push(mdl0_);
                 }
             }
-            catch (e_69_1) { e_69 = { error: e_69_1 }; }
+            catch (e_70_1) { e_70 = { error: e_70_1 }; }
             finally {
                 try {
                     if (modelsResDic_1_1 && !modelsResDic_1_1.done && (_a = modelsResDic_1.return)) _a.call(modelsResDic_1);
                 }
-                finally { if (e_69) throw e_69.error; }
+                finally { if (e_70) throw e_70.error; }
             }
         }
         // Textures
@@ -20415,12 +20564,12 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     tex0.push(tex0_);
                 }
             }
-            catch (e_70_1) { e_70 = { error: e_70_1 }; }
+            catch (e_71_1) { e_71 = { error: e_71_1 }; }
             finally {
                 try {
                     if (texturesResDic_1_1 && !texturesResDic_1_1.done && (_b = texturesResDic_1.return)) _b.call(texturesResDic_1);
                 }
-                finally { if (e_70) throw e_70.error; }
+                finally { if (e_71) throw e_71.error; }
             }
         }
         // Tex SRT Animations
@@ -20436,12 +20585,12 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     srt0.push(srt0_);
                 }
             }
-            catch (e_71_1) { e_71 = { error: e_71_1 }; }
+            catch (e_72_1) { e_72 = { error: e_72_1 }; }
             finally {
                 try {
                     if (animTexSrtResDic_1_1 && !animTexSrtResDic_1_1.done && (_c = animTexSrtResDic_1.return)) _c.call(animTexSrtResDic_1);
                 }
-                finally { if (e_71) throw e_71.error; }
+                finally { if (e_72) throw e_72.error; }
             }
         }
         // Tex Pattern Animations
@@ -20457,12 +20606,33 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     pat0.push(pat0_);
                 }
             }
-            catch (e_72_1) { e_72 = { error: e_72_1 }; }
+            catch (e_73_1) { e_73 = { error: e_73_1 }; }
             finally {
                 try {
                     if (animTexPatResDic_1_1 && !animTexPatResDic_1_1.done && (_d = animTexPatResDic_1.return)) _d.call(animTexPatResDic_1);
                 }
-                finally { if (e_72) throw e_72.error; }
+                finally { if (e_73) throw e_73.error; }
+            }
+        }
+        // Color Animations
+        var clr0 = [];
+        var animClrsEntry = rootResDic.find(function (entry) { return entry.name === 'AnmClr(NW4R)'; });
+        if (animClrsEntry) {
+            var animClrResDic = parseResDic(buffer, animClrsEntry.offs);
+            try {
+                for (var animClrResDic_1 = __values(animClrResDic), animClrResDic_1_1 = animClrResDic_1.next(); !animClrResDic_1_1.done; animClrResDic_1_1 = animClrResDic_1.next()) {
+                    var clr0Entry = animClrResDic_1_1.value;
+                    var clr0_ = parseCLR0(buffer.subarray(clr0Entry.offs));
+                    util_49.assert(clr0_.name === clr0Entry.name);
+                    clr0.push(clr0_);
+                }
+            }
+            catch (e_74_1) { e_74 = { error: e_74_1 }; }
+            finally {
+                try {
+                    if (animClrResDic_1_1 && !animClrResDic_1_1.done && (_e = animClrResDic_1.return)) _e.call(animClrResDic_1);
+                }
+                finally { if (e_74) throw e_74.error; }
             }
         }
         // Node Animations
@@ -20478,19 +20648,19 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                     chr0.push(chr0_);
                 }
             }
-            catch (e_73_1) { e_73 = { error: e_73_1 }; }
+            catch (e_75_1) { e_75 = { error: e_75_1 }; }
             finally {
                 try {
-                    if (animChrResDic_1_1 && !animChrResDic_1_1.done && (_e = animChrResDic_1.return)) _e.call(animChrResDic_1);
+                    if (animChrResDic_1_1 && !animChrResDic_1_1.done && (_f = animChrResDic_1.return)) _f.call(animChrResDic_1);
                 }
-                finally { if (e_73) throw e_73.error; }
+                finally { if (e_75) throw e_75.error; }
             }
         }
-        return { mdl0: mdl0, tex0: tex0, srt0: srt0, pat0: pat0, chr0: chr0 };
-        var e_69, _a, e_70, _b, e_71, _c, e_72, _d, e_73, _e;
+        return { mdl0: mdl0, tex0: tex0, srt0: srt0, pat0: pat0, clr0: clr0, chr0: chr0 };
+        var e_70, _a, e_71, _b, e_72, _c, e_73, _d, e_74, _e, e_75, _f;
     }
     exports_78("parse", parse);
-    var util_49, GX_Material, gx_displaylist_4, gl_matrix_18, Camera_10, DisplayListRegisters, AnimationController, Graph, SRT0TexMtxAnimator, TexMtxIndex, PAT0TexAnimator, CHR0NodesAnimator;
+    var util_49, GX_Material, gx_displaylist_4, gl_matrix_18, Camera_10, DisplayListRegisters, AnimationController, Graph, SRT0TexMtxAnimator, TexMtxIndex, PAT0TexAnimator, AnimatableColor, CLR0ColorAnimator, CHR0NodesAnimator;
     return {
         setters: [
             function (util_49_1) {
@@ -20672,6 +20842,40 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
                 return PAT0TexAnimator;
             }());
             exports_78("PAT0TexAnimator", PAT0TexAnimator);
+            //#endregion
+            //#region CLR0
+            (function (AnimatableColor) {
+                AnimatableColor[AnimatableColor["MAT0"] = 0] = "MAT0";
+                AnimatableColor[AnimatableColor["MAT1"] = 1] = "MAT1";
+                AnimatableColor[AnimatableColor["AMB0"] = 2] = "AMB0";
+                AnimatableColor[AnimatableColor["AMB1"] = 3] = "AMB1";
+                AnimatableColor[AnimatableColor["C0"] = 4] = "C0";
+                AnimatableColor[AnimatableColor["C1"] = 5] = "C1";
+                AnimatableColor[AnimatableColor["C2"] = 6] = "C2";
+                AnimatableColor[AnimatableColor["K0"] = 7] = "K0";
+                AnimatableColor[AnimatableColor["K1"] = 8] = "K1";
+                AnimatableColor[AnimatableColor["K2"] = 9] = "K2";
+                AnimatableColor[AnimatableColor["K3"] = 10] = "K3";
+                AnimatableColor[AnimatableColor["COUNT"] = 11] = "COUNT";
+            })(AnimatableColor || (AnimatableColor = {}));
+            exports_78("AnimatableColor", AnimatableColor);
+            CLR0ColorAnimator = /** @class */ (function () {
+                function CLR0ColorAnimator(animationController, clr0, clrData) {
+                    this.animationController = animationController;
+                    this.clr0 = clr0;
+                    this.clrData = clrData;
+                }
+                CLR0ColorAnimator.prototype.calcColor = function (dst, orig) {
+                    var clrData = this.clrData;
+                    var frame = this.animationController.getTimeInFrames();
+                    var animFrame = getAnimFrame(this.clr0, frame);
+                    var animColor = sampleColorData(clrData.frames, animFrame);
+                    var c = (orig.get32() & clrData.mask) | animColor;
+                    dst.copy32(c);
+                };
+                return CLR0ColorAnimator;
+            }());
+            exports_78("CLR0ColorAnimator", CLR0ColorAnimator);
             CHR0NodesAnimator = /** @class */ (function () {
                 function CHR0NodesAnimator(animationController, chr0, nodeData) {
                     this.animationController = animationController;
@@ -20840,15 +21044,15 @@ System.register("rres/u8", ["util"], function (exports_79, context_79) {
                                 return state_2.value;
                         }
                     }
-                    catch (e_74_1) { e_74 = { error: e_74_1 }; }
+                    catch (e_76_1) { e_76 = { error: e_76_1 }; }
                     finally {
                         try {
                             if (parts_2_1 && !parts_2_1.done && (_a = parts_2.return)) _a.call(parts_2);
                         }
-                        finally { if (e_74) throw e_74.error; }
+                        finally { if (e_76) throw e_76.error; }
                     }
                     return dir;
-                    var e_74, _a;
+                    var e_76, _a;
                 };
                 U8Archive.prototype.findDir = function (path) {
                     return this.findDirParts(path.split('/'));
@@ -20934,15 +21138,15 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                                 return file;
                         }
                     }
-                    catch (e_75_1) { e_75 = { error: e_75_1 }; }
+                    catch (e_77_1) { e_77 = { error: e_77_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_75) throw e_75.error; }
+                        finally { if (e_77) throw e_77.error; }
                     }
                     return null;
-                    var e_75, _c;
+                    var e_77, _c;
                 };
                 ModelArchiveCollection.prototype.loadRRESFromArc = function (gl, textureHolder, path) {
                     if (this.loaded.has(path))
@@ -21004,12 +21208,12 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                                         this.spawnModel(gl, mdl0, roomRRES, roomArchiveFile.name);
                                     }
                                 }
-                                catch (e_76_1) { e_76 = { error: e_76_1 }; }
+                                catch (e_78_1) { e_78 = { error: e_78_1 }; }
                                 finally {
                                     try {
                                         if (_d && !_d.done && (_e = _c.return)) _e.call(_c);
                                     }
-                                    finally { if (e_76) throw e_76.error; }
+                                    finally { if (e_78) throw e_78.error; }
                                 }
                                 var roomBZS = this.parseBZS(roomArchive.findFile('dat/room.bzs').buffer);
                                 this.roomBZSes.push(roomBZS);
@@ -21017,12 +21221,12 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                                 this.spawnLayout(gl, layout);
                             }
                         }
-                        catch (e_77_1) { e_77 = { error: e_77_1 }; }
+                        catch (e_79_1) { e_79 = { error: e_79_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_f = _a.return)) _f.call(_a);
                             }
-                            finally { if (e_77) throw e_77.error; }
+                            finally { if (e_79) throw e_79.error; }
                         }
                     }
                     try {
@@ -21042,32 +21246,32 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                                             }
                                         }
                                     }
-                                    catch (e_78_1) { e_78 = { error: e_78_1 }; }
+                                    catch (e_80_1) { e_80 = { error: e_80_1 }; }
                                     finally {
                                         try {
                                             if (_m && !_m.done && (_o = _l.return)) _o.call(_l);
                                         }
-                                        finally { if (e_78) throw e_78.error; }
+                                        finally { if (e_80) throw e_80.error; }
                                     }
                                 }
                             }
-                            catch (e_79_1) { e_79 = { error: e_79_1 }; }
+                            catch (e_81_1) { e_81 = { error: e_81_1 }; }
                             finally {
                                 try {
                                     if (_k && !_k.done && (_p = _j.return)) _p.call(_j);
                                 }
-                                finally { if (e_79) throw e_79.error; }
+                                finally { if (e_81) throw e_81.error; }
                             }
                         }
                     }
-                    catch (e_80_1) { e_80 = { error: e_80_1 }; }
+                    catch (e_82_1) { e_82 = { error: e_82_1 }; }
                     finally {
                         try {
                             if (_h && !_h.done && (_q = _g.return)) _q.call(_g);
                         }
-                        finally { if (e_80) throw e_80.error; }
+                        finally { if (e_82) throw e_82.error; }
                     }
-                    var e_77, _f, e_76, _e, e_80, _q, e_79, _p, e_78, _o;
+                    var e_79, _f, e_78, _e, e_82, _q, e_81, _p, e_80, _o;
                 }
                 SkywardSwordScene.prototype.createPanels = function () {
                     var panels = [];
@@ -21087,12 +21291,12 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                                 pastModels.push(modelRenderer);
                         }
                     }
-                    catch (e_81_1) { e_81 = { error: e_81_1 }; }
+                    catch (e_83_1) { e_83 = { error: e_83_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_81) throw e_81.error; }
+                        finally { if (e_83) throw e_83.error; }
                     }
                     if (futureModels.length || pastModels.length) {
                         var futurePanel = new UI.Panel();
@@ -21107,12 +21311,12 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                                     modelRenderer.setVisible(isFuture);
                                 }
                             }
-                            catch (e_82_1) { e_82 = { error: e_82_1 }; }
+                            catch (e_84_1) { e_84 = { error: e_84_1 }; }
                             finally {
                                 try {
                                     if (futureModels_1_1 && !futureModels_1_1.done && (_a = futureModels_1.return)) _a.call(futureModels_1);
                                 }
-                                finally { if (e_82) throw e_82.error; }
+                                finally { if (e_84) throw e_84.error; }
                             }
                             try {
                                 for (var pastModels_1 = __values(pastModels), pastModels_1_1 = pastModels_1.next(); !pastModels_1_1.done; pastModels_1_1 = pastModels_1.next()) {
@@ -21120,22 +21324,22 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                                     modelRenderer.setVisible(!isFuture);
                                 }
                             }
-                            catch (e_83_1) { e_83 = { error: e_83_1 }; }
+                            catch (e_85_1) { e_85 = { error: e_85_1 }; }
                             finally {
                                 try {
                                     if (pastModels_1_1 && !pastModels_1_1.done && (_b = pastModels_1.return)) _b.call(pastModels_1);
                                 }
-                                finally { if (e_83) throw e_83.error; }
+                                finally { if (e_85) throw e_85.error; }
                             }
                             layersPanel.syncLayerVisibility();
-                            var e_82, _a, e_83, _b;
+                            var e_84, _a, e_85, _b;
                         };
                         selector.selectItem(0); // Past
                         futurePanel.contents.appendChild(selector.elem);
                         panels.push(futurePanel);
                     }
                     return panels;
-                    var e_81, _c;
+                    var e_83, _c;
                 };
                 SkywardSwordScene.prototype.destroy = function (gl) {
                     this.textureHolder.destroy(gl);
@@ -21183,12 +21387,12 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                             modelRenderer.bindSRT0(this.animationController, srt0);
                         }
                     }
-                    catch (e_84_1) { e_84 = { error: e_84_1 }; }
+                    catch (e_86_1) { e_86 = { error: e_86_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                         }
-                        finally { if (e_84) throw e_84.error; }
+                        finally { if (e_86) throw e_86.error; }
                     }
                     try {
                         // Water animations are in the common archive.
@@ -21197,15 +21401,15 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                             modelRenderer.bindSRT0(this.animationController, srt0);
                         }
                     }
-                    catch (e_85_1) { e_85 = { error: e_85_1 }; }
+                    catch (e_87_1) { e_87 = { error: e_87_1 }; }
                     finally {
                         try {
                             if (_e && !_e.done && (_f = _d.return)) _f.call(_d);
                         }
-                        finally { if (e_85) throw e_85.error; }
+                        finally { if (e_87) throw e_87.error; }
                     }
                     return modelRenderer;
-                    var e_84, _c, e_85, _f;
+                    var e_86, _c, e_87, _f;
                 };
                 SkywardSwordScene.prototype.spawnModelName = function (gl, rres, modelName, namePrefix) {
                     var mdl0 = rres.mdl0.find(function (model) { return model.name === modelName; });
@@ -21348,21 +21552,21 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                                     gl_matrix_19.mat4.fromRotationTranslation(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz]);
                                 }
                             }
-                            catch (e_86_1) { e_86 = { error: e_86_1 }; }
+                            catch (e_88_1) { e_88 = { error: e_88_1 }; }
                             finally {
                                 try {
                                     if (models_1_1 && !models_1_1.done && (_c = models_1.return)) _c.call(models_1);
                                 }
-                                finally { if (e_86) throw e_86.error; }
+                                finally { if (e_88) throw e_88.error; }
                             }
                         }
                     }
-                    catch (e_87_1) { e_87 = { error: e_87_1 }; }
+                    catch (e_89_1) { e_89 = { error: e_89_1 }; }
                     finally {
                         try {
                             if (_b && !_b.done && (_d = _a.return)) _d.call(_a);
                         }
-                        finally { if (e_87) throw e_87.error; }
+                        finally { if (e_89) throw e_89.error; }
                     }
                     try {
                         // Now do scalable objects...
@@ -21378,23 +21582,23 @@ System.register("rres/zss_scenes", ["ui", "compression/CX", "rres/brres", "rres/
                                     gl_matrix_19.mat4.fromRotationTranslationScale(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz], [obj.sx, obj.sy, obj.sz]);
                                 }
                             }
-                            catch (e_88_1) { e_88 = { error: e_88_1 }; }
+                            catch (e_90_1) { e_90 = { error: e_90_1 }; }
                             finally {
                                 try {
                                     if (models_2_1 && !models_2_1.done && (_g = models_2.return)) _g.call(models_2);
                                 }
-                                finally { if (e_88) throw e_88.error; }
+                                finally { if (e_90) throw e_90.error; }
                             }
                         }
                     }
-                    catch (e_89_1) { e_89 = { error: e_89_1 }; }
+                    catch (e_91_1) { e_91 = { error: e_91_1 }; }
                     finally {
                         try {
                             if (_f && !_f.done && (_h = _e.return)) _h.call(_e);
                         }
-                        finally { if (e_89) throw e_89.error; }
+                        finally { if (e_91) throw e_91.error; }
                     }
-                    var e_87, _d, e_86, _c, e_89, _h, e_88, _g;
+                    var e_89, _d, e_88, _c, e_91, _h, e_90, _g;
                 };
                 SkywardSwordScene.prototype.parseBZS = function (buffer) {
                     var view = buffer.createDataView();
@@ -21623,23 +21827,23 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
                                     modelRenderer.bindSRT0(this.animationController, srt0);
                                 }
                             }
-                            catch (e_90_1) { e_90 = { error: e_90_1 }; }
+                            catch (e_92_1) { e_92 = { error: e_92_1 }; }
                             finally {
                                 try {
                                     if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                                 }
-                                finally { if (e_90) throw e_90.error; }
+                                finally { if (e_92) throw e_92.error; }
                             }
                         }
                     }
-                    catch (e_91_1) { e_91 = { error: e_91_1 }; }
+                    catch (e_93_1) { e_93 = { error: e_93_1 }; }
                     finally {
                         try {
                             if (stageRRESes_1_1 && !stageRRESes_1_1.done && (_d = stageRRESes_1.return)) _d.call(stageRRESes_1);
                         }
-                        finally { if (e_91) throw e_91.error; }
+                        finally { if (e_93) throw e_93.error; }
                     }
-                    var e_91, _d, e_90, _c;
+                    var e_93, _d, e_92, _c;
                 }
                 BasicRRESScene.prototype.createPanels = function () {
                     var panels = [];
@@ -22381,16 +22585,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_92_1) { e_92 = { error: e_92_1 }; }
+                        catch (e_94_1) { e_94 = { error: e_94_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_92) throw e_92.error; }
+                            finally { if (e_94) throw e_94.error; }
                         }
                     }
                     return cmd;
-                    var e_92, _c;
+                    var e_94, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
@@ -22541,18 +22745,18 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_86, context_86
                     record[field.name] = value;
                 }
             }
-            catch (e_93_1) { e_93 = { error: e_93_1 }; }
+            catch (e_95_1) { e_95 = { error: e_95_1 }; }
             finally {
                 try {
                     if (fields_1_1 && !fields_1_1.done && (_a = fields_1.return)) _a.call(fields_1);
                 }
-                finally { if (e_93) throw e_93.error; }
+                finally { if (e_95) throw e_95.error; }
             }
             records.push(record);
             recordTableIdx += recordSize;
         }
         return records;
-        var e_93, _a;
+        var e_95, _a;
     }
     exports_86("parse", parse);
     var util_55, nameTable, hashLookup;
