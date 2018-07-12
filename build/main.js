@@ -7915,7 +7915,7 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
             var b = readAnimationTrack(registerBTable);
             var a = readAnimationTrack(registerATable);
             var colorId = view.getUint8(animationTableIdx);
-            var colorOverride = render_3.ColorOverride.CPREV + colorId;
+            var colorOverride = render_3.ColorOverride.C0 + colorId;
             animationTableIdx += 0x04;
             animationEntries.push({ materialName: materialName, remapIndex: remapIndex, colorOverride: colorOverride, r: r, g: g, b: b, a: a });
         }
@@ -8167,9 +8167,9 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                         return false;
                     var animFrame = getAnimFrame(this.trk1, frame);
                     dst.r = sampleAnimationData(animationEntry.r, animFrame);
-                    dst.g = sampleAnimationData(animationEntry.r, animFrame);
-                    dst.b = sampleAnimationData(animationEntry.r, animFrame);
-                    dst.a = sampleAnimationData(animationEntry.r, animFrame);
+                    dst.g = sampleAnimationData(animationEntry.g, animFrame);
+                    dst.b = sampleAnimationData(animationEntry.b, animFrame);
+                    dst.a = sampleAnimationData(animationEntry.a, animFrame);
                     return true;
                 };
                 return BRK;

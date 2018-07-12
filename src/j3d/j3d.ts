@@ -1522,7 +1522,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const b = readAnimationTrack(registerBTable);
         const a = readAnimationTrack(registerATable);
         const colorId = view.getUint8(animationTableIdx);
-        const colorOverride = ColorOverride.CPREV + colorId;
+        const colorOverride = ColorOverride.C0 + colorId;
         animationTableIdx += 0x04;
         animationEntries.push({ materialName, remapIndex, colorOverride, r, g, b, a });
     }
@@ -1570,9 +1570,9 @@ export class BRK {
 
         const animFrame = getAnimFrame(this.trk1, frame);
         dst.r = sampleAnimationData(animationEntry.r, animFrame);
-        dst.g = sampleAnimationData(animationEntry.r, animFrame);
-        dst.b = sampleAnimationData(animationEntry.r, animFrame);
-        dst.a = sampleAnimationData(animationEntry.r, animFrame);
+        dst.g = sampleAnimationData(animationEntry.g, animFrame);
+        dst.b = sampleAnimationData(animationEntry.b, animFrame);
+        dst.a = sampleAnimationData(animationEntry.a, animFrame);
         return true;
     }
 
