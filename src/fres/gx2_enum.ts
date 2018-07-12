@@ -1,6 +1,8 @@
 
 export const enum GX2Dimension {
-    _2D = 1,
+    _2D = 0x01,
+    _2D_ARRAY = 0x05,
+    _2D_MSAA = 0x06,
 }
 
 export const enum GX2SurfaceFormat {

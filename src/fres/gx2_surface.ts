@@ -22,8 +22,7 @@ export interface GX2Surface {
 export function parseGX2Surface(buffer: ArrayBufferSlice, gx2SurfaceOffs: number): GX2Surface {
     const view = buffer.slice(gx2SurfaceOffs, gx2SurfaceOffs + 0x9C).createDataView();
 
-    const dimension = view.getUint32(0x00, false);
-    assert(dimension === GX2Dimension._2D);
+    const dimension: GX2Dimension = view.getUint32(0x00, false);
     const width = view.getUint32(0x04, false);
     const height = view.getUint32(0x08, false);
     const depth = view.getUint32(0x0C, false);
