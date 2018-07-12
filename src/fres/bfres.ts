@@ -513,7 +513,8 @@ export function parse(buffer: ArrayBufferSlice): FRES {
     const supportedVersions = [
         0x03040001, // v3.4.0.1 - Wind Waker HD
         0x03040002, // v3.4.0.2 - Super Mario 3D World
-        0x03050003, // v3.5.0.3 - Splatoon.
+        0x03040004, // v3.4.0.4 - Mario Kart 8
+        0x03050003, // v3.5.0.3 - Splatoon
     ];
     assert(supportedVersions.includes(version));
 
