@@ -48,7 +48,7 @@ export class ModelRenderer {
     }
 
     public bindCHR0(animationController: BRRES.AnimationController, chr0: BRRES.CHR0): void {
-        this.chr0NodeAnimator = BRRES.bindCHR0NodesAnimator(animationController, chr0, this.mdl0.nodes);
+        this.chr0NodeAnimator = BRRES.bindCHR0Animator(animationController, chr0, this.mdl0.nodes);
     }
 
     public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {
@@ -56,6 +56,22 @@ export class ModelRenderer {
             const cmd = this.materialCommands[i];
             cmd.bindSRT0(animationController, srt0);
         }
+    }
+
+    public bindPAT0(animationController: BRRES.AnimationController, pat0: BRRES.PAT0): void {
+        for (let i = 0; i < this.materialCommands.length; i++) {
+            const cmd = this.materialCommands[i];
+            cmd.bindPAT0(animationController, pat0);
+        }
+    }
+
+    public bindRRESAnimations(animationController: BRRES.AnimationController, rres: BRRES.RRES): void {
+        for (let i = 0; i < rres.chr0.length; i++)
+            this.bindCHR0(animationController, rres.chr0[i]);
+        for (let i = 0; i < rres.srt0.length; i++)
+            this.bindSRT0(animationController, rres.srt0[i]);
+        for (let i = 0; i < rres.pat0.length; i++)
+            this.bindPAT0(animationController, rres.pat0[i]);
     }
 
     public setColorOverride(i: ColorOverride, color: GX_Material.Color): void {
@@ -221,7 +237,8 @@ class Command_Material {
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
     private glSamplers: WebGLSampler[] = [];
-    private srtAnimators: BRRES.TexSrtAnimator[] = [];
+    private srt0Animators: BRRES.SRT0TexMtxAnimator[] = [];
+    private pat0Animators: BRRES.PAT0TexAnimator[] = [];
     public visible: boolean = true;
 
     constructor(gl: WebGL2RenderingContext,
@@ -239,9 +256,17 @@ class Command_Material {
 
     public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {
         for (let i: BRRES.TexMtxIndex = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
-            const srtAnimator = BRRES.bindTexAnimator(animationController, srt0, this.material.name, i);
+            const srtAnimator = BRRES.bindSRT0Animator(animationController, srt0, this.material.name, i);
             if (srtAnimator)
-                this.srtAnimators[i] = srtAnimator;
+                this.srt0Animators[i] = srtAnimator;
+        }
+    }
+
+    public bindPAT0(animationController: BRRES.AnimationController, pat0: BRRES.PAT0): void {
+        for (let i = 0; i < 8; i++) {
+            const patAnimator = BRRES.bindPAT0Animator(animationController, pat0, this.material.name, i);
+            if (patAnimator)
+                this.pat0Animators[i] = patAnimator;
         }
     }
 
@@ -291,8 +316,8 @@ class Command_Material {
         }
 
         // Calculate SRT.
-        if (this.srtAnimators[texMtxIdx]) {
-            this.srtAnimators[texMtxIdx].calcTexMtx(matrixScratch);
+        if (this.srt0Animators[texMtxIdx]) {
+            this.srt0Animators[texMtxIdx].calcTexMtx(matrixScratch);
         } else {
             mat4.copy(matrixScratch, texSrt.srtMtx);
         }
@@ -310,8 +335,8 @@ class Command_Material {
 
     private calcIndMtx(dst: mat2d, indIdx: number): void {
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.IND0 + indIdx;
-        if (this.srtAnimators[texMtxIdx]) {
-            this.srtAnimators[texMtxIdx].calcIndTexMtx(dst);
+        if (this.srt0Animators[texMtxIdx]) {
+            this.srt0Animators[texMtxIdx].calcIndTexMtx(dst);
         } else {
             mat2d.copy(dst, this.material.indTexMatrices[indIdx]);
         }
@@ -324,7 +349,11 @@ class Command_Material {
                 continue;
 
             const m = materialParams.m_TextureMapping[i];
-            this.textureHolder.fillTextureMapping(m, sampler.name);
+            if (this.pat0Animators[i]) {
+                this.pat0Animators[i].calcTextureMapping(m, this.textureHolder);
+            } else {
+                this.textureHolder.fillTextureMapping(m, sampler.name);
+            }
             // Fill in sampler state.
             m.glSampler = this.glSamplers[i];
             m.lodBias = sampler.lodBias;
