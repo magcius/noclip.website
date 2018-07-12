@@ -41,14 +41,25 @@ export class Color {
         public r: number = 0,
         public g: number = 0,
         public b: number = 0,
-        public a: number = 0
+        public a: number = 0,
     ) {}
 
-    public copy(c: Color, a: number = c.a) {
+    public copy(c: Color, a: number = c.a): void {
         this.r = c.r;
         this.g = c.g;
         this.b = c.b;
         this.a = a;
+    }
+
+    public copy32(c: number): void {
+        this.r = ((c >>> 24) & 0xFF) / 0xFF;
+        this.g = ((c >>> 16) & 0xFF) / 0xFF;
+        this.b = ((c >>>  8) & 0xFF) / 0xFF;
+        this.a = ((c >>>  0) & 0xFF) / 0xFF;
+    }
+
+    public get32(): number {
+        return ((this.r * 0xFF) << 24) | ((this.g * 0xFF) << 16) | ((this.b * 0xFF) << 8) | (this.a * 0xFF);
     }
 }
 

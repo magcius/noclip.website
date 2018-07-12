@@ -65,6 +65,13 @@ export class ModelRenderer {
         }
     }
 
+    public bindCLR0(animationController: BRRES.AnimationController, clr0: BRRES.CLR0): void {
+        for (let i = 0; i < this.materialCommands.length; i++) {
+            const cmd = this.materialCommands[i];
+            cmd.bindCLR0(animationController, clr0);
+        }
+    }
+
     public bindRRESAnimations(animationController: BRRES.AnimationController, rres: BRRES.RRES): void {
         for (let i = 0; i < rres.chr0.length; i++)
             this.bindCHR0(animationController, rres.chr0[i]);
@@ -72,6 +79,8 @@ export class ModelRenderer {
             this.bindSRT0(animationController, rres.srt0[i]);
         for (let i = 0; i < rres.pat0.length; i++)
             this.bindPAT0(animationController, rres.pat0[i]);
+        for (let i = 0; i < rres.clr0.length; i++)
+            this.bindCLR0(animationController, rres.clr0[i]);
     }
 
     public setColorOverride(i: ColorOverride, color: GX_Material.Color): void {
@@ -239,6 +248,7 @@ class Command_Material {
     private glSamplers: WebGLSampler[] = [];
     private srt0Animators: BRRES.SRT0TexMtxAnimator[] = [];
     private pat0Animators: BRRES.PAT0TexAnimator[] = [];
+    private clr0Animators: BRRES.CLR0ColorAnimator[] = [];
     public visible: boolean = true;
 
     constructor(gl: WebGL2RenderingContext,
@@ -267,6 +277,14 @@ class Command_Material {
             const patAnimator = BRRES.bindPAT0Animator(animationController, pat0, this.material.name, i);
             if (patAnimator)
                 this.pat0Animators[i] = patAnimator;
+        }
+    }
+
+    public bindCLR0(animationController: BRRES.AnimationController, clr0: BRRES.CLR0): void {
+        for (let i = 0; i < BRRES.AnimatableColor.COUNT; i++) {
+            const clrAnimator = BRRES.bindCLR0Animator(animationController, clr0, this.material.name, i);
+            if (clrAnimator)
+                this.clr0Animators[i] = clrAnimator;
         }
     }
 
@@ -359,7 +377,7 @@ class Command_Material {
             m.lodBias = sampler.lodBias;
         }
 
-        const copyColor = (i: ColorOverride, dst: GX_Material.Color, fallbackColor: GX_Material.Color) => {
+        const calcColor = (dst: GX_Material.Color, fallbackColor: GX_Material.Color, i: ColorOverride, a: BRRES.AnimatableColor) => {
             let color: GX_Material.Color;
             if (this.model.colorOverrides[i]) {
                 color = this.model.colorOverrides[i];
@@ -367,23 +385,27 @@ class Command_Material {
                 color = fallbackColor;
             }
 
-            dst.copy(color);
+            if (this.clr0Animators[a]) {
+                this.clr0Animators[a].calcColor(dst, color);
+            } else {
+                dst.copy(color);
+            }
         };
 
-        copyColor(ColorOverride.MAT0, materialParams.u_ColorMatReg[0], this.material.colorMatRegs[0]);
-        copyColor(ColorOverride.MAT1, materialParams.u_ColorMatReg[1], this.material.colorMatRegs[1]);
-        copyColor(ColorOverride.AMB0, materialParams.u_ColorAmbReg[0], this.material.colorAmbRegs[0]);
-        copyColor(ColorOverride.AMB1, materialParams.u_ColorAmbReg[1], this.material.colorAmbRegs[1]);
+        calcColor(materialParams.u_ColorMatReg[0], this.material.colorMatRegs[0], ColorOverride.MAT0, BRRES.AnimatableColor.MAT0);
+        calcColor(materialParams.u_ColorMatReg[1], this.material.colorMatRegs[1], ColorOverride.MAT1, BRRES.AnimatableColor.MAT1);
+        calcColor(materialParams.u_ColorAmbReg[0], this.material.colorAmbRegs[0], ColorOverride.AMB0, BRRES.AnimatableColor.AMB0);
+        calcColor(materialParams.u_ColorAmbReg[1], this.material.colorAmbRegs[1], ColorOverride.AMB1, BRRES.AnimatableColor.AMB1);
 
-        copyColor(ColorOverride.K0, materialParams.u_KonstColor[0], this.material.gxMaterial.colorConstants[0]);
-        copyColor(ColorOverride.K1, materialParams.u_KonstColor[1], this.material.gxMaterial.colorConstants[1]);
-        copyColor(ColorOverride.K2, materialParams.u_KonstColor[2], this.material.gxMaterial.colorConstants[2]);
-        copyColor(ColorOverride.K3, materialParams.u_KonstColor[3], this.material.gxMaterial.colorConstants[3]);
+        calcColor(materialParams.u_KonstColor[0], this.material.gxMaterial.colorConstants[0], ColorOverride.K0, BRRES.AnimatableColor.K0);
+        calcColor(materialParams.u_KonstColor[1], this.material.gxMaterial.colorConstants[1], ColorOverride.K1, BRRES.AnimatableColor.K1);
+        calcColor(materialParams.u_KonstColor[2], this.material.gxMaterial.colorConstants[2], ColorOverride.K2, BRRES.AnimatableColor.K2);
+        calcColor(materialParams.u_KonstColor[3], this.material.gxMaterial.colorConstants[3], ColorOverride.K3, BRRES.AnimatableColor.K3);
 
-        copyColor(ColorOverride.CPREV, materialParams.u_Color[0], this.material.gxMaterial.colorRegisters[0]);
-        copyColor(ColorOverride.C0, materialParams.u_Color[1], this.material.gxMaterial.colorRegisters[1]);
-        copyColor(ColorOverride.C1, materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2]);
-        copyColor(ColorOverride.C2, materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3]);
+        calcColor(materialParams.u_Color[0], this.material.gxMaterial.colorRegisters[0], ColorOverride.CPREV, -1);
+        calcColor(materialParams.u_Color[1], this.material.gxMaterial.colorRegisters[1], ColorOverride.C0, BRRES.AnimatableColor.C0);
+        calcColor(materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2], ColorOverride.C1, BRRES.AnimatableColor.C1);
+        calcColor(materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3], ColorOverride.C2, BRRES.AnimatableColor.C2);
 
         for (let i = 0; i < 8; i++)
             this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state, materialParams.m_TextureMapping[i].flipY);

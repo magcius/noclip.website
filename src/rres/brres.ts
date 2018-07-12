@@ -2005,6 +2005,189 @@ export function bindPAT0Animator(animationController: AnimationController, pat0:
 }
 //#endregion
 
+//#region CLR0
+export enum AnimatableColor {
+    MAT0,
+    MAT1,
+    AMB0,
+    AMB1,
+    C0,
+    C1,
+    C2,
+    K0,
+    K1,
+    K2,
+    K3,
+    COUNT,
+}
+
+interface CLR0_ColorData {
+    mask: number;
+    frames: Uint32Array;
+}
+
+interface CLR0_MatData {
+    materialName: string;
+    clrAnimations: CLR0_ColorData[];
+}
+
+export interface CLR0 extends AnimationBase {
+    matAnimations: CLR0_MatData[];
+}
+
+function findAnimationData_CLR0(clr0: CLR0, materialName: string, color: AnimatableColor): CLR0_ColorData | null {
+    const matData: CLR0_MatData = clr0.matAnimations.find((m) => m.materialName === materialName);
+    if (matData === undefined)
+        return null;
+
+    const clrData: CLR0_ColorData = matData.clrAnimations[color];
+    if (clrData === undefined)
+        return null;
+
+    return clrData;
+}
+
+function parseColorDataFrames(buffer: ArrayBufferSlice, numKeyframes: number, isConstant: boolean): Uint32Array {
+    const view = buffer.createDataView();
+    let frames: Uint32Array;
+    if (isConstant) {
+        const color = view.getUint32(0x00);
+        return Uint32Array.of(color);
+    } else {
+        const animationTrackOffs = view.getUint32(0x00);
+        return buffer.createTypedArray(Uint32Array, animationTrackOffs, numKeyframes + 1, Endianness.BIG_ENDIAN);
+    }
+}
+
+function parseCLR0_MatData(buffer: ArrayBufferSlice, numKeyframes: number): CLR0_MatData {
+    const view = buffer.createDataView();
+
+    const materialNameOffs = view.getUint32(0x00);
+    const materialName = readString(buffer, materialNameOffs);
+    const flags = view.getUint32(0x04);
+
+    const enum Flags {
+        EXISTS = 1 << 0,
+        CONSTANT = 1 << 1,
+    };
+
+    let animationTableIdx = 0x08;
+    function nextColorData(isConstant: boolean): CLR0_ColorData {
+        const mask = view.getUint32(animationTableIdx + 0x00);
+        const frames = parseColorDataFrames(buffer.slice(animationTableIdx + 0x04), numKeyframes, isConstant);
+        animationTableIdx += 0x08;
+        return { mask, frames };
+    }
+
+    const clrAnimations: CLR0_ColorData[] = [];
+    for (let i: AnimatableColor = 0; i < AnimatableColor.COUNT; i++) {
+        const clrFlags: Flags = (flags >>> (i * 2)) & 0x03;
+        if (!(clrFlags & Flags.EXISTS))
+            continue;
+
+        const isConstant = !!(clrFlags & Flags.CONSTANT);
+        clrAnimations[i] = nextColorData(isConstant);
+    }
+
+    return { materialName, clrAnimations };
+}
+
+function parseCLR0(buffer: ArrayBufferSlice): CLR0 {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'CLR0');
+    const version = view.getUint32(0x08);
+    const supportedVersions = [0x04];
+    assert(supportedVersions.includes(version));
+
+    const clrMatDataResDicOffs = view.getUint32(0x10);
+    const clrMatDataResDic = parseResDic(buffer, clrMatDataResDicOffs);
+
+    let offs = 0x14;
+    if (version >= 0x04) {
+        // user data
+        offs += 0x04;
+    }
+
+    const nameOffs = view.getUint32(offs + 0x00);
+    const name = readString(buffer, nameOffs);
+    const duration = view.getUint16(offs + 0x08);
+    const numMaterials = view.getUint16(offs + 0x0A);
+    const loopMode: LoopMode = view.getUint32(offs + 0x0C);
+
+    const matAnimations: CLR0_MatData[] = [];
+    for (const clrMatEntry of clrMatDataResDic) {
+        const matData = parseCLR0_MatData(buffer.slice(clrMatEntry.offs), duration);
+        matAnimations.push(matData);
+    }
+    assert(matAnimations.length === numMaterials);
+
+    return { name, loopMode, duration, matAnimations };
+}
+
+function lerpColor(k0: number, k1: number, t: number): number {
+    const k0r = (k0 >>> 24) & 0xFF;
+    const k0g = (k0 >>> 16) & 0xFF;
+    const k0b = (k0 >>>  8) & 0xFF;
+    const k0a = (k0 >>>  0) & 0xFF;
+
+    const k1r = (k1 >>> 24) & 0xFF;
+    const k1g = (k1 >>> 16) & 0xFF;
+    const k1b = (k1 >>>  8) & 0xFF;
+    const k1a = (k1 >>>  0) & 0xFF;
+
+    const r = lerp(k0r, k1r, t);
+    const g = lerp(k0g, k1g, t);
+    const b = lerp(k0b, k1b, t);
+    const a = lerp(k0a, k1a, t);
+    return (r << 24) | (g << 16) | (b << 8) | a;
+}
+
+function sampleColorData(frames: Uint32Array, frame: number): number {
+    const n = frames.length;
+    if (n === 1)
+        return frames[0];
+
+    if (frame === 0)
+        return frames[0];
+    else if (frame > n - 1)
+        return frames[n - 1];
+
+    // Find the first frame.
+    const idx0 = (frame | 0);
+    const k0 = frames[idx0];
+    const idx1 = idx0 + 1;
+    const k1 = frames[idx1];
+
+    const t = (frame - idx0);
+
+    return lerpColor(k0, k1, t);
+}
+
+export class CLR0ColorAnimator {
+    constructor(public animationController: AnimationController, public clr0: CLR0, public clrData: CLR0_ColorData) {
+    }
+
+    public calcColor(dst: GX_Material.Color, orig: GX_Material.Color): void {
+        const clrData = this.clrData;
+
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.clr0, frame);
+
+        const animColor: number = sampleColorData(clrData.frames, animFrame);
+        const c = (orig.get32() & clrData.mask) | animColor;
+        dst.copy32(c);
+    }
+}
+
+export function bindCLR0Animator(animationController: AnimationController, clr0: CLR0, materialName: string, color: AnimatableColor): CLR0ColorAnimator | null {
+    const clrData: CLR0_ColorData | null = findAnimationData_CLR0(clr0, materialName, color);
+    if (clrData === null)
+        return null;
+    return new CLR0ColorAnimator(animationController, clr0, clrData);
+}
+//#endregion
+
 //#region CHR0
 interface CHR0_NodeData {
     nodeName: string;
@@ -2275,6 +2458,7 @@ export interface RRES {
     tex0: TEX0[];
     srt0: SRT0[];
     pat0: PAT0[];
+    clr0: CLR0[];
     chr0: CHR0[];
 }
 
@@ -2353,6 +2537,18 @@ export function parse(buffer: ArrayBufferSlice): RRES {
         }
     }
 
+    // Color Animations
+    const clr0: CLR0[] = [];
+    const animClrsEntry = rootResDic.find((entry) => entry.name === 'AnmClr(NW4R)');
+    if (animClrsEntry) {
+        const animClrResDic = parseResDic(buffer, animClrsEntry.offs);
+        for (const clr0Entry of animClrResDic) {
+            const clr0_ = parseCLR0(buffer.subarray(clr0Entry.offs));
+            assert(clr0_.name === clr0Entry.name);
+            clr0.push(clr0_);
+        }
+    }
+
     // Node Animations
     const chr0: CHR0[] = [];
     const animChrsEntry = rootResDic.find((entry) => entry.name === 'AnmChr(NW4R)');
@@ -2365,5 +2561,5 @@ export function parse(buffer: ArrayBufferSlice): RRES {
         }
     }
 
-    return { mdl0, tex0, srt0, pat0, chr0 };
+    return { mdl0, tex0, srt0, pat0, clr0, chr0 };
 }
