@@ -6586,7 +6586,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         var dst = materialParams.u_TexMtx[i];
                         var flipY = materialParams.m_TextureMapping[i].flipY;
                         var flipYScale = flipY ? -1.0 : 1.0;
-                        var usingMapping = false;
                         // First, compute input matrix.
                         switch (texMtx.type) {
                             case 0x00:
@@ -6600,7 +6599,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                             case 0x07: // Rainbow Road
                                 // Environment mapping. Uses the normal matrix.
                                 // Normal matrix. Emulated here by the view matrix with the translation lopped off...
-                                usingMapping = true;
                                 gl_matrix_4.mat4.copy(dst, state.view);
                                 dst[12] = 0;
                                 dst[13] = 0;
@@ -6608,7 +6606,6 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                                 break;
                             case 0x09:
                                 // Projection. Used for indtexwater, mostly.
-                                usingMapping = true;
                                 gl_matrix_4.mat4.copy(dst, state.view);
                                 break;
                             default:
@@ -6647,16 +6644,15 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                         gl_matrix_4.mat4.copy(scratch, texMtx.matrix);
                         if (this.scene.btk !== null)
                             this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
-                        if (usingMapping) {
-                            // TODO(jstpierre): Just rewrite the texProjMatrices instead of doing this swap...
-                            var tx = scratch[12];
-                            scratch[12] = scratch[8];
-                            scratch[8] = tx;
-                            var ty = scratch[13];
-                            scratch[13] = scratch[9];
-                            scratch[9] = tx;
-                        }
-                        gl_matrix_4.mat4.mul(dst, dst, scratch);
+                        // SRT matrices have translation in fourth component, but we want our matrix to have translation
+                        // in third component. Swap.
+                        var tx = scratch[12];
+                        scratch[12] = scratch[8];
+                        scratch[8] = tx;
+                        var ty = scratch[13];
+                        scratch[13] = scratch[9];
+                        scratch[9] = ty;
+                        gl_matrix_4.mat4.mul(dst, scratch, dst);
                     }
                     for (var i = 0; i < this.material.postTexMatrices.length; i++) {
                         var postTexMtx = this.material.postTexMatrices[i];
@@ -18835,10 +18831,6 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                     var texMtxIdx = BRRES.TexMtxIndex.TEX0 + texIdx;
                     var texSrt = this.material.texSrts[texIdx];
                     var flipYScale = flipY ? -1.0 : 1.0;
-                    if (texSrt.mapMode !== 0 /* TEXCOORD */) {
-                        // Effect mtx.
-                        gl_matrix_17.mat4.mul(dst, this.material.texSrts[texIdx].effectMtx, dst);
-                    }
                     if (texSrt.mapMode === 2 /* PROJECTION */) {
                         Camera_9.texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
                         // XXX(jstpierre): ZSS hack. Reference camera 31 is set up by the game to be an overhead
@@ -18854,6 +18846,8 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                     else {
                         gl_matrix_17.mat4.identity(dst);
                     }
+                    // Apply effect matrix.
+                    gl_matrix_17.mat4.mul(dst, texSrt.effectMtx, dst);
                     // Calculate SRT.
                     if (this.srt0Animators[texMtxIdx]) {
                         this.srt0Animators[texMtxIdx].calcTexMtx(matrixScratch);
@@ -18861,15 +18855,14 @@ System.register("rres/render", ["rres/brres", "gx/gx_material", "gl-matrix", "gx
                     else {
                         gl_matrix_17.mat4.copy(matrixScratch, texSrt.srtMtx);
                     }
-                    // SRT puts translation in fourth column, env/proj in third, so swap SRT so that it matches.
-                    if (texSrt.mapMode !== 0 /* TEXCOORD */) {
-                        var tx = matrixScratch[12];
-                        matrixScratch[12] = matrixScratch[8];
-                        matrixScratch[8] = tx;
-                        var ty = matrixScratch[13];
-                        matrixScratch[13] = matrixScratch[9];
-                        matrixScratch[9] = ty;
-                    }
+                    // SRT matrices have translation in fourth component, but we want our matrix to have translation
+                    // in third component. Swap.
+                    var tx = matrixScratch[12];
+                    matrixScratch[12] = matrixScratch[8];
+                    matrixScratch[8] = tx;
+                    var ty = matrixScratch[13];
+                    matrixScratch[13] = matrixScratch[9];
+                    matrixScratch[9] = ty;
                     gl_matrix_17.mat4.mul(dst, matrixScratch, dst);
                 };
                 Command_Material.prototype.calcIndMtx = function (dst, indIdx) {
@@ -19882,7 +19875,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         return k0 + (k1 - k0) * t;
     }
     function lerpPeriodic(k0, k1, t, kp) {
-        if (kp === void 0) { kp = 360; }
+        if (kp === void 0) { kp = 180; }
         var ga = (k1 - k0) % kp;
         var g = 2 * ga % kp - ga;
         return k0 + g * t;

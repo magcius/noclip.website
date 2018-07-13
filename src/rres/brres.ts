@@ -1404,7 +1404,7 @@ function lerp(k0: number, k1: number, t: number): number {
     return k0 + (k1 - k0) * t;
 }
 
-function lerpPeriodic(k0: number, k1: number, t: number, kp: number = 360): number {
+function lerpPeriodic(k0: number, k1: number, t: number, kp: number = 180): number {
     const ga = (k1 - k0) % kp;
     const g = 2 * ga % kp - ga;
     return k0 + g * t;
