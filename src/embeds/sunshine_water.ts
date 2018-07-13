@@ -40,10 +40,8 @@ class SeaPlaneScene implements Scene {
     // Play make-believe for translateTextures
     public bmt: BMT = null;
 
-    private tex1TextureDatas: TEX1_TextureData[];
     private tex1Samplers: TEX1_Sampler[];
     private glSamplers: WebGLSampler[];
-    private glTextures: WebGLTexture[];
 
     public fps: number = 30;
 
