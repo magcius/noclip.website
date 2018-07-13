@@ -6,3 +6,4 @@
 * MKWii object spawn
 * Merge in N.E.C.'s N64 texenv work.
 * BRRES Billboard
+* SM64DS backface cull render setting
