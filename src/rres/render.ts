@@ -313,11 +313,6 @@ class Command_Material {
         const texSrt = this.material.texSrts[texIdx];
         const flipYScale = flipY ? -1.0 : 1.0;
 
-        if (texSrt.mapMode !== BRRES.MapMode.TEXCOORD) {
-            // Effect mtx.
-            mat4.mul(dst, this.material.texSrts[texIdx].effectMtx, dst);
-        }
-
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
             texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
 
@@ -333,6 +328,9 @@ class Command_Material {
             mat4.identity(dst);
         }
 
+        // Apply effect matrix.
+        mat4.mul(dst, texSrt.effectMtx, dst);
+
         // Calculate SRT.
         if (this.srt0Animators[texMtxIdx]) {
             this.srt0Animators[texMtxIdx].calcTexMtx(matrixScratch);
@@ -340,13 +338,14 @@ class Command_Material {
             mat4.copy(matrixScratch, texSrt.srtMtx);
         }
 
-        // SRT puts translation in fourth column, env/proj in third, so swap SRT so that it matches.
-        if (texSrt.mapMode !== BRRES.MapMode.TEXCOORD) {
-            const tx = matrixScratch[12];
-            matrixScratch[12] = matrixScratch[8]; matrixScratch[8] = tx;
-            const ty = matrixScratch[13];
-            matrixScratch[13] = matrixScratch[9]; matrixScratch[9] = ty;
-        }
+        // SRT matrices have translation in fourth component, but we want our matrix to have translation
+        // in third component. Swap.
+        const tx = matrixScratch[12];
+        matrixScratch[12] = matrixScratch[8];
+        matrixScratch[8] = tx;
+        const ty = matrixScratch[13];
+        matrixScratch[13] = matrixScratch[9];
+        matrixScratch[9] = ty;
 
         mat4.mul(dst, matrixScratch, dst);
     }

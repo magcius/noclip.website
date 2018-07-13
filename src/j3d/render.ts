@@ -288,8 +288,6 @@ export class Command_Material {
             const flipY = materialParams.m_TextureMapping[i].flipY;
             const flipYScale = flipY ? -1.0 : 1.0;
 
-            let usingMapping = false;
-
             // First, compute input matrix.
             switch (texMtx.type) {
             case 0x00:
@@ -303,7 +301,6 @@ export class Command_Material {
             case 0x07: // Rainbow Road
                 // Environment mapping. Uses the normal matrix.
                 // Normal matrix. Emulated here by the view matrix with the translation lopped off...
-                usingMapping = true;
                 mat4.copy(dst, state.view);
                 dst[12] = 0;
                 dst[13] = 0;
@@ -311,7 +308,6 @@ export class Command_Material {
                 break;
             case 0x09:
                 // Projection. Used for indtexwater, mostly.
-                usingMapping = true;
                 mat4.copy(dst, state.view);
                 break;
             default:
@@ -354,15 +350,16 @@ export class Command_Material {
             if (this.scene.btk !== null)
                 this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
 
-            if (usingMapping) {
-                // TODO(jstpierre): Just rewrite the texProjMatrices instead of doing this swap...
-                const tx = scratch[12];
-                scratch[12] = scratch[8]; scratch[8] = tx;
-                const ty = scratch[13];
-                scratch[13] = scratch[9]; scratch[9] = tx;
-            }
+            // SRT matrices have translation in fourth component, but we want our matrix to have translation
+            // in third component. Swap.
+            const tx = scratch[12];
+            scratch[12] = scratch[8];
+            scratch[8] = tx;
+            const ty = scratch[13];
+            scratch[13] = scratch[9];
+            scratch[9] = ty;
 
-            mat4.mul(dst, dst, scratch);
+            mat4.mul(dst, scratch, dst);
         }
 
         for (let i = 0; i < this.material.postTexMatrices.length; i++) {
