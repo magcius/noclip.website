@@ -780,12 +780,10 @@ export class LayerPanel extends Panel {
     }
 }
 
-
 export class UI {
     public elem: HTMLElement;
 
     private toplevel: HTMLElement;
-    private visible: boolean = false;
 
     public sceneSelect: SceneSelect;
     public textureViewer: TextureViewer;

@@ -3848,7 +3848,6 @@ System.register("ui", ["util", "Camera"], function (exports_17, context_17) {
             UI = /** @class */ (function () {
                 function UI(viewer) {
                     this.viewer = viewer;
-                    this.visible = false;
                     this.toplevel = document.createElement('div');
                     this.toplevel.style.display = 'grid';
                     this.toplevel.style.gridTemplateColumns = '1fr';
@@ -7470,8 +7469,8 @@ System.register("j3d/j3d", ["gl-matrix", "util", "gx/gx_displaylist", "gx/gx_mat
                 texMatrices[j] = readTexMatrix(texMtxTableOffs, j, texMtxIndex);
             }
             // Since texture matrices are assigned in order, we should never actually have more than 8 of these.
-            util_14.assert(texMatrices[8] === undefined);
-            util_14.assert(texMatrices[9] === undefined);
+            util_14.assert(texMatrices[8] === null);
+            util_14.assert(texMatrices[9] === null);
             var postTexMatrices = [];
             for (var j = 0; j < 20; j++) {
                 postTexMatrices[j] = null;
