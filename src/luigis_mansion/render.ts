@@ -10,6 +10,8 @@ import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelpe
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
+import { AABB, IntersectionState } from "../Camera";
+import { renderWireframeAABB } from "../RenderUtility";
 
 class Command_Material {
     private renderFlags: RenderFlags;
@@ -50,6 +52,7 @@ class Command_Material {
     }
 }
 
+const bboxScratch = new AABB();
 class Command_Batch {
     private shapeHelper: GXShapeHelper;
     private packetParams = new PacketParams();
@@ -65,7 +68,15 @@ class Command_Batch {
     public exec(state: RenderState): void {
         const gl = state.gl;
 
+        if (this.sceneGraphNode.bbox) {
+            bboxScratch.transform(this.sceneGraphNode.bbox, this.sceneGraphNode.modelMatrix);
+            if (state.camera.frustum.intersect(bboxScratch) === IntersectionState.FULLY_OUTSIDE) {
+               return;
+            }
+        }
+
         this.computeModelView(this.packetParams.u_PosMtx[0], state);
+
         this.scene.renderHelper.bindPacketParams(state, this.packetParams);
 
         this.shapeHelper.drawSimple(gl);
@@ -78,8 +89,6 @@ class Command_Batch {
 }
 
 type RenderCommand = Command_Batch | Command_Material;
-
-const sceneParamsData = new Float32Array(4*4 + 4);
 
 export class BinScene implements Viewer.MainScene {
     public name: string;
@@ -107,8 +116,6 @@ export class BinScene implements Viewer.MainScene {
     public render(state: RenderState): void {
         if (!this.visible)
             return;
-
-        const gl = state.gl;
 
         state.setClipPlanes(10, 500000);
 

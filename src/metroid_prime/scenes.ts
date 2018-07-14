@@ -5,6 +5,7 @@ import { ResourceSystem } from './resource';
 import { Scene } from './render';
 
 import * as Viewer from '../viewer';
+import * as UI from '../ui';
 import { fetch, assert } from '../util';
 import Progressable from 'Progressable';
 import { RenderState } from '../render';
@@ -21,19 +22,25 @@ function findPakBase() {
 
 const pakBase = findPakBase();
 
-export class MultiScene implements Viewer.MainScene {
-    public scenes: Viewer.Scene[];
+function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
+    const textures: Viewer.Texture[] = [];
+    for (const scene of scenes)
+        if (scene)
+            textures.push.apply(textures, scene.textures);
+    return textures;
+}
+
+export class MetroidPrimeAreaScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
 
-    constructor(scenes: Viewer.Scene[]) {
-        this.setScenes(scenes);
+    constructor(public mlvl: MLVL.MLVL, public scenes: Scene[]) {
+        this.textures = collectTextures(scenes);
     }
 
-    protected setScenes(scenes: Viewer.Scene[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
+    public createPanels(): UI.Panel[] {
+        const layersPanel = new UI.LayerPanel();
+        layersPanel.setLayers(this.scenes);
+        return [layersPanel];
     }
 
     public render(renderState: RenderState) {
@@ -69,12 +76,12 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 assert(mlvlEntry.fourCC === 'MLVL');
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
                 // Crash my browser please.
-                const areas = mlvl.areaTable.slice(0, 1);
+                const areas = mlvl.areaTable;
                 const scenes = areas.map((mreaEntry) => {
                     const mrea = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
-                    return new Scene(gl, mrea);
+                    return new Scene(gl, mreaEntry.areaMREAID, mrea);
                 });
-                return new MultiScene(scenes);
+                return new MetroidPrimeAreaScene(mlvl, scenes);
             }
 
             return null;

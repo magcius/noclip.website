@@ -167,8 +167,6 @@ export function fillPacketParamsData(d: Float32Array, packetParams: PacketParams
 
 const bufferDataScratchSize = Math.max(u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize);
 
-type ParamsDataFiller<T> = (d: Float32Array, params: T) => void;
-
 export class GXRenderHelper {
     public bufferDataScratch = new Float32Array(bufferDataScratchSize);
 
