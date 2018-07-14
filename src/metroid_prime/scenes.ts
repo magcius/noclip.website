@@ -3,7 +3,7 @@ import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import { ResourceSystem, NameData } from './resource';
-import { Scene } from './render';
+import { MREARenderer, RetroTextureHolder } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -24,35 +24,28 @@ function findPakBase() {
 
 const pakBase = findPakBase();
 
-function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
-    const textures: Viewer.Texture[] = [];
-    for (const scene of scenes)
-        if (scene)
-            textures.push.apply(textures, scene.textures);
-    return textures;
-}
-
-export class MetroidPrimeAreaScene implements Viewer.MainScene {
+export class MetroidPrimeWorldScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
 
-    constructor(public mlvl: MLVL.MLVL, public scenes: Scene[]) {
-        this.textures = collectTextures(scenes);
+    constructor(public mlvl: MLVL.MLVL, public textureHolder: RetroTextureHolder, public areas: MREARenderer[]) {
+        this.textures = textureHolder.viewerTextures;
     }
 
     public createPanels(): UI.Panel[] {
         const layersPanel = new UI.LayerPanel();
-        layersPanel.setLayers(this.scenes);
+        layersPanel.setLayers(this.areas);
         return [layersPanel];
     }
 
-    public render(renderState: RenderState) {
-        this.scenes.forEach((scene) => {
-            scene.render(renderState);
+    public render(state: RenderState) {
+        this.areas.forEach((area) => {
+            area.render(state);
         });
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
+        this.textureHolder.destroy(gl);
+        this.areas.forEach((area) => area.destroy(gl));
     }
 }
 
@@ -77,11 +70,12 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
                 // Crash my browser please.
                 const areas = mlvl.areaTable;
+                const textureHolder = new RetroTextureHolder();
                 const scenes = areas.map((mreaEntry) => {
                     const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
-                    return new Scene(gl, mreaEntry.areaName, mrea);
+                    return new MREARenderer(gl, textureHolder, mreaEntry.areaName, mrea);
                 });
-                return new MetroidPrimeAreaScene(mlvl, scenes);
+                return new MetroidPrimeWorldScene(mlvl, textureHolder, scenes);
             }
 
             return null;
