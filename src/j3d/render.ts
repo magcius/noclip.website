@@ -534,7 +534,7 @@ export class Scene implements Viewer.Scene {
         if (!this.visible)
             return false;
 
-        state.setClipPlanes(10, 500000);
+        state.setClipPlanes(20, 500000);
 
         // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
         this.updateJointMatrices(state);

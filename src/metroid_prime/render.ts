@@ -21,7 +21,7 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
     0, 0, 0, 1,
 );
 
-// Cheap way to scale up.
+// Cheap way to scale up. TODO(jstpierre): Why doesn't scale work?
 const posScale = 1;
 const posMtx = mat4.create();
 mat4.multiplyScalar(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, posScale);
@@ -214,11 +214,8 @@ class Command_Material {
     }
 
     public exec(state: RenderState, renderHelper: GXRenderHelper) {
-        const gl = state.gl;
-
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
-
         renderHelper.bindMaterialParams(state, this.materialParams);
     }
 

@@ -10,7 +10,7 @@ import * as MREA from './mrea';
 import * as STRG from './strg';
 import * as TXTR from './txtr';
 
-import { assert } from "../util";
+import { assert, hexzero } from "../util";
 import ArrayBufferSlice from 'ArrayBufferSlice';
 
 type ParseFunc<T> = (resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice) => T;
@@ -23,10 +23,31 @@ const FourCCLoaders: { [n: string]: ParseFunc<Resource> } = {
     'TXTR': TXTR.parse,
 };
 
+interface NameDataAsset {
+    Filename: string;
+    Path: string;
+}
+
+interface NameDataArea {
+    Name: string;
+}
+
+export interface NameData {
+    Assets: { [key: string]: NameDataAsset },
+    Areas: { [key: string]: NameDataArea },
+}
+
+function hexName(id: string): string {
+    let S = '';
+    for (let i = 0; i < id.length; i++)
+        S += hexzero(id.charCodeAt(i), 2).toUpperCase();
+    return S;
+}
+
 export class ResourceSystem {
     private _cache: Map<string, Resource>;
 
-    constructor(public paks: PAK[]) {
+    constructor(public paks: PAK[], public nameData: NameData) {
         this._cache = new Map<string, Resource>();
     }
 
@@ -38,6 +59,16 @@ export class ResourceSystem {
         } else {
             return resource.buffer;
         }
+    }
+
+    public findResourceNameByID(assetID: string): string {
+        const assetIDHex = hexName(assetID);
+        assert(assetIDHex.length === 8);
+        const nameDataAsset = this.nameData.Assets[assetIDHex];
+        if (nameDataAsset)
+            return nameDataAsset.Filename;
+        else
+            return assetIDHex;
     }
 
     public findResourceByID(assetID: string): FileResource {

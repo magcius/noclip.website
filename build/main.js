@@ -203,6 +203,7 @@ System.register("util", ["ArrayBufferSlice", "Progressable"], function (exports_
         var S = n.toString(16);
         return leftPad(S, spaces);
     }
+    exports_2("hexzero", hexzero);
     function hexdump(buffer, offs, length) {
         if (offs === void 0) { offs = 0; }
         if (length === void 0) { length = 0x100; }
@@ -6855,7 +6856,7 @@ System.register("j3d/render", ["gl-matrix", "j3d/j3d", "gx/gx_material", "gx/gx_
                 Scene.prototype.bindState = function (state) {
                     if (!this.visible)
                         return false;
-                    state.setClipPlanes(10, 500000);
+                    state.setClipPlanes(20, 500000);
                     // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
                     this.updateJointMatrices(state);
                     this.renderHelper.bindUniformBuffers(state);
@@ -16956,7 +16957,7 @@ System.register("metroid_prime/txtr", ["gx/gx_texture"], function (exports_67, c
     function parse(resourceSystem, assetID, buffer) {
         var view = buffer.createDataView();
         var txtrFormat = view.getUint32(0x00);
-        var name = assetID;
+        var name = resourceSystem.findResourceNameByID(assetID);
         var format = txtrFormatRemap[txtrFormat];
         var width = view.getUint16(0x04);
         var height = view.getUint16(0x06);
@@ -17518,6 +17519,12 @@ System.register("metroid_prime/strg", ["util"], function (exports_69, context_69
 System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroid_prime/mrea", "metroid_prime/strg", "metroid_prime/txtr", "util", "ArrayBufferSlice"], function (exports_70, context_70) {
     "use strict";
     var __moduleName = context_70 && context_70.id;
+    function hexName(id) {
+        var S = '';
+        for (var i = 0; i < id.length; i++)
+            S += util_41.hexzero(id.charCodeAt(i), 2).toUpperCase();
+        return S;
+    }
     var pako_1, MLVL, MREA, STRG, TXTR, util_41, ArrayBufferSlice_7, FourCCLoaders, ResourceSystem;
     return {
         setters: [
@@ -17551,8 +17558,9 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                 'TXTR': TXTR.parse,
             };
             ResourceSystem = /** @class */ (function () {
-                function ResourceSystem(paks) {
+                function ResourceSystem(paks, nameData) {
                     this.paks = paks;
+                    this.nameData = nameData;
                     this._cache = new Map();
                 }
                 ResourceSystem.prototype.loadResourceBuffer = function (resource) {
@@ -17564,6 +17572,15 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                     else {
                         return resource.buffer;
                     }
+                };
+                ResourceSystem.prototype.findResourceNameByID = function (assetID) {
+                    var assetIDHex = hexName(assetID);
+                    util_41.assert(assetIDHex.length === 8);
+                    var nameDataAsset = this.nameData.Assets[assetIDHex];
+                    if (nameDataAsset)
+                        return nameDataAsset.Filename;
+                    else
+                        return assetIDHex;
                 };
                 ResourceSystem.prototype.findResourceByID = function (assetID) {
                     util_41.assert(assetID.length === 4);
@@ -17618,7 +17635,7 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_71, context_71
         // STRG file ID?
         var worldNameSTRGID = util_42.readString(buffer, 0x08, 4, false);
         var worldNameSTRG = resourceSystem.findResourceByID(worldNameSTRGID);
-        resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
+        var worldName = resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
         var worldSaveID = view.getUint32(0x0C);
         var skyboxID = view.getUint32(0x10);
         // Memory Relay junk.
@@ -17639,8 +17656,8 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_71, context_71
         var areaTable = [];
         for (var i = 0; i < areaTableCount; i++) {
             var areaSTRGID = util_42.readString(buffer, areaTableIdx, 4, false);
-            var areaSTRG = resourceSystem.findResourceByID(areaSTRGID);
-            util_42.assert(areaSTRG !== null);
+            var areaSTRG = resourceSystem.loadAssetByID(areaSTRGID, 'STRG');
+            var areaName = areaSTRG.strings[0];
             areaTableIdx += 0x04;
             areaTableIdx += 0x04 * 12; // Transform matrix
             areaTableIdx += 0x04 * 6; // AABB
@@ -17685,7 +17702,7 @@ System.register("metroid_prime/mlvl", ["util"], function (exports_71, context_71
                     areaTableIdx += 0x0C; // xyz floats
                 }
             }
-            areaTable.push({ areaSTRGID: areaSTRGID, areaMREAID: areaMREAID });
+            areaTable.push({ areaName: areaName, areaMREAID: areaMREAID });
         }
         return { areaTable: areaTable };
     }
@@ -17734,7 +17751,7 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_texture", "gx/gx_ma
         ],
         execute: function () {
             fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_15.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-            // Cheap way to scale up.
+            // Cheap way to scale up. TODO(jstpierre): Why doesn't scale work?
             posScale = 1;
             posMtx = gl_matrix_15.mat4.create();
             gl_matrix_15.mat4.multiplyScalar(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, posScale);
@@ -17896,7 +17913,6 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_texture", "gx/gx_ma
                     this.fillMaterialParamsData(this.materialParams);
                 }
                 Command_Material.prototype.exec = function (state, renderHelper) {
-                    var gl = state.gl;
                     state.useProgram(this.program);
                     state.useFlags(this.renderFlags);
                     renderHelper.bindMaterialParams(state, this.materialParams);
@@ -17915,10 +17931,10 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_texture", "gx/gx_ma
         }
     };
 });
-System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "ui", "util", "Progressable"], function (exports_73, context_73) {
+System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/resource", "metroid_prime/render", "ui", "util", "Progressable", "byml"], function (exports_73, context_73) {
     "use strict";
     var __moduleName = context_73 && context_73.id;
-    // Files are too big for GitHub.
+    // PAK Files are too big for GitHub.
     function findPakBase() {
         if (document.location.protocol === 'file:') {
             return "data/metroid_prime/mp1/";
@@ -17946,7 +17962,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
         return textures;
         var e_57, _a;
     }
-    var PAK, resource_1, render_27, UI, util_44, Progressable_8, pakBase, MetroidPrimeAreaScene, MP1SceneDesc, id, name, sceneDescs, sceneGroup;
+    var PAK, resource_1, render_27, UI, util_44, Progressable_8, BYML, pakBase, MetroidPrimeAreaScene, MP1SceneDesc, id, name, sceneDescs, sceneGroup;
     return {
         setters: [
             function (PAK_1) {
@@ -17966,6 +17982,9 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
             },
             function (Progressable_8_1) {
                 Progressable_8 = Progressable_8_1;
+            },
+            function (BYML_2) {
+                BYML = BYML_2;
             }
         ],
         execute: function () {
@@ -17998,17 +18017,15 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                     this.name = name;
                     this.id = filename;
                 }
-                MP1SceneDesc.prototype.fetchPak = function (path) {
-                    return util_44.fetch(path).then(function (buffer) {
-                        return PAK.parse(buffer);
-                    });
-                };
                 MP1SceneDesc.prototype.createScene = function (gl) {
-                    var _this = this;
-                    var paks = [pakBase + "/" + this.filename, pakBase + "/Strings.pak"];
-                    return Progressable_8.default.all(paks.map(function (pakPath) { return _this.fetchPak(pakPath); })).then(function (paks) {
-                        var resourceSystem = new resource_1.ResourceSystem(paks);
-                        var levelPak = paks[0];
+                    var stringsPakP = util_44.fetch(pakBase + "/Strings.pak");
+                    var levelPakP = util_44.fetch(pakBase + "/" + this.filename);
+                    var nameDataP = util_44.fetch("data/metroid_prime/mp1/MP1_NameData.crg1");
+                    return Progressable_8.default.all([levelPakP, stringsPakP, nameDataP]).then(function (datas) {
+                        var levelPak = PAK.parse(datas[0]);
+                        var stringsPak = PAK.parse(datas[1]);
+                        var nameData = BYML.parse(datas[2], 1 /* CRG1 */);
+                        var resourceSystem = new resource_1.ResourceSystem([levelPak, stringsPak], nameData);
                         try {
                             for (var _a = __values(levelPak.namedResourceTable.values()), _b = _a.next(); !_b.done; _b = _a.next()) {
                                 var mlvlEntry = _b.value;
@@ -18018,7 +18035,7 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                                 var areas = mlvl.areaTable;
                                 var scenes = areas.map(function (mreaEntry) {
                                     var mrea = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
-                                    return new render_27.Scene(gl, mreaEntry.areaMREAID, mrea);
+                                    return new render_27.Scene(gl, mreaEntry.areaName, mrea);
                                 });
                                 return new MetroidPrimeAreaScene(mlvl, scenes);
                             }

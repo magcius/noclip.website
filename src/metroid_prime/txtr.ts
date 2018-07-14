@@ -36,7 +36,7 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
     const view = buffer.createDataView();
 
     const txtrFormat = view.getUint32(0x00);
-    const name = assetID;
+    const name = resourceSystem.findResourceNameByID(assetID);
     const format: GX.TexFormat = txtrFormatRemap[txtrFormat];
     const width = view.getUint16(0x04);
     const height = view.getUint16(0x06);

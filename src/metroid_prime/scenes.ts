@@ -1,7 +1,8 @@
 
 import * as PAK from './pak';
 import * as MLVL from './mlvl';
-import { ResourceSystem } from './resource';
+import * as MREA from './mrea';
+import { ResourceSystem, NameData } from './resource';
 import { Scene } from './render';
 
 import * as Viewer from '../viewer';
@@ -10,8 +11,9 @@ import { fetch, assert } from '../util';
 import Progressable from 'Progressable';
 import { RenderState } from '../render';
 import ArrayBufferSlice from 'ArrayBufferSlice';
+import * as BYML from 'byml';
 
-// Files are too big for GitHub.
+// PAK Files are too big for GitHub.
 function findPakBase() {
     if (document.location.protocol === 'file:') {
         return `data/metroid_prime/mp1/`;
@@ -60,17 +62,15 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         this.id = filename;
     }
 
-    private fetchPak(path: string): Progressable<PAK.PAK> {
-        return fetch(path).then((buffer: ArrayBufferSlice) => {
-            return PAK.parse(buffer);
-        });
-    }
-
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        const paks = [`${pakBase}/${this.filename}`, `${pakBase}/Strings.pak`];
-        return Progressable.all(paks.map((pakPath) => this.fetchPak(pakPath))).then((paks: PAK.PAK[]) => {
-            const resourceSystem = new ResourceSystem(paks);
-            const levelPak = paks[0];
+        const stringsPakP = fetch(`${pakBase}/Strings.pak`);
+        const levelPakP = fetch(`${pakBase}/${this.filename}`);
+        const nameDataP = fetch(`data/metroid_prime/mp1/MP1_NameData.crg1`);
+        return Progressable.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
+            const levelPak = PAK.parse(datas[0]);
+            const stringsPak = PAK.parse(datas[1]);
+            const nameData = BYML.parse(datas[2], BYML.FileType.CRG1);
+            const resourceSystem = new ResourceSystem([levelPak, stringsPak], <NameData> <any> nameData);
 
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
                 assert(mlvlEntry.fourCC === 'MLVL');
@@ -78,8 +78,8 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 // Crash my browser please.
                 const areas = mlvl.areaTable;
                 const scenes = areas.map((mreaEntry) => {
-                    const mrea = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
-                    return new Scene(gl, mreaEntry.areaMREAID, mrea);
+                    const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
+                    return new Scene(gl, mreaEntry.areaName, mrea);
                 });
                 return new MetroidPrimeAreaScene(mlvl, scenes);
             }
