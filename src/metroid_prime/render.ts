@@ -12,6 +12,7 @@ import { nArray } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { AABB, IntersectionState } from '../Camera';
+import { renderWireframeAABB } from '../RenderUtility';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0, 0, 0,
@@ -21,7 +22,7 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
 );
 
 // Cheap way to scale up.
-const posScale = 10;
+const posScale = 1;
 const posMtx = mat4.create();
 mat4.multiplyScalar(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, posScale);
 
@@ -38,8 +39,9 @@ export class Scene implements Viewer.MainScene {
     private sceneParams: SceneParams = new SceneParams();
     private packetParams: PacketParams = new PacketParams();
     private bboxScratch: AABB = new AABB();
+    public visible: boolean = true;
 
-    constructor(gl: WebGL2RenderingContext, public mrea: MREA) {
+    constructor(gl: WebGL2RenderingContext, public name: string, public mrea: MREA) {
         this.renderHelper = new GXRenderHelper(gl);
         this.translateTextures(gl);
         this.translateModel(gl);
@@ -96,8 +98,13 @@ export class Scene implements Viewer.MainScene {
         });
     }
 
-    public render(state: RenderState) {
-        const gl = state.gl;
+    public setVisible(visible: boolean): void {
+        this.visible = visible;
+    }
+
+    public render(state: RenderState): void {
+        if (!this.visible)
+            return;
 
         this.renderHelper.bindUniformBuffers(state);
 
@@ -118,22 +125,19 @@ export class Scene implements Viewer.MainScene {
             // Frustum cull.
             bbox.transform(worldModel.bbox, posMtx);
             if (state.camera.frustum.intersect(bbox) === IntersectionState.FULLY_OUTSIDE) {
-                // TODO(jstpierre): Why doesn't this work?
-                /*
                 surfaceCmdIndex += numSurfaces;
                 return;
-                */
             }
 
             for (let i = 0; i < numSurfaces; i++) {
                 const surfaceCmd = this.surfaceCommands[surfaceCmdIndex++];
                 const materialIndex = surfaceCmd.surface.materialIndex;
                 const material = this.mrea.materialSet.materials[materialIndex];
-    
+
                 // Don't render occluder meshes.
                 if (material.flags & MaterialFlags.OCCLUDER)
                     continue;
-    
+
                 if (currentMaterialIndex !== materialIndex) {
                     const groupIndex = this.mrea.materialSet.materials[materialIndex].groupIndex;
                     const materialCommand = this.materialCommands[groupIndex];

@@ -580,15 +580,14 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
         // World model header.
         let worldModelHeaderOffs = dataSectionOffsTable[geometrySectionIndex];
         const visorFlags = view.getUint32(worldModelHeaderOffs + 0x00);
-        worldModelHeaderOffs += 4 * 12; // World transform matrix
-        const bboxMinX = view.getFloat32(worldModelHeaderOffs + 0x00);
-        const bboxMinY = view.getFloat32(worldModelHeaderOffs + 0x04);
-        const bboxMinZ = view.getFloat32(worldModelHeaderOffs + 0x08);
-        const bboxMaxX = view.getFloat32(worldModelHeaderOffs + 0x0C);
-        const bboxMaxY = view.getFloat32(worldModelHeaderOffs + 0x10);
-        const bboxMaxZ = view.getFloat32(worldModelHeaderOffs + 0x14);
+        const bboxMinX = view.getFloat32(worldModelHeaderOffs + 0x34);
+        const bboxMinY = view.getFloat32(worldModelHeaderOffs + 0x38);
+        const bboxMinZ = view.getFloat32(worldModelHeaderOffs + 0x3C);
+        const bboxMaxX = view.getFloat32(worldModelHeaderOffs + 0x40);
+        const bboxMaxY = view.getFloat32(worldModelHeaderOffs + 0x44);
+        const bboxMaxZ = view.getFloat32(worldModelHeaderOffs + 0x48);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
-        worldModelHeaderOffs += 0x14;
+        worldModelHeaderOffs += 0x4C;
 
         geometrySectionIndex += 1;
 

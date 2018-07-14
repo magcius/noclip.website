@@ -1,11 +1,12 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import { readString, assert, hexdump } from "../util";
 import { mat4, vec3, quat } from "gl-matrix";
 
 import * as GX from "../gx/gx_enum";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import * as GX_Material from '../gx/gx_material';
+import { AABB } from "../Camera";
 
 export interface BIN {
     samplers: Sampler[];
@@ -44,6 +45,7 @@ export interface SceneGraphPart {
 export interface SceneGraphNode {
     children: SceneGraphNode[];
     modelMatrix: mat4;
+    bbox: AABB;
     parts: SceneGraphPart[];
 }
 
@@ -294,13 +296,18 @@ export function parse(buffer: ArrayBufferSlice): BIN {
         const translationY = view.getFloat32(nodeOffs + 0x28, false);
         const translationZ = view.getFloat32(nodeOffs + 0x2C, false);
 
-        // const bboxMinX = view.getFloat32(0x30, false);
-        // const bboxMinY = view.getFloat32(0x34, false);
-        // const bboxMinZ = view.getFloat32(0x38, false);
-        // const bboxMaxX = view.getFloat32(0x3C, false);
-        // const bboxMaxY = view.getFloat32(0x40, false);
-        // const bboxMaxZ = view.getFloat32(0x44, false);
-        // const unk = view.getFloat32(0x48, false);
+        const bboxMinX = view.getFloat32(nodeOffs + 0x30, false);
+        const bboxMinY = view.getFloat32(nodeOffs + 0x34, false);
+        const bboxMinZ = view.getFloat32(nodeOffs + 0x38, false);
+        const bboxMaxX = view.getFloat32(nodeOffs + 0x3C, false);
+        const bboxMaxY = view.getFloat32(nodeOffs + 0x40, false);
+        const bboxMaxZ = view.getFloat32(nodeOffs + 0x44, false);
+        // const unk = view.getFloat32(nodeOffs + 0x48, false);
+
+        let bbox: AABB = null;
+        if (bboxMinX !== 0 || bboxMinY !== 0 || bboxMinZ !== 0 || bboxMaxX !== 0 || bboxMaxY !== 0 || bboxMaxZ !== 0) {
+            bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+        }
 
         const scale = vec3.fromValues(scaleX, scaleY, scaleZ);
         const rotation = quat.create();
@@ -330,7 +337,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
         }
 
         const children: SceneGraphNode[] = [];
-        const node: SceneGraphNode = { children, modelMatrix, parts };
+        const node: SceneGraphNode = { children, modelMatrix, bbox, parts };
 
         // Add ourselves to parent.
         parentNode.children.push(node);
@@ -345,7 +352,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
     }
 
     // Create a fake root node to be parent to the root nodes.
-    const rootNode: SceneGraphNode = { children: [], modelMatrix: mat4.create(), parts: [] };
+    const rootNode: SceneGraphNode = { children: [], modelMatrix: mat4.create(), bbox: null, parts: [] };
     traverseSceneGraph(rootNode, 0);
 
     const bin: BIN = { rootNode, samplers };

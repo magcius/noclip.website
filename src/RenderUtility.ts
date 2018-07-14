@@ -8,7 +8,7 @@ class LinesProgram extends Program {
     public vert = `
 uniform mat4 u_modelView;
 uniform mat4 u_projection;
-layout(location = 0) attribute vec3 a_Position;
+layout(location = 13) attribute vec3 a_Position;
 
 void main() {
     gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);
@@ -50,8 +50,8 @@ const indexData = new Uint8Array([
     3, 7,
 ]);
 
-
-export function renderWireframeAABB(state: RenderState, color: vec4, aabb: AABB, modelMatrix: mat4 = null): void {
+const defaultLineColor = vec4.fromValues(1, 0, 1, 1);
+export function renderWireframeAABB(state: RenderState, aabb: AABB, modelMatrix: mat4 = null, color: vec4 = null): void {
     const gl = state.gl;
 
     if (!indexBuffer) {
@@ -106,10 +106,12 @@ export function renderWireframeAABB(state: RenderState, color: vec4, aabb: AABB,
     vertexData[7*3+2] = aabb.maxZ;
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
 
+    if (!color)
+        color = defaultLineColor;
     gl.uniform4fv(prog.u_LineColor, color);
 
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(13, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(13);
     gl.drawElements(gl.LINES, 12*2, gl.UNSIGNED_BYTE, 0);
     gl.bindVertexArray(null);
 }
