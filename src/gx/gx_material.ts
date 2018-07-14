@@ -5,6 +5,7 @@ import * as GX from './gx_enum';
 
 import { BlendFactor, BlendMode as RenderBlendMode, CompareMode, CullMode, FrontFaceMode, RenderFlags } from '../render';
 import { BaseProgram } from '../Program';
+import { colorCopy, colorFromRGBA8, colorToRGBA8 } from '../Color';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -42,24 +43,19 @@ export class Color {
         public g: number = 0,
         public b: number = 0,
         public a: number = 0,
-    ) {}
+    )
+    {}
 
     public copy(c: Color, a: number = c.a): void {
-        this.r = c.r;
-        this.g = c.g;
-        this.b = c.b;
-        this.a = a;
+        return colorCopy(this, c, a);
     }
 
     public copy32(c: number): void {
-        this.r = ((c >>> 24) & 0xFF) / 0xFF;
-        this.g = ((c >>> 16) & 0xFF) / 0xFF;
-        this.b = ((c >>>  8) & 0xFF) / 0xFF;
-        this.a = ((c >>>  0) & 0xFF) / 0xFF;
+        return colorFromRGBA8(this, c);
     }
 
     public get32(): number {
-        return ((this.r * 0xFF) << 24) | ((this.g * 0xFF) << 16) | ((this.b * 0xFF) << 8) | (this.a * 0xFF);
+        return colorToRGBA8(this);
     }
 }
 
