@@ -36,9 +36,7 @@ export class BasicRRESScene implements Viewer.MainScene {
             const modelRenderer = new ModelRenderer(gl, this.textureHolder, stageRRES.mdl0[0], '', materialHacks);
             this.models.push(modelRenderer);
 
-            for (const srt0 of stageRRES.srt0) {
-                modelRenderer.bindSRT0(this.animationController, srt0);
-            }
+            modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
         }
     }
 
