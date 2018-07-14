@@ -731,7 +731,7 @@ System.register("Camera", ["gl-matrix", "util"], function (exports_7, context_7)
         dst[15] = 9999.0;
     }
     exports_7("texEnvMtx", texEnvMtx);
-    var gl_matrix_1, util_3, Plane, AABB, FrustumVisualizer, IntersectionState, Frustum, Camera, FPSCameraController, OrbitCameraController;
+    var gl_matrix_1, util_3, Plane, scratchVec3a, scratchVec3b, scratchVec3c, scratchVec3d, AABB, FrustumVisualizer, IntersectionState, Frustum, Camera, FPSCameraController, OrbitCameraController;
     return {
         setters: [
             function (gl_matrix_1_1) {
@@ -763,6 +763,10 @@ System.register("Camera", ["gl-matrix", "util"], function (exports_7, context_7)
                 Plane.scratchVec3 = util_3.nArray(2, function () { return gl_matrix_1.vec3.create(); });
                 return Plane;
             }());
+            scratchVec3a = gl_matrix_1.vec3.create();
+            scratchVec3b = gl_matrix_1.vec3.create();
+            scratchVec3c = gl_matrix_1.vec3.create();
+            scratchVec3d = gl_matrix_1.vec3.create();
             AABB = /** @class */ (function () {
                 function AABB(minX, minY, minZ, maxX, maxY, maxZ) {
                     if (minX === void 0) { minX = 0; }
@@ -778,32 +782,35 @@ System.register("Camera", ["gl-matrix", "util"], function (exports_7, context_7)
                     this.maxY = maxY;
                     this.maxZ = maxZ;
                 }
-                AABB.prototype.normalize = function () {
-                    if (this.minX > this.maxX) {
-                        var t = this.minX;
-                        this.minX = this.maxX;
-                        this.maxX = t;
-                    }
-                    if (this.minY > this.maxY) {
-                        var t = this.minY;
-                        this.minY = this.maxY;
-                        this.maxY = t;
-                    }
-                    if (this.minZ > this.maxZ) {
-                        var t = this.minZ;
-                        this.minZ = this.maxZ;
-                        this.maxZ = t;
-                    }
-                };
                 AABB.prototype.transform = function (src, m) {
-                    this.minX = m[0] * src.minX + m[4] * src.minY + m[8] * src.minZ + m[12];
-                    this.minY = m[1] * src.minX + m[5] * src.minY + m[9] * src.minZ + m[13];
-                    this.minZ = m[2] * src.minX + m[6] * src.minY + m[10] * src.minZ + m[14];
-                    this.maxX = m[0] * src.maxX + m[4] * src.maxY + m[8] * src.maxZ + m[12];
-                    this.maxY = m[1] * src.maxX + m[5] * src.maxY + m[9] * src.maxZ + m[13];
-                    this.maxZ = m[2] * src.maxX + m[6] * src.maxY + m[10] * src.maxZ + m[14];
-                    // Normalize, as the matrix mult can possibly reverse things.
-                    this.normalize();
+                    // Transforming Axis-Aligned Bounding Boxes from Graphics Gems.
+                    var srcMin = scratchVec3a, srcMax = scratchVec3b;
+                    gl_matrix_1.vec3.set(srcMin, src.minX, src.minY, src.minZ);
+                    gl_matrix_1.vec3.set(srcMax, src.maxX, src.maxY, src.maxZ);
+                    var dstMin = scratchVec3c, dstMax = scratchVec3d;
+                    // Translation can be applied directly.
+                    gl_matrix_1.vec3.set(dstMin, m[12], m[13], m[14]);
+                    gl_matrix_1.vec3.set(dstMax, m[12], m[13], m[14]);
+                    for (var i = 0; i < 3; i++) {
+                        for (var j = 0; j < 3; j++) {
+                            var a = m[i * 4 + j] * srcMin[j];
+                            var b = m[i * 4 + j] * srcMax[j];
+                            if (a < b) {
+                                dstMin[i] += a;
+                                dstMax[i] += b;
+                            }
+                            else {
+                                dstMin[i] += b;
+                                dstMax[i] += a;
+                            }
+                        }
+                    }
+                    this.minX = dstMin[0];
+                    this.minY = dstMin[1];
+                    this.minZ = dstMin[2];
+                    this.maxX = dstMax[0];
+                    this.maxY = dstMax[1];
+                    this.maxZ = dstMax[2];
                 };
                 AABB.prototype.set = function (points) {
                     this.minX = this.minY = this.minZ = Infinity;
@@ -2981,7 +2988,8 @@ System.register("render", ["gl-matrix", "util", "Program", "Camera"], function (
 System.register("RenderUtility", ["Program"], function (exports_14, context_14) {
     "use strict";
     var __moduleName = context_14 && context_14.id;
-    function renderWireframeAABB(state, color, aabb) {
+    function renderWireframeAABB(state, color, aabb, modelMatrix) {
+        if (modelMatrix === void 0) { modelMatrix = null; }
         var gl = state.gl;
         if (!indexBuffer) {
             vao = gl.createVertexArray();
@@ -2995,7 +3003,7 @@ System.register("RenderUtility", ["Program"], function (exports_14, context_14) 
         gl.bindVertexArray(vao);
         var prog = new LinesProgram();
         state.useProgram(prog);
-        state.bindModelView();
+        state.bindModelView(false, modelMatrix);
         var vertexData = new Float32Array(3 * 8);
         vertexData[0 * 3 + 0] = aabb.minX;
         vertexData[0 * 3 + 1] = aabb.minY;
@@ -3023,13 +3031,13 @@ System.register("RenderUtility", ["Program"], function (exports_14, context_14) 
         vertexData[7 * 3 + 2] = aabb.maxZ;
         gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
         gl.uniform4fv(prog.u_LineColor, color);
-        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(0);
         gl.drawElements(gl.LINES, 12 * 2, gl.UNSIGNED_BYTE, 0);
         gl.bindVertexArray(null);
     }
     exports_14("renderWireframeAABB", renderWireframeAABB);
-    var Program_2, LinesProgram, vertexBuffer, indexBuffer, vao, vertexData, indexData;
+    var Program_2, LinesProgram, vertexBuffer, indexBuffer, vao, indexData;
     return {
         setters: [
             function (Program_2_1) {
@@ -3041,7 +3049,7 @@ System.register("RenderUtility", ["Program"], function (exports_14, context_14) 
                 __extends(LinesProgram, _super);
                 function LinesProgram() {
                     var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = 1) attribute vec3 a_Position;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);\n}\n";
+                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = 0) attribute vec3 a_Position;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);\n}\n";
                     _this.frag = "\nuniform vec4 u_LineColor;\n\nvoid main() {\n    gl_FragColor = u_LineColor;\n    gl_FragDepth = gl_FragCoord.z - 1e-6;\n}\n";
                     return _this;
                 }
@@ -3051,7 +3059,6 @@ System.register("RenderUtility", ["Program"], function (exports_14, context_14) 
                 };
                 return LinesProgram;
             }(Program_2.default));
-            vertexData = new Float32Array(3 * 8);
             indexData = new Uint8Array([
                 // Top.
                 0, 1,

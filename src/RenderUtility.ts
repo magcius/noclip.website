@@ -1,14 +1,14 @@
 
 import Program from "./Program";
 import { AABB } from "./Camera";
-import { vec4 } from "gl-matrix";
+import { vec4, mat4 } from "gl-matrix";
 import { RenderState } from "./render";
 
 class LinesProgram extends Program {
     public vert = `
 uniform mat4 u_modelView;
 uniform mat4 u_projection;
-layout(location = 1) attribute vec3 a_Position;
+layout(location = 0) attribute vec3 a_Position;
 
 void main() {
     gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);
@@ -32,7 +32,6 @@ void main() {
 }
 
 let vertexBuffer: WebGLBuffer, indexBuffer: WebGLBuffer, vao: WebGLVertexArrayObject;
-const vertexData = new Float32Array(3 * 8);
 const indexData = new Uint8Array([
     // Top.
     0, 1,
@@ -52,7 +51,7 @@ const indexData = new Uint8Array([
 ]);
 
 
-export function renderWireframeAABB(state: RenderState, color: vec4, aabb: AABB): void {
+export function renderWireframeAABB(state: RenderState, color: vec4, aabb: AABB, modelMatrix: mat4 = null): void {
     const gl = state.gl;
 
     if (!indexBuffer) {
@@ -71,7 +70,7 @@ export function renderWireframeAABB(state: RenderState, color: vec4, aabb: AABB)
 
     const prog = new LinesProgram();
     state.useProgram(prog);
-    state.bindModelView();
+    state.bindModelView(false, modelMatrix);
 
     const vertexData = new Float32Array(3 * 8);
     vertexData[0*3+0] = aabb.minX;
@@ -109,8 +108,8 @@ export function renderWireframeAABB(state: RenderState, color: vec4, aabb: AABB)
 
     gl.uniform4fv(prog.u_LineColor, color);
 
-    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
-    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
     gl.drawElements(gl.LINES, 12*2, gl.UNSIGNED_BYTE, 0);
     gl.bindVertexArray(null);
 }
