@@ -30,6 +30,10 @@ class Plane {
     }
 }
 
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
 export class AABB {
     constructor(
         public minX: number = 0,
@@ -40,33 +44,36 @@ export class AABB {
         public maxZ: number = 0,
     ) {}
 
-    public normalize(): void {
-        if (this.minX > this.maxX) {
-            const t = this.minX;
-            this.minX = this.maxX;
-            this.maxX = t;
-        }
-        if (this.minY > this.maxY) {
-            const t = this.minY;
-            this.minY = this.maxY;
-            this.maxY = t;
-        }
-        if (this.minZ > this.maxZ) {
-            const t = this.minZ;
-            this.minZ = this.maxZ;
-            this.maxZ = t;
-        }
-    }
-
     public transform(src: AABB, m: mat4): void {
-        this.minX = m[0]*src.minX + m[4]*src.minY + m[8]*src.minZ + m[12];
-        this.minY = m[1]*src.minX + m[5]*src.minY + m[9]*src.minZ + m[13];
-        this.minZ = m[2]*src.minX + m[6]*src.minY + m[10]*src.minZ + m[14];
-        this.maxX = m[0]*src.maxX + m[4]*src.maxY + m[8]*src.maxZ + m[12];
-        this.maxY = m[1]*src.maxX + m[5]*src.maxY + m[9]*src.maxZ + m[13];
-        this.maxZ = m[2]*src.maxX + m[6]*src.maxY + m[10]*src.maxZ + m[14];
-        // Normalize, as the matrix mult can possibly reverse things.
-        this.normalize();
+        // Transforming Axis-Aligned Bounding Boxes from Graphics Gems.
+        const srcMin = scratchVec3a, srcMax = scratchVec3b;
+        vec3.set(srcMin, src.minX, src.minY, src.minZ);
+        vec3.set(srcMax, src.maxX, src.maxY, src.maxZ);
+        const dstMin = scratchVec3c, dstMax = scratchVec3d;
+
+        // Translation can be applied directly.
+        vec3.set(dstMin, m[12], m[13], m[14]);
+        vec3.set(dstMax, m[12], m[13], m[14]);
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                const a = m[i*4+j] * srcMin[j];
+                const b = m[i*4+j] * srcMax[j];
+                if (a < b) {
+                    dstMin[i] += a;
+                    dstMax[i] += b;
+                } else {
+                    dstMin[i] += b;
+                    dstMax[i] += a;
+                }
+            }
+        }
+
+        this.minX = dstMin[0];
+        this.minY = dstMin[1];
+        this.minZ = dstMin[2];
+        this.maxX = dstMax[0];
+        this.maxY = dstMax[1];
+        this.maxZ = dstMax[2];
     }
 
     public set(points: vec3[]): void {
