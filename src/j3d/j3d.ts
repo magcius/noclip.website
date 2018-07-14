@@ -691,8 +691,8 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             texMatrices[j] = readTexMatrix(texMtxTableOffs, j, texMtxIndex);
         }
         // Since texture matrices are assigned in order, we should never actually have more than 8 of these.
-        assert(texMatrices[8] === undefined);
-        assert(texMatrices[9] === undefined);
+        assert(texMatrices[8] === null);
+        assert(texMatrices[9] === null);
 
         const postTexMatrices: TexMtx[] = [];
         for (let j = 0; j < 20; j++) {
