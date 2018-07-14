@@ -9,7 +9,6 @@ import * as Yaz0 from '../compression/Yaz0';
 import { fetch, assert } from '../util';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { BasicRRESScene } from './elb_scenes';
 import { mat4 } from 'gl-matrix';
 import { RRESTextureHolder, ModelRenderer } from './render';
 import { RenderState, depthClearFlags } from '../render';
