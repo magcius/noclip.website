@@ -669,8 +669,8 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
             }
 
-            // HACK(jstpierre): BCK can apply texture animations to materials that have the matrix set to
-            // IDENTITY. For this reason, we always assign a texture matrix. In theory, the file should
+            // BTK can apply texture animations to materials that have the matrix set to IDENTITY.
+            // For this reason, we always assign a texture matrix. In theory, the file should
             // have an identity texture matrix in the texMatrices section, so it should render correctly.
             const matrix: GX.TexGenMatrix = GX.TexGenMatrix.TEXMTX0 + j * 3;
             // If we ever find a counter-example for this, I'll have to rethink the scheme, but I
@@ -683,7 +683,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         }
 
         const texMatrices: TexMtx[] = [];
-        // Since texture matrices are assigned in order, we should never actually have more than 8 of these.
         for (let j = 0; j < 10; j++) {
             texMatrices[j] = null;
             const texMtxIndex = view.getInt16(materialEntryIdx + 0x48 + j * 0x02);
@@ -691,6 +690,9 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 continue;
             texMatrices[j] = readTexMatrix(texMtxTableOffs, j, texMtxIndex);
         }
+        // Since texture matrices are assigned in order, we should never actually have more than 8 of these.
+        assert(texMatrices[8] === undefined);
+        assert(texMatrices[9] === undefined);
 
         const postTexMatrices: TexMtx[] = [];
         for (let j = 0; j < 20; j++) {
