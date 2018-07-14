@@ -660,7 +660,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const index = j;
             const type: GX.TexGenType = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x00);
             const source: GX.TexGenSrc = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
-            const matrix: GX.TexGenMatrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
+            const matrixCheck: GX.TexGenMatrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
             assert(view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x03) === 0xFF);
             let postMatrix: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
             const postTexGenIndex = view.getInt16(materialEntryIdx + 0x38 + j * 0x02);
@@ -668,12 +668,22 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 postMatrix = view.getUint8(postTexGenTableOffs + texGenIndex * 0x04 + 0x02);
                 assert(view.getUint8(postTexGenTableOffs + postTexGenIndex * 0x04 + 0x03) === 0xFF);
             }
+
+            // HACK(jstpierre): BCK can apply texture animations to materials that have the matrix set to
+            // IDENTITY. For this reason, we always assign a texture matrix. In theory, the file should
+            // have an identity texture matrix in the texMatrices section, so it should render correctly.
+            const matrix: GX.TexGenMatrix = GX.TexGenMatrix.TEXMTX0 + j * 3;
+            // If we ever find a counter-example for this, I'll have to rethink the scheme, but I
+            // *believe* that texture matrices should always be paired with TexGens in order.
+            assert(matrixCheck === GX.TexGenMatrix.IDENTITY || matrixCheck === matrix);
+
             const normalize = false;
             const texGen: GX_Material.TexGen = { index, type, source, matrix, normalize, postMatrix };
-            texGens.push(texGen);
+            texGens[j] = texGen;
         }
 
         const texMatrices: TexMtx[] = [];
+        // Since texture matrices are assigned in order, we should never actually have more than 8 of these.
         for (let j = 0; j < 10; j++) {
             texMatrices[j] = null;
             const texMtxIndex = view.getInt16(materialEntryIdx + 0x48 + j * 0x02);
@@ -980,7 +990,7 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
     const wrapT = view.getUint8(0x07);
     const paletteFormat = view.getUint8(0x09);
     const paletteNumEntries = view.getUint16(0x0A);
-    const paletteOffs = view.getUint16(0x0C);
+    const paletteOffs = view.getUint32(0x0C);
     const minFilter = view.getUint8(0x14);
     const magFilter = view.getUint8(0x15);
     const minLOD = view.getInt8(0x16) * 1/8;
@@ -1320,7 +1330,7 @@ function translateAnimationTrack(data: Float32Array | Int16Array, scale: number,
 interface UVAnimationEntry {
     materialName: string;
     remapIndex: number;
-    texMtxIndex: number;
+    texGenIndex: number;
     centerS: number;
     centerT: number;
     centerQ: number;
@@ -1379,7 +1389,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
     for (let i = 0; i < animationCount; i++) {
         const materialName = materialNameTable[i];
         const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
-        const texMtxIndex = view.getUint8(texMtxIndexTableOffs + i);
+        const texGenIndex = view.getUint8(texMtxIndexTableOffs + i);
         const centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
         const centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
         const centerQ = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x08);
@@ -1393,7 +1403,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
         const rotationQ = readAnimationTrack(rTable, rotationScale);
         const translationQ = readAnimationTrack(tTable, 1);
         uvAnimationEntries.push({
-            materialName, remapIndex, texMtxIndex,
+            materialName, remapIndex, texGenIndex,
             centerS, centerT, centerQ,
             scaleS, rotationS, translationS,
             scaleT, rotationT, translationT,
@@ -1439,8 +1449,8 @@ export class BTK {
         return true;
     }
 
-    private findAnimationEntry(materialName: string, texMtxIndex: number): UVAnimationEntry {
-        return this.ttk1.uvAnimationEntries.find((e) => e.materialName === materialName && e.texMtxIndex === texMtxIndex);
+    private findAnimationEntry(materialName: string, texGenIndex: number): UVAnimationEntry {
+        return this.ttk1.uvAnimationEntries.find((e) => e.materialName === materialName && e.texGenIndex === texGenIndex);
     }
 }
 //#endregion
