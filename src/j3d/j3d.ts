@@ -322,7 +322,6 @@ export interface Bone {
 }
 
 export interface JNT1 {
-    remapTable: number[];
     bones: Bone[];
 }
 
@@ -349,9 +348,9 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
     const nameTable = readStringTable(buffer, nameTableOffs);
 
     const bones: Bone[] = [];
-    let boneDataTableIdx = boneDataTableOffs;
     for (let i = 0; i < boneDataCount; i++) {
         const name = nameTable[i];
+        const boneDataTableIdx = boneDataTableOffs + (remapTable[i] * 0x40);
         const scaleX = view.getFloat32(boneDataTableIdx + 0x04);
         const scaleY = view.getFloat32(boneDataTableIdx + 0x08);
         const scaleZ = view.getFloat32(boneDataTableIdx + 0x0C);
@@ -372,10 +371,9 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const matrix = mat4.create();
         createJointMatrix(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         bones.push({ name, matrix, scaleX, scaleY, scaleZ, bbox });
-        boneDataTableIdx += 0x40;
     }
 
-    return { remapTable, bones };
+    return { bones };
 }
 //#endregion
 
@@ -548,7 +546,6 @@ export interface MaterialEntry {
 }
 
 export interface MAT3 {
-    remapTable: number[];
     materialEntries: MaterialEntry[];
 }
 
@@ -592,8 +589,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     for (let i = 0; i < materialCount; i++)
         remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
 
-    const maxIndex = Math.max.apply(null, remapTable);
-
     const nameTableOffs = view.getUint32(0x14);
     const nameTable = readStringTable(buffer, nameTableOffs);
 
@@ -617,10 +612,11 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     const depthModeTableOffs = view.getUint32(0x74);
 
     const materialEntries: MaterialEntry[] = [];
-    let materialEntryIdx = view.getUint32(0x0C);
-    for (let i = 0; i <= maxIndex; i++) {
+    const materialEntryTableOffs = view.getUint32(0x0C);
+    for (let i = 0; i < materialCount; i++) {
         const index = i;
         const name = nameTable[i];
+        const materialEntryIdx = materialEntryTableOffs + (0x014C * remapTable[i]);
         const flags = view.getUint8(materialEntryIdx + 0x00);
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
         const colorChanCountIndex = view.getUint8(materialEntryIdx + 0x02);
@@ -888,7 +884,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             colorAmbRegs,
             indTexMatrices,
         });
-        materialEntryIdx += 0x014C;
     }
 
     function readColorChannel(tableOffs: number, colorChanIndex: number): GX_Material.ColorChannelControl {
@@ -954,7 +949,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         return texMtx;
     }
 
-    return { remapTable, materialEntries };
+    return { materialEntries };
 }
 //#endregion
 

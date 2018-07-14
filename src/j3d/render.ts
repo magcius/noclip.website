@@ -210,8 +210,6 @@ export class Command_Material {
         if (!this.scene.currentMaterialCommand.visible)
             return;
 
-        const gl = state.gl;
-
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
@@ -605,9 +603,8 @@ export class Scene implements Viewer.Scene {
         this.transparentCommands = [];
 
         this.jointMatrices = [];
-        for (const index of bmd.jnt1.remapTable)
-            if (this.jointMatrices[index] === undefined)
-                this.jointMatrices[index] = mat4.create();
+        for (let i = 0; i < bmd.jnt1.bones.length; i++)
+            this.jointMatrices[i] = mat4.create();
 
         this.weightedJointMatrices = [];
         for (const drw1Joint of bmd.drw1.drw1Joints)
@@ -615,13 +612,8 @@ export class Scene implements Viewer.Scene {
 
         this.translateTextures(gl, sceneLoader);
 
-        const materialCommands = mat3.materialEntries.map((material) => {
+        this.materialCommands = mat3.materialEntries.map((material) => {
             return new Command_Material(gl, this, material);
-        });
-
-        // Apply remap table.
-        this.materialCommands = mat3.remapTable.map((index) => {
-            return materialCommands[index];
         });
 
         this.bufferCoalescer = loadedDataCoalescer(gl, bmd.shp1.shapes.map((shape) => shape.loadedVertexData));
@@ -656,7 +648,7 @@ export class Scene implements Viewer.Scene {
 
         switch (node.type) {
         case HierarchyType.Joint:
-            const jointIndex = jnt1.remapTable[node.jointIdx];
+            const jointIndex = node.jointIdx;
             let boneMatrix = jnt1.bones[jointIndex].matrix;
             if (this.bck !== null) {
                 boneMatrix = matrixScratch2;
