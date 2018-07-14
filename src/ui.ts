@@ -44,6 +44,8 @@ export abstract class ScrollSelect implements Widget {
 
     protected toplevel: HTMLElement;
     protected scrollContainer: HTMLElement;
+    protected flairs: Flair[] = [];
+    protected internalFlairs: Flair[] = [];
 
     constructor() {
         this.toplevel = document.createElement('div');
@@ -82,6 +84,17 @@ export abstract class ScrollSelect implements Widget {
     }
 
     public setFlairs(flairs: Flair[]) {
+        this.flairs = flairs;
+        this.syncFlairs();
+    }
+
+    protected setInternalFlairs(flairs: Flair[]): void {
+        this.internalFlairs = flairs;
+        this.syncFlairs();
+    }
+
+    private syncFlairs(): void {
+        const flairs = [...this.internalFlairs, ...this.flairs];
         for (let i = 0; i < this.getNumItems(); i++) {
             const selector = <HTMLElement> this.scrollContainer.children.item(i);
             const flair = flairs.find((flair) => flair.index === i);
@@ -119,7 +132,7 @@ export class SingleSelect extends ScrollSelect {
     }
 
     public setHighlighted(highlightedIndex: number) {
-        this.setFlairs([highlightFlair(highlightedIndex)]);
+        this.setInternalFlairs([highlightFlair(highlightedIndex)]);
     }
 }
 
@@ -157,13 +170,13 @@ export class MultiSelect extends ScrollSelect {
         allButton.onclick = () => {
             for (let i = 0; i < this.getNumItems(); i++)
                 this.setItemIsOn(i, true);
-            this.syncFlairs();
+            this.syncInternalFlairs();
         };
         const noneButton: HTMLElement = this.toplevel.querySelector('.NoneButton');
         noneButton.onclick = () => {
             for (let i = 0; i < this.getNumItems(); i++)
                 this.setItemIsOn(i, false);
-            this.syncFlairs();
+            this.syncInternalFlairs();
         };
     }
 
@@ -174,27 +187,27 @@ export class MultiSelect extends ScrollSelect {
 
     public itemClicked(index: number) {
         this.setItemIsOn(index, !this.itemIsOn[index]);
-        this.syncFlairs();
+        this.syncInternalFlairs();
     }
 
-    private syncFlairs() {
-        const flairs: Flair[] = [];
+    private syncInternalFlairs() {
+        const flairs: Flair[] = [...this.flairs];
         for (let i = 0; i < this.getNumItems(); i++) {
             const bulletColor = !!this.itemIsOn[i] ? HIGHLIGHT_COLOR : '#aaa';
             const color = !!this.itemIsOn[i] ? 'white' : '#aaa';
             flairs.push({ index: i, bulletColor, color });
         }
-        this.setFlairs(flairs);
+        this.setInternalFlairs(flairs);
     }
 
     public setItemsSelected(isOn: boolean[]) {
         this.itemIsOn = isOn;
-        this.syncFlairs();
+        this.syncInternalFlairs();
     }
 
     public setItemSelected(index: number, v: boolean) {
         this.itemIsOn[index] = v;
-        this.syncFlairs();
+        this.syncInternalFlairs();
     }
 }
 
