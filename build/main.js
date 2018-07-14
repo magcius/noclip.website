@@ -793,8 +793,8 @@ System.register("Camera", ["gl-matrix", "util"], function (exports_7, context_7)
                     gl_matrix_1.vec3.set(dstMax, m[12], m[13], m[14]);
                     for (var i = 0; i < 3; i++) {
                         for (var j = 0; j < 3; j++) {
-                            var a = m[i * 4 + j] * srcMin[j];
-                            var b = m[i * 4 + j] * srcMax[j];
+                            var a = m[j * 4 + i] * srcMin[j];
+                            var b = m[j * 4 + i] * srcMax[j];
                             if (a < b) {
                                 dstMin[i] += a;
                                 dstMax[i] += b;
@@ -20556,7 +20556,7 @@ System.register("rres/brres", ["util", "gx/gx_material", "gx/gx_displaylist", "g
         var view = buffer.createDataView();
         util_49.assert(util_49.readString(buffer, 0x00, 0x04) === 'CLR0');
         var version = view.getUint32(0x08);
-        var supportedVersions = [0x04];
+        var supportedVersions = [0x03, 0x04];
         util_49.assert(supportedVersions.includes(version));
         var clrMatDataResDicOffs = view.getUint32(0x10);
         var clrMatDataResDic = parseResDic(buffer, clrMatDataResDicOffs);
@@ -22082,29 +22082,17 @@ System.register("rres/elb_scenes", ["ui", "rres/brres", "util", "Progressable", 
                             util_52.assert(stageRRES.mdl0.length === 1);
                             var modelRenderer = new render_34.ModelRenderer(gl, this.textureHolder, stageRRES.mdl0[0], '', materialHacks);
                             this.models.push(modelRenderer);
-                            try {
-                                for (var _a = __values(stageRRES.srt0), _b = _a.next(); !_b.done; _b = _a.next()) {
-                                    var srt0 = _b.value;
-                                    modelRenderer.bindSRT0(this.animationController, srt0);
-                                }
-                            }
-                            catch (e_94_1) { e_94 = { error: e_94_1 }; }
-                            finally {
-                                try {
-                                    if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
-                                }
-                                finally { if (e_94) throw e_94.error; }
-                            }
+                            modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
                         }
                     }
-                    catch (e_95_1) { e_95 = { error: e_95_1 }; }
+                    catch (e_94_1) { e_94 = { error: e_94_1 }; }
                     finally {
                         try {
-                            if (stageRRESes_1_1 && !stageRRESes_1_1.done && (_d = stageRRESes_1.return)) _d.call(stageRRESes_1);
+                            if (stageRRESes_1_1 && !stageRRESes_1_1.done && (_a = stageRRESes_1.return)) _a.call(stageRRESes_1);
                         }
-                        finally { if (e_95) throw e_95.error; }
+                        finally { if (e_94) throw e_94.error; }
                     }
-                    var e_95, _d, e_94, _c;
+                    var e_94, _a;
                 }
                 BasicRRESScene.prototype.createPanels = function () {
                     var panels = [];
@@ -22846,16 +22834,16 @@ System.register("embeds/sunshine_water", ["gl-matrix", "util", "gx/gx_material",
                                 gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
                             }
                         }
-                        catch (e_96_1) { e_96 = { error: e_96_1 }; }
+                        catch (e_95_1) { e_95 = { error: e_95_1 }; }
                         finally {
                             try {
                                 if (_b && !_b.done && (_c = _a.return)) _c.call(_a);
                             }
-                            finally { if (e_96) throw e_96.error; }
+                            finally { if (e_95) throw e_95.error; }
                         }
                     }
                     return cmd;
-                    var e_96, _c;
+                    var e_95, _c;
                 };
                 SeaPlaneScene.prototype.render = function (state) {
                     var gl = state.gl;
@@ -23006,18 +22994,18 @@ System.register("luigis_mansion/jmp", ["util"], function (exports_87, context_87
                     record[field.name] = value;
                 }
             }
-            catch (e_97_1) { e_97 = { error: e_97_1 }; }
+            catch (e_96_1) { e_96 = { error: e_96_1 }; }
             finally {
                 try {
                     if (fields_1_1 && !fields_1_1.done && (_a = fields_1.return)) _a.call(fields_1);
                 }
-                finally { if (e_97) throw e_97.error; }
+                finally { if (e_96) throw e_96.error; }
             }
             records.push(record);
             recordTableIdx += recordSize;
         }
         return records;
-        var e_97, _a;
+        var e_96, _a;
     }
     exports_87("parse", parse);
     var util_55, nameTable, hashLookup;

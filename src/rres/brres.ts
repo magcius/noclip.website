@@ -2097,7 +2097,7 @@ function parseCLR0(buffer: ArrayBufferSlice): CLR0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'CLR0');
     const version = view.getUint32(0x08);
-    const supportedVersions = [0x04];
+    const supportedVersions = [0x03, 0x04];
     assert(supportedVersions.includes(version));
 
     const clrMatDataResDicOffs = view.getUint32(0x10);
