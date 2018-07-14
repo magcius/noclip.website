@@ -4,9 +4,10 @@
 import { ResourceSystem } from "./resource";
 import { assert, readString } from "../util";
 import ArrayBufferSlice from "ArrayBufferSlice";
+import * as STRG from "./strg";
 
 interface Area {
-    areaSTRGID: string;
+    areaName: string;
     areaMREAID: string;
 }
 
@@ -26,7 +27,7 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
     // STRG file ID?
     const worldNameSTRGID = readString(buffer, 0x08, 4, false);
     const worldNameSTRG = resourceSystem.findResourceByID(worldNameSTRGID);
-    resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
+    const worldName: STRG.STRG = resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
 
     const worldSaveID = view.getUint32(0x0C);
     const skyboxID = view.getUint32(0x10);
@@ -50,8 +51,8 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
     const areaTable: Area[] = [];
     for (let i = 0; i < areaTableCount; i++) {
         const areaSTRGID = readString(buffer, areaTableIdx, 4, false);
-        const areaSTRG = resourceSystem.findResourceByID(areaSTRGID);
-        assert(areaSTRG !== null);
+        const areaSTRG: STRG.STRG = resourceSystem.loadAssetByID(areaSTRGID, 'STRG');
+        const areaName = areaSTRG.strings[0];
 
         areaTableIdx += 0x04;
 
@@ -106,7 +107,7 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
             }
         }
 
-        areaTable.push({ areaSTRGID, areaMREAID });
+        areaTable.push({ areaName, areaMREAID });
     }
 
     return { areaTable };

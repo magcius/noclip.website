@@ -77,7 +77,7 @@ export function leftPad(S: string, spaces: number): string {
     return S;
 }
 
-function hexzero(n: number, spaces: number): string {
+export function hexzero(n: number, spaces: number): string {
     let S = n.toString(16);
     return leftPad(S, spaces);
 }
