@@ -154,7 +154,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 }
             }
 
-            return new MultiScene(scenes);
+            return new MultiScene(textureHolder, scenes);
         });
     }
 }

@@ -135,6 +135,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        this.textureHolder.destroy(gl);
         this.skyboxScenes.forEach((scene) => scene.destroy(gl));
         this.roomScenes.forEach((scene) => scene.destroy(gl));
     }

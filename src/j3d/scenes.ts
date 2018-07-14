@@ -15,7 +15,7 @@ export class MultiScene implements Viewer.MainScene {
     public scenes: Scene[];
     public textures: Viewer.Texture[];
 
-    constructor(scenes: Scene[]) {
+    constructor(public textureHolder: J3DTextureHolder, scenes: Scene[]) {
         this.setScenes(scenes);
     }
 
@@ -32,6 +32,7 @@ export class MultiScene implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        this.textureHolder.destroy(gl);
         this.scenes.forEach((scene) => scene.destroy(gl));
     }
 
@@ -119,6 +120,6 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, textureHolder
 export function createMultiSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Promise<MultiScene> {
     const textureHolder = new J3DTextureHolder();
     return createScenesFromBuffer(gl, textureHolder, buffer).then((scenes) => {
-        return new MultiScene(scenes);
+        return new MultiScene(textureHolder, scenes);
     });
 }
