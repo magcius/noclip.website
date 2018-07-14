@@ -2603,6 +2603,59 @@ System.register("RenderArena", [], function (exports_12, context_12) {
 System.register("render", ["gl-matrix", "util", "Program", "Camera"], function (exports_13, context_13) {
     "use strict";
     var __moduleName = context_13 && context_13.id;
+    function flagChanged(stateFlag, newFlag) {
+        return newFlag !== undefined && stateFlag !== newFlag;
+    }
+    function applyFlags(gl, stateFlags, newFlags) {
+        if (flagChanged(stateFlags.depthWrite, newFlags.depthWrite)) {
+            gl.depthMask(newFlags.depthWrite);
+            stateFlags.depthWrite = newFlags.depthWrite;
+        }
+        if (flagChanged(stateFlags.depthTest, newFlags.depthTest)) {
+            if (newFlags.depthTest)
+                gl.enable(gl.DEPTH_TEST);
+            else
+                gl.disable(gl.DEPTH_TEST);
+            stateFlags.depthTest = newFlags.depthTest;
+        }
+        if (flagChanged(stateFlags.depthFunc, newFlags.depthFunc)) {
+            gl.depthFunc(newFlags.depthFunc);
+            stateFlags.depthFunc = newFlags.depthFunc;
+        }
+        if (flagChanged(stateFlags.blendMode, newFlags.blendMode)) {
+            if (newFlags.blendMode !== BlendMode.NONE) {
+                gl.enable(gl.BLEND);
+                gl.blendEquation(newFlags.blendMode);
+            }
+            else {
+                gl.disable(gl.BLEND);
+            }
+            stateFlags.blendMode = newFlags.blendMode;
+        }
+        if (flagChanged(stateFlags.blendSrc, newFlags.blendSrc) || flagChanged(stateFlags.blendDst, newFlags.blendDst)) {
+            gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
+            stateFlags.blendSrc = newFlags.blendSrc;
+            stateFlags.blendDst = newFlags.blendDst;
+        }
+        if (flagChanged(stateFlags.cullMode, newFlags.cullMode)) {
+            // Try to be smart about this.
+            if (stateFlags.cullMode === CullMode.NONE)
+                gl.enable(gl.CULL_FACE);
+            else if (newFlags.cullMode === CullMode.NONE)
+                gl.disable(gl.CULL_FACE);
+            if (newFlags.cullMode === CullMode.BACK)
+                gl.cullFace(gl.BACK);
+            else if (newFlags.cullMode === CullMode.FRONT)
+                gl.cullFace(gl.FRONT);
+            else if (newFlags.cullMode === CullMode.FRONT_AND_BACK)
+                gl.cullFace(gl.FRONT_AND_BACK);
+            stateFlags.cullMode = newFlags.cullMode;
+        }
+        if (flagChanged(stateFlags.frontFace, newFlags.frontFace)) {
+            gl.frontFace(newFlags.frontFace);
+            stateFlags.frontFace = newFlags.frontFace;
+        }
+    }
     var gl_matrix_2, util_6, Program_1, Camera_1, CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode, RenderFlags, FullscreenCopyProgram, RENDER_SAMPLES, ColorTarget, DepthTarget, depthClearFlags, RenderState;
     return {
         setters: [
@@ -2674,66 +2727,6 @@ System.register("render", ["gl-matrix", "util", "Program", "Camera"], function (
                     this.cullMode = undefined;
                     this.frontFace = undefined;
                 }
-                RenderFlags.flatten = function (dst, src) {
-                    if (dst.depthWrite === undefined)
-                        dst.depthWrite = src.depthWrite;
-                    if (dst.depthTest === undefined)
-                        dst.depthTest = src.depthTest;
-                    if (dst.depthFunc === undefined)
-                        dst.depthFunc = src.depthFunc;
-                    if (dst.blendMode === undefined)
-                        dst.blendMode = src.blendMode;
-                    if (dst.blendSrc === undefined)
-                        dst.blendSrc = src.blendSrc;
-                    if (dst.blendDst === undefined)
-                        dst.blendDst = src.blendDst;
-                    if (dst.cullMode === undefined)
-                        dst.cullMode = src.cullMode;
-                    if (dst.frontFace === undefined)
-                        dst.frontFace = src.frontFace;
-                    return dst;
-                };
-                RenderFlags.apply = function (gl, oldFlags, newFlags) {
-                    if (oldFlags.depthWrite !== newFlags.depthWrite) {
-                        gl.depthMask(newFlags.depthWrite);
-                    }
-                    if (oldFlags.depthTest !== newFlags.depthTest) {
-                        if (newFlags.depthTest)
-                            gl.enable(gl.DEPTH_TEST);
-                        else
-                            gl.disable(gl.DEPTH_TEST);
-                    }
-                    if (oldFlags.blendMode !== newFlags.blendMode) {
-                        if (newFlags.blendMode !== BlendMode.NONE) {
-                            gl.enable(gl.BLEND);
-                            gl.blendEquation(newFlags.blendMode);
-                        }
-                        else {
-                            gl.disable(gl.BLEND);
-                        }
-                    }
-                    if (oldFlags.blendSrc !== newFlags.blendSrc || oldFlags.blendDst !== newFlags.blendDst) {
-                        gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
-                    }
-                    if (oldFlags.depthFunc !== newFlags.depthFunc) {
-                        gl.depthFunc(newFlags.depthFunc);
-                    }
-                    if (oldFlags.cullMode !== newFlags.cullMode) {
-                        if (oldFlags.cullMode === CullMode.NONE)
-                            gl.enable(gl.CULL_FACE);
-                        else if (newFlags.cullMode === CullMode.NONE)
-                            gl.disable(gl.CULL_FACE);
-                        if (newFlags.cullMode === CullMode.BACK)
-                            gl.cullFace(gl.BACK);
-                        else if (newFlags.cullMode === CullMode.FRONT)
-                            gl.cullFace(gl.FRONT);
-                        else if (newFlags.cullMode === CullMode.FRONT_AND_BACK)
-                            gl.cullFace(gl.FRONT_AND_BACK);
-                    }
-                    if (oldFlags.frontFace !== newFlags.frontFace) {
-                        gl.frontFace(newFlags.frontFace);
-                    }
-                };
                 RenderFlags.default = new RenderFlags();
                 return RenderFlags;
             }());
@@ -2975,9 +2968,7 @@ System.register("render", ["gl-matrix", "util", "Program", "Camera"], function (
                 };
                 RenderState.prototype.useFlags = function (flags) {
                     var gl = this.gl;
-                    var resolved = RenderFlags.flatten(flags, this.currentFlags);
-                    RenderFlags.apply(gl, this.currentFlags, resolved);
-                    this.currentFlags = resolved;
+                    applyFlags(gl, this.currentFlags, flags);
                 };
                 return RenderState;
             }());
