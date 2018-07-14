@@ -18,6 +18,7 @@ import { ColorOverride, Scene, SceneLoader, J3DTextureHolder } from './render';
 import { Camera } from '../Camera';
 import * as GX from '../gx/gx_enum';
 import Program from '../Program';
+import { colorToCSS } from '../Color';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
@@ -358,11 +359,23 @@ class WindWakerRenderer implements Viewer.MainScene {
         const timeOfDayPanel = new UI.Panel();
         timeOfDayPanel.setTitle(TIME_OF_DAY_ICON, "Time of Day");
 
+        const colorPresets = [ '(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ];
+
         const selector = new UI.SimpleSingleSelect();
-        selector.setStrings([ '(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ]);
+        selector.setStrings(colorPresets);
         selector.onselectionchange = (index: number) => {
             this.setTimeOfDay(index);
         };
+
+        const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`);
+        const flairs: UI.Flair[] = colorPresets.slice(1).map((presetName, i): UI.Flair => {
+            const elemIndex = i + 1;
+            const timeOfDay = i;
+            const stageColors = getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
+            return { index: elemIndex, background: colorToCSS(stageColors.vr_sky) };
+        });
+        selector.setFlairs(flairs);
+
         selector.selectItem(3); // Day
         timeOfDayPanel.contents.appendChild(selector.elem);
 
