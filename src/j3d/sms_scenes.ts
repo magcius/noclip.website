@@ -299,6 +299,7 @@ export class SunshineRenderer implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
+        this.textureHolder.destroy(gl);
         if (this.skyScene)
             this.skyScene.destroy(gl);
         if (this.mapScene)

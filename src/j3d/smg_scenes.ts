@@ -218,6 +218,7 @@ class SMGRenderer implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
+        this.textureHolder.destroy(gl);
         this.mainScene.destroy(gl);
         this.skyboxScene.destroy(gl);
         this.bloomScene.destroy(gl);

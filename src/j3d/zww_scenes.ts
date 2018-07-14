@@ -413,6 +413,7 @@ class WindWakerRenderer implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        this.textureHolder.destroy(gl);
         this.vr_sky.destroy(gl);
         this.vr_kasumi_mae.destroy(gl);
         this.vr_uso_umi.destroy(gl);
