@@ -11,13 +11,14 @@ import { assert, readString, align } from "../util";
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { AABB } from '../Camera';
+import { mat4 } from 'gl-matrix';
 
 export interface MREA {
     materialSet: MaterialSet;
     worldModels: WorldModel[];
 }
 
-const enum UVAnimationType {
+export const enum UVAnimationType {
     INV_MAT_SKY = 0x00,
     INV_MAT     = 0x01,
     UV_SCROLL   = 0x02,
@@ -34,10 +35,10 @@ interface UVAnimation_Mat {
 
 interface UVAnimation_UVScroll {
     type: UVAnimationType.UV_SCROLL;
-    offsetA: number;
-    offsetB: number;
-    scaleA: number;
-    scaleB: number;
+    offsetS: number;
+    offsetT: number;
+    scaleS: number;
+    scaleT: number;
 }
 
 interface UVAnimation_Rotation {
@@ -60,7 +61,7 @@ interface UVAnimation_Cylinder {
     phi: number;
 }
 
-type UVAnimation = UVAnimation_Mat | UVAnimation_UVScroll | UVAnimation_Rotation | UVAnimation_Flipbook | UVAnimation_Cylinder;
+export type UVAnimation = UVAnimation_Mat | UVAnimation_UVScroll | UVAnimation_Rotation | UVAnimation_Flipbook | UVAnimation_Cylinder;
 
 export interface Material {
     flags: MaterialFlags;
@@ -297,34 +298,34 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSli
                 // These guys have no parameters.
                 break;
             case UVAnimationType.UV_SCROLL: {
-                const offsetA = view.getUint32(offs + 0x00);
-                const offsetB = view.getUint32(offs + 0x04);
-                const scaleA = view.getUint32(offs + 0x08);
-                const scaleB = view.getUint32(offs + 0x0C);
-                uvAnimations.push({ type, offsetA, offsetB, scaleA, scaleB });
+                const offsetS = view.getFloat32(offs + 0x00);
+                const offsetT = view.getFloat32(offs + 0x04);
+                const scaleS = view.getFloat32(offs + 0x08);
+                const scaleT = view.getFloat32(offs + 0x0C);
+                uvAnimations.push({ type, offsetS, offsetT, scaleS, scaleT });
                 offs += 0x10;
                 break;
             }
             case UVAnimationType.ROTATION: {
-                const offset = view.getUint32(offs + 0x00);
-                const scale = view.getUint32(offs + 0x04);
+                const offset = view.getFloat32(offs + 0x00);
+                const scale = view.getFloat32(offs + 0x04);
                 uvAnimations.push({ type, offset, scale });
                 offs += 0x08;
                 break;
             }
             case UVAnimationType.FLIPBOOK_U:
             case UVAnimationType.FLIPBOOK_V: {
-                const scale = view.getUint32(offs + 0x00);
-                const numFrames = view.getUint32(offs + 0x04);
-                const step = view.getUint32(offs + 0x08);
-                const offset = view.getUint32(offs + 0x0C);
+                const scale = view.getFloat32(offs + 0x00);
+                const numFrames = view.getFloat32(offs + 0x04);
+                const step = view.getFloat32(offs + 0x08);
+                const offset = view.getFloat32(offs + 0x0C);
                 uvAnimations.push({ type, scale, numFrames, step, offset });
                 offs += 0x10;
                 break;
             }
             case UVAnimationType.CYLINDER: {
-                const theta = view.getUint32(offs + 0x00);
-                const phi = view.getUint32(offs + 0x04);
+                const theta = view.getFloat32(offs + 0x00);
+                const phi = view.getFloat32(offs + 0x04);
                 uvAnimations.push({ type, theta, phi });
                 offs += 0x08;
                 break;
@@ -408,6 +409,7 @@ export interface Surface {
 
 export interface WorldModel {
     geometry: Geometry;
+    modelMatrix: mat4;
     bbox: AABB;
 }
 
@@ -580,6 +582,24 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
         // World model header.
         let worldModelHeaderOffs = dataSectionOffsTable[geometrySectionIndex];
         const visorFlags = view.getUint32(worldModelHeaderOffs + 0x00);
+        const m00 = view.getFloat32(worldModelHeaderOffs + 0x04);
+        const m01 = view.getFloat32(worldModelHeaderOffs + 0x08);
+        const m02 = view.getFloat32(worldModelHeaderOffs + 0x0C);
+        const m03 = view.getFloat32(worldModelHeaderOffs + 0x10);
+        const m10 = view.getFloat32(worldModelHeaderOffs + 0x14);
+        const m11 = view.getFloat32(worldModelHeaderOffs + 0x18);
+        const m12 = view.getFloat32(worldModelHeaderOffs + 0x1C);
+        const m13 = view.getFloat32(worldModelHeaderOffs + 0x20);
+        const m20 = view.getFloat32(worldModelHeaderOffs + 0x24);
+        const m21 = view.getFloat32(worldModelHeaderOffs + 0x28);
+        const m22 = view.getFloat32(worldModelHeaderOffs + 0x2C);
+        const m23 = view.getFloat32(worldModelHeaderOffs + 0x30);
+        const modelMatrix = mat4.fromValues(
+            m00, m10, m20, 0.0,
+            m01, m11, m21, 0.0,
+            m02, m12, m22, 0.0,
+            m03, m13, m23, 1.0,
+        );
         const bboxMinX = view.getFloat32(worldModelHeaderOffs + 0x34);
         const bboxMinY = view.getFloat32(worldModelHeaderOffs + 0x38);
         const bboxMinZ = view.getFloat32(worldModelHeaderOffs + 0x3C);
@@ -593,7 +613,7 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
 
         let geometry: Geometry;
         [geometry, geometrySectionIndex] = parseGeometry(resourceSystem, buffer, materialSet, sectionTables, geometrySectionIndex);
-        worldModels.push({ geometry, bbox });
+        worldModels.push({ geometry, modelMatrix, bbox });
     }
 
     return { materialSet, worldModels };

@@ -1,8 +1,7 @@
 
 import { mat4 } from 'gl-matrix';
 
-import { MREA, Material, Surface, MaterialFlags } from './mrea';
-import * as GX_Texture from 'gx/gx_texture';
+import { MREA, Material, Surface, MaterialFlags, UVAnimationType } from './mrea';
 import * as GX_Material from 'gx/gx_material';
 import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping, loadTextureFromMipChain, TextureHolder } from 'gx/gx_render';
 
@@ -11,8 +10,7 @@ import { RenderState, RenderFlags } from '../render';
 import { nArray } from '../util';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
-import { AABB, IntersectionState } from '../Camera';
-import { renderWireframeAABB } from '../RenderUtility';
+import { AABB, IntersectionState, texEnvMtx } from '../Camera';
 import { TXTR } from './txtr';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
@@ -22,10 +20,11 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
     0, 0, 0, 1,
 );
 
-// Cheap way to scale up. TODO(jstpierre): Why doesn't scale work?
-const posScale = 1;
+// Cheap way to scale up.
+const posScale = 10;
 const posMtx = mat4.create();
 mat4.multiplyScalar(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, posScale);
+posMtx[15] = 1;
 
 const textureMappingScratch: TextureMapping[] = nArray(8, () => new TextureMapping());
 
@@ -64,7 +63,7 @@ export class MREARenderer implements Viewer.Scene {
         }
 
         this.materialCommands = groupMaterials.map((material) => {
-            return new Command_Material(gl, material);
+            return new Command_Material(material);
         });
 
         const vertexDatas: ArrayBufferSlice[] = [];
@@ -134,7 +133,7 @@ export class MREARenderer implements Viewer.Scene {
                     const materialCommand = this.materialCommands[groupIndex];
 
                     if (groupIndex !== currentGroupIndex) {
-                        materialCommand.exec(state, this.renderHelper);
+                        materialCommand.exec(state, worldModel.modelMatrix, this.renderHelper);
                         currentGroupIndex = groupIndex;
                     }
 
@@ -198,15 +197,15 @@ class Command_Material {
     public program: GX_Material.GX_Program;
     public materialParams = new MaterialParams();
 
-    constructor(gl: WebGL2RenderingContext, public material: Material) {
+    constructor(public material: Material) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
-        this.fillMaterialParamsData(this.materialParams);
     }
 
-    public exec(state: RenderState, renderHelper: GXRenderHelper) {
+    public exec(state: RenderState, modelMatrix: mat4, renderHelper: GXRenderHelper) {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
+        this.fillMaterialParamsData(state, modelMatrix, this.materialParams);
         renderHelper.bindMaterialParams(state, this.materialParams);
     }
 
@@ -214,10 +213,80 @@ class Command_Material {
         this.program.destroy(gl);
     }
 
-    private fillMaterialParamsData(materialParams: MaterialParams): void {
+    private fillMaterialParamsData(state: RenderState, modelMatrix: mat4, materialParams: MaterialParams): void {
         for (let i = 0; i < 4; i++)
             materialParams.u_Color[i].copy(this.material.gxMaterial.colorRegisters[i]);
         for (let i = 0; i < 4; i++)
             materialParams.u_KonstColor[i].copy(this.material.gxMaterial.colorConstants[i]);
+
+        const animTime = ((state.time / 1000) % 900);
+        for (let i = 0; i < this.material.uvAnimations.length; i++) {
+            const uvAnimation = this.material.uvAnimations[i];
+            const texMtx = materialParams.u_TexMtx[i];
+            const postMtx = materialParams.u_PostTexMtx[i];
+            switch (uvAnimation.type) {
+            case UVAnimationType.UV_SCROLL: {
+                const transS = animTime * uvAnimation.scaleS + uvAnimation.offsetS;
+                const transT = animTime * uvAnimation.scaleT + uvAnimation.offsetT;
+                texMtx[12] = transS;
+                texMtx[13] = transT;
+                break;
+            }
+            case UVAnimationType.ROTATION: {
+                const theta = animTime * uvAnimation.scale + uvAnimation.offset;
+                const cosR = Math.cos(theta);
+                const sinR = Math.sin(theta);
+                texMtx[0] =  cosR;
+                texMtx[4] =  sinR;
+                texMtx[12] = (1.0 - (cosR - sinR)) * 0.5;
+            
+                texMtx[1] = -sinR;
+                texMtx[5] =  cosR;
+                texMtx[13] = (1.0 - (sinR + cosR)) * 0.5;
+                break;
+            }
+            case UVAnimationType.FLIPBOOK_U: {
+                const n = uvAnimation.step * uvAnimation.scale * (uvAnimation.offset + animTime);
+                const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
+                texMtx[12] = trans;
+                break;
+            }
+            case UVAnimationType.FLIPBOOK_V: {
+                const n = uvAnimation.step * uvAnimation.scale * (uvAnimation.offset + animTime);
+                const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
+                texMtx[13] = trans;
+                break;
+            }
+            case UVAnimationType.INV_MAT_SKY:
+                mat4.mul(texMtx, state.view, modelMatrix);
+                texMtx[12] = 0;
+                texMtx[13] = 0;
+                texMtx[14] = 0;
+                texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
+                break;
+            case UVAnimationType.INV_MAT:
+                mat4.mul(texMtx, state.view, modelMatrix);
+                texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
+                break;
+            case UVAnimationType.MODEL_MAT:
+                mat4.copy(texMtx, modelMatrix);
+                texMtx[12] = 0;
+                texMtx[13] = 0;
+                texMtx[14] = 0;
+                texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
+                break;
+            case UVAnimationType.CYLINDER: {
+                mat4.mul(texMtx, state.view, modelMatrix);
+                texMtx[12] = 0;
+                texMtx[13] = 0;
+                texMtx[14] = 0;
+                const xy = ((state.view[12] + state.view[13]) * 0.025 * uvAnimation.phi) % 1.0;
+                const z = state.view[14] * 0.05 * uvAnimation.phi;
+                const a = uvAnimation.theta * 0.5;
+                texEnvMtx(postMtx, a, -a, xy, z);
+                break;
+            }
+            }
+        }
     }
 }
