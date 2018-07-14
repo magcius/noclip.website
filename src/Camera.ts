@@ -56,8 +56,8 @@ export class AABB {
         vec3.set(dstMax, m[12], m[13], m[14]);
         for (let i = 0; i < 3; i++) {
             for (let j = 0; j < 3; j++) {
-                const a = m[i*4+j] * srcMin[j];
-                const b = m[i*4+j] * srcMax[j];
+                const a = m[j*4+i] * srcMin[j];
+                const b = m[j*4+i] * srcMax[j];
                 if (a < b) {
                     dstMin[i] += a;
                     dstMax[i] += b;
