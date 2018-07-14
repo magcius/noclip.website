@@ -4,7 +4,7 @@ import { mat4 } from 'gl-matrix';
 import { MREA, Material, Surface, MaterialFlags } from './mrea';
 import * as GX_Texture from 'gx/gx_texture';
 import * as GX_Material from 'gx/gx_material';
-import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping, loadTextureFromMipChain } from 'gx/gx_render';
+import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping, loadTextureFromMipChain, TextureHolder } from 'gx/gx_render';
 
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
@@ -13,6 +13,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { AABB, IntersectionState } from '../Camera';
 import { renderWireframeAABB } from '../RenderUtility';
+import { TXTR } from './txtr';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0, 0, 0,
@@ -28,9 +29,14 @@ mat4.multiplyScalar(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaBu
 
 const textureMappingScratch: TextureMapping[] = nArray(8, () => new TextureMapping());
 
-export class Scene implements Viewer.MainScene {
+export class RetroTextureHolder extends TextureHolder<TXTR> {
+    public addMREATextures(gl: WebGL2RenderingContext, mrea: MREA): void {
+        this.addTextures(gl, mrea.materialSet.textures);
+    }
+}
+
+export class MREARenderer implements Viewer.Scene {
     public textures: Viewer.Texture[] = [];
-    private glTextures: WebGLTexture[] = [];
 
     private bufferCoalescer: BufferCoalescer;
     private materialCommands: Command_Material[] = [];
@@ -41,29 +47,14 @@ export class Scene implements Viewer.MainScene {
     private bboxScratch: AABB = new AABB();
     public visible: boolean = true;
 
-    constructor(gl: WebGL2RenderingContext, public name: string, public mrea: MREA) {
+    constructor(gl: WebGL2RenderingContext, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
         this.renderHelper = new GXRenderHelper(gl);
-        this.translateTextures(gl);
         this.translateModel(gl);
     }
 
-    private translateTextures(gl: WebGL2RenderingContext): void {
-        const textureSet = this.mrea.materialSet.textures;
-        for (let i = 0; i < textureSet.length; i++) {
-            const texture = textureSet[i];
-            const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
-            const { glTexture, viewerTexture } = loadTextureFromMipChain(gl, mipChain);
-            // glTexture is already bound by loadTextureFromMipChain.
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-            this.glTextures.push(glTexture);
-            this.textures.push(viewerTexture);
-        }
-    }
+    private translateModel(gl: WebGL2RenderingContext): void {
+        this.textureHolder.addMREATextures(gl, this.mrea);
 
-    private translateModel(gl: WebGL2RenderingContext) {
         // Pull out the first material of each group, which should be identical except for textures.
         const groupMaterials: Material[] = [];
         for (let i = 0; i < this.mrea.materialSet.materials.length; i++) {
@@ -92,7 +83,7 @@ export class Scene implements Viewer.MainScene {
         let i = 0;
         this.mrea.worldModels.forEach((worldModel) => {
             worldModel.geometry.surfaces.forEach((surface) => {
-                this.surfaceCommands.push(new Command_Surface(gl, this, surface, this.bufferCoalescer.coalescedBuffers[i]));
+                this.surfaceCommands.push(new Command_Surface(gl, surface, this.bufferCoalescer.coalescedBuffers[i]));
                 ++i;
             });
         });
@@ -157,7 +148,6 @@ export class Scene implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.glTextures.forEach((texture) => gl.deleteTexture(texture));
         this.materialCommands.forEach((cmd) => cmd.destroy(gl));
         this.surfaceCommands.forEach((cmd) => cmd.destroy(gl));
         this.bufferCoalescer.destroy(gl);
@@ -169,8 +159,9 @@ export class Scene implements Viewer.MainScene {
             if (textureIndex === -1)
                 continue;
 
-            const glTexture = this.glTextures[this.mrea.materialSet.textureRemapTable[textureIndex]];
-            textureMapping[i].glTexture = glTexture;
+            const materialSet = this.mrea.materialSet;
+            const txtr = materialSet.textures[materialSet.textureRemapTable[textureIndex]];
+            this.textureHolder.fillTextureMapping(textureMapping[i], txtr.name);
         }
     }
 
@@ -187,7 +178,7 @@ export class Scene implements Viewer.MainScene {
 class Command_Surface {
     private shapeHelper: GXShapeHelper;
 
-    constructor(gl: WebGL2RenderingContext, public scene: Scene, public surface: Surface, private coalescedBuffers: CoalescedBuffers) {
+    constructor(gl: WebGL2RenderingContext, public surface: Surface, private coalescedBuffers: CoalescedBuffers) {
         this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
     }
 

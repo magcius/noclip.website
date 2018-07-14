@@ -282,7 +282,7 @@ function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSli
         }
 
         const uvAnimations: UVAnimation[] = [];
-        const uvAnimationsSize = view.getUint32(offs + 0x00)
+        const uvAnimationsSize = view.getUint32(offs + 0x00);
         const uvAnimationsCount = view.getUint32(offs + 0x04);
         offs += 0x08;
         for (let j = 0; j < uvAnimationsCount; j++) {
