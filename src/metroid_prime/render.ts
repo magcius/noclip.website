@@ -15,10 +15,10 @@ import { TXTR } from './txtr';
 import { CMDL } from './cmdl';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
-    1, 0, 0, 0,
-    0, 0, 1, 0,
-    0, 1, 0, 0,
-    0, 0, 0, 1,
+    1, 0,  0, 0,
+    0, 0, -1, 0,
+    0, 1,  0, 0,
+    0, 0,  0, 1,
 );
 
 // Cheap way to scale up.

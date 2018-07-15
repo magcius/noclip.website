@@ -17234,7 +17234,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "gx/gx_displayl
             var index = i;
             var translucent = flags & 16 /* IS_TRANSPARENT */;
             var name_14 = "PrimeGen_" + i;
-            var cullMode = 2 /* BACK */;
+            var cullMode = 1 /* FRONT */;
             var colorRegisters = [];
             colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
             colorRegisters.push(new GX_Material.Color(1, 1, 1, 0));
@@ -17846,7 +17846,7 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
             }
         ],
         execute: function () {
-            fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_16.mat4.fromValues(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+            fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = gl_matrix_16.mat4.fromValues(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
             // Cheap way to scale up.
             posScale = 10;
             posMtx = gl_matrix_16.mat4.create();
