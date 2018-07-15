@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 
 import * as Render from './render';
 import * as ZELVIEW0 from './zelview0';
@@ -7,10 +7,26 @@ import * as ZELVIEW0 from './zelview0';
 import { CullMode, RenderState, RenderFlags, BlendMode } from '../render';
 import * as Viewer from '../viewer';
 
+function extractBits(value: number, offset: number, bits: number) {
+    return (value >> offset) & ((1 << bits) - 1);
+}
+
 // Zelda uses the F3DEX2 display list format. This implements
 // a simple (and probably wrong!) HLE renderer for it.
 
 type CmdFunc = (renderState: RenderState) => void;
+
+const OtherModeH = {
+    CYCLETYPE_SFT: 20,
+    CYCLETYPE_LEN: 2,
+};
+
+const CYCLETYPE = {
+    _1CYCLE: 0,
+    _2CYCLE: 1,
+    COPY: 2,
+    FILL: 3,
+}
 
 const enum UCodeCommands {
     VTX = 0x01,
@@ -42,6 +58,7 @@ const enum UCodeCommands {
 
 class State {
     public gl: WebGL2RenderingContext;
+    public programMap: {[hash: string]: Render.F3DEX2Program} = {};
 
     public cmds: CmdFunc[];
     public textures: Viewer.Texture[];
@@ -53,19 +70,104 @@ class State {
     public vertexData: number[];
     public vertexOffs: number;
 
-    public geometryMode: number;
-    public otherModeL: number;
+    public geometryMode: number = 0;
+    public combiners: Readonly<Render.Combiners>;
+    public otherModeL: number = 0;
+    public otherModeH: number = (CYCLETYPE._2CYCLE << OtherModeH.CYCLETYPE_SFT);
+    
+    public primColor: vec4 = vec4.clone([1, 1, 1, 1]);
+    // FIXME: Initial envColor depends on which map is loaded, and can be animated.
+    public envColor: vec4 = vec4.clone([0, 0, 0, 0.5]);
 
     public palettePixels: Uint8Array;
     public textureImageAddr: number;
     public currentTile: TextureTile;
-    public textureTile: TextureTile;
+    public textureTiles: TextureTile[] = [];
 
     public rom: ZELVIEW0.ZELVIEW0;
     public banks: ZELVIEW0.RomBanks;
 
     public lookupAddress(addr: number) {
         return this.rom.lookupAddress(this.banks, addr);
+    }
+    
+    public getDLProgram(params: Render.F3DEX2ProgramParameters): Render.F3DEX2Program {
+        const hash = Render.hashF3DEX2Params(params);
+        if (!(hash in this.programMap)) {
+            this.programMap[hash] = new Render.F3DEX2Program(params);
+        }
+        return this.programMap[hash];
+    }
+
+    public pushProgramCmds() {
+        // Clone all relevant fields to prevent the closure from seeing different data than
+        // intended.
+        const envColor = vec4.clone(this.envColor);
+        const primColor = vec4.clone(this.primColor);
+        const geometryMode = this.geometryMode;
+        const otherModeL = this.otherModeL;
+        const otherModeH = this.otherModeH;
+
+        const progParams: Render.F3DEX2ProgramParameters = {
+            use2Cycle: (extractBits(otherModeH, OtherModeH.CYCLETYPE_SFT, OtherModeH.CYCLETYPE_LEN) == CYCLETYPE._2CYCLE),
+            combiners: this.combiners,
+        };
+
+        // TODO: Don't call getDLProgram if state didn't change, because it can be expensive.
+        const prog = this.getDLProgram(progParams);
+
+        let alphaTestMode: number;
+        if (otherModeL & OtherModeL.FORCE_BL) {
+            alphaTestMode = 0;
+        } else {
+            alphaTestMode = ((otherModeL & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
+                                (otherModeL & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
+        }
+
+        flushTexture(this)
+        var textures: TextureTile[] = []
+        // TODO: handle tiles other than 0 and 1 if needed?
+        if (this.textureTiles[0] && this.textureTiles[0].addr != 0)
+            textures[0] = Object.assign({}, this.textureTiles[0])
+        if (this.textureTiles[1] && this.textureTiles[1].addr != 0)
+            textures[1] = Object.assign({}, this.textureTiles[1])
+
+        this.cmds.push((renderState: RenderState) => {
+            const gl = renderState.gl;
+
+            renderState.useProgram(prog);
+            renderState.bindModelView();
+
+            gl.uniform1i(prog.texture0Location, 0);
+            gl.uniform1i(prog.texture1Location, 1);
+
+            gl.uniform4fv(prog.envLocation, envColor);
+            gl.uniform4fv(prog.primLocation, primColor);
+
+            for (let i = 0; i < 2; i++) {
+                gl.activeTexture(gl.TEXTURE0 + i);
+                if (textures[i])
+                {
+                    gl.bindTexture(gl.TEXTURE_2D, textures[i].glTextureId);
+                    gl.uniform2fv(prog.txsLocation[i], [1 / textures[i].width, 1 / textures[i].height]);
+                }
+                else
+                {
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                    gl.uniform2fv(prog.txsLocation[i], [1, 1]);
+                }
+            }
+
+            gl.activeTexture(gl.TEXTURE0);
+            
+            const lighting = !!(geometryMode & GeometryMode.LIGHTING);
+            // When lighting is disabled, the vertex colors are passed to the rasterizer as the SHADE attribute.
+            // When lighting is enabled, the vertex colors represent normals and SHADE is computed by the RSP.
+            const useVertexColors = lighting ? 0 : 1;
+            gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
+
+            gl.uniform1i(prog.alphaTestLocation, alphaTestMode);
+        });
     }
 }
 
@@ -140,6 +242,7 @@ function flushDraw(state: State) {
     if (vtxCount === 0)
         return;
 
+    state.pushProgramCmds()
     state.cmds.push((renderState: RenderState) => {
         const gl = renderState.gl;
         gl.drawArrays(gl.TRIANGLES, vtxOffs, vtxCount);
@@ -162,8 +265,10 @@ function tri(idxData: Uint8Array, offs: number, cmd: number) {
 }
 
 function flushTexture(state: State) {
-    if (state.textureTile)
-        loadTile(state, state.textureTile);
+    if (state.textureTiles[0] && state.textureTiles[0].addr != 0)
+        loadTile(state, state.textureTiles[0]);
+    if (state.textureTiles[1] && state.textureTiles[0].addr != 0)
+        loadTile(state, state.textureTiles[1])
 }
 
 function cmd_TRI1(state: State, w0: number, w1: number) {
@@ -187,6 +292,8 @@ const GeometryMode = {
 };
 
 function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
+    flushDraw(state)
+
     state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
     const newMode = state.geometryMode;
 
@@ -204,16 +311,8 @@ function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
     else
         renderFlags.cullMode = CullMode.NONE;
 
-    flushDraw(state);
     state.cmds.push((renderState: RenderState) => {
-        const gl = renderState.gl;
-        const prog = (<Render.F3DEX2Program> renderState.currentProgram);
-
         renderState.useFlags(renderFlags);
-
-        const lighting = newMode & GeometryMode.LIGHTING;
-        const useVertexColors = lighting ? 0 : 1;
-        gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
     });
 }
 
@@ -227,41 +326,52 @@ const OtherModeL = {
 };
 
 function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
-    const mode = 31 - (w0 & 0xFF);
-    if (mode === 3) {
-        const renderFlags = new RenderFlags();
-        const newMode = w1;
+    flushDraw(state);
+    
+    const len = extractBits(w0, 0, 8) + 1;
+    const sft = Math.max(0, 32 - extractBits(w0, 8, 8) - len);
+    const mask = ((1 << len) - 1) << sft;
 
-        renderFlags.depthTest = !!(newMode & OtherModeL.Z_CMP);
-        renderFlags.depthWrite = !!(newMode & OtherModeL.Z_UPD);
+    state.otherModeL = (state.otherModeL & ~mask) | (w1 & mask);
 
-        let alphaTestMode: number;
-        if (newMode & OtherModeL.FORCE_BL) {
-            alphaTestMode = 0;
-            renderFlags.blendMode = BlendMode.ADD;
-        } else {
-            alphaTestMode = ((newMode & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
-                             (newMode & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
-            renderFlags.blendMode = BlendMode.NONE;
-        }
+    const renderFlags = new RenderFlags();
+    const newMode = state.otherModeL;
 
-        flushDraw(state);
-        state.cmds.push((renderState: RenderState) => {
-            const gl = renderState.gl;
-            const prog = (<Render.F3DEX2Program> renderState.currentProgram);
+    renderFlags.depthTest = !!(newMode & OtherModeL.Z_CMP);
+    renderFlags.depthWrite = !!(newMode & OtherModeL.Z_UPD);
 
-            renderState.useFlags(renderFlags);
-
-            if (newMode & OtherModeL.ZMODE_DEC) {
-                gl.enable(gl.POLYGON_OFFSET_FILL);
-                gl.polygonOffset(-0.5, -0.5);
-            } else {
-                gl.disable(gl.POLYGON_OFFSET_FILL);
-            }
-
-            gl.uniform1i(prog.alphaTestLocation, alphaTestMode);
-        });
+    let alphaTestMode: number;
+    if (newMode & OtherModeL.FORCE_BL) {
+        alphaTestMode = 0;
+        renderFlags.blendMode = BlendMode.ADD;
+    } else {
+        alphaTestMode = ((newMode & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
+                            (newMode & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
+        renderFlags.blendMode = BlendMode.NONE;
     }
+
+    state.cmds.push((renderState: RenderState) => {
+        const gl = renderState.gl;
+        
+        renderState.useFlags(renderFlags);
+
+        if (newMode & OtherModeL.ZMODE_DEC) {
+            gl.enable(gl.POLYGON_OFFSET_FILL);
+            gl.polygonOffset(-0.5, -0.5);
+        } else {
+            gl.disable(gl.POLYGON_OFFSET_FILL);
+        }
+    });
+}
+
+function cmd_SETOTHERMODE_H(state: State, w0: number, w1: number) {
+    flushDraw(state);
+
+    const len = extractBits(w0, 0, 8) + 1;
+    const sft = Math.max(0, 32 - extractBits(w0, 8, 8) - len);
+    const mask = ((1 << len) - 1) << sft;
+
+    state.otherModeH = (state.otherModeH & ~mask) | (w1 & mask);
 }
 
 function cmd_DL(state: State, w0: number, w1: number) {
@@ -312,6 +422,63 @@ function cmd_TEXTURE(state: State, w0: number, w1: number) {
     state.boundTexture.scaleS = (s + 1) / 0x10000;
     state.boundTexture.scaleT = (t + 1) / 0x10000;
     */
+}
+
+function cmd_SETCOMBINE(state: State, w0: number, w1: number) {
+    flushDraw(state);
+
+    state.combiners = Object.freeze({
+        colorCombiners: Object.freeze([
+            Object.freeze({
+                subA: extractBits(w0, 20, 4),
+                subB: extractBits(w1, 28, 4),
+                mul: extractBits(w0, 15, 5),
+                add: extractBits(w1, 15, 3),
+            }),
+            Object.freeze({
+                subA: extractBits(w0, 5, 4),
+                subB: extractBits(w1, 24, 4),
+                mul: extractBits(w0, 0, 5),
+                add: extractBits(w1, 6, 3),
+            }),
+        ]),
+        alphaCombiners: Object.freeze([
+            Object.freeze({
+                subA: extractBits(w0, 12, 3),
+                subB: extractBits(w1, 12, 3),
+                mul: extractBits(w0, 9, 3),
+                add: extractBits(w1, 9, 3),
+            }),
+            Object.freeze({
+                subA: extractBits(w1, 21, 3),
+                subB: extractBits(w1, 3, 3),
+                mul: extractBits(w1, 18, 3),
+                add: extractBits(w1, 0, 3),
+            }),
+        ]),
+    });
+}
+
+function cmd_SETENVCOLOR(state: State, w0: number, w1: number) {
+    flushDraw(state);
+
+    state.envColor = vec4.clone([
+        extractBits(w1, 24, 8) / 255,
+        extractBits(w1, 16, 8) / 255,
+        extractBits(w1, 8, 8) / 255,
+        extractBits(w1, 0, 8) / 255,
+    ]);
+}
+
+function cmd_SETPRIMCOLOR(state: State, w0: number, w1: number) {
+    flushDraw(state);
+
+    state.primColor = vec4.clone([
+        extractBits(w1, 24, 8) / 255,
+        extractBits(w1, 16, 8) / 255,
+        extractBits(w1, 8, 8) / 255,
+        extractBits(w1, 0, 8) / 255,
+    ]);
 }
 
 function r5g5b5a1(dst: Uint8Array, dstOffs: number, p: number) {
@@ -776,8 +943,12 @@ CommandDispatch[UCodeCommands.DL] = cmd_DL;
 CommandDispatch[UCodeCommands.MTX] = cmd_MTX;
 CommandDispatch[UCodeCommands.POPMTX] = cmd_POPMTX;
 CommandDispatch[UCodeCommands.SETOTHERMODE_L] = cmd_SETOTHERMODE_L;
+CommandDispatch[UCodeCommands.SETOTHERMODE_H] = cmd_SETOTHERMODE_H;
 CommandDispatch[UCodeCommands.LOADTLUT] = cmd_LOADTLUT;
 CommandDispatch[UCodeCommands.TEXTURE] = cmd_TEXTURE;
+CommandDispatch[UCodeCommands.SETCOMBINE] = cmd_SETCOMBINE;
+CommandDispatch[UCodeCommands.SETENVCOLOR] = cmd_SETENVCOLOR;
+CommandDispatch[UCodeCommands.SETPRIMCOLOR] = cmd_SETPRIMCOLOR;
 CommandDispatch[UCodeCommands.SETTIMG] = cmd_SETTIMG;
 CommandDispatch[UCodeCommands.SETTILE] = cmd_SETTILE;
 CommandDispatch[UCodeCommands.SETTILESIZE] = cmd_SETTILESIZE;
@@ -785,24 +956,16 @@ CommandDispatch[UCodeCommands.SETTILESIZE] = cmd_SETTILESIZE;
 const F3DEX2 = {};
 
 function loadTextureBlock(state: State, cmds: number[][]) {
+    flushDraw(state)
+
     const tileIdx = (cmds[5][1] >> 24) & 0x7;
-    if (tileIdx !== 0)
-        return;
 
     cmd_SETTIMG(state, cmds[0][0], cmds[0][1]);
-    cmd_SETTILE(state, cmds[5][0], cmds[5][1]);
+    cmd_SETTILE(state, cmds[5][0], cmds[5][1]); // state.currentTile is constructed here
     cmd_SETTILESIZE(state, cmds[6][0], cmds[6][1]);
-    state.textureTile = state.currentTile;
-    const tile = state.textureTile;
-    tile.addr = state.textureImageAddr;
+    state.currentTile.addr = state.textureImageAddr;
 
-    flushDraw(state);
-    state.cmds.push((renderState: RenderState) => {
-        const gl = renderState.gl;
-        gl.bindTexture(gl.TEXTURE_2D, tile.glTextureId);
-        const prog = (<Render.F3DEX2Program> renderState.currentProgram);
-        gl.uniform2fv(prog.txsLocation, [1 / tile.width, 1 / tile.height]);
-    });
+    state.textureTiles[tileIdx] = state.currentTile
 }
 
 function runDL(state: State, addr: number) {
@@ -897,10 +1060,10 @@ export function readDL(gl: WebGL2RenderingContext, rom: ZELVIEW0.ZELVIEW0, banks
 
     gl.vertexAttribPointer(Render.F3DEX2Program.a_Position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
     gl.vertexAttribPointer(Render.F3DEX2Program.a_UV, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-    gl.vertexAttribPointer(Render.F3DEX2Program.a_Color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
+    gl.vertexAttribPointer(Render.F3DEX2Program.a_Shade, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
     gl.enableVertexAttribArray(Render.F3DEX2Program.a_Position);
     gl.enableVertexAttribArray(Render.F3DEX2Program.a_UV);
-    gl.enableVertexAttribArray(Render.F3DEX2Program.a_Color);
+    gl.enableVertexAttribArray(Render.F3DEX2Program.a_Shade);
 
     gl.bindVertexArray(null);
 
