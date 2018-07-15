@@ -84,7 +84,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
                 if (skyboxCMDL) {
                     const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                    const skyboxRenderer = new CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
+                    skyboxRenderer = new CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
                     skyboxRenderer.isSkybox = true;
                 }
                 const areaRenderers = areas.map((mreaEntry) => {

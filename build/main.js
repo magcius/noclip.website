@@ -18319,8 +18319,8 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             var skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
                             if (skyboxCMDL) {
                                 var skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                                var skyboxRenderer_1 = new render_27.CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
-                                skyboxRenderer_1.isSkybox = true;
+                                skyboxRenderer = new render_27.CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
+                                skyboxRenderer.isSkybox = true;
                             }
                             var areaRenderers = areas.map(function (mreaEntry) {
                                 var mrea = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
