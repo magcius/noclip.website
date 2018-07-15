@@ -86,8 +86,8 @@ export const enum MaterialFlags {
     HAS_SAMUS_REFL = 0x0040,
     DEPTH_WRITE    = 0x0080,
     OCCLUDER       = 0x0200,
+    HAS_INDTX_REFL = 0x0400,
     UV_SHORT       = 0x2000,
-    HAS_INDTX_REFL = 0x4000,
 }
 
 export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice, offs: number): MaterialSet {
