@@ -337,7 +337,7 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
         const translucent = flags & MaterialFlags.IS_TRANSPARENT;
 
         const name = `PrimeGen_${i}`;
-        const cullMode = GX.CullMode.BACK;
+        const cullMode = GX.CullMode.FRONT;
 
         const colorRegisters: GX_Material.Color[] = [];
         colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
