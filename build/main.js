@@ -12324,6 +12324,9 @@ System.register("zelview/zelview0", ["gl-matrix", "zelview/f3dex2", "util"], fun
 System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], function (exports_49, context_49) {
     "use strict";
     var __moduleName = context_49 && context_49.id;
+    function extractBits(value, offset, bits) {
+        return (value >> offset) & ((1 << bits) - 1);
+    }
     function readVertex(state, which, addr) {
         var rom = state.rom;
         var offs = state.lookupAddress(addr);
@@ -12363,6 +12366,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         state.vertexOffs = vtxBufSize;
         if (vtxCount === 0)
             return;
+        state.pushProgramCmds();
         state.cmds.push(function (renderState) {
             var gl = renderState.gl;
             gl.drawArrays(gl.TRIANGLES, vtxOffs, vtxCount);
@@ -12382,8 +12386,10 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         idxData[offs + 2] = (cmd >> 1) & 0x7F;
     }
     function flushTexture(state) {
-        if (state.textureTile)
-            loadTile(state, state.textureTile);
+        if (state.textureTiles[0] && state.textureTiles[0].addr != 0)
+            loadTile(state, state.textureTiles[0]);
+        if (state.textureTiles[1] && state.textureTiles[0].addr != 0)
+            loadTile(state, state.textureTiles[1]);
     }
     function cmd_TRI1(state, w0, w1) {
         flushTexture(state);
@@ -12399,6 +12405,7 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         translateTRI(state, idxData);
     }
     function cmd_GEOMETRYMODE(state, w0, w1) {
+        flushDraw(state);
         state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
         var newMode = state.geometryMode;
         var renderFlags = new render_18.RenderFlags();
@@ -12412,48 +12419,48 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             renderFlags.cullMode = render_18.CullMode.BACK;
         else
             renderFlags.cullMode = render_18.CullMode.NONE;
-        flushDraw(state);
         state.cmds.push(function (renderState) {
-            var gl = renderState.gl;
-            var prog = renderState.currentProgram;
             renderState.useFlags(renderFlags);
-            var lighting = newMode & GeometryMode.LIGHTING;
-            var useVertexColors = lighting ? 0 : 1;
-            gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
         });
     }
     function cmd_SETOTHERMODE_L(state, w0, w1) {
-        var mode = 31 - (w0 & 0xFF);
-        if (mode === 3) {
-            var renderFlags_1 = new render_18.RenderFlags();
-            var newMode_1 = w1;
-            renderFlags_1.depthTest = !!(newMode_1 & OtherModeL.Z_CMP);
-            renderFlags_1.depthWrite = !!(newMode_1 & OtherModeL.Z_UPD);
-            var alphaTestMode_1;
-            if (newMode_1 & OtherModeL.FORCE_BL) {
-                alphaTestMode_1 = 0;
-                renderFlags_1.blendMode = render_18.BlendMode.ADD;
+        flushDraw(state);
+        var len = extractBits(w0, 0, 8) + 1;
+        var sft = Math.max(0, 32 - extractBits(w0, 8, 8) - len);
+        var mask = ((1 << len) - 1) << sft;
+        state.otherModeL = (state.otherModeL & ~mask) | (w1 & mask);
+        var renderFlags = new render_18.RenderFlags();
+        var newMode = state.otherModeL;
+        renderFlags.depthTest = !!(newMode & OtherModeL.Z_CMP);
+        renderFlags.depthWrite = !!(newMode & OtherModeL.Z_UPD);
+        var alphaTestMode;
+        if (newMode & OtherModeL.FORCE_BL) {
+            alphaTestMode = 0;
+            renderFlags.blendMode = render_18.BlendMode.ADD;
+        }
+        else {
+            alphaTestMode = ((newMode & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
+                (newMode & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
+            renderFlags.blendMode = render_18.BlendMode.NONE;
+        }
+        state.cmds.push(function (renderState) {
+            var gl = renderState.gl;
+            renderState.useFlags(renderFlags);
+            if (newMode & OtherModeL.ZMODE_DEC) {
+                gl.enable(gl.POLYGON_OFFSET_FILL);
+                gl.polygonOffset(-0.5, -0.5);
             }
             else {
-                alphaTestMode_1 = ((newMode_1 & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
-                    (newMode_1 & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
-                renderFlags_1.blendMode = render_18.BlendMode.NONE;
+                gl.disable(gl.POLYGON_OFFSET_FILL);
             }
-            flushDraw(state);
-            state.cmds.push(function (renderState) {
-                var gl = renderState.gl;
-                var prog = renderState.currentProgram;
-                renderState.useFlags(renderFlags_1);
-                if (newMode_1 & OtherModeL.ZMODE_DEC) {
-                    gl.enable(gl.POLYGON_OFFSET_FILL);
-                    gl.polygonOffset(-0.5, -0.5);
-                }
-                else {
-                    gl.disable(gl.POLYGON_OFFSET_FILL);
-                }
-                gl.uniform1i(prog.alphaTestLocation, alphaTestMode_1);
-            });
-        }
+        });
+    }
+    function cmd_SETOTHERMODE_H(state, w0, w1) {
+        flushDraw(state);
+        var len = extractBits(w0, 0, 8) + 1;
+        var sft = Math.max(0, 32 - extractBits(w0, 8, 8) - len);
+        var mask = ((1 << len) - 1) << sft;
+        state.otherModeH = (state.otherModeH & ~mask) | (w1 & mask);
     }
     function cmd_DL(state, w0, w1) {
         runDL(state, w1);
@@ -12494,6 +12501,57 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         state.boundTexture.scaleS = (s + 1) / 0x10000;
         state.boundTexture.scaleT = (t + 1) / 0x10000;
         */
+    }
+    function cmd_SETCOMBINE(state, w0, w1) {
+        flushDraw(state);
+        state.combiners = Object.freeze({
+            colorCombiners: Object.freeze([
+                Object.freeze({
+                    subA: extractBits(w0, 20, 4),
+                    subB: extractBits(w1, 28, 4),
+                    mul: extractBits(w0, 15, 5),
+                    add: extractBits(w1, 15, 3),
+                }),
+                Object.freeze({
+                    subA: extractBits(w0, 5, 4),
+                    subB: extractBits(w1, 24, 4),
+                    mul: extractBits(w0, 0, 5),
+                    add: extractBits(w1, 6, 3),
+                }),
+            ]),
+            alphaCombiners: Object.freeze([
+                Object.freeze({
+                    subA: extractBits(w0, 12, 3),
+                    subB: extractBits(w1, 12, 3),
+                    mul: extractBits(w0, 9, 3),
+                    add: extractBits(w1, 9, 3),
+                }),
+                Object.freeze({
+                    subA: extractBits(w1, 21, 3),
+                    subB: extractBits(w1, 3, 3),
+                    mul: extractBits(w1, 18, 3),
+                    add: extractBits(w1, 0, 3),
+                }),
+            ]),
+        });
+    }
+    function cmd_SETENVCOLOR(state, w0, w1) {
+        flushDraw(state);
+        state.envColor = gl_matrix_13.vec4.clone([
+            extractBits(w1, 24, 8) / 255,
+            extractBits(w1, 16, 8) / 255,
+            extractBits(w1, 8, 8) / 255,
+            extractBits(w1, 0, 8) / 255,
+        ]);
+    }
+    function cmd_SETPRIMCOLOR(state, w0, w1) {
+        flushDraw(state);
+        state.primColor = gl_matrix_13.vec4.clone([
+            extractBits(w1, 24, 8) / 255,
+            extractBits(w1, 16, 8) / 255,
+            extractBits(w1, 8, 8) / 255,
+            extractBits(w1, 0, 8) / 255,
+        ]);
     }
     function r5g5b5a1(dst, dstOffs, p) {
         var r, g, b, a;
@@ -12912,22 +12970,13 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         texture.height = height;
     }
     function loadTextureBlock(state, cmds) {
-        var tileIdx = (cmds[5][1] >> 24) & 0x7;
-        if (tileIdx !== 0)
-            return;
-        cmd_SETTIMG(state, cmds[0][0], cmds[0][1]);
-        cmd_SETTILE(state, cmds[5][0], cmds[5][1]);
-        cmd_SETTILESIZE(state, cmds[6][0], cmds[6][1]);
-        state.textureTile = state.currentTile;
-        var tile = state.textureTile;
-        tile.addr = state.textureImageAddr;
         flushDraw(state);
-        state.cmds.push(function (renderState) {
-            var gl = renderState.gl;
-            gl.bindTexture(gl.TEXTURE_2D, tile.glTextureId);
-            var prog = renderState.currentProgram;
-            gl.uniform2fv(prog.txsLocation, [1 / tile.width, 1 / tile.height]);
-        });
+        var tileIdx = (cmds[5][1] >> 24) & 0x7;
+        cmd_SETTIMG(state, cmds[0][0], cmds[0][1]);
+        cmd_SETTILE(state, cmds[5][0], cmds[5][1]); // state.currentTile is constructed here
+        cmd_SETTILESIZE(state, cmds[6][0], cmds[6][1]);
+        state.currentTile.addr = state.textureImageAddr;
+        state.textureTiles[tileIdx] = state.currentTile;
     }
     function runDL(state, addr) {
         function collectNextCmds() {
@@ -12993,15 +13042,15 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(state.vertexData), gl.STATIC_DRAW);
         gl.vertexAttribPointer(Render.F3DEX2Program.a_Position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
         gl.vertexAttribPointer(Render.F3DEX2Program.a_UV, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-        gl.vertexAttribPointer(Render.F3DEX2Program.a_Color, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
+        gl.vertexAttribPointer(Render.F3DEX2Program.a_Shade, 4, gl.FLOAT, false, VERTEX_BYTES, 5 * Float32Array.BYTES_PER_ELEMENT);
         gl.enableVertexAttribArray(Render.F3DEX2Program.a_Position);
         gl.enableVertexAttribArray(Render.F3DEX2Program.a_UV);
-        gl.enableVertexAttribArray(Render.F3DEX2Program.a_Color);
+        gl.enableVertexAttribArray(Render.F3DEX2Program.a_Shade);
         gl.bindVertexArray(null);
         return new DL(vao, state.cmds, state.textures);
     }
     exports_49("readDL", readDL);
-    var gl_matrix_13, Render, render_18, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
+    var gl_matrix_13, Render, render_18, OtherModeH, CYCLETYPE, State, VERTEX_SIZE, VERTEX_BYTES, GeometryMode, OtherModeL, tileCache, CommandDispatch, F3DEX2, DL;
     return {
         setters: [
             function (gl_matrix_13_1) {
@@ -13015,11 +13064,93 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             }
         ],
         execute: function () {
+            OtherModeH = {
+                CYCLETYPE_SFT: 20,
+                CYCLETYPE_LEN: 2,
+            };
+            CYCLETYPE = {
+                _1CYCLE: 0,
+                _2CYCLE: 1,
+                COPY: 2,
+                FILL: 3,
+            };
             State = /** @class */ (function () {
                 function State() {
+                    this.programMap = {};
+                    this.geometryMode = 0;
+                    this.otherModeL = 0;
+                    this.otherModeH = (CYCLETYPE._2CYCLE << OtherModeH.CYCLETYPE_SFT);
+                    this.primColor = gl_matrix_13.vec4.clone([1, 1, 1, 1]);
+                    // FIXME: Initial envColor depends on which map is loaded, and can be animated.
+                    this.envColor = gl_matrix_13.vec4.clone([0, 0, 0, 0.5]);
+                    this.textureTiles = [];
                 }
                 State.prototype.lookupAddress = function (addr) {
                     return this.rom.lookupAddress(this.banks, addr);
+                };
+                State.prototype.getDLProgram = function (params) {
+                    var hash = Render.hashF3DEX2Params(params);
+                    if (!(hash in this.programMap)) {
+                        this.programMap[hash] = new Render.F3DEX2Program(params);
+                    }
+                    return this.programMap[hash];
+                };
+                State.prototype.pushProgramCmds = function () {
+                    // Clone all relevant fields to prevent the closure from seeing different data than
+                    // intended.
+                    var envColor = gl_matrix_13.vec4.clone(this.envColor);
+                    var primColor = gl_matrix_13.vec4.clone(this.primColor);
+                    var geometryMode = this.geometryMode;
+                    var otherModeL = this.otherModeL;
+                    var otherModeH = this.otherModeH;
+                    var progParams = {
+                        use2Cycle: (extractBits(otherModeH, OtherModeH.CYCLETYPE_SFT, OtherModeH.CYCLETYPE_LEN) == CYCLETYPE._2CYCLE),
+                        combiners: this.combiners,
+                    };
+                    // TODO: Don't call getDLProgram if state didn't change, because it can be expensive.
+                    var prog = this.getDLProgram(progParams);
+                    var alphaTestMode;
+                    if (otherModeL & OtherModeL.FORCE_BL) {
+                        alphaTestMode = 0;
+                    }
+                    else {
+                        alphaTestMode = ((otherModeL & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
+                            (otherModeL & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
+                    }
+                    flushTexture(this);
+                    var textures = [];
+                    // TODO: handle tiles other than 0 and 1 if needed?
+                    if (this.textureTiles[0] && this.textureTiles[0].addr != 0)
+                        textures[0] = Object.assign({}, this.textureTiles[0]);
+                    if (this.textureTiles[1] && this.textureTiles[1].addr != 0)
+                        textures[1] = Object.assign({}, this.textureTiles[1]);
+                    this.cmds.push(function (renderState) {
+                        var gl = renderState.gl;
+                        renderState.useProgram(prog);
+                        renderState.bindModelView();
+                        gl.uniform1i(prog.texture0Location, 0);
+                        gl.uniform1i(prog.texture1Location, 1);
+                        gl.uniform4fv(prog.envLocation, envColor);
+                        gl.uniform4fv(prog.primLocation, primColor);
+                        for (var i = 0; i < 2; i++) {
+                            gl.activeTexture(gl.TEXTURE0 + i);
+                            if (textures[i]) {
+                                gl.bindTexture(gl.TEXTURE_2D, textures[i].glTextureId);
+                                gl.uniform2fv(prog.txsLocation[i], [1 / textures[i].width, 1 / textures[i].height]);
+                            }
+                            else {
+                                gl.bindTexture(gl.TEXTURE_2D, null);
+                                gl.uniform2fv(prog.txsLocation[i], [1, 1]);
+                            }
+                        }
+                        gl.activeTexture(gl.TEXTURE0);
+                        var lighting = !!(geometryMode & GeometryMode.LIGHTING);
+                        // When lighting is disabled, the vertex colors are passed to the rasterizer as the SHADE attribute.
+                        // When lighting is enabled, the vertex colors represent normals and SHADE is computed by the RSP.
+                        var useVertexColors = lighting ? 0 : 1;
+                        gl.uniform1i(prog.useVertexColorsLocation, useVertexColors);
+                        gl.uniform1i(prog.alphaTestLocation, alphaTestMode);
+                    });
                 };
                 return State;
             }());
@@ -13050,8 +13181,12 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
             CommandDispatch[218 /* MTX */] = cmd_MTX;
             CommandDispatch[216 /* POPMTX */] = cmd_POPMTX;
             CommandDispatch[226 /* SETOTHERMODE_L */] = cmd_SETOTHERMODE_L;
+            CommandDispatch[227 /* SETOTHERMODE_H */] = cmd_SETOTHERMODE_H;
             CommandDispatch[240 /* LOADTLUT */] = cmd_LOADTLUT;
             CommandDispatch[215 /* TEXTURE */] = cmd_TEXTURE;
+            CommandDispatch[252 /* SETCOMBINE */] = cmd_SETCOMBINE;
+            CommandDispatch[251 /* SETENVCOLOR */] = cmd_SETENVCOLOR;
+            CommandDispatch[249 /* SETPRIMCOLOR */] = cmd_SETPRIMCOLOR;
             CommandDispatch[253 /* SETTIMG */] = cmd_SETTIMG;
             CommandDispatch[245 /* SETTILE */] = cmd_SETTILE;
             CommandDispatch[242 /* SETTILESIZE */] = cmd_SETTILESIZE;
@@ -13079,7 +13214,27 @@ System.register("zelview/f3dex2", ["gl-matrix", "zelview/render", "render"], fun
 System.register("zelview/render", ["zelview/zelview0", "render", "Program", "util"], function (exports_50, context_50) {
     "use strict";
     var __moduleName = context_50 && context_50.id;
-    var ZELVIEW0, render_19, Program_8, util_28, BillboardBGProgram, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
+    function ccUsesTexel0(c) {
+        return c.subA == 1 || c.subB == 1 || c.mul == 1 || c.mul == 8 || c.add == 1;
+    }
+    function acUsesTexel0(c) {
+        return c.subA == 1 || c.subB == 1 || c.mul == 1 || c.add == 1;
+    }
+    function ccUsesTexel1(c) {
+        return c.subA == 2 || c.subB == 2 || c.mul == 2 || c.mul == 9 || c.add == 2;
+    }
+    function acUsesTexel1(c) {
+        return c.subA == 2 || c.subB == 2 || c.mul == 2 || c.add == 2;
+    }
+    function getOrDefault(obj, key, def) {
+        var result = obj[key];
+        return (result === undefined) ? def : result;
+    }
+    function hashF3DEX2Params(params) {
+        return JSON.stringify(params); // TODO: use a more efficient hash mechanism
+    }
+    exports_50("hashF3DEX2Params", hashF3DEX2Params);
+    var ZELVIEW0, render_19, Program_8, util_28, BillboardBGProgram, F3DEX2_FRAG_BASE, CC_SUBA, CC_SUBB, CC_MUL, CC_ADD, AC_ADDSUB, AC_MUL, F3DEX2Program, CollisionProgram, WaterboxProgram, Scene, SceneDesc;
     return {
         setters: [
             function (ZELVIEW0_1) {
@@ -13112,23 +13267,103 @@ System.register("zelview/render", ["zelview/zelview0", "render", "Program", "uti
                 return BillboardBGProgram;
             }(Program_8.default));
             exports_50("BillboardBGProgram", BillboardBGProgram);
+            F3DEX2_FRAG_BASE = "\nprecision mediump float;\nvarying vec2 v_uv;\nvarying vec4 v_shade;\nuniform vec4 u_env;\nuniform vec4 u_prim;\nuniform sampler2D u_texture0;\nuniform sampler2D u_texture1;\nuniform bool u_useVertexColors;\nuniform int u_alphaTest;\n\nvec4 n64Texture2D(sampler2D tex, vec2 texCoord) {\n    vec2 texSize = vec2(textureSize(tex, 0));\n    vec2 offset = fract(texCoord * texSize - 0.5);\n    offset -= step(1.0, offset.x + offset.y);\n    vec4 c0 = texture2D(tex, texCoord - offset / texSize, 0.0);\n    vec4 c1 = texture2D(tex, texCoord - vec2(offset.x - sign(offset.x), offset.y) / texSize, 0.0);\n    vec4 c2 = texture2D(tex, texCoord - vec2(offset.x, offset.y - sign(offset.y)) / texSize, 0.0);\n    return c0 + abs(offset.x) * (c1 - c0) + abs(offset.y) * (c2 - c0);\t\t\n}\n\nvoid main() {\n#if USE_2CYCLE && CC1_USES_T1\n    // 2-cycle, complete\n    vec4 t00 = n64Texture2D(u_texture0, v_uv);\n    vec4 t10 = n64Texture2D(u_texture1, v_uv);\n    vec4 t01 = t00; // ???\n    vec4 t11 = t10; // ???\n#elif USE_2CYCLE && (CC0_USES_T1 || CC1_USES_T0)\n    // 2-cycle, no texel-next?\n    vec4 t00 = n64Texture2D(u_texture0, v_uv);\n    vec4 t10 = n64Texture2D(u_texture1, v_uv);\n    vec4 t01 = n64Texture2D(u_texture0, v_uv); // ???\n    vec4 t11 = n64Texture2D(u_texture1, v_uv); // ???\n#elif USE_2CYCLE && (CC0_USES_T0 || CC0_USES_LOD_FRAC || CC1_USES_LOD_FRAC)\n    // 2-cycle, no texel 1\n    vec4 t00 = n64Texture2D(u_texture0, v_uv);\n    vec4 t10 = vec4(0.0);\n    vec4 t01 = t00; // ???\n    vec4 t11 = t10; // ???\n#elif USE_2CYCLE\n    vec4 t00 = vec4(0.0);\n    vec4 t10 = vec4(0.0);\n    vec4 t01 = vec4(0.0);\n    vec4 t11 = vec4(0.0);\n#else\n    #error TODO: handle 1-cycle\n#endif\n\n    vec4 shade = v_shade;\n    if (!u_useVertexColors) {\n        shade = vec4(1.0);\n    }\n\n    vec4 combined = shade;\n    vec4 t0;\n    vec4 t1;\n#if USE_2CYCLE\n    t0 = t00;\n    t1 = t10;\n    combined = vec4(\n        (CC0_SUBA - CC0_SUBB) * CC0_MUL + CC0_ADD,\n        (AC0_SUBA - AC0_SUBB) * AC0_MUL + AC0_ADD\n    );\n#endif\n    t0 = t01;\n    t1 = t11;\n    combined = vec4(\n        (CC1_SUBA - CC1_SUBB) * CC1_MUL + CC1_ADD,\n        (AC1_SUBA - AC1_SUBB) * AC1_MUL + AC1_ADD\n    );\n\n    gl_FragColor = combined;\n\n    if (u_alphaTest > 0 && gl_FragColor.a < 0.0125)\n        discard;\n}\n";
+            CC_SUBA = {
+                0: "combined.rgb",
+                1: "t0.rgb",
+                2: "t1.rgb",
+                3: "u_prim.rgb",
+                4: "shade.rgb",
+                5: "u_env.rgb",
+                6: "vec3(1.0)",
+                7: "vec3(0.5)",
+            };
+            CC_SUBB = {
+                0: "combined.rgb",
+                1: "t0.rgb",
+                2: "t1.rgb",
+                3: "u_prim.rgb",
+                4: "shade.rgb",
+                5: "u_env.rgb",
+                6: "vec3(0.0)",
+                7: "vec3(0.5)",
+            };
+            CC_MUL = {
+                0: "combined.rgb",
+                1: "t0.rgb",
+                2: "t1.rgb",
+                3: "u_prim.rgb",
+                4: "shade.rgb",
+                5: "u_env.rgb",
+                6: "vec3(1.0)",
+                7: "combined.aaa",
+                8: "t0.aaa",
+                9: "t1.aaa",
+                10: "u_prim.aaa",
+                11: "shade.aaa",
+                12: "u_env.aaa",
+                13: "vec3(1.0)",
+                14: "vec3(1.0)",
+                15: "vec3(0.5)",
+            };
+            CC_ADD = {
+                0: "combined.rgb",
+                1: "t0.rgb",
+                2: "t1.rgb",
+                3: "u_prim.rgb",
+                4: "shade.rgb",
+                5: "u_env.rgb",
+                6: "vec3(1.0)",
+            };
+            AC_ADDSUB = {
+                0: "combined.a",
+                1: "t0.a",
+                2: "t1.a",
+                3: "u_prim.a",
+                4: "shade.a",
+                5: "u_env.a",
+                6: "1.0",
+            };
+            AC_MUL = {
+                0: "1.0",
+                1: "t0.a",
+                2: "t1.a",
+                3: "u_prim.a",
+                4: "shade.a",
+                5: "u_env.a",
+                6: "1.0",
+            };
             F3DEX2Program = /** @class */ (function (_super) {
                 __extends(F3DEX2Program, _super);
-                function F3DEX2Program() {
-                    var _this = _super !== null && _super.apply(this, arguments) || this;
-                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + F3DEX2Program.a_Position + ") attribute vec3 a_Position;\nlayout(location = " + F3DEX2Program.a_UV + ") attribute vec2 a_UV;\nlayout(location = " + F3DEX2Program.a_Color + ") attribute vec4 a_Color;\nout vec4 v_color;\nout vec2 v_uv;\nuniform vec2 u_txs;\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);\n    v_uv = a_UV * u_txs;\n    v_color = a_Color;\n}\n";
-                    _this.frag = "\nprecision mediump float;\nvarying vec2 v_uv;\nvarying vec4 v_color;\nuniform sampler2D u_texture;\nuniform bool u_useVertexColors;\nuniform int u_alphaTest;\n\nvec4 n64Texture2D(sampler2D tex, vec2 texCoord) {\n    vec2 texSize = vec2(textureSize(tex, 0));\n    vec2 offset = fract(texCoord * texSize - 0.5);\n    offset -= step(1.0, offset.x + offset.y);\n    vec4 c0 = texture2D(tex, texCoord - offset / texSize, 0.0);\n    vec4 c1 = texture2D(tex, texCoord - vec2(offset.x - sign(offset.x), offset.y) / texSize, 0.0);\n    vec4 c2 = texture2D(tex, texCoord - vec2(offset.x, offset.y - sign(offset.y)) / texSize, 0.0);\n    return c0 + abs(offset.x) * (c1 - c0) + abs(offset.y) * (c2 - c0);\t\t\n}\n\nvoid main() {\n    gl_FragColor = n64Texture2D(u_texture, v_uv);\n    if (u_useVertexColors)\n        gl_FragColor *= v_color;\n    if (u_alphaTest > 0 && gl_FragColor.a < 0.0125)\n        discard;\n}\n";
+                function F3DEX2Program(params) {
+                    var _this = _super.call(this) || this;
+                    _this.vert = "\nuniform mat4 u_modelView;\nuniform mat4 u_projection;\nlayout(location = " + F3DEX2Program.a_Position + ") attribute vec3 a_Position;\nlayout(location = " + F3DEX2Program.a_UV + ") attribute vec2 a_UV;\nlayout(location = " + F3DEX2Program.a_Shade + ") attribute vec4 a_Shade;\nout vec4 v_shade;\nout vec2 v_uv;\nuniform vec2 u_txs[2];\n\nvoid main() {\n    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);\n    v_uv = a_UV * u_txs[0]; // ??? Is there a second set of texcoords?\n    v_shade = a_Shade;\n}\n";
+                    _this.frag = "\n#error Shader was not properly constructed.\n";
+                    _this.frag = "#define USE_2CYCLE " + (params.use2Cycle ? 1 : 0) + "\n";
+                    for (var i = 0; i < 2; i++) {
+                        var usesT0 = ccUsesTexel0(params.combiners.colorCombiners[i]) || acUsesTexel0(params.combiners.alphaCombiners[i]);
+                        var usesT1 = ccUsesTexel1(params.combiners.colorCombiners[i]) || acUsesTexel1(params.combiners.alphaCombiners[i]);
+                        var usesLodFrac = params.combiners.colorCombiners[i].mul == 13 || params.combiners.alphaCombiners[i].mul == 0;
+                        _this.frag += "\n#define CC" + i + "_USES_T0 " + (usesT0 ? 1 : 0) + "\n#define CC" + i + "_USES_T1 " + (usesT1 ? 1 : 0) + "\n#define CC" + i + "_USES_LOD_FRAC " + (usesLodFrac ? 1 : 0) + "\n#define CC" + i + "_SUBA " + getOrDefault(CC_SUBA, params.combiners.colorCombiners[i].subA, 'vec3(0.0)') + "\n#define CC" + i + "_SUBB " + getOrDefault(CC_SUBB, params.combiners.colorCombiners[i].subB, 'vec3(0.0)') + "\n#define CC" + i + "_MUL " + getOrDefault(CC_MUL, params.combiners.colorCombiners[i].mul, 'vec3(0.0)') + "\n#define CC" + i + "_ADD " + getOrDefault(CC_ADD, params.combiners.colorCombiners[i].add, 'vec3(0.0)') + "\n#define AC" + i + "_SUBA " + getOrDefault(AC_ADDSUB, params.combiners.alphaCombiners[i].subA, '0.0') + "\n#define AC" + i + "_SUBB " + getOrDefault(AC_ADDSUB, params.combiners.alphaCombiners[i].subB, '0.0') + "\n#define AC" + i + "_MUL " + getOrDefault(AC_MUL, params.combiners.alphaCombiners[i].mul, '0.0') + "\n#define AC" + i + "_ADD " + getOrDefault(AC_ADDSUB, params.combiners.alphaCombiners[i].add, '0.0') + "\n";
+                    }
+                    _this.frag += F3DEX2_FRAG_BASE;
                     return _this;
                 }
                 F3DEX2Program.prototype.bind = function (gl, prog) {
                     _super.prototype.bind.call(this, gl, prog);
-                    this.txsLocation = gl.getUniformLocation(prog, "u_txs");
+                    this.texture0Location = gl.getUniformLocation(prog, "u_texture0");
+                    this.texture1Location = gl.getUniformLocation(prog, "u_texture1");
+                    this.txsLocation = [];
+                    this.txsLocation[0] = gl.getUniformLocation(prog, "u_txs[0]");
+                    this.txsLocation[1] = gl.getUniformLocation(prog, "u_txs[1]");
+                    this.envLocation = gl.getUniformLocation(prog, "u_env");
+                    this.primLocation = gl.getUniformLocation(prog, "u_prim");
                     this.useVertexColorsLocation = gl.getUniformLocation(prog, "u_useVertexColors");
                     this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
                 };
                 F3DEX2Program.a_Position = 0;
                 F3DEX2Program.a_UV = 1;
-                F3DEX2Program.a_Color = 2;
+                F3DEX2Program.a_Shade = 2;
                 return F3DEX2Program;
             }(Program_8.default));
             exports_50("F3DEX2Program", F3DEX2Program);
@@ -13167,7 +13402,6 @@ System.register("zelview/render", ["zelview/zelview0", "render", "Program", "uti
                     this.textures = [];
                     this.program_BG = new BillboardBGProgram();
                     this.program_COLL = new CollisionProgram();
-                    this.program_DL = new F3DEX2Program();
                     this.program_WATERS = new WaterboxProgram();
                     var mainScene = zelview0.loadMainScene(gl);
                     mainScene.rooms.forEach(function (room) {
@@ -13195,15 +13429,12 @@ System.register("zelview/render", ["zelview/zelview0", "render", "Program", "uti
                                 state.bindModelView();
                                 mesh.bg(state);
                             }
-                            state.useProgram(_this.program_DL);
-                            state.bindModelView();
                             mesh.opaque.forEach(renderDL);
                             mesh.transparent.forEach(renderDL);
                         };
                         var renderRoom = function (room) {
                             renderMesh(room.mesh);
                         };
-                        state.useProgram(_this.program_DL);
                         scene.rooms.forEach(function (room) { return renderRoom(room); });
                     };
                 };
