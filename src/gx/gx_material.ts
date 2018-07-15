@@ -46,6 +46,13 @@ export class Color {
     )
     {}
 
+    public set(r: number, g: number, b: number, a: number): void {
+        this.r = r;
+        this.g = g;
+        this.b = b;
+        this.a = a;
+    }
+
     public copy(c: Color, a: number = c.a): void {
         return colorCopy(this, c, a);
     }

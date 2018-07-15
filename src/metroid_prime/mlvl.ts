@@ -13,6 +13,7 @@ interface Area {
 
 export interface MLVL {
     areaTable: Area[];
+    defaultSkyboxID: string;
 }
 
 export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MLVL {
@@ -26,11 +27,10 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
 
     // STRG file ID?
     const worldNameSTRGID = readString(buffer, 0x08, 4, false);
-    const worldNameSTRG = resourceSystem.findResourceByID(worldNameSTRGID);
     const worldName: STRG.STRG = resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
 
     const worldSaveID = view.getUint32(0x0C);
-    const skyboxID = view.getUint32(0x10);
+    const defaultSkyboxID = readString(buffer, 0x10, 4, false);
 
     // Memory Relay junk.
     let memoryRelayTableIdx = 0x14;
@@ -110,5 +110,5 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
         areaTable.push({ areaName, areaMREAID });
     }
 
-    return { areaTable };
+    return { areaTable, defaultSkyboxID };
 }

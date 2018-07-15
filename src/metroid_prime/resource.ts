@@ -9,6 +9,7 @@ import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import * as STRG from './strg';
 import * as TXTR from './txtr';
+import * as CMDL from './cmdl';
 
 import { assert, hexzero } from "../util";
 import ArrayBufferSlice from 'ArrayBufferSlice';
@@ -21,6 +22,7 @@ const FourCCLoaders: { [n: string]: ParseFunc<Resource> } = {
     'MREA': MREA.parse,
     'STRG': STRG.parse,
     'TXTR': TXTR.parse,
+    'CMDL': CMDL.parse,
 };
 
 interface NameDataAsset {
