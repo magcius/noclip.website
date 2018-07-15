@@ -90,7 +90,7 @@ export const enum MaterialFlags {
     HAS_INDTX_REFL = 0x4000,
 }
 
-function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice, offs: number): MaterialSet {
+export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice, offs: number): MaterialSet {
     const view = buffer.createDataView();
 
     const textureCount = view.getUint32(offs + 0x00);
@@ -417,22 +417,14 @@ export interface Geometry {
     surfaces: Surface[];
 }
 
-interface SectionTables {
-    dataSectionOffsTable: number[];
-    dataSectionSizeTable: number[];
-}
-
-function parseGeometry(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice, materialSet: MaterialSet, sectionTables: SectionTables, sectionIndex: number): [Geometry, number] {
-    const sectionOffsTable = sectionTables.dataSectionOffsTable;
-    const sectionSizeTable = sectionTables.dataSectionSizeTable;
-
+export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, sectionIndex: number): [Geometry, number] {
     const view = buffer.createDataView();
 
     const posSectionOffs = sectionOffsTable[sectionIndex++];
     const nrmSectionOffs = sectionOffsTable[sectionIndex++];
     const clrSectionOffs = sectionOffsTable[sectionIndex++];
     const uvfSectionOffs = sectionOffsTable[sectionIndex++];
-    const uvsSectionOffs = sectionOffsTable[sectionIndex++];
+    const uvsSectionOffs = hasUVShort ? sectionOffsTable[sectionIndex++] : null;
 
     const surfaceTableOffs = sectionOffsTable[sectionIndex++];
     const firstSurfaceOffs = sectionOffsTable[sectionIndex];
@@ -573,9 +565,6 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
     // Parse out materials.
     const materialSet = parseMaterialSet(resourceSystem, buffer, materialSectionOffs);
 
-    // Now do geometry.
-    const sectionTables = { dataSectionOffsTable, dataSectionSizeTable };
-
     let geometrySectionIndex = worldGeometrySectionIndex + 1;
     const worldModels: WorldModel[] = [];
     for (let i = 0; i < worldModelCount; i++) {
@@ -612,7 +601,7 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
         geometrySectionIndex += 1;
 
         let geometry: Geometry;
-        [geometry, geometrySectionIndex] = parseGeometry(resourceSystem, buffer, materialSet, sectionTables, geometrySectionIndex);
+        [geometry, geometrySectionIndex] = parseGeometry(buffer, materialSet, dataSectionOffsTable, true, geometrySectionIndex);
         worldModels.push({ geometry, modelMatrix, bbox });
     }
 

@@ -1,7 +1,7 @@
 
 import { mat4 } from 'gl-matrix';
 
-import { MREA, Material, Surface, MaterialFlags, UVAnimationType } from './mrea';
+import { MREA, Material, Surface, MaterialFlags, UVAnimationType, MaterialSet } from './mrea';
 import * as GX_Material from 'gx/gx_material';
 import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping, loadTextureFromMipChain, TextureHolder } from 'gx/gx_render';
 
@@ -12,6 +12,7 @@ import ArrayBufferSlice from 'ArrayBufferSlice';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { AABB, IntersectionState, texEnvMtx } from '../Camera';
 import { TXTR } from './txtr';
+import { CMDL } from './cmdl';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0, 0, 0,
@@ -26,13 +27,13 @@ const posMtx = mat4.create();
 mat4.multiplyScalar(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, posScale);
 posMtx[15] = 1;
 
-const textureMappingScratch: TextureMapping[] = nArray(8, () => new TextureMapping());
-
 export class RetroTextureHolder extends TextureHolder<TXTR> {
-    public addMREATextures(gl: WebGL2RenderingContext, mrea: MREA): void {
-        this.addTextures(gl, mrea.materialSet.textures);
+    public addMaterialSetTextures(gl: WebGL2RenderingContext, materialSet: MaterialSet): void {
+        this.addTextures(gl, materialSet.textures);
     }
 }
+
+const textureMappingScratch: TextureMapping[] = nArray(8, () => new TextureMapping());
 
 export class MREARenderer implements Viewer.Scene {
     public textures: Viewer.Texture[] = [];
@@ -52,12 +53,14 @@ export class MREARenderer implements Viewer.Scene {
     }
 
     private translateModel(gl: WebGL2RenderingContext): void {
-        this.textureHolder.addMREATextures(gl, this.mrea);
+        const materialSet = this.mrea.materialSet;
+
+        this.textureHolder.addMaterialSetTextures(gl, materialSet);
 
         // Pull out the first material of each group, which should be identical except for textures.
         const groupMaterials: Material[] = [];
-        for (let i = 0; i < this.mrea.materialSet.materials.length; i++) {
-            const material = this.mrea.materialSet.materials[i];
+        for (let i = 0; i < materialSet.materials.length; i++) {
+            const material = materialSet.materials[i];
             if (!groupMaterials[material.groupIndex])
                 groupMaterials[material.groupIndex] = material;
         }
@@ -133,7 +136,7 @@ export class MREARenderer implements Viewer.Scene {
                     const materialCommand = this.materialCommands[groupIndex];
 
                     if (groupIndex !== currentGroupIndex) {
-                        materialCommand.exec(state, worldModel.modelMatrix, this.renderHelper);
+                        materialCommand.exec(state, worldModel.modelMatrix, false, this.renderHelper);
                         currentGroupIndex = groupIndex;
                     }
 
@@ -141,7 +144,7 @@ export class MREARenderer implements Viewer.Scene {
                     currentMaterialIndex = materialIndex;
                 }
     
-                surfaceCmd.exec(state, this.renderHelper);
+                surfaceCmd.exec(state);
             }
         });
     }
@@ -174,14 +177,155 @@ export class MREARenderer implements Viewer.Scene {
     }
 }
 
+// TODO(jstpierre): Dedupe.
+export class CMDLRenderer implements Viewer.Scene {
+    public textures: Viewer.Texture[] = [];
+
+    private bufferCoalescer: BufferCoalescer;
+    private materialCommands: Command_Material[] = [];
+    private surfaceCommands: Command_Surface[] = [];
+    private renderHelper: GXRenderHelper;
+    private sceneParams: SceneParams = new SceneParams();
+    private packetParams: PacketParams = new PacketParams();
+    private bboxScratch: AABB = new AABB();
+    private modelMatrix = mat4.create();
+    public visible: boolean = true;
+    public isSkybox: boolean = false;
+
+    constructor(gl: WebGL2RenderingContext, public textureHolder: RetroTextureHolder, public name: string, public cmdl: CMDL) {
+        this.renderHelper = new GXRenderHelper(gl);
+        this.translateModel(gl);
+    }
+
+    private translateModel(gl: WebGL2RenderingContext): void {
+        const materialSet = this.cmdl.materialSets[0];
+
+        this.textureHolder.addMaterialSetTextures(gl, materialSet);
+
+        // Pull out the first material of each group, which should be identical except for textures.
+        const groupMaterials: Material[] = [];
+        for (let i = 0; i < materialSet.materials.length; i++) {
+            const material = materialSet.materials[i];
+            if (!groupMaterials[material.groupIndex])
+                groupMaterials[material.groupIndex] = material;
+        }
+
+        this.materialCommands = groupMaterials.map((material) => {
+            return new Command_Material(material);
+        });
+
+        const vertexDatas: ArrayBufferSlice[] = [];
+        const indexDatas: ArrayBufferSlice[] = [];
+
+        // Coalesce surface data.
+        this.cmdl.geometry.surfaces.forEach((surface) => {
+            vertexDatas.push(new ArrayBufferSlice(surface.loadedVertexData.packedVertexData));
+            indexDatas.push(new ArrayBufferSlice(surface.loadedVertexData.indexData));
+        });
+
+        this.bufferCoalescer = new BufferCoalescer(gl, vertexDatas, indexDatas);
+
+        let i = 0;
+        this.cmdl.geometry.surfaces.forEach((surface) => {
+            this.surfaceCommands.push(new Command_Surface(gl, surface, this.bufferCoalescer.coalescedBuffers[i]));
+            ++i;
+        });
+    }
+
+    public setVisible(visible: boolean): void {
+        this.visible = visible;
+    }
+
+    public render(state: RenderState): void {
+        if (!this.visible)
+            return;
+
+        this.renderHelper.bindUniformBuffers(state);
+
+        fillSceneParamsFromRenderState(this.sceneParams, state);
+        this.renderHelper.bindSceneParams(state, this.sceneParams);
+
+        this.computeModelView(this.packetParams.u_PosMtx[0], state);
+        this.renderHelper.bindPacketParams(state, this.packetParams);
+
+        let currentMaterialIndex = -1;
+        let currentGroupIndex = -1;
+
+        let surfaceCmdIndex = 0;
+        const bbox = this.bboxScratch;
+
+        const numSurfaces = this.cmdl.geometry.surfaces.length;
+        const materialSet = this.cmdl.materialSets[0];
+
+        // Frustum cull.
+        if (!this.isSkybox) {
+            bbox.transform(this.cmdl.bbox, posMtx);
+            if (state.camera.frustum.intersect(bbox) === IntersectionState.FULLY_OUTSIDE)
+                return;
+        }
+
+        for (let i = 0; i < numSurfaces; i++) {
+            const surfaceCmd = this.surfaceCommands[surfaceCmdIndex++];
+            const materialIndex = surfaceCmd.surface.materialIndex;
+            const material = materialSet.materials[materialIndex];
+
+            // Don't render occluder meshes.
+            if (material.flags & MaterialFlags.OCCLUDER)
+                continue;
+
+            if (currentMaterialIndex !== materialIndex) {
+                const groupIndex = materialSet.materials[materialIndex].groupIndex;
+                const materialCommand = this.materialCommands[groupIndex];
+
+                if (groupIndex !== currentGroupIndex) {
+                    materialCommand.exec(state, this.modelMatrix, this.isSkybox, this.renderHelper);
+                    currentGroupIndex = groupIndex;
+                }
+
+                this.bindTextures(state, material, materialCommand.program);
+                currentMaterialIndex = materialIndex;
+            }
+
+            surfaceCmd.exec(state);
+        }
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.materialCommands.forEach((cmd) => cmd.destroy(gl));
+        this.surfaceCommands.forEach((cmd) => cmd.destroy(gl));
+        this.bufferCoalescer.destroy(gl);
+    }
+
+    private fillTextureMapping(textureMapping: TextureMapping[], material: Material): void {
+        for (let i = 0; i < material.textureIndexes.length; i++) {
+            const textureIndex = material.textureIndexes[i];
+            if (textureIndex === -1)
+                continue;
+
+            const materialSet = this.cmdl.materialSets[0];
+            const txtr = materialSet.textures[materialSet.textureRemapTable[textureIndex]];
+            this.textureHolder.fillTextureMapping(textureMapping[i], txtr.name);
+        }
+    }
+
+    private bindTextures(state: RenderState, material: Material, program: GX_Material.GX_Program): void {
+        this.fillTextureMapping(textureMappingScratch, material);
+        this.renderHelper.bindMaterialTextureMapping(state, textureMappingScratch, program);
+    }
+
+    private computeModelView(dst: mat4, state: RenderState): void {
+        mat4.copy(dst, state.updateModelView(this.isSkybox, posMtx));
+    }
+}
+
 class Command_Surface {
     private shapeHelper: GXShapeHelper;
 
-    constructor(gl: WebGL2RenderingContext, public surface: Surface, private coalescedBuffers: CoalescedBuffers) {
+    constructor(gl: WebGL2RenderingContext, public surface: Surface, coalescedBuffers: CoalescedBuffers) {
         this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
     }
 
-    public exec(state: RenderState, renderHelper: GXRenderHelper) {
+    public exec(state: RenderState) {
         const gl = state.gl;
         this.shapeHelper.drawSimple(gl);
         state.drawCallCount++;
@@ -202,10 +346,10 @@ class Command_Material {
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
     }
 
-    public exec(state: RenderState, modelMatrix: mat4, renderHelper: GXRenderHelper) {
+    public exec(state: RenderState, modelMatrix: mat4, isSkybox: boolean, renderHelper: GXRenderHelper) {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
-        this.fillMaterialParamsData(state, modelMatrix, this.materialParams);
+        this.fillMaterialParamsData(state, modelMatrix, isSkybox, this.materialParams);
         renderHelper.bindMaterialParams(state, this.materialParams);
     }
 
@@ -213,7 +357,12 @@ class Command_Material {
         this.program.destroy(gl);
     }
 
-    private fillMaterialParamsData(state: RenderState, modelMatrix: mat4, materialParams: MaterialParams): void {
+    private fillMaterialParamsData(state: RenderState, modelMatrix: mat4, isSkybox: boolean, materialParams: MaterialParams): void {
+        materialParams.u_ColorMatReg[0].set(1, 1, 1, 1);
+        if (isSkybox)
+            materialParams.u_ColorAmbReg[0].set(1, 1, 1, 1);
+        else
+            materialParams.u_ColorMatReg[0].set(0, 0, 0, 1);
         for (let i = 0; i < 4; i++)
             materialParams.u_Color[i].copy(this.material.gxMaterial.colorRegisters[i]);
         for (let i = 0; i < 4; i++)

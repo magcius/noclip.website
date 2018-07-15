@@ -3,13 +3,13 @@ import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import { ResourceSystem, NameData } from './resource';
-import { MREARenderer, RetroTextureHolder } from './render';
+import { MREARenderer, RetroTextureHolder, CMDLRenderer } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { fetch, assert } from '../util';
 import Progressable from 'Progressable';
-import { RenderState } from '../render';
+import { RenderState, depthClearFlags } from '../render';
 import ArrayBufferSlice from 'ArrayBufferSlice';
 import * as BYML from 'byml';
 
@@ -27,25 +27,32 @@ const pakBase = findPakBase();
 export class MetroidPrimeWorldScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
 
-    constructor(public mlvl: MLVL.MLVL, public textureHolder: RetroTextureHolder, public areas: MREARenderer[]) {
+    constructor(public mlvl: MLVL.MLVL, public textureHolder: RetroTextureHolder, public skyboxRenderer: CMDLRenderer, public areaRenderers: MREARenderer[]) {
         this.textures = textureHolder.viewerTextures;
     }
 
     public createPanels(): UI.Panel[] {
         const layersPanel = new UI.LayerPanel();
-        layersPanel.setLayers(this.areas);
+        layersPanel.setLayers(this.areaRenderers);
         return [layersPanel];
     }
 
     public render(state: RenderState) {
-        this.areas.forEach((area) => {
-            area.render(state);
+        const gl = state.gl;
+
+        this.skyboxRenderer.render(state);
+
+        state.useFlags(depthClearFlags);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+
+        this.areaRenderers.forEach((areaRenderer) => {
+            areaRenderer.render(state);
         });
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.textureHolder.destroy(gl);
-        this.areas.forEach((area) => area.destroy(gl));
+        this.areaRenderers.forEach((areaRenderer) => areaRenderer.destroy(gl));
     }
 }
 
@@ -68,14 +75,23 @@ class MP1SceneDesc implements Viewer.SceneDesc {
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
                 assert(mlvlEntry.fourCC === 'MLVL');
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
-                // Crash my browser please.
-                const areas = mlvl.areaTable.slice(25, 26);
+                const areas = mlvl.areaTable;
                 const textureHolder = new RetroTextureHolder();
-                const scenes = areas.map((mreaEntry) => {
+                const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
+                const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
+                const skyboxRenderer = new CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
+                skyboxRenderer.isSkybox = true;
+                const areaRenderers = areas.map((mreaEntry) => {
                     const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
                     return new MREARenderer(gl, textureHolder, mreaEntry.areaName, mrea);
                 });
-                return new MetroidPrimeWorldScene(mlvl, textureHolder, scenes);
+
+                // By default, set only the first 10 area renderers to visible, so as to not "crash my browser please".
+                areaRenderers.slice(10).forEach((areaRenderer) => {
+                    areaRenderer.visible = false;
+                });
+
+                return new MetroidPrimeWorldScene(mlvl, textureHolder, skyboxRenderer, areaRenderers);
             }
 
             return null;
@@ -87,7 +103,12 @@ const id = "mp1";
 const name = "Metroid Prime 1";
 const sceneDescs: Viewer.SceneDesc[] = [
     new MP1SceneDesc(`Metroid1.pak`, "Space Pirate Frigate"),
+    new MP1SceneDesc(`Metroid2.pak`, "Chozo Ruins"),
+    new MP1SceneDesc(`Metroid3.pak`, "Phendrana Drifts"),
     new MP1SceneDesc(`Metroid4.pak`, "Tallon Overworld"),
+    new MP1SceneDesc(`Metroid5.pak`, "Phazon Mines"),
+    new MP1SceneDesc(`Metroid6.pak`, "Magmoor Caverns"),
+    new MP1SceneDesc(`Metroid7.pak`, "Impact Crater"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
