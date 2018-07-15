@@ -40,7 +40,8 @@ export class MREARenderer implements Viewer.Scene {
 
     private bufferCoalescer: BufferCoalescer;
     private materialCommands: Command_Material[] = [];
-    private surfaceCommands: Command_Surface[] = [];
+    private opaqueCommands: Command_Surface[] = [];
+    private transparentCommands: Command_Surface[] = [];
     private renderHelper: GXRenderHelper;
     private sceneParams: SceneParams = new SceneParams();
     private packetParams: PacketParams = new PacketParams();
@@ -82,11 +83,20 @@ export class MREARenderer implements Viewer.Scene {
 
         this.bufferCoalescer = new BufferCoalescer(gl, vertexDatas, indexDatas);
 
-        let i = 0;
-        this.mrea.worldModels.forEach((worldModel) => {
+        let bufferIndex = 0;
+        this.mrea.worldModels.forEach((worldModel, modelIndex) => {
             worldModel.geometry.surfaces.forEach((surface) => {
-                this.surfaceCommands.push(new Command_Surface(gl, surface, this.bufferCoalescer.coalescedBuffers[i]));
-                ++i;
+                const material = materialSet.materials[surface.materialIndex];
+                const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[bufferIndex++];
+
+                if (material.flags & MaterialFlags.OCCLUDER)
+                    return;
+
+                const surfaceCommand = new Command_Surface(gl, surface, coalescedBuffers, modelIndex);
+                if (material.flags & MaterialFlags.IS_TRANSPARENT)
+                    this.transparentCommands.push(surfaceCommand);
+                else
+                    this.opaqueCommands.push(surfaceCommand);
             });
         });
     }
@@ -99,6 +109,8 @@ export class MREARenderer implements Viewer.Scene {
         if (!this.visible)
             return;
 
+        state.setClipPlanes(2, 7500);
+
         this.renderHelper.bindUniformBuffers(state);
 
         fillSceneParamsFromRenderState(this.sceneParams, state);
@@ -107,52 +119,53 @@ export class MREARenderer implements Viewer.Scene {
         this.computeModelView(this.packetParams.u_PosMtx[0], state);
         this.renderHelper.bindPacketParams(state, this.packetParams);
 
-        let currentMaterialIndex = -1;
-        let currentGroupIndex = -1;
-
-        let surfaceCmdIndex = 0;
+        // Frustum cull.
         const bbox = this.bboxScratch;
-        this.mrea.worldModels.forEach((worldModel) => {
-            const numSurfaces = worldModel.geometry.surfaces.length;
-
-            // Frustum cull.
+        const modelVisibility: boolean[] = [];
+        this.mrea.worldModels.forEach((worldModel, i) => {
             bbox.transform(worldModel.bbox, posMtx);
-            if (state.camera.frustum.intersect(bbox) === IntersectionState.FULLY_OUTSIDE) {
-                surfaceCmdIndex += numSurfaces;
-                return;
-            }
-
-            for (let i = 0; i < numSurfaces; i++) {
-                const surfaceCmd = this.surfaceCommands[surfaceCmdIndex++];
-                const materialIndex = surfaceCmd.surface.materialIndex;
-                const material = this.mrea.materialSet.materials[materialIndex];
-
-                // Don't render occluder meshes.
-                if (material.flags & MaterialFlags.OCCLUDER)
-                    continue;
-
-                if (currentMaterialIndex !== materialIndex) {
-                    const groupIndex = this.mrea.materialSet.materials[materialIndex].groupIndex;
-                    const materialCommand = this.materialCommands[groupIndex];
-
-                    if (groupIndex !== currentGroupIndex) {
-                        materialCommand.exec(state, worldModel.modelMatrix, false, this.renderHelper);
-                        currentGroupIndex = groupIndex;
-                    }
-
-                    this.bindTextures(state, material, materialCommand.program);
-                    currentMaterialIndex = materialIndex;
-                }
-    
-                surfaceCmd.exec(state);
-            }
+            modelVisibility[i] = state.camera.frustum.intersect(bbox) !== IntersectionState.FULLY_OUTSIDE;
         });
+
+        this.execSurfaceCommandList(state, this.opaqueCommands, modelVisibility);
+        this.execSurfaceCommandList(state, this.transparentCommands, modelVisibility);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.materialCommands.forEach((cmd) => cmd.destroy(gl));
-        this.surfaceCommands.forEach((cmd) => cmd.destroy(gl));
+        this.opaqueCommands.forEach((cmd) => cmd.destroy(gl));
+        this.transparentCommands.forEach((cmd) => cmd.destroy(gl));
         this.bufferCoalescer.destroy(gl);
+    }
+
+    private execSurfaceCommandList(state: RenderState, cmdList: Command_Surface[], modelVisibility: boolean[]): void {
+        let currentMaterialIndex = -1;
+        let currentGroupIndex = -1;
+
+        for (let i = 0; i < cmdList.length; i++) {
+            const surfaceCmd = cmdList[i];
+            if (!modelVisibility[surfaceCmd.modelIndex])
+                continue;
+
+            const materialIndex = surfaceCmd.surface.materialIndex;
+            const material = this.mrea.materialSet.materials[materialIndex];
+
+            if (currentMaterialIndex !== materialIndex) {
+                const groupIndex = material.groupIndex;
+                const materialCommand = this.materialCommands[groupIndex];
+
+                if (groupIndex !== currentGroupIndex) {
+                    const worldModel = this.mrea.worldModels[surfaceCmd.modelIndex];
+                    materialCommand.exec(state, worldModel.modelMatrix, false, this.renderHelper);
+                    currentGroupIndex = groupIndex;
+                }
+
+                this.bindTextures(state, material, materialCommand.program);
+                currentMaterialIndex = materialIndex;
+            }
+
+            surfaceCmd.exec(state);
+        }
     }
 
     private fillTextureMapping(textureMapping: TextureMapping[], material: Material): void {
@@ -321,7 +334,7 @@ export class CMDLRenderer implements Viewer.Scene {
 class Command_Surface {
     private shapeHelper: GXShapeHelper;
 
-    constructor(gl: WebGL2RenderingContext, public surface: Surface, coalescedBuffers: CoalescedBuffers) {
+    constructor(gl: WebGL2RenderingContext, public surface: Surface, coalescedBuffers: CoalescedBuffers, public modelIndex: number = 0) {
         this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
     }
 
@@ -430,7 +443,7 @@ class Command_Material {
                 texMtx[13] = 0;
                 texMtx[14] = 0;
                 const xy = ((state.view[12] + state.view[13]) * 0.025 * uvAnimation.phi) % 1.0;
-                const z = state.view[14] * 0.05 * uvAnimation.phi;
+                const z = (state.view[14] * 0.05 * uvAnimation.phi) % 1.0;
                 const a = uvAnimation.theta * 0.5;
                 texEnvMtx(postMtx, a, -a, xy, z);
                 break;
