@@ -17086,7 +17086,7 @@ System.register("metroid_prime/mrea", ["gx/gx_material", "util", "gx/gx_displayl
             var blendDstFactor = view.getUint16(offs + 0x00);
             var blendSrcFactor = view.getUint16(offs + 0x02);
             offs += 0x04;
-            if (flags & 16384 /* HAS_INDTX_REFL */) {
+            if (flags & 1024 /* HAS_INDTX_REFL */) {
                 var reflectionIndtexSlot = view.getUint32(offs);
                 offs += 0x04;
             }
@@ -17701,6 +17701,8 @@ System.register("metroid_prime/resource", ["pako", "metroid_prime/mlvl", "metroi
                     var e_56, _c;
                 };
                 ResourceSystem.prototype.loadAssetByID = function (assetID, fourCC) {
+                    if (assetID === '\xFF\xFF\xFF\xFF')
+                        return null;
                     var cached = this._cache.get(assetID);
                     if (cached !== undefined)
                         return cached;
@@ -18265,7 +18267,8 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 };
                 MetroidPrimeWorldScene.prototype.render = function (state) {
                     var gl = state.gl;
-                    this.skyboxRenderer.render(state);
+                    if (this.skyboxRenderer)
+                        this.skyboxRenderer.render(state);
                     state.useFlags(render_28.depthClearFlags);
                     gl.clear(gl.DEPTH_BUFFER_BIT);
                     this.areaRenderers.forEach(function (areaRenderer) {
@@ -18274,6 +18277,8 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                 };
                 MetroidPrimeWorldScene.prototype.destroy = function (gl) {
                     this.textureHolder.destroy(gl);
+                    if (this.skyboxRenderer)
+                        this.skyboxRenderer.destroy(gl);
                     this.areaRenderers.forEach(function (areaRenderer) { return areaRenderer.destroy(gl); });
                 };
                 return MetroidPrimeWorldScene;
@@ -18299,10 +18304,13 @@ System.register("metroid_prime/scenes", ["metroid_prime/pak", "metroid_prime/res
                             var mlvl = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
                             var areas = mlvl.areaTable;
                             var textureHolder = new render_27.RetroTextureHolder();
+                            var skyboxRenderer = null;
                             var skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
-                            var skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                            var skyboxRenderer = new render_27.CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
-                            skyboxRenderer.isSkybox = true;
+                            if (skyboxCMDL) {
+                                var skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
+                                var skyboxRenderer_1 = new render_27.CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
+                                skyboxRenderer_1.isSkybox = true;
+                            }
                             var areaRenderers = areas.map(function (mreaEntry) {
                                 var mrea = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
                                 return new render_27.MREARenderer(gl, textureHolder, mreaEntry.areaName, mrea);

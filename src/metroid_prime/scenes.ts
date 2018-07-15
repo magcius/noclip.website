@@ -40,7 +40,8 @@ export class MetroidPrimeWorldScene implements Viewer.MainScene {
     public render(state: RenderState) {
         const gl = state.gl;
 
-        this.skyboxRenderer.render(state);
+        if (this.skyboxRenderer)
+            this.skyboxRenderer.render(state);
 
         state.useFlags(depthClearFlags);
         gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -52,6 +53,8 @@ export class MetroidPrimeWorldScene implements Viewer.MainScene {
 
     public destroy(gl: WebGL2RenderingContext) {
         this.textureHolder.destroy(gl);
+        if (this.skyboxRenderer)
+            this.skyboxRenderer.destroy(gl);
         this.areaRenderers.forEach((areaRenderer) => areaRenderer.destroy(gl));
     }
 }
@@ -77,10 +80,13 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
                 const areas = mlvl.areaTable;
                 const textureHolder = new RetroTextureHolder();
+                let skyboxRenderer = null;
                 const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
-                const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                const skyboxRenderer = new CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
-                skyboxRenderer.isSkybox = true;
+                if (skyboxCMDL) {
+                    const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
+                    const skyboxRenderer = new CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
+                    skyboxRenderer.isSkybox = true;
+                }
                 const areaRenderers = areas.map((mreaEntry) => {
                     const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
                     return new MREARenderer(gl, textureHolder, mreaEntry.areaName, mrea);

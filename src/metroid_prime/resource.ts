@@ -84,6 +84,9 @@ export class ResourceSystem {
     }
 
     public loadAssetByID(assetID: string, fourCC: string): Resource {
+        if (assetID === '\xFF\xFF\xFF\xFF')
+            return null;
+
         const cached = this._cache.get(assetID);
         if (cached !== undefined)
             return cached;
