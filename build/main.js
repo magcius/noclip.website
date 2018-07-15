@@ -17871,7 +17871,8 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
                     this.mrea = mrea;
                     this.textures = [];
                     this.materialCommands = [];
-                    this.surfaceCommands = [];
+                    this.opaqueCommands = [];
+                    this.transparentCommands = [];
                     this.sceneParams = new gx_render_2.SceneParams();
                     this.packetParams = new gx_render_2.PacketParams();
                     this.bboxScratch = new Camera_9.AABB();
@@ -17885,8 +17886,8 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
                     this.textureHolder.addMaterialSetTextures(gl, materialSet);
                     // Pull out the first material of each group, which should be identical except for textures.
                     var groupMaterials = [];
-                    for (var i_4 = 0; i_4 < materialSet.materials.length; i_4++) {
-                        var material = materialSet.materials[i_4];
+                    for (var i = 0; i < materialSet.materials.length; i++) {
+                        var material = materialSet.materials[i];
                         if (!groupMaterials[material.groupIndex])
                             groupMaterials[material.groupIndex] = material;
                     }
@@ -17903,11 +17904,18 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
                         });
                     });
                     this.bufferCoalescer = new BufferCoalescer_3.default(gl, vertexDatas, indexDatas);
-                    var i = 0;
-                    this.mrea.worldModels.forEach(function (worldModel) {
+                    var bufferIndex = 0;
+                    this.mrea.worldModels.forEach(function (worldModel, modelIndex) {
                         worldModel.geometry.surfaces.forEach(function (surface) {
-                            _this.surfaceCommands.push(new Command_Surface(gl, surface, _this.bufferCoalescer.coalescedBuffers[i]));
-                            ++i;
+                            var material = materialSet.materials[surface.materialIndex];
+                            var coalescedBuffers = _this.bufferCoalescer.coalescedBuffers[bufferIndex++];
+                            if (material.flags & 512 /* OCCLUDER */)
+                                return;
+                            var surfaceCommand = new Command_Surface(gl, surface, coalescedBuffers, modelIndex);
+                            if (material.flags & 16 /* IS_TRANSPARENT */)
+                                _this.transparentCommands.push(surfaceCommand);
+                            else
+                                _this.opaqueCommands.push(surfaceCommand);
                         });
                     });
                 };
@@ -17915,51 +17923,52 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
                     this.visible = visible;
                 };
                 MREARenderer.prototype.render = function (state) {
-                    var _this = this;
                     if (!this.visible)
                         return;
+                    state.setClipPlanes(2, 7500);
                     this.renderHelper.bindUniformBuffers(state);
                     gx_render_2.fillSceneParamsFromRenderState(this.sceneParams, state);
                     this.renderHelper.bindSceneParams(state, this.sceneParams);
                     this.computeModelView(this.packetParams.u_PosMtx[0], state);
                     this.renderHelper.bindPacketParams(state, this.packetParams);
-                    var currentMaterialIndex = -1;
-                    var currentGroupIndex = -1;
-                    var surfaceCmdIndex = 0;
+                    // Frustum cull.
                     var bbox = this.bboxScratch;
-                    this.mrea.worldModels.forEach(function (worldModel) {
-                        var numSurfaces = worldModel.geometry.surfaces.length;
-                        // Frustum cull.
+                    var modelVisibility = [];
+                    this.mrea.worldModels.forEach(function (worldModel, i) {
                         bbox.transform(worldModel.bbox, posMtx);
-                        if (state.camera.frustum.intersect(bbox) === Camera_9.IntersectionState.FULLY_OUTSIDE) {
-                            surfaceCmdIndex += numSurfaces;
-                            return;
-                        }
-                        for (var i = 0; i < numSurfaces; i++) {
-                            var surfaceCmd = _this.surfaceCommands[surfaceCmdIndex++];
-                            var materialIndex = surfaceCmd.surface.materialIndex;
-                            var material = _this.mrea.materialSet.materials[materialIndex];
-                            // Don't render occluder meshes.
-                            if (material.flags & 512 /* OCCLUDER */)
-                                continue;
-                            if (currentMaterialIndex !== materialIndex) {
-                                var groupIndex = _this.mrea.materialSet.materials[materialIndex].groupIndex;
-                                var materialCommand = _this.materialCommands[groupIndex];
-                                if (groupIndex !== currentGroupIndex) {
-                                    materialCommand.exec(state, worldModel.modelMatrix, false, _this.renderHelper);
-                                    currentGroupIndex = groupIndex;
-                                }
-                                _this.bindTextures(state, material, materialCommand.program);
-                                currentMaterialIndex = materialIndex;
-                            }
-                            surfaceCmd.exec(state);
-                        }
+                        modelVisibility[i] = state.camera.frustum.intersect(bbox) !== Camera_9.IntersectionState.FULLY_OUTSIDE;
                     });
+                    this.execSurfaceCommandList(state, this.opaqueCommands, modelVisibility);
+                    this.execSurfaceCommandList(state, this.transparentCommands, modelVisibility);
                 };
                 MREARenderer.prototype.destroy = function (gl) {
                     this.materialCommands.forEach(function (cmd) { return cmd.destroy(gl); });
-                    this.surfaceCommands.forEach(function (cmd) { return cmd.destroy(gl); });
+                    this.opaqueCommands.forEach(function (cmd) { return cmd.destroy(gl); });
+                    this.transparentCommands.forEach(function (cmd) { return cmd.destroy(gl); });
                     this.bufferCoalescer.destroy(gl);
+                };
+                MREARenderer.prototype.execSurfaceCommandList = function (state, cmdList, modelVisibility) {
+                    var currentMaterialIndex = -1;
+                    var currentGroupIndex = -1;
+                    for (var i = 0; i < cmdList.length; i++) {
+                        var surfaceCmd = cmdList[i];
+                        if (!modelVisibility[surfaceCmd.modelIndex])
+                            continue;
+                        var materialIndex = surfaceCmd.surface.materialIndex;
+                        var material = this.mrea.materialSet.materials[materialIndex];
+                        if (currentMaterialIndex !== materialIndex) {
+                            var groupIndex = material.groupIndex;
+                            var materialCommand = this.materialCommands[groupIndex];
+                            if (groupIndex !== currentGroupIndex) {
+                                var worldModel = this.mrea.worldModels[surfaceCmd.modelIndex];
+                                materialCommand.exec(state, worldModel.modelMatrix, false, this.renderHelper);
+                                currentGroupIndex = groupIndex;
+                            }
+                            this.bindTextures(state, material, materialCommand.program);
+                            currentMaterialIndex = materialIndex;
+                        }
+                        surfaceCmd.exec(state);
+                    }
                 };
                 MREARenderer.prototype.fillTextureMapping = function (textureMapping, material) {
                     for (var i = 0; i < material.textureIndexes.length; i++) {
@@ -18005,8 +18014,8 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
                     this.textureHolder.addMaterialSetTextures(gl, materialSet);
                     // Pull out the first material of each group, which should be identical except for textures.
                     var groupMaterials = [];
-                    for (var i_5 = 0; i_5 < materialSet.materials.length; i_5++) {
-                        var material = materialSet.materials[i_5];
+                    for (var i_4 = 0; i_4 < materialSet.materials.length; i_4++) {
+                        var material = materialSet.materials[i_4];
                         if (!groupMaterials[material.groupIndex])
                             groupMaterials[material.groupIndex] = material;
                     }
@@ -18096,8 +18105,10 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
             }());
             exports_73("CMDLRenderer", CMDLRenderer);
             Command_Surface = /** @class */ (function () {
-                function Command_Surface(gl, surface, coalescedBuffers) {
+                function Command_Surface(gl, surface, coalescedBuffers, modelIndex) {
+                    if (modelIndex === void 0) { modelIndex = 0; }
                     this.surface = surface;
+                    this.modelIndex = modelIndex;
                     this.shapeHelper = new gx_render_2.GXShapeHelper(gl, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
                 }
                 Command_Surface.prototype.exec = function (state) {
@@ -18197,7 +18208,7 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
                                 texMtx[13] = 0;
                                 texMtx[14] = 0;
                                 var xy = ((state.view[12] + state.view[13]) * 0.025 * uvAnimation.phi) % 1.0;
-                                var z = state.view[14] * 0.05 * uvAnimation.phi;
+                                var z = (state.view[14] * 0.05 * uvAnimation.phi) % 1.0;
                                 var a = uvAnimation.theta * 0.5;
                                 Camera_9.texEnvMtx(postMtx, a, -a, xy, z);
                                 break;
