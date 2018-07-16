@@ -17960,8 +17960,7 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
                             var groupIndex = material.groupIndex;
                             var materialCommand = this.materialCommands[groupIndex];
                             if (groupIndex !== currentGroupIndex) {
-                                var worldModel = this.mrea.worldModels[surfaceCmd.modelIndex];
-                                materialCommand.exec(state, worldModel.modelMatrix, false, this.renderHelper);
+                                materialCommand.exec(state, null, false, this.renderHelper);
                                 currentGroupIndex = groupIndex;
                             }
                             this.bindTextures(state, material, materialCommand.program);
@@ -18185,25 +18184,34 @@ System.register("metroid_prime/render", ["gl-matrix", "gx/gx_material", "gx/gx_r
                                 break;
                             }
                             case 0 /* INV_MAT_SKY */:
-                                gl_matrix_16.mat4.mul(texMtx, state.view, modelMatrix);
+                                gl_matrix_16.mat4.invert(texMtx, state.view);
+                                if (modelMatrix !== null)
+                                    gl_matrix_16.mat4.mul(texMtx, texMtx, modelMatrix);
                                 texMtx[12] = 0;
                                 texMtx[13] = 0;
                                 texMtx[14] = 0;
                                 Camera_9.texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
                                 break;
                             case 1 /* INV_MAT */:
-                                gl_matrix_16.mat4.mul(texMtx, state.view, modelMatrix);
+                                gl_matrix_16.mat4.invert(texMtx, state.view);
+                                if (modelMatrix !== null)
+                                    gl_matrix_16.mat4.mul(texMtx, texMtx, modelMatrix);
                                 Camera_9.texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
                                 break;
                             case 6 /* MODEL_MAT */:
-                                gl_matrix_16.mat4.copy(texMtx, modelMatrix);
+                                if (modelMatrix !== null)
+                                    gl_matrix_16.mat4.copy(texMtx, modelMatrix);
+                                else
+                                    gl_matrix_16.mat4.identity(texMtx);
                                 texMtx[12] = 0;
                                 texMtx[13] = 0;
                                 texMtx[14] = 0;
                                 Camera_9.texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
                                 break;
                             case 7 /* CYLINDER */: {
-                                gl_matrix_16.mat4.mul(texMtx, state.view, modelMatrix);
+                                gl_matrix_16.mat4.copy(texMtx, state.view);
+                                if (modelMatrix !== null)
+                                    gl_matrix_16.mat4.mul(texMtx, texMtx, modelMatrix);
                                 texMtx[12] = 0;
                                 texMtx[13] = 0;
                                 texMtx[14] = 0;

@@ -155,8 +155,7 @@ export class MREARenderer implements Viewer.Scene {
                 const materialCommand = this.materialCommands[groupIndex];
 
                 if (groupIndex !== currentGroupIndex) {
-                    const worldModel = this.mrea.worldModels[surfaceCmd.modelIndex];
-                    materialCommand.exec(state, worldModel.modelMatrix, false, this.renderHelper);
+                    materialCommand.exec(state, null, false, this.renderHelper);
                     currentGroupIndex = groupIndex;
                 }
 
@@ -359,7 +358,7 @@ class Command_Material {
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
     }
 
-    public exec(state: RenderState, modelMatrix: mat4, isSkybox: boolean, renderHelper: GXRenderHelper) {
+    public exec(state: RenderState, modelMatrix: mat4 | null, isSkybox: boolean, renderHelper: GXRenderHelper) {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
         this.fillMaterialParamsData(state, modelMatrix, isSkybox, this.materialParams);
@@ -370,7 +369,7 @@ class Command_Material {
         this.program.destroy(gl);
     }
 
-    private fillMaterialParamsData(state: RenderState, modelMatrix: mat4, isSkybox: boolean, materialParams: MaterialParams): void {
+    private fillMaterialParamsData(state: RenderState, modelMatrix: mat4 | null, isSkybox: boolean, materialParams: MaterialParams): void {
         materialParams.u_ColorMatReg[0].set(1, 1, 1, 1);
         if (isSkybox)
             materialParams.u_ColorAmbReg[0].set(1, 1, 1, 1);
@@ -420,25 +419,34 @@ class Command_Material {
                 break;
             }
             case UVAnimationType.INV_MAT_SKY:
-                mat4.mul(texMtx, state.view, modelMatrix);
+                mat4.invert(texMtx, state.view);
+                if (modelMatrix !== null)
+                    mat4.mul(texMtx, texMtx, modelMatrix);
                 texMtx[12] = 0;
                 texMtx[13] = 0;
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
                 break;
             case UVAnimationType.INV_MAT:
-                mat4.mul(texMtx, state.view, modelMatrix);
+                mat4.invert(texMtx, state.view);
+                if (modelMatrix !== null)
+                    mat4.mul(texMtx, texMtx, modelMatrix);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
                 break;
             case UVAnimationType.MODEL_MAT:
-                mat4.copy(texMtx, modelMatrix);
+                if (modelMatrix !== null)
+                    mat4.copy(texMtx, modelMatrix);
+                else
+                    mat4.identity(texMtx);
                 texMtx[12] = 0;
                 texMtx[13] = 0;
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
                 break;
             case UVAnimationType.CYLINDER: {
-                mat4.mul(texMtx, state.view, modelMatrix);
+                mat4.copy(texMtx, state.view);
+                if (modelMatrix !== null)
+                    mat4.mul(texMtx, texMtx, modelMatrix);
                 texMtx[12] = 0;
                 texMtx[13] = 0;
                 texMtx[14] = 0;
