@@ -16,6 +16,7 @@
     "@types/webgl2": "0.0.2"
   },
   "scripts": {
-    "start": "parcel src/index.html"
+    "start": "parcel src/index.html",
+    "embed": "parcel src/embed.html"
   }
 }

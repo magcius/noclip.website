@@ -366,6 +366,7 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
 
 export interface CameraController {
     camera: Camera;
+    forceUpdate: boolean;
     serialize(): string;
     deserialize(state: string): void;
     update(inputManager: InputManager, dt: number): boolean;
@@ -377,6 +378,7 @@ export interface CameraControllerClass {
 
 export class FPSCameraController implements CameraController {
     public camera: Camera;
+    public forceUpdate: boolean = false;
 
     private tmp1: vec3 = vec3.create();
     private tmp2: vec3 = vec3.create();
@@ -490,6 +492,8 @@ export class FPSCameraController implements CameraController {
             updated = true;
         }
 
+        updated = updated || this.forceUpdate;
+
         if (updated) {
             this.camera.worldMatrixUpdated();
         }
@@ -508,6 +512,7 @@ function clampRange(v: number, lim: number): number {
 
 export class OrbitCameraController implements CameraController {
     public camera: Camera;
+    public forceUpdate: boolean = false;
 
     public x: number = 0.15;
     public y: number = 0.35;
@@ -556,7 +561,7 @@ export class OrbitCameraController implements CameraController {
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
-        const updated = this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0;
+        const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0;
         if (updated) {
             // Apply velocities.
             const drag = inputManager.isDragging() ? 0.92 : 0.96;

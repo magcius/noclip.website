@@ -75,9 +75,10 @@ export class Viewer {
     public setCameraController(cameraController: CameraController) {
         this.cameraController = cameraController;
         this.cameraController.camera = this.renderState.camera;
+        this.cameraController.forceUpdate = true;
     }
 
-    public setScene(scene: MainScene) {
+    public setScene(scene: MainScene): void {
         const gl = this.renderState.gl;
 
         this.reset();
@@ -86,17 +87,10 @@ export class Viewer {
             this.scene.destroy(gl);
         }
 
-        if (scene) {
-            this.scene = scene;
-            this.oncamerachanged();
-        } else {
-            this.scene = null;
-        }
+        this.scene = scene;
     }
 
     public start() {
-        const canvas = this.canvas;
-
         let t = 0;
         const update = (nt: number) => {
             const dt = nt - t;
