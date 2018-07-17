@@ -4,14 +4,14 @@ node_js:
   - "node"
 
 script:
-  - parcel build index.html
+  - parcel build --public-url=./ index.html
+  - parcel build --public-url=./ embed.html
   - rm -f dist/data
   - mv data/ dist/
 
 deploy:
   provider: pages
   skip_cleanup: true
-  keep_history: true
   local_dir: dist
   github_token: $GITHUB_TOKEN
   on:
