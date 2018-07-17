@@ -164,6 +164,7 @@ class Command_Shape {
         }
 
         this.shapeHelper.drawEpilogue(gl);
+        state.renderStatisticsTracker.drawCallCount++;
     }
 
     public destroy(gl: WebGL2RenderingContext) {

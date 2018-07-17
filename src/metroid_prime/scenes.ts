@@ -15,7 +15,7 @@ import * as BYML from '../byml';
 
 // PAK Files are too big for GitHub.
 function findPakBase() {
-    if (document.location.protocol === 'file:') {
+    if (document.location.protocol === 'file:' || document.location.hostname === 'localhost') {
         return `data/metroid_prime/mp1/`;
     } else {
         return `https://funny.computer/cloud/MetroidPrime1/`;

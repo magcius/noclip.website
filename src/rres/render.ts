@@ -232,8 +232,7 @@ class Command_Shape {
     }
 
     public exec(state: RenderState): void {
-        const gl = state.gl;
-        this.shapeHelper.drawSimple(gl);
+        this.shapeHelper.drawSimple(state);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {

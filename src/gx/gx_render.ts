@@ -185,6 +185,7 @@ export class GXRenderHelper {
         fillSceneParamsData(this.bufferDataScratch, params);
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.sceneParamsBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, this.bufferDataScratch, gl.DYNAMIC_DRAW);
+        state.renderStatisticsTracker.bufferUploadCount++;
     }
 
     public bindMaterialParams(state: RenderState, params: MaterialParams): void {
@@ -192,6 +193,7 @@ export class GXRenderHelper {
         fillMaterialParamsData(this.bufferDataScratch, params);
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.materialParamsBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, this.bufferDataScratch, gl.DYNAMIC_DRAW);
+        state.renderStatisticsTracker.bufferUploadCount++;
     }
 
     public bindPacketParams(state: RenderState, params: PacketParams): void {
@@ -199,6 +201,7 @@ export class GXRenderHelper {
         fillPacketParamsData(this.bufferDataScratch, params);
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.packetParamsBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, this.bufferDataScratch, gl.DYNAMIC_DRAW);
+        state.renderStatisticsTracker.bufferUploadCount++;
     }
 
     public bindMaterialTextureMapping(state: RenderState, textureMapping: TextureMapping[], prog: GX_Material.GX_Program): void {
@@ -212,12 +215,12 @@ export class GXRenderHelper {
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, m.glTexture);
             gl.bindSampler(i, m.glSampler);
+            state.renderStatisticsTracker.textureBindCount++;
         }
         prog.bindTextureSamplerIdentities(gl);
     }
 
     public bindMaterialTextures(state: RenderState, materialParams: MaterialParams, prog: GX_Material.GX_Program): void {
-        const gl = state.gl;
         this.bindMaterialTextureMapping(state, materialParams.m_TextureMapping, prog);
     }
 
@@ -325,13 +328,15 @@ export class GXShapeHelper {
         const numVertices = numTriangles * 3;
         const indexType = gl.UNSIGNED_SHORT, indexByteSize = 2;
         const indexBufferOffset = this.coalescedBuffers.indexBuffer.offset + (firstVertex * indexByteSize);
-        gl.drawElements(gl.TRIANGLES, numVertices, indexType, indexBufferOffset)
+        gl.drawElements(gl.TRIANGLES, numVertices, indexType, indexBufferOffset);
     }
 
-    public drawSimple(gl: WebGL2RenderingContext): void {
+    public drawSimple(state: RenderState): void {
+        const gl = state.gl;
         this.drawPrologue(gl);
         this.drawTriangles(gl, 0, this.loadedVertexData.totalTriangleCount);
         this.drawEpilogue(gl);
+        state.renderStatisticsTracker.drawCallCount++;
     }
 }
 
