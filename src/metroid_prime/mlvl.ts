@@ -1,9 +1,10 @@
 
 // Implements Retro's MLVL format as seen in Metroid Prime 1.
 
-import { ResourceSystem } from "./resource";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
-import ArrayBufferSlice from "ArrayBufferSlice";
+
+import { ResourceSystem } from "./resource";
 import * as STRG from "./strg";
 
 interface Area {

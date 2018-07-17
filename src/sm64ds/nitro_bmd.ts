@@ -4,8 +4,8 @@ import { mat2d } from 'gl-matrix';
 import * as NITRO_GX from './nitro_gx';
 import * as NITRO_Tex from './nitro_tex';
 
-import { readString } from 'util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import { readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 // Super Mario 64 DS .bmd format
 

@@ -4,12 +4,12 @@ import * as ZSI from './zsi';
 
 import * as Viewer from '../viewer';
 
-import Progressable from 'Progressable';
+import Progressable from '../Progressable';
 import { BlendMode, CullMode, RenderFlags, RenderState } from '../render';
 import Program from '../Program';
 import RenderArena from '../RenderArena';
 import { fetch, assert } from '../util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 class OoT3D_Program extends Program {
     public posScaleLocation: WebGLUniformLocation;

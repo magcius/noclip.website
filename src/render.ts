@@ -1,7 +1,7 @@
 
 import { mat4 } from 'gl-matrix';
 import { assert, assertExists } from './util';
-import Program, { BaseProgram, FullscreenProgram, ProgramCache } from 'Program';
+import Program, { BaseProgram, FullscreenProgram, ProgramCache } from './Program';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from './Camera';
 
 export enum CompareMode {

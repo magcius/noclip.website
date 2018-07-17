@@ -1,7 +1,7 @@
 
 // Read DS texture formats.
 
-import ArrayBufferSlice from "ArrayBufferSlice";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export enum Format {
     Tex_None =       0x00,

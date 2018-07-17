@@ -1,11 +1,12 @@
 
 // Implements Retro's CMDL format as seen in Metroid Prime 1.
 
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { assert, align } from "../util";
+
 import { ResourceSystem } from "./resource";
-import ArrayBufferSlice from "ArrayBufferSlice";
 import { Geometry, MaterialSet, parseGeometry, parseMaterialSet } from "./mrea";
 import { AABB } from "../Camera";
-import { assert, align } from "../util";
 
 export interface CMDL {
     bbox: AABB;

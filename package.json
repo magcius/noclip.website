@@ -4,6 +4,8 @@
   "devDependencies": {
     "gl-matrix": "^2.4.0",
     "pako": "^1.0.6",
+    "parcel-bundler": "^1.9.7",
+    "typescript": "^2.9.2",
     "wabt": "^1.0.0-nightly.20180421"
   },
   "dependencies": {
@@ -12,5 +14,8 @@
     "@types/systemjs": "^0.20.6",
     "@types/webassembly-js-api": "0.0.1",
     "@types/webgl2": "0.0.2"
+  },
+  "scripts": {
+    "start": "parcel src/index.html"
   }
 }

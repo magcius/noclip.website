@@ -1,8 +1,8 @@
 
 import { MainScene, SceneDesc, SceneGroup, Viewer } from './viewer';
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import Progressable from 'Progressable';
+import ArrayBufferSlice from './ArrayBufferSlice';
+import Progressable from './Progressable';
 
 import * as ZTP from './j3d/ztp_scenes';
 import * as MKDD from './j3d/mkdd_scenes';

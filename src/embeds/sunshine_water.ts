@@ -1,22 +1,22 @@
 
 import { mat4 } from 'gl-matrix';
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import Progressable from 'Progressable';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import Progressable from '../Progressable';
 
 import { RenderState } from '../render';
-import { fetch } from 'util';
-import { MainScene, Scene, Texture } from 'viewer';
+import { fetch } from '../util';
+import { MainScene, Scene, Texture } from '../viewer';
 
-import * as GX from 'gx/gx_enum';
-import * as GX_Material from 'gx/gx_material';
+import * as GX from '../gx/gx_enum';
+import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BMT, BTK, MaterialEntry, TEX1_TextureData, TEX1_Sampler, BRK } from 'j3d/j3d';
-import * as RARC from 'j3d/rarc';
-import { Command_Material, Scene as J3DScene, SceneLoader, J3DTextureHolder } from 'j3d/render';
-import { SunshineRenderer, SunshineSceneDesc } from 'j3d/sms_scenes';
+import { BMD, BMT, BTK, MaterialEntry, TEX1_Sampler, BRK } from '../j3d/j3d';
+import * as RARC from '../j3d/rarc';
+import { Command_Material, Scene as J3DScene, SceneLoader, J3DTextureHolder } from '../j3d/render';
+import { SunshineRenderer, SunshineSceneDesc } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
-import { GXRenderHelper, TextureMapping, SceneParams, PacketParams, fillSceneParamsFromRenderState, TextureHolder } from '../gx/gx_render';
+import { GXRenderHelper, TextureMapping, SceneParams, PacketParams, fillSceneParamsFromRenderState } from '../gx/gx_render';
 
 const scale = 200;
 const posMtx = mat4.create();

@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import Progressable from 'Progressable';
-import { assert, fetch } from 'util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import Progressable from '../Progressable';
+import { assert, fetch } from '../util';
 
 import { RenderState, ColorTarget, RenderFlags, BlendMode, BlendFactor } from '../render';
 import { FullscreenProgram } from '../Program';

@@ -1,8 +1,8 @@
 
 // Nintendo SARC archive format.
 
-import { assert, readString } from 'util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import { assert, readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export interface SARCFile {
     name: string;

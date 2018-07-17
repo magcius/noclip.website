@@ -2,8 +2,8 @@
 import { GX2Surface, parseGX2Surface } from './gx2_surface';
 import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode, GX2SurfaceFormat } from './gx2_enum';
 
-import { assert, readString } from 'util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import { assert, readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 function readBinPtrT(view: DataView, offs: number, littleEndian: boolean) {
     const offs2 = view.getInt32(offs, littleEndian);

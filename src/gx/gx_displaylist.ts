@@ -33,13 +33,12 @@
 // don't have the display list that sets these registers serialized and instead just use
 // standard formats.
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 import MemoizeCache from '../MemoizeCache';
 import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
-import { VtxAttrib } from '../fres/bfres';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {

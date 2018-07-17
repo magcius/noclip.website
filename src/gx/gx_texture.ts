@@ -1,7 +1,7 @@
 
 // GX texture decoding
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as GX from './gx_enum';
 import { align } from '../util';

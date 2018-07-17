@@ -1,5 +1,5 @@
 
-import { SceneDesc } from 'render';
+import { SceneDesc } from './render';
 import { SceneGroup } from '../viewer';
 
 const id = "zelview";

@@ -16,10 +16,10 @@
 //         Offset: bits 5-15
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
-import { assert, readString, align } from 'util';
+import { assert, readString, align } from '../util';
 import { yaz0_asInstance } from '../wat_modules';
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import WasmMemoryManager from 'WasmMemoryManager';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import WasmMemoryManager from '../WasmMemoryManager';
 
 declare module "../wat_modules" {
     interface yaz0_asExports {

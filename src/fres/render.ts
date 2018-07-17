@@ -10,7 +10,7 @@ import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode } from '
 import Program from '../Program';
 import RenderArena from '../RenderArena';
 import { assert } from '../util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
 import { CoalescedBuffer, coalesceBuffer } from '../BufferCoalescer';
 

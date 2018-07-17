@@ -1,5 +1,5 @@
 
-import ArrayBufferSlice from "ArrayBufferSlice";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 // Parser for the .iv file used by the Dark Souls Model Viewer
 // Presumably made by vlad001 from the Havok physics data shipped in the game.

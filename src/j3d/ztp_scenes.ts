@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import Progressable from 'Progressable';
-import { fetch } from 'util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import Progressable from '../Progressable';
+import { fetch } from '../util';
 
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';

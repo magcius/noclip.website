@@ -4,7 +4,7 @@ import { mat4 } from 'gl-matrix';
 import * as F3DEX2 from './f3dex2';
 import * as Render from './render';
 import * as Viewer from '../viewer';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString } from '../util';
 import { RenderState } from '../render';
 

@@ -2,7 +2,7 @@
 // Read DS Geometry Engine commands.
 
 import { bgr5 as _bgr5 } from './nitro_tex';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 // tslint:disable:variable-name
 

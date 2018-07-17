@@ -1,6 +1,6 @@
 
-import { assert, readString } from 'util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import { assert, readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export interface MDL0 {
     clrData: Uint8Array;

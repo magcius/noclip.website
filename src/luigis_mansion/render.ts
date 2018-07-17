@@ -3,15 +3,13 @@ import * as Viewer from "../viewer";
 import { RenderState, RenderFlags } from "../render";
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
-import * as GX_Texture from 'gx/gx_texture';
-import * as GX_Material from 'gx/gx_material';
-import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, loadedDataCoalescer, loadTextureFromMipChain, translateWrapMode } from 'gx/gx_render';
-
+import * as GX_Texture from '../gx/gx_texture';
+import * as GX_Material from '../gx/gx_material';
+import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, loadedDataCoalescer, loadTextureFromMipChain, translateWrapMode } from '../gx/gx_render';
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { AABB, IntersectionState } from "../Camera";
-import { renderWireframeAABB } from "../RenderUtility";
 
 class Command_Material {
     private renderFlags: RenderFlags;

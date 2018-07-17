@@ -1,13 +1,13 @@
 
-import * as MDL0 from 'mdl0';
+import * as MDL0 from './mdl0';
 
 import * as Viewer from '../viewer';
 
 import { RenderFlags, RenderState, BlendMode } from '../render';
 import Program from '../Program';
-import Progressable from 'Progressable';
+import Progressable from '../Progressable';
 import { fetch } from '../util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 import { OrbitCameraController } from '../Camera';
 
 class FancyGrid_Program extends Program {

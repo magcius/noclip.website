@@ -1,7 +1,10 @@
 
 // Resource System
 
-import pako from 'pako';
+import * as Pako from 'pako';
+
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { assert, hexzero } from "../util";
 
 import { PAK, FileResource } from "./pak";
 
@@ -10,9 +13,6 @@ import * as MREA from './mrea';
 import * as STRG from './strg';
 import * as TXTR from './txtr';
 import * as CMDL from './cmdl';
-
-import { assert, hexzero } from "../util";
-import ArrayBufferSlice from 'ArrayBufferSlice';
 
 type ParseFunc<T> = (resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice) => T;
 type Resource = any;
@@ -56,7 +56,7 @@ export class ResourceSystem {
     private loadResourceBuffer(resource: FileResource): ArrayBufferSlice {
         if (resource.isCompressed) {
             const deflated = resource.buffer.createTypedArray(Uint8Array);
-            const inflated = pako.inflate(deflated);
+            const inflated = Pako.inflate(deflated);
             return new ArrayBufferSlice(inflated.buffer);
         } else {
             return resource.buffer;

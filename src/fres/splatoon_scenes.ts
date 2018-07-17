@@ -4,9 +4,9 @@ import { createSceneFromSARCBuffer } from './scenes';
 import * as Viewer from '../viewer';
 
 import { RenderState } from '../render';
-import Progressable from 'Progressable';
+import Progressable from '../Progressable';
 import { fetch } from '../util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
     const textures: Viewer.Texture[] = [];

@@ -1,22 +1,21 @@
 
 import { mat4 } from 'gl-matrix';
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import Progressable from 'Progressable';
-import { fetch, readString } from 'util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import Progressable from '../Progressable';
+import { fetch, readString } from '../util';
 
 import { RenderState, depthClearFlags, RenderFlags } from '../render';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
 
-import * as GX_Material from 'gx/gx_material';
+import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { ColorOverride, Scene, SceneLoader, J3DTextureHolder } from './render';
 import { Camera } from '../Camera';
-import * as GX from '../gx/gx_enum';
 import Program from '../Program';
 import { colorToCSS } from '../Color';
 

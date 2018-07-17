@@ -2,8 +2,8 @@
 // SM64DS's LZ10 wrapper, which is just a "LZ77" prefix for the file.
 
 import { decompress } from '../compression/CX';
-import { readString } from 'util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import { readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export function isLZ77(srcBuffer: ArrayBufferSlice): boolean {
     return (readString(srcBuffer, 0x00, 0x05) === 'LZ77\x10');
