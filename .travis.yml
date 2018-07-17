@@ -6,7 +6,7 @@ node_js:
 depth: 1
 
 script:
-  - parcel build --public-url=./ src/index.html src/embed.hmtl
+  - parcel build --public-url=./ src/index.html src/embed.html
   - rm -f dist/data
   - mv data/ dist/
 
