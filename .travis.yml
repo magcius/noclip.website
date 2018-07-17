@@ -5,11 +5,13 @@ node_js:
 
 script:
   - parcel build index.html
+  - rm -r dist/data/
   - mv data/ dist/
 
 deploy:
   provider: pages
   skip_cleanup: true
+  keep_history: true
   local_dir: dist
   github_token: $GITHUB_TOKEN
   on:
