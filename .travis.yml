@@ -5,7 +5,7 @@ node_js:
 
 script:
   - parcel build index.html
-  - rm -r dist/data/
+  - rm -f dist/data/
   - mv data/ dist/
 
 deploy:
