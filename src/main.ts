@@ -25,6 +25,7 @@ import * as MKWII from './rres/mkwii_scenes';
 import * as J3D from './j3d/scenes';
 import { UI } from './ui';
 import { CameraControllerClass, FPSCameraController } from './Camera';
+import { RenderStatistics } from './render';
 
 const sceneGroups = [
     ZTP.sceneGroup,
@@ -151,6 +152,7 @@ class Main {
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
     public groups: SceneGroup[];
+    public ui: UI;
 
     private droppedFileGroup: SceneGroup;
 
@@ -160,7 +162,6 @@ class Main {
     private currentSceneDesc: SceneDesc;
 
     private sceneLoader: SceneLoader;
-    private ui: UI;
 
     private lastSavedState: string;
     private saveTimeout: number;
@@ -187,6 +188,9 @@ class Main {
         window.addEventListener('keydown', this._onKeyDown.bind(this));
 
         this.viewer = new Viewer(this.canvas);
+        this.viewer.onstatistics = (statistics: RenderStatistics): void => {
+            this.ui.statisticsPanel.addRenderStatistics(statistics);
+        };
         this.viewer.oncamerachanged = () => {
             this._queueSaveState();
         };
@@ -209,6 +213,13 @@ class Main {
         // Make the user choose a scene if there's nothing loaded by default...
         if (this.currentSceneDesc === undefined)
             this.ui.sceneSelect.setExpanded(true);
+    }
+
+    public destroy(): void {
+        this.sceneLoader.setScene(null, null, null);
+        document.body.removeChild(this.canvas);
+        document.body.removeChild(this.uiContainers);
+        window.onresize = null;
     }
 
     private _deselectUI() {
@@ -351,7 +362,7 @@ class Main {
     }
 }
 
-// Expand-o!
+// Declare a "main" object for easy access.
 declare global {
     interface Window {
         main: any;
@@ -359,3 +370,11 @@ declare global {
 }
 
 window.main = new Main();
+
+// Parcel HMR workaround.
+declare var module: any;
+if (module.hot) {
+    module.hot.dispose(() => {
+        window.location.reload();
+    });
+}

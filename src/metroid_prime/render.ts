@@ -99,6 +99,11 @@ export class MREARenderer implements Viewer.Scene {
                     this.opaqueCommands.push(surfaceCommand);
             });
         });
+
+        // Sort commands by material index.
+        this.opaqueCommands.sort((a, b) => {
+            return a.surface.materialIndex - b.surface.materialIndex;
+        });
     }
 
     public setVisible(visible: boolean): void {
@@ -338,9 +343,7 @@ class Command_Surface {
     }
 
     public exec(state: RenderState) {
-        const gl = state.gl;
-        this.shapeHelper.drawSimple(gl);
-        state.drawCallCount++;
+        this.shapeHelper.drawSimple(state);
     }
 
     public destroy(gl: WebGL2RenderingContext) {

@@ -77,8 +77,7 @@ class Command_Batch {
 
         this.scene.renderHelper.bindPacketParams(state, this.packetParams);
 
-        this.shapeHelper.drawSimple(gl);
-        state.drawCallCount++;
+        this.shapeHelper.drawSimple(state);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {

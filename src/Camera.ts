@@ -496,6 +496,7 @@ export class FPSCameraController implements CameraController {
 
         if (updated) {
             this.camera.worldMatrixUpdated();
+            this.forceUpdate = false;
         }
 
         return updated;
@@ -610,6 +611,7 @@ export class OrbitCameraController implements CameraController {
             );
             mat4.invert(camera.worldMatrix, camera.worldMatrix);
             this.camera.worldMatrixUpdated();
+            this.forceUpdate = false;
         }
 
         return updated;

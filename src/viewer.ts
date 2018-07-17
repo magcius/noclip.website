@@ -1,7 +1,7 @@
 
 // tslint:disable:no-console
 
-import { RenderState, ColorTarget, DepthTarget } from './render';
+import { RenderState, ColorTarget, DepthTarget, RenderStatistics } from './render';
 import * as UI from './ui';
 
 import Progressable from './Progressable';
@@ -30,6 +30,7 @@ export class Viewer {
     public scene: MainScene;
     
     public oncamerachanged: () => void = (() => {});
+    public onstatistics: (statistics: RenderStatistics) => void = (() => {});
 
     constructor(public canvas: HTMLCanvasElement) {
         const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
@@ -53,6 +54,8 @@ export class Viewer {
         if (!this.scene)
             return;
 
+        this.renderState.renderStatisticsTracker.beginFrame(gl);
+
         this.onscreenColorTarget.setParameters(gl, this.canvas.width, this.canvas.height);
         this.onscreenDepthTarget.setParameters(gl, this.canvas.width, this.canvas.height);
         this.renderState.setOnscreenRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
@@ -67,9 +70,8 @@ export class Viewer {
         // Blit to the screen.
         this.renderState.blitOnscreenToGL();
 
-        const frameEndTime = window.performance.now();
-        const diff = frameEndTime - this.renderState.frameStartTime;
-        // console.log(`Time: ${diff} Draw calls: ${state.drawCallCount}`);
+        const renderStatistics = this.renderState.renderStatisticsTracker.endFrame(gl);
+        this.onstatistics(renderStatistics);
     }
 
     public setCameraController(cameraController: CameraController) {

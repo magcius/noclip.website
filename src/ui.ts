@@ -5,6 +5,8 @@ import * as Viewer from './viewer';
 import Progressable from './Progressable';
 import { assertExists } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController } from './Camera';
+import { RenderStatistics } from './render';
+import { Color, colorToCSS } from './Color';
 
 const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 
@@ -677,6 +679,103 @@ class ViewerSettings extends Panel {
     }
 }
 
+class LineGraph {
+    public canvas: HTMLCanvasElement;
+    public ctx: CanvasRenderingContext2D;
+    public textYOffset: number = 0;
+
+    constructor(public minY: number = 0, public maxY: number = 160) {
+        this.canvas = document.createElement('canvas');
+        this.ctx = this.canvas.getContext('2d');
+    }
+
+    public beginDraw(width: number, height: number): void {
+        this.canvas.width = width;
+        this.canvas.height = height;
+
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, width, height);
+
+        this.textYOffset = 24;
+    }
+
+    public drawPoints(points: number[], color: Color): void {
+        const width = this.canvas.width;
+        const height = this.canvas.height;
+
+        const ctx = this.ctx;
+
+        const pointsRange = points.length - 1;
+        const valuesRange = (this.maxY - this.minY) - 1;
+
+        const scaleX = width / pointsRange;
+        const scaleY = height / valuesRange;
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = colorToCSS(color);
+        ctx.fillStyle = colorToCSS({ r: color.r, g: color.g, b: color.b, a: color.a - 0.8 });
+        ctx.beginPath();
+        ctx.lineTo(width + 20, height + 20);
+        for (let i = 0; i < points.length; i++) {
+            ctx.lineTo(width - i * scaleX, height - (points[i] - this.minY) * scaleY);
+        }
+        ctx.lineTo(-20, height + 20);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    public drawText(text: string): void {
+        const ctx = this.ctx;
+
+        ctx.fillStyle = 'white';
+        ctx.font = '12pt monospace';
+        ctx.fillText(text, 16, this.textYOffset);
+        this.textYOffset += 16;
+    }
+}
+
+const STATISTICS_ICON = `
+<svg viewBox="5 0 55 60" height="16" fill="white"><g><polygon points="6.9,11.5 6.9,56 55.4,56 55.4,53 9.9,53 9.9,11.5"/><path d="M52.7,15.8c-2.7,0-4.9,2.2-4.9,4.9c0,1,0.3,1.8,0.8,2.6l-5,6.8c-0.4-0.1-0.9-0.2-1.3-0.2c-1.5,0-2.9,0.7-3.8,1.8l-5.6-2.8   c0-0.2,0.1-0.5,0.1-0.8c0-2.7-2.2-4.9-4.9-4.9s-4.9,2.2-4.9,4.9c0,1.1,0.3,2,0.9,2.8l-3.9,5.1c-0.5-0.2-1.1-0.3-1.7-0.3   c-2.7,0-4.9,2.2-4.9,4.9s2.2,4.9,4.9,4.9s4.9-2.2,4.9-4.9c0-1-0.3-2-0.8-2.7l4-5.2c0.5,0.2,1.1,0.3,1.6,0.3c1.4,0,2.6-0.6,3.5-1.5   l5.8,2.9c0,0.1,0,0.2,0,0.3c0,2.7,2.2,4.9,4.9,4.9c2.7,0,4.9-2.2,4.9-4.9c0-1.2-0.4-2.2-1.1-3.1l4.8-6.5c0.6,0.2,1.2,0.4,1.9,0.4   c2.7,0,4.9-2.2,4.9-4.9S55.4,15.8,52.7,15.8z"/></g></svg>`;
+
+class StatisticsPanel extends Panel {
+    public history: RenderStatistics[] = [];
+    private fpsGraph = new LineGraph();
+    private fpsPoints: number[] = [];
+    private fpsColor: Color = { r: 0.4, g: 0.9, b: 0.6, a: 1.0 };
+
+    constructor() {
+        super();
+        this.setTitle(STATISTICS_ICON, 'Statistics');
+
+        this.contents.appendChild(this.fpsGraph.canvas);
+    }
+
+    public addRenderStatistics(renderStatistics: RenderStatistics): void {
+        this.history.unshift(renderStatistics);
+
+        while (this.history.length > 100) {
+            this.history.pop();
+        }
+
+        this.fpsPoints.length = 100;
+        for (let i = 0; i < this.fpsPoints.length; i++) {
+            this.fpsPoints[i] = this.history[i] !== undefined ? this.history[i].fps : 0;
+        }
+
+        this.fpsGraph.beginDraw(400, 200);
+        this.fpsGraph.drawPoints(this.fpsPoints, this.fpsColor);
+
+        this.fpsGraph.drawText(`FPS: ${renderStatistics.fps | 0}`);
+        if (renderStatistics.drawCallCount)
+            this.fpsGraph.drawText(`Draw Calls: ${renderStatistics.drawCallCount}`);
+        if (renderStatistics.textureBindCount)
+            this.fpsGraph.drawText(`Texture Binds: ${renderStatistics.textureBindCount}`);
+        if (renderStatistics.bufferUploadCount)
+            this.fpsGraph.drawText(`Buffer Uploads: ${renderStatistics.bufferUploadCount}`);
+    }
+}
+
 const ABOUT_ICON = `
 <svg viewBox="0 0 100 100" height="16" fill="white"><path d="M50,1.1C23,1.1,1.1,23,1.1,50S23,98.9,50,98.9C77,98.9,98.9,77,98.9,50S77,1.1,50,1.1z M55.3,77.7c0,1.7-1.4,3.1-3.1,3.1  h-7.9c-1.7,0-3.1-1.4-3.1-3.1v-5.1c0-1.7,1.4-3.1,3.1-3.1h7.9c1.7,0,3.1,1.4,3.1,3.1V77.7z M67.8,47.3c-2.1,2.9-4.7,5.2-7.9,6.9  c-1.8,1.2-3,2.4-3.6,3.8c-0.4,0.9-0.7,2.1-0.9,3.5c-0.1,1.1-1.1,1.9-2.2,1.9h-9.7c-1.3,0-2.3-1.1-2.2-2.3c0.2-2.7,0.9-4.8,2-6.4  c1.4-1.9,3.9-4.2,7.5-6.7c1.9-1.2,3.3-2.6,4.4-4.3c1.1-1.7,1.6-3.7,1.6-6c0-2.3-0.6-4.2-1.9-5.6c-1.3-1.4-3-2.1-5.3-2.1  c-1.9,0-3.4,0.6-4.7,1.7c-0.8,0.7-1.3,1.6-1.6,2.8c-0.4,1.4-1.7,2.3-3.2,2.3l-9-0.2c-1.1,0-2-1-1.9-2.1c0.3-4.8,2.2-8.4,5.5-11  c3.8-2.9,8.7-4.4,14.9-4.4c6.6,0,11.8,1.7,15.6,5c3.8,3.3,5.7,7.8,5.7,13.5C70.9,41.2,69.8,44.4,67.8,47.3z"/></svg>`;
 
@@ -737,6 +836,7 @@ and <a href="https://twitter.com/__Aruki">Aruki</a></p>
 <li> Nightshift <span>by</span> mikicon
 <li> Layer <span>by</span> Chameleon Design
 <li> Sand Clock <span>by</span> James
+<li> Line Chart <span>by</span> Shastry
 </ul>
 </div>
 `;
@@ -788,6 +888,7 @@ export class UI {
     public sceneSelect: SceneSelect;
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
+    public statisticsPanel: StatisticsPanel;
     private about: About;
 
     constructor(public viewer: Viewer.Viewer) {
@@ -800,6 +901,7 @@ export class UI {
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(viewer);
+        this.statisticsPanel = new StatisticsPanel();
         this.about = new About();
 
         this.setScenePanels([]);
@@ -823,6 +925,6 @@ export class UI {
     }
 
     public setScenePanels(panels: Panel[]): void {
-        this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.viewerSettings, this.about]);
+        this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
     }
 }

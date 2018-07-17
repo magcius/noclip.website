@@ -245,6 +245,39 @@ export class DepthTarget {
 export const depthClearFlags = new RenderFlags();
 depthClearFlags.depthWrite = true;
 
+export interface RenderStatistics {
+    frameStartCPUTime: number;
+    drawCallCount: number;
+    textureBindCount: number;
+    bufferUploadCount: number;
+    frameCPUTime: number;
+    fps: number;
+}
+
+class RenderStatisticsTracker {
+    public drawCallCount: number = 0;
+    public textureBindCount: number = 0;
+    public bufferUploadCount: number = 0;
+    public frameStartCPUTime: number = 0;
+
+    public beginFrame(gl: WebGL2RenderingContext): void {
+        this.drawCallCount = 0;
+        this.textureBindCount = 0;
+        this.bufferUploadCount = 0;
+        this.frameStartCPUTime = window.performance.now();
+    }
+
+    public endFrame(gl: WebGL2RenderingContext): RenderStatistics {
+        const drawCallCount = this.drawCallCount;
+        const textureBindCount = this.textureBindCount;
+        const bufferUploadCount = this.bufferUploadCount;
+        const frameStartCPUTime = this.frameStartCPUTime;
+        const frameCPUTime = window.performance.now() - frameStartCPUTime;
+        const fps = 1000 / frameCPUTime;
+        return { frameStartCPUTime, drawCallCount, textureBindCount, bufferUploadCount, frameCPUTime, fps };
+    }
+}
+
 // XXX(jstpierre): This is becoming a lot more than just some render state.
 // Rename to "SceneRenderer" at some point?
 export class RenderState {
@@ -258,25 +291,23 @@ export class RenderState {
     private currentDepthTarget: DepthTarget | null = null;
 
     // Parameters.
-    public fov: number;
     public time: number;
-
     public camera: Camera;
 
+    // TODO(jstpierre): Move to Camera? Some are game-specific though...
+    public fov: number;
     public nearClipPlane: number;
     public farClipPlane: number;
-
-    private scratchMatrix: mat4;
-
-    public drawCallCount: number = 0;
-    public frameStartTime: number = 0;
 
     public onscreenColorTarget: ColorTarget;
     public onscreenDepthTarget: DepthTarget;
 
+    public renderStatisticsTracker = new RenderStatisticsTracker();
+
     private fullscreenCopyProgram: FullscreenCopyProgram;
     private fullscreenFlags: RenderFlags;
     private msaaFramebuffer: WebGLFramebuffer;
+    private scratchMatrix = mat4.create();
 
     constructor(public gl: WebGL2RenderingContext) {
         this.programCache = new ProgramCache(this.gl);
@@ -285,7 +316,6 @@ export class RenderState {
         this.fov = Math.PI / 4;
 
         this.camera = new Camera();
-        this.scratchMatrix = mat4.create();
 
         this.fullscreenCopyProgram = new FullscreenCopyProgram();
         this.fullscreenFlags = new RenderFlags();
@@ -307,8 +337,6 @@ export class RenderState {
     }
 
     public reset() {
-        this.drawCallCount = 0;
-        this.frameStartTime = window.performance.now();
         this.useRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
         this.useFlags(RenderFlags.default);
         this.camera.newFrame();
