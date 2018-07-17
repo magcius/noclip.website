@@ -1,11 +1,25 @@
 
-import ArrayBufferSlice from "ArrayBufferSlice";
-import { assert, readString, align } from "util";
-import { Endianness } from "endian";
+import ArrayBufferSlice from "./ArrayBufferSlice";
+import { assert, readString, align } from "./util";
+import { Endianness } from "./endian";
 
 export const enum FileType {
     BYML,
     CRG1, // Jasper's BYML variant with extensions.
+}
+
+const enum NodeType {
+    STRING       = 0xA0,
+    ARRAY        = 0xC0,
+    DICT         = 0xC1,
+    STRING_TABLE = 0xC2,
+    BINARY_DATA  = 0xCB, // CRG1 extension.
+    BOOL         = 0xD0,
+    INT          = 0xD1,
+    FLOAT        = 0xD2,
+    SHORT        = 0xD3,
+    FLOAT_ARRAY  = 0xE2, // CRG1 extension.
+    NULL         = 0xFF,
 }
 
 interface FileDescription {
@@ -22,20 +36,6 @@ const fileDescriptions: { [key: number]: FileDescription } = {
         magics: ['CRG1'],
         allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.SHORT, NodeType.FLOAT, NodeType.NULL, NodeType.FLOAT_ARRAY, NodeType.BINARY_DATA ],
     },
-}
-
-const enum NodeType {
-    STRING       = 0xA0,
-    ARRAY        = 0xC0,
-    DICT         = 0xC1,
-    STRING_TABLE = 0xC2,
-    BINARY_DATA  = 0xCB, // CRG1 extension.
-    BOOL         = 0xD0,
-    INT          = 0xD1,
-    FLOAT        = 0xD2,
-    SHORT        = 0xD3,
-    FLOAT_ARRAY  = 0xE2, // CRG1 extension.
-    NULL         = 0xFF,
 }
 
 export type StringTable = string[];

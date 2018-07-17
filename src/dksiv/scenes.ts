@@ -6,8 +6,8 @@ import { RenderState } from '../render';
 import { MainScene, SceneGroup, Texture } from '../viewer';
 import * as UI from '../ui';
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import Progressable from 'Progressable';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import Progressable from '../Progressable';
 import { fetch } from '../util';
 
 const dks1Paths = [

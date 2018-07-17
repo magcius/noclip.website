@@ -1,8 +1,8 @@
 
-import * as CMB from 'cmb';
+import * as CMB from './cmb';
 
-import { assert, readString } from 'util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import { assert, readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export class ZSI {
     mesh: Mesh;

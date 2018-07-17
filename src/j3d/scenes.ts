@@ -1,5 +1,5 @@
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState } from '../render';
 import { readString } from '../util';
 

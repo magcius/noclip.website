@@ -1,14 +1,14 @@
 
 // Implements Retro's MREA format as seen in Metroid Prime 1.
 
-import * as GX_Material from 'gx/gx_material';
-import * as GX from 'gx/gx_enum';
+import * as GX_Material from '../gx/gx_material';
+import * as GX from '../gx/gx_enum';
 
 import { TXTR } from './txtr';
 
 import { ResourceSystem } from "./resource";
 import { assert, readString, align } from "../util";
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { AABB } from '../Camera';
 import { mat4 } from 'gl-matrix';

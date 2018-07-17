@@ -15,8 +15,9 @@
             "dom"
         ],
         "sourceMap": true,
-        "module": "system",
-        "outFile": "build/main.js"
+        "moduleResolution": "node",
+        "module": "commonjs",
+        "outDir": "./temp/es5",
     },
     "include": [
         "src/"

@@ -3,9 +3,9 @@
 
 import { ResourceSystem } from './resource';
 
-import * as GX from 'gx/gx_enum';
-import * as GX_Texture from 'gx/gx_texture';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import * as GX from '../gx/gx_enum';
+import * as GX_Texture from '../gx/gx_texture';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 const txtrFormatRemap = [
     GX.TexFormat.I4,     // 0x00

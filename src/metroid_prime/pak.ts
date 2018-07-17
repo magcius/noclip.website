@@ -1,8 +1,8 @@
 
 // Implements Retro's PAK format as seen in Metroid Prime 1.
 
+import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
-import ArrayBufferSlice from "ArrayBufferSlice";
 
 export interface FileResource {
     name: string;

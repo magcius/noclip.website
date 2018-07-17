@@ -3,7 +3,7 @@
 
 import { ResourceSystem } from "./resource";
 import { assert, readString } from "../util";
-import ArrayBufferSlice from "ArrayBufferSlice";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export interface STRG {
     strings: string[];

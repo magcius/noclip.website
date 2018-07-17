@@ -1,14 +1,14 @@
 
 import { mat4 } from 'gl-matrix';
 
-import { MREA, Material, Surface, MaterialFlags, UVAnimationType, MaterialSet } from './mrea';
-import * as GX_Material from 'gx/gx_material';
-import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping, loadTextureFromMipChain, TextureHolder } from 'gx/gx_render';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { nArray } from '../util';
+import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from '../gx/gx_render';
 
+import { MREA, Material, Surface, MaterialFlags, UVAnimationType, MaterialSet } from './mrea';
+import * as GX_Material from '../gx/gx_material';
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
-import { nArray } from '../util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { AABB, IntersectionState, texEnvMtx } from '../Camera';
 import { TXTR } from './txtr';

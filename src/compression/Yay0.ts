@@ -24,8 +24,8 @@
 //         Offset: bits 5-15
 //         Copy Length+2 bytes from Offset back in the output buffer.
 
-import { assert, readString } from 'util';
-import ArrayBufferSlice from 'ArrayBufferSlice';
+import { assert, readString } from '../util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
     const srcView = srcBuffer.createDataView();

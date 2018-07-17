@@ -1,7 +1,7 @@
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import Progressable from 'Progressable';
-import { fetch, readString, assert } from 'util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import Progressable from '../Progressable';
+import { fetch, readString, assert } from '../util';
 
 import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import * as Viewer from '../viewer';

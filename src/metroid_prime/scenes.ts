@@ -8,10 +8,10 @@ import { MREARenderer, RetroTextureHolder, CMDLRenderer } from './render';
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { fetch, assert } from '../util';
-import Progressable from 'Progressable';
+import Progressable from '../Progressable';
 import { RenderState, depthClearFlags } from '../render';
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import * as BYML from 'byml';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import * as BYML from '../byml';
 
 // PAK Files are too big for GitHub.
 function findPakBase() {

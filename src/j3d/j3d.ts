@@ -3,13 +3,13 @@
 
 import { mat4, quat } from 'gl-matrix';
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import { Endianness } from 'endian';
-import { assert, readString } from 'util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { Endianness } from '../endian';
+import { assert, readString } from '../util';
 
-import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from 'gx/gx_displaylist';
-import * as GX from 'gx/gx_enum';
-import * as GX_Material from 'gx/gx_material';
+import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import * as GX from '../gx/gx_enum';
+import * as GX_Material from '../gx/gx_material';
 import { ColorOverride } from './render';
 import { AABB } from '../Camera';
 

@@ -4,7 +4,7 @@
 import { RenderState, ColorTarget, DepthTarget } from './render';
 import * as UI from './ui';
 
-import Progressable from 'Progressable';
+import Progressable from './Progressable';
 import { InputManager } from './InputManager';
 import { CameraController, Camera, CameraControllerClass } from './Camera';
 

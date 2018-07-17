@@ -1,6 +1,6 @@
 
-import Progressable from 'Progressable';
-import * as Viewer from 'viewer';
+import Progressable from '../Progressable';
+import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 
 interface EmbedModule {

@@ -49,3 +49,4 @@ Temporary Items
 node_modules
 
 assemblyscript/
+.cache/
