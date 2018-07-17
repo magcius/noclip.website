@@ -1,4 +1,4 @@
-<img align="right" src="logo.png">
+<img align="right" src="src/logo.png">
 
 # Model Viewer
 
