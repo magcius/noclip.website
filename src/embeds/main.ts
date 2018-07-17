@@ -3,9 +3,13 @@ import Progressable from '../Progressable';
 import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 
-interface EmbedModule {
-    createScene(gl: WebGL2RenderingContext, name: string): Progressable<Viewer.MainScene>;
-}
+import * as sunshine_water from './sunshine_water';
+
+type CreateSceneFunc = (gl: WebGL2RenderingContext, name: string) => Progressable<Viewer.MainScene>;
+
+const embeds: { [key: string]: CreateSceneFunc } = {
+    "sunshine_water": sunshine_water.createScene,
+};
 
 class FsButton {
     public elem: HTMLElement;
@@ -78,14 +82,13 @@ class Main {
         this.loadScene(hash);
     }
 
-    private loadScene(hash: string) {
+    private async loadScene(hash: string) {
         const [file, name] = hash.split('/');
-        SystemJS.import(`embeds/${file}`).then((embedModule: EmbedModule) => {
-            const gl = this.viewer.renderState.gl;
-            embedModule.createScene(gl, name).then((scene: Viewer.MainScene) => {
-                this.viewer.setCameraController(new OrbitCameraController());
-                this.viewer.setScene(scene);
-            });
+        const gl = this.viewer.renderState.gl;
+        const createScene = embeds[file];
+        createScene(gl, name).then((scene: Viewer.MainScene) => {
+            this.viewer.setCameraController(new OrbitCameraController());
+            this.viewer.setScene(scene);
         });
     }
 

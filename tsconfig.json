@@ -16,8 +16,7 @@
         ],
         "sourceMap": true,
         "moduleResolution": "node",
-        "module": "commonjs",
-        "outDir": "./temp/es5",
+        "module": "commonjs"
     },
     "include": [
         "src/"
