@@ -2,11 +2,11 @@
   "name": "@jstpierre/model-viewer",
   "private": true,
   "devDependencies": {
-    "gl-matrix": "^2.4.0",
+    "gl-matrix": "^2.7.1",
     "pako": "^1.0.6",
     "parcel-bundler": "^1.9.7",
     "typescript": "^2.9.2",
-    "wabt": "^1.0.0-nightly.20180421"
+    "wabt": "^1.0.0"
   },
   "dependencies": {
     "@types/gl-matrix": "^2.4.0",
