@@ -286,6 +286,13 @@ export const enum KonstAlphaSel {
     KASEL_K3_A = 0x1F, /*!< K3[A] register */
 }
 
+export const enum TevColorChan {
+    R = 0,
+    G = 1,
+    B = 2,
+    A = 3,
+}
+
 export const enum WrapMode {
     CLAMP = 0,
     REPEAT = 1,
