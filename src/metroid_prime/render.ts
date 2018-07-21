@@ -49,6 +49,7 @@ export class MREARenderer implements Viewer.Scene {
     public visible: boolean = true;
 
     constructor(gl: WebGL2RenderingContext, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
+        this.textures = textureHolder.viewerTextures;
         this.renderHelper = new GXRenderHelper(gl);
         this.translateModel(gl);
     }
@@ -89,11 +90,11 @@ export class MREARenderer implements Viewer.Scene {
                 const material = materialSet.materials[surface.materialIndex];
                 const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[bufferIndex++];
 
-                if (material.flags & MaterialFlags.OCCLUDER)
+                if (material.isOccluder)
                     return;
 
                 const surfaceCommand = new Command_Surface(gl, surface, coalescedBuffers, modelIndex);
-                if (material.flags & MaterialFlags.IS_TRANSPARENT)
+                if (material.isTransparent)
                     this.transparentCommands.push(surfaceCommand);
                 else
                     this.opaqueCommands.push(surfaceCommand);
@@ -287,7 +288,7 @@ export class CMDLRenderer implements Viewer.Scene {
             const material = materialSet.materials[materialIndex];
 
             // Don't render occluder meshes.
-            if (material.flags & MaterialFlags.OCCLUDER)
+            if (material.isOccluder)
                 continue;
 
             if (currentMaterialIndex !== materialIndex) {
@@ -377,7 +378,8 @@ class Command_Material {
         if (isSkybox)
             materialParams.u_ColorAmbReg[0].set(1, 1, 1, 1);
         else
-            materialParams.u_ColorMatReg[0].set(0, 0, 0, 1);
+            materialParams.u_ColorAmbReg[0].set(0, 0, 0, 1);
+
         for (let i = 0; i < 4; i++)
             materialParams.u_Color[i].copy(this.material.gxMaterial.colorRegisters[i]);
         for (let i = 0; i < 4; i++)
@@ -386,6 +388,9 @@ class Command_Material {
         const animTime = ((state.time / 1000) % 900);
         for (let i = 0; i < this.material.uvAnimations.length; i++) {
             const uvAnimation = this.material.uvAnimations[i];
+            if (!uvAnimation)
+                continue;
+
             const texMtx = materialParams.u_TexMtx[i];
             const postMtx = materialParams.u_PostTexMtx[i];
             switch (uvAnimation.type) {
@@ -421,6 +426,7 @@ class Command_Material {
                 texMtx[13] = trans;
                 break;
             }
+            /*
             case UVAnimationType.INV_MAT_SKY:
                 mat4.invert(texMtx, state.view);
                 if (modelMatrix !== null)
@@ -459,6 +465,7 @@ class Command_Material {
                 texEnvMtx(postMtx, a, -a, xy, z);
                 break;
             }
+            */
             }
         }
     }

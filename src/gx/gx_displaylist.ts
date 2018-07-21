@@ -650,6 +650,9 @@ while (true) {
 
     drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });
 
+    if (srcVertexSizes[vertexFormat] === undefined)
+        throw new Error("No VAT for VTXFMT" + vertexFormat);
+
     // Skip over the index data.
     drawCallIdx += srcVertexSizes[vertexFormat] * vertexCount;
 }

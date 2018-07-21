@@ -17,6 +17,7 @@ import * as FRES from './fres/scenes';
 import * as SPL from './fres/splatoon_scenes';
 import * as DKSIV from './dksiv/scenes';
 import * as MP1 from './metroid_prime/scenes';
+import * as DKCR from './metroid_prime/dkcr_scenes';
 import * as LM from './luigis_mansion/scenes';
 import * as ZSS from './rres/zss_scenes';
 import * as ELB from './rres/elb_scenes';
@@ -35,6 +36,8 @@ const sceneGroups = [
     SMG.sceneGroup,
     MKDD.sceneGroup,
     MKWII.sceneGroup,
+    MP1.sceneGroup,
+    DKCR.sceneGroup,
     ELB.sceneGroup,
     LM.sceneGroup,
     SM64DS.sceneGroup,
@@ -43,7 +46,6 @@ const sceneGroups = [
     ZELVIEW.sceneGroup,
     OOT3D.sceneGroup,
     DKSIV.sceneGroup,
-    MP1.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {

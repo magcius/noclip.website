@@ -7,7 +7,7 @@ import { assert, readString } from "../util";
 import { ResourceSystem } from "./resource";
 import * as STRG from "./strg";
 
-interface Area {
+export interface Area {
     areaName: string;
     areaMREAID: string;
 }
@@ -17,7 +17,7 @@ export interface MLVL {
     defaultSkyboxID: string;
 }
 
-export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MLVL {
+function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MLVL {
     const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) == 0xDEAFBABE);
@@ -112,4 +112,89 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
     }
 
     return { areaTable, defaultSkyboxID };
+}
+
+function parse_DKCR(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MLVL {
+    const view = buffer.createDataView();
+
+    assert(view.getUint32(0x00) == 0xDEAFBABE);
+    const version = view.getUint32(0x04);
+
+    // Version that appears in Metroid Prime 1.
+    assert(version === 0x1B);
+
+    // STRG file ID?
+    let offs = 0x08;
+    const worldNameSTRGID = readString(buffer, offs, 0x08, false);
+    offs += 0x08;
+    const worldName: STRG.STRG = resourceSystem.loadAssetByID(worldNameSTRGID, 'STRG');
+
+    const hasTimeAttack = !!view.getUint8(offs);
+    offs += 0x01;
+
+    if (hasTimeAttack) {
+        const levelID = readString(buffer, offs, 0xFF, true);
+        offs += levelID.length + 1;
+        const timeAttackBronze = view.getFloat32(offs);
+        offs += 0x04;
+        const timeAttackSilver = view.getFloat32(offs);
+        offs += 0x04;
+        const timeAttackGold = view.getFloat32(offs);
+        offs += 0x04;
+        const timeAttackShiny = view.getFloat32(offs);
+        offs += 0x04;
+    }
+
+    const worldSaveID = readString(buffer, offs, 0x08, false);
+    offs += 0x08;
+    const defaultSkyboxID = readString(buffer, offs, 0x08, false);
+    offs += 0x08;
+
+    const areaTableOffs = offs;
+    const areaTableCount = view.getUint32(areaTableOffs + 0x00);
+    let areaTableIdx = areaTableOffs + 0x04;
+    const areaTable: Area[] = [];
+    for (let i = 0; i < areaTableCount; i++) {
+        // areaSTRG is empty in DKCR.
+        areaTableIdx += 0x08;
+
+        areaTableIdx += 0x04 * 12; // Transform matrix
+        areaTableIdx += 0x04 * 6; // AABB
+
+        const areaMREAID = readString(buffer, areaTableIdx + 0x00, 0x08, false);
+        areaTableIdx += 0x08;
+        const areaMREA = resourceSystem.findResourceByID(areaMREAID);
+        assert(areaMREA !== null);
+
+        const areaInternalID = readString(buffer, areaTableIdx + 0x00, 0x08, false);
+        areaTableIdx += 0x08;
+
+        // Always 0.
+        areaTableIdx += 0x04;
+
+        // Internal area name
+        const areaName = readString(buffer, areaTableIdx, 0xFF, true);
+        areaTableIdx += areaName.length;
+
+        areaTable.push({ areaName, areaMREAID });
+    }
+
+    return { areaTable, defaultSkyboxID };
+}
+
+export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MLVL {
+    const view = buffer.createDataView();
+
+    assert(view.getUint32(0x00) == 0xDEAFBABE);
+    const version = view.getUint32(0x04);
+
+    // Metroid Prime 1
+    if (version === 0x11)
+        return parse_MP1(resourceSystem, assetID, buffer);
+
+    // Donkey Kong Country Returns
+    if (version === 0x1B)
+        return parse_DKCR(resourceSystem, assetID, buffer);
+
+    throw "whoops";
 }

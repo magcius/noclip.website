@@ -127,6 +127,11 @@ export interface TevStage {
     konstColorSel: GX.KonstColorSel;
     konstAlphaSel: GX.KonstAlphaSel;
 
+    // SetTevSwapMode / SetTevSwapModeTable
+    // TODO(jstpierre): Dumb hack for now.
+    rasSwapTable?: GX.TevColorChan[];
+    texSwapTable?: GX.TevColorChan[];
+
     // SetTevIndirect
     indTexStage: GX.IndTexStageID;
     indTexFormat: GX.IndTexFormat;
@@ -509,6 +514,31 @@ export class GX_Program extends BaseProgram {
         return `TextureSample(${stage.texMap}, t_TexCoord)`;
     }
 
+    private generateComponentSwizzle(swapTable: GX.TevColorChan[] | undefined, channel: GX.TevColorChan): string {
+        const suffixes = ['r', 'g', 'b', 'a'];
+        if (swapTable)
+            channel = swapTable[channel];
+        return suffixes[channel];
+    }
+
+    private generateColorSwizzle(swapTable: GX.TevColorChan[] | undefined, colorIn: GX.CombineColorInput): string {
+        const swapR = this.generateComponentSwizzle(swapTable, GX.TevColorChan.R);
+        const swapG = this.generateComponentSwizzle(swapTable, GX.TevColorChan.G);
+        const swapB = this.generateComponentSwizzle(swapTable, GX.TevColorChan.B);
+        const swapA = this.generateComponentSwizzle(swapTable, GX.TevColorChan.A);
+
+        switch (colorIn) {
+        case GX.CombineColorInput.TEXC:
+        case GX.CombineColorInput.RASC:
+            return `${swapR}${swapG}${swapB}`;
+        case GX.CombineColorInput.TEXA:
+        case GX.CombineColorInput.RASA:
+            return `${swapA}${swapA}${swapA}`;
+        default:
+            throw "whoops";
+        }
+    }
+
     private generateColorIn(stage: TevStage, colorIn: GX.CombineColorInput) {
         const i = stage.index;
         switch (colorIn) {
@@ -520,10 +550,10 @@ export class GX_Program extends BaseProgram {
         case GX.CombineColorInput.A1:    return `t_Color1.aaa`;
         case GX.CombineColorInput.C2:    return `t_Color2.rgb`;
         case GX.CombineColorInput.A2:    return `t_Color2.aaa`;
-        case GX.CombineColorInput.TEXC:  return `${this.generateTexAccess(stage)}.rgb`;
-        case GX.CombineColorInput.TEXA:  return `${this.generateTexAccess(stage)}.aaa`;
-        case GX.CombineColorInput.RASC:  return `${this.generateRas(stage)}.rgb`;
-        case GX.CombineColorInput.RASA:  return `${this.generateRas(stage)}.aaa`;
+        case GX.CombineColorInput.TEXC:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
+        case GX.CombineColorInput.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
+        case GX.CombineColorInput.RASC:  return `${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)}`;
+        case GX.CombineColorInput.RASA:  return `${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)}`;
         case GX.CombineColorInput.ONE:   return `vec3(1)`;
         case GX.CombineColorInput.HALF:  return `vec3(1.0/2.0)`;
         case GX.CombineColorInput.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}`;
@@ -538,8 +568,8 @@ export class GX_Program extends BaseProgram {
         case GX.CombineAlphaInput.A0:    return `t_Color0.a`;
         case GX.CombineAlphaInput.A1:    return `t_Color1.a`;
         case GX.CombineAlphaInput.A2:    return `t_Color2.a`;
-        case GX.CombineAlphaInput.TEXA:  return `${this.generateTexAccess(stage)}.a`;
-        case GX.CombineAlphaInput.RASA:  return `${this.generateRas(stage)}.a`;
+        case GX.CombineAlphaInput.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateComponentSwizzle(stage.texSwapTable, GX.TevColorChan.A)}`;
+        case GX.CombineAlphaInput.RASA:  return `${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)}`;
         case GX.CombineAlphaInput.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
         case GX.CombineAlphaInput.ZERO:  return `0.0`;
         }

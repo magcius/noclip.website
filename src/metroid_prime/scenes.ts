@@ -18,7 +18,7 @@ function findPakBase() {
     if (document.location.protocol === 'file:' || document.location.hostname === 'localhost') {
         return `data/metroid_prime/mp1/`;
     } else {
-        return `https://funny.computer/cloud/MetroidPrime1/`;
+        return `https://funny.computer/cloud/NBMDVD/MetroidPrime1/`;
     }
 }
 
