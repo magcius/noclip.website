@@ -53,3 +53,4 @@ assemblyscript/
 
 dist/*
 !dist/data
+post.html

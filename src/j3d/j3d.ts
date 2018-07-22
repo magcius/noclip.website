@@ -979,7 +979,11 @@ export interface BTI_Texture {
     maxLOD: number;
     lodBias: number;
     mipCount: number;
-    data: ArrayBufferSlice;
+    data: ArrayBufferSlice | null;
+
+    // Palette data
+    paletteFormat: GX.TexPalette;
+    paletteData: ArrayBufferSlice | null;
 }
 
 function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
@@ -991,7 +995,7 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
     const wrapS = view.getUint8(0x06);
     const wrapT = view.getUint8(0x07);
     const paletteFormat = view.getUint8(0x09);
-    const paletteNumEntries = view.getUint16(0x0A);
+    const paletteCount = view.getUint16(0x0A);
     const paletteOffs = view.getUint32(0x0C);
     const minFilter = view.getUint8(0x14);
     const magFilter = view.getUint8(0x15);
@@ -1003,11 +1007,15 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
 
     assert(minLOD === 0);
 
-    let data = null;
+    let data: ArrayBufferSlice | null = null;
     if (dataOffs !== 0)
         data = buffer.slice(dataOffs);
 
-    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data };
+    let paletteData: ArrayBufferSlice | null = null;
+    if (paletteOffs !== 0)
+        paletteData = buffer.subarray(paletteOffs, paletteCount * 2);
+
+    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data, paletteFormat, paletteData };
 }
 //#endregion
 
@@ -1026,7 +1034,9 @@ export interface TEX1_TextureData {
     height: number;
     format: GX.TexFormat;
     mipCount: number;
-    data: ArrayBufferSlice;
+    data: ArrayBufferSlice | null;
+    paletteFormat: GX.TexPalette;
+    paletteData: ArrayBufferSlice | null;
 }
 
 export interface TEX1_Sampler {
@@ -1077,6 +1087,8 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
                 format: btiTexture.format,
                 mipCount: btiTexture.mipCount,
                 data: btiTexture.data,
+                paletteFormat: btiTexture.paletteFormat,
+                paletteData: btiTexture.paletteData,
             };
             textureDatas.push(textureData);
             textureDataIndex = textureDatas.length - 1;

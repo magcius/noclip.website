@@ -25,22 +25,20 @@ export class MultiScene implements Viewer.MainScene {
         return [layersPanel];
     }
 
-    public render(renderState: RenderState) {
+    public render(renderState: RenderState): void {
         this.scenes.forEach((scene) => {
             scene.render(renderState);
         });
     }
 
-    public destroy(gl: WebGL2RenderingContext) {
+    public destroy(gl: WebGL2RenderingContext): void {
         this.textureHolder.destroy(gl);
         this.scenes.forEach((scene) => scene.destroy(gl));
     }
 
-    protected setScenes(scenes: Scene[]) {
+    protected setScenes(scenes: Scene[]): void {
         this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
+        this.textures = this.textureHolder.viewerTextures;
     }
 }
 
@@ -101,7 +99,7 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, textureHolder
             scenes = scenes.sort((a, b) => {
                 return boolSort(a.isSkybox, b.isSkybox);
             });
-    
+
             return scenes;
         }
 
