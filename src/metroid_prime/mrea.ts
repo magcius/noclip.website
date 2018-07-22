@@ -842,6 +842,7 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
         const isOccluder = !!(materialFlags & MaterialFlags_MP3.OCCLUDER);
         const blend = !!(materialFlags & MaterialFlags_MP3.BLEND);
         const additiveBlend = !!(materialFlags & MaterialFlags_MP3.ADDITIVE_BLEND);
+        const punchthrough = !!(materialFlags & MaterialFlags_MP3.PUNCHTHROUGH);
         const isTransparent = blend || additiveBlend;
         const depthWrite = true;
 
@@ -863,16 +864,16 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
 
         const alphaTest: GX_Material.AlphaTest = {
             op: GX.AlphaOp.OR,
-            compareA: GX.CompareType.GREATER,
-            referenceA: 0.25,
+            compareA: punchthrough ? GX.CompareType.GREATER : GX.CompareType.ALWAYS,
+            referenceA: 0.75,
             compareB: GX.CompareType.NEVER,
             referenceB: 0,
         };
 
         const blendMode: GX_Material.BlendMode = {
             type: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
-            srcFactor: additiveBlend ? GX.BlendFactor.ONE : GX.BlendFactor.INVSRCALPHA,
-            dstFactor: additiveBlend ? GX.BlendFactor.ONE : GX.BlendFactor.DSTALPHA,
+            srcFactor: GX.BlendFactor.SRCALPHA,
+            dstFactor: additiveBlend ? GX.BlendFactor.ONE : GX.BlendFactor.INVSRCALPHA,
             logicOp: GX.LogicOp.CLEAR,
         };
 
