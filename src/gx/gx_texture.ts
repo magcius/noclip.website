@@ -4,7 +4,7 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as GX from './gx_enum';
-import { align } from '../util';
+import { align, assert } from '../util';
 import { gx_texture_asInstance, gx_texture_asExports } from '../wat_modules';
 import WasmMemoryManager from '../WasmMemoryManager';
 
@@ -30,6 +30,8 @@ export interface Texture {
     height: number;
     data: ArrayBufferSlice;
     mipCount?: number;
+    paletteFormat?: GX.TexPalette;
+    paletteData?: ArrayBufferSlice;
 }
 
 export interface DecodedTexture {
@@ -101,7 +103,9 @@ export function calcMipChain(texture: Texture, mipCount: number = 0xFF): MipChai
     while (width > 0 && height > 0 && mipLevel < mipCount) {
         const mipSize = calcTextureSize(format, width, height);
         const data = texture.data !== null ? texture.data.subarray(textureSize) : null;
-        mipLevels.push({ name: `${texture.name} mip level ${mipLevel}`, format, width, height, data });
+        const paletteFormat = texture.paletteFormat;
+        const paletteData = texture.paletteData;
+        mipLevels.push({ name: `${texture.name} mip level ${mipLevel}`, format, width, height, data, paletteFormat, paletteData });
         mipLevel++;
         textureSize += mipSize;
         width /= 2;
@@ -145,7 +149,161 @@ function decode_Dummy(texture: Texture): DecodedTexture {
     return { pixels };
 }
 
-export function getFormatName(format: GX.TexFormat): string {
+function expand3to8(n: number): number {
+    return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
+}
+
+function expand4to8(n: number): number {
+    return (n << 4) | n;
+}
+
+function expand5to8(n: number): number {
+    return (n << (8 - 5)) | (n >>> (10 - 8));
+}
+
+function expand6to8(n: number): number {
+    return (n << (8 - 6)) | (n >>> (12 - 8));
+}
+
+function decodePalette_IA8(paletteData: ArrayBufferSlice): Uint8Array {
+    const paletteCount = paletteData.byteLength >>> 1;
+    const dst = new Uint8Array(paletteCount * 4);
+    const view = paletteData.createDataView();
+    for (let i = 0; i < paletteCount; i++) {
+        const aa = view.getUint8(i * 2 + 0);
+        const ii = view.getUint8(i * 2 + 1);
+        dst[i * 4 + 0] = ii;
+        dst[i * 4 + 1] = ii;
+        dst[i * 4 + 2] = ii;
+        dst[i * 4 + 3] = aa;
+    }
+    return dst;
+}
+
+function decodePalette_RGB565(paletteData: ArrayBufferSlice): Uint8Array {
+    const paletteCount = paletteData.byteLength >>> 1;
+    const dst = new Uint8Array(paletteCount * 4);
+    const view = paletteData.createDataView();
+    for (let i = 0; i < paletteCount; i++) {
+        const p = view.getUint16(i * 2 + 0);
+        dst[i * 4 + 0] = expand5to8((p >> 11) & 0x1F);
+        dst[i * 4 + 1] = expand6to8((p >> 5) & 0x3F);
+        dst[i * 4 + 2] = expand5to8(p & 0x1F);
+        dst[i * 4 + 3] = 0xFF;
+    }
+    return dst;
+}
+
+function decodePalette_RGB5A3(paletteData: ArrayBufferSlice): Uint8Array {
+    const paletteCount = paletteData.byteLength >>> 1;
+    const dst = new Uint8Array(paletteCount * 4);
+    const view = paletteData.createDataView();
+    for (let i = 0; i < paletteCount; i++) {
+        const p = view.getUint16(i * 2 + 0);
+        if (p & 0x8000) {
+            // RGB5
+            dst[i * 4 + 0] = expand5to8((p >> 10) & 0x1F);
+            dst[i * 4 + 1] = expand5to8((p >> 5) & 0x1F);
+            dst[i * 4 + 2] = expand5to8(p & 0x1F);
+            dst[i * 4 + 3] = 0xFF;
+        } else {
+            // A3RGB4
+            dst[i * 4 + 0] = expand4to8((p >> 8) & 0x0F);
+            dst[i * 4 + 1] = expand4to8((p >> 4) & 0x0F);
+            dst[i * 4 + 2] = expand4to8(p & 0x0F);
+            dst[i * 4 + 3] = expand3to8(p >> 12);
+        }
+    }
+    return dst;
+}
+
+function decodePalette(paletteFormat: GX.TexPalette, paletteData: ArrayBufferSlice): Uint8Array {
+    switch (paletteFormat) {
+    case GX.TexPalette.IA8:
+        return decodePalette_IA8(paletteData);
+    case GX.TexPalette.RGB565:
+        return decodePalette_RGB565(paletteData);
+    case GX.TexPalette.RGB5A3:
+        return decodePalette_RGB5A3(paletteData);
+    }
+}
+
+function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels: Uint8Array, dstOffs: number) => void): DecodedTexture {
+    const pixels = new Uint8Array(texture.width * texture.height * 4);
+    for (let yy = 0; yy < texture.height; yy += bh) {
+        for (let xx = 0; xx < texture.width; xx += bw) {
+            for (let y = 0; y < bh; y++) {
+                for (let x = 0; x < bw; x++) {
+                    const dstPixel = (texture.width * (yy + y)) + xx + x;
+                    const dstOffs = dstPixel * 4;
+                    decoder(pixels, dstOffs);
+                }
+            }
+        }
+    }
+    return { pixels };
+}
+
+function decode_C4(texture: Texture): DecodedTexture {
+    assert(!!texture.paletteData);
+    const view = texture.data.createDataView();
+    const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
+    let srcOffs = 0;
+    return decode_Tiled(texture, 8, 8, (dst: Uint8Array, dstOffs: number): void => {
+        const ii = view.getUint8(srcOffs >> 1);
+        const i = ii >>> ((srcOffs & 1) ? 0 : 4) & 0x0F;
+        dst[dstOffs + 0] = paletteData[i * 4 + 0];
+        dst[dstOffs + 1] = paletteData[i * 4 + 1];
+        dst[dstOffs + 2] = paletteData[i * 4 + 2];
+        dst[dstOffs + 3] = paletteData[i * 4 + 3];
+        srcOffs++;
+    });
+}
+
+function decode_C8(texture: Texture): DecodedTexture {
+    assert(!!texture.paletteData);
+    const view = texture.data.createDataView();
+    const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
+    let srcOffs = 0;
+    return decode_Tiled(texture, 8, 4, (dst: Uint8Array, dstOffs: number): void => {
+        const i = view.getUint8(srcOffs);
+        dst[dstOffs + 0] = paletteData[i * 4 + 0];
+        dst[dstOffs + 1] = paletteData[i * 4 + 1];
+        dst[dstOffs + 2] = paletteData[i * 4 + 2];
+        dst[dstOffs + 3] = paletteData[i * 4 + 3];
+        srcOffs++;
+    });
+}
+
+function decode_C14X2(texture: Texture): DecodedTexture {
+    assert(!!texture.paletteData);
+    const view = texture.data.createDataView();
+    const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
+    let srcOffs = 0;
+    return decode_Tiled(texture, 4, 4, (dst: Uint8Array, dstOffs: number): void => {
+        const i = view.getUint16(srcOffs) & 0x3FFF;
+        dst[dstOffs + 0] = paletteData[i * 4 + 0];
+        dst[dstOffs + 1] = paletteData[i * 4 + 1];
+        dst[dstOffs + 2] = paletteData[i * 4 + 2];
+        dst[dstOffs + 3] = paletteData[i * 4 + 3];
+        srcOffs += 2;
+    });
+}
+
+function getPaletteFormatName(paletteFormat: GX.TexPalette): string {
+    switch (paletteFormat) {
+    case GX.TexPalette.IA8:
+        return "IA8";
+    case GX.TexPalette.RGB565:
+        return "RGB565";
+    case GX.TexPalette.RGB5A3:
+        return "RGB5A3";
+    default:
+        return "invalid";
+    }
+}
+
+export function getFormatName(format: GX.TexFormat, paletteFormat: GX.TexPalette): string {
     switch (format) {
     case GX.TexFormat.I4:
         return "I4";
@@ -164,11 +322,11 @@ export function getFormatName(format: GX.TexFormat): string {
     case GX.TexFormat.CMPR:
         return "CMPR";
     case GX.TexFormat.C4:
-        return "C4 (TODO)";
+        return `C4 (${getPaletteFormatName(paletteFormat)})`;
     case GX.TexFormat.C8:
-        return "C8 (TODO)";
+        return `C8 (${getPaletteFormatName(paletteFormat)})`;
     case GX.TexFormat.C14X2:
-        return "C14X2 (TODO)";
+        return `C14X2 (${getPaletteFormatName(paletteFormat)})`;
     default:
         return "invalid";
     }
@@ -197,8 +355,11 @@ export function decodeTexture(texture: Texture): Promise<DecodedTexture> {
         case GX.TexFormat.CMPR:
             return decode_Wasm(wasmInstance, texture, wasmInstance.decode_CMPR, 16);
         case GX.TexFormat.C4:
+            return decode_C4(texture);
         case GX.TexFormat.C8:
+            return decode_C8(texture);
         case GX.TexFormat.C14X2:
+            return decode_C14X2(texture);
         default:
             console.error(`Unsupported texture format ${texture.format} on texture ${texture.name}`);
             return decode_Dummy(texture);
