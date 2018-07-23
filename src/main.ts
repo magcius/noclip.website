@@ -32,6 +32,7 @@ const sceneGroups = [
     ZTP.sceneGroup,
     ZSS.sceneGroup,
     ZWW.sceneGroup,
+    ZWW.sceneGroupDev,
     SMS.sceneGroup,
     SMG.sceneGroup,
     MKDD.sceneGroup,
@@ -127,10 +128,10 @@ class SceneLoader {
 
         if (cameraState !== null) {
             cameraController.deserialize(cameraState);
-        } else if (scene !== null && scene.resetCamera) {
-            scene.resetCamera(cameraController.camera);
         } else {
             cameraController.camera.identity();
+            if (scene !== null && scene.resetCamera)
+                scene.resetCamera(cameraController.camera);
         }
 
         this.viewer.setScene(scene);
