@@ -123,7 +123,9 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
 }
 
 function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, name: string, isSkybox: boolean = false): Scene {
-    const bdlFile = rarc.findFile(`bdl/${name}.bdl`);
+    let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
+    if (!bdlFile)
+        bdlFile = rarc.findFile(`bmd/${name}.bmd`);
     if (!bdlFile)
         return null;
     const btkFile = rarc.findFile(`btk/${name}.btk`);
@@ -145,13 +147,21 @@ class WindWakerRoomRenderer implements Viewer.Scene {
 
     public model: Scene;
     public model1: Scene;
+    public model2: Scene;
     public model3: Scene;
+    public name: string;
+    public visible: boolean = true;
 
     constructor(gl: WebGL2RenderingContext, private textureHolder: J3DTextureHolder, public roomIdx: number, public roomRarc: RARC.RARC) {
+        this.name = `Room ${roomIdx}`;
+
         this.model = createScene(gl, textureHolder, roomRarc, `model`);
 
         // Ocean.
         this.model1 = createScene(gl, textureHolder, roomRarc, `model1`);
+
+        // Special effects / Skybox as seen in Hyrule.
+        this.model2 = createScene(gl, textureHolder, roomRarc, `model2`);
 
         // Windows / doors.
         this.model3 = createScene(gl, textureHolder, roomRarc, `model3`);
@@ -169,8 +179,10 @@ class WindWakerRoomRenderer implements Viewer.Scene {
 
     public setColors(colors?: Colors): void {
         if (colors !== undefined) {
-            this.model.setColorOverride(ColorOverride.K0, colors.light);
-            this.model.setColorOverride(ColorOverride.C0, colors.amb);
+            if (this.model) {
+                this.model.setColorOverride(ColorOverride.K0, colors.light);
+                this.model.setColorOverride(ColorOverride.C0, colors.amb);
+            }
 
             if (this.model1) {
                 this.model1.setColorOverride(ColorOverride.K0, colors.ocean);
@@ -181,8 +193,10 @@ class WindWakerRoomRenderer implements Viewer.Scene {
             if (this.model3)
                 this.model3.setColorOverride(ColorOverride.C0, colors.doors);
         } else {
-            this.model.setColorOverride(ColorOverride.K0, undefined);
-            this.model.setColorOverride(ColorOverride.C0, undefined);
+            if (this.model) {
+                this.model.setColorOverride(ColorOverride.K0, undefined);
+                this.model.setColorOverride(ColorOverride.C0, undefined);
+            }
 
             if (this.model1) {
                 this.model1.setColorOverride(ColorOverride.K0, undefined);
@@ -195,18 +209,31 @@ class WindWakerRoomRenderer implements Viewer.Scene {
         }
     }
 
+    public setVisible(v: boolean): void {
+        this.visible = v;
+    }
+
     public render(state: RenderState): void {
-        this.model.render(state);
+        if (!this.visible)
+            return;
+
+        if (this.model)
+            this.model.render(state);
         if (this.model1)
             this.model1.render(state);
+        if (this.model2)
+            this.model2.render(state);
         if (this.model3)
             this.model3.render(state);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
-        this.model.destroy(gl);
+        if (this.model)
+            this.model.destroy(gl);
         if (this.model1)
             this.model1.destroy(gl);
+        if (this.model2)
+            this.model2.destroy(gl);
         if (this.model3)
             this.model3.destroy(gl);
     }
@@ -317,10 +344,12 @@ class WindWakerRenderer implements Viewer.MainScene {
     private vr_back_cloud: Scene;
     public roomRenderers: WindWakerRoomRenderer[] = [];
 
-    constructor(gl: WebGL2RenderingContext, private textureHolder: J3DTextureHolder, private stageRarc: RARC.RARC, public cameraPos: CameraPos) {
+    constructor(gl: WebGL2RenderingContext, wantsSeaPlane: boolean, private textureHolder: J3DTextureHolder, private stageRarc: RARC.RARC, public cameraPos: CameraPos = null) {
         this.textures = textureHolder.viewerTextures;
 
-        this.seaPlane = new SeaPlane(gl);
+        if (wantsSeaPlane)
+            this.seaPlane = new SeaPlane(gl);
+
         this.vr_sky = createScene(gl, this.textureHolder, stageRarc, `vr_sky`, true);
         this.vr_uso_umi = createScene(gl, this.textureHolder, stageRarc, `vr_uso_umi`, true);
         this.vr_kasumi_mae = createScene(gl, this.textureHolder, stageRarc, `vr_kasumi_mae`, true);
@@ -334,18 +363,29 @@ class WindWakerRenderer implements Viewer.MainScene {
         const colors = timeOfDay === -1 ? undefined : getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
 
         if (colors !== undefined) {
-            this.seaPlane.setColor(colors.ocean);
-            this.vr_sky.setColorOverride(ColorOverride.K0, colors.vr_sky);
-            this.vr_uso_umi.setColorOverride(ColorOverride.K0, colors.vr_uso_umi);
-            this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, colors.vr_kasumi_mae);
-            this.vr_back_cloud.setColorOverride(ColorOverride.K0, colors.vr_back_cloud);
-            this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, colors.vr_back_cloud.a);
+            if (this.seaPlane)
+                this.seaPlane.setColor(colors.ocean);
+            if (this.vr_sky)
+                this.vr_sky.setColorOverride(ColorOverride.K0, colors.vr_sky);
+            if (this.vr_uso_umi)
+                this.vr_uso_umi.setColorOverride(ColorOverride.K0, colors.vr_uso_umi);
+            if (this.vr_kasumi_mae)
+                this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, colors.vr_kasumi_mae);
+            if (this.vr_back_cloud) {
+                this.vr_back_cloud.setColorOverride(ColorOverride.K0, colors.vr_back_cloud);
+                this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, colors.vr_back_cloud.a);
+            }
         } else {
-            this.vr_sky.setColorOverride(ColorOverride.K0, undefined);
-            this.vr_uso_umi.setColorOverride(ColorOverride.K0, undefined);
-            this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, undefined);
-            this.vr_back_cloud.setColorOverride(ColorOverride.K0, undefined);
-            this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, undefined);
+            if (this.vr_sky)
+                this.vr_sky.setColorOverride(ColorOverride.K0, undefined);
+            if (this.vr_uso_umi)
+                this.vr_uso_umi.setColorOverride(ColorOverride.K0, undefined);
+            if (this.vr_kasumi_mae)
+                this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, undefined);
+            if (this.vr_back_cloud) {
+                this.vr_back_cloud.setColorOverride(ColorOverride.K0, undefined);
+                this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, undefined);
+            }
         }
 
         for (const roomRenderer of this.roomRenderers) {
@@ -378,32 +418,44 @@ class WindWakerRenderer implements Viewer.MainScene {
         selector.selectItem(3); // Day
         timeOfDayPanel.contents.appendChild(selector.elem);
 
-        return [timeOfDayPanel];
+        const layersPanel = new UI.LayerPanel();
+        layersPanel.setLayers(this.roomRenderers);
+
+        return [timeOfDayPanel, layersPanel];
     }
 
-    public resetCamera(camera: Camera) {
-        const m = mat4.create();
-        this.cameraPos.set(m);
-        mat4.invert(camera.worldMatrix, m);
-        camera.worldMatrixUpdated();
+    public resetCamera(camera: Camera): void {
+        if (this.cameraPos) {
+            const m = mat4.create();
+            this.cameraPos.set(m);
+            mat4.invert(camera.worldMatrix, m);
+            camera.worldMatrixUpdated();
+        }
     }
 
     public render(state: RenderState) {
         const gl = state.gl;
 
-        // Render skybox.
-        this.vr_sky.render(state);
-        this.vr_kasumi_mae.render(state);
-        this.vr_uso_umi.render(state);
-        this.vr_back_cloud.render(state);
+        if (this.vr_sky) {
+            // Render skybox.
+            this.vr_sky.render(state);
+            if (this.vr_kasumi_mae)
+                this.vr_kasumi_mae.render(state);
+            if (this.vr_uso_umi)
+                this.vr_uso_umi.render(state);
+            if (this.vr_back_cloud)
+                this.vr_back_cloud.render(state);
 
-        state.useFlags(depthClearFlags);
-        gl.clear(gl.DEPTH_BUFFER_BIT);
+            state.useFlags(depthClearFlags);
+            gl.clear(gl.DEPTH_BUFFER_BIT);
+        }
 
         state.useFlags(RenderFlags.default);
 
-        // Render sea plane.
-        this.seaPlane.render(state);
+        if (this.seaPlane) {
+            // Render sea plane.
+            this.seaPlane.render(state);
+        }
 
         for (let i = 0; i < this.roomRenderers.length; i++) {
             const roomRenderer = this.roomRenderers[i];
@@ -413,84 +465,59 @@ class WindWakerRenderer implements Viewer.MainScene {
 
     public destroy(gl: WebGL2RenderingContext) {
         this.textureHolder.destroy(gl);
-        this.vr_sky.destroy(gl);
-        this.vr_kasumi_mae.destroy(gl);
-        this.vr_uso_umi.destroy(gl);
-        this.vr_back_cloud.destroy(gl);
+        if (this.vr_sky)
+            this.vr_sky.destroy(gl);
+        if (this.vr_kasumi_mae)
+            this.vr_kasumi_mae.destroy(gl);
+        if (this.vr_uso_umi)
+            this.vr_uso_umi.destroy(gl);
+        if (this.vr_back_cloud)
+            this.vr_back_cloud.destroy(gl);
+        if (this.seaPlane)
+            this.seaPlane.destroy(gl);
         for (const roomRenderer of this.roomRenderers)
             roomRenderer.destroy(gl);
     }
 }
 
-class WindWakerSceneDesc {
+class SceneDesc {
     public id: string;
-    public constructor(public path: string, public name: string, public cameraPos: CameraPos) {
-        this.id = path;
-    }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        const roomIdx = parseInt(this.path.match(/Room(\d+)/)[1], 10);
+    public constructor(public stageDir: string, public name: string, public rooms: number[] = [0], public cameraPos: CameraPos = null) {
+        this.id = stageDir;
 
-        return Progressable.all([
-            this.fetchRarc(`data/j3d/ww/sea/Stage.arc`),
-            this.fetchRarc(this.path),
-        ]).then(([stageRarc, roomRarc]) => {
-            const textureHolder = new J3DTextureHolder();
-            const renderer = new WindWakerRenderer(gl, textureHolder, stageRarc, this.cameraPos);
-            renderer.roomRenderers.push(new WindWakerRoomRenderer(gl, textureHolder, roomIdx, roomRarc));
-            return renderer;
-        });
-    }
-
-    private fetchRarc(path: string): Progressable<RARC.RARC> {
-        return fetch(path).then((buffer: ArrayBufferSlice) => {
-            if (readString(buffer, 0, 4) === 'Yaz0')
-                return Yaz0.decompress(buffer);
-            else
-                return buffer;
-        }).then((buffer: ArrayBufferSlice) => {
-            return RARC.parse(buffer);
-        });
-    }
-}
-
-class SeaSceneDesc {
-    public id: string;
-    public constructor(public name: string, public cameraPos: CameraPos) {
-        this.id = 'sea';
+        // Garbage hack.
+        if (this.stageDir === 'sea' && rooms.length === 1)
+            this.id = `Room${rooms[0]}.arc`;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const rarcs = [];
 
-        rarcs.push(this.fetchRarc(`data/j3d/ww/sea/Stage.arc`));
-        for (let i = 1; i <= 49; i++) {
-            // Tower of the Gods is not spawned by default, and has no map model.
-            if (i === 26)
-                continue;
-            rarcs.push(this.fetchRarc(`data/j3d/ww/sea/Room${i}.arc`));
+        // XXX(jstpierre): This is really terrible code.
+        rarcs.push(this.fetchRarc(`data/j3d/ww/${this.stageDir}/Stage.arc`));
+        for (const r of this.rooms) {
+            const roomIdx = Math.abs(r);
+            rarcs.push(this.fetchRarc(`data/j3d/ww/${this.stageDir}/Room${roomIdx}.arc`));
         }
 
         return Progressable.all(rarcs).then(([stageRarc, ...roomRarcs]) => {
             const textureHolder = new J3DTextureHolder();
-            const renderer = new WindWakerRenderer(gl, textureHolder, stageRarc.rarc, this.cameraPos);
-            const modelMatrix = mat4.create();
-            const scale = 0.4;
-            const gridSize = 100000 * scale;
+            const wantsSeaPlane = this.stageDir === 'sea';
+            const renderer = new WindWakerRenderer(gl, wantsSeaPlane, textureHolder, stageRarc.rarc, this.cameraPos);
             for (const roomRarc of roomRarcs) {
                 const roomIdx = parseInt(roomRarc.path.match(/Room(\d+)/)[1], 10);
-                const roomRenderer = new WindWakerRoomRenderer(gl, textureHolder, roomIdx, roomRarc.rarc);
-                const gridX = (roomIdx % 7) | 0;
-                const gridY = (roomIdx / 7) | 0;
-                const tx = (gridX - 3.5) * gridSize;
-                const tz = (gridY - 3.5) * gridSize;
-                mat4.fromTranslation(modelMatrix, [tx, 0, tz]);
-                mat4.scale(modelMatrix, modelMatrix, [scale, scale, scale]);
-                roomRenderer.setModelMatrix(modelMatrix);
+                const visible = roomIdx === 0 || this.rooms.indexOf(-roomIdx) === -1;
+                const roomRenderer = this.spawnRoom(gl, textureHolder, roomIdx, roomRarc.rarc);
+                roomRenderer.visible = visible;
                 renderer.roomRenderers.push(roomRenderer);
             }
             return renderer;
         });
+    }
+
+    protected spawnRoom(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, roomIdx: number, roomRarc: RARC.RARC): WindWakerRoomRenderer {
+        return new WindWakerRoomRenderer(gl, textureHolder, roomIdx, roomRarc);
     }
 
     private fetchRarc(path: string): Progressable<{ path: string, rarc: RARC.RARC }> {
@@ -506,15 +533,87 @@ class SeaSceneDesc {
     }
 }
 
+class FullSeaSceneDesc extends SceneDesc {
+    // Place islands on sea.
+    protected spawnRoom(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, roomIdx: number, roomRarc: RARC.RARC): WindWakerRoomRenderer {
+        const roomRenderer = super.spawnRoom(gl, textureHolder, roomIdx, roomRarc);
+
+        const modelMatrix = mat4.create();
+        const scale = 0.4;
+        const gridSize = 100000 * scale;
+
+        const gridX = (roomIdx % 7) | 0;
+        const gridY = (roomIdx / 7) | 0;
+        const tx = (gridX - 3.5) * gridSize;
+        const tz = (gridY - 3.5) * gridSize;
+        mat4.fromTranslation(modelMatrix, [tx, 0, tz]);
+        mat4.scale(modelMatrix, modelMatrix, [scale, scale, scale]);
+        roomRenderer.setModelMatrix(modelMatrix);
+        return roomRenderer;
+    }
+}
+
 const sceneDescs: Viewer.SceneDesc[] = [
-    new WindWakerSceneDesc("data/j3d/ww/sea/Room11.arc", "Windfall Island",     new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
-    new WindWakerSceneDesc("data/j3d/ww/sea/Room13.arc", "Dragon Roost Island", new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
-    new WindWakerSceneDesc("data/j3d/ww/sea/Room41.arc", "Forest Haven",        new CameraPos(20000, 1760, -5500, 16000, 1000, 0)),
-    new WindWakerSceneDesc("data/j3d/ww/sea/Room44.arc", "Outset Island",       new CameraPos(6000, 6000, 6000, 0, 0, 20000)),
-    new SeaSceneDesc("The Great Sea", new CameraPos(0, 0, 0, 0, 0, 0)),
+    new SceneDesc("sea", "Windfall Island",     [11], new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
+    new SceneDesc("sea", "Dragon Roost Island", [13], new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
+    new SceneDesc("sea", "Forest Haven",        [41], new CameraPos(20000, 1760, -5500, 16000, 1000, 0)),
+    new SceneDesc("sea", "Outset Island",       [44], new CameraPos(6000, 6000, 6000, 0, 0, 20000)),
+    new FullSeaSceneDesc("sea", "The Great Sea", [
+         1,  2,  3,  4,  5,  6,  7,
+         8,  9, 10, 11, 12, 13, 14,
+        15, 16, 17, 18, 19, 20, 21,
+        22, 23, 24, 25,     27, 28,
+        29, 30, 31, 32, 33, 34, 35,
+        36, 37, 38, 39, 40, 41, 42,
+        43, 44, 45, 46, 47, 48, 49,
+    ]),
+
+    new SceneDesc("kindan", "Forbidden Woods", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+    new SceneDesc("M_NewD2", "Dragon Roost Cavern", [0, 1, 2, -3, 4, -5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+    new SceneDesc("Siren", "Temple of the Gods", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, -15, 16, 17, -18, 19, 20, 21, 22, -23]),
+
+    new SceneDesc("Edaichi", "Earth Temple Entrance"),
+    new SceneDesc("M_Dai", "Earth Temple", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]),
+
+    new SceneDesc("Ekaze", "Wind Temple Entrance"),
+    new SceneDesc("kaze", "Wind Temple", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+
+    // Location names taken from CryZe's Debug Menu.
+    // https://github.com/CryZe/WindWakerDebugMenu/blob/master/src/warp_menu/consts.rs
+    new SceneDesc("Hyrule", "Hyrule Field"),
+    new SceneDesc("Hyroom", "Hyrule Castle"),
+    new SceneDesc("kenroom", "Master Sword Chamber"),
+    new SceneDesc("Asoko", "Tetra's Ship Interior"),
+    new SceneDesc("PShip", "Ghost Ship"),
+    new SceneDesc("Kaisen", "Windfall Sploosh Game Room"),
+    new SceneDesc("Nitiyou", "School of Joy"),
+    new SceneDesc("Obombh", "Bomb Shop"),
+    new SceneDesc("Ocmera", "Lenzo's House"),
+    new SceneDesc("Opub", "Cafe Bar"),
+    new SceneDesc("Orichh", "House of Wealth"),
+    new SceneDesc("Pdrgsh", "Chu Jelly Juice Shop"),
+    new SceneDesc("Pnezumi", "Windfall Island Jail"),
 ];
 
 const id = "zww";
 const name = "The Legend of Zelda: The Wind Waker";
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+
+const sceneDescsDev: Viewer.SceneDesc[] = [
+    new SceneDesc("Cave08", "Wind Temple (Early)", [1, 2, 3]),
+    new SceneDesc("H_test", "Pig Chamber"),
+    new SceneDesc("Ebesso", "Island with House"),
+    new SceneDesc("KATA_HB", "Bridge Room"),
+    new SceneDesc("KATA_RM", "Large Empty Room"),
+    new SceneDesc("kazan", "Fire Mountain"),
+    new SceneDesc("Msmoke", "Smoke Test Room", [0, 1]),
+    new SceneDesc("Mukao", "Early Headstone Island"),
+    new SceneDesc("tincle", "Tingle's Room"),
+    new SceneDesc("VrTest", "Early Environment Art Test"),
+];
+
+const idDev = "zww_dev";
+const nameDev = "Wind Waker (Unused Maps)";
+
+export const sceneGroupDev: Viewer.SceneGroup = { id: idDev, name: nameDev, sceneDescs: sceneDescsDev };
