@@ -585,7 +585,7 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SceneDesc("kenroom", "Master Sword Chamber"),
     new SceneDesc("Asoko", "Tetra's Ship Interior"),
     new SceneDesc("PShip", "Ghost Ship"),
-    new SceneDesc("Kaisen", "Windfall Sploosh Game Room"),
+    new SceneDesc("Kaisen", "Windfall Battleship Game Room"),
     new SceneDesc("Nitiyou", "School of Joy"),
     new SceneDesc("Obombh", "Bomb Shop"),
     new SceneDesc("Ocmera", "Lenzo's House"),
