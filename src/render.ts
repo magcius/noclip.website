@@ -173,6 +173,8 @@ export class ColorTarget {
     }
 
     public setParameters(gl: WebGL2RenderingContext, width: number, height: number, samples: number = RENDER_SAMPLES) {
+        samples = Math.min(samples, gl.getParameter(gl.MAX_SAMPLES));
+        
         if (this.width === width && this.height === height && this.samples === samples)
             return;
 
