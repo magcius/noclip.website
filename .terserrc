@@ -1,5 +1,0 @@
-{
-    "mangle": {
-        "reserved": [ "_deswizzle", "deswizzleWorker" ]
-    }
-}
