@@ -49,6 +49,7 @@ Temporary Items
 node_modules
 
 assemblyscript/
+parcel/
 .cache/
 
 dist/*

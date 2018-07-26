@@ -5,7 +5,56 @@ import { GX2Surface, DeswizzledSurface } from './gx2_surface';
 import { WorkerPool, makeWorkerFromSource } from '../worker_util';
 
 // This is all contained in one function in order to make it easier to Worker-ize.
-function _deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: number): DeswizzledSurface {
+function _deswizzle(inSurface: any, srcBuffer: ArrayBuffer, mipLevel: number): DeswizzledSurface {
+    // TODO(jstpierre): Until I figure out how to make Parcel support
+    // TypeScript const enum, I'm just going to duplicate the structures.
+    // The web platform is pretty bad-ass in how it doesn't work.
+
+    const enum GX2SurfaceFormat {
+        FLAG_SRGB   = 0x0400,
+        FLAG_SNORM  = 0x0200,
+        FMT_MASK    = 0x003F,
+        FMT_BC1     = 0x0031,
+        FMT_BC3     = 0x0033,
+        FMT_BC4     = 0x0034,
+        FMT_BC5     = 0x0035,
+    
+        FMT_TCS_R8_G8_B8_A8 = 0x1a,
+    
+        BC1_UNORM   = FMT_BC1,
+        BC1_SRGB    = FMT_BC1 | FLAG_SRGB,
+        BC3_UNORM   = FMT_BC3,
+        BC3_SRGB    = FMT_BC3 | FLAG_SRGB,
+        BC4_UNORM   = FMT_BC4,
+        BC4_SNORM   = FMT_BC4 | FLAG_SNORM,
+        BC5_UNORM   = FMT_BC5,
+        BC5_SNORM   = FMT_BC5 | FLAG_SNORM,
+    
+        TCS_R8_G8_B8_A8_UNORM = FMT_TCS_R8_G8_B8_A8,
+        TCS_R8_G8_B8_A8_SRGB  = FMT_TCS_R8_G8_B8_A8 | FLAG_SRGB,
+    }
+    
+    const enum GX2TileMode {
+        _1D_TILED_THIN1 = 0x02,
+        _2D_TILED_THIN1 = 0x04,
+    }
+    
+    interface GX2Surface {
+        format: GX2SurfaceFormat;
+        tileMode: GX2TileMode;
+        aaMode: GX2AAMode;
+        swizzle: number;
+        width: number;
+        height: number;
+        depth: number;
+        pitch: number;
+        numMips: number;
+
+        texDataSize: number;
+        mipDataSize: number;
+        mipDataOffsets: number[];
+    }
+
     const numPipes = 2;
     const numBanks = 4;
     const microTileWidth = 8;
@@ -18,8 +67,6 @@ function _deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: num
     const numPipeBits = 1;
     const numBankBits = 2;
     const numGroupBits = 8;
-    const rowSize = 2048;
-    const swapSize = 256;
     const splitSize = 2048;
 
     function memcpy(dst: Uint8Array, dstOffs: number, src: ArrayBuffer, srcOffs: number, length: number) {
@@ -33,11 +80,6 @@ function _deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: num
         return x;
     }
 
-    function align(n: number, multiple: number): number {
-        const mask = (multiple - 1);
-        return (n + mask) & ~mask;
-    }
-
     function computeSurfaceMipLevelTileMode(surface: GX2Surface, mipLevel: number): void {
         // Level starts at 0.
         if (mipLevel > 0) {
@@ -47,7 +89,6 @@ function _deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: num
 
             const numSamples = 1 << surface.aaMode;
 
-            const thickness = computeSurfaceThickness(surface.tileMode);
             const bytesPerBlock = computeSurfaceBytesPerBlock(surface.format);
             const microTileThickness = computeSurfaceThickness(surface.tileMode);
             const bytesPerSample = bytesPerBlock * microTileThickness * microTilePixels;
@@ -210,7 +251,6 @@ function _deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: num
         const isSamplesSplit = numSamples > 1 && (microTileBytes > splitSize);
         const samplesPerSlice = Math.max(isSamplesSplit ? (splitSize / bytesPerSample) : numSamples, 1);
         const numSampleSplits = isSamplesSplit ? (numSamples / samplesPerSlice) : 1;
-        const numSurfaceSamples = isSamplesSplit ? samplesPerSlice : numSamples;
 
         const rotation = computeSurfaceRotationFromTileMode(surface.tileMode);
         const macroTilePitch = computeMacroTilePitch(surface.tileMode);
@@ -265,6 +305,7 @@ function _deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: num
     }
 
     // Have to spell this thing out the long way...
+    // TODO(jstpierre): Fix this dumb-ness when we fix the worker stuff.
     const surface: GX2Surface = {
         format: inSurface.format,
         tileMode: inSurface.tileMode,
@@ -283,9 +324,6 @@ function _deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: num
 
     // For non-BC formats, "block" = 1 pixel.
     const blockSize = computeSurfaceBlockWidth(surface.format);
-
-    let srcWidthBlocks = ((surface.width + blockSize - 1) / blockSize) | 0;
-    let srcHeightBlocks = ((surface.height + blockSize - 1) / blockSize) | 0;
 
     const dstWidth = inSurface.width >>> mipLevel;
     const dstHeight = inSurface.height >>> mipLevel;

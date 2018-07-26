@@ -340,9 +340,6 @@ export function decodeSurface(surface: GX2Surface, texData: ArrayBufferSlice, mi
         levelData = mipData.slice(offset);
     }
 
-    const width = surface.width;
-    const height = surface.height;
-
     return deswizzleSurface(surface, levelData, mipLevel).then((deswizzledSurface: DeswizzledSurface): DecodedSurface => {
         switch (surface.format) {
         case GX2SurfaceFormat.BC1_UNORM:
