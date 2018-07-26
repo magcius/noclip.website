@@ -1,6 +1,5 @@
 
 import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat } from './gx2_enum';
-import { deswizzler } from './gx2_swizzle';
 import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 
@@ -786,7 +785,7 @@ export class Scene implements Viewer.Scene {
 
     public destroy(gl: WebGL2RenderingContext) {
         // Tear down the deswizzle workers.
-        deswizzler.terminate();
+        GX2Texture.deswizzler.terminate();
         this.arena.destroy(gl);
     }
 }

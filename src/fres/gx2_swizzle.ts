@@ -1,60 +1,15 @@
 
-import { GX2AAMode } from './gx2_enum';
+import { GX2SurfaceFormat, GX2TileMode } from './gx2_enum';
 import { GX2Surface, DeswizzledSurface } from './gx2_surface';
 
-import { WorkerPool, makeWorkerFromSource } from '../worker_util';
+export interface DeswizzleRequest {
+    surface: GX2Surface;
+    buffer: ArrayBuffer;
+    mipLevel: number;
+    priority: number;
+}
 
-// This is all contained in one function in order to make it easier to Worker-ize.
-function _deswizzle(inSurface: any, srcBuffer: ArrayBuffer, mipLevel: number): DeswizzledSurface {
-    // TODO(jstpierre): Until I figure out how to make Parcel support
-    // TypeScript const enum, I'm just going to duplicate the structures.
-    // The web platform is pretty bad-ass in how it doesn't work.
-
-    const enum GX2SurfaceFormat {
-        FLAG_SRGB   = 0x0400,
-        FLAG_SNORM  = 0x0200,
-        FMT_MASK    = 0x003F,
-        FMT_BC1     = 0x0031,
-        FMT_BC3     = 0x0033,
-        FMT_BC4     = 0x0034,
-        FMT_BC5     = 0x0035,
-    
-        FMT_TCS_R8_G8_B8_A8 = 0x1a,
-    
-        BC1_UNORM   = FMT_BC1,
-        BC1_SRGB    = FMT_BC1 | FLAG_SRGB,
-        BC3_UNORM   = FMT_BC3,
-        BC3_SRGB    = FMT_BC3 | FLAG_SRGB,
-        BC4_UNORM   = FMT_BC4,
-        BC4_SNORM   = FMT_BC4 | FLAG_SNORM,
-        BC5_UNORM   = FMT_BC5,
-        BC5_SNORM   = FMT_BC5 | FLAG_SNORM,
-    
-        TCS_R8_G8_B8_A8_UNORM = FMT_TCS_R8_G8_B8_A8,
-        TCS_R8_G8_B8_A8_SRGB  = FMT_TCS_R8_G8_B8_A8 | FLAG_SRGB,
-    }
-    
-    const enum GX2TileMode {
-        _1D_TILED_THIN1 = 0x02,
-        _2D_TILED_THIN1 = 0x04,
-    }
-    
-    interface GX2Surface {
-        format: GX2SurfaceFormat;
-        tileMode: GX2TileMode;
-        aaMode: GX2AAMode;
-        swizzle: number;
-        width: number;
-        height: number;
-        depth: number;
-        pitch: number;
-        numMips: number;
-
-        texDataSize: number;
-        mipDataSize: number;
-        mipDataOffsets: number[];
-    }
-
+export function deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLevel: number): DeswizzledSurface {
     const numPipes = 2;
     const numBanks = 4;
     const microTileWidth = 8;
@@ -358,49 +313,3 @@ function _deswizzle(inSurface: any, srcBuffer: ArrayBuffer, mipLevel: number): D
     const height = dstHeight;
     return { width, height, pixels };
 }
-
-interface DeswizzleRequest {
-    surface: GX2Surface;
-    buffer: ArrayBuffer;
-    mipLevel: number;
-    priority: number;
-}
-
-function deswizzleWorker(global: any): void {
-    global.onmessage = (e: MessageEvent) => {
-        const req: DeswizzleRequest = e.data;
-        const deswizzledSurface = _deswizzle(req.surface, req.buffer, req.mipLevel);
-        global.postMessage(deswizzledSurface, [deswizzledSurface.pixels]);
-    };
-}
-
-function makeDeswizzleWorker(): Worker {
-    return makeWorkerFromSource([
-        _deswizzle.toString(),
-        deswizzleWorker.toString(),
-        'deswizzleWorker(this)',
-    ]);
-}
-
-class Deswizzler {
-    private pool: WorkerPool<DeswizzleRequest, DeswizzledSurface>;
-
-    constructor() {
-        this.pool = new WorkerPool<DeswizzleRequest, DeswizzledSurface>(makeDeswizzleWorker);
-    }
-
-    public deswizzle(surface: GX2Surface, buffer: ArrayBuffer, mipLevel: number): Promise<DeswizzledSurface> {
-        const req: DeswizzleRequest = { surface, buffer, mipLevel, priority: mipLevel };
-        return this.pool.execute(req);
-    }
-
-    public terminate() {
-        this.pool.terminate();
-    }
-
-    public build() {
-        this.pool.build();
-    }
-}
-
-export const deswizzler: Deswizzler = new Deswizzler();
