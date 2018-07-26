@@ -746,6 +746,9 @@ export class Scene implements Viewer.Scene {
                 canvas.height = decompressedSurface.height;
                 canvas.title = `${textureEntry.entry.name} ${surface.format} (${surface.width}x${surface.height})`;
                 GX2Texture.surfaceToCanvas(canvas, decompressedSurface);
+
+                if (textureEntry.entry.name === 'PlazaBridgeFloorSlope_Alb')
+                    console.log(mipLevel, decodedSurface);
             });
         }
 
