@@ -259,22 +259,7 @@ export function deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLeve
         return addr;
     }
 
-    // Have to spell this thing out the long way...
-    // TODO(jstpierre): Fix this dumb-ness when we fix the worker stuff.
-    const surface: GX2Surface = {
-        format: inSurface.format,
-        tileMode: inSurface.tileMode,
-        aaMode: inSurface.aaMode,
-        swizzle: inSurface.swizzle,
-        width: inSurface.width,
-        height: inSurface.height,
-        depth: inSurface.depth,
-        pitch: inSurface.pitch,
-        numMips: inSurface.numMips,
-        texDataSize: inSurface.texDataSize,
-        mipDataSize: inSurface.mipDataSize,
-        mipDataOffsets: inSurface.mipDataOffsets,
-    };
+    const surface: GX2Surface = { ...inSurface };
     computeSurfaceMipLevelTileMode(surface, mipLevel);
 
     // For non-BC formats, "block" = 1 pixel.
