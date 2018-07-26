@@ -659,7 +659,7 @@ export class Scene implements Viewer.Scene {
         }
         */
 
-        if (ext_compressed_texture_s3tc) {
+        if (tex.flag === 'UNORM' && ext_compressed_texture_s3tc) {
             switch (tex.type) {
             case 'BC1':
                 return ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT;
@@ -701,7 +701,7 @@ export class Scene implements Viewer.Scene {
 
                 // XXX(jstpierre): Sometimes Splatoon uses non-block-sized textures. OpenGL does
                 // not like this one bit. If this is the case, decompress in software.
-                const isBlockSized = !!(texture.surface.width & 0x03) || !!(texture.surface.height & 0x03);
+                const isBlockSized = (texture.surface.width & 0x03) === 0 && (texture.surface.height & 0x03) === 0;
 
                 // First check if we have to decompress compressed textures.
                 switch (decodedSurface.type) {
@@ -746,9 +746,6 @@ export class Scene implements Viewer.Scene {
                 canvas.height = decompressedSurface.height;
                 canvas.title = `${textureEntry.entry.name} ${surface.format} (${surface.width}x${surface.height})`;
                 GX2Texture.surfaceToCanvas(canvas, decompressedSurface);
-
-                if (textureEntry.entry.name === 'PlazaBridgeFloorSlope_Alb')
-                    console.log(mipLevel, decodedSurface);
             });
         }
 
