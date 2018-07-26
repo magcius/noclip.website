@@ -1,8 +1,33 @@
 
-import { GX2SurfaceFormat, GX2TileMode, GX2AAMode } from './gx2_enum';
+import { GX2SurfaceFormat } from './gx2_enum';
 import { GX2Surface, DeswizzledSurface } from './gx2_surface';
-import { deswizzler } from './gx2_swizzle';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+
+import { WorkerPool } from '../worker_util';
+import { DeswizzleRequest } from './gx2_swizzle';
+
+class Deswizzler {
+    private pool: WorkerPool<DeswizzleRequest, DeswizzledSurface>;
+
+    constructor() {
+        this.pool = new WorkerPool<DeswizzleRequest, DeswizzledSurface>(() => new Worker('./worker/gx2_swizzle_worker.ts'));
+    }
+
+    public deswizzle(surface: GX2Surface, buffer: ArrayBuffer, mipLevel: number): Promise<DeswizzledSurface> {
+        const req: DeswizzleRequest = { surface, buffer, mipLevel, priority: mipLevel };
+        return this.pool.execute(req);
+    }
+
+    public terminate() {
+        this.pool.terminate();
+    }
+
+    public build() {
+        this.pool.build();
+    }
+}
+
+export const deswizzler: Deswizzler = new Deswizzler();
 
 interface DecodedSurfaceRGBA extends DeswizzledSurface {
     type: 'RGBA';

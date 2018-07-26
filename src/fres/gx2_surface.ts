@@ -1,7 +1,6 @@
 
 import { GX2SurfaceFormat, GX2TileMode, GX2AAMode, GX2Dimension } from './gx2_enum';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert } from '../util';
 
 export interface GX2Surface {
     format: GX2SurfaceFormat;
