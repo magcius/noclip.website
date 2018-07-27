@@ -22,12 +22,15 @@ uniform mat4 u_projection;
 layout(location = ${IVProgram.a_Position}) attribute vec3 a_Position;
 layout(location = ${IVProgram.a_Normal}) attribute vec3 a_Normal;
 
-out vec3 v_Normal;
+out vec3 v_LightColor;
 
 void main() {
     const float t_ModelScale = 20.0;
     gl_Position = u_projection * u_modelView * vec4(a_Position * t_ModelScale, 1.0);
-    v_Normal = a_Normal;
+    vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
+    float t_LightIntensity = dot(-a_Normal, t_LightDirection);
+    vec3 t_LightColor = t_LightIntensity * vec3(0.3);
+    v_LightColor = t_LightColor;
 }
 `;
 
@@ -35,14 +38,10 @@ void main() {
 precision mediump float;
 
 uniform vec3 u_Color;
-
-in vec3 v_Normal;
+in vec3 v_LightColor;
 
 void main() {
-    vec3 u_LightDirection = normalize(vec3(.2, -1, .5));
-    float t_LightIntensity = dot(-v_Normal, u_LightDirection);
-    vec3 t_LightColor = t_LightIntensity * vec3(0.3);
-    gl_FragColor = vec4(u_Color + t_LightColor, 1.0);
+    gl_FragColor = vec4(u_Color + v_LightColor, 1.0);
 }
 `;
 

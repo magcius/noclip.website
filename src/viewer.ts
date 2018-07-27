@@ -15,7 +15,6 @@ export interface Texture {
 }
 
 export interface Scene {
-    textures: Texture[];
     render(state: RenderState): void;
     destroy(gl: WebGL2RenderingContext): void;
 }

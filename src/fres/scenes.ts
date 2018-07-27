@@ -2,7 +2,8 @@
 import * as BFRES from './bfres';
 import * as SARC from './sarc';
 import * as Yaz0 from '../compression/Yaz0';
-import { Scene } from './render';
+import { ModelRenderer, GX2TextureHolder } from './render';
+import * as GX2Texture from './gx2_texture';
 
 import * as Viewer from '../viewer';
 
@@ -10,19 +11,11 @@ import { RenderState } from '../render';
 import { readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
-    const textures: Viewer.Texture[] = [];
-    for (const scene of scenes)
-        if (scene)
-            textures.push.apply(textures, scene.textures);
-    return textures;
-}
-
 class FRESRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[];
 
-    constructor(public mainScene: Viewer.Scene) {
-        this.textures = collectTextures([this.mainScene]);
+    constructor(private textureHolder: GX2TextureHolder, public mainScene: Viewer.Scene) {
+        this.textures = textureHolder.viewerTextures;
     }
 
     public render(state: RenderState) {
@@ -34,17 +27,20 @@ class FRESRenderer implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        GX2Texture.deswizzler.terminate();
+
         if (this.mainScene)
             this.mainScene.destroy(gl);
     }
 }
 
-export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false): Viewer.MainScene {
+export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): FRESRenderer {
     const fres = BFRES.parse(buffer);
-    return new FRESRenderer(new Scene(gl, fres, isSkybox));
+    const textureHolder = new GX2TextureHolder();
+    return new FRESRenderer(textureHolder, new ModelRenderer(gl, textureHolder, fres, fres.fmdl[0].fmdl));
 }
 
-export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice, isSkybox: boolean = false): Promise<Viewer.Scene> {
+export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Promise<Viewer.Scene> {
     return Promise.resolve(buffer).then((buffer: ArrayBufferSlice) => {
         if (readString(buffer, 0, 4) === 'Yaz0')
             return Yaz0.decompress(buffer);
@@ -53,6 +49,6 @@ export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: Ar
     }).then((buffer: ArrayBufferSlice) => {
         const sarc = SARC.parse(buffer);
         const file = sarc.files.find((file) => file.name.endsWith('.bfres'));
-        return createSceneFromFRESBuffer(gl, file.buffer, isSkybox);
+        return createSceneFromFRESBuffer(gl, file.buffer);
     });
 }

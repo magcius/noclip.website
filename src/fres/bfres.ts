@@ -4,6 +4,7 @@ import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexX
 
 import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { TextureBase } from '../TextureHolder';
 
 function readBinPtrT(view: DataView, offs: number, littleEndian: boolean) {
     const offs2 = view.getInt32(offs, littleEndian);
@@ -476,19 +477,22 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
     return { fvtx, fshp, fmat };
 }
 
-export interface TextureEntry {
+export interface FTEXEntry extends TextureBase {
+    name: string;
+    width: number;
+    height: number;
     entry: ResDicEntry;
-    texture: DecodableTexture;
+    ftex: DecodableTexture;
 }
 
-export interface ModelEntry {
+export interface FMDLEntry {
     entry: ResDicEntry;
     fmdl: FMDL;
 }
 
 export interface FRES {
-    textures: TextureEntry[];
-    models: ModelEntry[];
+    ftex: FTEXEntry[];
+    fmdl: FMDLEntry[];
 }
 
 export function parse(buffer: ArrayBufferSlice): FRES {
@@ -532,17 +536,17 @@ export function parse(buffer: ArrayBufferSlice): FRES {
     const ftexTable = parseResDicIdx(0x01);
     const fskaTable = parseResDicIdx(0x02);
 
-    const textures: TextureEntry[] = [];
+    const ftex: FTEXEntry[] = [];
     for (const entry of ftexTable) {
-        const texture = parseFTEX(buffer, entry, littleEndian);
-        textures.push({ entry, texture });
+        const ftex_ = parseFTEX(buffer, entry, littleEndian);
+        ftex.push({ name: entry.name, width: ftex_.surface.width, height: ftex_.surface.height, entry, ftex: ftex_ });
     }
 
-    const models: ModelEntry[] = [];
+    const fmdl: FMDLEntry[] = [];
     for (const entry of fmdlTable) {
-        const fmdl = parseFMDL(buffer, entry, littleEndian);
-        models.push({ entry, fmdl });
+        const fmdl_ = parseFMDL(buffer, entry, littleEndian);
+        fmdl.push({ entry, fmdl: fmdl_ });
     }
 
-    return { textures, models };
+    return { ftex, fmdl };
 }

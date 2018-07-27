@@ -4,14 +4,15 @@ import { mat4, mat2d } from 'gl-matrix';
 import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, BRK, DRW1JointKind, BCK } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
-import { TextureMapping, MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, translateTexFilter, translateWrapMode, TextureHolder } from '../gx/gx_render';
+import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, translateTexFilter, translateWrapMode, GXTextureHolder } from '../gx/gx_render';
 import * as Viewer from '../viewer';
 
 import { RenderFlags, RenderState } from '../render';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, AABB, IntersectionState } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
+import { TextureMapping } from '../TextureHolder';
 
-export class J3DTextureHolder extends TextureHolder<TEX1_TextureData> {
+export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(gl: WebGL2RenderingContext, bmd: BMD, bmt: BMT = null) {
         this.addTextures(gl, bmd.tex1.textureDatas);
         if (bmt)

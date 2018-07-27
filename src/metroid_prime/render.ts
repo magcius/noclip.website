@@ -3,7 +3,7 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray } from '../util';
-import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, TextureMapping, TextureHolder } from '../gx/gx_render';
+import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, GXTextureHolder } from '../gx/gx_render';
 
 import { MREA, Material, Surface, MaterialFlags, UVAnimationType, MaterialSet } from './mrea';
 import * as GX_Material from '../gx/gx_material';
@@ -13,6 +13,7 @@ import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { AABB, IntersectionState, texEnvMtx } from '../Camera';
 import { TXTR } from './txtr';
 import { CMDL } from './cmdl';
+import { TextureMapping } from '../TextureHolder';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0,  0, 0,
@@ -27,7 +28,7 @@ const posMtx = mat4.create();
 mat4.multiplyScalar(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, posScale);
 posMtx[15] = 1;
 
-export class RetroTextureHolder extends TextureHolder<TXTR> {
+export class RetroTextureHolder extends GXTextureHolder<TXTR> {
     public addMaterialSetTextures(gl: WebGL2RenderingContext, materialSet: MaterialSet): void {
         this.addTextures(gl, materialSet.textures);
     }
