@@ -1,46 +1,43 @@
 
-import { createSceneFromSARCBuffer } from './scenes';
-
 import * as Viewer from '../viewer';
+import * as Yaz0 from '../compression/Yaz0';
 
-import { RenderState } from '../render';
+import { RenderState, depthClearFlags } from '../render';
 import Progressable from '../Progressable';
 import { fetch } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
-    const textures: Viewer.Texture[] = [];
-    for (const scene of scenes)
-        if (scene)
-            textures.push.apply(textures, scene.textures);
-    return textures;
-}
+import * as SARC from './sarc';
+import * as BFRES from './bfres';
+import * as GX2Texture from './gx2_texture';
+import { GX2TextureHolder, ModelRenderer } from './render';
 
 class SplatoonRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[];
 
-    constructor(public mainScene: Viewer.Scene, public skyScene: Viewer.Scene) {
-        this.textures = collectTextures([this.mainScene, this.skyScene]);
+    constructor(public textureHolder: GX2TextureHolder, public mainRenderers: ModelRenderer[], public skyRenderers: ModelRenderer[]) {
+        this.textures = textureHolder.viewerTextures;
     }
 
     public render(state: RenderState) {
         const gl = state.gl;
         state.setClipPlanes(0.2, 500000);
 
-        if (this.skyScene) {
-            this.skyScene.render(state);
-        }
+        this.skyRenderers.forEach((renderer) => renderer.render(state));
+
+        state.useFlags(depthClearFlags);
         gl.clear(gl.DEPTH_BUFFER_BIT);
-        if (this.mainScene) {
-            this.mainScene.render(state);
-        }
+
+        this.mainRenderers.forEach((renderer) => renderer.render(state));
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        if (this.skyScene)
-            this.skyScene.destroy(gl);
-        if (this.mainScene)
-            this.mainScene.destroy(gl);
+        GX2Texture.deswizzler.terminate();
+
+        for (const renderer of this.skyRenderers)
+            renderer.destroy(gl);
+        for (const renderer of this.mainRenderers)
+            renderer.destroy(gl);
     }
 }
 
@@ -56,18 +53,44 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+        const textureHolder = new GX2TextureHolder();
+
         return Progressable.all([
-            this._createSceneFromPath(gl, `data/spl/${this.path}`, false),
-            this._createSceneFromPath(gl, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
-        ]).then((scenes: Viewer.Scene[]): Viewer.MainScene => {
-            const [mainScene, skyScene] = scenes;
-            return new SplatoonRenderer(mainScene, skyScene);
+            this._createRenderersFromPath(gl, textureHolder, `data/spl/${this.path}`, false),
+            this._createRenderersFromPath(gl, textureHolder, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
+        ]).then((renderers: ModelRenderer[][]): Viewer.MainScene => {
+            const [mainRenderers, skyRenderers] = renderers;
+            return new SplatoonRenderer(textureHolder, mainRenderers, skyRenderers);
         });
     }
 
-    private _createSceneFromPath(gl: WebGL2RenderingContext, path: string, isSkybox: boolean): Progressable<Viewer.Scene> {
-        return fetch(path).then((result: ArrayBufferSlice): Promise<Viewer.Scene> => {
-            return createSceneFromSARCBuffer(gl, result, isSkybox);
+    private _createRenderersFromPath(gl: WebGL2RenderingContext, textureHolder: GX2TextureHolder, path: string, isSkybox: boolean): Progressable<ModelRenderer[]> {
+        return fetch(path).then((result: ArrayBufferSlice) => {
+            return Yaz0.decompress(result);
+        }).then((result: ArrayBufferSlice) => {
+            const renderers: ModelRenderer[] = [];
+            const sarc = SARC.parse(result);
+            const file = sarc.files.find((file) => file.name.endsWith('.bfres'));
+            const fres = BFRES.parse(file.buffer);
+
+            textureHolder.addFRESTextures(gl, fres);
+
+            for (const fmdlEntry of fres.fmdl) {
+                // _drcmap is the map used for the Gamepad. It does nothing but cause Z-fighting.
+                if (fmdlEntry.entry.name.endsWith('_drcmap'))
+                    continue;
+
+                // "_DV" seems to be the skybox. There are additional models which are powered
+                // by skeleton animation, which we don't quite support yet. Kill them for now.
+                if (fmdlEntry.entry.name.indexOf('_DV_') !== -1)
+                    continue;
+
+                const modelRenderer = new ModelRenderer(gl, textureHolder, fres, fmdlEntry.fmdl);
+                modelRenderer.isSkybox = isSkybox;
+                renderers.push(modelRenderer);
+            }
+
+            return renderers;
         });
     }
 }

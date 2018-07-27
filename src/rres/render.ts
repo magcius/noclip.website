@@ -5,12 +5,11 @@ import * as BRRES from './brres';
 import * as GX_Material from '../gx/gx_material';
 import { mat4, mat2d, vec4 } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
-import { MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, TextureHolder } from "../gx/gx_render";
+import { MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder } from "../gx/gx_render";
 import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState } from "../Camera";
 import { ColorOverride } from "../j3d/render";
-import { renderWireframeAABB } from "../RenderUtility";
 
-export class RRESTextureHolder extends TextureHolder<BRRES.TEX0> {
+export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
         this.addTextures(gl, rres.tex0);
     }

@@ -296,10 +296,10 @@ class Scene implements Viewer.Scene {
 }
 
 class MultiScene implements Viewer.MainScene {
-    public scenes: Viewer.Scene[];
+    public scenes: Scene[];
     public textures: Viewer.Texture[];
 
-    constructor(scenes: Viewer.Scene[]) {
+    constructor(scenes: Scene[]) {
         this.scenes = scenes;
         this.textures = [];
         for (const scene of this.scenes)
@@ -357,7 +357,7 @@ export class SceneDesc implements Viewer.SceneDesc {
 
         return Progressable.all(roomFilenames.map((filename) => {
             return fetch(filename).then((roomResult) => this._createRoomSceneFromData(gl, roomResult));
-        })).then((scenes: Viewer.Scene[]) => {
+        })).then((scenes: Scene[]) => {
             return new MultiScene(scenes);
         });
     }
