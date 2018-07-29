@@ -428,6 +428,8 @@ export class GX_Program extends BaseProgram {
 
     private generateIndTexStages(stages: IndTexStage[]): string {
         return stages.map((stage) => {
+            if (stage.texCoordId >= this.material.texGens.length)
+                return '';
             return this.generateIndTexStage(stage);
         }).join('');
     }
