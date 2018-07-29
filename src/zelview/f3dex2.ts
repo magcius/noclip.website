@@ -121,7 +121,7 @@ class State {
             alphaTestMode = 0;
         } else {
             alphaTestMode = ((otherModeL & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
-                                (otherModeL & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
+                             (otherModeL & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
         }
 
         flushTexture(this)
@@ -340,13 +340,9 @@ function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
     renderFlags.depthTest = !!(newMode & OtherModeL.Z_CMP);
     renderFlags.depthWrite = !!(newMode & OtherModeL.Z_UPD);
 
-    let alphaTestMode: number;
     if (newMode & OtherModeL.FORCE_BL) {
-        alphaTestMode = 0;
         renderFlags.blendMode = BlendMode.ADD;
     } else {
-        alphaTestMode = ((newMode & OtherModeL.CVG_X_ALPHA) ? 0x1 : 0 |
-                            (newMode & OtherModeL.ALPHA_CVG_SEL) ? 0x2 : 0);
         renderFlags.blendMode = BlendMode.NONE;
     }
 
@@ -836,10 +832,10 @@ function translateTexture(state: State, texture: TextureTile) {
 
     function translateWrap(cm: number) {
         switch (cm) {
-            case 1: return gl.MIRRORED_REPEAT;
-            case 2: return gl.CLAMP_TO_EDGE;
-            case 3: return gl.CLAMP_TO_EDGE;
-            default: return gl.REPEAT;
+        case 1: return gl.MIRRORED_REPEAT;
+        case 2: return gl.CLAMP_TO_EDGE;
+        case 3: return gl.CLAMP_TO_EDGE;
+        default: return gl.REPEAT;
         }
     }
 
@@ -952,8 +948,6 @@ CommandDispatch[UCodeCommands.SETPRIMCOLOR] = cmd_SETPRIMCOLOR;
 CommandDispatch[UCodeCommands.SETTIMG] = cmd_SETTIMG;
 CommandDispatch[UCodeCommands.SETTILE] = cmd_SETTILE;
 CommandDispatch[UCodeCommands.SETTILESIZE] = cmd_SETTILESIZE;
-
-const F3DEX2 = {};
 
 function loadTextureBlock(state: State, cmds: number[][]) {
     flushDraw(state)

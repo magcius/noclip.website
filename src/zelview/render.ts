@@ -4,7 +4,7 @@ import * as ZELVIEW0 from './zelview0';
 
 import Progressable from '../Progressable';
 import { CullMode, RenderFlags, RenderState, BlendMode } from '../render';
-import Program from '../Program';
+import Program, { BaseProgram } from '../Program';
 import { fetch } from '../util';
 
 import * as Viewer from '../viewer';
@@ -12,7 +12,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export type RenderFunc = (renderState: RenderState) => void;
 
-export class BillboardBGProgram extends Program {
+export class BillboardBGProgram extends BaseProgram {
     public positionLocation: number;
     public uvLocation: number;
 
@@ -37,8 +37,6 @@ void main() {
 `;
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-
         this.positionLocation = gl.getAttribLocation(prog, "a_position");
         this.uvLocation = gl.getAttribLocation(prog, "a_uv");
     }
@@ -244,7 +242,7 @@ export class F3DEX2Program extends Program {
     static a_UV = 1;
     static a_Shade = 2;
 
-    constructor(params: F3DEX2ProgramParameters) {
+    constructor(public params: F3DEX2ProgramParameters) {
         super();
 
         this.frag = `#define USE_2CYCLE ${params.use2Cycle ? 1 : 0}\n`;
@@ -397,8 +395,6 @@ class Scene implements Viewer.MainScene {
 
     private translateScene(gl: WebGL2RenderingContext, scene: ZELVIEW0.Headers): (state: RenderState) => void {
         return (state: RenderState) => {
-            const gl = state.gl;
-
             const renderDL = (dl: F3DEX2.DL) => {
                 dl.render(state);
             };
