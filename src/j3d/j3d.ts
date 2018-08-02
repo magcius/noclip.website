@@ -1128,10 +1128,10 @@ class J3DFileReaderHelper {
         this.offs = 0x20;
     }
 
-    public maybeNextChunk(maybeChunkId: string): ArrayBufferSlice {
+    public maybeNextChunk(maybeChunkId: string, sizeBias: number = 0): ArrayBufferSlice {
         const chunkStart = this.offs;
         const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
-        const chunkSize = this.view.getUint32(chunkStart + 0x04);
+        const chunkSize = this.view.getUint32(chunkStart + 0x04) + sizeBias;
         if (chunkId === maybeChunkId) {
             this.offs += chunkSize;
             return this.buffer.subarray(chunkStart, chunkSize);
@@ -1140,10 +1140,10 @@ class J3DFileReaderHelper {
         }
     }
 
-    public nextChunk(expectedChunkId: string): ArrayBufferSlice {
+    public nextChunk(expectedChunkId: string, sizeBias: number = 0): ArrayBufferSlice {
         const chunkStart = this.offs;
         const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
-        const chunkSize = this.view.getUint32(chunkStart + 0x04);
+        const chunkSize = this.view.getUint32(chunkStart + 0x04) + sizeBias;
         assert(chunkId === expectedChunkId);
         this.offs += chunkSize;
         return this.buffer.subarray(chunkStart, chunkSize);
@@ -1437,7 +1437,8 @@ export class BTK {
         const j3d = new J3DFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1btk1');
 
-        btk.ttk1 = readTTK1Chunk(j3d.nextChunk('TTK1'));
+        // For some reason, TTK1 chunks have an invalid size chunk with 0x04 extra bytes.
+        btk.ttk1 = readTTK1Chunk(j3d.nextChunk('TTK1', -0x04));
 
         return btk;
     }

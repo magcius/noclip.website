@@ -13,7 +13,7 @@ import { createScene } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import { LoopMode } from './j3d';
-import { TextureOverride } from '../gx/gx_render';
+import { TextureOverride } from '../TextureHolder';
 
 const sjisDecoder = new TextDecoder('sjis');
 

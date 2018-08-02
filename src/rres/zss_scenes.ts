@@ -12,7 +12,7 @@ import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import { RRESTextureHolder, ModelRenderer } from './render';
-import { TextureOverride } from '../gx/gx_render';
+import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import { ColorOverride } from '../j3d/render';

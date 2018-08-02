@@ -1,5 +1,5 @@
 
-import { BaseProgram } from './program';
+import { BaseProgram } from './Program';
 
 function pushAndReturn<T>(a: T[], v: T) {
     a.push(v);
