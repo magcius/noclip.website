@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexdump } from "../util";
+import { readString, assert } from "../util";
 import { mat4, vec3, quat } from "gl-matrix";
 
 import * as GX from "../gx/gx_enum";

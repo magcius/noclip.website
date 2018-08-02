@@ -197,11 +197,11 @@ export class Command_Material {
     private renderFlags: RenderFlags;
     public program: GX_Material.GX_Program;
 
-    constructor(gl: WebGL2RenderingContext, scene: Command_MaterialScene, material: MaterialEntry) {
+    constructor(scene: Command_MaterialScene, material: MaterialEntry, hacks?: GX_Material.GXMaterialHacks) {
         this.name = material.name;
         this.scene = scene;
         this.material = material;
-        this.program = new GX_Material.GX_Program(material.gxMaterial);
+        this.program = new GX_Material.GX_Program(material.gxMaterial, hacks);
         this.program.name = this.name;
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
     }
@@ -409,7 +409,8 @@ export class SceneLoader {
     constructor(
         public textureHolder: J3DTextureHolder,
         public bmd: BMD,
-        public bmt: BMT | null = null)
+        public bmt: BMT | null = null,
+        public materialHacks?: GX_Material.GXMaterialHacks)
     {}
 
     public createScene(gl: WebGL2RenderingContext): Scene {
@@ -461,6 +462,7 @@ export class Scene implements Viewer.Scene {
 
     private opaqueCommands: Command[];
     private transparentCommands: Command[];
+    private materialHacks?: GX_Material.GXMaterialHacks;
 
     constructor(
         sceneLoaderToken: SceneLoaderToken,
@@ -470,6 +472,7 @@ export class Scene implements Viewer.Scene {
         this.bmd = sceneLoader.bmd;
         this.bmt = sceneLoader.bmt;
         this.textureHolder = sceneLoader.textureHolder;
+        this.materialHacks = sceneLoader.materialHacks;
 
         // TODO(jstpierre): Remove textures from Scene onto MainScene.
         this.textures = this.textureHolder.viewerTextures;
@@ -535,8 +538,6 @@ export class Scene implements Viewer.Scene {
     public bindState(state: RenderState): boolean {
         if (!this.visible)
             return false;
-
-        state.setClipPlanes(20, 500000);
 
         // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
         this.updateJointMatrices(state);
@@ -615,7 +616,7 @@ export class Scene implements Viewer.Scene {
         this.translateTextures(gl, sceneLoader);
 
         this.materialCommands = mat3.materialEntries.map((material) => {
-            return new Command_Material(gl, this, material);
+            return new Command_Material(this, material, this.materialHacks);
         });
 
         this.bufferCoalescer = loadedDataCoalescer(gl, bmd.shp1.shapes.map((shape) => shape.loadedVertexData));

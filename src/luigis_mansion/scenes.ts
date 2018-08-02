@@ -1,24 +1,13 @@
 
 import * as Viewer from '../viewer';
 import Progressable from '../Progressable';
-import * as Yay0 from '../compression/Yay0';
-import { fetch, assert } from '../util';
+import { fetch } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as RARC from '../j3d/rarc';
 import * as BIN from './bin';
 import { BinScene } from './render';
 import { RenderState } from '../render';
 import * as UI from '../ui';
-import { createScenesFromBuffer } from '../j3d/scenes';
-import { Scene, J3DTextureHolder } from '../j3d/render';
-
-function collectTextures(scenes: Viewer.Scene[]): Viewer.Texture[] {
-    const textures: Viewer.Texture[] = [];
-    for (const scene of scenes)
-        if (scene)
-            textures.push.apply(textures, scene.textures);
-    return textures;
-}
 
 interface LayerScene extends Viewer.Scene, UI.Layer {}
 
@@ -26,7 +15,8 @@ class LuigisMansionScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
 
     constructor(public roomScenes: LayerScene[]) {
-        this.textures = collectTextures(roomScenes);
+        // TODO(jstpierre): Texture holder
+        this.textures = [];
     }
 
     public createPanels(): UI.Panel[] {
@@ -44,17 +34,6 @@ class LuigisMansionScene implements Viewer.MainScene {
     public destroy(gl: WebGL2RenderingContext): void {
         this.roomScenes.forEach((scene) => scene.destroy(gl));
     }
-}
-
-function fetchVRBScene(gl: WebGL2RenderingContext, path: string): Progressable<LayerScene> {
-    return fetch(`data/luigis_mansion/${path}`).then((buffer: ArrayBufferSlice) => {
-        const decompressed = Yay0.decompress(buffer);
-        const textureHolder = new J3DTextureHolder();
-        return createScenesFromBuffer(gl, textureHolder, decompressed).then((scenes: Scene[]) => {
-            assert(scenes.length === 1);
-            return scenes[0];
-        });
-    });
 }
 
 function fetchBinScene(gl: WebGL2RenderingContext, path: string): Progressable<BinScene> {
@@ -89,14 +68,6 @@ class LuigisMansionBinSceneDesc implements Viewer.SceneDesc {
             return new LuigisMansionScene(roomScenes);
         });
     }
-}
-
-function zeroPad(i: number): string {
-    const s = ''+i;
-    if (s.length === 1)
-        return '0' + s;
-    else
-        return s;
 }
 
 // Main mansion

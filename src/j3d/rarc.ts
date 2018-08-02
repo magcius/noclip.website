@@ -47,6 +47,13 @@ export class RARC {
             return null;
         return file;
     }
+
+    public findFileData(path: string): ArrayBufferSlice | null {
+        const file = this.findFile(path);
+        if (file === null)
+            return null;
+        return file.buffer;
+    }
 }
 
 // Used while parsing

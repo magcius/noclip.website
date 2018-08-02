@@ -12,7 +12,7 @@ import * as RARC from './rarc';
 import { Scene, SceneLoader, J3DTextureHolder } from './render';
 import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
-import { TextureOverride } from '../gx/gx_render';
+import { TextureOverride } from '../TextureHolder';
 
 class ZTPTextureHolder extends J3DTextureHolder {
     protected tryTextureNameVariants(name: string): string[] {

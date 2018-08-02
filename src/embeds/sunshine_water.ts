@@ -100,7 +100,7 @@ class SeaPlaneScene implements Scene {
             }
         }
 
-        const cmd = new Command_Material(gl, this, material);
+        const cmd = new Command_Material(this, material);
 
         if (configName.includes('nomip')) {
             for (const sampler of this.glSamplers) {
