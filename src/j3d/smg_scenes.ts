@@ -207,6 +207,10 @@ class SMGRenderer implements Viewer.MainScene {
         this.sceneGraph.forTag(SceneGraphTag.Normal, (node) => {
             node.bindState(state);
             node.renderOpaque(state);
+        });
+
+        this.sceneGraph.forTag(SceneGraphTag.Normal, (node) => {
+            node.bindState(state);
             node.renderTransparent(state);
         });
 
@@ -325,6 +329,12 @@ function computeModelMatrixFromRecord(modelMatrix: mat4, bcsv: BCSV.Bcsv, record
     mat4.fromRotationTranslationScale(modelMatrix, q, [pos_x, pos_y, pos_z], [scale_x, scale_y, scale_z]);
 }
 
+interface AnimOptions {
+    bck?: string;
+    btk?: string;
+    brk?: string;
+}
+
 class SMGSceneDesc2 implements Viewer.SceneDesc {
     constructor(public name: string, public galaxyName: string, public id: string = galaxyName) {
     }
@@ -357,7 +367,7 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
         return { name, layers };
     }
 
-    public spawnArchive(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, name: string, modelMatrix: mat4): Progressable<Scene | null> {
+    public spawnArchive(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<Scene | null> {
         // Should do a remap at some point.
         return fetch(`${pathBase}/ObjectData/${name}.arc`).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
@@ -372,12 +382,12 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
             const lowerName = name.toLowerCase();
             const bmd = rarc.findFileData(`${lowerName}.bdl`) !== null ? BMD.parse(rarc.findFileData(`${lowerName}.bdl`)) : null;
             // Find the first animations we can.
-            const bckFile = rarc.files.find((file) => file.name.endsWith('.bck'));
-            const bck = bckFile !== undefined ? BCK.parse(bckFile.buffer) : null;
-            const brkFile = rarc.files.find((file) => file.name.endsWith('.brk'));
-            const brk = brkFile !== undefined ? BRK.parse(brkFile.buffer) : null;
-            const btkFile = rarc.files.find((file) => file.name.endsWith('.btk'));
-            const btk = btkFile !== undefined ? BTK.parse(btkFile.buffer) : null;
+            const bckFile = (animOptions !== undefined && animOptions.bck) ? rarc.findFile(animOptions.bck) : rarc.files.find((file) => file.name.endsWith('.bck'));
+            const bck = !!bckFile ? BCK.parse(bckFile.buffer) : null;
+            const brkFile = (animOptions !== undefined && animOptions.brk) ? rarc.findFile(animOptions.brk) : rarc.files.find((file) => file.name.endsWith('.brk'));
+            const brk = !!brkFile ? BRK.parse(brkFile.buffer) : null;
+            const btkFile = (animOptions !== undefined && animOptions.btk) ? rarc.findFile(animOptions.btk) : rarc.files.find((file) => file.name.endsWith('.btk'));
+            const btk = !!btkFile ? BTK.parse(btkFile.buffer) : null;
             const sceneLoader = new SceneLoader(textureHolder, bmd, null, materialHacks);
             textureHolder.addJ3DTextures(gl, bmd, null);
             const scene = sceneLoader.createScene(gl);
@@ -391,20 +401,17 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
     }
 
     public spawnObject(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, planetTable: BCSV.Bcsv, sceneGraph: SceneGraph, objinfo: ObjInfo, modelMatrix: mat4): void {
-        let isSkybox = false;
-
-        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal) => {
-            this.spawnArchive(gl, textureHolder, arcName, modelMatrix).then((scene) => {
+        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions?: AnimOptions) => {
+            this.spawnArchive(gl, textureHolder, modelMatrix, arcName, animOptions).then((scene) => {
                 if (scene) {
-                    if (isSkybox) {
+                    if (tag === SceneGraphTag.Skybox)
                         scene.setIsSkybox(true);
-                        tag = SceneGraphTag.Skybox;
-                    }
                     sceneGraph.addNode(scene, [tag]);
                 }
             });
         };
 
+        const name = objinfo.objName;
         switch (objinfo.objName) {
         case 'FlagPeachCastleA':
         case 'FlagPeachCastleB':
@@ -425,6 +432,9 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
         case 'LuigiEvent':
             // Logic objects.
             return;
+        case 'AstroCore':
+            spawnGraph(name, SceneGraphTag.Normal, { bck: 'revival4.bck', brk: 'revival4.brk', btk: 'astrocore.btk' });
+            break;
         case 'AstroDomeEntrance': {
             switch (objinfo.objArg0) {
             case 1: spawnGraph('AstroDomeEntranceObservatory'); break;
@@ -448,16 +458,20 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
             default: assert(false);
             }
             break;
-            }
+        }
+        case 'SignBoard':
+            spawnGraph(name, SceneGraphTag.Normal, null);
+            break;
         case 'GalaxySky':
         case 'RockPlanetOrbitSky':
         case 'VROrbit':
             // Skyboxen.
-            isSkybox = true;
-            // Fall through.
+            spawnGraph(name, SceneGraphTag.Skybox);
+            break;
         default: {
             const name = objinfo.objName;
             spawnGraph(name, SceneGraphTag.Normal);
+            // Spawn planets.
             const planetRecord = planetTable.records.find((record) => BCSV.getField(planetTable, record, 'PlanetName') === name);
             if (planetRecord) {
                 const bloomFlag = BCSV.getField(planetTable, planetRecord, 'BloomFlag');
@@ -481,7 +495,7 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
         for (const layer of zone.layers) {
             for (const objinfo of layer.objinfo) {
                 const modelMatrix = mat4.create();
-                mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
+                 mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
                 this.spawnObject(gl, textureHolder, planetTable, sceneGraph, objinfo, modelMatrix);
             }
 
