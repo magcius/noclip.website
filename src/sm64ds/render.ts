@@ -404,7 +404,7 @@ export class SceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return fetch('data/sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
-            const crg1 = <Sm64DSCRG1> <any> BYML.parse(result, BYML.FileType.CRG1);
+            const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
             return this._createSceneFromCRG1(gl, crg1);
         });
     }

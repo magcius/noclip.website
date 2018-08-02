@@ -72,8 +72,8 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         return Progressable.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
             const levelPak = PAK.parse(datas[0]);
             const stringsPak = PAK.parse(datas[1]);
-            const nameData = BYML.parse(datas[2], BYML.FileType.CRG1);
-            const resourceSystem = new ResourceSystem([levelPak, stringsPak], <NameData> <any> nameData);
+            const nameData = BYML.parse<NameData>(datas[2], BYML.FileType.CRG1);
+            const resourceSystem = new ResourceSystem([levelPak, stringsPak], nameData);
 
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
                 assert(mlvlEntry.fourCC === 'MLVL');
