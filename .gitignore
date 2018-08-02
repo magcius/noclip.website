@@ -54,4 +54,4 @@ parcel/
 
 dist/*
 !dist/data
-post.html
+post*.html

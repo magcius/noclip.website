@@ -177,7 +177,7 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
     }
 }
 
-export function parse(buffer: ArrayBufferSlice, fileType: FileType = FileType.BYML): NodeDict {
+export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType.BYML): T {
     const magic = readString(buffer, 0x00, 0x04);
     const magics = fileDescriptions[fileType].magics;
     assert(magics.includes(magic));
@@ -192,10 +192,10 @@ export function parse(buffer: ArrayBufferSlice, fileType: FileType = FileType.BY
     const rootNodeOffs = view.getUint32(0x0C, context.littleEndian);
 
     if (rootNodeOffs === 0)
-        return {};
+        return {} as T;
 
     context.strKeyTable = strKeyTableOffs !== 0 ? parseStringTable(context, buffer, strKeyTableOffs) : null;
     context.strValueTable = strValueTableOffs !== 0 ? parseStringTable(context, buffer, strValueTableOffs) : null;
     const node = parseComplexNode(context, buffer, rootNodeOffs);
-    return <NodeDict> node;
+    return node as any as T;
 }
