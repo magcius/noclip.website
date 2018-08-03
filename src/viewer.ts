@@ -115,6 +115,7 @@ export class Viewer {
 }
 
 export interface MainScene extends Scene {
+    textures: Texture[];
     resetCamera?(camera: Camera): void;
     createPanels?(): UI.Panel[];
 }

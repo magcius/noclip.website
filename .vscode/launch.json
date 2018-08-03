@@ -1,13 +1,21 @@
 {
-    "version": "0.1.0",
+    "version": "0.2.0",
     "configurations": [
         {
             "type": "firefox",
             "request": "launch",
             "reAttach": true,
-            "name": "Launch index.html",
-            "firefoxExecutable": "C:/Program Files/Nightly/firefox.exe",
-            "file": "${workspaceFolder}/index.html"
+            "name": "Launch localhost",
+            "url": "http://localhost:1234/",
+            "webRoot": "${workspaceFolder}/src",
+            "firefoxExecutable": "C:\\Program Files\\Nightly\\firefox.exe"
         },
+        {
+            "type": "chrome",
+            "request": "launch",
+            "name": "Launch Chrome",
+            "url": "http://localhost:1234/",
+            "webRoot": "${workspaceFolder}/src"
+        }
     ]
 }
