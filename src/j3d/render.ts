@@ -73,14 +73,13 @@ function texProjOrthoMtx(dst: mat4, t: number, b: number, l: number, r: number, 
 const scratchModelMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
 class Command_Shape {
-    private bmd: BMD;
     private packetParams = new PacketParams();
-    private shapeHelper: GXShapeHelper;
-    private bboxScratch: AABB = new AABB();
+    private shapeHelpers: GXShapeHelper[] = [];
 
-    constructor(gl: WebGL2RenderingContext, sceneLoader: SceneLoader, private scene: Scene, private shape: Shape, coalescedBuffers: CoalescedBuffers) {
-        this.bmd = sceneLoader.bmd;
-        this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, this.shape.loadedVertexLayout, this.shape.loadedVertexData);
+    constructor(gl: WebGL2RenderingContext, sceneLoader: SceneLoader, private scene: Scene, private shape: Shape, coalescedBuffers: CoalescedBuffers[]) {
+        this.shapeHelpers = shape.packets.map((packet) => {
+            return new GXShapeHelper(gl, coalescedBuffers.shift(), this.shape.loadedVertexLayout, packet.loadedVertexData);
+        })
     }
 
     private computeModelView(state: RenderState): mat4 {
@@ -119,8 +118,6 @@ class Command_Shape {
             return;
 
         const gl = state.gl;
-
-        this.shapeHelper.drawPrologue(gl);
 
         const modelView = this.computeModelView(state);
 
@@ -161,15 +158,20 @@ class Command_Shape {
                 needsUpload = false;
             }
 
-            this.shapeHelper.drawTriangles(gl, packet.firstTriangle, packet.numTriangles);
+            const shapeHelper = this.shapeHelpers[p];
+            shapeHelper.drawSimple(state);
+            /*
+            shapeHelper.drawPrologue(gl);
+            shapeHelper.drawTriangles(gl, packet.firstTriangle, packet.numTriangles);
+            shapeHelper.drawEpilogue(gl);
+            */
         }
 
-        this.shapeHelper.drawEpilogue(gl);
         state.renderStatisticsTracker.drawCallCount++;
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.shapeHelper.destroy(gl);
+        this.shapeHelpers.forEach((shapeHelper) => shapeHelper.destroy(gl));
     }
 }
 
@@ -389,11 +391,6 @@ export enum ColorOverride {
     MAT0, MAT1, AMB0, AMB1,
     K0, K1, K2, K3,
     CPREV, C0, C1, C2,
-}
-
-interface HierarchyTraverseContext {
-    commandList: Command[];
-    parentJointMatrix: mat4;
 }
 
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
@@ -619,9 +616,13 @@ export class Scene implements Viewer.Scene {
             return new Command_Material(this, material, this.materialHacks);
         });
 
-        this.bufferCoalescer = loadedDataCoalescer(gl, bmd.shp1.shapes.map((shape) => shape.loadedVertexData));
+        const loadedVertexDatas = [];
+        for (const shape of bmd.shp1.shapes)
+            for (const packet of shape.packets)
+                loadedVertexDatas.push(packet.loadedVertexData);
+        this.bufferCoalescer = loadedDataCoalescer(gl, loadedVertexDatas);
         this.shapeCommands = bmd.shp1.shapes.map((shape, i) => {
-            return new Command_Shape(gl, sceneLoader, this, shape, this.bufferCoalescer.coalescedBuffers[i]);
+            return new Command_Shape(gl, sceneLoader, this, shape, this.bufferCoalescer.coalescedBuffers);
         });
 
         // Iterate through scene graph.
@@ -652,21 +653,32 @@ export class Scene implements Viewer.Scene {
         switch (node.type) {
         case HierarchyType.Joint:
             const jointIndex = node.jointIdx;
-            let boneMatrix = jnt1.bones[jointIndex].matrix;
-            if (this.bck !== null) {
+
+            let boneMatrix: mat4;
+            if (this.bck !== null && this.bck.ank1.jointAnimationEntries[jointIndex]) {
                 boneMatrix = matrixScratch2;
                 this.bck.calcJointMatrix(boneMatrix, jointIndex, this.getTimeInFrames(state.time));
+            } else {
+                boneMatrix = jnt1.bones[jointIndex].matrix;
             }
-            const jointMatrix = this.jointMatrices[jointIndex];
-            mat4.mul(jointMatrix, parentJointMatrix, boneMatrix);
-            bbox.transform(jnt1.bones[jointIndex].bbox, jointMatrix);
+
+            const dstJointMatrix = this.jointMatrices[jointIndex];
+            mat4.mul(dstJointMatrix, parentJointMatrix, boneMatrix);
+
+            // Frustum cull.
+            bbox.transform(jnt1.bones[jointIndex].bbox, dstJointMatrix);
             this.jointVisibility[jointIndex] = state.camera.frustum.intersect(bbox);
-            parentJointMatrix = jointMatrix;
+
+            // Now update children.
+            for (let i = 0; i < node.children.length; i++)
+                this.updateJointMatrixHierarchy(state, node.children[i], dstJointMatrix);
+            break;
+        default:
+            // Pass through.
+            for (let i = 0; i < node.children.length; i++)
+                this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix);
             break;
         }
-
-        for (let i = 0; i < node.children.length; i++)
-            this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix);
     }
 
     private updateJointMatrices(state: RenderState) {

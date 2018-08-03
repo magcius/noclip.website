@@ -383,6 +383,7 @@ interface Packet {
     matrixTable: Uint16Array;
     firstTriangle: number;
     numTriangles: number;
+    loadedVertexData: LoadedVertexData;
 }
 
 export const enum ShapeDisplayFlags {
@@ -394,7 +395,6 @@ export const enum ShapeDisplayFlags {
 
 export interface Shape {
     displayFlags: ShapeDisplayFlags;
-    loadedVertexData: LoadedVertexData;
     loadedVertexLayout: LoadedVertexLayout;
     packets: Packet[];
     bbox: AABB;
@@ -460,13 +460,11 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         }
 
         const vtxLoader = compileVtxLoader(vat, vcd);
+        const loadedVertexLayout = vtxLoader.loadedVertexLayout;
 
         // Now parse out the packets.
         let packetIdx = packetTableOffs + (firstPacket * 0x08);
         const packets: Packet[] = [];
-
-        const loadedDatas: LoadedVertexData[] = [];
-        assert(packetCount === 1);
 
         let totalTriangleCount = 0;
         for (let j = 0; j < packetCount; j++) {
@@ -483,14 +481,13 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 
             const srcOffs = packetStart;
             const subBuffer = buffer.subarray(srcOffs, packetSize);
-            const loadedSubData = vtxLoader.runVertices(vtxArrays, subBuffer);
-            loadedDatas.push(loadedSubData);
+            const loadedVertexData = vtxLoader.runVertices(vtxArrays, subBuffer);
 
-            const firstTriangle = 0; // totalTriangleCount;
-            const numTriangles = loadedSubData.totalTriangleCount;
+            const firstTriangle = totalTriangleCount;
+            const numTriangles = loadedVertexData.totalTriangleCount;
             totalTriangleCount += numTriangles;
 
-            packets.push({ matrixTable, firstTriangle, numTriangles });
+            packets.push({ matrixTable, firstTriangle, numTriangles, loadedVertexData });
             packetIdx += 0x08;
         }
 
@@ -503,14 +500,8 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const bboxMaxZ = view.getFloat32(shapeIdx + 0x24);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
-        // Coalesce shape data.
-        // TODO(jstpierre): coalesceLoadedData is basically completely busted.
-        assert(loadedDatas.length === 1);
-        const loadedVertexData = loadedDatas[0];
-        const loadedVertexLayout = vtxLoader.loadedVertexLayout;
-
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ displayFlags, loadedVertexData, loadedVertexLayout, packets, bbox });
+        shapes.push({ displayFlags, loadedVertexLayout, packets, bbox });
 
         shapeIdx += 0x28;
     }
@@ -1688,13 +1679,13 @@ export class BCK {
 
         const entry = this.ank1.jointAnimationEntries[jointIndex];
         const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * 180;
-        const translationX = sampleAnimationData(entry.translationX, animFrame);
         const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * 180;
-        const translationY = sampleAnimationData(entry.translationY, animFrame);
         const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * 180;
+        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * 180;
         const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * 180;
+        const translationX = sampleAnimationData(entry.translationX, animFrame);
+        const translationY = sampleAnimationData(entry.translationY, animFrame);
         const translationZ = sampleAnimationData(entry.translationZ, animFrame);
         createJointMatrix(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
     }

@@ -40,7 +40,7 @@ export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: Ar
     return new FRESRenderer(textureHolder, new ModelRenderer(gl, textureHolder, fres, fres.fmdl[0].fmdl));
 }
 
-export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Promise<Viewer.Scene> {
+export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Promise<Viewer.MainScene> {
     return Promise.resolve(buffer).then((buffer: ArrayBufferSlice) => {
         if (readString(buffer, 0, 4) === 'Yaz0')
             return Yaz0.decompress(buffer);

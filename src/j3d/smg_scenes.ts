@@ -14,6 +14,7 @@ import { TextureOverride } from '../TextureHolder';
 import * as RARC from './rarc';
 import * as Yaz0 from '../compression/Yaz0';
 import * as BCSV from '../luigis_mansion/bcsv';
+import * as UI from '../ui';
 import { mat4, quat } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK } from './j3d';
 
@@ -141,11 +142,15 @@ class SceneGraph {
         return this.nodeTags.some((tags) => tags.includes(tag));
     }
 
-    public forTag(tag: string, cb: (node: Scene) => void): void {
+    public nodeHasTag(i: number, tag: string): boolean {
+        return this.nodeTags[i].includes(tag);
+    }
+
+    public forTag(tag: string, cb: (node: Scene, i: number) => void): void {
         for (let i = 0; i < this.nodes.length; i++) {
             const nodeTags = this.nodeTags[i];
             if (nodeTags.includes(tag))
-                cb(this.nodes[i]);
+                cb(this.nodes[i], i);
         }
     }
 
@@ -160,6 +165,12 @@ class SceneGraph {
         for (let i = 0; i < this.nodes.length; i++)
             this.nodes[i].destroy(gl);
     }
+}
+
+const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
+
+function getZoneLayerFilterTag(zoneName: string, layerIndex: number): string {
+    return `${zoneName}_${getLayerName(layerIndex)}`;
 }
 
 class SMGRenderer implements Viewer.MainScene {
@@ -179,6 +190,8 @@ class SMGRenderer implements Viewer.MainScene {
         gl: WebGL2RenderingContext,
         private textureHolder: J3DTextureHolder,
         private sceneGraph: SceneGraph,
+        private scenarioData: BCSV.Bcsv,
+        private zoneNames: string[],
     ) {
         this.textures = textureHolder.viewerTextures;
         this.bloomCombineFlags = new RenderFlags();
@@ -186,6 +199,42 @@ class SMGRenderer implements Viewer.MainScene {
         this.bloomCombineFlags.blendMode = BlendMode.ADD;
         this.bloomCombineFlags.blendSrc = BlendFactor.ONE;
         this.bloomCombineFlags.blendDst = BlendFactor.ONE;
+    }
+
+    public setZoneLayersVisible(zoneName: string, layerMask: number): void {
+        for (let i = 0; i < 10; i++) {
+            const visible = !!(layerMask & (1 << i));
+            this.sceneGraph.forTag(getZoneLayerFilterTag(zoneName, i), (node) => {
+                node.setVisible(visible);
+            });
+        }
+    }
+
+    public setCurrentScenario(index: number): void {
+        const scenarioRecord = this.scenarioData.records[index];
+        for (const zoneName of this.zoneNames) {
+            const layerMask = BCSV.getField<number>(this.scenarioData, scenarioRecord, zoneName, 0);
+            this.setZoneLayersVisible(zoneName, layerMask);
+        }
+    }
+
+    public createPanels(): UI.Panel[] {
+        const scenarioPanel = new UI.Panel();
+        scenarioPanel.setTitle(TIME_OF_DAY_ICON, 'Scenario');
+
+        const scenarioNames = this.scenarioData.records.map((record) => {
+            return BCSV.getField<string>(this.scenarioData, record, 'ScenarioName');
+        });
+        const scenarioSelect = new UI.SimpleSingleSelect();
+        scenarioSelect.setStrings(scenarioNames);
+        scenarioSelect.onselectionchange = (index: number) => {
+            this.setCurrentScenario(index);
+        };
+        scenarioSelect.selectItem(0);
+
+        scenarioPanel.contents.appendChild(scenarioSelect.elem);
+
+        return [scenarioPanel];
     }
 
     public render(state: RenderState): void {
@@ -197,7 +246,8 @@ class SMGRenderer implements Viewer.MainScene {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         this.sceneGraph.forTag(SceneGraphTag.Skybox, (node) => {
-            node.bindState(state);
+            if (!node.bindState(state))
+                return;
             node.renderOpaque(state);
         });
 
@@ -205,12 +255,14 @@ class SMGRenderer implements Viewer.MainScene {
         state.setClipPlanes(20, 500000);
 
         this.sceneGraph.forTag(SceneGraphTag.Normal, (node) => {
-            node.bindState(state);
+            if (!node.bindState(state))
+                return;
             node.renderOpaque(state);
         });
 
         this.sceneGraph.forTag(SceneGraphTag.Normal, (node) => {
-            node.bindState(state);
+            if (!node.bindState(state))
+                return;
             node.renderTransparent(state);
         });
 
@@ -222,7 +274,8 @@ class SMGRenderer implements Viewer.MainScene {
             const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("IndDummy", textureOverride);
             this.sceneGraph.forTag(SceneGraphTag.Indirect, (node) => {
-                node.bindState(state);
+                if (!node.bindState(state))
+                    return;
                 node.renderOpaque(state);
             });
         }
@@ -367,6 +420,37 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
         return { name, layers };
     }
 
+    public applyAnimations(scene: Scene, rarc: RARC.RARC, animOptions?: AnimOptions): void {
+        let bckFile: RARC.RARCFile | null = null;
+        let brkFile: RARC.RARCFile | null = null;
+        let btkFile: RARC.RARCFile | null = null;
+
+        if (animOptions !== null) {
+            if (animOptions !== undefined) {
+                bckFile = animOptions.bck ? rarc.findFile(animOptions.bck) : null;
+                brkFile = animOptions.brk ? rarc.findFile(animOptions.brk) : null;
+                btkFile = animOptions.btk ? rarc.findFile(animOptions.btk) : null;
+            } else {
+                // Look for "wait" animation first, then fall back to the first animation.
+                bckFile = rarc.findFile('wait.bck');
+                brkFile = rarc.findFile('wait.brk');
+                btkFile = rarc.findFile('wait.btk');
+                if (!(bckFile || brkFile || btkFile)) {
+                    bckFile = rarc.files.find((file) => file.name.endsWith('.bck')) || null;
+                    brkFile = rarc.files.find((file) => file.name.endsWith('.brk')) || null;
+                    btkFile = rarc.files.find((file) => file.name.endsWith('.btk')) || null;
+                }
+            }
+        }
+
+        const bck = bckFile !== null ? BCK.parse(bckFile.buffer) : null;
+        const brk = brkFile !== null ? BRK.parse(brkFile.buffer) : null;
+        const btk = btkFile !== null ? BTK.parse(btkFile.buffer) : null;
+        scene.setBCK(bck);
+        scene.setBRK(brk);
+        scene.setBTK(btk);
+    }
+
     public spawnArchive(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<Scene | null> {
         // Should do a remap at some point.
         return fetch(`${pathBase}/ObjectData/${name}.arc`).then((buffer: ArrayBufferSlice) => {
@@ -381,32 +465,23 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
             const rarc = RARC.parse(buffer);
             const lowerName = name.toLowerCase();
             const bmd = rarc.findFileData(`${lowerName}.bdl`) !== null ? BMD.parse(rarc.findFileData(`${lowerName}.bdl`)) : null;
-            // Find the first animations we can.
-            const bckFile = (animOptions !== undefined && animOptions.bck) ? rarc.findFile(animOptions.bck) : rarc.files.find((file) => file.name.endsWith('.bck'));
-            const bck = !!bckFile ? BCK.parse(bckFile.buffer) : null;
-            const brkFile = (animOptions !== undefined && animOptions.brk) ? rarc.findFile(animOptions.brk) : rarc.files.find((file) => file.name.endsWith('.brk'));
-            const brk = !!brkFile ? BRK.parse(brkFile.buffer) : null;
-            const btkFile = (animOptions !== undefined && animOptions.btk) ? rarc.findFile(animOptions.btk) : rarc.files.find((file) => file.name.endsWith('.btk'));
-            const btk = !!btkFile ? BTK.parse(btkFile.buffer) : null;
             const sceneLoader = new SceneLoader(textureHolder, bmd, null, materialHacks);
             textureHolder.addJ3DTextures(gl, bmd, null);
             const scene = sceneLoader.createScene(gl);
             scene.name = name;
-            scene.setBCK(bck);
-            scene.setBRK(brk);
-            scene.setBTK(btk);
+            this.applyAnimations(scene, rarc, animOptions);
             mat4.copy(scene.modelMatrix, modelMatrix);
             return scene;
         });
     }
 
-    public spawnObject(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, planetTable: BCSV.Bcsv, sceneGraph: SceneGraph, objinfo: ObjInfo, modelMatrix: mat4): void {
+    public spawnObject(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, planetTable: BCSV.Bcsv, zoneLayerFilterTag: string, sceneGraph: SceneGraph, objinfo: ObjInfo, modelMatrix: mat4): void {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions?: AnimOptions) => {
             this.spawnArchive(gl, textureHolder, modelMatrix, arcName, animOptions).then((scene) => {
                 if (scene) {
                     if (tag === SceneGraphTag.Skybox)
                         scene.setIsSkybox(true);
-                    sceneGraph.addNode(scene, [tag]);
+                    sceneGraph.addNode(scene, [tag, zoneLayerFilterTag]);
                 }
             });
         };
@@ -462,6 +537,9 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
         case 'SignBoard':
             spawnGraph(name, SceneGraphTag.Normal, null);
             break;
+        case 'Rosetta':
+            spawnGraph(name, SceneGraphTag.Normal);
+            break;
         case 'GalaxySky':
         case 'RockPlanetOrbitSky':
         case 'VROrbit':
@@ -493,16 +571,18 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
         // Spawn all layers. We'll hide them later when masking out the others.
 
         for (const layer of zone.layers) {
+            const zoneLayerFilterTag = getZoneLayerFilterTag(zone.name, layer.index);
+
             for (const objinfo of layer.objinfo) {
                 const modelMatrix = mat4.create();
-                 mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
-                this.spawnObject(gl, textureHolder, planetTable, sceneGraph, objinfo, modelMatrix);
+                mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
+                this.spawnObject(gl, textureHolder, planetTable, zoneLayerFilterTag, sceneGraph, objinfo, modelMatrix);
             }
 
             for (const objinfo of layer.mappartsinfo) {
                 const modelMatrix = mat4.create();
                 mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
-                this.spawnObject(gl, textureHolder, planetTable, sceneGraph, objinfo, modelMatrix);
+                this.spawnObject(gl, textureHolder, planetTable, zoneLayerFilterTag, sceneGraph, objinfo, modelMatrix);
             }
 
             for (const zoneinfo of layer.stageobjinfo) {
@@ -550,7 +630,7 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
                 const textureHolder = new J3DTextureHolder();
                 const modelMatrixBase = mat4.create();
                 this.spawnZone(gl, textureHolder, planetTable, sceneGraph, zones[0], zones, modelMatrixBase);
-                return new SMGRenderer(gl, textureHolder, sceneGraph);
+                return new SMGRenderer(gl, textureHolder, sceneGraph, scenariodata, zoneNames);
             });
         });
     }

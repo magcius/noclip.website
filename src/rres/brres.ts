@@ -11,7 +11,7 @@ import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader
 import { mat4, mat2d } from 'gl-matrix';
 import { Endianness } from '../endian';
 import { AABB } from '../Camera';
-import { TextureMapping, TextureHolder, MaterialParams } from '../gx/gx_render';
+import { TextureMapping } from '../TextureHolder';
 import { RRESTextureHolder } from './render';
 
 //#region Utility
