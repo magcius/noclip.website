@@ -25,9 +25,10 @@ export class MultiScene implements Viewer.MainScene {
         return [layersPanel];
     }
 
-    public render(renderState: RenderState): void {
+    public render(state: RenderState): void {
+        state.setClipPlanes(20, 500000);
         this.scenes.forEach((scene) => {
-            scene.render(renderState);
+            scene.render(state);
         });
     }
 

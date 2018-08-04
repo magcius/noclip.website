@@ -436,6 +436,8 @@ class WindWakerRenderer implements Viewer.MainScene {
     public render(state: RenderState) {
         const gl = state.gl;
 
+        state.setClipPlanes(20, 500000);
+
         if (this.vr_sky) {
             // Render skybox.
             this.vr_sky.render(state);
