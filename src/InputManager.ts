@@ -22,12 +22,14 @@ export class InputManager {
         this.resetMouse();
     }
 
-    public isKeyDown(key: string) {
-        return this.keysDown.get(key);
+    public isKeyDown(key: string): boolean {
+        return !!this.keysDown.get(key);
     }
+
     public isDragging(): boolean {
         return this.grabbing;
     }
+
     public resetMouse() {
         this.dx = 0;
         this.dy = 0;

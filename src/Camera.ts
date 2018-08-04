@@ -547,16 +547,16 @@ export class OrbitCameraController implements CameraController {
             this.yVel += inputManager.dy / 200;
         }
         this.zVel += inputManager.dz;
-        if (inputManager.isKeyDown('A')) {
+        if (inputManager.isKeyDown('KeyA')) {
             this.xVel += 0.05;
         }
-        if (inputManager.isKeyDown('D')) {
+        if (inputManager.isKeyDown('KeyD')) {
             this.xVel -= 0.05;
         }
-        if (inputManager.isKeyDown('W')) {
+        if (inputManager.isKeyDown('KeyW')) {
             this.yVel += 0.05;
         }
-        if (inputManager.isKeyDown('S')) {
+        if (inputManager.isKeyDown('KeyS')) {
             this.yVel -= 0.05;
         }
         this.xVel = clampRange(this.xVel, 2);
