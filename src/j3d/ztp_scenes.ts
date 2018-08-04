@@ -97,6 +97,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
         // Draw skybox + opaque to main RT.
         this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
         state.useRenderTarget(this.mainColorTarget);
+        state.setClipPlanes(20, 500000);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         this.skyboxScenes.forEach((scene) => {
             scene.render(state);

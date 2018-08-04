@@ -269,6 +269,7 @@ export class SunshineRenderer implements Viewer.MainScene {
 
         this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
         state.useRenderTarget(this.mainColorTarget);
+        state.setClipPlanes(20, 500000);
         gl.clearColor(0, 0, 0.125, 1);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
 
