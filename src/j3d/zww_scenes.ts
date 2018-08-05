@@ -595,6 +595,7 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SceneDesc("Orichh", "House of Wealth"),
     new SceneDesc("Pdrgsh", "Chu Jelly Juice Shop"),
     new SceneDesc("Pnezumi", "Windfall Island Jail"),
+    new SceneDesc("GanonK", "Puppet Ganon Fight"),
 ];
 
 const id = "zww";

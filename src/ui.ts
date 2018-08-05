@@ -805,8 +805,6 @@ class About extends Panel {
 }
 </style>
 
-<h2><img style="vertical-align: middle;" src="logo.png">MODEL VIEWER</h2>
-
 <p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>
 <p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to go faster than that.
 <strong>B</strong> resets the camera, and <strong>Z</strong> toggles the UI. </p>
@@ -815,7 +813,8 @@ class About extends Panel {
 
 <p><strong>MODELS</strong> © Nintendo, SEGA, Retro Studios, FROM Software, Konami</p>
 
-<p><strong>CODE HELP AND FRIENDSHIP</strong> from
+<p>
+<strong>BASED ON WORK</strong> by
 <a href="https://twitter.com/beholdnec">N.E.C.</a>,
 <a href="https://twitter.com/LordNed">LordNed</a>,
 <a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,
@@ -825,7 +824,8 @@ class About extends Panel {
 <a href="https://github.com/vlad001">vlad001</a>,
 <a href="https://twitter.com/Jewelots_">Jewel</a>,
 <a href="https://twitter.com/instant_grat">Instant Grat</a>,
-and <a href="https://twitter.com/__Aruki">Aruki</a></p>
+<a href="https://twitter.com/__Aruki">Aruki</a>
+</p>
 
 <p><strong>ICONS</strong> from <a href="https://thenounproject.com/">The Noun Project</a>, used under Creative Commons CC-BY:</p>
 <ul>
