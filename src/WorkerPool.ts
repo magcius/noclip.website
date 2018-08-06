@@ -17,7 +17,7 @@ class WorkerManager<TReq extends WorkerRequest, TRes> {
         this.worker.onmessage = this._workerOnMessage.bind(this);
     }
 
-    private _workerOnMessage(e: MessageEvent) {
+    private _workerOnMessage(e: MessageEvent): void {
         const resp: TRes = e.data;
         this.currentRequest = assertExists(this.currentRequest);
         this.currentRequest.resolve(resp);
@@ -30,30 +30,30 @@ class WorkerManager<TReq extends WorkerRequest, TRes> {
         this.worker.postMessage(req.request);
     }
 
-    public isFree() {
+    public isFree(): boolean {
         return this.currentRequest === null;
     }
 
-    public terminate() {
-        return this.worker.terminate();
+    public terminate(): void {
+        this.worker.terminate();
     }
 }
 
-export class WorkerPool<TReq extends WorkerRequest, TRes> {
+export default class WorkerPool<TReq extends WorkerRequest, TRes> {
     private outstandingRequests: WorkerManagerRequest<TReq, TRes>[] = [];
     private workers: WorkerManager<TReq, TRes>[] = [];
 
     constructor(private workerConstructor: () => Worker, private numWorkers: number = 8) {
     }
 
-    public terminate() {
+    public terminate(): void {
         for (const worker of this.workers) {
             worker.terminate();
         }
         this.workers = [];
     }
 
-    public build() {
+    public build(): void {
         if (this.workers.length > 0)
             return;
 
@@ -66,16 +66,15 @@ export class WorkerPool<TReq extends WorkerRequest, TRes> {
 
     public execute(request: TReq): Promise<TRes> {
         this.build();
-
         const p = new Promise<TRes>((resolve, reject) => {
-            const workerManagerRequest = { request, resolve };
+            const workerManagerRequest: WorkerManagerRequest<TReq, TRes> = { request, resolve };
             this.insertRequest(workerManagerRequest);
         });
         this.pumpQueue();
         return p;
     }
 
-    private insertRequest(workerManagerRequest: WorkerManagerRequest<TReq, TRes>) {
+    private insertRequest(workerManagerRequest: WorkerManagerRequest<TReq, TRes>): void {
         let i;
         for (i = 0; i < this.outstandingRequests.length; i++) {
             if (this.outstandingRequests[i].request.priority > workerManagerRequest.request.priority)
@@ -84,7 +83,7 @@ export class WorkerPool<TReq extends WorkerRequest, TRes> {
         this.outstandingRequests.splice(i, 0, workerManagerRequest);
     }
 
-    private pumpQueue() {
+    private pumpQueue(): void {
         for (const worker of this.workers) {
             if (this.outstandingRequests.length === 0)
                 return;
@@ -96,15 +95,7 @@ export class WorkerPool<TReq extends WorkerRequest, TRes> {
         }
     }
 
-    private _onWorkerDone() {
+    private _onWorkerDone(): void {
         this.pumpQueue();
     }
-}
-
-export function makeWorkerFromSource(sources: string[]): Worker {
-    const blob = new Blob(sources, { type: 'application/javascript' });
-    const url = window.URL.createObjectURL(blob);
-    const w = new Worker(url);
-    window.URL.revokeObjectURL(url);
-    return w;
 }

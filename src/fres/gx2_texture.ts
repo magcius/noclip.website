@@ -3,7 +3,7 @@ import { GX2SurfaceFormat } from './gx2_enum';
 import { GX2Surface, DeswizzledSurface } from './gx2_surface';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-import { WorkerPool } from '../worker_util';
+import WorkerPool from '../WorkerPool';
 import { DeswizzleRequest } from './gx2_swizzle';
 
 class Deswizzler {
