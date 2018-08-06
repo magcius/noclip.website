@@ -1034,7 +1034,7 @@ function parse_DKCR(resourceSystem: ResourceSystem, assetID: string, buffer: Arr
         const uvfSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
         const uvsSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
         const firstSurfaceOffs = dataSectionOffsTable[gpudSectionIndex];
-    
+
         const surfaceCount = secView.getUint32(surfaceDefinitionTableOffs + 0x00);
         let surfaceDefinitionTableIdx = surfaceDefinitionTableOffs + 0x04;
         const surfaces: Surface[] = [];

@@ -93,7 +93,7 @@ vec4 n64Texture2D(sampler2D tex, vec2 texCoord) {
     vec4 c0 = texture2D(tex, texCoord - offset / texSize, 0.0);
     vec4 c1 = texture2D(tex, texCoord - vec2(offset.x - sign(offset.x), offset.y) / texSize, 0.0);
     vec4 c2 = texture2D(tex, texCoord - vec2(offset.x, offset.y - sign(offset.y)) / texSize, 0.0);
-    return c0 + abs(offset.x) * (c1 - c0) + abs(offset.y) * (c2 - c0);		
+    return c0 + abs(offset.x) * (c1 - c0) + abs(offset.y) * (c2 - c0);
 }
 
 void main() {
@@ -413,7 +413,7 @@ class Scene implements Viewer.MainScene {
             const renderRoom = (room: ZELVIEW0.Headers) => {
                 renderMesh(room.mesh);
             };
-            
+
             scene.rooms.forEach((room) => renderRoom(room));
         };
     }

@@ -409,7 +409,7 @@ class Command_Material {
                 texMtx[0] =  cosR;
                 texMtx[4] =  sinR;
                 texMtx[12] = (1.0 - (cosR - sinR)) * 0.5;
-            
+
                 texMtx[1] = -sinR;
                 texMtx[5] =  cosR;
                 texMtx[13] = (1.0 - (sinR + cosR)) * 0.5;

@@ -25,7 +25,7 @@ export class Viewer {
     private onscreenColorTarget: ColorTarget = new ColorTarget();
     private onscreenDepthTarget: DepthTarget = new DepthTarget();
     public scene: MainScene;
-    
+
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
 

@@ -1594,7 +1594,7 @@ class Graph {
     }
 }
 
-function cv(): CanvasRenderingContext2D {    
+function cv(): CanvasRenderingContext2D {
     const canvas = document.createElement('canvas');
     canvas.width = 800;
     canvas.height = 400;

@@ -12,7 +12,7 @@ interface WorkerRequest {
 
 class WorkerManager<TReq extends WorkerRequest, TRes> {
     private currentRequest: (WorkerManagerRequest<TReq, TRes> | null) = null;
-    
+
     constructor(private worker: Worker, public onworkerdone: () => void) {
         this.worker.onmessage = this._workerOnMessage.bind(this);
     }
