@@ -74,7 +74,7 @@ class State {
     public combiners: Readonly<Render.Combiners>;
     public otherModeL: number = 0;
     public otherModeH: number = (CYCLETYPE._2CYCLE << OtherModeH.CYCLETYPE_SFT);
-    
+
     public primColor: vec4 = vec4.clone([1, 1, 1, 1]);
     // FIXME: Initial envColor depends on which map is loaded, and can be animated.
     public envColor: vec4 = vec4.clone([0, 0, 0, 0.5]);
@@ -90,7 +90,7 @@ class State {
     public lookupAddress(addr: number) {
         return this.rom.lookupAddress(this.banks, addr);
     }
-    
+
     public getDLProgram(params: Render.F3DEX2ProgramParameters): Render.F3DEX2Program {
         const hash = Render.hashF3DEX2Params(params);
         if (!(hash in this.programMap)) {
@@ -159,7 +159,7 @@ class State {
             }
 
             gl.activeTexture(gl.TEXTURE0);
-            
+
             const lighting = !!(geometryMode & GeometryMode.LIGHTING);
             // When lighting is disabled, the vertex colors are passed to the rasterizer as the SHADE attribute.
             // When lighting is enabled, the vertex colors represent normals and SHADE is computed by the RSP.
@@ -327,7 +327,7 @@ const OtherModeL = {
 
 function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
     flushDraw(state);
-    
+
     const len = extractBits(w0, 0, 8) + 1;
     const sft = Math.max(0, 32 - extractBits(w0, 8, 8) - len);
     const mask = ((1 << len) - 1) << sft;
@@ -348,7 +348,7 @@ function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
 
     state.cmds.push((renderState: RenderState) => {
         const gl = renderState.gl;
-        
+
         renderState.useFlags(renderFlags);
 
         if (newMode & OtherModeL.ZMODE_DEC) {

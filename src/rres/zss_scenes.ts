@@ -194,7 +194,7 @@ class SkywardSwordScene implements Viewer.MainScene {
         if (futureModels.length || pastModels.length) {
             const futurePanel = new UI.Panel();
             futurePanel.setTitle(SAND_CLOCK_ICON, "Time Stones");
-    
+
             const selector = new UI.SimpleSingleSelect();
             selector.setStrings([ 'Past', 'Future' ]);
             selector.onselectionchange = (index: number) => {
@@ -207,7 +207,7 @@ class SkywardSwordScene implements Viewer.MainScene {
             };
             selector.selectItem(0); // Past
             futurePanel.contents.appendChild(selector.elem);
-    
+
             panels.push(futurePanel);
         }
 
@@ -397,7 +397,7 @@ class SkywardSwordScene implements Viewer.MainScene {
             const rotationX = 180 * (obj.rotX / 0x7FFF);
             const rotationY = 180 * (obj.rotY / 0x7FFF);
             quat.fromEuler(q, rotationX, rotationY, 0);
-    
+
             for (const modelRenderer of models) {
                 mat4.fromRotationTranslation(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz]);
             }
@@ -410,7 +410,7 @@ class SkywardSwordScene implements Viewer.MainScene {
             // Set model matrix.
             const rotation = 180 * (obj.rotY / 0x7FFF);
             quat.fromEuler(q, 0, rotation, 0);
-    
+
             for (const modelRenderer of models) {
                 mat4.fromRotationTranslationScale(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz], [obj.sx, obj.sy, obj.sz]);
             }
@@ -490,7 +490,7 @@ class SkywardSwordScene implements Viewer.MainScene {
             const layoutChunkTableCount = view.getUint16(layoutsTableIdx + 0x00);
             // pad
             const layoutChunkTableOffs = layoutsTableIdx + view.getUint32(layoutsTableIdx + 0x04);
-    
+
             const layoutChunkTable = parseChunkTable(layoutChunkTableOffs, layoutChunkTableCount);
 
             // Look for objects table.

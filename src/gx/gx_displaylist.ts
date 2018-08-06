@@ -502,7 +502,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
                         value = compileReadOneComponent(viewName, srcOffs);
                     else
                         value = `0`;
-    
+
                     S += `
         ${compileWriteOneComponent(dstOffs, value)};`;
                 }

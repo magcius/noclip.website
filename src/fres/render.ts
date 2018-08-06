@@ -622,7 +622,7 @@ class Command_Shape {
             throw new Error(`Unsupported index format ${indexFormat}`);
         }
     }
- 
+
     private translatePrimType(gl: WebGL2RenderingContext, primType: GX2PrimitiveType) {
         switch (primType) {
         case GX2PrimitiveType.TRIANGLES:

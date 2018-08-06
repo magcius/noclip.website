@@ -111,7 +111,7 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, textureHolder
             const scene = sceneLoader.createScene(gl);
             return [scene];
         }
-    
+
         return null;
     });
 }

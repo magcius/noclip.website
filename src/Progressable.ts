@@ -38,7 +38,7 @@ export default class Progressable<T> {
         });
         const pr = new Progressable<T[]>(p);
         return pr;
-    }    
+    }
 }
 
 function avg(L: number[]) {

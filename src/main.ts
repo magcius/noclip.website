@@ -296,7 +296,7 @@ class Main {
         const scene = this.viewer.scene;
         this.ui.sceneChanged();
 
-        if (scene && scene.createPanels) 
+        if (scene && scene.createPanels)
             this.ui.setScenePanels(scene.createPanels());
         else
             this.ui.setScenePanels([]);

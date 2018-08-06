@@ -1649,7 +1649,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
         const scaleZ = readAnimationTrack(sTable, 1);
         const rotationZ = readAnimationTrack(rTable, rotationScale);
         const translationZ = readAnimationTrack(tTable, 1);
-        jointAnimationEntries.push({ 
+        jointAnimationEntries.push({
             index: i,
             scaleX, rotationX, translationX,
             scaleY, rotationY, translationY,

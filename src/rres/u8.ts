@@ -67,7 +67,7 @@ export function parse(buffer: ArrayBufferSlice): U8Archive {
         File = 0x00,
         Directory = 0x01,
     }
-    
+
     const rootNodeType: NodeType = view.getUint8(tocOffs + 0x00);
     assert(rootNodeType === NodeType.Directory);
     const rootNodeChildCount = view.getUint32(tocOffs + 0x08, false);

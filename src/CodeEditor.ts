@@ -538,7 +538,7 @@ export default class CodeEditor {
 
         // Recalculate geometry.
         const numLines = this._lineModel.length;
-        
+
         const gutterChars = ('' + numLines).length;
         this._gutterMargin = 10;
         this._gutterWidth = this._charWidth * Math.max(gutterChars, 2) + this._gutterMargin * 2;
@@ -1002,7 +1002,7 @@ export default class CodeEditor {
         // Setting the font on a CanvasRenderingContext2D in Firefox is expensive, so try
         // to set it as little as possible by only setting it when it changes.
         let currentFont;
-        
+
         // Now for the actual paint.
         for (let m = 0; m < this._lineModel.length; m++) {
             const line = this._lineModel[m];

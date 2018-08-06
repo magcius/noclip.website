@@ -96,7 +96,7 @@ function applyFlags(gl: WebGL2RenderingContext, stateFlags: RenderFlagsResolved,
         stateFlags.blendSrc = newFlags.blendSrc;
         stateFlags.blendDst = newFlags.blendDst;
     }
-    
+
     if (flagChanged(stateFlags.cullMode, newFlags.cullMode)) {
         // Try to be smart about this.
         if (stateFlags.cullMode === CullMode.NONE)
@@ -174,7 +174,7 @@ export class ColorTarget {
 
     public setParameters(gl: WebGL2RenderingContext, width: number, height: number, samples: number = RENDER_SAMPLES) {
         samples = Math.min(samples, gl.getParameter(gl.MAX_SAMPLES));
-        
+
         if (this.width === width && this.height === height && this.samples === samples)
             return;
 
