@@ -1,6 +1,6 @@
 
 import { mat4, vec3 } from 'gl-matrix';
-import { InputManager } from './InputManager';
+import InputManager from './InputManager';
 import { nArray } from './util';
 
 class Plane {

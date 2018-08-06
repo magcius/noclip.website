@@ -1,5 +1,5 @@
 
-export class InputManager {
+export default class InputManager {
     public toplevel: HTMLElement;
     public keysDown: Map<string, boolean>;
     public dx: number;

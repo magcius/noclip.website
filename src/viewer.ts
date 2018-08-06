@@ -1,11 +1,9 @@
 
-// tslint:disable:no-console
-
 import { RenderState, ColorTarget, DepthTarget, RenderStatistics } from './render';
 import * as UI from './ui';
 
 import Progressable from './Progressable';
-import { InputManager } from './InputManager';
+import InputManager from './InputManager';
 import { CameraController, Camera, CameraControllerClass } from './Camera';
 
 export interface Texture {
