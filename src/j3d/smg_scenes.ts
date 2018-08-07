@@ -443,12 +443,20 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
             }
         }
 
-        const bck = bckFile !== null ? BCK.parse(bckFile.buffer) : null;
-        const brk = brkFile !== null ? BRK.parse(brkFile.buffer) : null;
-        const btk = btkFile !== null ? BTK.parse(btkFile.buffer) : null;
-        scene.setBCK(bck);
-        scene.setBRK(brk);
-        scene.setBTK(btk);
+        if (btkFile !== null) {
+            const btk = BTK.parse(btkFile.buffer);
+            scene.bindTTK1(btk.ttk1);
+        }
+
+        if (brkFile !== null) {
+            const brk = BRK.parse(brkFile.buffer);
+            scene.bindTRK1(brk.trk1);
+        }
+
+        if (bckFile !== null) {
+            const bck = BCK.parse(bckFile.buffer);
+            scene.bindANK1(bck.ank1);
+        }
     }
 
     public spawnArchive(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<Scene | null> {

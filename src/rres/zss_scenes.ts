@@ -16,6 +16,7 @@ import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import { ColorOverride } from '../j3d/render';
+import AnimationController from '../AnimationController';
 
 const SAND_CLOCK_ICON = '<svg viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
 
@@ -97,7 +98,7 @@ class ModelArchiveCollection {
 class SkywardSwordScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
-    public animationController: BRRES.AnimationController;
+    public animationController: AnimationController;
     private mainColorTarget: ColorTarget = new ColorTarget();
     private stageRRES: BRRES.RRES;
     private stageBZS: BZS = null;
@@ -113,7 +114,7 @@ class SkywardSwordScene implements Viewer.MainScene {
 
     constructor(gl: WebGL2RenderingContext, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.textureHolder = new RRESTextureHolder();
-        this.animationController = new BRRES.AnimationController();
+        this.animationController = new AnimationController();
 
         this.textures = this.textureHolder.viewerTextures;
 

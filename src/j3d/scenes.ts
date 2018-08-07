@@ -43,15 +43,28 @@ export class MultiScene implements Viewer.MainScene {
     }
 }
 
-export function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
+export function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     textureHolder.addJ3DTextures(gl, bmd, bmt);
     const sceneLoader: SceneLoader = new SceneLoader(textureHolder, bmd, bmt);
     const scene = sceneLoader.createScene(gl);
-    scene.setBTK(btkFile ? BTK.parse(btkFile.buffer) : null);
-    scene.setBRK(brkFile ? BRK.parse(brkFile.buffer) : null);
-    scene.setBCK(bckFile ? BCK.parse(bckFile.buffer) : null);
+
+    if (btkFile !== null) {
+        const btk = BTK.parse(btkFile.buffer);
+        scene.bindTTK1(btk.ttk1);
+    }
+
+    if (brkFile !== null) {
+        const brk = BRK.parse(brkFile.buffer);
+        scene.bindTRK1(brk.trk1);
+    }
+
+    if (bckFile !== null) {
+        const bck = BCK.parse(bckFile.buffer);
+        scene.bindANK1(bck.ank1);
+    }
+
     return scene;
 }
 

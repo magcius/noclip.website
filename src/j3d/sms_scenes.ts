@@ -395,7 +395,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmdFile = rarc.findFile(bmdFilename);
             const bckFile = rarc.findFile(bckFilename);
             const scene = createScene(gl, textureHolder, bmdFile, null, null, bckFile, null);
-            scene.bck.ank1.loopMode = loopMode;
+            scene.ank1Animator.ank1.loopMode = loopMode;
             return scene;
         }
 

@@ -11,6 +11,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState } from '../render';
 import { RRESTextureHolder, ModelRenderer } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
+import AnimationController from '../AnimationController';
 
 const materialHacks: GXMaterialHacks = {
     colorLightingFudge: (p) => `${p.matSource}`,
@@ -21,11 +22,11 @@ export class BasicRRESScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
     public models: ModelRenderer[] = [];
-    public animationController: BRRES.AnimationController;
+    public animationController: AnimationController;
 
     constructor(gl: WebGL2RenderingContext, public stageRRESes: BRRES.RRES[]) {
         this.textureHolder = new RRESTextureHolder();
-        this.animationController = new BRRES.AnimationController();
+        this.animationController = new AnimationController();
 
         this.textures = this.textureHolder.viewerTextures;
 

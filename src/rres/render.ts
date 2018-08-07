@@ -8,6 +8,7 @@ import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder } from "../gx/gx_render";
 import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState } from "../Camera";
 import { ColorOverride } from "../j3d/render";
+import AnimationController from "../AnimationController";
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
@@ -47,32 +48,32 @@ export class ModelRenderer {
         this.name = `${namePrefix}/${mdl0.name}`;
     }
 
-    public bindCHR0(animationController: BRRES.AnimationController, chr0: BRRES.CHR0): void {
+    public bindCHR0(animationController: AnimationController, chr0: BRRES.CHR0): void {
         this.chr0NodeAnimator = BRRES.bindCHR0Animator(animationController, chr0, this.mdl0.nodes);
     }
 
-    public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {
+    public bindSRT0(animationController: AnimationController, srt0: BRRES.SRT0): void {
         for (let i = 0; i < this.materialCommands.length; i++) {
             const cmd = this.materialCommands[i];
             cmd.bindSRT0(animationController, srt0);
         }
     }
 
-    public bindPAT0(animationController: BRRES.AnimationController, pat0: BRRES.PAT0): void {
+    public bindPAT0(animationController: AnimationController, pat0: BRRES.PAT0): void {
         for (let i = 0; i < this.materialCommands.length; i++) {
             const cmd = this.materialCommands[i];
             cmd.bindPAT0(animationController, pat0);
         }
     }
 
-    public bindCLR0(animationController: BRRES.AnimationController, clr0: BRRES.CLR0): void {
+    public bindCLR0(animationController: AnimationController, clr0: BRRES.CLR0): void {
         for (let i = 0; i < this.materialCommands.length; i++) {
             const cmd = this.materialCommands[i];
             cmd.bindCLR0(animationController, clr0);
         }
     }
 
-    public bindRRESAnimations(animationController: BRRES.AnimationController, rres: BRRES.RRES): void {
+    public bindRRESAnimations(animationController: AnimationController, rres: BRRES.RRES): void {
         for (let i = 0; i < rres.chr0.length; i++)
             this.bindCHR0(animationController, rres.chr0[i]);
         for (let i = 0; i < rres.srt0.length; i++)
@@ -263,7 +264,7 @@ class Command_Material {
         this.translateSamplers(gl);
     }
 
-    public bindSRT0(animationController: BRRES.AnimationController, srt0: BRRES.SRT0): void {
+    public bindSRT0(animationController: AnimationController, srt0: BRRES.SRT0): void {
         for (let i: BRRES.TexMtxIndex = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
             const srtAnimator = BRRES.bindSRT0Animator(animationController, srt0, this.material.name, i);
             if (srtAnimator)
@@ -271,7 +272,7 @@ class Command_Material {
         }
     }
 
-    public bindPAT0(animationController: BRRES.AnimationController, pat0: BRRES.PAT0): void {
+    public bindPAT0(animationController: AnimationController, pat0: BRRES.PAT0): void {
         for (let i = 0; i < 8; i++) {
             const patAnimator = BRRES.bindPAT0Animator(animationController, pat0, this.material.name, i);
             if (patAnimator)
@@ -279,7 +280,7 @@ class Command_Material {
         }
     }
 
-    public bindCLR0(animationController: BRRES.AnimationController, clr0: BRRES.CLR0): void {
+    public bindCLR0(animationController: AnimationController, clr0: BRRES.CLR0): void {
         for (let i = 0; i < BRRES.AnimatableColor.COUNT; i++) {
             const clrAnimator = BRRES.bindCLR0Animator(animationController, clr0, this.material.name, i);
             if (clrAnimator)

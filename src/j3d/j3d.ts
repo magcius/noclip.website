@@ -12,6 +12,7 @@ import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { ColorOverride } from './render';
 import { AABB } from '../Camera';
+import AnimationController from '../AnimationController';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
@@ -1209,7 +1210,7 @@ export class BTI {
 }
 //#endregion
 
-//#region Animation
+//#region Animation Core
 export const enum LoopMode {
     ONCE = 0,
     REPEAT = 2,
@@ -1418,6 +1419,33 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
 
     return { duration, loopMode, uvAnimationEntries };
 }
+
+export class TTK1Animator {
+    constructor(public animationController: AnimationController, private ttk1: TTK1, private animationEntry: UVAnimationEntry) {}
+
+    public calcTexMtx(dst: mat4): void {
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.ttk1, frame);
+
+        const centerS = this.animationEntry.centerS;
+        const centerT = this.animationEntry.centerT;
+        const centerQ = this.animationEntry.centerQ;
+        const scaleS = sampleAnimationData(this.animationEntry.scaleS, animFrame);
+        const scaleT = sampleAnimationData(this.animationEntry.scaleT, animFrame);
+        const rotation = sampleAnimationData(this.animationEntry.rotationQ, animFrame);
+        const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
+        const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
+        createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+    }
+}
+
+export function bindTTK1Animator(animationController: AnimationController, ttk1: TTK1, materialName: string, texGenIndex: number): TTK1Animator | null {
+    const animationEntry = ttk1.uvAnimationEntries.find((entry) => entry.materialName === materialName && entry.texGenIndex === texGenIndex);
+    if (animationEntry === undefined)
+        return null;
+
+    return new TTK1Animator(animationController, ttk1, animationEntry);
+}
 //#endregion
 
 //#region BTK
@@ -1435,29 +1463,6 @@ export class BTK {
     }
 
     public ttk1: TTK1;
-
-    public calcAnimatedTexMtx(dst: mat4, materialName: string, texMtxIndex: number, frame: number): boolean {
-        const animationEntry = this.findAnimationEntry(materialName, texMtxIndex);
-        if (!animationEntry)
-            return false;
-
-        const animFrame = getAnimFrame(this.ttk1, frame);
-
-        const centerS = animationEntry.centerS;
-        const centerT = animationEntry.centerT;
-        const centerQ = animationEntry.centerQ;
-        const scaleS = sampleAnimationData(animationEntry.scaleS, animFrame);
-        const scaleT = sampleAnimationData(animationEntry.scaleT, animFrame);
-        const rotation = sampleAnimationData(animationEntry.rotationQ, animFrame);
-        const translationS = sampleAnimationData(animationEntry.translationS, animFrame);
-        const translationT = sampleAnimationData(animationEntry.translationT, animFrame);
-        createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-        return true;
-    }
-
-    private findAnimationEntry(materialName: string, texGenIndex: number): UVAnimationEntry {
-        return this.ttk1.uvAnimationEntries.find((e) => e.materialName === materialName && e.texGenIndex === texGenIndex);
-    }
 }
 //#endregion
 
@@ -1559,6 +1564,28 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 
     return { duration, loopMode, animationEntries };
 }
+
+export class TRK1Animator {
+    constructor(public animationController: AnimationController, private trk1: TRK1, private animationEntry: PaletteAnimationEntry) {}
+
+    public calcColorOverride(dst: GX_Material.Color): void {
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.trk1, frame);
+
+        dst.r = sampleAnimationData(this.animationEntry.r, animFrame);
+        dst.g = sampleAnimationData(this.animationEntry.g, animFrame);
+        dst.b = sampleAnimationData(this.animationEntry.b, animFrame);
+        dst.a = sampleAnimationData(this.animationEntry.a, animFrame);
+    }
+}
+
+export function bindTRK1Animator(animationController: AnimationController, trk1: TRK1, materialName: string, colorOverride: ColorOverride): TRK1Animator | null {
+    const animationEntry = trk1.animationEntries.find((entry) => entry.materialName === materialName && entry.colorOverride === colorOverride);
+    if (animationEntry === undefined)
+        return null;
+
+    return new TRK1Animator(animationController, trk1, animationEntry);
+}
 //#endregion
 
 //#region BRK
@@ -1572,19 +1599,6 @@ export class BRK {
         brk.trk1 = readTRK1Chunk(j3d.nextChunk('TRK1'));
 
         return brk;
-    }
-
-    public calcColorOverride(dst: GX_Material.Color, materialName: string, colorOverride: ColorOverride, frame: number): boolean {
-        const animationEntry = this.trk1.animationEntries.find((e) => e.materialName === materialName && e.colorOverride === colorOverride);
-        if (!animationEntry)
-            return false;
-
-        const animFrame = getAnimFrame(this.trk1, frame);
-        dst.r = sampleAnimationData(animationEntry.r, animFrame);
-        dst.g = sampleAnimationData(animationEntry.g, animFrame);
-        dst.b = sampleAnimationData(animationEntry.b, animFrame);
-        dst.a = sampleAnimationData(animationEntry.a, animFrame);
-        return true;
     }
 
     public trk1: TRK1;
@@ -1605,7 +1619,7 @@ interface JointAnimationEntry {
     translationZ: AnimationTrack;
 }
 
-interface ANK1 extends AnimationBase {
+export interface ANK1 extends AnimationBase {
     jointAnimationEntries: JointAnimationEntry[];
 }
 
@@ -1659,6 +1673,35 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
 
     return { loopMode, duration, jointAnimationEntries };
 }
+
+export class ANK1Animator { 
+    constructor(public animationController: AnimationController, public ank1: ANK1) {}
+
+    public calcJointMatrix(dst: mat4, jointIndex: number): boolean {
+        const entry = this.ank1.jointAnimationEntries[jointIndex];
+        if (!entry)
+            return false;
+
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.ank1, frame);
+
+        const scaleX = sampleAnimationData(entry.scaleX, animFrame);
+        const scaleY = sampleAnimationData(entry.scaleY, animFrame);
+        const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * 180;
+        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * 180;
+        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * 180;
+        const translationX = sampleAnimationData(entry.translationX, animFrame);
+        const translationY = sampleAnimationData(entry.translationY, animFrame);
+        const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+        createJointMatrix(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        return true;
+    }
+}
+
+export function bindANK1Animator(animationController: AnimationController, ank1: ANK1): ANK1Animator {
+    return new ANK1Animator(animationController, ank1);
+}
 //#endregion
 
 //#region BCK
@@ -1672,22 +1715,6 @@ export class BCK {
         bck.ank1 = readANK1Chunk(j3d.nextChunk('ANK1'));
 
         return bck;
-    }
-
-    public calcJointMatrix(dst: mat4, jointIndex: number, frame: number): void {
-        const animFrame = getAnimFrame(this.ank1, frame);
-
-        const entry = this.ank1.jointAnimationEntries[jointIndex];
-        const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-        const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-        const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * 180;
-        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * 180;
-        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * 180;
-        const translationX = sampleAnimationData(entry.translationX, animFrame);
-        const translationY = sampleAnimationData(entry.translationY, animFrame);
-        const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-        createJointMatrix(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
     }
 
     public ank1: ANK1;
