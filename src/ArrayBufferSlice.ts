@@ -1,7 +1,4 @@
 
-import { assert } from "./util";
-import { getSystemEndianness, Endianness } from "./endian";
-
 // This implements a "saner" ArrayBuffer, since the JS one is absurd.
 //
 // The biggest issue is that ArrayBuffer.prototype.slice does not make a read-only view, but instead
@@ -11,6 +8,9 @@ import { getSystemEndianness, Endianness } from "./endian";
 //
 // ArrayBufferSlice's are designed to be read-only, however, JavaScript has no way of enforcing this
 // currently...
+
+import { assert } from "./util";
+import { getSystemEndianness, Endianness } from "./endian";
 
 // Install our dummy ArrayBuffer.prototype.slice to catch any rogue offenders.
 const ArrayBuffer_slice = ArrayBuffer.prototype.slice;
@@ -110,7 +110,7 @@ export default class ArrayBufferSlice {
         } else if (componentSize === 4) {
             return this.bswap32();
         } else {
-            return componentSize;
+            throw new Error("Invalid componentSize");
         }
     }
 
@@ -134,12 +134,12 @@ export default class ArrayBufferSlice {
             assert((count | 0) === count);
         }
 
-        const componentSize = <1 | 2 | 4> clazz.BYTES_PER_ELEMENT;
+        const componentSize = clazz.BYTES_PER_ELEMENT as (1 | 2 | 4);
         const needsEndianSwap = (componentSize > 1) && (endianness !== getSystemEndianness());
 
         // Typed arrays require alignment.
         if (needsEndianSwap) {
-            const componentSize_ = <2 | 4> componentSize;
+            const componentSize_ = componentSize as (2 | 4);
             const copy = this.subarray(offs, byteLength).bswap(componentSize_);
             return copy.createTypedArray(clazz);
         } else if (isAligned(begin, componentSize)) {

@@ -103,7 +103,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 }
                 if (bckFile !== null) {
                     const bck = BCK.parse(bckFile.buffer);
-                    scene.setBCK(bck);
+                    scene.bindANK1(bck.ank1);
                 }
                 scenes.push(scene);
                 return scene;

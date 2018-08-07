@@ -13,6 +13,8 @@ import { Endianness } from '../endian';
 import { AABB } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { RRESTextureHolder } from './render';
+import AnimationController from '../AnimationController';
+import { cv, Graph } from '../DebugJunk';
 
 //#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {
@@ -1530,90 +1532,6 @@ function parseAnimationTrackF96(buffer: ArrayBufferSlice): FloatAnimationTrack {
     }
     return { type: AnimationTrackType.HERMITE, frames };
 }
-
-export class AnimationController {
-    public fps: number = 30;
-    private timeMilliseconds: number;
-
-    public getTimeInFrames(): number {
-        const ms = this.timeMilliseconds;
-        return (ms / 1000) * this.fps;
-    }
-
-    public updateTime(newTime: number): void {
-        this.timeMilliseconds = newTime;
-    }
-}
-
-function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
-    for (let t = 0; t < maxt; t += step) {
-        callback(t, f(t));
-    }
-}
-
-type F = (t: number) => number;
-
-class Graph {
-    public minv: number = undefined;
-    public maxv: number = undefined;
-    public ctx: CanvasRenderingContext2D;
-
-    constructor(ctx: CanvasRenderingContext2D) {
-        this.ctx = ctx;
-    }
-
-    public graphF(color: string, f: F, range: number): void {
-        const step = 1;
-
-        stepF(f, range, step, (t, v) => {
-            if (this.minv === undefined)
-                this.minv = v;
-            if (this.maxv === undefined)
-                this.maxv = v;
-            this.minv = Math.min(this.minv, v);
-            this.maxv = Math.max(this.maxv, v);
-        });
-
-        // pad
-        const displayMinV = this.minv;
-        const displayMaxV = this.maxv;
-        const ctx = this.ctx;
-        const width = ctx.canvas.width;
-        const height = ctx.canvas.height;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        stepF(f, range, step, (t, v) => {
-            const xa = (t / range) * 1/step;
-            const ya = (v - displayMinV) / (displayMaxV - displayMinV);
-            const x = xa * width;
-            const y = (1-ya) * height;
-            ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-    }
-}
-
-function cv(): CanvasRenderingContext2D {
-    const canvas = document.createElement('canvas');
-    canvas.width = 800;
-    canvas.height = 400;
-    const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    canvas.style.position = 'absolute';
-    canvas.style.top = '0';
-    canvas.style.left = '0';
-
-    [].forEach.call(document.querySelectorAll('canvas.cv'), (e: HTMLElement) => document.body.removeChild(e));
-    canvas.classList.add('cv');
-    document.body.appendChild(canvas);
-
-    return ctx;
-}
-
 //#endregion
 
 //#region SRT0
@@ -2235,8 +2153,7 @@ function parseCHR0_NodeData(buffer: ArrayBufferSlice, numKeyframes: number): CHR
         TRANS_NOT_EXIST   = (IDENTITY | RT_ZERO | TRANS_ZERO | TRANS_USE_MODEL),
     };
 
-    enum TrackFormat
-    {
+    enum TrackFormat {
         CONSTANT,
         _32,
         _48,
@@ -2453,6 +2370,7 @@ export function bindCHR0Animator(animationController: AnimationController, chr0:
 }
 //#endregion
 
+//#region RRES
 export interface RRES {
     mdl0: MDL0[];
     tex0: TEX0[];
@@ -2563,3 +2481,4 @@ export function parse(buffer: ArrayBufferSlice): RRES {
 
     return { mdl0, tex0, srt0, pat0, clr0, chr0 };
 }
+//#endregion

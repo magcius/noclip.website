@@ -1,7 +1,8 @@
 
 import { mat4, mat2d } from 'gl-matrix';
 
-import { BMD, BMT, BTK, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, BRK, DRW1JointKind, BCK } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1JointKind, TTK1Animator, ANK1Animator, bindANK1Animator } from './j3d';
+import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, translateTexFilter, translateWrapMode, GXTextureHolder } from '../gx/gx_render';
@@ -11,6 +12,7 @@ import { RenderFlags, RenderState } from '../render';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, AABB, IntersectionState } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { TextureMapping } from '../TextureHolder';
+import AnimationController from '../AnimationController';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(gl: WebGL2RenderingContext, bmd: BMD, bmt: BMT = null) {
@@ -44,30 +46,6 @@ function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number,
     dst[7] = 9999.0;
     dst[11] = 9999.0;
     dst[15] = 9999.0;
-}
-
-function texProjOrthoMtx(dst: mat4, t: number, b: number, l: number, r: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    const h = 1 / (r - l);
-    dst[0] = 2.0 * h * scaleS;
-    dst[4] = 0.0;
-    dst[8] = 0.0;
-    dst[12] = ((-(r + l) * h) * scaleS) + transS;
-
-    const v = 1 / (t - b);
-    dst[1] = 0.0;
-    dst[5] = 2.0 * v * scaleT;
-    dst[9] = -transT;
-    dst[13] = ((-(t + b) * v) * scaleT) + transT;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = -1.0;
-    dst[14] = 0.0;
-
-    dst[3] = 0.0;
-    dst[7] = 0.0;
-    dst[11] = 0.0;
-    dst[15] = 1.0;
 }
 
 const scratchModelMatrix = mat4.create();
@@ -160,11 +138,6 @@ class Command_Shape {
 
             const shapeHelper = this.shapeHelpers[p];
             shapeHelper.drawSimple(state);
-            /*
-            shapeHelper.drawPrologue(gl);
-            shapeHelper.drawTriangles(gl, packet.firstTriangle, packet.numTriangles);
-            shapeHelper.drawEpilogue(gl);
-            */
         }
 
         state.renderStatisticsTracker.drawCallCount++;
@@ -176,8 +149,6 @@ class Command_Shape {
 }
 
 interface Command_MaterialScene {
-    brk: BRK;
-    btk: BTK;
     currentMaterialCommand: Command_Material;
     getTimeInFrames(milliseconds: number): number;
     colorOverrides: GX_Material.Color[];
@@ -198,6 +169,8 @@ export class Command_Material {
     private scene: Command_MaterialScene;
     private renderFlags: RenderFlags;
     public program: GX_Material.GX_Program;
+    private ttk1Animators: TTK1Animator[] = [];
+    private trk1Animators: TRK1Animator[] = [];
 
     constructor(scene: Command_MaterialScene, material: MaterialEntry, hacks?: GX_Material.GXMaterialHacks) {
         this.name = material.name;
@@ -206,6 +179,22 @@ export class Command_Material {
         this.program = new GX_Material.GX_Program(material.gxMaterial, hacks);
         this.program.name = this.name;
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
+    }
+
+    public bindTTK1(animationController: AnimationController, ttk1: TTK1): void {
+        for (let i = 0; i < 8; i++) {
+            const ttk1Animator = bindTTK1Animator(animationController, ttk1, this.material.name, i);
+            if (ttk1Animator)
+                this.ttk1Animators[i] = ttk1Animator;
+        }
+    }
+
+    public bindTRK1(animationController: AnimationController, trk1: TRK1): void {
+        for (let i: ColorOverride = 0; i < ColorOverride.COUNT; i++) {
+            const trk1Animator = bindTRK1Animator(animationController, trk1, this.material.name, i);
+            if (trk1Animator)
+                this.trk1Animators[i] = trk1Animator;
+        }
     }
 
     public exec(state: RenderState) {
@@ -228,13 +217,10 @@ export class Command_Material {
     }
 
     private fillMaterialParams(materialParams: MaterialParams, state: RenderState): void {
-        const animationFrame = this.scene.getTimeInFrames(state.time);
-
         const copyColor = (i: ColorOverride, dst: GX_Material.Color, fallbackColor: GX_Material.Color) => {
-            // First, check for a color animation.
-            if (this.scene.brk !== null) {
-                if (this.scene.brk.calcColorOverride(dst, this.material.name, i, animationFrame))
-                    return;
+            if (this.trk1Animators[i] !== undefined) {
+                this.trk1Animators[i].calcColorOverride(dst);
+                return;
             }
 
             let color: GX_Material.Color;
@@ -248,7 +234,7 @@ export class Command_Material {
             if (this.scene.alphaOverrides[i] !== undefined) {
                 alpha = this.scene.alphaOverrides[i];
             } else {
-                alpha = fallbackColor.a;
+                alpha = color.a;
             }
 
             dst.copy(color, alpha);
@@ -347,10 +333,11 @@ export class Command_Material {
             }
 
             // Apply SRT.
-            mat4.copy(scratch, texMtx.matrix);
-
-            if (this.scene.btk !== null)
-                this.scene.btk.calcAnimatedTexMtx(scratch, this.material.name, i, animationFrame);
+            if (this.ttk1Animators[i] !== undefined) {
+                this.ttk1Animators[i].calcTexMtx(scratch);
+            } else {
+                mat4.copy(scratch, texMtx.matrix);
+            }
 
             // SRT matrices have translation in fourth component, but we want our matrix to have translation
             // in third component. Swap.
@@ -391,6 +378,7 @@ export enum ColorOverride {
     MAT0, MAT1, AMB0, AMB1,
     K0, K1, K2, K3,
     CPREV, C0, C1, C2,
+    COUNT,
 }
 
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
@@ -436,12 +424,11 @@ export class Scene implements Viewer.Scene {
     public bmt: BMT | null = null;
 
     // Animations.
-    public bck: BCK | null = null;
-    public brk: BRK | null = null;
-    public btk: BTK | null = null;
-    public textureHolder: J3DTextureHolder;
+    private animationController: AnimationController = new AnimationController();
+    public ank1Animator: ANK1Animator | null = null;
 
     // Texture information.
+    public textureHolder: J3DTextureHolder;
     private tex1Samplers: TEX1_Sampler[];
     private glSamplers: WebGLSampler[];
 
@@ -488,19 +475,19 @@ export class Scene implements Viewer.Scene {
         this.glSamplers.forEach((sampler) => gl.deleteSampler(sampler));
     }
 
-    public setColorOverride(i: ColorOverride, color: GX_Material.Color) {
+    public setColorOverride(i: ColorOverride, color: GX_Material.Color): void {
         this.colorOverrides[i] = color;
     }
 
-    public setAlphaOverride(i: ColorOverride, alpha: number) {
+    public setAlphaOverride(i: ColorOverride, alpha: number): void {
         this.alphaOverrides[i] = alpha;
     }
 
-    public setIsSkybox(v: boolean) {
+    public setIsSkybox(v: boolean): void {
         this.isSkybox = v;
     }
 
-    public setFPS(v: number) {
+    public setFPS(v: number): void {
         this.fps = v;
     }
 
@@ -508,16 +495,32 @@ export class Scene implements Viewer.Scene {
         this.visible = v;
     }
 
-    public setBCK(bck: BCK | null): void {
-        this.bck = bck;
+    /**
+     * Binds {@param ttk1} (texture animations) to this model renderer.
+     * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
+     */
+    public bindTTK1(ttk1: TTK1): void {
+        for (let i = 0; i < this.materialCommands.length; i++) {
+            this.materialCommands[i].bindTTK1(this.animationController, ttk1);
+        }
     }
 
-    public setBRK(brk: BRK | null): void {
-        this.brk = brk;
+    /**
+     * Binds {@param trk1} (color register animations) to this model renderer.
+     * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
+     */
+    public bindTRK1(trk1: TRK1): void {
+        for (let i = 0; i < this.materialCommands.length; i++) {
+            this.materialCommands[i].bindTRK1(this.animationController, trk1);
+        }
     }
 
-    public setBTK(btk: BTK | null): void {
-        this.btk = btk;
+    /**
+     * Binds {@param ank1} (joint animations) to this model renderer.
+     * ANK1 objects can be parsed from {@link BCK} files. See {@link BCK.parse}.
+     */
+    public bindANK1(ank1: ANK1): void {
+        this.ank1Animator = bindANK1Animator(this.animationController, ank1);
     }
 
     public fillTextureMapping(m: TextureMapping, texIndex: number): void {
@@ -535,6 +538,8 @@ export class Scene implements Viewer.Scene {
     public bindState(state: RenderState): boolean {
         if (!this.visible)
             return false;
+
+        this.animationController.updateTime(state.time);
 
         // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
         this.updateJointMatrices(state);
@@ -655,9 +660,8 @@ export class Scene implements Viewer.Scene {
             const jointIndex = node.jointIdx;
 
             let boneMatrix: mat4;
-            if (this.bck !== null && this.bck.ank1.jointAnimationEntries[jointIndex]) {
+            if (this.ank1Animator !== null && this.ank1Animator.calcJointMatrix(matrixScratch2, jointIndex)) {
                 boneMatrix = matrixScratch2;
-                this.bck.calcJointMatrix(boneMatrix, jointIndex, this.getTimeInFrames(state.time));
             } else {
                 boneMatrix = jnt1.bones[jointIndex].matrix;
             }
