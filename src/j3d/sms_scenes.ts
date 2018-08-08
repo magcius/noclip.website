@@ -168,16 +168,18 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
     }
     case 'AmbColor':
     {
-        const [r, g, b, a] = unpack(params, 'BBBB');
+        const [paramsSize, r, g, b, a] = unpack(params, 'BBBB');
         return { type: 'AmbColor', klass, name, size, r, g, b, a };
     }
     case 'Light':
     {
-        const [x, y, z, r, g, b, a, intensity] = unpack(params, 'fffBBBBf');
+        const [paramsSize, x, y, z, r, g, b, a, intensity] = unpack(params, 'fffBBBBf');
         return { type: 'Light', klass, name, size, x, y, z, r, g, b, a, intensity };
     }
     // Models
     case 'BananaTree':
+    case 'BiaTurnBridge':
+    case 'BiaWatermill':
     case 'Coin':
     case 'CoinRed':
     case 'Fence':
@@ -201,7 +203,6 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
     case 'WoodBlock':
     case 'Viking':
     {
-        // XXX(jstpierre): MapObjBase AirportPole seemingly has extra junk after it?
         const [paramsSize, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, flags, model] = unpack(params, 'ffffff fffsi s.');
         return { type: 'Model', klass, name, size, x, y, z, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ, manager, model };
     }
@@ -401,6 +402,8 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
         const modelLookup: ModelLookup[] = [
             { k: 'BananaTree', m: 'BananaTree', p: 'mapobj/bananatree' },
+            { k: 'BiaTurnBridge', m: 'BiaTurnBridge', s: () => bmtm('mapobj/biaturnbridge.bmd', 'mapobj/bianco.bmt') },
+            { k: 'BiaWatermill', m: 'BiaWatermill', s: () => bmtm('mapobj/biawatermill.bmd', 'mapobj/bianco.bmt') },
             { k: 'BrickBlock', m: 'BrickBlock', p: 'mapobj/brickblock' },
             { k: 'Coin', m: 'coin', p: 'mapobj/coin' },
             { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
@@ -422,7 +425,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             { k: 'MapObjBase', m: 'ArrowBoardUp', s: () => bmtm('mapobj/arrowboardup.bmd', 'mapobj/arrowboard.bmt') },
             { k: 'MapObjBase', m: 'ArrowBoardDown', s: () => bmtm('mapobj/arrowboarddown.bmd', 'mapobj/arrowboard.bmt') },
             { k: 'MapObjBase', m: 'monte_chair', p: 'mapobj/monte_chair_model' },
-            { k: 'MapStaticObj', m: 'ReflectSky', s: () => bmtm('map/map/reflectsky.bmd', 'map/map/sky.bmt') },
+            { k: 'MapStaticObj', m: 'ReflectSky', s: () => null },
             // Disable SeaIndirect loading...
             { k: 'MapStaticObj', m: 'SeaIndirect', s: () => null },
             { k: 'Merrygoround', m: 'merry', p: 'mapobj/merry' },
