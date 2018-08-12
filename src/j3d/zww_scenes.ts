@@ -384,10 +384,8 @@ class WindWakerRenderer implements Viewer.MainScene {
                 this.vr_uso_umi.setColorOverride(ColorOverride.K0, colors.vr_uso_umi);
             if (this.vr_kasumi_mae)
                 this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, colors.vr_kasumi_mae);
-            if (this.vr_back_cloud) {
-                this.vr_back_cloud.setColorOverride(ColorOverride.K0, colors.vr_back_cloud);
-                this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, colors.vr_back_cloud.a);
-            }
+            if (this.vr_back_cloud)
+                this.vr_back_cloud.setColorOverride(ColorOverride.K0, colors.vr_back_cloud, true);
         } else {
             if (this.vr_sky)
                 this.vr_sky.setColorOverride(ColorOverride.K0, undefined);
@@ -395,10 +393,8 @@ class WindWakerRenderer implements Viewer.MainScene {
                 this.vr_uso_umi.setColorOverride(ColorOverride.K0, undefined);
             if (this.vr_kasumi_mae)
                 this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, undefined);
-            if (this.vr_back_cloud) {
+            if (this.vr_back_cloud)
                 this.vr_back_cloud.setColorOverride(ColorOverride.K0, undefined);
-                this.vr_back_cloud.setAlphaOverride(ColorOverride.K0, undefined);
-            }
         }
 
         for (const roomRenderer of this.roomRenderers) {

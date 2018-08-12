@@ -364,10 +364,10 @@ class MaterialInstance {
             }
     
             let alpha: number;
-            if (this.modelInstance.alphaOverrides[i] !== undefined) {
-                alpha = this.modelInstance.alphaOverrides[i];
-            } else {
+            if (this.modelInstance.alphaOverrides[i]) {
                 alpha = color.a;
+            } else {
+                alpha = fallbackColor.a;
             }
     
             dst.copy(color, alpha);
@@ -515,7 +515,7 @@ export class BMDModelInstance {
     public modelMatrix: mat4;
 
     public colorOverrides: GX_Material.Color[] = [];
-    public alphaOverrides: number[] = [];
+    public alphaOverrides: boolean[] = [];
     public renderHelper: GXRenderHelper;
     private sceneParams = new SceneParams();
 
@@ -560,12 +560,9 @@ export class BMDModelInstance {
         this.renderHelper.destroy(gl);
     }
 
-    public setColorOverride(i: ColorOverride, color: GX_Material.Color): void {
+    public setColorOverride(i: ColorOverride, color: GX_Material.Color, useAlpha: boolean = false): void {
         this.colorOverrides[i] = color;
-    }
-
-    public setAlphaOverride(i: ColorOverride, alpha: number): void {
-        this.alphaOverrides[i] = alpha;
+        this.alphaOverrides[i] = useAlpha;
     }
 
     public setIsSkybox(v: boolean): void {
