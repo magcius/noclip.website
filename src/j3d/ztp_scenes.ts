@@ -57,10 +57,10 @@ function createScenesFromRARC(gl: WebGL2RenderingContext, textureHolder: J3DText
     const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
     const scenes = bmdFiles.map((bmdFile) => {
         const basename = bmdFile.name.split('.')[0];
-        const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
-        const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`);
-        const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`);
-        const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
+        const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`) || null;
+        const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`) || null;
+        const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
+        const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
         const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
         scene.name = `${rarcName}/${basename}`;
         return scene;
