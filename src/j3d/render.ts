@@ -151,7 +151,7 @@ class Command_Shape {
     }
 }
 
-class MaterialInstanceState {
+export class MaterialInstanceState {
     public texMatrices: mat4[] = nArray(8, () => mat4.create());
     public colors: GX_Material.Color[] = nArray(ColorOverride.COUNT, () => new GX_Material.Color());
 }
@@ -324,11 +324,11 @@ export enum ColorOverride {
 
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
 
-class MaterialInstance {
+export class MaterialInstance {
     public ttk1Animators: TTK1Animator[] = [];
     public trk1Animators: TRK1Animator[] = [];
 
-    constructor(private modelInstance: BMDModelInstance, private material: MaterialEntry) {
+    constructor(private modelInstance: BMDModelInstance | null, private material: MaterialEntry) {
     }
 
     public bindTTK1(animationController: AnimationController, ttk1: TTK1): void {
@@ -355,16 +355,16 @@ class MaterialInstance {
                 this.trk1Animators[i].calcColorOverride(dst);
                 return;
             }
-    
+
             let color: GX_Material.Color;
-            if (this.modelInstance.colorOverrides[i] !== undefined) {
+            if (this.modelInstance !== null && this.modelInstance.colorOverrides[i] !== undefined) {
                 color = this.modelInstance.colorOverrides[i];
             } else {
                 color = fallbackColor;
             }
-    
+
             let alpha: number;
-            if (this.modelInstance.alphaOverrides[i]) {
+            if (this.modelInstance !== null && this.modelInstance.alphaOverrides[i]) {
                 alpha = color.a;
             } else {
                 alpha = fallbackColor.a;
@@ -372,17 +372,17 @@ class MaterialInstance {
     
             dst.copy(color, alpha);
         };
-    
+
         copyColor(ColorOverride.MAT0, this.material.colorMatRegs[0]);
         copyColor(ColorOverride.MAT1, this.material.colorMatRegs[1]);
         copyColor(ColorOverride.AMB0, this.material.colorAmbRegs[0]);
         copyColor(ColorOverride.AMB1, this.material.colorAmbRegs[1]);
-    
+
         copyColor(ColorOverride.K0, this.material.gxMaterial.colorConstants[0]);
         copyColor(ColorOverride.K1, this.material.gxMaterial.colorConstants[1]);
         copyColor(ColorOverride.K2, this.material.gxMaterial.colorConstants[2]);
         copyColor(ColorOverride.K3, this.material.gxMaterial.colorConstants[3]);
-    
+
         copyColor(ColorOverride.CPREV, this.material.gxMaterial.colorRegisters[0]);
         copyColor(ColorOverride.C0, this.material.gxMaterial.colorRegisters[1]);
         copyColor(ColorOverride.C1, this.material.gxMaterial.colorRegisters[2]);

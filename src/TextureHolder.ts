@@ -24,6 +24,15 @@ export class TextureMapping {
     // GL fucking sucks. This is a convenience when building texture matrices.
     // gx_render does *not* use this parameter at all!
     public flipY: boolean = false;
+
+    public copy(other: TextureMapping): void {
+        this.glTexture = other.glTexture;
+        this.glSampler = other.glSampler;
+        this.width = other.width;
+        this.height = other.height;
+        this.lodBias = other.lodBias;
+        this.flipY = other.flipY;
+    }
 }
 
 export interface LoadedTexture {
