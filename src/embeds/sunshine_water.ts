@@ -122,6 +122,7 @@ class SeaPlaneScene implements Scene {
         this.plane.destroy(gl);
         this.seaCmd.destroy(gl);
         this.renderHelper.destroy(gl);
+        this.bmdModel.destroy(gl);
     }
 }
 
