@@ -357,7 +357,7 @@ class MaterialInstance {
             }
     
             let color: GX_Material.Color;
-            if (this.modelInstance.colorOverrides[i]) {
+            if (this.modelInstance.colorOverrides[i] !== undefined) {
                 color = this.modelInstance.colorOverrides[i];
             } else {
                 color = fallbackColor;
