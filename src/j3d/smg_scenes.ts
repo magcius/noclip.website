@@ -7,7 +7,7 @@ import { RenderState, ColorTarget, RenderFlags, BlendMode, BlendFactor } from '.
 import { FullscreenProgram } from '../Program';
 import * as Viewer from '../viewer';
 
-import { Scene, J3DTextureHolder, SceneLoader } from './render';
+import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { TextureOverride } from '../TextureHolder';
 
@@ -135,7 +135,7 @@ const enum SceneGraphTag {
 }
 
 class SceneGraph {
-    public nodes: Scene[] = [];
+    public nodes: BMDModelInstance[] = [];
     public nodeTags: string[][] = [];
 
     public hasTag(tag: string): boolean {
@@ -146,7 +146,7 @@ class SceneGraph {
         return this.nodeTags[i].includes(tag);
     }
 
-    public forTag(tag: string, cb: (node: Scene, i: number) => void): void {
+    public forTag(tag: string, cb: (node: BMDModelInstance, i: number) => void): void {
         for (let i = 0; i < this.nodes.length; i++) {
             const nodeTags = this.nodeTags[i];
             if (nodeTags.includes(tag))
@@ -154,7 +154,7 @@ class SceneGraph {
         }
     }
 
-    public addNode(node: Scene | null, tags: string[]): void {
+    public addNode(node: BMDModelInstance | null, tags: string[]): void {
         if (node === null)
             return;
         this.nodes.push(node);
@@ -420,7 +420,7 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
         return { name, layers };
     }
 
-    public applyAnimations(scene: Scene, rarc: RARC.RARC, animOptions?: AnimOptions): void {
+    public applyAnimations(scene: BMDModelInstance, rarc: RARC.RARC, animOptions?: AnimOptions): void {
         let bckFile: RARC.RARCFile | null = null;
         let brkFile: RARC.RARCFile | null = null;
         let btkFile: RARC.RARCFile | null = null;
@@ -459,7 +459,7 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
         }
     }
 
-    public spawnArchive(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<Scene | null> {
+    public spawnArchive(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<BMDModelInstance | null> {
         // Should do a remap at some point.
         return fetch(`${pathBase}/ObjectData/${name}.arc`).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
@@ -473,13 +473,14 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
             const rarc = RARC.parse(buffer);
             const lowerName = name.toLowerCase();
             const bmd = rarc.findFileData(`${lowerName}.bdl`) !== null ? BMD.parse(rarc.findFileData(`${lowerName}.bdl`)) : null;
-            const sceneLoader = new SceneLoader(textureHolder, bmd, null, materialHacks);
             textureHolder.addJ3DTextures(gl, bmd, null);
-            const scene = sceneLoader.createScene(gl);
-            scene.name = name;
-            this.applyAnimations(scene, rarc, animOptions);
-            mat4.copy(scene.modelMatrix, modelMatrix);
-            return scene;
+            // TODO(jstpierre): Cache models.
+            const bmdModel = new BMDModel(gl, bmd, null, materialHacks);
+            const bmdModelInstance = new BMDModelInstance(gl, textureHolder, bmdModel);
+            bmdModelInstance.name = name;
+            this.applyAnimations(bmdModelInstance, rarc, animOptions);
+            mat4.copy(bmdModelInstance.modelMatrix, modelMatrix);
+            return bmdModelInstance;
         });
     }
 

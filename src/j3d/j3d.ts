@@ -288,6 +288,7 @@ interface DRW1WeightedJoint {
 type DRW1Joint = DRW1NormalJoint | DRW1WeightedJoint;
 
 export interface DRW1 {
+    // TODO(jstpierre): Rename this.
     drw1Joints: DRW1Joint[];
 }
 

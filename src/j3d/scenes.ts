@@ -9,13 +9,13 @@ import * as Viewer from '../viewer';
 import { BMD, BMT, BTK, BRK, BCK } from './j3d';
 import * as Yaz0 from '../compression/Yaz0';
 import * as RARC from './rarc';
-import { Scene, SceneLoader, J3DTextureHolder } from './render';
+import { BMDModelInstance, J3DTextureHolder, BMDModel } from './render';
 
 export class MultiScene implements Viewer.MainScene {
-    public scenes: Scene[];
+    public scenes: BMDModelInstance[];
     public textures: Viewer.Texture[];
 
-    constructor(public textureHolder: J3DTextureHolder, scenes: Scene[]) {
+    constructor(public textureHolder: J3DTextureHolder, scenes: BMDModelInstance[]) {
         this.setScenes(scenes);
     }
 
@@ -37,7 +37,7 @@ export class MultiScene implements Viewer.MainScene {
         this.scenes.forEach((scene) => scene.destroy(gl));
     }
 
-    protected setScenes(scenes: Scene[]): void {
+    protected setScenes(scenes: BMDModelInstance[]): void {
         this.scenes = scenes;
         this.textures = this.textureHolder.viewerTextures;
     }
@@ -47,8 +47,8 @@ export function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextur
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     textureHolder.addJ3DTextures(gl, bmd, bmt);
-    const sceneLoader: SceneLoader = new SceneLoader(textureHolder, bmd, bmt);
-    const scene = sceneLoader.createScene(gl);
+    const bmdModel = new BMDModel(gl, bmd, bmt);
+    const scene = new BMDModelInstance(gl, textureHolder, bmdModel);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -77,7 +77,7 @@ function boolSort(a: boolean, b: boolean): number {
         return 0;
 }
 
-export function createScenesFromBuffer(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, buffer: ArrayBufferSlice): Promise<Scene[]> {
+export function createScenesFromBuffer(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, buffer: ArrayBufferSlice): Promise<BMDModelInstance[]> {
     return Promise.resolve(buffer).then((buffer: ArrayBufferSlice) => {
         if (readString(buffer, 0, 4) === 'Yaz0')
             return Yaz0.decompress(buffer);
@@ -120,8 +120,8 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, textureHolder
         if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
             const bmd = BMD.parse(buffer);
             textureHolder.addJ3DTextures(gl, bmd);
-            const sceneLoader = new SceneLoader(textureHolder, bmd);
-            const scene = sceneLoader.createScene(gl);
+            const bmdModel = new BMDModel(gl, bmd);
+            const scene = new BMDModelInstance(gl, textureHolder, bmdModel);
             return [scene];
         }
 

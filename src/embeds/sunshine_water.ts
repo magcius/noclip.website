@@ -13,7 +13,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BMT, BTK, MaterialEntry, TEX1_Sampler, BRK } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { Command_Material, Scene as J3DScene, SceneLoader, J3DTextureHolder } from '../j3d/render';
+import { Command_Material, J3DTextureHolder } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { GXRenderHelper, SceneParams, PacketParams, fillSceneParamsFromRenderState } from '../gx/gx_render';

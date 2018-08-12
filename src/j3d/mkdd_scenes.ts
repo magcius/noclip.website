@@ -8,7 +8,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { fetch, readString, assert, assertExists } from '../util';
 import { mat4, quat } from 'gl-matrix';
 import * as RARC from './rarc';
-import { Scene, J3DTextureHolder } from './render';
+import { J3DTextureHolder, BMDModelInstance } from './render';
 import { BCK } from './j3d';
 
 const id = "mkdd";
@@ -63,7 +63,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    private spawnBMD(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, basename: string, modelMatrix: mat4 = null): Scene {
+    private spawnBMD(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, basename: string, modelMatrix: mat4 = null): BMDModelInstance {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         assertExists(bmdFile);
         const btkFile = rarc.findFile(`${basename}.btk`);
@@ -85,14 +85,14 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
             const courseName = bolFile.name.replace('_course.bol', '');
 
             const textureHolder = new J3DTextureHolder();
-            const scenes: Scene[] = [];
+            const scenes: BMDModelInstance[] = [];
 
             if (rarc.findFile(`${courseName}_sky.bmd`))
                 scenes.push(this.spawnBMD(gl, textureHolder, rarc, `${courseName}_sky`));
 
             scenes.push(this.spawnBMD(gl, textureHolder, rarc, `${courseName}_course`));
 
-            const spawnObject = (obj: Obj, basename: string, animName: string = null): Scene => {
+            const spawnObject = (obj: Obj, basename: string, animName: string = null): BMDModelInstance => {
                 const scene = this.spawnBMD(gl, textureHolder, rarc, basename, obj.modelMatrix);
                 let bckFile;
                 if (animName !== null) {
