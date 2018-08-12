@@ -8,11 +8,11 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 
 import * as RARC from './rarc';
-import { J3DTextureHolder, BMDModelInstance } from './render';
+import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
 import { createScene } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
-import { LoopMode } from './j3d';
+import { LoopMode, BMD, BMT, BCK, BTK, BRK } from './j3d';
 import { TextureOverride } from '../TextureHolder';
 
 const sjisDecoder = new TextDecoder('sjis');
@@ -386,18 +386,68 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             s?: () => BMDModelInstance;
         };
 
-        function bmtm(bmd: string, bmt: string) {
-            const bmdFile = rarc.findFile(bmd);
-            const bmtFile = rarc.findFile(bmt);
-            return createScene(gl, textureHolder, bmdFile, null, null, null, bmtFile);
+        const modelCache = new Map<RARC.RARCFile, BMDModel>();
+        function lookupModel(bmdFile: RARC.RARCFile, bmtFile: RARC.RARCFile | null): BMDModel {
+            assert(!!bmdFile);
+            if (modelCache.has(bmdFile)) {
+                return modelCache.get(bmdFile);
+            } else {
+                const bmd = BMD.parse(bmdFile.buffer);
+                const bmt = bmtFile !== null ? BMT.parse(bmtFile.buffer) : null;
+                textureHolder.addJ3DTextures(gl, bmd, bmt);
+                const bmdModel = new BMDModel(gl, bmd, bmt);
+                modelCache.set(bmdFile, bmdModel);
+                return bmdModel;
+            }
         }
 
-        function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT) {
+        function bmtm(bmd: string, bmt: string): BMDModelInstance {
+            const bmdFile = rarc.findFile(bmd);
+            const bmtFile = rarc.findFile(bmt);
+            const bmdModel = lookupModel(bmdFile, bmtFile);
+            return new BMDModelInstance(gl, textureHolder, bmdModel);
+        }
+
+        function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT): BMDModelInstance {
             const bmdFile = rarc.findFile(bmdFilename);
+            const bmdModel = lookupModel(bmdFile, null);
+            const modelInstance = new BMDModelInstance(gl, textureHolder, bmdModel);
             const bckFile = rarc.findFile(bckFilename);
-            const scene = createScene(gl, textureHolder, bmdFile, null, null, bckFile, null);
-            scene.ank1Animator.ank1.loopMode = loopMode;
-            return scene;
+            const bck = BCK.parse(bckFile.buffer);
+            bck.ank1.loopMode = loopMode;
+            modelInstance.bindANK1(bck.ank1);
+            return modelInstance;
+        }
+
+        function basenameModel(basename: string): BMDModelInstance | null {
+            const bmdFile = rarc.findFile(`${basename}.bmd`);
+            if (!bmdFile)
+                return null;
+            const btkFile = rarc.findFile(`${basename}.btk`);
+            const brkFile = rarc.findFile(`${basename}.brk`);
+            const bckFile = rarc.findFile(`${basename}.bck`);
+            const bmtFile = rarc.findFile(`${basename}.bmt`);
+
+            const bmdModel = lookupModel(bmdFile, bmtFile);
+            const modelInstance = new BMDModelInstance(gl, textureHolder, bmdModel);
+
+            if (btkFile !== null) {
+                const btk = BTK.parse(btkFile.buffer);
+                modelInstance.bindTTK1(btk.ttk1);
+            }
+        
+            if (brkFile !== null) {
+                const brk = BRK.parse(brkFile.buffer);
+                modelInstance.bindTRK1(brk.trk1);
+            }
+        
+            if (bckFile !== null) {
+                const bck = BCK.parse(bckFile.buffer);
+                modelInstance.bindANK1(bck.ank1);
+            }
+
+            modelInstance.name = basename;
+            return modelInstance;
         }
 
         const modelLookup: ModelLookup[] = [
@@ -466,7 +516,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
         let scene = null;
         if (modelEntry.p !== undefined) {
-            scene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, modelEntry.p, false);
+            scene = basenameModel(modelEntry.p);
         } else if (modelEntry.s !== undefined) {
             scene = modelEntry.s();
         }
