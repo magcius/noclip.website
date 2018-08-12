@@ -14,7 +14,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
-import { ColorOverride, Scene, SceneLoader, J3DTextureHolder } from './render';
+import { ColorOverride, J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
 import { Camera } from '../Camera';
 import Program from '../Program';
 import { colorToCSS } from '../Color';
@@ -122,7 +122,7 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
     return { amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
 }
 
-function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, name: string, isSkybox: boolean = false): Scene {
+function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -132,9 +132,9 @@ function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder
     const brkFile = rarc.findFile(`brk/${name}.brk`);
     const bckFile = rarc.findFile(`bck/${name}.bck`);
     const bdl = BMD.parse(bdlFile.buffer);
-    const sceneLoader = new SceneLoader(textureHolder, bdl, null);
     textureHolder.addJ3DTextures(gl, bdl);
-    const scene = sceneLoader.createScene(gl);
+    const bmdModel = new BMDModel(gl, bdl, null);
+    const scene = new BMDModelInstance(gl, textureHolder, bmdModel);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -158,10 +158,10 @@ function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder
 class WindWakerRoomRenderer implements Viewer.Scene {
     public textures: Viewer.Texture[];
 
-    public model: Scene;
-    public model1: Scene;
-    public model2: Scene;
-    public model3: Scene;
+    public model: BMDModelInstance;
+    public model1: BMDModelInstance;
+    public model2: BMDModelInstance;
+    public model3: BMDModelInstance;
     public name: string;
     public visible: boolean = true;
 
@@ -351,10 +351,10 @@ class WindWakerRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[];
 
     private seaPlane: SeaPlane;
-    private vr_sky: Scene;
-    private vr_uso_umi: Scene;
-    private vr_kasumi_mae: Scene;
-    private vr_back_cloud: Scene;
+    private vr_sky: BMDModelInstance;
+    private vr_uso_umi: BMDModelInstance;
+    private vr_kasumi_mae: BMDModelInstance;
+    private vr_back_cloud: BMDModelInstance;
     public roomRenderers: WindWakerRoomRenderer[] = [];
 
     constructor(gl: WebGL2RenderingContext, wantsSeaPlane: boolean, private textureHolder: J3DTextureHolder, private stageRarc: RARC.RARC, public cameraPos: CameraPos = null) {

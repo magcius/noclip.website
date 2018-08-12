@@ -1,18 +1,18 @@
 
 import { mat4, mat2d } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1JointKind, TTK1Animator, ANK1Animator, bindANK1Animator } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1JointKind, TTK1Animator, ANK1Animator, bindANK1Animator, TEX1 } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, translateTexFilter, translateWrapMode, GXTextureHolder } from '../gx/gx_render';
-import * as Viewer from '../viewer';
 
 import { RenderFlags, RenderState } from '../render';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, AABB, IntersectionState } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
+import { nArray } from '../util';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(gl: WebGL2RenderingContext, bmd: BMD, bmt: BMT = null) {
@@ -48,60 +48,33 @@ function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number,
     dst[15] = 9999.0;
 }
 
+class ShapeInstanceState {
+    public modelMatrix: mat4 = mat4.create();
+    public matrixArray: mat4[] = [];
+    public matrixVisibility: IntersectionState[] = [];
+    public isSkybox: boolean;
+}
+
+// TODO(jstpierre): Rename the Command_* classes. Is it even worth having the Command_* vs. Instance split anymore?
+
 const scratchModelMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
+const posMtxVisibility: IntersectionState[] = nArray(10, () => IntersectionState.FULLY_INSIDE);
 class Command_Shape {
     private packetParams = new PacketParams();
     private shapeHelpers: GXShapeHelper[] = [];
 
-    constructor(gl: WebGL2RenderingContext, sceneLoader: SceneLoader, private scene: Scene, private shape: Shape, coalescedBuffers: CoalescedBuffers[]) {
+    constructor(gl: WebGL2RenderingContext, private shape: Shape, coalescedBuffers: CoalescedBuffers[]) {
         this.shapeHelpers = shape.packets.map((packet) => {
             return new GXShapeHelper(gl, coalescedBuffers.shift(), this.shape.loadedVertexLayout, packet.loadedVertexData);
         })
     }
 
-    private computeModelView(state: RenderState): mat4 {
-        mat4.copy(scratchModelMatrix, this.scene.modelMatrix);
-
-        switch (this.shape.displayFlags) {
-        case ShapeDisplayFlags.NORMAL:
-        case ShapeDisplayFlags.USE_PNMTXIDX:
-            // We should already be using PNMTXIDX in the normal case -- it's hardwired to 0.
-            break;
-
-        case ShapeDisplayFlags.BILLBOARD:
-            computeModelMatrixBillboard(scratchModelMatrix, state.camera);
-            mat4.mul(scratchModelMatrix, this.scene.modelMatrix, scratchModelMatrix);
-            break;
-        case ShapeDisplayFlags.Y_BILLBOARD:
-            computeModelMatrixYBillboard(scratchModelMatrix, state.camera);
-            mat4.mul(scratchModelMatrix, this.scene.modelMatrix, scratchModelMatrix);
-            break;
-        default:
-            throw new Error("whoops");
-        }
-
-        if (this.scene.isSkybox) {
-            computeViewMatrixSkybox(scratchViewMatrix, state.camera);
-        } else {
-            computeViewMatrix(scratchViewMatrix, state.camera);
-        }
-
-        mat4.mul(scratchViewMatrix, scratchViewMatrix, scratchModelMatrix);
-        return scratchViewMatrix;
-    }
-
-    public exec(state: RenderState) {
-        if (!this.scene.currentMaterialCommand.visible)
-            return;
-
-        const gl = state.gl;
-
-        const modelView = this.computeModelView(state);
+    public draw(state: RenderState, renderHelper: GXRenderHelper, shapeInstanceState: ShapeInstanceState): void {
+        const modelView = this.computeModelView(state, shapeInstanceState);
 
         let needsUpload = false;
 
-        const posMtxVisibility: IntersectionState[] = new Array(10);
         for (let p = 0; p < this.shape.packets.length; p++) {
             const packet = this.shape.packets[p];
 
@@ -113,8 +86,8 @@ class Command_Shape {
                 if (matrixIndex === 0xFFFF)
                     continue;
 
-                const posMtx = this.scene.weightedJointMatrices[matrixIndex];
-                posMtxVisibility[i] = this.scene.matrixVisibility[matrixIndex];
+                const posMtx = shapeInstanceState.matrixArray[matrixIndex];
+                posMtxVisibility[i] = shapeInstanceState.matrixVisibility[matrixIndex];
                 mat4.mul(this.packetParams.u_PosMtx[i], modelView, posMtx);
                 needsUpload = true;
             }
@@ -132,7 +105,7 @@ class Command_Shape {
                 return;
 
             if (needsUpload) {
-                this.scene.renderHelper.bindPacketParams(state, this.packetParams);
+                renderHelper.bindPacketParams(state, this.packetParams);
                 needsUpload = false;
             }
 
@@ -146,120 +119,94 @@ class Command_Shape {
     public destroy(gl: WebGL2RenderingContext) {
         this.shapeHelpers.forEach((shapeHelper) => shapeHelper.destroy(gl));
     }
+
+    private computeModelView(state: RenderState, shapeInstanceState: ShapeInstanceState): mat4 {
+        switch (this.shape.displayFlags) {
+        case ShapeDisplayFlags.USE_PNMTXIDX:
+        case ShapeDisplayFlags.NORMAL:
+            // We always use PNMTXIDX in the normal case -- and we hardcode missing attributes to 0.
+            mat4.copy(scratchModelMatrix, shapeInstanceState.modelMatrix);
+            break;
+
+        case ShapeDisplayFlags.BILLBOARD:
+            computeModelMatrixBillboard(scratchModelMatrix, state.camera);
+            mat4.mul(scratchModelMatrix, shapeInstanceState.modelMatrix, scratchModelMatrix);
+            break;
+        case ShapeDisplayFlags.Y_BILLBOARD:
+            computeModelMatrixYBillboard(scratchModelMatrix, state.camera);
+            mat4.mul(scratchModelMatrix, shapeInstanceState.modelMatrix, scratchModelMatrix);
+            break;
+        default:
+            throw new Error("whoops");
+        }
+
+        if (shapeInstanceState.isSkybox) {
+            computeViewMatrixSkybox(scratchViewMatrix, state.camera);
+        } else {
+            computeViewMatrix(scratchViewMatrix, state.camera);
+        }
+
+        mat4.mul(scratchViewMatrix, scratchViewMatrix, scratchModelMatrix);
+        return scratchViewMatrix;
+    }
 }
 
-interface Command_MaterialScene {
-    currentMaterialCommand: Command_Material;
-    getTimeInFrames(milliseconds: number): number;
-    colorOverrides: GX_Material.Color[];
-    alphaOverrides: number[];
-    renderHelper: GXRenderHelper;
-    fillTextureMapping(m: TextureMapping, i: number): void;
+class MaterialInstanceState {
+    public texMatrices: mat4[] = nArray(8, () => mat4.create());
+    public colors: GX_Material.Color[] = nArray(ColorOverride.COUNT, () => new GX_Material.Color());
 }
 
 export class Command_Material {
     private static matrixScratch = mat4.create();
     private static materialParams = new MaterialParams();
 
-    public material: MaterialEntry;
-
     public name: string;
-    public visible: boolean = true;
 
-    private scene: Command_MaterialScene;
     private renderFlags: RenderFlags;
     public program: GX_Material.GX_Program;
-    private ttk1Animators: TTK1Animator[] = [];
-    private trk1Animators: TRK1Animator[] = [];
 
-    constructor(scene: Command_MaterialScene, material: MaterialEntry, hacks?: GX_Material.GXMaterialHacks) {
+    constructor(private bmdModel: BMDModel, public material: MaterialEntry, hacks?: GX_Material.GXMaterialHacks) {
         this.name = material.name;
-        this.scene = scene;
-        this.material = material;
         this.program = new GX_Material.GX_Program(material.gxMaterial, hacks);
         this.program.name = this.name;
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
     }
 
-    public bindTTK1(animationController: AnimationController, ttk1: TTK1): void {
-        for (let i = 0; i < 8; i++) {
-            const ttk1Animator = bindTTK1Animator(animationController, ttk1, this.material.name, i);
-            if (ttk1Animator)
-                this.ttk1Animators[i] = ttk1Animator;
-        }
-    }
-
-    public bindTRK1(animationController: AnimationController, trk1: TRK1): void {
-        for (let i: ColorOverride = 0; i < ColorOverride.COUNT; i++) {
-            const trk1Animator = bindTRK1Animator(animationController, trk1, this.material.name, i);
-            if (trk1Animator)
-                this.trk1Animators[i] = trk1Animator;
-        }
-    }
-
-    public exec(state: RenderState) {
-        this.scene.currentMaterialCommand = this;
-
-        if (!this.scene.currentMaterialCommand.visible)
-            return;
-
+    public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: J3DTextureHolder, materialInstanceState: MaterialInstanceState): void {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
         const materialParams = Command_Material.materialParams;
-        this.fillMaterialParams(materialParams, state);
-        this.scene.renderHelper.bindMaterialParams(state, materialParams);
-        this.scene.renderHelper.bindMaterialTextures(state, materialParams, this.program);
+        this.fillMaterialParams(materialParams, state, textureHolder, materialInstanceState);
+        renderHelper.bindMaterialParams(state, materialParams);
+        renderHelper.bindMaterialTextures(state, materialParams, this.program);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.program.destroy(gl);
     }
 
-    private fillMaterialParams(materialParams: MaterialParams, state: RenderState): void {
-        const copyColor = (i: ColorOverride, dst: GX_Material.Color, fallbackColor: GX_Material.Color) => {
-            if (this.trk1Animators[i] !== undefined) {
-                this.trk1Animators[i].calcColorOverride(dst);
-                return;
-            }
-
-            let color: GX_Material.Color;
-            if (this.scene.colorOverrides[i]) {
-                color = this.scene.colorOverrides[i];
-            } else {
-                color = fallbackColor;
-            }
-
-            let alpha: number;
-            if (this.scene.alphaOverrides[i] !== undefined) {
-                alpha = this.scene.alphaOverrides[i];
-            } else {
-                alpha = color.a;
-            }
-
-            dst.copy(color, alpha);
-        };
-
-        copyColor(ColorOverride.MAT0, materialParams.u_ColorMatReg[0], this.material.colorMatRegs[0]);
-        copyColor(ColorOverride.MAT1, materialParams.u_ColorMatReg[1], this.material.colorMatRegs[1]);
-        copyColor(ColorOverride.AMB0, materialParams.u_ColorAmbReg[0], this.material.colorAmbRegs[0]);
-        copyColor(ColorOverride.AMB1, materialParams.u_ColorAmbReg[1], this.material.colorAmbRegs[1]);
-
-        copyColor(ColorOverride.K0, materialParams.u_KonstColor[0], this.material.gxMaterial.colorConstants[0]);
-        copyColor(ColorOverride.K1, materialParams.u_KonstColor[1], this.material.gxMaterial.colorConstants[1]);
-        copyColor(ColorOverride.K2, materialParams.u_KonstColor[2], this.material.gxMaterial.colorConstants[2]);
-        copyColor(ColorOverride.K3, materialParams.u_KonstColor[3], this.material.gxMaterial.colorConstants[3]);
-
-        copyColor(ColorOverride.CPREV, materialParams.u_Color[0], this.material.gxMaterial.colorRegisters[0]);
-        copyColor(ColorOverride.C0, materialParams.u_Color[1], this.material.gxMaterial.colorRegisters[1]);
-        copyColor(ColorOverride.C1, materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2]);
-        copyColor(ColorOverride.C2, materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3]);
+    private fillMaterialParams(materialParams: MaterialParams, state: RenderState, textureHolder: J3DTextureHolder, materialInstanceState: MaterialInstanceState): void {
+        // Bind color parameters.
+        // TODO(jstpierre): Replace separate buffers with one large array in gx_render?
+        materialParams.u_ColorMatReg[0].copy(materialInstanceState.colors[ColorOverride.MAT0]);
+        materialParams.u_ColorMatReg[1].copy(materialInstanceState.colors[ColorOverride.MAT1]);
+        materialParams.u_ColorAmbReg[0].copy(materialInstanceState.colors[ColorOverride.AMB0]);
+        materialParams.u_ColorAmbReg[1].copy(materialInstanceState.colors[ColorOverride.AMB1]);
+        materialParams.u_KonstColor[0].copy(materialInstanceState.colors[ColorOverride.K0]);
+        materialParams.u_KonstColor[1].copy(materialInstanceState.colors[ColorOverride.K1]);
+        materialParams.u_KonstColor[2].copy(materialInstanceState.colors[ColorOverride.K2]);
+        materialParams.u_KonstColor[3].copy(materialInstanceState.colors[ColorOverride.K3]);
+        materialParams.u_Color[0].copy(materialInstanceState.colors[ColorOverride.CPREV]);
+        materialParams.u_Color[1].copy(materialInstanceState.colors[ColorOverride.C0]);
+        materialParams.u_Color[2].copy(materialInstanceState.colors[ColorOverride.C1]);
+        materialParams.u_Color[3].copy(materialInstanceState.colors[ColorOverride.C2]);
 
         // Bind textures.
         for (let i = 0; i < this.material.textureIndexes.length; i++) {
             const texIndex = this.material.textureIndexes[i];
             if (texIndex >= 0) {
-                this.scene.fillTextureMapping(materialParams.m_TextureMapping[i], texIndex);
+                this.bmdModel.fillTextureMapping(materialParams.m_TextureMapping[i], textureHolder, texIndex);
             } else {
                 materialParams.m_TextureMapping[i].glTexture = null;
             }
@@ -333,11 +280,7 @@ export class Command_Material {
             }
 
             // Apply SRT.
-            if (this.ttk1Animators[i] !== undefined) {
-                this.ttk1Animators[i].calcTexMtx(scratch);
-            } else {
-                mat4.copy(scratch, texMtx.matrix);
-            }
+            mat4.copy(scratch, materialInstanceState.texMatrices[i]);
 
             // SRT matrices have translation in fourth component, but we want our matrix to have translation
             // in third component. Swap.
@@ -372,8 +315,6 @@ export class Command_Material {
     }
 }
 
-type Command = Command_Shape | Command_Material;
-
 export enum ColorOverride {
     MAT0, MAT1, AMB0, AMB1,
     K0, K1, K2, K3,
@@ -383,29 +324,189 @@ export enum ColorOverride {
 
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
 
-// SceneLoaderToken is a private class that's passed to Scene.
-// Basically, this emulates an internal constructor by making
-// it impossible to call...
-class SceneLoaderToken {
-    constructor(public gl: WebGL2RenderingContext) {}
-}
+class MaterialInstance {
+    public ttk1Animators: TTK1Animator[] = [];
+    public trk1Animators: TRK1Animator[] = [];
 
-export class SceneLoader {
-    constructor(
-        public textureHolder: J3DTextureHolder,
-        public bmd: BMD,
-        public bmt: BMT | null = null,
-        public materialHacks?: GX_Material.GXMaterialHacks)
-    {}
+    constructor(private modelInstance: BMDModelInstance, private material: MaterialEntry) {
+    }
 
-    public createScene(gl: WebGL2RenderingContext): Scene {
-        return new Scene(new SceneLoaderToken(gl), this);
+    public bindTTK1(animationController: AnimationController, ttk1: TTK1): void {
+        for (let i = 0; i < 8; i++) {
+            const ttk1Animator = bindTTK1Animator(animationController, ttk1, this.material.name, i);
+            if (ttk1Animator)
+                this.ttk1Animators[i] = ttk1Animator;
+        }
+    }
+
+    public bindTRK1(animationController: AnimationController, trk1: TRK1): void {
+        for (let i: ColorOverride = 0; i < ColorOverride.COUNT; i++) {
+            const trk1Animator = bindTRK1Animator(animationController, trk1, this.material.name, i);
+            if (trk1Animator)
+                this.trk1Animators[i] = trk1Animator;
+        }
+    }
+
+    public fillMaterialInstanceState(materialInstanceState: MaterialInstanceState): void {
+        const copyColor = (i: ColorOverride, fallbackColor: GX_Material.Color) => {
+            const dst = materialInstanceState.colors[i];
+
+            if (this.trk1Animators[i] !== undefined) {
+                this.trk1Animators[i].calcColorOverride(dst);
+                return;
+            }
+    
+            let color: GX_Material.Color;
+            if (this.modelInstance.colorOverrides[i]) {
+                color = this.modelInstance.colorOverrides[i];
+            } else {
+                color = fallbackColor;
+            }
+    
+            let alpha: number;
+            if (this.modelInstance.alphaOverrides[i] !== undefined) {
+                alpha = this.modelInstance.alphaOverrides[i];
+            } else {
+                alpha = color.a;
+            }
+    
+            dst.copy(color, alpha);
+        };
+    
+        copyColor(ColorOverride.MAT0, this.material.colorMatRegs[0]);
+        copyColor(ColorOverride.MAT1, this.material.colorMatRegs[1]);
+        copyColor(ColorOverride.AMB0, this.material.colorAmbRegs[0]);
+        copyColor(ColorOverride.AMB1, this.material.colorAmbRegs[1]);
+    
+        copyColor(ColorOverride.K0, this.material.gxMaterial.colorConstants[0]);
+        copyColor(ColorOverride.K1, this.material.gxMaterial.colorConstants[1]);
+        copyColor(ColorOverride.K2, this.material.gxMaterial.colorConstants[2]);
+        copyColor(ColorOverride.K3, this.material.gxMaterial.colorConstants[3]);
+    
+        copyColor(ColorOverride.CPREV, this.material.gxMaterial.colorRegisters[0]);
+        copyColor(ColorOverride.C0, this.material.gxMaterial.colorRegisters[1]);
+        copyColor(ColorOverride.C1, this.material.gxMaterial.colorRegisters[2]);
+        copyColor(ColorOverride.C2, this.material.gxMaterial.colorRegisters[3]);
+
+        // Compute texture matrices.
+        for (let i = 0; i < this.material.texMatrices.length; i++) {
+            if (this.material.texMatrices[i] === null)
+                continue;
+
+            const dst = materialInstanceState.texMatrices[i];
+            if (this.ttk1Animators[i] !== undefined) {
+                this.ttk1Animators[i].calcTexMtx(dst);
+            } else {
+                mat4.copy(dst, this.material.texMatrices[i].matrix);
+            }
+        }
     }
 }
 
-export class Scene implements Viewer.Scene {
-    public textures: Viewer.Texture[];
+class DrawListItem {
+    constructor(
+        public materialIndex: number,
+        public shapeCommands: Command_Shape[] = [],
+    ) {
+    }
+}
 
+export class BMDModel {
+    private realized: boolean = false;
+
+    private glSamplers!: WebGLSampler[];
+    private tex1Samplers!: TEX1_Sampler[];
+
+    private bufferCoalescer: BufferCoalescer;
+
+    public materialCommands: Command_Material[] = [];
+    public shapeCommands: Command_Shape[] = [];
+    public opaqueDrawList: DrawListItem[] = [];
+    public transparentDrawList: DrawListItem[] = [];
+
+    constructor(
+        gl: WebGL2RenderingContext,
+        public bmd: BMD,
+        public bmt: BMT | null = null,
+        public materialHacks?: GX_Material.GXMaterialHacks
+    ) {
+        const mat3 = (bmt !== null && bmt.mat3 !== null) ? bmt.mat3 : bmd.mat3;
+        const tex1 = (bmt !== null && bmt.tex1 !== null) ? bmt.tex1 : bmd.tex1;
+
+        this.tex1Samplers = tex1.samplers;
+        this.glSamplers = this.tex1Samplers.map((sampler) => BMDModel.translateSampler(gl, sampler));
+
+        // Load material data.
+        this.materialCommands = mat3.materialEntries.map((material) => {
+            return new Command_Material(this, material, this.materialHacks);
+        });
+
+        // Load shape data.
+        const loadedVertexDatas = [];
+        for (const shape of bmd.shp1.shapes)
+            for (const packet of shape.packets)
+                loadedVertexDatas.push(packet.loadedVertexData);
+        this.bufferCoalescer = loadedDataCoalescer(gl, loadedVertexDatas);
+        this.shapeCommands = bmd.shp1.shapes.map((shape, i) => {
+            return new Command_Shape(gl, shape, this.bufferCoalescer.coalescedBuffers);
+        });
+
+        // Load scene graph.
+        this.translateSceneGraph(bmd.inf1.sceneGraph, null);
+        this.realized = true;
+    }
+
+    public destroy(gl: WebGL2RenderingContext): void {
+        // TODO(jstpierre): Remove once we get rid of Scene.
+        if (!this.realized)
+            return;
+
+        this.bufferCoalescer.destroy(gl);
+        this.materialCommands.forEach((command) => command.destroy(gl));
+        this.shapeCommands.forEach((command) => command.destroy(gl));
+        this.glSamplers.forEach((sampler) => gl.deleteSampler(sampler));
+        this.realized = false;
+    }
+
+    public fillTextureMapping(m: TextureMapping, textureHolder: J3DTextureHolder, texIndex: number): void {
+        const tex1Sampler = this.tex1Samplers[texIndex];
+        textureHolder.fillTextureMapping(m, tex1Sampler.name);
+        m.glSampler = this.glSamplers[tex1Sampler.index];
+        m.lodBias = tex1Sampler.lodBias;
+    }
+
+    private static translateSampler(gl: WebGL2RenderingContext, sampler: TEX1_Sampler): WebGLSampler {
+        const glSampler = gl.createSampler();
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
+        gl.samplerParameterf(glSampler, gl.TEXTURE_MIN_LOD, sampler.minLOD);
+        gl.samplerParameterf(glSampler, gl.TEXTURE_MAX_LOD, sampler.maxLOD);
+        return glSampler;
+    }
+
+    private translateSceneGraph(node: HierarchyNode, drawListItem: DrawListItem | null): void {
+        switch (node.type) {
+        case HierarchyType.Shape:
+            drawListItem!.shapeCommands.push(this.shapeCommands[node.shapeIdx]);
+            break;
+        case HierarchyType.Material:
+            const materialCommand = this.materialCommands[node.materialIdx];
+            drawListItem = new DrawListItem(node.materialIdx);
+            if (materialCommand.material.translucent)
+                this.transparentDrawList.push(drawListItem);
+            else
+                this.opaqueDrawList.push(drawListItem);
+            break;
+        }
+
+        for (const child of node.children)
+            this.translateSceneGraph(child, drawListItem);
+    }
+}
+
+export class BMDModelInstance {
     public name: string = '';
     public visible: boolean = true;
     public isSkybox: boolean = false;
@@ -418,61 +519,45 @@ export class Scene implements Viewer.Scene {
     public renderHelper: GXRenderHelper;
     private sceneParams = new SceneParams();
 
-    // BMD
-    public bmd: BMD;
-    // TODO(jstpierre): Make BMT settable after load...
-    public bmt: BMT | null = null;
-
     // Animations.
     private animationController: AnimationController = new AnimationController();
     public ank1Animator: ANK1Animator | null = null;
 
-    // Texture information.
-    public textureHolder: J3DTextureHolder;
-    private tex1Samplers: TEX1_Sampler[];
-    private glSamplers: WebGLSampler[];
-
     public currentMaterialCommand: Command_Material;
 
-    public materialCommands: Command_Material[];
-    private shapeCommands: Command_Shape[];
+    // Temporary state when calculating bone matrices.
     private jointMatrices: mat4[];
-    public weightedJointMatrices: mat4[];
-    private jointVisibility: IntersectionState[] = [];
-    public matrixVisibility: IntersectionState[] = [];
+    private jointVisibility: IntersectionState[];
     private bboxScratch: AABB = new AABB();
 
-    private bufferCoalescer: BufferCoalescer;
-
-    private opaqueCommands: Command[];
-    private transparentCommands: Command[];
-    private materialHacks?: GX_Material.GXMaterialHacks;
+    private materialInstances: MaterialInstance[] = [];
+    private materialInstanceState: MaterialInstanceState = new MaterialInstanceState();
+    private shapeInstanceState: ShapeInstanceState = new ShapeInstanceState();
 
     constructor(
-        sceneLoaderToken: SceneLoaderToken,
-        sceneLoader: SceneLoader,
+        gl: WebGL2RenderingContext,
+        private textureHolder: J3DTextureHolder,
+        private bmdModel: BMDModel,
     ) {
-        const gl = sceneLoaderToken.gl;
-        this.bmd = sceneLoader.bmd;
-        this.bmt = sceneLoader.bmt;
-        this.textureHolder = sceneLoader.textureHolder;
-        this.materialHacks = sceneLoader.materialHacks;
-
-        // TODO(jstpierre): Remove textures from Scene onto MainScene.
-        this.textures = this.textureHolder.viewerTextures;
-
-        this.translateModel(gl, sceneLoader);
-
         this.renderHelper = new GXRenderHelper(gl);
         this.modelMatrix = mat4.create();
+
+        this.materialInstances = this.bmdModel.materialCommands.map((materialCommand) => {
+            return new MaterialInstance(this, materialCommand.material);
+        });
+
+        const numBones = this.bmdModel.bmd.jnt1.bones.length;
+        this.jointMatrices = nArray(numBones, () => mat4.create());
+        this.jointVisibility = nArray(numBones, () => IntersectionState.FULLY_INSIDE);
+
+        const numVertexWeights = this.bmdModel.bmd.drw1.drw1Joints.length;
+        this.shapeInstanceState.matrixArray = nArray(numVertexWeights, () => mat4.create());
+        this.shapeInstanceState.matrixVisibility = nArray(numVertexWeights, () => IntersectionState.FULLY_INSIDE);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        this.bmdModel.destroy(gl);
         this.renderHelper.destroy(gl);
-        this.bufferCoalescer.destroy(gl);
-        this.materialCommands.forEach((command) => command.destroy(gl));
-        this.shapeCommands.forEach((command) => command.destroy(gl));
-        this.glSamplers.forEach((sampler) => gl.deleteSampler(sampler));
     }
 
     public setColorOverride(i: ColorOverride, color: GX_Material.Color): void {
@@ -500,8 +585,8 @@ export class Scene implements Viewer.Scene {
      * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
      */
     public bindTTK1(ttk1: TTK1): void {
-        for (let i = 0; i < this.materialCommands.length; i++) {
-            this.materialCommands[i].bindTTK1(this.animationController, ttk1);
+        for (let i = 0; i < this.materialInstances.length; i++) {
+            this.materialInstances[i].bindTTK1(this.animationController, ttk1);
         }
     }
 
@@ -510,8 +595,8 @@ export class Scene implements Viewer.Scene {
      * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
      */
     public bindTRK1(trk1: TRK1): void {
-        for (let i = 0; i < this.materialCommands.length; i++) {
-            this.materialCommands[i].bindTRK1(this.animationController, trk1);
+        for (let i = 0; i < this.materialInstances.length; i++) {
+            this.materialInstances[i].bindTRK1(this.animationController, trk1);
         }
     }
 
@@ -523,14 +608,6 @@ export class Scene implements Viewer.Scene {
         this.ank1Animator = bindANK1Animator(this.animationController, ank1);
     }
 
-    public fillTextureMapping(m: TextureMapping, texIndex: number): void {
-        const tex1Sampler = this.tex1Samplers[texIndex];
-
-        this.textureHolder.fillTextureMapping(m, tex1Sampler.name);
-        m.glSampler = this.glSamplers[tex1Sampler.index];
-        m.lodBias = tex1Sampler.lodBias;
-    }
-
     public getTimeInFrames(milliseconds: number) {
         return (milliseconds / 1000) * this.fps;
     }
@@ -539,10 +616,13 @@ export class Scene implements Viewer.Scene {
         if (!this.visible)
             return false;
 
-        this.animationController.updateTime(state.time);
-
         // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
-        this.updateJointMatrices(state);
+        this.animationController.updateTime(state.time);
+        this.updateMatrixArray(state);
+
+        // Update model matrix. TO
+        mat4.copy(this.shapeInstanceState.modelMatrix, this.modelMatrix);
+        this.shapeInstanceState.isSkybox = this.isSkybox;
 
         this.renderHelper.bindUniformBuffers(state);
 
@@ -552,15 +632,31 @@ export class Scene implements Viewer.Scene {
         return true;
     }
 
-    public renderOpaque(state: RenderState) {
-        this.execCommands(state, this.opaqueCommands);
+    private renderDrawList(state: RenderState, drawList: DrawListItem[]): void {
+        for (let i = 0; i < drawList.length; i++) {
+            const drawListItem = drawList[i];
+            const materialIndex = drawListItem.materialIndex;
+            const materialInstance = this.materialInstances[materialIndex];
+            materialInstance.fillMaterialInstanceState(this.materialInstanceState);
+            const materialCommand = this.bmdModel.materialCommands[materialIndex];
+            materialCommand.bindMaterial(state, this.renderHelper, this.textureHolder, this.materialInstanceState);
+
+            for (let j = 0; j < drawListItem.shapeCommands.length; j++) {
+                const shapeCommand = drawListItem.shapeCommands[j];
+                shapeCommand.draw(state, this.renderHelper, this.shapeInstanceState);
+            }
+        }
     }
 
-    public renderTransparent(state: RenderState) {
-        this.execCommands(state, this.transparentCommands);
+    public renderOpaque(state: RenderState): void {
+        this.renderDrawList(state, this.bmdModel.opaqueDrawList);
     }
 
-    public render(state: RenderState) {
+    public renderTransparent(state: RenderState): void {
+        this.renderDrawList(state, this.bmdModel.transparentDrawList);
+    }
+
+    public render(state: RenderState): void {
         if (!this.bindState(state))
             return;
 
@@ -568,91 +664,9 @@ export class Scene implements Viewer.Scene {
         this.renderTransparent(state);
     }
 
-    private execCommands(state: RenderState, commands: Command[]) {
-        commands.forEach((command, i) => {
-            command.exec(state);
-        });
-    }
-
-    public static translateSampler(gl: WebGL2RenderingContext, sampler: TEX1_Sampler): WebGLSampler {
-        const glSampler = gl.createSampler();
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
-        gl.samplerParameterf(glSampler, gl.TEXTURE_MIN_LOD, sampler.minLOD);
-        gl.samplerParameterf(glSampler, gl.TEXTURE_MAX_LOD, sampler.maxLOD);
-        return glSampler;
-    }
-
-    public translateTextures(gl: WebGL2RenderingContext, sceneLoader: SceneLoader) {
-        const tex1 = sceneLoader.bmt !== null ? sceneLoader.bmt.tex1 : sceneLoader.bmd.tex1;
-
-        // TODO(jstpierre): How does separable textureData / sampler work with external
-        // texture resolve?
-
-        this.glSamplers = [];
-        for (let sampler of tex1.samplers) {
-            this.glSamplers.push(Scene.translateSampler(gl, sampler));
-        }
-
-        this.tex1Samplers = tex1.samplers;
-    }
-
-    private translateModel(gl: WebGL2RenderingContext, sceneLoader: SceneLoader) {
-        const bmd = sceneLoader.bmd;
-        const bmt = sceneLoader.bmt;
-        const mat3 = (bmt !== null && bmt.mat3 !== null) ? bmt.mat3 : bmd.mat3;
-
-        this.opaqueCommands = [];
-        this.transparentCommands = [];
-
-        this.jointMatrices = [];
-        for (let i = 0; i < bmd.jnt1.bones.length; i++)
-            this.jointMatrices[i] = mat4.create();
-
-        this.weightedJointMatrices = [];
-        for (const drw1Joint of bmd.drw1.drw1Joints)
-            this.weightedJointMatrices.push(mat4.create());
-
-        this.translateTextures(gl, sceneLoader);
-
-        this.materialCommands = mat3.materialEntries.map((material) => {
-            return new Command_Material(this, material, this.materialHacks);
-        });
-
-        const loadedVertexDatas = [];
-        for (const shape of bmd.shp1.shapes)
-            for (const packet of shape.packets)
-                loadedVertexDatas.push(packet.loadedVertexData);
-        this.bufferCoalescer = loadedDataCoalescer(gl, loadedVertexDatas);
-        this.shapeCommands = bmd.shp1.shapes.map((shape, i) => {
-            return new Command_Shape(gl, sceneLoader, this, shape, this.bufferCoalescer.coalescedBuffers);
-        });
-
-        // Iterate through scene graph.
-        this.translateSceneGraph(bmd.inf1.sceneGraph, null);
-    }
-
-    private translateSceneGraph(node: HierarchyNode, commandList: Command[]) {
-        switch (node.type) {
-        case HierarchyType.Shape:
-            commandList.push(this.shapeCommands[node.shapeIdx]);
-            break;
-        case HierarchyType.Material:
-            const materialCommand = this.materialCommands[node.materialIdx];
-            commandList = materialCommand.material.translucent ? this.transparentCommands : this.opaqueCommands;
-            commandList.push(materialCommand);
-            break;
-        }
-
-        for (const child of node.children)
-            this.translateSceneGraph(child, commandList);
-    }
-
-    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4) {
+    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4): void {
         // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
-        const jnt1 = this.bmd.jnt1;
+        const jnt1 = this.bmdModel.bmd.jnt1;
         const bbox = this.bboxScratch;
 
         switch (node.type) {
@@ -685,29 +699,33 @@ export class Scene implements Viewer.Scene {
         }
     }
 
-    private updateJointMatrices(state: RenderState) {
+    private updateMatrixArray(state: RenderState): void {
+        const inf1 = this.bmdModel.bmd.inf1;
+        const drw1 = this.bmdModel.bmd.drw1;
+        const evp1 = this.bmdModel.bmd.evp1;
+
         // First, update joint matrices from hierarchy.
         mat4.identity(matrixScratch);
-        this.updateJointMatrixHierarchy(state, this.bmd.inf1.sceneGraph, matrixScratch);
+        this.updateJointMatrixHierarchy(state, inf1.sceneGraph, matrixScratch);
 
         // Update weighted joint matrices.
-        for (let i = 0; i < this.bmd.drw1.drw1Joints.length; i++) {
-            const joint = this.bmd.drw1.drw1Joints[i];
-            const destMtx = this.weightedJointMatrices[i];
+        for (let i = 0; i < drw1.drw1Joints.length; i++) {
+            const joint = drw1.drw1Joints[i];
+            const dst = this.shapeInstanceState.matrixArray[i];
             if (joint.kind === DRW1JointKind.NormalJoint) {
-                mat4.copy(destMtx, this.jointMatrices[joint.jointIndex]);
-                this.matrixVisibility[i] = this.jointVisibility[joint.jointIndex];
+                mat4.copy(dst, this.jointMatrices[joint.jointIndex]);
+                this.shapeInstanceState.matrixVisibility[i] = this.jointVisibility[joint.jointIndex];
             } else if (joint.kind === DRW1JointKind.WeightedJoint) {
-                destMtx.fill(0);
-                const envelope = this.bmd.evp1.envelopes[joint.envelopeIndex];
+                dst.fill(0);
+                const envelope = evp1.envelopes[joint.envelopeIndex];
                 for (let i = 0; i < envelope.weightedBones.length; i++) {
                     const weightedBone = envelope.weightedBones[i];
-                    const inverseBindPose = this.bmd.evp1.inverseBinds[weightedBone.index];
+                    const inverseBindPose = evp1.inverseBinds[weightedBone.index];
                     mat4.mul(matrixScratch, this.jointMatrices[weightedBone.index], inverseBindPose);
-                    mat4.multiplyScalarAndAdd(destMtx, destMtx, matrixScratch, weightedBone.weight);
+                    mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
                 }
                 // TODO(jstpierre): Frustum cull weighted joints.
-                this.matrixVisibility[i] = IntersectionState.FULLY_INSIDE;
+                this.shapeInstanceState.matrixVisibility[i] = IntersectionState.FULLY_INSIDE;
             }
         }
     }

@@ -9,7 +9,7 @@ import * as UI from '../ui';
 
 import { BMD, BMT, BTK, BTI, TEX1_TextureData, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
-import { Scene, SceneLoader, J3DTextureHolder } from './render';
+import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
 import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { TextureOverride } from '../TextureHolder';
@@ -32,8 +32,8 @@ function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     textureHolder.addJ3DTextures(gl, bmd, bmt);
-    const sceneLoader = new SceneLoader(textureHolder, bmd, bmt);
-    const scene = sceneLoader.createScene(gl);
+    const bmdModel = new BMDModel(gl, bmd, bmt);
+    const scene = new BMDModelInstance(gl, textureHolder, bmdModel);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -53,7 +53,7 @@ function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder
     return scene;
 }
 
-function createScenesFromRARC(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarcName: string, rarc: RARC.RARC): Scene[] {
+function createScenesFromRARC(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarcName: string, rarc: RARC.RARC): BMDModelInstance[] {
     const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
     const scenes = bmdFiles.map((bmdFile) => {
         const basename = bmdFile.name.split('.')[0];
@@ -73,12 +73,12 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
 
     private mainColorTarget: ColorTarget = new ColorTarget();
-    private opaqueScenes: Scene[] = [];
-    private indTexScenes: Scene[] = [];
-    private transparentScenes: Scene[] = [];
-    private windowScenes: Scene[] = [];
+    private opaqueScenes: BMDModelInstance[] = [];
+    private indTexScenes: BMDModelInstance[] = [];
+    private transparentScenes: BMDModelInstance[] = [];
+    private windowScenes: BMDModelInstance[] = [];
 
-    constructor(private textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: Scene[], public roomScenes: Scene[]) {
+    constructor(private textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: BMDModelInstance[], public roomScenes: BMDModelInstance[]) {
         this.textures = textureHolder.viewerTextures;
 
         this.roomScenes.forEach((scene) => {
@@ -179,7 +179,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
 
             textureHolder.addExtraTextures(gl, extraTextures);
 
-            const skyboxScenes: Scene[] = [`vrbox_sora`, `vrbox_kasumim`].map((basename) => {
+            const skyboxScenes: BMDModelInstance[] = [`vrbox_sora`, `vrbox_kasumim`].map((basename) => {
                 const bmdFile = stageRarc.findFile(`bmdp/${basename}.bmd`);
                 if (!bmdFile)
                     return null;
@@ -192,12 +192,12 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             }).filter((s) => !!s);
 
             const roomRarcs: RARC.RARC[] = rarcs;
-            const roomScenes_: Scene[][] = roomRarcs.map((rarc: RARC.RARC, i: number) => {
+            const roomScenes_: BMDModelInstance[][] = roomRarcs.map((rarc: RARC.RARC, i: number) => {
                 const rarcBasename = this.roomPaths[i].split('.')[0];
                 return createScenesFromRARC(gl, textureHolder, rarcBasename, rarc);
             });
-            const roomScenes: Scene[] = [];
-            roomScenes_.forEach((scenes: Scene[]) => roomScenes.push.apply(roomScenes, scenes));
+            const roomScenes: BMDModelInstance[] = [];
+            roomScenes_.forEach((scenes: BMDModelInstance[]) => roomScenes.push.apply(roomScenes, scenes));
 
             return new TwilightPrincessRenderer(textureHolder, stageRarc, roomRarcs, skyboxScenes, roomScenes);
         });

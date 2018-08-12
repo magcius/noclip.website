@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 
 import * as RARC from './rarc';
-import { Scene, J3DTextureHolder } from './render';
+import { J3DTextureHolder, BMDModelInstance } from './render';
 import { createScene } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
@@ -261,7 +261,7 @@ export class SunshineRenderer implements Viewer.MainScene {
     public textures: Viewer.Texture[] = [];
     private mainColorTarget: ColorTarget = new ColorTarget();
 
-    constructor(private textureHolder: J3DTextureHolder, public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: Scene, public extraScenes: Scene[], public rarc: RARC.RARC = null) {
+    constructor(private textureHolder: J3DTextureHolder, public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: BMDModelInstance, public extraScenes: BMDModelInstance[], public rarc: RARC.RARC = null) {
         this.textures = textureHolder.viewerTextures;
     }
 
@@ -313,7 +313,7 @@ export class SunshineRenderer implements Viewer.MainScene {
 }
 
 export class SunshineSceneDesc implements Viewer.SceneDesc {
-    public static createSunshineSceneForBasename(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, basename: string, isSkybox: boolean): Scene {
+    public static createSunshineSceneForBasename(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, basename: string, isSkybox: boolean): BMDModelInstance {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         if (!bmdFile)
             return null;
@@ -321,7 +321,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         const brkFile = rarc.findFile(`${basename}.brk`);
         const bckFile = rarc.findFile(`${basename}.bck`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile, );
+        const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
         scene.name = basename;
         scene.setIsSkybox(isSkybox);
         return scene;
@@ -357,7 +357,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private createSceneBinObjects(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObj): Scene[] {
+    private createSceneBinObjects(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObj): BMDModelInstance[] {
         function flatten<T>(L: T[][]): T[] {
             const R: T[] = [];
             for (const Ts of L)
@@ -367,8 +367,8 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
         switch (obj.type) {
         case 'Group':
-            const childTs: Scene[][] = obj.children.map(c => this.createSceneBinObjects(gl, textureHolder, rarc, c));
-            const flattened: Scene[] = flatten(childTs).filter(o => !!o);
+            const childTs: BMDModelInstance[][] = obj.children.map(c => this.createSceneBinObjects(gl, textureHolder, rarc, c));
+            const flattened: BMDModelInstance[] = flatten(childTs).filter(o => !!o);
             return flattened;
         case 'Model':
             return [this.createSceneForSceneBinModel(gl, textureHolder, rarc, obj)];
@@ -378,12 +378,12 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private createSceneForSceneBinModel(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObjModel): Scene {
+    private createSceneForSceneBinModel(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObjModel): BMDModelInstance {
         interface ModelLookup {
             k: string; // klass
             m: string; // model
             p?: string; // resulting file prefix
-            s?: () => Scene;
+            s?: () => BMDModelInstance;
         };
 
         function bmtm(bmd: string, bmt: string) {
