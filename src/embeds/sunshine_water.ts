@@ -11,13 +11,13 @@ import { MainScene, Scene, Texture } from '../viewer';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BMT, BTK, MaterialEntry, TEX1_Sampler, BRK } from '../j3d/j3d';
+import { BMD, BTK, MaterialEntry, TEX1_Sampler } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { Command_Material, J3DTextureHolder } from '../j3d/render';
+import { Command_Material, J3DTextureHolder, BMDModel, MaterialInstanceState, MaterialInstance } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { GXRenderHelper, SceneParams, PacketParams, fillSceneParamsFromRenderState } from '../gx/gx_render';
-import { TextureMapping } from '../TextureHolder';
+import AnimationController from '../AnimationController';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -26,37 +26,30 @@ mat4.fromScaling(posMtx, [scale, scale, scale]);
 class SeaPlaneScene implements Scene {
     public textures: Texture[];
 
-    public animationScale: number = 5;
-
-    // Play make-believe for Command_Material.
-    public btk: BTK = null;
-    public brk: BRK = null;
-    public colorOverrides: GX_Material.Color[] = [];
-    public alphaOverrides: number[] = [];
-    public currentMaterialCommand: Command_Material;
-    public renderHelper: GXRenderHelper;
-
     private sceneParams = new SceneParams();
-
-    // Play make-believe for translateTextures
-    public bmt: BMT = null;
 
     private tex1Samplers: TEX1_Sampler[];
     private glSamplers: WebGLSampler[];
 
-    public fps: number = 30;
-
     private seaCmd: Command_Material;
+    private seaCmdInstance: MaterialInstance;
     private plane: PlaneShape;
+    private renderHelper: GXRenderHelper;
+    private bmdModel: BMDModel;
+    private materialInstanceState = new MaterialInstanceState();
+    private animationController: AnimationController;
 
     constructor(gl: WebGL2RenderingContext, private textureHolder: J3DTextureHolder, bmd: BMD, btk: BTK, configName: string) {
-        this.btk = btk;
+        this.animationController = new AnimationController();
+        // Make it go fast.
+        this.animationController.fps = 30 * 5;
 
-        const sceneLoader: SceneLoader = new SceneLoader(textureHolder, bmd, null);
-        J3DScene.prototype.translateTextures.call(this, gl, sceneLoader);
+        this.bmdModel = new BMDModel(gl, bmd);
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
+        this.seaCmdInstance = new MaterialInstance(null, seaMaterial);
+        this.seaCmdInstance.bindTTK1(this.animationController, btk.ttk1);
         this.plane = new PlaneShape(gl);
 
         this.renderHelper = new GXRenderHelper(gl);
@@ -100,7 +93,7 @@ class SeaPlaneScene implements Scene {
             }
         }
 
-        const cmd = new Command_Material(this, material);
+        const cmd = new Command_Material(this.bmdModel, material);
 
         if (configName.includes('nomip')) {
             for (const sampler of this.glSamplers) {
@@ -112,15 +105,16 @@ class SeaPlaneScene implements Scene {
         return cmd;
     }
 
-    public render(state: RenderState) {
-        const gl = state.gl;
-
+    public render(state: RenderState): void {
         this.renderHelper.bindUniformBuffers(state);
 
         fillSceneParamsFromRenderState(this.sceneParams, state);
         this.renderHelper.bindSceneParams(state, this.sceneParams);
 
-        this.seaCmd.exec(state);
+        this.animationController.updateTime(state.time);
+
+        this.seaCmdInstance.fillMaterialInstanceState(this.materialInstanceState);
+        this.seaCmd.bindMaterial(state, this.renderHelper, this.textureHolder, this.materialInstanceState);
         this.plane.render(state, this.renderHelper);
     }
 
@@ -128,18 +122,6 @@ class SeaPlaneScene implements Scene {
         this.plane.destroy(gl);
         this.seaCmd.destroy(gl);
         this.renderHelper.destroy(gl);
-    }
-
-    public getTimeInFrames(milliseconds: number) {
-        return (milliseconds / 1000) * this.fps * this.animationScale;
-    }
-
-    public fillTextureMapping(m: TextureMapping, texIndex: number): void {
-        const tex1Sampler = this.tex1Samplers[texIndex];
-
-        this.textureHolder.fillTextureMapping(m, tex1Sampler.name);
-        m.glSampler = this.glSamplers[tex1Sampler.index];
-        m.lodBias = tex1Sampler.lodBias;
     }
 }
 
