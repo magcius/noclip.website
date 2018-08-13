@@ -6,12 +6,12 @@ import Progressable from '../Progressable';
 
 import { RenderState } from '../render';
 import { fetch } from '../util';
-import { MainScene, Scene, Texture } from '../viewer';
+import { MainScene, Scene } from '../viewer';
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, MaterialEntry, TEX1_Sampler } from '../j3d/j3d';
+import { BMD, BTK, MaterialEntry } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
 import { Command_Material, J3DTextureHolder, BMDModel, MaterialInstance } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from '../j3d/sms_scenes';

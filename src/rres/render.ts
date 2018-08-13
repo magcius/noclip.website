@@ -72,7 +72,7 @@ export class MDL0ModelInstance {
     public isSkybox: boolean = false;
 
     constructor(gl: WebGL2RenderingContext,
-        public textureHolder: RRESTextureHolder,
+        public textureHolder: GXTextureHolder,
         public mdl0Model: MDL0Model,
         public namePrefix: string = '',
         public materialHacks: GX_Material.GXMaterialHacks = null
@@ -260,14 +260,14 @@ class Command_Shape {
     }
 }
 
-class MaterialInstance {
+export class MaterialInstance {
     private srt0Animators: BRRES.SRT0TexMtxAnimator[] = [];
     private pat0Animators: BRRES.PAT0TexAnimator[] = [];
     private clr0Animators: BRRES.CLR0ColorAnimator[] = [];
 
     constructor(
         private modelInstance: MDL0ModelInstance,
-        private textureHolder: RRESTextureHolder,
+        private textureHolder: GXTextureHolder,
         private material: BRRES.MDL0_MaterialEntry,
     ) {
     }
@@ -317,7 +317,7 @@ class MaterialInstance {
     public calcMaterialParams(materialParams: MaterialParams): void {
         const calcColor = (dst: GX_Material.Color, fallbackColor: GX_Material.Color, i: ColorOverride, a: BRRES.AnimatableColor) => {
             let color: GX_Material.Color;
-            if (this.modelInstance.colorOverrides[i]) {
+            if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
                 color = this.modelInstance.colorOverrides[i];
             } else {
                 color = fallbackColor;
@@ -352,7 +352,7 @@ class MaterialInstance {
 }
 
 const matrixScratch = mat4.create();
-class Command_Material {
+export class Command_Material {
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
@@ -361,7 +361,7 @@ class Command_Material {
     constructor(
         gl: WebGL2RenderingContext,
         public material: BRRES.MDL0_MaterialEntry,
-        public materialHacks: GX_Material.GXMaterialHacks,
+        public materialHacks?: GX_Material.GXMaterialHacks,
     ) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
         this.program.name = this.material.name;

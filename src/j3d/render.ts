@@ -167,7 +167,7 @@ export class Command_Material {
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
     }
 
-    public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: J3DTextureHolder, materialInstance: MaterialInstance): void {
+    public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: GXTextureHolder, materialInstance: MaterialInstance): void {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
@@ -181,7 +181,7 @@ export class Command_Material {
         this.program.destroy(gl);
     }
 
-    private fillMaterialParams(materialParams: MaterialParams, state: RenderState, textureHolder: J3DTextureHolder, materialInstance: MaterialInstance): void {
+    private fillMaterialParams(materialParams: MaterialParams, state: RenderState, textureHolder: GXTextureHolder, materialInstance: MaterialInstance): void {
         // Bind color parameters.
         // TODO(jstpierre): Replace separate buffers with one large array in gx_render?
         materialInstance.fillMaterialParams(materialParams);
@@ -444,7 +444,7 @@ export class BMDModel {
         this.realized = false;
     }
 
-    public fillTextureMapping(m: TextureMapping, textureHolder: J3DTextureHolder, texIndex: number): void {
+    public fillTextureMapping(m: TextureMapping, textureHolder: GXTextureHolder, texIndex: number): void {
         const tex1Sampler = this.tex1Samplers[texIndex];
         textureHolder.fillTextureMapping(m, tex1Sampler.name);
         m.glSampler = this.glSamplers[tex1Sampler.index];
