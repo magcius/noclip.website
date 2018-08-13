@@ -270,51 +270,50 @@ function readEVP1Chunk(buffer: ArrayBufferSlice): EVP1 {
 //#endregion
 
 //#region DRW1
-export enum DRW1JointKind {
-    NormalJoint = 0x00,
-    WeightedJoint = 0x01,
+export enum DRW1MatrixKind {
+    Joint = 0x00,
+    Envelope = 0x01,
 }
 
-interface DRW1NormalJoint {
-    kind: DRW1JointKind.NormalJoint;
+interface DRW1JointMatrix {
+    kind: DRW1MatrixKind.Joint;
     jointIndex: number;
 }
 
-interface DRW1WeightedJoint {
-    kind: DRW1JointKind.WeightedJoint;
+interface DRW1EnvelopeMatrix {
+    kind: DRW1MatrixKind.Envelope;
     envelopeIndex: number;
 }
 
-type DRW1Joint = DRW1NormalJoint | DRW1WeightedJoint;
+type DRW1Matrix = DRW1JointMatrix | DRW1EnvelopeMatrix;
 
 export interface DRW1 {
-    // TODO(jstpierre): Rename this.
-    drw1Joints: DRW1Joint[];
+    matrixDefinitions: DRW1Matrix[];
 }
 
 function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
     const view = buffer.createDataView();
-    const weightedJointCount = view.getUint16(0x08);
+    const matrixCount = view.getUint16(0x08);
     const isWeightedTableOffs = view.getUint32(0x0C);
-    const jointIndexTableOffs = view.getUint32(0x10);
+    const matrixIndexTableOffs = view.getUint32(0x10);
 
-    const drw1Joints: DRW1Joint[] = [];
-    for (let i = 0; i < weightedJointCount; i++) {
-        const kind: DRW1JointKind = view.getUint8(isWeightedTableOffs + i);
-        const param = view.getUint16(jointIndexTableOffs + i * 0x02);
-        if (kind === DRW1JointKind.NormalJoint) {
-            drw1Joints.push({ kind, jointIndex: param });
-        } else if (kind === DRW1JointKind.WeightedJoint) {
-            drw1Joints.push({ kind, envelopeIndex: param })
+    const matrixDefinitions: DRW1Matrix[] = [];
+    for (let i = 0; i < matrixCount; i++) {
+        const kind: DRW1MatrixKind = view.getUint8(isWeightedTableOffs + i);
+        const param = view.getUint16(matrixIndexTableOffs + i * 0x02);
+        if (kind === DRW1MatrixKind.Joint) {
+            matrixDefinitions.push({ kind, jointIndex: param });
+        } else if (kind === DRW1MatrixKind.Envelope) {
+            matrixDefinitions.push({ kind, envelopeIndex: param })
         }
     }
 
-    return { drw1Joints };
+    return { matrixDefinitions };
 }
 //#endregion
 
 //#region JNT1
-export interface Bone {
+export interface Joint {
     name: string;
     matrix: mat4;
     scaleX: number;
@@ -324,7 +323,7 @@ export interface Bone {
 }
 
 export interface JNT1 {
-    bones: Bone[];
+    joints: Joint[];
 }
 
 const quatScratch = quat.create();
@@ -336,46 +335,46 @@ function createJointMatrix(m: mat4, sx: number, sy: number, sz: number, rx: numb
 function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
     const view = buffer.createDataView();
 
-    const boneDataCount = view.getUint16(0x08);
+    const jointDataCount = view.getUint16(0x08);
     assert(view.getUint16(0x0A) === 0xFFFF);
 
-    const boneDataTableOffs = view.getUint32(0x0C);
+    const jointDataTableOffs = view.getUint32(0x0C);
     const remapTableOffs = view.getUint32(0x10);
 
     const remapTable: number[] = [];
-    for (let i = 0; i < boneDataCount; i++)
+    for (let i = 0; i < jointDataCount; i++)
         remapTable[i] = view.getUint16(remapTableOffs + i * 0x02);
 
     const nameTableOffs = view.getUint32(0x14);
     const nameTable = readStringTable(buffer, nameTableOffs);
 
-    const bones: Bone[] = [];
-    for (let i = 0; i < boneDataCount; i++) {
+    const joints: Joint[] = [];
+    for (let i = 0; i < jointDataCount; i++) {
         const name = nameTable[i];
-        const boneDataTableIdx = boneDataTableOffs + (remapTable[i] * 0x40);
-        const scaleX = view.getFloat32(boneDataTableIdx + 0x04);
-        const scaleY = view.getFloat32(boneDataTableIdx + 0x08);
-        const scaleZ = view.getFloat32(boneDataTableIdx + 0x0C);
-        const rotationX = view.getInt16(boneDataTableIdx + 0x10) / 0x7FFF * 180;
-        const rotationY = view.getInt16(boneDataTableIdx + 0x12) / 0x7FFF * 180;
-        const rotationZ = view.getInt16(boneDataTableIdx + 0x14) / 0x7FFF * 180;
-        const translationX = view.getFloat32(boneDataTableIdx + 0x18);
-        const translationY = view.getFloat32(boneDataTableIdx + 0x1C);
-        const translationZ = view.getFloat32(boneDataTableIdx + 0x20);
-        const boundingSphereRadius = view.getFloat32(boneDataTableIdx + 0x24);
-        const bboxMinX = view.getFloat32(boneDataTableIdx + 0x28);
-        const bboxMinY = view.getFloat32(boneDataTableIdx + 0x2C);
-        const bboxMinZ = view.getFloat32(boneDataTableIdx + 0x30);
-        const bboxMaxX = view.getFloat32(boneDataTableIdx + 0x34);
-        const bboxMaxY = view.getFloat32(boneDataTableIdx + 0x38);
-        const bboxMaxZ = view.getFloat32(boneDataTableIdx + 0x3C);
+        const jointDataTableIdx = jointDataTableOffs + (remapTable[i] * 0x40);
+        const scaleX = view.getFloat32(jointDataTableIdx + 0x04);
+        const scaleY = view.getFloat32(jointDataTableIdx + 0x08);
+        const scaleZ = view.getFloat32(jointDataTableIdx + 0x0C);
+        const rotationX = view.getInt16(jointDataTableIdx + 0x10) / 0x7FFF * 180;
+        const rotationY = view.getInt16(jointDataTableIdx + 0x12) / 0x7FFF * 180;
+        const rotationZ = view.getInt16(jointDataTableIdx + 0x14) / 0x7FFF * 180;
+        const translationX = view.getFloat32(jointDataTableIdx + 0x18);
+        const translationY = view.getFloat32(jointDataTableIdx + 0x1C);
+        const translationZ = view.getFloat32(jointDataTableIdx + 0x20);
+        const boundingSphereRadius = view.getFloat32(jointDataTableIdx + 0x24);
+        const bboxMinX = view.getFloat32(jointDataTableIdx + 0x28);
+        const bboxMinY = view.getFloat32(jointDataTableIdx + 0x2C);
+        const bboxMinZ = view.getFloat32(jointDataTableIdx + 0x30);
+        const bboxMaxX = view.getFloat32(jointDataTableIdx + 0x34);
+        const bboxMaxY = view.getFloat32(jointDataTableIdx + 0x38);
+        const bboxMaxZ = view.getFloat32(jointDataTableIdx + 0x3C);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         const matrix = mat4.create();
         createJointMatrix(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        bones.push({ name, matrix, scaleX, scaleY, scaleZ, bbox });
+        joints.push({ name, matrix, scaleX, scaleY, scaleZ, bbox });
     }
 
-    return { bones };
+    return { joints };
 }
 //#endregion
 

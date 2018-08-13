@@ -1,7 +1,7 @@
 
 import { mat4, mat2d } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1JointKind, TTK1Animator, ANK1Animator, bindANK1Animator, TEX1 } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, TEX1 } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
@@ -546,13 +546,13 @@ export class BMDModelInstance {
             return new MaterialInstance(this, materialCommand.material);
         });
 
-        const numBones = this.bmdModel.bmd.jnt1.bones.length;
-        this.jointMatrices = nArray(numBones, () => mat4.create());
-        this.jointVisibility = nArray(numBones, () => IntersectionState.FULLY_INSIDE);
+        const numJoints = this.bmdModel.bmd.jnt1.joints.length;
+        this.jointMatrices = nArray(numJoints, () => mat4.create());
+        this.jointVisibility = nArray(numJoints, () => IntersectionState.FULLY_INSIDE);
 
-        const numVertexWeights = this.bmdModel.bmd.drw1.drw1Joints.length;
-        this.shapeInstanceState.matrixArray = nArray(numVertexWeights, () => mat4.create());
-        this.shapeInstanceState.matrixVisibility = nArray(numVertexWeights, () => IntersectionState.FULLY_INSIDE);
+        const numMatrices = this.bmdModel.bmd.drw1.matrixDefinitions.length;
+        this.shapeInstanceState.matrixArray = nArray(numMatrices, () => mat4.create());
+        this.shapeInstanceState.matrixVisibility = nArray(numMatrices, () => IntersectionState.FULLY_INSIDE);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -674,14 +674,14 @@ export class BMDModelInstance {
             if (this.ank1Animator !== null && this.ank1Animator.calcJointMatrix(matrixScratch2, jointIndex)) {
                 boneMatrix = matrixScratch2;
             } else {
-                boneMatrix = jnt1.bones[jointIndex].matrix;
+                boneMatrix = jnt1.joints[jointIndex].matrix;
             }
 
             const dstJointMatrix = this.jointMatrices[jointIndex];
             mat4.mul(dstJointMatrix, parentJointMatrix, boneMatrix);
 
             // Frustum cull.
-            bbox.transform(jnt1.bones[jointIndex].bbox, dstJointMatrix);
+            bbox.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
             this.jointVisibility[jointIndex] = state.camera.frustum.intersect(bbox);
 
             // Now update children.
@@ -706,15 +706,15 @@ export class BMDModelInstance {
         this.updateJointMatrixHierarchy(state, inf1.sceneGraph, matrixScratch);
 
         // Update weighted joint matrices.
-        for (let i = 0; i < drw1.drw1Joints.length; i++) {
-            const joint = drw1.drw1Joints[i];
+        for (let i = 0; i < drw1.matrixDefinitions.length; i++) {
+            const matrixDefinition = drw1.matrixDefinitions[i];
             const dst = this.shapeInstanceState.matrixArray[i];
-            if (joint.kind === DRW1JointKind.NormalJoint) {
-                mat4.copy(dst, this.jointMatrices[joint.jointIndex]);
-                this.shapeInstanceState.matrixVisibility[i] = this.jointVisibility[joint.jointIndex];
-            } else if (joint.kind === DRW1JointKind.WeightedJoint) {
+            if (matrixDefinition.kind === DRW1MatrixKind.Joint) {
+                mat4.copy(dst, this.jointMatrices[matrixDefinition.jointIndex]);
+                this.shapeInstanceState.matrixVisibility[i] = this.jointVisibility[matrixDefinition.jointIndex];
+            } else if (matrixDefinition.kind === DRW1MatrixKind.Envelope) {
                 dst.fill(0);
-                const envelope = evp1.envelopes[joint.envelopeIndex];
+                const envelope = evp1.envelopes[matrixDefinition.envelopeIndex];
                 for (let i = 0; i < envelope.weightedBones.length; i++) {
                     const weightedBone = envelope.weightedBones[i];
                     const inverseBindPose = evp1.inverseBinds[weightedBone.index];
