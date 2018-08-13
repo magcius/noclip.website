@@ -151,11 +151,6 @@ class Command_Shape {
     }
 }
 
-export class MaterialInstanceState {
-    public texMatrices: mat4[] = nArray(8, () => mat4.create());
-    public colors: GX_Material.Color[] = nArray(ColorOverride.COUNT, () => new GX_Material.Color());
-}
-
 export class Command_Material {
     private static matrixScratch = mat4.create();
     private static materialParams = new MaterialParams();
@@ -172,12 +167,12 @@ export class Command_Material {
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
     }
 
-    public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: J3DTextureHolder, materialInstanceState: MaterialInstanceState): void {
+    public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: J3DTextureHolder, materialInstance: MaterialInstance): void {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
         const materialParams = Command_Material.materialParams;
-        this.fillMaterialParams(materialParams, state, textureHolder, materialInstanceState);
+        this.fillMaterialParams(materialParams, state, textureHolder, materialInstance);
         renderHelper.bindMaterialParams(state, materialParams);
         renderHelper.bindMaterialTextures(state, materialParams, this.program);
     }
@@ -186,21 +181,10 @@ export class Command_Material {
         this.program.destroy(gl);
     }
 
-    private fillMaterialParams(materialParams: MaterialParams, state: RenderState, textureHolder: J3DTextureHolder, materialInstanceState: MaterialInstanceState): void {
+    private fillMaterialParams(materialParams: MaterialParams, state: RenderState, textureHolder: J3DTextureHolder, materialInstance: MaterialInstance): void {
         // Bind color parameters.
         // TODO(jstpierre): Replace separate buffers with one large array in gx_render?
-        materialParams.u_ColorMatReg[0].copy(materialInstanceState.colors[ColorOverride.MAT0]);
-        materialParams.u_ColorMatReg[1].copy(materialInstanceState.colors[ColorOverride.MAT1]);
-        materialParams.u_ColorAmbReg[0].copy(materialInstanceState.colors[ColorOverride.AMB0]);
-        materialParams.u_ColorAmbReg[1].copy(materialInstanceState.colors[ColorOverride.AMB1]);
-        materialParams.u_KonstColor[0].copy(materialInstanceState.colors[ColorOverride.K0]);
-        materialParams.u_KonstColor[1].copy(materialInstanceState.colors[ColorOverride.K1]);
-        materialParams.u_KonstColor[2].copy(materialInstanceState.colors[ColorOverride.K2]);
-        materialParams.u_KonstColor[3].copy(materialInstanceState.colors[ColorOverride.K3]);
-        materialParams.u_Color[0].copy(materialInstanceState.colors[ColorOverride.CPREV]);
-        materialParams.u_Color[1].copy(materialInstanceState.colors[ColorOverride.C0]);
-        materialParams.u_Color[2].copy(materialInstanceState.colors[ColorOverride.C1]);
-        materialParams.u_Color[3].copy(materialInstanceState.colors[ColorOverride.C2]);
+        materialInstance.fillMaterialParams(materialParams);
 
         // Bind textures.
         for (let i = 0; i < this.material.textureIndexes.length; i++) {
@@ -280,7 +264,7 @@ export class Command_Material {
             }
 
             // Apply SRT.
-            mat4.copy(scratch, materialInstanceState.texMatrices[i]);
+            materialInstance.calcTexMatrix(scratch, i);
 
             // SRT matrices have translation in fourth component, but we want our matrix to have translation
             // in third component. Swap.
@@ -347,10 +331,8 @@ export class MaterialInstance {
         }
     }
 
-    public fillMaterialInstanceState(materialInstanceState: MaterialInstanceState): void {
-        const copyColor = (i: ColorOverride, fallbackColor: GX_Material.Color) => {
-            const dst = materialInstanceState.colors[i];
-
+    public fillMaterialParams(materialParams: MaterialParams): void {
+        const copyColor = (dst: GX_Material.Color, i: ColorOverride, fallbackColor: GX_Material.Color) => {
             if (this.trk1Animators[i] !== undefined) {
                 this.trk1Animators[i].calcColorOverride(dst);
                 return;
@@ -373,32 +355,27 @@ export class MaterialInstance {
             dst.copy(color, alpha);
         };
 
-        copyColor(ColorOverride.MAT0, this.material.colorMatRegs[0]);
-        copyColor(ColorOverride.MAT1, this.material.colorMatRegs[1]);
-        copyColor(ColorOverride.AMB0, this.material.colorAmbRegs[0]);
-        copyColor(ColorOverride.AMB1, this.material.colorAmbRegs[1]);
+        copyColor(materialParams.u_ColorMatReg[0], ColorOverride.MAT0, this.material.colorMatRegs[0]);
+        copyColor(materialParams.u_ColorMatReg[1], ColorOverride.MAT1, this.material.colorMatRegs[1]);
+        copyColor(materialParams.u_ColorAmbReg[0], ColorOverride.AMB0, this.material.colorAmbRegs[0]);
+        copyColor(materialParams.u_ColorAmbReg[1], ColorOverride.AMB1, this.material.colorAmbRegs[1]);
 
-        copyColor(ColorOverride.K0, this.material.gxMaterial.colorConstants[0]);
-        copyColor(ColorOverride.K1, this.material.gxMaterial.colorConstants[1]);
-        copyColor(ColorOverride.K2, this.material.gxMaterial.colorConstants[2]);
-        copyColor(ColorOverride.K3, this.material.gxMaterial.colorConstants[3]);
+        copyColor(materialParams.u_KonstColor[0], ColorOverride.K0, this.material.gxMaterial.colorConstants[0]);
+        copyColor(materialParams.u_KonstColor[1], ColorOverride.K1, this.material.gxMaterial.colorConstants[1]);
+        copyColor(materialParams.u_KonstColor[2], ColorOverride.K2, this.material.gxMaterial.colorConstants[2]);
+        copyColor(materialParams.u_KonstColor[3], ColorOverride.K3, this.material.gxMaterial.colorConstants[3]);
 
-        copyColor(ColorOverride.CPREV, this.material.gxMaterial.colorRegisters[0]);
-        copyColor(ColorOverride.C0, this.material.gxMaterial.colorRegisters[1]);
-        copyColor(ColorOverride.C1, this.material.gxMaterial.colorRegisters[2]);
-        copyColor(ColorOverride.C2, this.material.gxMaterial.colorRegisters[3]);
+        copyColor(materialParams.u_Color[0], ColorOverride.CPREV, this.material.gxMaterial.colorRegisters[0]);
+        copyColor(materialParams.u_Color[1], ColorOverride.C0, this.material.gxMaterial.colorRegisters[1]);
+        copyColor(materialParams.u_Color[2], ColorOverride.C1, this.material.gxMaterial.colorRegisters[2]);
+        copyColor(materialParams.u_Color[3], ColorOverride.C2, this.material.gxMaterial.colorRegisters[3]);
+    }
 
-        // Compute texture matrices.
-        for (let i = 0; i < this.material.texMatrices.length; i++) {
-            if (this.material.texMatrices[i] === null)
-                continue;
-
-            const dst = materialInstanceState.texMatrices[i];
-            if (this.ttk1Animators[i] !== undefined) {
-                this.ttk1Animators[i].calcTexMtx(dst);
-            } else {
-                mat4.copy(dst, this.material.texMatrices[i].matrix);
-            }
+    public calcTexMatrix(dst: mat4, i: number): void {
+        if (this.ttk1Animators[i] !== undefined) {
+            this.ttk1Animators[i].calcTexMtx(dst);
+        } else {
+            mat4.copy(dst, this.material.texMatrices[i].matrix);
         }
     }
 }
@@ -457,7 +434,6 @@ export class BMDModel {
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
-        // TODO(jstpierre): Remove once we get rid of Scene.
         if (!this.realized)
             return;
 
@@ -531,7 +507,6 @@ export class BMDModelInstance {
     private bboxScratch: AABB = new AABB();
 
     private materialInstances: MaterialInstance[] = [];
-    private materialInstanceState: MaterialInstanceState = new MaterialInstanceState();
     private shapeInstanceState: ShapeInstanceState = new ShapeInstanceState();
 
     constructor(
@@ -582,9 +557,8 @@ export class BMDModelInstance {
      * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
      */
     public bindTTK1(ttk1: TTK1): void {
-        for (let i = 0; i < this.materialInstances.length; i++) {
+        for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindTTK1(this.animationController, ttk1);
-        }
     }
 
     /**
@@ -592,9 +566,8 @@ export class BMDModelInstance {
      * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
      */
     public bindTRK1(trk1: TRK1): void {
-        for (let i = 0; i < this.materialInstances.length; i++) {
+        for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindTRK1(this.animationController, trk1);
-        }
     }
 
     /**
@@ -617,7 +590,7 @@ export class BMDModelInstance {
         this.animationController.updateTime(state.time);
         this.updateMatrixArray(state);
 
-        // Update model matrix. TO
+        // Update model matrix. TODO: Move model matrix to root bone?
         mat4.copy(this.shapeInstanceState.modelMatrix, this.modelMatrix);
         this.shapeInstanceState.isSkybox = this.isSkybox;
 
@@ -634,9 +607,8 @@ export class BMDModelInstance {
             const drawListItem = drawList[i];
             const materialIndex = drawListItem.materialIndex;
             const materialInstance = this.materialInstances[materialIndex];
-            materialInstance.fillMaterialInstanceState(this.materialInstanceState);
             const materialCommand = this.bmdModel.materialCommands[materialIndex];
-            materialCommand.bindMaterial(state, this.renderHelper, this.textureHolder, this.materialInstanceState);
+            materialCommand.bindMaterial(state, this.renderHelper, this.textureHolder, materialInstance);
 
             for (let j = 0; j < drawListItem.shapeCommands.length; j++) {
                 const shapeCommand = drawListItem.shapeCommands[j];
