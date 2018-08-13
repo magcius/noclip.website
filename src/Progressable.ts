@@ -25,6 +25,10 @@ export default class Progressable<T> {
         return pr;
     }
 
+    public static resolve<T>(value: T): Progressable<T> {
+        return new Progressable(Promise.resolve(value), 1);
+    }
+
     public static all<T>(progressables: Progressable<T>[]): Progressable<T[]> {
         const p = Promise.all(progressables.map((p) => p.promise));
         function calcProgress() {
