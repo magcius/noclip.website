@@ -24,12 +24,7 @@ const posMtx = mat4.create();
 mat4.fromScaling(posMtx, [scale, scale, scale]);
 
 class SeaPlaneScene implements Scene {
-    public textures: Texture[];
-
     private sceneParams = new SceneParams();
-
-    private tex1Samplers: TEX1_Sampler[];
-    private glSamplers: WebGLSampler[];
 
     private seaCmd: Command_Material;
     private seaCmdInstance: MaterialInstance;
@@ -43,6 +38,14 @@ class SeaPlaneScene implements Scene {
         // Make it go fast.
         this.animationController.fps = 30 * 5;
 
+        if (configName.includes('nomip')) {
+            for (const sampler of bmd.tex1.samplers) {
+                sampler.minLOD = 1;
+                sampler.maxLOD = 1;
+            }
+        }
+
+        textureHolder.addJ3DTextures(gl, bmd);
         this.bmdModel = new BMDModel(gl, bmd);
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
@@ -92,16 +95,7 @@ class SeaPlaneScene implements Scene {
             }
         }
 
-        const cmd = new Command_Material(this.bmdModel, material);
-
-        if (configName.includes('nomip')) {
-            for (const sampler of this.glSamplers) {
-                gl.samplerParameterf(sampler, gl.TEXTURE_MIN_LOD, 1);
-                gl.samplerParameterf(sampler, gl.TEXTURE_MAX_LOD, 1);
-            }
-        }
-
-        return cmd;
+        return new Command_Material(this.bmdModel, material);
     }
 
     public render(state: RenderState): void {
@@ -204,15 +198,12 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
         const rarc = RARC.parse(buffer);
 
         const textureHolder = new J3DTextureHolder();
-
         const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/sky', true);
 
         const bmdFile = rarc.findFile('map/map/sea.bmd');
         const btkFile = rarc.findFile('map/map/sea.btk');
         const bmd = BMD.parse(bmdFile.buffer);
         const btk = BTK.parse(btkFile.buffer);
-
-        textureHolder.addJ3DTextures(gl, bmd);
 
         const seaScene = new SeaPlaneScene(gl, textureHolder, bmd, btk, name);
         return new SunshineRenderer(
