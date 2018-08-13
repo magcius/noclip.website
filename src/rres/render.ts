@@ -3,12 +3,13 @@ import { RenderState, RenderFlags } from "../render";
 import * as BRRES from './brres';
 
 import * as GX_Material from '../gx/gx_material';
-import { mat4, mat2d, vec4 } from "gl-matrix";
+import { mat4, mat2d } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder } from "../gx/gx_render";
 import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState } from "../Camera";
 import { ColorOverride } from "../j3d/render";
 import AnimationController from "../AnimationController";
+import { TextureMapping } from "../TextureHolder";
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
@@ -16,13 +17,46 @@ export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     }
 }
 
-export class ModelRenderer {
-    private materialCommands: Command_Material[] = [];
-    private shapeCommands: Command_Shape[] = [];
+export class MDL0Model {
+    public materialCommands: Command_Material[] = [];
+    public shapeCommands: Command_Shape[] = [];
+    private bufferCoalescer: BufferCoalescer;
+    private realized: boolean;
+
+    constructor(
+        gl: WebGL2RenderingContext,
+        public mdl0: BRRES.MDL0,
+        private materialHacks: GX_Material.GXMaterialHacks | null = null,
+    ) {
+        for (const material of this.mdl0.materials)
+            this.materialCommands.push(new Command_Material(gl, material, this.materialHacks));
+
+        this.bufferCoalescer = loadedDataCoalescer(gl, this.mdl0.shapes.map((shape) => shape.loadedVertexData));
+
+        for (let i = 0; i < this.mdl0.shapes.length; i++) {
+            const shape = this.mdl0.shapes[i];
+            this.shapeCommands.push(new Command_Shape(gl, this.bufferCoalescer.coalescedBuffers[i], shape));
+        }
+
+        this.realized = true;
+    }
+
+    public destroy(gl: WebGL2RenderingContext): void {
+        if (!this.realized)
+            return;
+
+        this.materialCommands.forEach((cmd) => cmd.destroy(gl));
+        this.shapeCommands.forEach((cmd) => cmd.destroy(gl));
+        this.bufferCoalescer.destroy(gl);
+        this.realized = false;
+    }
+}
+
+export class MDL0ModelInstance {
+    private materialInstances: MaterialInstance[];
     private renderHelper: GXRenderHelper;
     private sceneParams: SceneParams = new SceneParams();
     private packetParams: PacketParams = new PacketParams();
-    private bufferCoalescer: BufferCoalescer;
     private chr0NodeAnimator: BRRES.CHR0NodesAnimator;
 
     private matrixVisibility: IntersectionState[] = [];
@@ -39,38 +73,36 @@ export class ModelRenderer {
 
     constructor(gl: WebGL2RenderingContext,
         public textureHolder: RRESTextureHolder,
-        public mdl0: BRRES.MDL0,
+        public mdl0Model: MDL0Model,
         public namePrefix: string = '',
         public materialHacks: GX_Material.GXMaterialHacks = null
     ) {
         this.renderHelper = new GXRenderHelper(gl);
-        this.translateModel(gl);
-        this.name = `${namePrefix}/${mdl0.name}`;
+        this.name = `${namePrefix}/${mdl0Model.mdl0.name}`;
+
+        this.materialInstances = this.mdl0Model.materialCommands.map((materialCommand) => {
+            return new MaterialInstance(this, textureHolder, materialCommand.material);
+        })
+        this.growMatrixArray(this.mdl0Model.mdl0.sceneGraph.nodeTreeOps);
     }
 
     public bindCHR0(animationController: AnimationController, chr0: BRRES.CHR0): void {
-        this.chr0NodeAnimator = BRRES.bindCHR0Animator(animationController, chr0, this.mdl0.nodes);
+        this.chr0NodeAnimator = BRRES.bindCHR0Animator(animationController, chr0, this.mdl0Model.mdl0.nodes);
     }
 
     public bindSRT0(animationController: AnimationController, srt0: BRRES.SRT0): void {
-        for (let i = 0; i < this.materialCommands.length; i++) {
-            const cmd = this.materialCommands[i];
-            cmd.bindSRT0(animationController, srt0);
-        }
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].bindSRT0(animationController, srt0);
     }
 
     public bindPAT0(animationController: AnimationController, pat0: BRRES.PAT0): void {
-        for (let i = 0; i < this.materialCommands.length; i++) {
-            const cmd = this.materialCommands[i];
-            cmd.bindPAT0(animationController, pat0);
-        }
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].bindPAT0(animationController, pat0);
     }
 
     public bindCLR0(animationController: AnimationController, clr0: BRRES.CLR0): void {
-        for (let i = 0; i < this.materialCommands.length; i++) {
-            const cmd = this.materialCommands[i];
-            cmd.bindCLR0(animationController, clr0);
-        }
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].bindCLR0(animationController, clr0);
     }
 
     public bindRRESAnimations(animationController: AnimationController, rres: BRRES.RRES): void {
@@ -97,15 +129,16 @@ export class ModelRenderer {
             return;
 
         // Frustum cull.
-        if (this.mdl0.bbox !== null) {
+        const mdl0 = this.mdl0Model.mdl0;
+        if (mdl0.bbox !== null) {
             const bbox = this.bboxScratch;
-            bbox.transform(this.mdl0.bbox, this.modelMatrix);
+            bbox.transform(mdl0.bbox, this.modelMatrix);
             if (state.camera.frustum.intersect(bbox) === IntersectionState.FULLY_OUTSIDE)
                 return;
         }
 
         // First, update our matrix state.
-        this.execNodeTreeOpList(state, this.mdl0.sceneGraph.nodeTreeOps);
+        this.execNodeTreeOpList(state, mdl0.sceneGraph.nodeTreeOps);
 
         this.renderHelper.bindUniformBuffers(state);
 
@@ -113,57 +146,56 @@ export class ModelRenderer {
         this.renderHelper.bindSceneParams(state, this.sceneParams);
 
         // TODO(jstpierre): Split into two draws.
-        this.execDrawOpList(state, this.mdl0.sceneGraph.drawOpaOps);
-        this.execDrawOpList(state, this.mdl0.sceneGraph.drawXluOps);
+        this.execDrawOpList(state, mdl0.sceneGraph.drawOpaOps);
+        this.execDrawOpList(state, mdl0.sceneGraph.drawXluOps);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
+        this.mdl0Model.destroy(gl);
         this.renderHelper.destroy(gl);
-        this.materialCommands.forEach((cmd) => cmd.destroy(gl));
-        this.shapeCommands.forEach((cmd) => cmd.destroy(gl));
     }
 
     private execDrawOpList(state: RenderState, opList: BRRES.DrawOp[]): void {
+        const mdl0 = this.mdl0Model.mdl0;
+
         let lastMatId = -1;
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
 
-            const node = this.mdl0.nodes[op.nodeId];
+            const node = mdl0.nodes[op.nodeId];
             if (this.matrixVisibility[node.mtxId] === IntersectionState.FULLY_OUTSIDE)
                 continue;
 
-            const matCommand = this.materialCommands[op.matId];
-            if (!matCommand.visible)
-                continue;
+            const matCommand = this.mdl0Model.materialCommands[op.matId];
 
             const usesEnvelope = (node.mtxId < 0);
             if (usesEnvelope)
                 throw "whoops";
 
-            const shpCommand = this.shapeCommands[op.shpId];
+            const shpCommand = this.mdl0Model.shapeCommands[op.shpId];
 
             const nodeModelMtx = this.matrixArray[node.mtxId];
             const modelView = state.updateModelView(this.isSkybox, nodeModelMtx);
 
             if (op.matId != lastMatId) {
-                matCommand.exec(state, this.renderHelper);
+                matCommand.bindMaterial(state, this.renderHelper, this.materialInstances[op.matId]);
                 lastMatId = op.matId;
             }
 
             mat4.copy(this.packetParams.u_PosMtx[0], modelView);
             this.renderHelper.bindPacketParams(state, this.packetParams);
-
-            shpCommand.exec(state);
+            shpCommand.draw(state);
         }
     }
 
     private growMatrixArray(opList: BRRES.NodeTreeOp[]): void {
+        const mdl0 = this.mdl0Model.mdl0;
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
 
             let dstMtxId;
             if (op.op === BRRES.ByteCodeOp.NODEDESC) {
-                const node = this.mdl0.nodes[op.nodeId];
+                const node = mdl0.nodes[op.nodeId];
                 dstMtxId = node.mtxId;
             } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
                 dstMtxId = op.toMtxId;
@@ -178,6 +210,8 @@ export class ModelRenderer {
     }
 
     private execNodeTreeOpList(state: RenderState, opList: BRRES.NodeTreeOp[]): void {
+        const mdl0 = this.mdl0Model.mdl0;
+
         mat4.copy(this.matrixArray[0], this.modelMatrix);
         this.matrixVisibility[0] = IntersectionState.PARTIAL_INTERSECT;
 
@@ -185,7 +219,7 @@ export class ModelRenderer {
             const op = opList[i];
 
             if (op.op === BRRES.ByteCodeOp.NODEDESC) {
-                const node = this.mdl0.nodes[op.nodeId];
+                const node = mdl0.nodes[op.nodeId];
                 const parentMtxId = op.parentMtxId;
                 const dstMtxId = node.mtxId;
 
@@ -208,20 +242,6 @@ export class ModelRenderer {
             }
         }
     }
-
-    private translateModel(gl: WebGL2RenderingContext): void {
-        this.growMatrixArray(this.mdl0.sceneGraph.nodeTreeOps);
-
-        for (const material of this.mdl0.materials)
-            this.materialCommands.push(new Command_Material(gl, this, this.textureHolder, material, this.materialHacks));
-
-        this.bufferCoalescer = loadedDataCoalescer(gl, this.mdl0.shapes.map((shape) => shape.loadedVertexData));
-
-        for (let i = 0; i < this.mdl0.shapes.length; i++) {
-            const shape = this.mdl0.shapes[i];
-            this.shapeCommands.push(new Command_Shape(gl, this.bufferCoalescer.coalescedBuffers[i], shape));
-        }
-    }
 }
 
 class Command_Shape {
@@ -231,7 +251,7 @@ class Command_Shape {
         this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, shape.loadedVertexLayout, shape.loadedVertexData);
     }
 
-    public exec(state: RenderState): void {
+    public draw(state: RenderState): void {
         this.shapeHelper.drawSimple(state);
     }
 
@@ -240,28 +260,16 @@ class Command_Shape {
     }
 }
 
-const matrixScratch = mat4.create();
-class Command_Material {
-    private renderFlags: RenderFlags;
-    private program: GX_Material.GX_Program;
-    private materialParams = new MaterialParams();
-    private glSamplers: WebGLSampler[] = [];
+class MaterialInstance {
     private srt0Animators: BRRES.SRT0TexMtxAnimator[] = [];
     private pat0Animators: BRRES.PAT0TexAnimator[] = [];
     private clr0Animators: BRRES.CLR0ColorAnimator[] = [];
-    public visible: boolean = true;
 
-    constructor(gl: WebGL2RenderingContext,
-        public model: ModelRenderer,
-        public textureHolder: RRESTextureHolder,
-        public material: BRRES.MDL0_MaterialEntry,
-        public materialHacks: GX_Material.GXMaterialHacks,
+    constructor(
+        private modelInstance: MDL0ModelInstance,
+        private textureHolder: RRESTextureHolder,
+        private material: BRRES.MDL0_MaterialEntry,
     ) {
-        this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
-        this.program.name = this.material.name;
-        this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
-
-        this.translateSamplers(gl);
     }
 
     public bindSRT0(animationController: AnimationController, srt0: BRRES.SRT0): void {
@@ -288,69 +296,7 @@ class Command_Material {
         }
     }
 
-    private translateSamplers(gl: WebGL2RenderingContext): void {
-        for (let i = 0; i < 8; i++) {
-            const sampler = this.material.samplers[i];
-            if (!sampler)
-                continue;
-
-            // Check sampler validity.
-            if (!this.textureHolder.hasTexture(sampler.name))
-                console.warn("Missing texture:", sampler.name);
-
-            const glSampler = gl.createSampler();
-            gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
-            gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));
-            gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
-            gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
-
-            this.glSamplers[i] = glSampler;
-        }
-    }
-
-    private calcPostTexMtx(dst: mat4, texIdx: number, state: RenderState, flipY: boolean): void {
-        const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
-        const texSrt = this.material.texSrts[texIdx];
-        const flipYScale = flipY ? -1.0 : 1.0;
-
-        if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
-            texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
-
-            // XXX(jstpierre): ZSS hack. Reference camera 31 is set up by the game to be an overhead
-            // camera for clouds. Kill it until we can emulate the camera system in this game...
-            if (texSrt.refCamera === 31) {
-                dst[0] = 0;
-                dst[5] = 0;
-            }
-        } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
-            texEnvMtx(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
-        } else {
-            mat4.identity(dst);
-        }
-
-        // Apply effect matrix.
-        mat4.mul(dst, texSrt.effectMtx, dst);
-
-        // Calculate SRT.
-        if (this.srt0Animators[texMtxIdx]) {
-            this.srt0Animators[texMtxIdx].calcTexMtx(matrixScratch);
-        } else {
-            mat4.copy(matrixScratch, texSrt.srtMtx);
-        }
-
-        // SRT matrices have translation in fourth component, but we want our matrix to have translation
-        // in third component. Swap.
-        const tx = matrixScratch[12];
-        matrixScratch[12] = matrixScratch[8];
-        matrixScratch[8] = tx;
-        const ty = matrixScratch[13];
-        matrixScratch[13] = matrixScratch[9];
-        matrixScratch[9] = ty;
-
-        mat4.mul(dst, matrixScratch, dst);
-    }
-
-    private calcIndMtx(dst: mat2d, indIdx: number): void {
+    public calcIndTexMatrix(dst: mat2d, indIdx: number): void {
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.IND0 + indIdx;
         if (this.srt0Animators[texMtxIdx]) {
             this.srt0Animators[texMtxIdx].calcIndTexMtx(dst);
@@ -359,27 +305,20 @@ class Command_Material {
         }
     }
 
-    private fillMaterialParams(materialParams: MaterialParams, state: RenderState): void {
-        for (let i = 0; i < 8; i++) {
-            const sampler = this.material.samplers[i];
-            if (!sampler)
-                continue;
-
-            const m = materialParams.m_TextureMapping[i];
-            if (this.pat0Animators[i]) {
-                this.pat0Animators[i].calcTextureMapping(m, this.textureHolder);
-            } else {
-                this.textureHolder.fillTextureMapping(m, sampler.name);
-            }
-            // Fill in sampler state.
-            m.glSampler = this.glSamplers[i];
-            m.lodBias = sampler.lodBias;
+    public calcTexMatrix(dst: mat4, texIdx: number): void {
+        const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
+        if (this.srt0Animators[texMtxIdx]) {
+            this.srt0Animators[texMtxIdx].calcTexMtx(matrixScratch);
+        } else {
+            mat4.copy(dst, this.material.texSrts[texMtxIdx].srtMtx);
         }
+    }
 
+    public calcMaterialParams(materialParams: MaterialParams): void {
         const calcColor = (dst: GX_Material.Color, fallbackColor: GX_Material.Color, i: ColorOverride, a: BRRES.AnimatableColor) => {
             let color: GX_Material.Color;
-            if (this.model.colorOverrides[i]) {
-                color = this.model.colorOverrides[i];
+            if (this.modelInstance.colorOverrides[i]) {
+                color = this.modelInstance.colorOverrides[i];
             } else {
                 color = fallbackColor;
             }
@@ -405,20 +344,115 @@ class Command_Material {
         calcColor(materialParams.u_Color[1], this.material.gxMaterial.colorRegisters[1], ColorOverride.C0, BRRES.AnimatableColor.C0);
         calcColor(materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2], ColorOverride.C1, BRRES.AnimatableColor.C1);
         calcColor(materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3], ColorOverride.C2, BRRES.AnimatableColor.C2);
-
-        for (let i = 0; i < 8; i++)
-            this.calcPostTexMtx(materialParams.u_PostTexMtx[i], i, state, materialParams.m_TextureMapping[i].flipY);
-        for (let i = 0; i < 3; i++)
-            this.calcIndMtx(materialParams.u_IndTexMtx[i], i);
     }
 
-    public exec(state: RenderState, renderHelper: GXRenderHelper): void {
-        const gl = state.gl;
+    public calcTextureMapping(dst: TextureMapping, name: string): void {
+        this.textureHolder.fillTextureMapping(dst, name);
+    }
+}
 
+const matrixScratch = mat4.create();
+class Command_Material {
+    private renderFlags: RenderFlags;
+    private program: GX_Material.GX_Program;
+    private materialParams = new MaterialParams();
+    private glSamplers: WebGLSampler[] = [];
+
+    constructor(
+        gl: WebGL2RenderingContext,
+        public material: BRRES.MDL0_MaterialEntry,
+        public materialHacks: GX_Material.GXMaterialHacks,
+    ) {
+        this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
+        this.program.name = this.material.name;
+        this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
+
+        this.translateSamplers(gl);
+    }
+
+    private translateSamplers(gl: WebGL2RenderingContext): void {
+        for (let i = 0; i < 8; i++) {
+            const sampler = this.material.samplers[i];
+            if (!sampler)
+                continue;
+
+            const glSampler = gl.createSampler();
+            gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
+            gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));
+            gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
+            gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
+
+            this.glSamplers[i] = glSampler;
+        }
+    }
+
+    private calcPostTexMatrix(dst: mat4, texIdx: number, state: RenderState, flipY: boolean, materialInstance: MaterialInstance): void {
+        const texSrt = this.material.texSrts[texIdx];
+        const flipYScale = flipY ? -1.0 : 1.0;
+
+        if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
+            texProjPerspMtx(dst, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+
+            // XXX(jstpierre): ZSS hack. Reference camera 31 is set up by the game to be an overhead
+            // camera for clouds. Kill it until we can emulate the camera system in this game...
+            if (texSrt.refCamera === 31) {
+                dst[0] = 0;
+                dst[5] = 0;
+            }
+        } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
+            texEnvMtx(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+        } else {
+            mat4.identity(dst);
+        }
+
+        // Apply effect matrix.
+        mat4.mul(dst, texSrt.effectMtx, dst);
+
+        // Calculate SRT.
+        materialInstance.calcTexMatrix(matrixScratch, texIdx);
+
+        // SRT matrices have translation in fourth component, but we want our matrix to have translation
+        // in third component. Swap.
+        const tx = matrixScratch[12];
+        matrixScratch[12] = matrixScratch[8];
+        matrixScratch[8] = tx;
+        const ty = matrixScratch[13];
+        matrixScratch[13] = matrixScratch[9];
+        matrixScratch[9] = ty;
+
+        mat4.mul(dst, matrixScratch, dst);
+    }
+
+    private calcIndTexMatrix(dst: mat2d, indIdx: number, materialInstance: MaterialInstance): void {
+        materialInstance.calcIndTexMatrix(dst, indIdx);
+    }
+
+    private calcMaterialParams(materialParams: MaterialParams, state: RenderState, materialInstance: MaterialInstance): void {
+        for (let i = 0; i < 8; i++) {
+            const sampler = this.material.samplers[i];
+            if (!sampler)
+                continue;
+
+            const m = materialParams.m_TextureMapping[i];
+            materialInstance.calcTextureMapping(m, sampler.name);
+            // Fill in sampler state.
+            m.glSampler = this.glSamplers[i];
+            m.lodBias = sampler.lodBias;
+        }
+
+        materialInstance.calcMaterialParams(materialParams);
+
+        for (let i = 0; i < 8; i++)
+            this.calcPostTexMatrix(materialParams.u_PostTexMtx[i], i, state, materialParams.m_TextureMapping[i].flipY, materialInstance);
+        for (let i = 0; i < 3; i++)
+            this.calcIndTexMatrix(materialParams.u_IndTexMtx[i], i, materialInstance);
+    }
+
+    public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, materialInstance: MaterialInstance): void {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
-        this.fillMaterialParams(this.materialParams, state);
+        this.calcMaterialParams(this.materialParams, state, materialInstance);
 
         renderHelper.bindMaterialParams(state, this.materialParams);
         renderHelper.bindMaterialTextures(state, this.materialParams, this.program);

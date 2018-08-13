@@ -10,7 +10,7 @@ import { fetch, assert } from '../util';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
-import { RRESTextureHolder, ModelRenderer } from './render';
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { RenderState, depthClearFlags } from '../render';
 import AnimationController from '../AnimationController';
 
@@ -19,8 +19,8 @@ class MarioKartRenderer implements Viewer.MainScene {
     private textureHolder: RRESTextureHolder = new RRESTextureHolder();
     private animationController: AnimationController;
 
-    private skyboxRenderer: ModelRenderer;
-    private courseRenderer: ModelRenderer;
+    private skyboxRenderer: MDL0ModelInstance;
+    private courseRenderer: MDL0ModelInstance;
 
     constructor(gl: WebGL2RenderingContext, public courseRRES: BRRES.RRES, public skyboxRRES: BRRES.RRES) {
         this.textures = this.textureHolder.viewerTextures;
@@ -31,11 +31,13 @@ class MarioKartRenderer implements Viewer.MainScene {
         this.textureHolder.addRRESTextures(gl, courseRRES);
 
         assert(skyboxRRES.mdl0.length === 1);
-        this.skyboxRenderer = new ModelRenderer(gl, this.textureHolder, skyboxRRES.mdl0[0], 'vrbox');
+        const skyboxModel = new MDL0Model(gl, skyboxRRES.mdl0[0]);
+        this.skyboxRenderer = new MDL0ModelInstance(gl, this.textureHolder, skyboxModel, 'vrbox');
         this.skyboxRenderer.isSkybox = true;
 
         assert(courseRRES.mdl0.length === 1);
-        this.courseRenderer = new ModelRenderer(gl, this.textureHolder, courseRRES.mdl0[0], 'course');
+        const courseModel = new MDL0Model(gl, courseRRES.mdl0[0]);
+        this.courseRenderer = new MDL0ModelInstance(gl, this.textureHolder, courseModel, 'course');
 
         // Mario Kart Wii courses appear to be very, very big. Scale them down a bit.
         const scaleFactor = 0.1;

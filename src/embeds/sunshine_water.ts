@@ -13,7 +13,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, MaterialEntry, TEX1_Sampler } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { Command_Material, J3DTextureHolder, BMDModel, MaterialInstanceState, MaterialInstance } from '../j3d/render';
+import { Command_Material, J3DTextureHolder, BMDModel, MaterialInstance } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { GXRenderHelper, SceneParams, PacketParams, fillSceneParamsFromRenderState } from '../gx/gx_render';
@@ -36,7 +36,6 @@ class SeaPlaneScene implements Scene {
     private plane: PlaneShape;
     private renderHelper: GXRenderHelper;
     private bmdModel: BMDModel;
-    private materialInstanceState = new MaterialInstanceState();
     private animationController: AnimationController;
 
     constructor(gl: WebGL2RenderingContext, private textureHolder: J3DTextureHolder, bmd: BMD, btk: BTK, configName: string) {
@@ -113,8 +112,7 @@ class SeaPlaneScene implements Scene {
 
         this.animationController.updateTime(state.time);
 
-        this.seaCmdInstance.fillMaterialInstanceState(this.materialInstanceState);
-        this.seaCmd.bindMaterial(state, this.renderHelper, this.textureHolder, this.materialInstanceState);
+        this.seaCmd.bindMaterial(state, this.renderHelper, this.textureHolder, this.seaCmdInstance);
         this.plane.render(state, this.renderHelper);
     }
 

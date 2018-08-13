@@ -11,9 +11,9 @@ import { fetch, assert, readString, assertExists } from '../util';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState, ColorTarget, depthClearFlags } from '../render';
-import { RRESTextureHolder, ModelRenderer } from './render';
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { TextureOverride } from '../TextureHolder';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color, GX_Program } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import { ColorOverride } from '../j3d/render';
 import AnimationController from '../AnimationController';
@@ -28,9 +28,9 @@ const materialHacks: GXMaterialHacks = {
 interface Obj {
     unk1: number; // 0x00. Appears to be object-specific parameters.
     unk2: number; // 0x04. Appears to be object-specific parameters.
-    tx: number;   // 0x08
-    ty: number;   // 0x0C
-    tz: number;   // 0x10
+    tx: number;   // 0x08. Translation X.
+    ty: number;   // 0x0C. Translation Y.
+    tz: number;   // 0x10. Translation Z.
     rotX: number; // 0x14. Rotation around X.
     rotY: number; // 0x16. Rotation around Y (-0x7FFF maps to -180, 0x7FFF maps to 180)
     unk4: number; // 0x18. Always zero so far (for OBJ. OBJS have it filled in.). Probably padding...
@@ -43,12 +43,12 @@ interface Obj {
 interface Sobj {
     unk1: number; // 0x00. Appears to be object-specific parameters.
     unk2: number; // 0x04. Appears to be object-specific parameters.
-    tx: number;   // 0x08
-    ty: number;   // 0x0C
-    tz: number;   // 0x10
-    sx: number;   // 0x14. Either scale or bounding box.
-    sy: number;   // 0x18. Either scale or bounding box.
-    sz: number;   // 0x1C. Either scale or bounding box.
+    tx: number;   // 0x08. Translation X.
+    ty: number;   // 0x0C. Translation Y.
+    tz: number;   // 0x10. Translation Z.
+    sx: number;   // 0x14. Scale X.
+    sy: number;   // 0x18. Scale Y.
+    sz: number;   // 0x1C. Scale Z.
     rotY: number; // 0x20. Another per-object parameter?
     unk4: number; // 0x22. Always zero so far (for OBJ. OBJS have it filled in.). Probably padding...
     unk5: number; // 0x26. Object group perhaps? Tends to be a small number of things...
@@ -95,6 +95,19 @@ class ModelArchiveCollection {
     }
 }
 
+class ModelCache {
+    public cache = new Map<BRRES.MDL0, MDL0Model>();
+
+    public getModel(gl: WebGL2RenderingContext, mdl0: BRRES.MDL0, materialHacks: GXMaterialHacks): MDL0Model {
+        if (this.cache.has(mdl0))
+            return this.cache.get(mdl0);
+
+        const mdl0Model = new MDL0Model(gl, mdl0, materialHacks);
+        this.cache.set(mdl0, mdl0Model);
+        return mdl0Model;
+    }
+}
+
 class SkywardSwordScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
@@ -105,12 +118,13 @@ class SkywardSwordScene implements Viewer.MainScene {
     private roomBZSes: BZS[] = [];
     private commonRRES: BRRES.RRES;
     private oarcCollection = new ModelArchiveCollection();
+    private modelCache = new ModelCache();
 
-    private models: ModelRenderer[] = [];
+    private models: MDL0ModelInstance[] = [];
     // Uses WaterDummy. Have to render after everything else. TODO(jstpierre): How does engine know this?
-    private indirectModels: ModelRenderer[] = [];
+    private indirectModels: MDL0ModelInstance[] = [];
     // Skybox is rendered specially...
-    private vrboxModel: ModelRenderer = null;
+    private vrboxModel: MDL0ModelInstance = null;
 
     constructor(gl: WebGL2RenderingContext, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.textureHolder = new RRESTextureHolder();
@@ -162,7 +176,7 @@ class SkywardSwordScene implements Viewer.MainScene {
         outer:
         // Find any indirect scenes.
         for (const modelRenderer of this.models) {
-            for (const material of modelRenderer.mdl0.materials) {
+            for (const material of modelRenderer.mdl0Model.mdl0.materials) {
                 for (const sampler of material.samplers) {
                     if (sampler.name === 'DummyWater') {
                         this.indirectModels.push(modelRenderer);
@@ -181,14 +195,14 @@ class SkywardSwordScene implements Viewer.MainScene {
         panels.push(layersPanel);
 
         // Construct a list of past/future models.
-        const futureModels: ModelRenderer[] = [];
-        const pastModels: ModelRenderer[] = [];
+        const futureModels: MDL0ModelInstance[] = [];
+        const pastModels: MDL0ModelInstance[] = [];
         for (const modelRenderer of this.models) {
-            if (modelRenderer.mdl0.name.startsWith('model_obj'))
+            if (modelRenderer.mdl0Model.mdl0.name.startsWith('model_obj'))
                 futureModels.push(modelRenderer);
 
             // Lanayru Sand Sea has a "past" decal on top of a future zone.
-            if (this.stageId === 'F301_1' && modelRenderer.mdl0.name === 'model1_s')
+            if (this.stageId === 'F301_1' && modelRenderer.mdl0Model.mdl0.name === 'model1_s')
                 pastModels.push(modelRenderer);
         }
 
@@ -260,8 +274,9 @@ class SkywardSwordScene implements Viewer.MainScene {
         });
     }
 
-    private spawnModel(gl: WebGL2RenderingContext, mdl0: BRRES.MDL0, rres: BRRES.RRES, namePrefix: string): ModelRenderer {
-        const modelRenderer = new ModelRenderer(gl, this.textureHolder, mdl0, namePrefix, materialHacks);
+    private spawnModel(gl: WebGL2RenderingContext, mdl0: BRRES.MDL0, rres: BRRES.RRES, namePrefix: string): MDL0ModelInstance {
+        const model = this.modelCache.getModel(gl, mdl0, materialHacks);
+        const modelRenderer = new MDL0ModelInstance(gl, this.textureHolder, model, namePrefix, materialHacks);
         this.models.push(modelRenderer);
 
         // Bind animations.
@@ -278,17 +293,17 @@ class SkywardSwordScene implements Viewer.MainScene {
     }
 
 
-    private spawnModelName(gl: WebGL2RenderingContext, rres: BRRES.RRES, modelName: string, namePrefix: string): ModelRenderer {
+    private spawnModelName(gl: WebGL2RenderingContext, rres: BRRES.RRES, modelName: string, namePrefix: string): MDL0ModelInstance {
         const mdl0 = rres.mdl0.find((model) => model.name === modelName);
         return this.spawnModel(gl, mdl0, rres, namePrefix);
     }
 
-    private spawnObj(gl: WebGL2RenderingContext, name: string, unk1: number, unk2: number): ModelRenderer[] {
+    private spawnObj(gl: WebGL2RenderingContext, name: string, unk1: number, unk2: number): MDL0ModelInstance[] {
         // In the actual engine, each obj is handled by a separate .rel (runtime module)
         // which knows the actual layout. The mapping of obj name to .rel is stored in main.dol.
         // We emulate that here.
 
-        const models: ModelRenderer[] = [];
+        const models: MDL0ModelInstance[] = [];
 
         if (name === 'CityWtr') {
             // For City Water, we spawn three objects, the second one being an indirect object.
