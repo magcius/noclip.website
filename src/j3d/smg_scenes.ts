@@ -336,8 +336,6 @@ class SMGRenderer implements Viewer.MainScene {
     }
 }
 
-const pathBase = `data/j3d/smg`;
-
 function getLayerName(index: number) {
     if (index === -1) {
         return 'common';
@@ -388,39 +386,48 @@ interface AnimOptions {
     brk?: string;
 }
 
-class SMGSceneDesc2 implements Viewer.SceneDesc {
-    constructor(public name: string, public galaxyName: string, public id: string = galaxyName) {
-    }
+const pathBase = `data/j3d/smg`;
 
-    public parsePlacement(bcsv: BCSV.Bcsv): ObjInfo[] {
-        return bcsv.records.map((record): ObjInfo => {
-            const objId = BCSV.getField<number>(bcsv, record, 'l_id', -1);
-            const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
-            const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
-            const modelMatrix = mat4.create();
-            computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-            return { objId, objName, objArg0, modelMatrix };
+class ModelCache {
+    public cache = new Map<string, BMDModel>();
+    public archiveCache = new Map<string, RARC.RARC>();
+
+    public getModel(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, archiveName: string): Progressable<BMDModel> {
+        if (this.cache.has(archiveName))
+            return Progressable.resolve(this.cache.get(archiveName));
+
+        return fetch(`${pathBase}/ObjectData/${archiveName}.arc`).then((buffer: ArrayBufferSlice) => {
+            if (buffer.byteLength === 0) {
+                console.warn(`Could not spawn archive ${archiveName}`);
+                return null;
+            }
+            return Yaz0.decompress(buffer);
+        }).then((buffer: ArrayBufferSlice) => {
+            if (buffer === null)
+                return null;
+            const rarc = RARC.parse(buffer);
+            const lowerName = archiveName.toLowerCase();
+            const bmd = rarc.findFileData(`${lowerName}.bdl`) !== null ? BMD.parse(rarc.findFileData(`${lowerName}.bdl`)) : null;
+            const bmdModel = new BMDModel(gl, bmd, null, materialHacks);
+            textureHolder.addJ3DTextures(gl, bmd);
+            this.cache.set(archiveName, bmdModel);
+            this.archiveCache.set(archiveName, rarc);
+            return bmdModel;
         });
     }
+}
 
-    public parseZone(name: string, buffer: ArrayBufferSlice): Zone {
-        const rarc = RARC.parse(buffer);
-        const layers: ZoneLayer[] = [];
-        for (let i = -1; i < 10; i++) {
-            const layerName = getLayerName(i);
-            const placementDir = `jmp/placement/${layerName}`;
-            const mappartsDir = `jmp/mapparts/${layerName}`;
-            if (!rarc.findDir(placementDir))
-                continue;
-            const objinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/objinfo`)));
-            const mappartsinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${mappartsDir}/mappartsinfo`)));
-            const stageobjinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/stageobjinfo`)));
-            layers.push({ index: i, objinfo, mappartsinfo, stageobjinfo });
-        }
-        return { name, layers };
+class SMGSpawner {
+    public textureHolder = new J3DTextureHolder();
+    public sceneGraph = new SceneGraph();
+    public modelCache = new ModelCache();
+
+    constructor(
+        public planetTable: BCSV.Bcsv,
+    ) {
     }
 
-    public applyAnimations(scene: BMDModelInstance, rarc: RARC.RARC, animOptions?: AnimOptions): void {
+    public applyAnimations(modelInstance: BMDModelInstance, rarc: RARC.RARC, animOptions?: AnimOptions): void {
         let bckFile: RARC.RARCFile | null = null;
         let brkFile: RARC.RARCFile | null = null;
         let btkFile: RARC.RARCFile | null = null;
@@ -445,38 +452,30 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
 
         if (btkFile !== null) {
             const btk = BTK.parse(btkFile.buffer);
-            scene.bindTTK1(btk.ttk1);
+            modelInstance.bindTTK1(btk.ttk1);
         }
 
         if (brkFile !== null) {
             const brk = BRK.parse(brkFile.buffer);
-            scene.bindTRK1(brk.trk1);
+            modelInstance.bindTRK1(brk.trk1);
         }
 
         if (bckFile !== null) {
             const bck = BCK.parse(bckFile.buffer);
-            scene.bindANK1(bck.ank1);
+            modelInstance.bindANK1(bck.ank1);
         }
     }
 
-    public spawnArchive(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<BMDModelInstance | null> {
+    public spawnArchive(gl: WebGL2RenderingContext, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<BMDModelInstance | null> {
         // Should do a remap at some point.
-        return fetch(`${pathBase}/ObjectData/${name}.arc`).then((buffer: ArrayBufferSlice) => {
-            if (buffer.byteLength === 0) {
-                console.warn(`Could not spawn archive ${name}`);
+        return this.modelCache.getModel(gl, this.textureHolder, name).then((bmdModel) => {
+            if (bmdModel === null)
                 return null;
-            }
-            return Yaz0.decompress(buffer);
-        }).then((buffer: ArrayBufferSlice) => {
-            if (buffer === null)
-                return null;
-            const rarc = RARC.parse(buffer);
-            const lowerName = name.toLowerCase();
-            const bmd = rarc.findFileData(`${lowerName}.bdl`) !== null ? BMD.parse(rarc.findFileData(`${lowerName}.bdl`)) : null;
-            textureHolder.addJ3DTextures(gl, bmd, null);
-            // TODO(jstpierre): Cache models.
-            const bmdModel = new BMDModel(gl, bmd, null, materialHacks);
-            const bmdModelInstance = new BMDModelInstance(gl, textureHolder, bmdModel);
+
+            // Trickery.
+            const rarc = this.modelCache.archiveCache.get(name);
+
+            const bmdModelInstance = new BMDModelInstance(gl, this.textureHolder, bmdModel);
             bmdModelInstance.name = name;
             this.applyAnimations(bmdModelInstance, rarc, animOptions);
             mat4.copy(bmdModelInstance.modelMatrix, modelMatrix);
@@ -484,13 +483,13 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
         });
     }
 
-    public spawnObject(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, planetTable: BCSV.Bcsv, zoneLayerFilterTag: string, sceneGraph: SceneGraph, objinfo: ObjInfo, modelMatrix: mat4): void {
+    public spawnObject(gl: WebGL2RenderingContext, zoneLayerFilterTag: string, objinfo: ObjInfo, modelMatrix: mat4): void {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions?: AnimOptions) => {
-            this.spawnArchive(gl, textureHolder, modelMatrix, arcName, animOptions).then((scene) => {
-                if (scene) {
+            this.spawnArchive(gl, modelMatrix, arcName, animOptions).then((modelInstance) => {
+                if (modelInstance) {
                     if (tag === SceneGraphTag.Skybox)
-                        scene.setIsSkybox(true);
-                    sceneGraph.addNode(scene, [tag, zoneLayerFilterTag]);
+                        modelInstance.setIsSkybox(true);
+                    this.sceneGraph.addNode(modelInstance, [tag, zoneLayerFilterTag]);
                 }
             });
         };
@@ -559,11 +558,11 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
             const name = objinfo.objName;
             spawnGraph(name, SceneGraphTag.Normal);
             // Spawn planets.
-            const planetRecord = planetTable.records.find((record) => BCSV.getField(planetTable, record, 'PlanetName') === name);
+            const planetRecord = this.planetTable.records.find((record) => BCSV.getField(this.planetTable, record, 'PlanetName') === name);
             if (planetRecord) {
-                const bloomFlag = BCSV.getField(planetTable, planetRecord, 'BloomFlag');
-                const waterFlag = BCSV.getField(planetTable, planetRecord, 'WaterFlag');
-                const indirectFlag = BCSV.getField(planetTable, planetRecord, 'IndirectFlag');
+                const bloomFlag = BCSV.getField(this.planetTable, planetRecord, 'BloomFlag');
+                const waterFlag = BCSV.getField(this.planetTable, planetRecord, 'WaterFlag');
+                const indirectFlag = BCSV.getField(this.planetTable, planetRecord, 'IndirectFlag');
                 if (bloomFlag)
                     spawnGraph(`${name}Bloom`, SceneGraphTag.Bloom);
                 if (waterFlag)
@@ -571,12 +570,12 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
                 if (indirectFlag)
                     spawnGraph(`${name}Indirect`, SceneGraphTag.Indirect);
             }
+            break;
         }
-        break;
         }
     }
 
-    public spawnZone(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, planetTable: BCSV.Bcsv, sceneGraph: SceneGraph, zone: Zone, zones: Zone[], modelMatrixBase: mat4): void {
+    public spawnZone(gl: WebGL2RenderingContext, zone: Zone, zones: Zone[], modelMatrixBase: mat4): void {
         // Spawn all layers. We'll hide them later when masking out the others.
 
         for (const layer of zone.layers) {
@@ -585,22 +584,55 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
             for (const objinfo of layer.objinfo) {
                 const modelMatrix = mat4.create();
                 mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
-                this.spawnObject(gl, textureHolder, planetTable, zoneLayerFilterTag, sceneGraph, objinfo, modelMatrix);
+                this.spawnObject(gl, zoneLayerFilterTag, objinfo, modelMatrix);
             }
 
             for (const objinfo of layer.mappartsinfo) {
                 const modelMatrix = mat4.create();
                 mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
-                this.spawnObject(gl, textureHolder, planetTable, zoneLayerFilterTag, sceneGraph, objinfo, modelMatrix);
+                this.spawnObject(gl, zoneLayerFilterTag, objinfo, modelMatrix);
             }
 
             for (const zoneinfo of layer.stageobjinfo) {
                 const subzone = zones.find((zone) => zone.name === zoneinfo.objName);
                 const subzoneModelMatrix = mat4.create();
                 mat4.mul(subzoneModelMatrix, modelMatrixBase, zoneinfo.modelMatrix);
-                this.spawnZone(gl, textureHolder, planetTable, sceneGraph, subzone, zones, subzoneModelMatrix);
+                this.spawnZone(gl, subzone, zones, subzoneModelMatrix);
             }
         }
+    }
+}
+
+class SMGSceneDesc implements Viewer.SceneDesc {
+    constructor(public name: string, public galaxyName: string, public id: string = galaxyName) {
+    }
+
+    public parsePlacement(bcsv: BCSV.Bcsv): ObjInfo[] {
+        return bcsv.records.map((record): ObjInfo => {
+            const objId = BCSV.getField<number>(bcsv, record, 'l_id', -1);
+            const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
+            const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
+            const modelMatrix = mat4.create();
+            computeModelMatrixFromRecord(modelMatrix, bcsv, record);
+            return { objId, objName, objArg0, modelMatrix };
+        });
+    }
+
+    public parseZone(name: string, buffer: ArrayBufferSlice): Zone {
+        const rarc = RARC.parse(buffer);
+        const layers: ZoneLayer[] = [];
+        for (let i = -1; i < 10; i++) {
+            const layerName = getLayerName(i);
+            const placementDir = `jmp/placement/${layerName}`;
+            const mappartsDir = `jmp/mapparts/${layerName}`;
+            if (!rarc.findDir(placementDir))
+                continue;
+            const objinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/objinfo`)));
+            const mappartsinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${mappartsDir}/mappartsinfo`)));
+            const stageobjinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/stageobjinfo`)));
+            layers.push({ index: i, objinfo, mappartsinfo, stageobjinfo });
+        }
+        return { name, layers };
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
@@ -635,11 +667,10 @@ class SMGSceneDesc2 implements Viewer.SceneDesc {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]) => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
-                const sceneGraph = new SceneGraph();
-                const textureHolder = new J3DTextureHolder();
+                const spawner = new SMGSpawner(planetTable);
                 const modelMatrixBase = mat4.create();
-                this.spawnZone(gl, textureHolder, planetTable, sceneGraph, zones[0], zones, modelMatrixBase);
-                return new SMGRenderer(gl, textureHolder, sceneGraph, scenariodata, zoneNames);
+                spawner.spawnZone(gl, zones[0], zones, modelMatrixBase);
+                return new SMGRenderer(gl, spawner.textureHolder, spawner.sceneGraph, scenariodata, zoneNames);
             });
         });
     }
@@ -649,9 +680,9 @@ const id = "smg";
 const name = "Super Mario Galaxy";
 
 const sceneDescs: Viewer.SceneDesc[] = [
-    new SMGSceneDesc2("Peach's Castle Garden", "PeachCastleGardenGalaxy"),
-    new SMGSceneDesc2("Comet Observatory", "AstroGalaxy"),
-    new SMGSceneDesc2("BattleShipGalaxy", "BattleShipGalaxy"),
+    new SMGSceneDesc("Peach's Castle Garden", "PeachCastleGardenGalaxy"),
+    new SMGSceneDesc("Comet Observatory", "AstroGalaxy"),
+    new SMGSceneDesc("BattleShipGalaxy", "BattleShipGalaxy"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
