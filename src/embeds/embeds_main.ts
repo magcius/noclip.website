@@ -4,11 +4,13 @@ import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
+import * as water_comparison from './water_comparison';
 
 type CreateSceneFunc = (gl: WebGL2RenderingContext, name: string) => Progressable<Viewer.MainScene>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
     "sunshine_water": sunshine_water.createScene,
+    "water_comparison": water_comparison.createScene,
 };
 
 class FsButton {
@@ -86,10 +88,9 @@ class Main {
         const [file, name] = hash.split('/');
         const gl = this.viewer.renderState.gl;
         const createScene = embeds[file];
-        createScene(gl, name).then((scene: Viewer.MainScene) => {
-            this.viewer.setCameraController(new OrbitCameraController());
-            this.viewer.setScene(scene);
-        });
+        const scene = await createScene(gl, name);
+        this.viewer.setCameraController(new OrbitCameraController());
+        this.viewer.setScene(scene);
     }
 
     private onResize() {

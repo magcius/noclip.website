@@ -549,8 +549,6 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
         return Progressable.all([fetch(systemPath), fetch(objPackPath), fetch(stagePath)]).then((buffers: ArrayBufferSlice[]) => {
             const [systemBuffer, objPackBuffer, stageBuffer] = buffers;
 
-            const commonRRESes: BRRES.RRES[] = [];
-
             const systemArchive = U8.parse(systemBuffer);
             const objPackArchive = U8.parse(CX.decompress(objPackBuffer));
             const stageArchive = U8.parse(CX.decompress(stageBuffer));
