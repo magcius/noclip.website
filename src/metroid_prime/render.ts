@@ -5,7 +5,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray } from '../util';
 import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, GXTextureHolder } from '../gx/gx_render';
 
-import { MREA, Material, Surface, MaterialFlags, UVAnimationType, MaterialSet } from './mrea';
+import { MREA, Material, Surface, UVAnimationType, MaterialSet } from './mrea';
 import * as GX_Material from '../gx/gx_material';
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
@@ -345,7 +345,7 @@ class Command_Surface {
     }
 
     public exec(state: RenderState) {
-        this.shapeHelper.drawSimple(state);
+        this.shapeHelper.draw(state);
     }
 
     public destroy(gl: WebGL2RenderingContext) {

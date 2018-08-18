@@ -252,7 +252,7 @@ class Command_Shape {
     }
 
     public draw(state: RenderState): void {
-        this.shapeHelper.drawSimple(state);
+        this.shapeHelper.draw(state);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {

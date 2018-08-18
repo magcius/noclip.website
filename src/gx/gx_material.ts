@@ -167,26 +167,33 @@ export interface RopInfo {
 // #endregion
 
 // #region Material shader generation.
+export const enum UniformStorage {
+    UINT,
+    VEC2,
+    VEC3,
+    VEC4,
+}
+
 interface VertexAttributeGenDef {
     attrib: GX.VertexAttribute;
-    storage: string;
+    storage: UniformStorage;
     name: string;
 }
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  storage: "uint" },
-    { attrib: GX.VertexAttribute.POS,        name: "Position",   storage: "vec3" },
-    { attrib: GX.VertexAttribute.NRM,        name: "Normal",     storage: "vec3" },
-    { attrib: GX.VertexAttribute.CLR0,       name: "Color0",     storage: "vec4" },
-    { attrib: GX.VertexAttribute.CLR1,       name: "Color1",     storage: "vec4" },
-    { attrib: GX.VertexAttribute.TEX0,       name: "Tex0",       storage: "vec2" },
-    { attrib: GX.VertexAttribute.TEX1,       name: "Tex1",       storage: "vec2" },
-    { attrib: GX.VertexAttribute.TEX2,       name: "Tex2",       storage: "vec2" },
-    { attrib: GX.VertexAttribute.TEX3,       name: "Tex3",       storage: "vec2" },
-    { attrib: GX.VertexAttribute.TEX4,       name: "Tex4",       storage: "vec2" },
-    { attrib: GX.VertexAttribute.TEX5,       name: "Tex5",       storage: "vec2" },
-    { attrib: GX.VertexAttribute.TEX6,       name: "Tex6",       storage: "vec2" },
-    { attrib: GX.VertexAttribute.TEX7,       name: "Tex7",       storage: "vec2" },
+    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  storage: UniformStorage.UINT },
+    { attrib: GX.VertexAttribute.POS,        name: "Position",   storage: UniformStorage.VEC3 },
+    { attrib: GX.VertexAttribute.NRM,        name: "Normal",     storage: UniformStorage.VEC3 },
+    { attrib: GX.VertexAttribute.CLR0,       name: "Color0",     storage: UniformStorage.VEC4 },
+    { attrib: GX.VertexAttribute.CLR1,       name: "Color1",     storage: UniformStorage.VEC4 },
+    { attrib: GX.VertexAttribute.TEX0,       name: "Tex0",       storage: UniformStorage.VEC2 },
+    { attrib: GX.VertexAttribute.TEX1,       name: "Tex1",       storage: UniformStorage.VEC2 },
+    { attrib: GX.VertexAttribute.TEX2,       name: "Tex2",       storage: UniformStorage.VEC2 },
+    { attrib: GX.VertexAttribute.TEX3,       name: "Tex3",       storage: UniformStorage.VEC2 },
+    { attrib: GX.VertexAttribute.TEX4,       name: "Tex4",       storage: UniformStorage.VEC2 },
+    { attrib: GX.VertexAttribute.TEX5,       name: "Tex5",       storage: UniformStorage.VEC2 },
+    { attrib: GX.VertexAttribute.TEX6,       name: "Tex6",       storage: UniformStorage.VEC2 },
+    { attrib: GX.VertexAttribute.TEX7,       name: "Tex7",       storage: UniformStorage.VEC2 },
 ];
 
 export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
@@ -809,9 +816,18 @@ export class GX_Program extends BaseProgram {
 `;
     }
 
+    private generateStorageType(t: UniformStorage): string {
+        switch (t) {
+        case UniformStorage.UINT: return 'uint';
+        case UniformStorage.VEC2: return 'vec2';
+        case UniformStorage.VEC3: return 'vec3';
+        case UniformStorage.VEC4: return 'vec4';
+        }
+    }
+
     private generateVertAttributeDefs() {
         return vtxAttributeGenDefs.map((a, i) => {
-            return `layout(location = ${i}) in ${a.storage} a_${a.name};`;
+            return `layout(location = ${i}) in ${this.generateStorageType(a.storage)} a_${a.name};`;
         }).join('\n');
     }
 

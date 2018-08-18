@@ -17,7 +17,7 @@ import { TextureMapping, TextureHolder } from '../TextureHolder';
 
 export class SceneParams {
     public u_Projection: mat4 = mat4.create();
-    // u_Misc0
+    // u_Misc0[0]
     public u_SceneTextureLODBias: number = 0;
 }
 
@@ -270,31 +270,27 @@ export class GXShapeHelper {
 
                 gl.enableVertexAttribArray(attribLocation);
                 switch (attribGenDef.storage) {
-                case 'uint':
+                case GX_Material.UniformStorage.UINT:
                     gl.vertexAttribIPointer(attribLocation, attrib.componentCount, type, stride, offset);
                     break;
-                case 'vec2':
-                case 'vec3':
-                case 'vec4':
+                case GX_Material.UniformStorage.VEC2:
+                case GX_Material.UniformStorage.VEC3:
+                case GX_Material.UniformStorage.VEC4:
                     gl.vertexAttribPointer(attribLocation, attrib.componentCount, type, normalized, stride, offset);
                     break;
-                default:
-                    throw "whoops";
                 }
             } else {
                 // Set default.
                 switch (attribGenDef.storage) {
-                case 'uint':
+                case GX_Material.UniformStorage.UINT:
                     gl.vertexAttribI4ui(attribLocation, 0, 0, 0, 0);
-                case 'vec2':
-                case 'vec3':
-                case 'vec4':
+                    break;
+                case GX_Material.UniformStorage.VEC2:
+                case GX_Material.UniformStorage.VEC3:
+                case GX_Material.UniformStorage.VEC3:
                     // Float defaults don't need to be initialized in GLES.
                     break;
-                default:
-                    throw "whoops";
                 }
-
             }
         }
 
@@ -305,27 +301,15 @@ export class GXShapeHelper {
         gl.deleteVertexArray(this.vao);
     }
 
-    public drawPrologue(gl: WebGL2RenderingContext): void {
+    public draw(state: RenderState, firstTriangle: number = 0, numTriangles: number = this.loadedVertexData.totalTriangleCount): void {
+        const gl = state.gl;
         gl.bindVertexArray(this.vao);
-    }
-
-    public drawEpilogue(gl: WebGL2RenderingContext): void {
-        gl.bindVertexArray(null);
-    }
-
-    public drawTriangles(gl: WebGL2RenderingContext, firstTriangle: number, numTriangles: number): void {
         const firstVertex = firstTriangle * 3;
         const numVertices = numTriangles * 3;
         const indexType = gl.UNSIGNED_SHORT, indexByteSize = 2;
         const indexBufferOffset = this.coalescedBuffers.indexBuffer.offset + (firstVertex * indexByteSize);
         gl.drawElements(gl.TRIANGLES, numVertices, indexType, indexBufferOffset);
-    }
-
-    public drawSimple(state: RenderState): void {
-        const gl = state.gl;
-        this.drawPrologue(gl);
-        this.drawTriangles(gl, 0, this.loadedVertexData.totalTriangleCount);
-        this.drawEpilogue(gl);
+        gl.bindVertexArray(null);
         state.renderStatisticsTracker.drawCallCount++;
     }
 }
@@ -389,7 +373,7 @@ export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX
 
     const viewerExtraInfo = new Map<string, string>();
     const firstMipLevel = mipChain.mipLevels[0];
-    viewerExtraInfo.set('Format', GX_Texture.getFormatName(firstMipLevel.format, firstMipLevel.paletteFormat));
+    viewerExtraInfo.set("Format", GX_Texture.getFormatName(firstMipLevel.format, firstMipLevel.paletteFormat));
 
     const viewerTexture: Viewer.Texture = { name: mipChain.name, surfaces, extraInfo: viewerExtraInfo };
     return { glTexture, viewerTexture };
