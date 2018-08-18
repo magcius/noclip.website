@@ -4,7 +4,7 @@ import * as ZELVIEW0 from './zelview0';
 
 import Progressable from '../Progressable';
 import { CullMode, RenderFlags, RenderState, BlendMode } from '../render';
-import Program, { BaseProgram } from '../Program';
+import { SimpleProgram, BaseProgram } from '../Program';
 import { fetch } from '../util';
 
 import * as Viewer from '../viewer';
@@ -230,7 +230,7 @@ function getOrDefault(obj: {[k: number]: any}, key: number, def: any) {
     return (result === undefined) ? def : result;
 }
 
-export class F3DEX2Program extends Program {
+export class F3DEX2Program extends SimpleProgram {
     public texture0Location: WebGLUniformLocation;
     public texture1Location: WebGLUniformLocation;
     public txsLocation: Array<WebGLUniformLocation>;
@@ -305,7 +305,7 @@ void main() {
     }
 }
 
-class CollisionProgram extends Program {
+class CollisionProgram extends SimpleProgram {
     public positionLocation: number;
 
     public vert = `
@@ -333,7 +333,7 @@ void main() {
     }
 }
 
-class WaterboxProgram extends Program {
+class WaterboxProgram extends SimpleProgram {
     public positionLocation: number;
 
     public vert = `

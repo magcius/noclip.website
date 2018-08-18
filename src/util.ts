@@ -71,9 +71,9 @@ export function nArray<T>(n: number, c: () => T): T[] {
 }
 
 // Eat your heart out, npm.
-export function leftPad(S: string, spaces: number): string {
+export function leftPad(S: string, spaces: number, ch: string = '0'): string {
     while (S.length < spaces)
-        S = `0${S}`;
+        S = `${ch}${S}`;
     return S;
 }
 

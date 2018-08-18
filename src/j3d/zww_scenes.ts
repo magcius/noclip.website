@@ -16,7 +16,7 @@ import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
 import { Camera } from '../Camera';
-import Program from '../Program';
+import { SimpleProgram } from '../Program';
 import { colorToCSS } from '../Color';
 import { ColorKind } from '../gx/gx_render';
 
@@ -253,7 +253,7 @@ class WindWakerRoomRenderer implements Viewer.Scene {
     }
 }
 
-class PlaneColorProgram extends Program {
+class PlaneColorProgram extends SimpleProgram {
     public static a_Position: number = 0;
 
     public vert = `

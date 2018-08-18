@@ -4,16 +4,14 @@ import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 
 import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode } from '../render';
-import Program from '../Program';
+import { SimpleProgram } from '../Program';
 import { assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
 import { CoalescedBuffer, coalesceBuffer } from '../BufferCoalescer';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 
-type RenderFunc = (renderState: RenderState) => void;
-
-class ProgramGambit_UBER extends Program {
+class ProgramGambit_UBER extends SimpleProgram {
     public s_a0: WebGLUniformLocation;
     public s_e0: WebGLUniformLocation;
     public s_n0: WebGLUniformLocation;

@@ -1,5 +1,5 @@
 
-import Program from "./Program";
+import { SimpleProgram } from "./Program";
 import { AABB } from "./Camera";
 import { vec4, mat4 } from "gl-matrix";
 import { RenderState } from "./render";
@@ -73,7 +73,7 @@ export function cv(): CanvasRenderingContext2D {
     return ctx;
 }
 
-class LinesProgram extends Program {
+class LinesProgram extends SimpleProgram {
     public vert = `
 uniform mat4 u_modelView;
 uniform mat4 u_projection;

@@ -4,13 +4,13 @@ import * as MDL0 from './mdl0';
 import * as Viewer from '../viewer';
 
 import { RenderFlags, RenderState, BlendMode } from '../render';
-import Program from '../Program';
+import { SimpleProgram } from '../Program';
 import Progressable from '../Progressable';
 import { fetch } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { OrbitCameraController } from '../Camera';
 
-class FancyGrid_Program extends Program {
+class FancyGrid_Program extends SimpleProgram {
     public positionLocation: number;
 
     public vert = `
@@ -138,7 +138,7 @@ class FancyGrid {
     }
 }
 
-class MDL0_Program extends Program {
+class MDL0_Program extends SimpleProgram {
     public positionLocation: number;
     public colorLocation: number;
 

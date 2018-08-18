@@ -1,20 +1,13 @@
 
 import MemoizeCache from "./MemoizeCache";
 import CodeEditor from "./CodeEditor";
-import { assertExists } from "./util";
+import { assertExists, leftPad } from "./util";
 
 const DEBUG = true;
 
-function leftPad(n: number, v: string, num: number) {
-    let s = ''+n;
-    while (s.length < num)
-        s = v + s;
-    return s;
-}
-
 function prependLineNo(str: string, lineStart: number = 1) {
     const lines = str.split('\n');
-    return lines.map((s, i) => `${leftPad(lineStart + i, ' ', 4)}  ${s}`).join('\n');
+    return lines.map((s, i) => `${leftPad('' + (lineStart + i), 4, ' ')}  ${s}`).join('\n');
 }
 
 function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
@@ -152,7 +145,7 @@ ${rest}
 }
 
 // TODO(jstpierre): Remove.
-export default class Program extends BaseProgram {
+export class SimpleProgram extends BaseProgram {
     public projectionLocation: WebGLUniformLocation | null = null;
     public modelViewLocation: WebGLUniformLocation | null = null;
 

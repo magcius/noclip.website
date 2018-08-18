@@ -9,14 +9,14 @@ import * as NITRO_GX from './nitro_gx';
 import * as Viewer from '../viewer';
 
 import { CullMode, RenderFlags, RenderState, BlendMode, depthClearFlags } from '../render';
-import Program from '../Program';
+import { SimpleProgram } from '../Program';
 import Progressable from '../Progressable';
 import RenderArena from '../RenderArena';
 import { fetch } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 
-class NITRO_Program extends Program {
+class NITRO_Program extends SimpleProgram {
     public texCoordMatLocation: WebGLUniformLocation;
 
     public static a_position = 0;
