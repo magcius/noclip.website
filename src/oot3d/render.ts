@@ -6,12 +6,12 @@ import * as Viewer from '../viewer';
 
 import Progressable from '../Progressable';
 import { BlendMode, CullMode, RenderFlags, RenderState } from '../render';
-import Program from '../Program';
+import { SimpleProgram } from '../Program';
 import RenderArena from '../RenderArena';
 import { fetch, assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-class OoT3D_Program extends Program {
+class OoT3D_Program extends SimpleProgram {
     public posScaleLocation: WebGLUniformLocation;
     public uvScaleLocation: WebGLUniformLocation;
     public alphaTestLocation: WebGLUniformLocation;

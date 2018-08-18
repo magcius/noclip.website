@@ -24,7 +24,6 @@ import * as RRESRender from '../rres/render';
 import { SunshineSceneDesc } from '../j3d/sms_scenes';
 import { GXRenderHelper, SceneParams, PacketParams, fillSceneParamsFromRenderState, GXTextureHolder } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
-import { MDL0Model, MDL0ModelInstance, RRESTextureHolder } from '../rres/render';
 
 const scale = 200;
 const posMtx = mat4.create();

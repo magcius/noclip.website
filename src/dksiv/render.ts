@@ -2,12 +2,12 @@
 import { vec3 } from 'gl-matrix';
 
 import { CullMode, RenderFlags, RenderState } from '../render';
-import Program from '../Program';
+import { SimpleProgram } from '../Program';
 import * as Viewer from '../viewer';
 
 import * as IV from './iv';
 
-class IVProgram extends Program {
+class IVProgram extends SimpleProgram {
     public static a_Position = 0;
     public static a_Normal = 1;
 
