@@ -64,8 +64,6 @@ class Command_Batch {
     }
 
     public exec(state: RenderState): void {
-        const gl = state.gl;
-
         if (this.sceneGraphNode.bbox) {
             bboxScratch.transform(this.sceneGraphNode.bbox, this.sceneGraphNode.modelMatrix);
             if (state.camera.frustum.intersect(bboxScratch) === IntersectionState.FULLY_OUTSIDE) {
@@ -77,7 +75,7 @@ class Command_Batch {
 
         this.scene.renderHelper.bindPacketParams(state, this.packetParams);
 
-        this.shapeHelper.drawSimple(state);
+        this.shapeHelper.draw(state);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {

@@ -51,7 +51,7 @@ function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number,
 class ShapeInstanceState {
     public modelMatrix: mat4 = mat4.create();
     public matrixArray: mat4[] = [];
-    public matrixVisibility: IntersectionState[] = [];
+    public matrixVisibility: boolean[] = [];
     public isSkybox: boolean;
 }
 
@@ -59,7 +59,7 @@ class ShapeInstanceState {
 
 const scratchModelMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
-const posMtxVisibility: IntersectionState[] = nArray(10, () => IntersectionState.FULLY_INSIDE);
+const posMtxVisibility: boolean[] = nArray(10, () => true);
 class Command_Shape {
     private packetParams = new PacketParams();
     private shapeHelpers: GXShapeHelper[] = [];
@@ -79,6 +79,10 @@ class Command_Shape {
             const packet = this.shape.packets[p];
 
             // Update our matrix table.
+            for (let i = 0; i < 10; i++) {
+                posMtxVisibility[i] = false;
+            }
+
             for (let i = 0; i < packet.matrixTable.length; i++) {
                 const matrixIndex = packet.matrixTable[i];
 
@@ -93,15 +97,15 @@ class Command_Shape {
             }
 
             // If all matrices are invisible, we can cull.
-            let frustumCull = true;
+            let packetVisible = false;
             for (let i = 0; i < posMtxVisibility.length; i++) {
-                if (posMtxVisibility[i] !== IntersectionState.FULLY_OUTSIDE) {
-                    frustumCull = false;
+                if (posMtxVisibility[i]) {
+                    packetVisible = true;
                     break;
                 }
             }
 
-            if (frustumCull)
+            if (!packetVisible)
                 return;
 
             if (needsUpload) {
@@ -110,7 +114,7 @@ class Command_Shape {
             }
 
             const shapeHelper = this.shapeHelpers[p];
-            shapeHelper.drawSimple(state);
+            shapeHelper.draw(state);
         }
 
         state.renderStatisticsTracker.drawCallCount++;
@@ -503,7 +507,7 @@ export class BMDModelInstance {
 
     // Temporary state when calculating bone matrices.
     private jointMatrices: mat4[];
-    private jointVisibility: IntersectionState[];
+    private jointVisibility: boolean[];
     private bboxScratch: AABB = new AABB();
 
     private materialInstances: MaterialInstance[] = [];
@@ -523,11 +527,11 @@ export class BMDModelInstance {
 
         const numJoints = this.bmdModel.bmd.jnt1.joints.length;
         this.jointMatrices = nArray(numJoints, () => mat4.create());
-        this.jointVisibility = nArray(numJoints, () => IntersectionState.FULLY_INSIDE);
+        this.jointVisibility = nArray(numJoints, () => true);
 
         const numMatrices = this.bmdModel.bmd.drw1.matrixDefinitions.length;
         this.shapeInstanceState.matrixArray = nArray(numMatrices, () => mat4.create());
-        this.shapeInstanceState.matrixVisibility = nArray(numMatrices, () => IntersectionState.FULLY_INSIDE);
+        this.shapeInstanceState.matrixVisibility = nArray(numMatrices, () => true);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -633,7 +637,7 @@ export class BMDModelInstance {
         this.renderTransparent(state);
     }
 
-    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4): void {
+    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4, parentIntersectionState: IntersectionState): void {
         // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
         const jnt1 = this.bmdModel.bmd.jnt1;
         const bbox = this.bboxScratch;
@@ -653,17 +657,29 @@ export class BMDModelInstance {
             mat4.mul(dstJointMatrix, parentJointMatrix, boneMatrix);
 
             // Frustum cull.
-            bbox.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
-            this.jointVisibility[jointIndex] = state.camera.frustum.intersect(bbox);
 
-            // Now update children.
-            for (let i = 0; i < node.children.length; i++)
-                this.updateJointMatrixHierarchy(state, node.children[i], dstJointMatrix);
+            // If the parent is fully visible, then we are also fully visible, no need to check.
+            let intersectionState: IntersectionState;
+            if (parentIntersectionState === IntersectionState.FULLY_INSIDE) {
+                intersectionState = IntersectionState.FULLY_INSIDE;
+            } else {
+                bbox.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
+                intersectionState = state.camera.frustum.intersect(bbox);
+            }
+
+            // Update children. If we're fully outside, then no need to update children joints at all.
+            if (intersectionState !== IntersectionState.FULLY_OUTSIDE) {
+                this.jointVisibility[jointIndex] = true;
+                for (let i = 0; i < node.children.length; i++)
+                    this.updateJointMatrixHierarchy(state, node.children[i], dstJointMatrix, intersectionState);
+            } else {
+                this.jointVisibility[jointIndex] = false;
+            }
             break;
         default:
             // Pass through.
             for (let i = 0; i < node.children.length; i++)
-                this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix);
+                this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix, parentIntersectionState);
             break;
         }
     }
@@ -675,26 +691,40 @@ export class BMDModelInstance {
 
         // First, update joint matrices from hierarchy.
         mat4.identity(matrixScratch);
-        this.updateJointMatrixHierarchy(state, inf1.sceneGraph, matrixScratch);
+        this.updateJointMatrixHierarchy(state, inf1.sceneGraph, matrixScratch, IntersectionState.FULLY_INSIDE);
 
         // Update weighted joint matrices.
         for (let i = 0; i < drw1.matrixDefinitions.length; i++) {
             const matrixDefinition = drw1.matrixDefinitions[i];
             const dst = this.shapeInstanceState.matrixArray[i];
             if (matrixDefinition.kind === DRW1MatrixKind.Joint) {
-                mat4.copy(dst, this.jointMatrices[matrixDefinition.jointIndex]);
-                this.shapeInstanceState.matrixVisibility[i] = this.jointVisibility[matrixDefinition.jointIndex];
+                const matrixVisible = this.jointVisibility[matrixDefinition.jointIndex];
+                this.shapeInstanceState.matrixVisibility[i] = matrixVisible;
+                if (matrixVisible)
+                    mat4.copy(dst, this.jointMatrices[matrixDefinition.jointIndex]);
             } else if (matrixDefinition.kind === DRW1MatrixKind.Envelope) {
                 dst.fill(0);
                 const envelope = evp1.envelopes[matrixDefinition.envelopeIndex];
+
+                let matrixVisible = false;
                 for (let i = 0; i < envelope.weightedBones.length; i++) {
                     const weightedBone = envelope.weightedBones[i];
-                    const inverseBindPose = evp1.inverseBinds[weightedBone.index];
-                    mat4.mul(matrixScratch, this.jointMatrices[weightedBone.index], inverseBindPose);
-                    mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
+                    if (this.jointVisibility[weightedBone.index]) {
+                        matrixVisible = true;
+                        break;
+                    }
                 }
-                // TODO(jstpierre): Frustum cull weighted joints.
-                this.shapeInstanceState.matrixVisibility[i] = IntersectionState.FULLY_INSIDE;
+
+                this.shapeInstanceState.matrixVisibility[i] = matrixVisible;
+
+                if (matrixVisible) {
+                    for (let i = 0; i < envelope.weightedBones.length; i++) {
+                        const weightedBone = envelope.weightedBones[i];
+                        const inverseBindPose = evp1.inverseBinds[weightedBone.index];
+                        mat4.mul(matrixScratch, this.jointMatrices[weightedBone.index], inverseBindPose);
+                        mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
+                    }
+                }
             }
         }
     }
