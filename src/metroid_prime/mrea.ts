@@ -73,6 +73,8 @@ export interface Material {
     vtxAttrFormat: number;
     gxMaterial: GX_Material.GXMaterial;
     uvAnimations: UVAnimation[];
+    colorRegisters: GX_Material.Color[];
+    colorConstants: GX_Material.Color[];
 }
 
 export interface MaterialSet {
@@ -387,8 +389,6 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
         const gxMaterial: GX_Material.GXMaterial = {
             index, name,
             cullMode,
-            colorRegisters,
-            colorConstants,
             lightChannels,
             texGens,
             tevStages,
@@ -397,7 +397,18 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             indTexStages: [],
         };
 
-        materials.push({ isOccluder, isTransparent, flags, groupIndex, textureIndexes, vtxAttrFormat, gxMaterial, uvAnimations });
+        materials.push({
+            isOccluder,
+            isTransparent,
+            flags,
+            groupIndex,
+            textureIndexes,
+            vtxAttrFormat,
+            gxMaterial,
+            uvAnimations,
+            colorRegisters,
+            colorConstants,
+         });
         assert((offs - materialsStart) === materialEndTable[i]);
     }
 
@@ -887,8 +898,6 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
         const gxMaterial: GX_Material.GXMaterial = {
             index, name,
             cullMode,
-            colorRegisters,
-            colorConstants,
             lightChannels,
             texGens,
             tevStages,
@@ -897,7 +906,19 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
             indTexStages: [],
         };
 
-        materials.push({ isOccluder, isTransparent, flags: 0, groupIndex, textureIndexes, vtxAttrFormat, gxMaterial, uvAnimations, passTypes });
+        materials.push({
+            isOccluder,
+            isTransparent,
+            flags: 0,
+            groupIndex,
+            textureIndexes,
+            vtxAttrFormat,
+            gxMaterial,
+            uvAnimations,
+            passTypes,
+            colorRegisters,
+            colorConstants,
+        });
     }
 
     return { textures, textureRemapTable, materials };

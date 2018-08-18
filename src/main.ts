@@ -66,7 +66,7 @@ class DroppedFileSceneDesc implements SceneDesc {
 
         const p = new Promise<ArrayBufferSlice>((resolve, reject) => {
             request.onload = () => {
-                const buffer: ArrayBuffer = request.result;
+                const buffer: ArrayBuffer = request.result as ArrayBuffer;
                 const slice = new ArrayBufferSlice(buffer);
                 resolve(slice);
             };

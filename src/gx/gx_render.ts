@@ -15,6 +15,13 @@ import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder } from '../TextureHolder';
 
+export enum ColorKind {
+    MAT0, MAT1, AMB0, AMB1,
+    K0, K1, K2, K3,
+    CPREV, C0, C1, C2,
+    COUNT,
+}
+
 export class SceneParams {
     public u_Projection: mat4 = mat4.create();
     // u_Misc0[0]
@@ -23,10 +30,7 @@ export class SceneParams {
 
 export class MaterialParams {
     public m_TextureMapping: TextureMapping[] = nArray(8, () => new TextureMapping());
-    public u_ColorMatReg: GX_Material.Color[] = nArray(2, () => new GX_Material.Color());
-    public u_ColorAmbReg: GX_Material.Color[] = nArray(2, () => new GX_Material.Color());
-    public u_KonstColor: GX_Material.Color[] = nArray(4, () => new GX_Material.Color());
-    public u_Color: GX_Material.Color[] = nArray(4, () => new GX_Material.Color());
+    public u_Color: GX_Material.Color[] = nArray(ColorKind.COUNT, () => new GX_Material.Color());
     public u_TexMtx: mat4[] = nArray(10, () => mat4.create());     // mat4x3
     public u_PostTexMtx: mat4[] = nArray(20, () => mat4.create()); // mat4x3
     public u_IndTexMtx: mat2d[] = nArray(3, () => mat2d.create()); // mat4x2
@@ -124,13 +128,7 @@ export function fillMaterialParamsData(d: Float32Array, materialParams: Material
     // Texture mapping requires special effort.
     let offs = 0;
 
-    for (let i = 0; i < 2; i++)
-        offs += fillColor(d, offs, materialParams.u_ColorMatReg[i]);
-    for (let i = 0; i < 2; i++)
-        offs += fillColor(d, offs, materialParams.u_ColorAmbReg[i]);
-    for (let i = 0; i < 4; i++)
-        offs += fillColor(d, offs, materialParams.u_KonstColor[i]);
-    for (let i = 0; i < 4; i++)
+    for (let i = 0; i < 12; i++)
         offs += fillColor(d, offs, materialParams.u_Color[i]);
     for (let i = 0; i < 10; i++)
         offs += fillMatrix4x3(d, offs, materialParams.u_TexMtx[i]);
