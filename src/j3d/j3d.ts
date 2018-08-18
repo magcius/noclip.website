@@ -10,9 +10,9 @@ import { assert, readString } from '../util';
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { ColorOverride } from './render';
 import { AABB } from '../Camera';
 import AnimationController from '../AnimationController';
+import { ColorKind } from '../gx/gx_render';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
@@ -535,6 +535,8 @@ export interface MaterialEntry {
     indTexMatrices: Float32Array[];
     colorMatRegs: GX_Material.Color[];
     colorAmbRegs: GX_Material.Color[];
+    colorConstants: GX_Material.Color[];
+    colorRegisters: GX_Material.Color[];
 }
 
 export interface MAT3 {
@@ -869,8 +871,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             cullMode,
             lightChannels,
             texGens,
-            colorRegisters,
-            colorConstants,
             tevStages,
             indTexStages,
             alphaTest,
@@ -884,9 +884,11 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             texMatrices,
             postTexMatrices,
             gxMaterial,
+            indTexMatrices,
             colorMatRegs,
             colorAmbRegs,
-            indTexMatrices,
+            colorRegisters,
+            colorConstants,
         });
     }
 
@@ -1470,7 +1472,7 @@ export class BTK {
 interface PaletteAnimationEntry {
     materialName: string;
     remapIndex: number;
-    colorOverride: ColorOverride;
+    colorKind: ColorKind;
     r: AnimationTrack;
     g: AnimationTrack;
     b: AnimationTrack;
@@ -1538,9 +1540,9 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const b = readAnimationTrack(registerBTable);
         const a = readAnimationTrack(registerATable);
         const colorId = view.getUint8(animationTableIdx);
-        const colorOverride = ColorOverride.C0 + colorId;
+        const colorKind = ColorKind.C0 + colorId;
         animationTableIdx += 0x04;
-        animationEntries.push({ materialName, remapIndex, colorOverride, r, g, b, a });
+        animationEntries.push({ materialName, remapIndex, colorKind, r, g, b, a });
     }
 
     const konstantRTable = buffer.createTypedArray(Int16Array, konstantROffs, konstantRCount, Endianness.BIG_ENDIAN);
@@ -1557,9 +1559,9 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const b = readAnimationTrack(konstantBTable);
         const a = readAnimationTrack(konstantATable);
         const colorId = view.getUint8(animationTableIdx);
-        const colorOverride = ColorOverride.K0 + colorId;
+        const colorKind = ColorKind.K0 + colorId;
         animationTableIdx += 0x04;
-        animationEntries.push({ materialName, remapIndex, colorOverride, r, g, b, a });
+        animationEntries.push({ materialName, remapIndex, colorKind, r, g, b, a });
     }
 
     return { duration, loopMode, animationEntries };
@@ -1568,7 +1570,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 export class TRK1Animator {
     constructor(public animationController: AnimationController, private trk1: TRK1, private animationEntry: PaletteAnimationEntry) {}
 
-    public calcColorOverride(dst: GX_Material.Color): void {
+    public calcColor(dst: GX_Material.Color): void {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.trk1, frame);
 
@@ -1579,8 +1581,8 @@ export class TRK1Animator {
     }
 }
 
-export function bindTRK1Animator(animationController: AnimationController, trk1: TRK1, materialName: string, colorOverride: ColorOverride): TRK1Animator | null {
-    const animationEntry = trk1.animationEntries.find((entry) => entry.materialName === materialName && entry.colorOverride === colorOverride);
+export function bindTRK1Animator(animationController: AnimationController, trk1: TRK1, materialName: string, colorKind: ColorKind): TRK1Animator | null {
+    const animationEntry = trk1.animationEntries.find((entry) => entry.materialName === materialName && entry.colorKind === colorKind);
     if (animationEntry === undefined)
         return null;
 

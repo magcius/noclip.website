@@ -2,13 +2,6 @@
 // The monospace font we use...
 const MONOSPACE = '"Source Code Pro", "Droid Sans Mono", monospace';
 
-// TypeScript is out of date...
-declare global {
-    interface HTMLTextAreaElement {
-        selectionDirection: 'forward' | 'backward' | 'none';
-    }
-}
-
 function visibleRAF(elem: HTMLElement, func: (t: number) => void) {
     const window = elem.ownerDocument.defaultView;
 

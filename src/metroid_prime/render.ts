@@ -375,16 +375,16 @@ class Command_Material {
     }
 
     private fillMaterialParamsData(state: RenderState, modelMatrix: mat4 | null, isSkybox: boolean, materialParams: MaterialParams): void {
-        materialParams.u_ColorMatReg[0].set(1, 1, 1, 1);
+        materialParams.u_Color[0].set(1, 1, 1, 1);
         if (isSkybox)
-            materialParams.u_ColorAmbReg[0].set(1, 1, 1, 1);
+            materialParams.u_Color[2].set(1, 1, 1, 1);
         else
-            materialParams.u_ColorAmbReg[0].set(0, 0, 0, 1);
+            materialParams.u_Color[2].set(0, 0, 0, 1);
 
         for (let i = 0; i < 4; i++)
-            materialParams.u_Color[i].copy(this.material.gxMaterial.colorRegisters[i]);
+            materialParams.u_Color[4 + i].copy(this.material.colorRegisters[i]);
         for (let i = 0; i < 4; i++)
-            materialParams.u_KonstColor[i].copy(this.material.gxMaterial.colorConstants[i]);
+            materialParams.u_Color[8 + i].copy(this.material.colorConstants[i]);
 
         const animTime = ((state.time / 1000) % 900);
         for (let i = 0; i < this.material.uvAnimations.length; i++) {

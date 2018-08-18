@@ -25,9 +25,6 @@ export interface GXMaterial {
     texGens: TexGen[];
 
     // TEV state
-    // TODO(jstpierre): These are just used for debugging.
-    colorRegisters: Color[];
-    colorConstants: Color[];
     tevStages: TevStage[];
     // Indirect TEV state
     indTexStages: IndTexStage[];
@@ -248,10 +245,6 @@ export class GX_Program extends BaseProgram {
         if (!s.includes('.'))
             s += '.0';
         return s;
-    }
-
-    private generateColorConstant(c: Color) {
-        return `vec4(${c.r}, ${c.g}, ${c.b}, ${c.a})`;
     }
 
     // Color Channels
@@ -812,8 +805,7 @@ export class GX_Program extends BaseProgram {
     bool t_AlphaTestA = ${this.generateAlphaTestCompare(alphaTest.compareA, alphaTest.referenceA)};
     bool t_AlphaTestB = ${this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB)};
     if (!(${this.generateAlphaTestOp(alphaTest.op)}))
-        discard;
-`;
+        discard;`;
     }
 
     private generateStorageType(t: UniformStorage): string {
@@ -906,8 +898,6 @@ ${this.generateTexGens(this.material.texGens)}
         const tevStages = this.material.tevStages;
         const indTexStages = this.material.indTexStages;
         const alphaTest = this.material.alphaTest;
-        const kColors = this.material.colorConstants;
-        const rColors = this.material.colorRegisters;
 
         this.frag = `
 // ${this.material.name}
@@ -947,15 +937,15 @@ vec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 vec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 
 void main() {
-    vec4 s_kColor0   = u_KonstColor[0]; // ${this.generateColorConstant(kColors[0])}
-    vec4 s_kColor1   = u_KonstColor[1]; // ${this.generateColorConstant(kColors[1])}
-    vec4 s_kColor2   = u_KonstColor[2]; // ${this.generateColorConstant(kColors[2])}
-    vec4 s_kColor3   = u_KonstColor[3]; // ${this.generateColorConstant(kColors[3])}
+    vec4 s_kColor0   = u_KonstColor[0];
+    vec4 s_kColor1   = u_KonstColor[1];
+    vec4 s_kColor2   = u_KonstColor[2];
+    vec4 s_kColor3   = u_KonstColor[3];
 
-    vec4 t_ColorPrev = u_Color[0]; // ${this.generateColorConstant(rColors[GX.Register.PREV])}
-    vec4 t_Color0    = u_Color[1]; // ${this.generateColorConstant(rColors[GX.Register.REG0])}
-    vec4 t_Color1    = u_Color[2]; // ${this.generateColorConstant(rColors[GX.Register.REG1])}
-    vec4 t_Color2    = u_Color[3]; // ${this.generateColorConstant(rColors[GX.Register.REG2])}
+    vec4 t_ColorPrev = u_Color[0];
+    vec4 t_Color0    = u_Color[1];
+    vec4 t_Color1    = u_Color[2];
+    vec4 t_Color2    = u_Color[3];
 
     vec2 t_TexCoord = vec2(0.0, 0.0);
 ${this.generateIndTexStages(indTexStages)}

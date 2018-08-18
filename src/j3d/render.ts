@@ -5,7 +5,7 @@ import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisp
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, translateTexFilter, translateWrapMode, GXTextureHolder } from '../gx/gx_render';
+import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, translateTexFilter, translateWrapMode, GXTextureHolder, ColorKind } from '../gx/gx_render';
 
 import { RenderFlags, RenderState } from '../render';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, AABB, IntersectionState } from '../Camera';
@@ -303,13 +303,6 @@ export class Command_Material {
     }
 }
 
-export enum ColorOverride {
-    MAT0, MAT1, AMB0, AMB1,
-    K0, K1, K2, K3,
-    CPREV, C0, C1, C2,
-    COUNT,
-}
-
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
 
 export class MaterialInstance {
@@ -328,7 +321,7 @@ export class MaterialInstance {
     }
 
     public bindTRK1(animationController: AnimationController, trk1: TRK1): void {
-        for (let i: ColorOverride = 0; i < ColorOverride.COUNT; i++) {
+        for (let i: ColorKind = 0; i < ColorKind.COUNT; i++) {
             const trk1Animator = bindTRK1Animator(animationController, trk1, this.material.name, i);
             if (trk1Animator)
                 this.trk1Animators[i] = trk1Animator;
@@ -336,9 +329,11 @@ export class MaterialInstance {
     }
 
     public fillMaterialParams(materialParams: MaterialParams): void {
-        const copyColor = (dst: GX_Material.Color, i: ColorOverride, fallbackColor: GX_Material.Color) => {
+        const copyColor = (i: ColorKind, fallbackColor: GX_Material.Color) => {
+            const dst = materialParams.u_Color[i];
+
             if (this.trk1Animators[i] !== undefined) {
-                this.trk1Animators[i].calcColorOverride(dst);
+                this.trk1Animators[i].calcColor(dst);
                 return;
             }
 
@@ -359,20 +354,20 @@ export class MaterialInstance {
             dst.copy(color, alpha);
         };
 
-        copyColor(materialParams.u_ColorMatReg[0], ColorOverride.MAT0, this.material.colorMatRegs[0]);
-        copyColor(materialParams.u_ColorMatReg[1], ColorOverride.MAT1, this.material.colorMatRegs[1]);
-        copyColor(materialParams.u_ColorAmbReg[0], ColorOverride.AMB0, this.material.colorAmbRegs[0]);
-        copyColor(materialParams.u_ColorAmbReg[1], ColorOverride.AMB1, this.material.colorAmbRegs[1]);
+        copyColor(ColorKind.MAT0, this.material.colorMatRegs[0]);
+        copyColor(ColorKind.MAT1, this.material.colorMatRegs[1]);
+        copyColor(ColorKind.AMB0, this.material.colorAmbRegs[0]);
+        copyColor(ColorKind.AMB1, this.material.colorAmbRegs[1]);
 
-        copyColor(materialParams.u_KonstColor[0], ColorOverride.K0, this.material.gxMaterial.colorConstants[0]);
-        copyColor(materialParams.u_KonstColor[1], ColorOverride.K1, this.material.gxMaterial.colorConstants[1]);
-        copyColor(materialParams.u_KonstColor[2], ColorOverride.K2, this.material.gxMaterial.colorConstants[2]);
-        copyColor(materialParams.u_KonstColor[3], ColorOverride.K3, this.material.gxMaterial.colorConstants[3]);
+        copyColor(ColorKind.K0, this.material.colorConstants[0]);
+        copyColor(ColorKind.K1, this.material.colorConstants[1]);
+        copyColor(ColorKind.K2, this.material.colorConstants[2]);
+        copyColor(ColorKind.K3, this.material.colorConstants[3]);
 
-        copyColor(materialParams.u_Color[0], ColorOverride.CPREV, this.material.gxMaterial.colorRegisters[0]);
-        copyColor(materialParams.u_Color[1], ColorOverride.C0, this.material.gxMaterial.colorRegisters[1]);
-        copyColor(materialParams.u_Color[2], ColorOverride.C1, this.material.gxMaterial.colorRegisters[2]);
-        copyColor(materialParams.u_Color[3], ColorOverride.C2, this.material.gxMaterial.colorRegisters[3]);
+        copyColor(ColorKind.CPREV, this.material.colorRegisters[0]);
+        copyColor(ColorKind.C0, this.material.colorRegisters[1]);
+        copyColor(ColorKind.C1, this.material.colorRegisters[2]);
+        copyColor(ColorKind.C2, this.material.colorRegisters[3]);
     }
 
     public calcTexMatrix(dst: mat4, i: number): void {
@@ -539,7 +534,7 @@ export class BMDModelInstance {
         this.renderHelper.destroy(gl);
     }
 
-    public setColorOverride(i: ColorOverride, color: GX_Material.Color, useAlpha: boolean = false): void {
+    public setColorOverride(i: ColorKind, color: GX_Material.Color, useAlpha: boolean = false): void {
         this.colorOverrides[i] = color;
         this.alphaOverrides[i] = useAlpha;
     }

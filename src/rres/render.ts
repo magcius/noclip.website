@@ -5,9 +5,8 @@ import * as BRRES from './brres';
 import * as GX_Material from '../gx/gx_material';
 import { mat4, mat2d } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
-import { MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder } from "../gx/gx_render";
+import { MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind } from "../gx/gx_render";
 import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState } from "../Camera";
-import { ColorOverride } from "../j3d/render";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 
@@ -116,7 +115,7 @@ export class MDL0ModelInstance {
             this.bindCLR0(animationController, rres.clr0[i]);
     }
 
-    public setColorOverride(i: ColorOverride, color: GX_Material.Color): void {
+    public setColorOverride(i: ColorKind, color: GX_Material.Color): void {
         this.colorOverrides[i] = color;
     }
 
@@ -315,7 +314,8 @@ export class MaterialInstance {
     }
 
     public calcMaterialParams(materialParams: MaterialParams): void {
-        const calcColor = (dst: GX_Material.Color, fallbackColor: GX_Material.Color, i: ColorOverride, a: BRRES.AnimatableColor) => {
+        const calcColor = (i: ColorKind, fallbackColor: GX_Material.Color, a: BRRES.AnimatableColor) => {
+            const dst = materialParams.u_Color[i];
             let color: GX_Material.Color;
             if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
                 color = this.modelInstance.colorOverrides[i];
@@ -330,20 +330,20 @@ export class MaterialInstance {
             }
         };
 
-        calcColor(materialParams.u_ColorMatReg[0], this.material.colorMatRegs[0], ColorOverride.MAT0, BRRES.AnimatableColor.MAT0);
-        calcColor(materialParams.u_ColorMatReg[1], this.material.colorMatRegs[1], ColorOverride.MAT1, BRRES.AnimatableColor.MAT1);
-        calcColor(materialParams.u_ColorAmbReg[0], this.material.colorAmbRegs[0], ColorOverride.AMB0, BRRES.AnimatableColor.AMB0);
-        calcColor(materialParams.u_ColorAmbReg[1], this.material.colorAmbRegs[1], ColorOverride.AMB1, BRRES.AnimatableColor.AMB1);
+        calcColor(ColorKind.MAT0, this.material.colorMatRegs[0], BRRES.AnimatableColor.MAT0);
+        calcColor(ColorKind.MAT1, this.material.colorMatRegs[1], BRRES.AnimatableColor.MAT1);
+        calcColor(ColorKind.AMB0, this.material.colorAmbRegs[0], BRRES.AnimatableColor.AMB0);
+        calcColor(ColorKind.AMB1, this.material.colorAmbRegs[1], BRRES.AnimatableColor.AMB1);
 
-        calcColor(materialParams.u_KonstColor[0], this.material.gxMaterial.colorConstants[0], ColorOverride.K0, BRRES.AnimatableColor.K0);
-        calcColor(materialParams.u_KonstColor[1], this.material.gxMaterial.colorConstants[1], ColorOverride.K1, BRRES.AnimatableColor.K1);
-        calcColor(materialParams.u_KonstColor[2], this.material.gxMaterial.colorConstants[2], ColorOverride.K2, BRRES.AnimatableColor.K2);
-        calcColor(materialParams.u_KonstColor[3], this.material.gxMaterial.colorConstants[3], ColorOverride.K3, BRRES.AnimatableColor.K3);
+        calcColor(ColorKind.K0, this.material.colorConstants[0], BRRES.AnimatableColor.K0);
+        calcColor(ColorKind.K1, this.material.colorConstants[1], BRRES.AnimatableColor.K1);
+        calcColor(ColorKind.K2, this.material.colorConstants[2], BRRES.AnimatableColor.K2);
+        calcColor(ColorKind.K3, this.material.colorConstants[3], BRRES.AnimatableColor.K3);
 
-        calcColor(materialParams.u_Color[0], this.material.gxMaterial.colorRegisters[0], ColorOverride.CPREV, -1);
-        calcColor(materialParams.u_Color[1], this.material.gxMaterial.colorRegisters[1], ColorOverride.C0, BRRES.AnimatableColor.C0);
-        calcColor(materialParams.u_Color[2], this.material.gxMaterial.colorRegisters[2], ColorOverride.C1, BRRES.AnimatableColor.C1);
-        calcColor(materialParams.u_Color[3], this.material.gxMaterial.colorRegisters[3], ColorOverride.C2, BRRES.AnimatableColor.C2);
+        calcColor(ColorKind.CPREV, this.material.colorRegisters[0], -1);
+        calcColor(ColorKind.C0, this.material.colorRegisters[1], BRRES.AnimatableColor.C0);
+        calcColor(ColorKind.C1, this.material.colorRegisters[2], BRRES.AnimatableColor.C1);
+        calcColor(ColorKind.C2, this.material.colorRegisters[3], BRRES.AnimatableColor.C2);
     }
 
     public calcTextureMapping(dst: TextureMapping, name: string): void {

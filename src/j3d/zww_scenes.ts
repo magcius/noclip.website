@@ -14,10 +14,11 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
-import { ColorOverride, J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
+import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
 import { Camera } from '../Camera';
 import Program from '../Program';
 import { colorToCSS } from '../Color';
+import { ColorKind } from '../gx/gx_render';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
@@ -193,32 +194,32 @@ class WindWakerRoomRenderer implements Viewer.Scene {
     public setColors(colors?: Colors): void {
         if (colors !== undefined) {
             if (this.model) {
-                this.model.setColorOverride(ColorOverride.K0, colors.light);
-                this.model.setColorOverride(ColorOverride.C0, colors.amb);
+                this.model.setColorOverride(ColorKind.K0, colors.light);
+                this.model.setColorOverride(ColorKind.C0, colors.amb);
             }
 
             if (this.model1) {
-                this.model1.setColorOverride(ColorOverride.K0, colors.ocean);
-                this.model1.setColorOverride(ColorOverride.C0, colors.wave);
-                this.model1.setColorOverride(ColorOverride.C1, colors.splash);
-                this.model1.setColorOverride(ColorOverride.K1, colors.splash2);
+                this.model1.setColorOverride(ColorKind.K0, colors.ocean);
+                this.model1.setColorOverride(ColorKind.C0, colors.wave);
+                this.model1.setColorOverride(ColorKind.C1, colors.splash);
+                this.model1.setColorOverride(ColorKind.K1, colors.splash2);
             }
             if (this.model3)
-                this.model3.setColorOverride(ColorOverride.C0, colors.doors);
+                this.model3.setColorOverride(ColorKind.C0, colors.doors);
         } else {
             if (this.model) {
-                this.model.setColorOverride(ColorOverride.K0, undefined);
-                this.model.setColorOverride(ColorOverride.C0, undefined);
+                this.model.setColorOverride(ColorKind.K0, undefined);
+                this.model.setColorOverride(ColorKind.C0, undefined);
             }
 
             if (this.model1) {
-                this.model1.setColorOverride(ColorOverride.K0, undefined);
-                this.model1.setColorOverride(ColorOverride.C0, undefined);
-                this.model1.setColorOverride(ColorOverride.C1, undefined);
-                this.model1.setColorOverride(ColorOverride.K1, undefined);
+                this.model1.setColorOverride(ColorKind.K0, undefined);
+                this.model1.setColorOverride(ColorKind.C0, undefined);
+                this.model1.setColorOverride(ColorKind.C1, undefined);
+                this.model1.setColorOverride(ColorKind.K1, undefined);
             }
             if (this.model3)
-                this.model3.setColorOverride(ColorOverride.C0, undefined);
+                this.model3.setColorOverride(ColorKind.C0, undefined);
         }
     }
 
@@ -379,22 +380,22 @@ class WindWakerRenderer implements Viewer.MainScene {
             if (this.seaPlane)
                 this.seaPlane.setColor(colors.ocean);
             if (this.vr_sky)
-                this.vr_sky.setColorOverride(ColorOverride.K0, colors.vr_sky);
+                this.vr_sky.setColorOverride(ColorKind.K0, colors.vr_sky);
             if (this.vr_uso_umi)
-                this.vr_uso_umi.setColorOverride(ColorOverride.K0, colors.vr_uso_umi);
+                this.vr_uso_umi.setColorOverride(ColorKind.K0, colors.vr_uso_umi);
             if (this.vr_kasumi_mae)
-                this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, colors.vr_kasumi_mae);
+                this.vr_kasumi_mae.setColorOverride(ColorKind.C0, colors.vr_kasumi_mae);
             if (this.vr_back_cloud)
-                this.vr_back_cloud.setColorOverride(ColorOverride.K0, colors.vr_back_cloud, true);
+                this.vr_back_cloud.setColorOverride(ColorKind.K0, colors.vr_back_cloud, true);
         } else {
             if (this.vr_sky)
-                this.vr_sky.setColorOverride(ColorOverride.K0, undefined);
+                this.vr_sky.setColorOverride(ColorKind.K0, undefined);
             if (this.vr_uso_umi)
-                this.vr_uso_umi.setColorOverride(ColorOverride.K0, undefined);
+                this.vr_uso_umi.setColorOverride(ColorKind.K0, undefined);
             if (this.vr_kasumi_mae)
-                this.vr_kasumi_mae.setColorOverride(ColorOverride.C0, undefined);
+                this.vr_kasumi_mae.setColorOverride(ColorKind.C0, undefined);
             if (this.vr_back_cloud)
-                this.vr_back_cloud.setColorOverride(ColorOverride.K0, undefined);
+                this.vr_back_cloud.setColorOverride(ColorKind.K0, undefined);
         }
 
         for (const roomRenderer of this.roomRenderers) {

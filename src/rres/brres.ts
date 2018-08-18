@@ -361,6 +361,8 @@ export interface MDL0_MaterialEntry {
     indTexMatrices: mat2d[];
     colorAmbRegs: GX_Material.Color[];
     colorMatRegs: GX_Material.Color[];
+    colorRegisters: GX_Material.Color[];
+    colorConstants: GX_Material.Color[];
 }
 
 function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL0_MaterialEntry {
@@ -840,11 +842,10 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         index, name,
         lightChannels, cullMode,
         tevStages, texGens,
-        colorRegisters, colorConstants,
         indTexStages, alphaTest, ropInfo,
     }
 
-    return { index, name, translucent, gxMaterial, samplers, texSrts, indTexMatrices, colorMatRegs, colorAmbRegs };
+    return { index, name, translucent, gxMaterial, samplers, texSrts, indTexMatrices, colorMatRegs, colorAmbRegs, colorRegisters, colorConstants };
 }
 
 interface VtxBufferData {
