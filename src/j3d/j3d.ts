@@ -319,6 +319,7 @@ export interface Joint {
     scaleX: number;
     scaleY: number;
     scaleZ: number;
+    boundingSphereRadius: number;
     bbox: AABB;
 }
 
@@ -371,7 +372,7 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         const matrix = mat4.create();
         createJointMatrix(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        joints.push({ name, matrix, scaleX, scaleY, scaleZ, bbox });
+        joints.push({ name, matrix, scaleX, scaleY, scaleZ, boundingSphereRadius, bbox });
     }
 
     return { joints };

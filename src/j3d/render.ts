@@ -399,6 +399,7 @@ export class BMDModel {
     public shapeCommands: Command_Shape[] = [];
     public opaqueDrawList: DrawListItem[] = [];
     public transparentDrawList: DrawListItem[] = [];
+    public hasBillboard: boolean;
 
     constructor(
         gl: WebGL2RenderingContext,
@@ -426,6 +427,12 @@ export class BMDModel {
         this.shapeCommands = bmd.shp1.shapes.map((shape, i) => {
             return new Command_Shape(gl, shape, this.bufferCoalescer.coalescedBuffers);
         });
+
+        // Look for billboards.
+        for (const shape of bmd.shp1.shapes) {
+            if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD || shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
+                this.hasBillboard = true;
+        }
 
         // Load scene graph.
         this.translateSceneGraph(bmd.inf1.sceneGraph, null);
@@ -479,6 +486,15 @@ export class BMDModel {
         for (const child of node.children)
             this.translateSceneGraph(child, drawListItem);
     }
+}
+
+const enum MatrixCalcFlags {
+    // No special transformation.
+    NORMAL = 0,
+    // View translation modified.
+    VIEW_TRANSLATION_CHANGED = 1 << 0,
+    // View rotation modified.
+    VIEW_ROTATION_CHANGED = 1 << 1,
 }
 
 export class BMDModelInstance {
@@ -587,11 +603,35 @@ export class BMDModelInstance {
 
         // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
         this.animationController.updateTime(state.time);
-        this.updateMatrixArray(state);
 
-        // Update model matrix. TODO: Move model matrix to root bone?
-        mat4.copy(this.shapeInstanceState.modelMatrix, this.modelMatrix);
+        // Skyboxes implicitly center themselves around the view matrix (their view translation is removed).
+        // While we could represent this, a skybox is always visible in theory so it's probably not worth it
+        // to cull. If we ever have a fancy skybox model, then it might be worth it to represent it in world-space.
+        //
+        // Billboards have their view matrix modified to face the camera, so their world space position doesn't
+        // quite match what they kind of do.
+        //
+        // For now, we simply don't cull both of these special cases, hoping they'll be simple enough to just always
+        // render. In theory, we could cull billboards using the bounding sphere.
+        const matrixCalcFlags: MatrixCalcFlags = (
+            (this.isSkybox ? MatrixCalcFlags.VIEW_TRANSLATION_CHANGED : 0) |
+            (this.bmdModel.hasBillboard ? MatrixCalcFlags.VIEW_TRANSLATION_CHANGED : 0)
+        );
+
+        // First, update joint matrices from hierarchy.
+        //
+        // then the root bone is taken from the model matrix. Otherwise, we apply it
+        // to the shape for use there.
+        if (matrixCalcFlags === MatrixCalcFlags.NORMAL) {
+            mat4.copy(matrixScratch, this.modelMatrix);
+            mat4.identity(this.shapeInstanceState.modelMatrix);
+        } else {
+            mat4.identity(matrixScratch);
+            mat4.copy(this.shapeInstanceState.modelMatrix, this.modelMatrix);
+        }
+
         this.shapeInstanceState.isSkybox = this.isSkybox;
+        this.updateMatrixArray(state, matrixScratch, matrixCalcFlags);
 
         this.renderHelper.bindUniformBuffers(state);
 
@@ -632,7 +672,7 @@ export class BMDModelInstance {
         this.renderTransparent(state);
     }
 
-    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4, parentIntersectionState: IntersectionState): void {
+    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4, matrixCalcFlags: MatrixCalcFlags): void {
         // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
         const jnt1 = this.bmdModel.bmd.jnt1;
         const bbox = this.bboxScratch;
@@ -641,54 +681,46 @@ export class BMDModelInstance {
         case HierarchyType.Joint:
             const jointIndex = node.jointIdx;
 
-            let boneMatrix: mat4;
+            let jointMatrix: mat4;
             if (this.ank1Animator !== null && this.ank1Animator.calcJointMatrix(matrixScratch2, jointIndex)) {
-                boneMatrix = matrixScratch2;
+                jointMatrix = matrixScratch2;
             } else {
-                boneMatrix = jnt1.joints[jointIndex].matrix;
+                jointMatrix = jnt1.joints[jointIndex].matrix;
             }
 
             const dstJointMatrix = this.jointMatrices[jointIndex];
-            mat4.mul(dstJointMatrix, parentJointMatrix, boneMatrix);
+            mat4.mul(dstJointMatrix, parentJointMatrix, jointMatrix);
 
-            // Frustum cull.
-
-            // If the parent is fully visible, then we are also fully visible, no need to check.
-            let intersectionState: IntersectionState;
-            if (parentIntersectionState === IntersectionState.FULLY_INSIDE) {
-                intersectionState = IntersectionState.FULLY_INSIDE;
-            } else {
+            if (matrixCalcFlags === MatrixCalcFlags.NORMAL) {
+                // Frustum cull.
+                // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
+                // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
                 bbox.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
-                intersectionState = state.camera.frustum.intersect(bbox);
+                const intersectionState = state.camera.frustum.intersect(bbox);
+                this.jointVisibility[jointIndex] = intersectionState !== IntersectionState.FULLY_OUTSIDE;
+            } else {
+                this.jointVisibility[jointIndex] = true;
             }
 
-            // Update children. If we're fully outside, then no need to update children joints at all.
-            if (intersectionState !== IntersectionState.FULLY_OUTSIDE) {
-                this.jointVisibility[jointIndex] = true;
-                for (let i = 0; i < node.children.length; i++)
-                    this.updateJointMatrixHierarchy(state, node.children[i], dstJointMatrix, intersectionState);
-            } else {
-                this.jointVisibility[jointIndex] = false;
-            }
+            for (let i = 0; i < node.children.length; i++)
+                this.updateJointMatrixHierarchy(state, node.children[i], dstJointMatrix, matrixCalcFlags);
             break;
         default:
             // Pass through.
             for (let i = 0; i < node.children.length; i++)
-                this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix, parentIntersectionState);
+                this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix, matrixCalcFlags);
             break;
         }
     }
 
-    private updateMatrixArray(state: RenderState): void {
+    private updateMatrixArray(state: RenderState, modelMatrix: mat4, matrixCalcFlags: MatrixCalcFlags): void {
         const inf1 = this.bmdModel.bmd.inf1;
         const drw1 = this.bmdModel.bmd.drw1;
         const evp1 = this.bmdModel.bmd.evp1;
 
-        // First, update joint matrices from hierarchy.
-        mat4.identity(matrixScratch);
-        this.updateJointMatrixHierarchy(state, inf1.sceneGraph, matrixScratch, IntersectionState.FULLY_INSIDE);
+        this.updateJointMatrixHierarchy(state, inf1.sceneGraph, modelMatrix, matrixCalcFlags);
 
-        // Update weighted joint matrices.
+        // Now update our matrix definition array.
         for (let i = 0; i < drw1.matrixDefinitions.length; i++) {
             const matrixDefinition = drw1.matrixDefinitions[i];
             const dst = this.shapeInstanceState.matrixArray[i];
