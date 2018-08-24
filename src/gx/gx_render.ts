@@ -341,7 +341,7 @@ export interface LoadedTexture {
 
 export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX_Texture.MipChain): LoadedTexture {
     const glTexture = gl.createTexture();
-    (<any> glTexture).name = mipChain.name;
+    (glTexture as any).name = mipChain.name;
     gl.bindTexture(gl.TEXTURE_2D, glTexture);
 
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, mipChain.mipLevels.length - 1);
