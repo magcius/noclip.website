@@ -1076,7 +1076,7 @@ function parse_DKCR(resourceSystem: ResourceSystem, assetID: string, buffer: Arr
             const extraDataSize = secView.getUint8(surfaceOffs + 0x1F);
 
             // Build our vertex format.
-            const material: Material_MP3 = <Material_MP3> materialSet.materials[materialIndex];
+            const material: Material_MP3 = materialSet.materials[materialIndex] as Material_MP3;
             const vtxAttrFormat = material.vtxAttrFormat;
 
             const surfaceHeaderEnd = surfaceOffs + 0x20 + extraDataSize;

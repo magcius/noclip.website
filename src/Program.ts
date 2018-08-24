@@ -126,7 +126,7 @@ ${rest}
                 this[n] = editor.getValue();
                 this.forceRecompile = true;
             };
-            (<any> win).editor = editor;
+            (win as any).editor = editor;
             win.document.body.appendChild(editor.elem);
         };
         if (win.document.readyState === 'complete')

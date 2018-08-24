@@ -114,7 +114,7 @@ export function parse(buffer: ArrayBufferSlice): U8Archive {
     }
 
     // Root node (0) has parent index 0...
-    const rootNode: U8Dir = <U8Dir> readNode(0, 0);
+    const rootNode: U8Dir = readNode(0, 0) as U8Dir;
     assert(rootNode.kind === 'directory');
 
     const archive = new U8Archive();

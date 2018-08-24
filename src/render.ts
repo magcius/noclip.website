@@ -456,7 +456,7 @@ export class RenderState {
     public bindModelView(isSkybox: boolean = false, model: mat4 | null = null) {
         // XXX(jstpierre): Remove this junk
         const gl = this.gl;
-        const prog = <SimpleProgram> this.currentProgram;
+        const prog = this.currentProgram as SimpleProgram;
         const scratch = this.updateModelView(isSkybox, model);
         gl.uniformMatrix4fv(prog.projectionLocation, false, this.camera.projectionMatrix);
         gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);

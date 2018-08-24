@@ -98,7 +98,7 @@ export abstract class ScrollSelect implements Widget {
     private syncFlairs(): void {
         const flairs = [...this.internalFlairs, ...this.flairs];
         for (let i = 0; i < this.getNumItems(); i++) {
-            const selector = <HTMLElement> this.scrollContainer.children.item(i);
+            const selector = this.scrollContainer.children.item(i) as HTMLElement;
             const flair = flairs.find((flair) => flair.index === i);
 
             const background = (flair !== undefined && flair.background !== undefined) ? flair.background : '';
