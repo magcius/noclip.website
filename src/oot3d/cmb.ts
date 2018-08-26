@@ -136,8 +136,8 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
     // I'll never know...
     const pixelToColorIndex = [ 2, 3, 1, 0 ];
 
-    const diff = (w1 & 2);
-    const flip = (w1 & 1);
+    const diff = (w1 & 0x02) !== 0;
+    const flip = (w1 & 0x01) !== 0;
 
     // Intensity tables for each block.
     const intensityIndex1 = (w1 >> 5) & 0x7;
@@ -214,7 +214,7 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
 
         // If flipbit=0, the block is divided into two 2x4
         // subblocks side-by-side.
-        if (flip === 0)
+        if (!flip)
             whichBlock = x & 2;
         else
             whichBlock = y & 2;
@@ -284,7 +284,7 @@ function decodeTexture_ETC1(texture: Texture, texData: ArrayBufferSlice, alpha: 
 
 type PixelDecode = (pixels: Uint8Array, dstOffs: number) => void;
 
-function decodeTexture_Tiled(texture: Texture, texData: ArrayBufferSlice, decoder: PixelDecode) {
+function decodeTexture_Tiled(texture: Texture, decoder: PixelDecode) {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     const stride = texture.width;
 
@@ -311,7 +311,7 @@ function decodeTexture_Tiled(texture: Texture, texData: ArrayBufferSlice, decode
 function decodeTexture_RGBA5551(texture: Texture, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
         pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
         pixels[dstOffs + 1] = expand5to8((p >> 6) & 0x1F);
@@ -324,7 +324,7 @@ function decodeTexture_RGBA5551(texture: Texture, texData: ArrayBufferSlice) {
 function decodeTexture_RGB565(texture: Texture, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
         pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
         pixels[dstOffs + 1] = expand6to8((p >> 5) & 0x3F);
@@ -337,7 +337,7 @@ function decodeTexture_RGB565(texture: Texture, texData: ArrayBufferSlice) {
 function decodeTexture_A8(texture: Texture, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
         const A = src.getUint8(srcOffs++);
         pixels[dstOffs + 0] = 0xFF;
         pixels[dstOffs + 1] = 0xFF;
@@ -349,7 +349,7 @@ function decodeTexture_A8(texture: Texture, texData: ArrayBufferSlice) {
 function decodeTexture_L8(texture: Texture, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
         const L = src.getUint8(srcOffs++);
         pixels[dstOffs + 0] = L;
         pixels[dstOffs + 1] = L;
@@ -361,7 +361,7 @@ function decodeTexture_L8(texture: Texture, texData: ArrayBufferSlice) {
 function decodeTexture_LA8(texture: Texture, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, texData, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
         const L = src.getUint8(srcOffs++);
         const A = src.getUint8(srcOffs++);
         pixels[dstOffs + 0] = L;
