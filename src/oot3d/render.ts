@@ -103,7 +103,6 @@ class Scene implements Viewer.Scene {
     }
 
     public render(state: RenderState) {
-        const gl = state.gl;
         state.useProgram(this.program);
         state.bindModelView();
         this.model(state);
