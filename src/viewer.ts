@@ -5,6 +5,7 @@ import * as UI from './ui';
 import Progressable from './Progressable';
 import InputManager from './InputManager';
 import { CameraController, Camera, CameraControllerClass } from './Camera';
+import { TextureHolder } from './TextureHolder';
 
 export interface Texture {
     name: string;
@@ -113,7 +114,8 @@ export class Viewer {
 }
 
 export interface MainScene extends Scene {
-    textures: Texture[];
+    textures?: Texture[];
+    textureHolder?: TextureHolder<any>;
     resetCamera?(camera: Camera): void;
     createPanels?(): UI.Panel[];
 }

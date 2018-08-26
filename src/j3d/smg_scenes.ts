@@ -174,8 +174,6 @@ function getZoneLayerFilterTag(zoneName: string, layerIndex: number): string {
 }
 
 class SMGRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[] = [];
-
     private mainColorTarget: ColorTarget = new ColorTarget();
 
     // Bloom stuff.
@@ -188,12 +186,11 @@ class SMGRenderer implements Viewer.MainScene {
 
     constructor(
         gl: WebGL2RenderingContext,
-        private textureHolder: J3DTextureHolder,
+        public textureHolder: J3DTextureHolder,
         private sceneGraph: SceneGraph,
         private scenarioData: BCSV.Bcsv,
         private zoneNames: string[],
     ) {
-        this.textures = textureHolder.viewerTextures;
         this.bloomCombineFlags = new RenderFlags();
 
         this.bloomCombineFlags.blendMode = BlendMode.ADD;

@@ -45,6 +45,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
     public glTextures: WebGLTexture[] = [];
     public textureEntries: TextureType[] = [];
     public textureOverrides = new Map<string, TextureOverride>();
+    public onnewtextures: (() => void) | null = null;
 
     public destroy(gl: WebGL2RenderingContext): void {
         this.glTextures.forEach((texture) => gl.deleteTexture(texture));
@@ -129,5 +130,8 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
             this.glTextures.push(glTexture);
             this.viewerTextures.push(viewerTexture);
         }
+
+        if (this.onnewtextures !== null)
+            this.onnewtextures();
     }
 }

@@ -7,6 +7,7 @@ import { assertExists } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController } from './Camera';
 import { RenderStatistics } from './render';
 import { Color, colorToCSS } from './Color';
+import { TextureHolder } from './TextureHolder';
 
 const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 
@@ -572,6 +573,13 @@ export class TextureViewer extends Panel {
         this.scrollList.setStrings(strings);
         this.textureList = textures;
     }
+
+    public setTextureHolder(textureHolder: TextureHolder<any>): void {
+        this.setTextureList(textureHolder.viewerTextures);
+        textureHolder.onnewtextures = () => {
+            this.setTextureList(textureHolder.viewerTextures);
+        };
+    }
 }
 
 const FRUSTUM_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><polygon points="48.2573,19.8589 33.8981,15.0724 5,67.8384 48.2573,90.3684" /><polygon points="51.5652,19.8738 51.5652,90.3734 95,67.8392 65.9366,15.2701" /><polygon points="61.3189,13.2756 49.9911,9.6265 38.5411,13.1331 49.9213,16.9268" /></svg>`;
@@ -914,7 +922,12 @@ export class UI {
         const cameraControllerClass = (<CameraControllerClass> this.viewer.cameraController.constructor);
         // Set up UI.
         this.viewerSettings.cameraControllerSelected(cameraControllerClass);
-        this.textureViewer.setTextureList(scene !== null ? scene.textures : []);
+        if (scene !== null) {
+            if (scene.textures !== undefined)
+                this.textureViewer.setTextureList(scene.textures);
+            else if (scene.textureHolder !== undefined)
+                this.textureViewer.setTextureHolder(scene.textureHolder);
+        }
     }
 
     private setPanels(panels: Panel[]): void {

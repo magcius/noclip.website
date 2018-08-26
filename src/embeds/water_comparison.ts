@@ -30,13 +30,11 @@ const posMtx = mat4.create();
 mat4.fromScaling(posMtx, [scale, scale, scale]);
 
 abstract class WaterComparisonRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[] = [];
-
     private sceneParams = new SceneParams();
     protected renderHelper: GXRenderHelper;
     protected animationController = new AnimationController();
 
-    constructor(gl: WebGL2RenderingContext, private skyboxScene: J3DRender.BMDModelInstance, protected textureHolder: J3DRender.J3DTextureHolder, animationScale: number, private plane: PlaneShape) {
+    constructor(gl: WebGL2RenderingContext, private skyboxScene: J3DRender.BMDModelInstance, public textureHolder: J3DRender.J3DTextureHolder, animationScale: number, private plane: PlaneShape) {
         // Make it go fast.
         this.animationController.fps = 30 * animationScale;
         this.renderHelper = new GXRenderHelper(gl);
