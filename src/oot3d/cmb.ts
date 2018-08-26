@@ -34,17 +34,18 @@ export enum TextureWrapMode {
     REPEAT = 0x2901,
 }
 
-class TextureBinding {
-    public textureIdx: number;
-    public minFilter: TextureFilter;
-    public magFilter: TextureFilter;
-    public wrapS: TextureWrapMode;
-    public wrapT: TextureWrapMode;
+interface TextureBinding {
+    textureIdx: number;
+    minFilter: TextureFilter;
+    magFilter: TextureFilter;
+    wrapS: TextureWrapMode;
+    wrapT: TextureWrapMode;
 }
 
-export class Material {
-    public textureBindings: TextureBinding[] = [];
-    public alphaTestEnable: boolean;
+export interface Material {
+    index: number;
+    textureBindings: TextureBinding[];
+    alphaTestEnable: boolean;
 }
 
 function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
@@ -55,23 +56,22 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
     let offs = 0x0C;
     for (let i = 0; i < count; i++) {
-        const mat = new Material();
-
         let bindingOffs = offs + 0x10;
+        const textureBindings: TextureBinding[] = [];
+
         for (let j = 0; j < 3; j++) {
-            const binding = new TextureBinding();
-            binding.textureIdx = view.getInt16(bindingOffs + 0x00, true);
-            binding.minFilter = view.getUint16(bindingOffs + 0x04, true);
-            binding.magFilter = view.getUint16(bindingOffs + 0x06, true);
-            binding.wrapS = view.getUint16(bindingOffs + 0x08, true);
-            binding.wrapT = view.getUint16(bindingOffs + 0x0A, true);
-            mat.textureBindings.push(binding);
+            const textureIdx = view.getInt16(bindingOffs + 0x00, true);
+            const minFilter = view.getUint16(bindingOffs + 0x04, true);
+            const magFilter = view.getUint16(bindingOffs + 0x06, true);
+            const wrapS = view.getUint16(bindingOffs + 0x08, true);
+            const wrapT = view.getUint16(bindingOffs + 0x0A, true);
+            textureBindings.push({ textureIdx, minFilter, magFilter, wrapS, wrapT });
             bindingOffs += 0x18;
         }
 
-        mat.alphaTestEnable = !!view.getUint8(offs + 0x130);
+        const alphaTestEnable = !!view.getUint8(offs + 0x130);
 
-        cmb.materials.push(mat);
+        cmb.materials.push({ index: i, textureBindings, alphaTestEnable });
         offs += 0x15C;
     }
 }
