@@ -74,7 +74,6 @@ export class MDL0ModelInstance {
         public textureHolder: GXTextureHolder,
         public mdl0Model: MDL0Model,
         public namePrefix: string = '',
-        public materialHacks: GX_Material.GXMaterialHacks = null
     ) {
         this.renderHelper = new GXRenderHelper(gl);
         this.name = `${namePrefix}/${mdl0Model.mdl0.name}`;

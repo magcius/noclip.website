@@ -10,7 +10,7 @@ import * as GX_Material from '../gx/gx_material';
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
-import { AABB, IntersectionState, texEnvMtx } from '../Camera';
+import { AABB, IntersectionState } from '../Camera';
 import { TXTR } from './txtr';
 import { CMDL } from './cmdl';
 import { TextureMapping } from '../TextureHolder';
