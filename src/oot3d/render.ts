@@ -1,8 +1,11 @@
 
 import * as CMB from './cmb';
+import * as CMAB from './cmab';
+import * as ZAR from './zar';
 import * as ZSI from './zsi';
 
 import * as Viewer from '../viewer';
+import * as UI from '../ui';
 
 import Progressable from '../Progressable';
 import { BlendMode, CullMode, RenderFlags, RenderState } from '../render';
@@ -10,15 +13,18 @@ import { SimpleProgram } from '../Program';
 import RenderArena from '../RenderArena';
 import { fetch, assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import AnimationController from '../AnimationController';
+import { mat4 } from 'gl-matrix';
 
 class OoT3D_Program extends SimpleProgram {
-    public posScaleLocation: WebGLUniformLocation;
-    public uvScaleLocation: WebGLUniformLocation;
-    public alphaTestLocation: WebGLUniformLocation;
+    public u_PosScale: WebGLUniformLocation;
+    public u_TexCoordScale: WebGLUniformLocation;
+    public u_AlphaTest: WebGLUniformLocation;
+    public u_TexCoordMtx: WebGLUniformLocation;
 
-    public static a_position = 0;
-    public static a_color = 1;
-    public static a_uv = 2;
+    public static a_Position = 0;
+    public static a_Color = 1;
+    public static a_TexCoord = 2;
 
     public vert = `
 precision mediump float;
@@ -26,41 +32,44 @@ precision mediump float;
 uniform mat4 u_modelView;
 uniform mat4 u_localMatrix;
 uniform mat4 u_projection;
-uniform float u_posScale;
-uniform float u_uvScale;
-layout(location = ${OoT3D_Program.a_position}) in vec3 a_position;
-layout(location = ${OoT3D_Program.a_uv}) in vec2 a_uv;
-layout(location = ${OoT3D_Program.a_color}) in vec4 a_color;
-varying vec4 v_color;
-varying vec2 v_uv;
+uniform float u_PosScale;
+uniform float u_TexCoordScale;
+uniform mat4 u_TexCoordMtx;
+layout(location = ${OoT3D_Program.a_Position}) in vec3 a_Position;
+layout(location = ${OoT3D_Program.a_Color}) in vec4 a_Color;
+layout(location = ${OoT3D_Program.a_TexCoord}) in vec2 a_TexCoord;
+varying vec4 v_Color;
+varying vec2 v_TexCoord;
 
 void main() {
-    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0) * u_posScale;
-    v_color = a_color;
-    v_uv = a_uv * u_uvScale;
-    v_uv.t = 1.0 - v_uv.t;
+    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0) * u_PosScale;
+    v_Color = a_Color;
+    vec2 t_TexCoord = a_TexCoord * u_TexCoordScale;
+    v_TexCoord = (u_TexCoordMtx * vec4(t_TexCoord, 0.0, 1.0)).st;
+    v_TexCoord.t = 1.0 - v_TexCoord.t;
 }`;
 
     public frag = `
 precision mediump float;
-varying vec2 v_uv;
-varying vec4 v_color;
-uniform sampler2D u_texture;
-uniform bool u_alphaTest;
+varying vec2 v_TexCoord;
+varying vec4 v_Color;
+uniform sampler2D u_Sampler;
+uniform bool u_AlphaTest;
 
 void main() {
-    gl_FragColor = texture2D(u_texture, v_uv);
-    gl_FragColor *= v_color;
-    if (u_alphaTest && gl_FragColor.a <= 0.8)
+    gl_FragColor = texture2D(u_Sampler, v_TexCoord);
+    gl_FragColor *= v_Color;
+    if (u_AlphaTest && gl_FragColor.a <= 0.8)
         discard;
 }`;
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
         super.bind(gl, prog);
 
-        this.posScaleLocation = gl.getUniformLocation(prog, "u_posScale");
-        this.uvScaleLocation = gl.getUniformLocation(prog, "u_uvScale");
-        this.alphaTestLocation = gl.getUniformLocation(prog, "u_alphaTest");
+        this.u_PosScale = gl.getUniformLocation(prog, "u_PosScale");
+        this.u_TexCoordScale = gl.getUniformLocation(prog, "u_TexCoordScale");
+        this.u_AlphaTest = gl.getUniformLocation(prog, "u_AlphaTest");
+        this.u_TexCoordMtx = gl.getUniformLocation(prog, "u_TexCoordMtx");
     }
 }
 
@@ -83,26 +92,56 @@ function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
 
 type RenderFunc = (renderState: RenderState) => void;
 
-class Scene implements Viewer.Scene {
+interface CmbContext {
+    posBuffer: WebGLBuffer;
+    colBuffer: WebGLBuffer;
+    nrmBuffer: WebGLBuffer;
+    txcBuffer: WebGLBuffer;
+    idxBuffer: WebGLBuffer;
+    textures: WebGLBuffer[];
+
+    sepdFuncs: RenderFunc[];
+    matFuncs: RenderFunc[];
+}
+
+const scratchMatrix = mat4.create();
+class RoomRenderer implements Viewer.Scene {
+    public visible: boolean = true;
     public textures: Viewer.Texture[];
     public program: OoT3D_Program;
-    public zsi: ZSI.ZSI;
     public model: RenderFunc;
+    public materialAnimators: CMAB.TextureAnimator[] = [];
+    public animationController = new AnimationController();
 
     private arena: RenderArena;
 
-    constructor(gl: WebGL2RenderingContext, zsi: ZSI.ZSI) {
+    constructor(gl: WebGL2RenderingContext, public zsi: ZSI.ZSI, public name: string) {
         this.program = new OoT3D_Program();
         this.textures = zsi.mesh.textures.map((texture) => {
             return textureToCanvas(texture);
         });
-        this.zsi = zsi;
 
         this.arena = new RenderArena();
         this.model = this.translateModel(gl, zsi.mesh);
     }
 
+    public setVisible(visible: boolean): void {
+        this.visible = visible;
+    }
+
+    public bindCMAB(cmab: CMAB.CMAB): void {
+        // TODO(jstpierre): Support better stuff here when we get a better renderer...
+        for (const animEntry of cmab.animEntries) {
+            if (animEntry.channelIndex === 0 && animEntry.animationType === CMAB.AnimationType.XY_SCROLL) {
+                this.materialAnimators[animEntry.materialIndex] = new CMAB.TextureAnimator(this.animationController, cmab, animEntry);
+            }
+        }
+    }
+
     public render(state: RenderState) {
+        if (!this.visible)
+            return;
+
         state.useProgram(this.program);
         state.bindModelView();
         this.model(state);
@@ -134,30 +173,30 @@ class Scene implements Viewer.Scene {
         }
     }
 
-    private translateSepd(gl: WebGL2RenderingContext, cmbContext: any, sepd: CMB.Sepd) {
+    private translateSepd(gl: WebGL2RenderingContext, cmbContext: CmbContext, sepd: CMB.Sepd): RenderFunc {
         const vao = this.arena.createVertexArray(gl);
         gl.bindVertexArray(vao);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cmbContext.idxBuffer);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_position, 3, this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
+        gl.vertexAttribPointer(OoT3D_Program.a_Position, 3, this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_color, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
+        gl.vertexAttribPointer(OoT3D_Program.a_Color, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_uv, 2, this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
+        gl.vertexAttribPointer(OoT3D_Program.a_TexCoord, 2, this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
 
-        gl.enableVertexAttribArray(OoT3D_Program.a_position);
-        gl.enableVertexAttribArray(OoT3D_Program.a_color);
-        gl.enableVertexAttribArray(OoT3D_Program.a_uv);
+        gl.enableVertexAttribArray(OoT3D_Program.a_Position);
+        gl.enableVertexAttribArray(OoT3D_Program.a_Color);
+        gl.enableVertexAttribArray(OoT3D_Program.a_TexCoord);
 
         gl.bindVertexArray(null);
 
-        return () => {
-            gl.uniform1f(this.program.uvScaleLocation, sepd.txcScale);
-            gl.uniform1f(this.program.posScaleLocation, sepd.posScale);
+        return (state: RenderState) => {
+            gl.uniform1f(this.program.u_TexCoordScale, sepd.txcScale);
+            gl.uniform1f(this.program.u_PosScale, sepd.posScale);
 
             gl.bindVertexArray(vao);
 
@@ -175,7 +214,7 @@ class Scene implements Viewer.Scene {
         return texId;
     }
 
-    private translateMaterial(gl: WebGL2RenderingContext, cmbContext: any, material: CMB.Material) {
+    private translateMaterial(gl: WebGL2RenderingContext, cmbContext: CmbContext, material: CMB.Material): RenderFunc {
         function translateWrapMode(wrapMode: CMB.TextureWrapMode) {
             switch (wrapMode) {
             case CMB.TextureWrapMode.CLAMP: return gl.CLAMP_TO_EDGE;
@@ -196,13 +235,21 @@ class Scene implements Viewer.Scene {
             }
         }
 
-        return () => {
+        return (state: RenderState): void => {
+            gl.uniform1i(this.program.u_AlphaTest, material.alphaTestEnable ? 1 : 0);
+
+            if (this.materialAnimators[material.index] !== undefined) {
+                this.materialAnimators[material.index].calcTexMtx(scratchMatrix);
+            } else {
+                mat4.identity(scratchMatrix);
+            }
+
+            gl.uniformMatrix4fv(this.program.u_TexCoordMtx, false, scratchMatrix);
+
             for (let i = 0; i < 1; i++) {
                 const binding = material.textureBindings[i];
                 if (binding.textureIdx === -1)
                     continue;
-
-                gl.uniform1i(this.program.alphaTestLocation, material.alphaTestEnable ? 1 : 0);
 
                 gl.activeTexture(gl.TEXTURE0 + i);
                 gl.bindTexture(gl.TEXTURE_2D, cmbContext.textures[binding.textureIdx]);
@@ -214,17 +261,17 @@ class Scene implements Viewer.Scene {
         };
     }
 
-    private translateMesh(gl: WebGL2RenderingContext, cmbContext: any, mesh: CMB.Mesh) {
+    private translateMesh(gl: WebGL2RenderingContext, cmbContext: CmbContext, mesh: CMB.Mesh): RenderFunc {
         const mat = cmbContext.matFuncs[mesh.matsIdx];
         const sepd = cmbContext.sepdFuncs[mesh.sepdIdx];
 
-        return () => {
-            mat(mesh);
-            sepd();
+        return (state: RenderState): void => {
+            mat(state);
+            sepd(state);
         };
     }
 
-    private translateCmb(gl: WebGL2RenderingContext, cmb: CMB.CMB) {
+    private translateCmb(gl: WebGL2RenderingContext, cmb: CMB.CMB): RenderFunc {
         if (!cmb)
             return () => {};
 
@@ -252,13 +299,15 @@ class Scene implements Viewer.Scene {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer.castToBuffer(), gl.STATIC_DRAW);
 
-        const cmbContext: any = {
+        const cmbContext: CmbContext = {
             posBuffer,
             colBuffer,
             nrmBuffer,
             txcBuffer,
             idxBuffer,
             textures,
+            sepdFuncs: [],
+            matFuncs: [],
         };
 
         cmbContext.sepdFuncs = cmb.sepds.map((sepd) => this.translateSepd(gl, cmbContext, sepd));
@@ -266,14 +315,14 @@ class Scene implements Viewer.Scene {
 
         const meshFuncs = cmb.meshs.map((mesh) => this.translateMesh(gl, cmbContext, mesh));
 
-        return () => {
+        return (state: RenderState) => {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
             for (const func of meshFuncs)
-                func();
+                func(state);
         };
     }
 
-    private translateModel(gl: WebGL2RenderingContext, mesh: ZSI.Mesh) {
+    private translateModel(gl: WebGL2RenderingContext, mesh: ZSI.Mesh): RenderFunc {
         const opaque = this.translateCmb(gl, mesh.opaque);
         const transparent = this.translateCmb(gl, mesh.transparent);
 
@@ -282,10 +331,11 @@ class Scene implements Viewer.Scene {
         renderFlags.depthTest = true;
         renderFlags.cullMode = CullMode.BACK;
 
-        return (state: RenderState) => {
+        return (state: RenderState): void => {
+            this.animationController.updateTime(state.time);
             state.useFlags(renderFlags);
-            opaque();
-            transparent();
+            opaque(state);
+            transparent(state);
         };
     }
 
@@ -295,14 +345,20 @@ class Scene implements Viewer.Scene {
 }
 
 class MultiScene implements Viewer.MainScene {
-    public scenes: Scene[];
+    public scenes: RoomRenderer[];
     public textures: Viewer.Texture[];
 
-    constructor(scenes: Scene[]) {
+    constructor(scenes: RoomRenderer[]) {
         this.scenes = scenes;
         this.textures = [];
         for (const scene of this.scenes)
             this.textures = this.textures.concat(scene.textures);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const layerPanel = new UI.LayerPanel();
+        layerPanel.setLayers(this.scenes);
+        return [layerPanel];
     }
 
     public render(renderState: RenderState) {
@@ -316,47 +372,47 @@ class MultiScene implements Viewer.MainScene {
     }
 }
 
-function dirname(path: string): string {
-    const parts = path.split('/');
-    parts.pop();
-    return parts.join('/');
-}
-
 export class SceneDesc implements Viewer.SceneDesc {
     public name: string;
-    public path: string;
     public id: string;
 
-    constructor(name: string, path: string) {
+    constructor(name: string, id: string) {
         this.name = name;
-        this.path = path;
-        this.id = this.path;
+        this.id = id;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch(this.path).then((result: ArrayBufferSlice) => {
-            return this._createSceneFromData(gl, result);
+        // Fetch the ZAR & info ZSI.
+        const path_zar = `data/oot3d/${this.id}.zar`;
+        const path_info_zsi = `data/oot3d/${this.id}_info.zsi`;
+        return Progressable.all([fetch(path_zar), fetch(path_info_zsi)]).then(([zar, zsi]) => {
+            return this._createSceneFromData(gl, zar, zsi);
         });
     }
 
-    private _createRoomSceneFromData(gl: WebGL2RenderingContext, result: ArrayBufferSlice): Progressable<Scene> {
-        const zsi = ZSI.parse(result);
-        assert(zsi.mesh !== null);
-        return new Progressable(Promise.resolve(new Scene(gl, zsi)));
-    }
+    private _createSceneFromData(gl: WebGL2RenderingContext, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.MainScene> {
+        const zar = ZAR.parse(zarBuffer);
 
-    private _createSceneFromData(gl: WebGL2RenderingContext, result: ArrayBufferSlice): Progressable<Viewer.MainScene> {
-        const zsi = ZSI.parse(result);
+        const zsi = ZSI.parse(zsiBuffer);
         assert(zsi.rooms !== null);
-        const basePath = dirname(this.path);
         const roomFilenames = zsi.rooms.map((romPath) => {
             const filename = romPath.split('/').pop();
-            return basePath + '/' + filename;
+            return `data/oot3d/${filename}`;
         });
 
-        return Progressable.all(roomFilenames.map((filename) => {
-            return fetch(filename).then((roomResult) => this._createRoomSceneFromData(gl, roomResult));
-        })).then((scenes: Scene[]) => {
+        return Progressable.all(roomFilenames.map((filename, i) => {
+            return fetch(filename).then((roomResult) => {
+                const zsi = ZSI.parse(roomResult);
+                assert(zsi.mesh !== null);
+                const roomRenderer = new RoomRenderer(gl, zsi, filename);
+                const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
+                if (cmabFile) {
+                    const cmab = CMAB.parse(cmabFile.buffer);
+                    roomRenderer.bindCMAB(cmab);
+                }
+                return new Progressable(Promise.resolve(roomRenderer));
+            });
+        })).then((scenes: RoomRenderer[]) => {
             return new MultiScene(scenes);
         });
     }
