@@ -9,7 +9,7 @@ import { fetch, assert, leftPad } from '../util';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState } from '../render';
-import { RRESTextureHolder, ModelRenderer } from './render';
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
 import AnimationController from '../AnimationController';
 
@@ -21,7 +21,7 @@ const materialHacks: GXMaterialHacks = {
 export class BasicRRESScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
-    public models: ModelRenderer[] = [];
+    public models: MDL0ModelInstance[] = [];
     public animationController: AnimationController;
 
     constructor(gl: WebGL2RenderingContext, public stageRRESes: BRRES.RRES[]) {
@@ -34,7 +34,8 @@ export class BasicRRESScene implements Viewer.MainScene {
             this.textureHolder.addRRESTextures(gl, stageRRES);
             assert(stageRRES.mdl0.length === 1);
 
-            const modelRenderer = new ModelRenderer(gl, this.textureHolder, stageRRES.mdl0[0], '', materialHacks);
+            const model = new MDL0Model(gl, stageRRES.mdl0[0], materialHacks);
+            const modelRenderer = new MDL0ModelInstance(gl, this.textureHolder, model);
             this.models.push(modelRenderer);
 
             modelRenderer.bindRRESAnimations(this.animationController, stageRRES);

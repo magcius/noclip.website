@@ -276,7 +276,7 @@ class SkywardSwordScene implements Viewer.MainScene {
 
     private spawnModel(gl: WebGL2RenderingContext, mdl0: BRRES.MDL0, rres: BRRES.RRES, namePrefix: string): MDL0ModelInstance {
         const model = this.modelCache.getModel(gl, mdl0, materialHacks);
-        const modelRenderer = new MDL0ModelInstance(gl, this.textureHolder, model, namePrefix, materialHacks);
+        const modelRenderer = new MDL0ModelInstance(gl, this.textureHolder, model, namePrefix);
         this.models.push(modelRenderer);
 
         // Bind animations.
