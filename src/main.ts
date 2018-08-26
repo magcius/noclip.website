@@ -306,6 +306,17 @@ class Main {
         this._loadSceneDesc(sceneGroup, sceneDesc);
     }
 
+    private _sendAnalytics(): void {
+        const groupId = this.currentSceneGroup.id;
+        const sceneId = this.currentSceneDesc.id;
+        ga("send", {
+            hitType: "event",
+            eventCategory: "Scenes",
+            eventAction: "loadScene",
+            eventLabel: `${groupId}/${sceneId}`,
+        });
+    }
+
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, cameraState: string = null) {
         if (this.currentSceneDesc === sceneDesc)
             return;
@@ -323,6 +334,7 @@ class Main {
 
         this._deselectUI();
         this._saveState();
+        this._sendAnalytics();
     }
 
     private _loadSceneGroups() {
