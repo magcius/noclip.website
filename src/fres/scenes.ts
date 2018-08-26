@@ -12,10 +12,7 @@ import { readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 class FRESRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
-
-    constructor(private textureHolder: GX2TextureHolder, public mainScene: Viewer.Scene) {
-        this.textures = textureHolder.viewerTextures;
+    constructor(public textureHolder: GX2TextureHolder, public mainScene: Viewer.Scene) {
     }
 
     public render(state: RenderState) {

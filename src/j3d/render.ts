@@ -70,6 +70,23 @@ class Command_Shape {
         })
     }
 
+    public shouldDraw(state: RenderState, shapeInstanceState: ShapeInstanceState): boolean {
+        for (let p = 0; p < this.shape.packets.length; p++) {
+            const packet = this.shape.packets[p];
+            for (let i = 0; i < packet.matrixTable.length; i++) {
+                const matrixIndex = packet.matrixTable[i];
+
+                if (matrixIndex === 0xFFFF)
+                    continue;
+
+                if (shapeInstanceState.matrixVisibility[matrixIndex])
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
     public draw(state: RenderState, renderHelper: GXRenderHelper, shapeInstanceState: ShapeInstanceState): void {
         const modelView = this.computeModelView(state, shapeInstanceState);
 
@@ -79,10 +96,6 @@ class Command_Shape {
             const packet = this.shape.packets[p];
 
             // Update our matrix table.
-            for (let i = 0; i < 10; i++) {
-                posMtxVisibility[i] = false;
-            }
-
             for (let i = 0; i < packet.matrixTable.length; i++) {
                 const matrixIndex = packet.matrixTable[i];
 
@@ -106,7 +119,7 @@ class Command_Shape {
             }
 
             if (!packetVisible)
-                return;
+                continue;
 
             if (needsUpload) {
                 renderHelper.bindPacketParams(state, this.packetParams);
@@ -633,6 +646,10 @@ export class BMDModelInstance {
         this.shapeInstanceState.isSkybox = this.isSkybox;
         this.updateMatrixArray(state, matrixScratch, matrixCalcFlags);
 
+        // If entire model is culled away, then we don't need to render anything.
+        if (!this.shapeInstanceState.matrixVisibility.some((visible) => visible))
+            return false;
+
         this.renderHelper.bindUniformBuffers(state);
 
         fillSceneParamsFromRenderState(this.sceneParams, state);
@@ -644,6 +661,13 @@ export class BMDModelInstance {
     private renderDrawList(state: RenderState, drawList: DrawListItem[]): void {
         for (let i = 0; i < drawList.length; i++) {
             const drawListItem = drawList[i];
+            const shouldDraw = drawListItem.shapeCommands.some((shapeCommand) => {
+                return shapeCommand.shouldDraw(state, this.shapeInstanceState);
+            });
+
+            if (!shouldDraw)
+                continue;
+
             const materialIndex = drawListItem.materialIndex;
             const materialInstance = this.materialInstances[materialIndex];
             const materialCommand = this.bmdModel.materialCommands[materialIndex];

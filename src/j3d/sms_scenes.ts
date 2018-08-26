@@ -258,11 +258,9 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
 }
 
 export class SunshineRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[] = [];
     private mainColorTarget: ColorTarget = new ColorTarget();
 
-    constructor(private textureHolder: J3DTextureHolder, public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: BMDModelInstance, public extraScenes: BMDModelInstance[], public rarc: RARC.RARC = null) {
-        this.textures = textureHolder.viewerTextures;
+    constructor(public textureHolder: J3DTextureHolder, public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: BMDModelInstance, public extraScenes: BMDModelInstance[], public rarc: RARC.RARC = null) {
     }
 
     public render(state: RenderState): void {

@@ -15,16 +15,13 @@ import { RenderState, depthClearFlags } from '../render';
 import AnimationController from '../AnimationController';
 
 class MarioKartRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
-    private textureHolder: RRESTextureHolder = new RRESTextureHolder();
+    public textureHolder: RRESTextureHolder = new RRESTextureHolder();
     private animationController: AnimationController;
 
     private skyboxRenderer: MDL0ModelInstance;
     private courseRenderer: MDL0ModelInstance;
 
     constructor(gl: WebGL2RenderingContext, public courseRRES: BRRES.RRES, public skyboxRRES: BRRES.RRES) {
-        this.textures = this.textureHolder.viewerTextures;
-
         this.animationController = new AnimationController();
 
         this.textureHolder.addRRESTextures(gl, skyboxRRES);

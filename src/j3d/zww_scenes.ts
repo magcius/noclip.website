@@ -349,8 +349,6 @@ class SeaPlane {
 }
 
 class WindWakerRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
-
     private seaPlane: SeaPlane;
     private vr_sky: BMDModelInstance;
     private vr_uso_umi: BMDModelInstance;
@@ -358,9 +356,7 @@ class WindWakerRenderer implements Viewer.MainScene {
     private vr_back_cloud: BMDModelInstance;
     public roomRenderers: WindWakerRoomRenderer[] = [];
 
-    constructor(gl: WebGL2RenderingContext, wantsSeaPlane: boolean, private textureHolder: J3DTextureHolder, private stageRarc: RARC.RARC, public cameraPos: CameraPos = null) {
-        this.textures = textureHolder.viewerTextures;
-
+    constructor(gl: WebGL2RenderingContext, wantsSeaPlane: boolean, public textureHolder: J3DTextureHolder, private stageRarc: RARC.RARC, public cameraPos: CameraPos = null) {
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(gl);
 
