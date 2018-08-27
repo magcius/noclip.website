@@ -18,10 +18,9 @@ enum HeaderCommands {
     End = 0x14,
 }
 
-export class Mesh {
-    opaque: CMB.CMB;
-    transparent: CMB.CMB;
-    textures: CMB.Texture[];
+export interface Mesh {
+    opaque: CMB.CMB | null;
+    transparent: CMB.CMB | null;
 }
 
 function readRooms(buffer: ArrayBufferSlice, nRooms: number, offs: number): string[] {
@@ -34,7 +33,6 @@ function readRooms(buffer: ArrayBufferSlice, nRooms: number, offs: number): stri
 }
 
 function readMesh(buffer: ArrayBufferSlice, offs: number): Mesh {
-    const mesh = new Mesh();
     const view = buffer.createDataView();
 
     const hdr = view.getUint32(offs);
@@ -48,18 +46,10 @@ function readMesh(buffer: ArrayBufferSlice, offs: number): Mesh {
     const opaqueAddr = view.getUint32(entriesAddr + 0x08, true);
     const transparentAddr = view.getUint32(entriesAddr + 0x0C, true);
 
-    if (opaqueAddr !== 0)
-        mesh.opaque = CMB.parse(buffer.slice(opaqueAddr));
-    if (transparentAddr !== 0)
-        mesh.transparent = CMB.parse(buffer.slice(transparentAddr));
+    const opaque = opaqueAddr !== 0 ? CMB.parse(buffer.slice(opaqueAddr)) : null;
+    const transparent = transparentAddr !== 0 ? CMB.parse(buffer.slice(transparentAddr)) : null;
 
-    mesh.textures = [];
-    if (mesh.opaque)
-        mesh.textures = mesh.textures.concat(mesh.opaque.textures);
-    if (mesh.transparent)
-        mesh.textures = mesh.textures.concat(mesh.transparent.textures);
-
-    return mesh;
+    return { opaque, transparent };
 }
 
 interface Collision {

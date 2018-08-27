@@ -1,6 +1,7 @@
 
 import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { RenderFlags, CullMode, BlendFactor, BlendMode } from '../render';
 
 class VertexBufferSlices {
     public posBuffer: ArrayBufferSlice;
@@ -32,6 +33,8 @@ export enum TextureFilter {
 export enum TextureWrapMode {
     CLAMP = 0x2900,
     REPEAT = 0x2901,
+    CLAMP_TO_EDGE = 0x812F,
+    MIRRORED_REPEAT = 0x8370,
 }
 
 interface TextureBinding {
@@ -46,6 +49,7 @@ export interface Material {
     index: number;
     textureBindings: TextureBinding[];
     alphaTestEnable: boolean;
+    renderFlags: RenderFlags;
 }
 
 function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
@@ -71,7 +75,14 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const alphaTestEnable = !!view.getUint8(offs + 0x130);
 
-        cmb.materials.push({ index: i, textureBindings, alphaTestEnable });
+        const renderFlags = new RenderFlags();
+        renderFlags.blendSrc = view.getUint16(offs + 0x13C, true) as BlendFactor;
+        renderFlags.blendDst = view.getUint16(offs + 0x13E, true) as BlendFactor;
+        renderFlags.blendMode = BlendMode.ADD;
+        renderFlags.depthTest = true;
+        renderFlags.cullMode = CullMode.BACK;
+
+        cmb.materials.push({ index: i, textureBindings, alphaTestEnable, renderFlags });
         offs += 0x15C;
     }
 }
@@ -86,13 +97,13 @@ enum TextureFormat {
     LA8      = 0x14016758,
 }
 
-export class Texture {
-    public size: number;
-    public width: number;
-    public height: number;
-    public format: TextureFormat;
-    public pixels: Uint8Array;
-    public name: string;
+export interface Texture {
+    size: number;
+    width: number;
+    height: number;
+    format: TextureFormat;
+    pixels: Uint8Array;
+    name: string;
 }
 
 function expand4to8(n: number) {
@@ -244,14 +255,14 @@ function decodeTexture_ETC1_4x4_Alpha(dst: Uint8Array, a1: number, a2: number, d
     }
 }
 
-function decodeTexture_ETC1(texture: Texture, texData: ArrayBufferSlice, alpha: boolean) {
-    const pixels = new Uint8Array(texture.width * texture.height * 4);
-    const stride = texture.width;
+function decodeTexture_ETC1(width: number, height: number, texData: ArrayBufferSlice, alpha: boolean) {
+    const pixels = new Uint8Array(width * height * 4);
+    const stride = width;
 
     const src = texData.createDataView();
     let offs = 0;
-    for (let yy = 0; yy < texture.height; yy += 8) {
-        for (let xx = 0; xx < texture.width; xx += 8) {
+    for (let yy = 0; yy < height; yy += 8) {
+        for (let xx = 0; xx < width; xx += 8) {
             // Order of each set of 4 blocks: top left, top right, bottom left, bottom right...
             for (let y = 0; y < 8; y += 4) {
                 for (let x = 0; x < 8; x += 4) {
@@ -284,17 +295,17 @@ function decodeTexture_ETC1(texture: Texture, texData: ArrayBufferSlice, alpha: 
 
 type PixelDecode = (pixels: Uint8Array, dstOffs: number) => void;
 
-function decodeTexture_Tiled(texture: Texture, decoder: PixelDecode) {
-    const pixels = new Uint8Array(texture.width * texture.height * 4);
-    const stride = texture.width;
+function decodeTexture_Tiled(width: number, height: number, decoder: PixelDecode) {
+    const pixels = new Uint8Array(width * height * 4);
+    const stride = width;
 
     function morton7(n: number) {
         // 0a0b0c => 000abc
         return ((n >> 2) & 0x04) | ((n >> 1) & 0x02) | (n & 0x01);
     }
 
-    for (let yy = 0; yy < texture.height; yy += 8) {
-        for (let xx = 0; xx < texture.width; xx += 8) {
+    for (let yy = 0; yy < height; yy += 8) {
+        for (let xx = 0; xx < width; xx += 8) {
             // Iterate in Morton order inside each tile.
             for (let i = 0; i < 0x40; i++) {
                 const x = morton7(i);
@@ -308,10 +319,10 @@ function decodeTexture_Tiled(texture: Texture, decoder: PixelDecode) {
     return pixels;
 }
 
-function decodeTexture_RGBA5551(texture: Texture, texData: ArrayBufferSlice) {
+function decodeTexture_RGBA5551(width: number, height: number, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
         pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
         pixels[dstOffs + 1] = expand5to8((p >> 6) & 0x1F);
@@ -321,10 +332,10 @@ function decodeTexture_RGBA5551(texture: Texture, texData: ArrayBufferSlice) {
     });
 }
 
-function decodeTexture_RGB565(texture: Texture, texData: ArrayBufferSlice) {
+function decodeTexture_RGB565(width: number, height: number, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
         pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
         pixels[dstOffs + 1] = expand6to8((p >> 5) & 0x3F);
@@ -334,10 +345,10 @@ function decodeTexture_RGB565(texture: Texture, texData: ArrayBufferSlice) {
     });
 }
 
-function decodeTexture_A8(texture: Texture, texData: ArrayBufferSlice) {
+function decodeTexture_A8(width: number, height: number, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
         const A = src.getUint8(srcOffs++);
         pixels[dstOffs + 0] = 0xFF;
         pixels[dstOffs + 1] = 0xFF;
@@ -346,10 +357,10 @@ function decodeTexture_A8(texture: Texture, texData: ArrayBufferSlice) {
     });
 }
 
-function decodeTexture_L8(texture: Texture, texData: ArrayBufferSlice) {
+function decodeTexture_L8(width: number, height: number, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
         const L = src.getUint8(srcOffs++);
         pixels[dstOffs + 0] = L;
         pixels[dstOffs + 1] = L;
@@ -358,10 +369,10 @@ function decodeTexture_L8(texture: Texture, texData: ArrayBufferSlice) {
     });
 }
 
-function decodeTexture_LA8(texture: Texture, texData: ArrayBufferSlice) {
+function decodeTexture_LA8(width: number, height: number, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
-    return decodeTexture_Tiled(texture, (pixels, dstOffs) => {
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
         const L = src.getUint8(srcOffs++);
         const A = src.getUint8(srcOffs++);
         pixels[dstOffs + 0] = L;
@@ -371,24 +382,24 @@ function decodeTexture_LA8(texture: Texture, texData: ArrayBufferSlice) {
     });
 }
 
-function decodeTexture(texture: Texture, texData: ArrayBufferSlice) {
-    switch (texture.format) {
+function decodeTexture(width: number, height: number, format: TextureFormat, texData: ArrayBufferSlice): Uint8Array {
+    switch (format) {
     case TextureFormat.ETC1:
-        return decodeTexture_ETC1(texture, texData, false);
+        return decodeTexture_ETC1(width, height, texData, false);
     case TextureFormat.ETC1A4:
-        return decodeTexture_ETC1(texture, texData, true);
+        return decodeTexture_ETC1(width, height, texData, true);
     case TextureFormat.RGBA5551:
-        return decodeTexture_RGBA5551(texture, texData);
+        return decodeTexture_RGBA5551(width, height, texData);
     case TextureFormat.RGB565:
-        return decodeTexture_RGB565(texture, texData);
+        return decodeTexture_RGB565(width, height, texData);
     case TextureFormat.A8:
-        return decodeTexture_A8(texture, texData);
+        return decodeTexture_A8(width, height, texData);
     case TextureFormat.L8:
-        return decodeTexture_L8(texture, texData);
+        return decodeTexture_L8(width, height, texData);
     case TextureFormat.LA8:
-        return decodeTexture_LA8(texture, texData);
+        return decodeTexture_LA8(width, height, texData);
     default:
-        throw new Error(`Unsupported texture type! ${texture.format}`);
+        throw new Error(`Unsupported texture type! ${format}`);
     }
 }
 
@@ -399,19 +410,17 @@ function readTexChunk(cmb: CMB, buffer: ArrayBufferSlice, texData: ArrayBufferSl
     const count = view.getUint32(0x08, true);
     let offs = 0x0C;
     for (let i = 0; i < count; i++) {
-        const texture = new Texture();
         const size = view.getUint32(offs + 0x00, true);
-        texture.width = view.getUint16(offs + 0x08, true);
-        texture.height = view.getUint16(offs + 0x0A, true);
-        texture.format = view.getUint32(offs + 0x0C, true);
+        const width = view.getUint16(offs + 0x08, true);
+        const height = view.getUint16(offs + 0x0A, true);
+        const format = view.getUint32(offs + 0x0C, true);
         const dataOffs = view.getUint32(offs + 0x10, true);
-        texture.name = readString(buffer, offs + 0x14, 0x10);
-        texture.name = `${texture.name}  (${texture.format})`;
+        const name = readString(buffer, offs + 0x14, 0x10);
         offs += 0x24;
 
-        texture.pixels = decodeTexture(texture, texData.slice(dataOffs, dataOffs + size));
+        const pixels = decodeTexture(width, height, format, texData.slice(dataOffs, dataOffs + size));
 
-        cmb.textures.push(texture);
+        cmb.textures.push({ size, width, height, format, name, pixels });
     }
 }
 
@@ -527,7 +536,7 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     let offs = 0x108;
     for (let i = 0; i < count; i++) {
-        const prmsOffs = view.getUint32(offs, true);
+        const prmsOffs = view.getUint16(offs, true);
         sepd.prms.push(readPrmsChunk(cmb, buffer.slice(prmsOffs)));
         offs += 0x02;
     }

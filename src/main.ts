@@ -92,6 +92,9 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.szs'))
             return FRES.createSceneFromSARCBuffer(gl, buffer);
 
+        if (file.name.endsWith('.zar'))
+            return Promise.resolve(OOT3D.createSceneFromZARBuffer(gl, buffer));
+
         // XXX(jstpierre): Figure out WTF to do here...
         const promise = J3D.createMultiSceneFromBuffer(gl, buffer);
         if (promise)

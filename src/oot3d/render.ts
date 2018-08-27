@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import Progressable from '../Progressable';
-import { BlendMode, CullMode, RenderFlags, RenderState } from '../render';
+import { RenderState } from '../render';
 import { SimpleProgram } from '../Program';
 import RenderArena from '../RenderArena';
 import { fetch, assert } from '../util';
@@ -59,6 +59,7 @@ uniform bool u_AlphaTest;
 void main() {
     gl_FragColor = texture2D(u_Sampler, v_TexCoord);
     gl_FragColor *= v_Color;
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     if (u_AlphaTest && gl_FragColor.a <= 0.8)
         discard;
 }`;
@@ -104,29 +105,38 @@ interface CmbContext {
     matFuncs: RenderFunc[];
 }
 
-const scratchMatrix = mat4.create();
-class RoomRenderer implements Viewer.Scene {
-    public visible: boolean = true;
-    public textures: Viewer.Texture[];
-    public program: OoT3D_Program;
-    public model: RenderFunc;
-    public materialAnimators: CMAB.TextureAnimator[] = [];
+export class CmbRenderer {
+    public program = new OoT3D_Program();
+    public arena = new RenderArena();
     public animationController = new AnimationController();
+    public materialAnimators: CMAB.TextureAnimator[] = [];
+    public model: RenderFunc;
+    public visible: boolean = true;
+    public textures: Viewer.Texture[] = [];
 
-    private arena: RenderArena;
-
-    constructor(gl: WebGL2RenderingContext, public zsi: ZSI.ZSI, public name: string) {
+    constructor(gl: WebGL2RenderingContext, public cmb: CMB.CMB, public name: string = '') {
         this.program = new OoT3D_Program();
-        this.textures = zsi.mesh.textures.map((texture) => {
-            return textureToCanvas(texture);
-        });
-
         this.arena = new RenderArena();
-        this.model = this.translateModel(gl, zsi.mesh);
+        this.model = this.translateCmb(gl, cmb);
+        this.textures = cmb.textures.map((tex) => textureToCanvas(tex));
     }
 
     public setVisible(visible: boolean): void {
         this.visible = visible;
+    }
+
+    public render(state: RenderState): void {
+        if (!this.visible)
+            return;
+
+        this.animationController.updateTime(state.time);
+        state.useProgram(this.program);
+        state.bindModelView();
+        this.model(state);
+    }
+
+    public destroy(gl: WebGL2RenderingContext): void {
+        this.arena.destroy(gl);
     }
 
     public bindCMAB(cmab: CMAB.CMAB): void {
@@ -136,15 +146,6 @@ class RoomRenderer implements Viewer.Scene {
                 this.materialAnimators[animEntry.materialIndex] = new CMAB.TextureAnimator(this.animationController, cmab, animEntry);
             }
         }
-    }
-
-    public render(state: RenderState) {
-        if (!this.visible)
-            return;
-
-        state.useProgram(this.program);
-        state.bindModelView();
-        this.model(state);
     }
 
     private translateDataType(gl: WebGL2RenderingContext, dataType: CMB.DataType) {
@@ -218,7 +219,9 @@ class RoomRenderer implements Viewer.Scene {
         function translateWrapMode(wrapMode: CMB.TextureWrapMode) {
             switch (wrapMode) {
             case CMB.TextureWrapMode.CLAMP: return gl.CLAMP_TO_EDGE;
+            case CMB.TextureWrapMode.CLAMP_TO_EDGE: return gl.CLAMP_TO_EDGE;
             case CMB.TextureWrapMode.REPEAT: return gl.REPEAT;
+            case CMB.TextureWrapMode.MIRRORED_REPEAT: return gl.MIRRORED_REPEAT;
             default: throw new Error();
             }
         }
@@ -236,6 +239,8 @@ class RoomRenderer implements Viewer.Scene {
         }
 
         return (state: RenderState): void => {
+            state.useFlags(material.renderFlags);
+
             gl.uniform1i(this.program.u_AlphaTest, material.alphaTestEnable ? 1 : 0);
 
             if (this.materialAnimators[material.index] !== undefined) {
@@ -272,9 +277,6 @@ class RoomRenderer implements Viewer.Scene {
     }
 
     private translateCmb(gl: WebGL2RenderingContext, cmb: CMB.CMB): RenderFunc {
-        if (!cmb)
-            return () => {};
-
         const posBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.posBuffer.castToBuffer(), gl.STATIC_DRAW);
@@ -321,26 +323,55 @@ class RoomRenderer implements Viewer.Scene {
                 func(state);
         };
     }
+}
 
-    private translateModel(gl: WebGL2RenderingContext, mesh: ZSI.Mesh): RenderFunc {
-        const opaque = this.translateCmb(gl, mesh.opaque);
-        const transparent = this.translateCmb(gl, mesh.transparent);
+const scratchMatrix = mat4.create();
+class RoomRenderer implements Viewer.Scene {
+    public visible: boolean = true;
+    public textures: Viewer.Texture[];
+    public opaqueMesh: CmbRenderer | null;
+    public transparentMesh: CmbRenderer | null;
 
-        const renderFlags = new RenderFlags();
-        renderFlags.blendMode = BlendMode.ADD;
-        renderFlags.depthTest = true;
-        renderFlags.cullMode = CullMode.BACK;
+    constructor(gl: WebGL2RenderingContext, public zsi: ZSI.ZSI, public name: string) {
+        const mesh = zsi.mesh;
 
-        return (state: RenderState): void => {
-            this.animationController.updateTime(state.time);
-            state.useFlags(renderFlags);
-            opaque(state);
-            transparent(state);
-        };
+        this.opaqueMesh = mesh.opaque !== null ? new CmbRenderer(gl, mesh.opaque) : null;
+        this.transparentMesh = mesh.transparent !== null ? new CmbRenderer(gl, mesh.transparent) : null;
+
+        // TODO(jstpierre): TextureHolder.
+        this.textures = [];
+        if (this.opaqueMesh !== null)
+            this.textures = this.textures.concat(this.opaqueMesh.textures);
+        if (this.transparentMesh !== null)
+            this.textures = this.textures.concat(this.transparentMesh.textures);
+    }
+
+    public bindCMAB(cmab: CMAB.CMAB): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.bindCMAB(cmab);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.bindCMAB(cmab);
+    }
+
+    public setVisible(visible: boolean): void {
+        this.visible = visible;
+    }
+
+    public render(state: RenderState) {
+        if (!this.visible)
+            return;
+
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.render(state);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.render(state);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        this.arena.destroy(gl);
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.destroy(gl);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.destroy(gl);
     }
 }
 
