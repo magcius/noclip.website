@@ -94,9 +94,9 @@ type RenderFunc = (renderState: RenderState) => void;
 
 interface CmbContext {
     posBuffer: WebGLBuffer;
-    colBuffer: WebGLBuffer;
-    nrmBuffer: WebGLBuffer;
-    txcBuffer: WebGLBuffer;
+    colBuffer: WebGLBuffer | null;
+    nrmBuffer: WebGLBuffer | null;
+    txcBuffer: WebGLBuffer | null;
     idxBuffer: WebGLBuffer;
     textures: WebGLBuffer[];
 
@@ -181,16 +181,21 @@ export class CmbRenderer {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
         gl.vertexAttribPointer(OoT3D_Program.a_Position, 3, this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_Color, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_TexCoord, 2, this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
-
         gl.enableVertexAttribArray(OoT3D_Program.a_Position);
-        gl.enableVertexAttribArray(OoT3D_Program.a_Color);
-        gl.enableVertexAttribArray(OoT3D_Program.a_TexCoord);
+
+        if (cmbContext.colBuffer !== null) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
+            gl.vertexAttribPointer(OoT3D_Program.a_Color, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
+            gl.enableVertexAttribArray(OoT3D_Program.a_Color);
+        } else {
+            gl.vertexAttrib4f(OoT3D_Program.a_Color, 1.0, 1.0, 1.0, 1.0);
+        }
+
+        if (cmbContext.txcBuffer !== null) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
+            gl.vertexAttribPointer(OoT3D_Program.a_TexCoord, 2, this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
+            gl.enableVertexAttribArray(OoT3D_Program.a_TexCoord);
+        }
 
         gl.bindVertexArray(null);
 
@@ -200,8 +205,10 @@ export class CmbRenderer {
 
             gl.bindVertexArray(vao);
 
-            for (const prm of sepd.prms)
+            for (let i = 0; i < sepd.prms.length; i++) {
+                const prm = sepd.prms[i];
                 gl.drawElements(gl.TRIANGLES, prm.count, this.translateDataType(gl, prm.indexType), prm.offset * this.dataTypeSize(prm.indexType));
+            }
 
             gl.bindVertexArray(null);
         };
@@ -280,17 +287,26 @@ export class CmbRenderer {
         gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.posBuffer.castToBuffer(), gl.STATIC_DRAW);
 
-        const colBuffer = this.arena.createBuffer(gl);
-        gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.colBuffer.castToBuffer(), gl.STATIC_DRAW);
+        let colBuffer: WebGLBuffer | null = null;
+        if (cmb.vertexBufferSlices.colBuffer.byteLength > 0) {
+            colBuffer = this.arena.createBuffer(gl);
+            gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.colBuffer.castToBuffer(), gl.STATIC_DRAW);
+        }
 
-        const nrmBuffer = this.arena.createBuffer(gl);
-        gl.bindBuffer(gl.ARRAY_BUFFER, nrmBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.nrmBuffer.castToBuffer(), gl.STATIC_DRAW);
+        let nrmBuffer: WebGLBuffer | null = null;
+        if (cmb.vertexBufferSlices.nrmBuffer.byteLength > 0) {
+            nrmBuffer = this.arena.createBuffer(gl);
+            gl.bindBuffer(gl.ARRAY_BUFFER, nrmBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.nrmBuffer.castToBuffer(), gl.STATIC_DRAW);
+        }
 
-        const txcBuffer = this.arena.createBuffer(gl);
-        gl.bindBuffer(gl.ARRAY_BUFFER, txcBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.txcBuffer.castToBuffer(), gl.STATIC_DRAW);
+        let txcBuffer: WebGLBuffer | null = null;
+        if (cmb.vertexBufferSlices.txcBuffer.byteLength > 0) {
+            txcBuffer = this.arena.createBuffer(gl);
+            gl.bindBuffer(gl.ARRAY_BUFFER, txcBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.txcBuffer.castToBuffer(), gl.STATIC_DRAW);
+        }
 
         const textures: WebGLTexture[] = cmb.textures.map((texture) => {
             return this.translateTexture(gl, texture);
