@@ -1,6 +1,66 @@
 
-import { SceneDesc } from './render';
-import { SceneGroup } from '../viewer';
+import * as CMAB from './cmab';
+import * as CMB from './cmb';
+import * as ZAR from './zar';
+
+import * as UI from '../ui';
+
+import { SceneDesc, CmbRenderer } from './render';
+import { SceneGroup, MainScene, Texture } from '../viewer';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { RenderState } from '../render';
+
+class MultiScene implements MainScene {
+    public textures: Texture[] = [];
+
+    constructor(public scenes: CmbRenderer[]) {
+        for (const scene of scenes)
+            this.textures = this.textures.concat(scene.textures);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const layerPanel = new UI.LayerPanel();
+        layerPanel.setLayers(this.scenes);
+        return [layerPanel];
+    }
+
+    public render(state: RenderState): void {
+        this.scenes.forEach((scene) => {
+            scene.render(state);
+        });
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        this.scenes.forEach((scene) => scene.destroy(gl));
+    }
+}
+
+function basename(str: string): string {
+    const parts = str.split('/');
+    return parts.pop();
+}
+
+function setExtension(str: string, ext: string): string {
+    const dot = str.lastIndexOf('.');
+    if (dot < 0)
+        return `${str}${ext}`;
+    else
+        return `${str.slice(0, dot)}${ext}`;
+}
+
+export function createSceneFromZARBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): MainScene {
+    const zar = ZAR.parse(buffer);
+    const cmbFiles = zar.files.filter((file) => file.name.endsWith('.cmb'));
+    const renderers = cmbFiles.map((cmbFile) => {
+        const cmbRenderer = new CmbRenderer(gl, CMB.parse(cmbFile.buffer), cmbFile.name);
+        const cmabFileName = `misc/${basename(setExtension(cmbFile.name, '.cmab'))}`;
+        const cmabFile = zar.files.find((file) => file.name === cmabFileName);
+        if (cmabFile)
+            cmbRenderer.bindCMAB(CMAB.parse(cmabFile.buffer));
+        return cmbRenderer;
+    });
+    return new MultiScene(renderers);
+}
 
 const id = "oot3d";
 const name = "Ocarina of Time 3D";

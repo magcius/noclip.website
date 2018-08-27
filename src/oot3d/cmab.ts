@@ -80,9 +80,9 @@ function parseTrack(buffer: ArrayBufferSlice, valueType: ValueType): AnimationTr
 
     function getValue(offs: number) {
         if (valueType === ValueType.FLOAT32)
-            return view.getFloat32(keyframeTableIdx + 0x04, true);
+            return view.getFloat32(offs, true);
         else if (valueType === ValueType.UINT32)
-            return view.getUint32(keyframeTableIdx + 0x04, true);
+            return view.getUint32(offs, true);
         else
             throw "whoops";
     }

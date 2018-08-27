@@ -927,6 +927,8 @@ export class UI {
                 this.textureViewer.setTextureList(scene.textures);
             else if (scene.textureHolder !== undefined)
                 this.textureViewer.setTextureHolder(scene.textureHolder);
+            else
+                this.textureViewer.setTextureList([]);
         }
     }
 
