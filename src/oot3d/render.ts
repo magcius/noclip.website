@@ -59,7 +59,6 @@ uniform bool u_AlphaTest;
 void main() {
     gl_FragColor = texture2D(u_Sampler, v_TexCoord);
     gl_FragColor *= v_Color;
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     if (u_AlphaTest && gl_FragColor.a <= 0.8)
         discard;
 }`;
