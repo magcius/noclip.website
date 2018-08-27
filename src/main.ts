@@ -312,11 +312,10 @@ class Main {
     private _sendAnalytics(): void {
         const groupId = this.currentSceneGroup.id;
         const sceneId = this.currentSceneDesc.id;
-        ga("send", {
-            hitType: "event",
-            eventCategory: "Scenes",
-            eventAction: "loadScene",
-            eventLabel: `${groupId}/${sceneId}`,
+
+        gtag("event", "loadScene", {
+            'event_category': "Scenes",
+            'event_label': `${groupId}/${sceneId}`,
         });
     }
 
@@ -379,6 +378,9 @@ class Main {
         }
     }
 }
+
+// Google Analytics
+declare var gtag: (command: string, eventName: string, eventParameters: { [key: string]: string }) => void;
 
 // Declare a "main" object for easy access.
 declare global {

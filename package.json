@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@types/gl-matrix": "^2.4.0",
-    "@types/google.analytics": "0.0.39",
     "@types/pako": "^1.0.0",
     "@types/systemjs": "^0.20.6",
     "@types/webassembly-js-api": "0.0.1",
