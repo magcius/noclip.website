@@ -94,6 +94,7 @@ enum TextureFormat {
     RGB565   = 0x83636754,
     A8       = 0x14016756,
     L8       = 0x14016757,
+    L4       = 0x67616757,
     LA8      = 0x14016758,
 }
 
@@ -357,6 +358,21 @@ function decodeTexture_A8(width: number, height: number, texData: ArrayBufferSli
     });
 }
 
+function decodeTexture_L4(width: number, height: number, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
+    let srcOffs = 0;
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
+        const p = src.getUint8(srcOffs >>> 1);
+        const n = (srcOffs & 1) ? (p >>> 4) : (p & 0x0F);
+        const L = expand4to8(n);
+        pixels[dstOffs + 0] = L;
+        pixels[dstOffs + 1] = L;
+        pixels[dstOffs + 2] = L;
+        pixels[dstOffs + 3] = L;
+        srcOffs++;
+    });
+}
+
 function decodeTexture_L8(width: number, height: number, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
@@ -394,12 +410,27 @@ function decodeTexture(width: number, height: number, format: TextureFormat, tex
         return decodeTexture_RGB565(width, height, texData);
     case TextureFormat.A8:
         return decodeTexture_A8(width, height, texData);
+    case TextureFormat.L4:
+        return decodeTexture_L4(width, height, texData);
     case TextureFormat.L8:
         return decodeTexture_L8(width, height, texData);
     case TextureFormat.LA8:
         return decodeTexture_LA8(width, height, texData);
     default:
-        throw new Error(`Unsupported texture type! ${format}`);
+        throw new Error(`Unsupported texture type! ${(format as number).toString(16)}`);
+    }
+}
+
+export function getTextureFormatName(format: TextureFormat): string {
+    switch (format) {
+    case TextureFormat.ETC1: return 'ETC1';
+    case TextureFormat.ETC1A4: return 'ETC1A4';
+    case TextureFormat.RGBA5551: return 'RGBA5551';
+    case TextureFormat.RGB565: return 'RGB565';
+    case TextureFormat.A8: return 'A8';
+    case TextureFormat.L4: return 'L4';
+    case TextureFormat.L8: return 'L8';
+    case TextureFormat.LA8: return 'LA8';
     }
 }
 

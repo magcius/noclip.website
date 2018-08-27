@@ -87,7 +87,11 @@ function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
 
     ctx.putImageData(imgData, 0, 0);
     const surfaces = [ canvas ];
-    return { name: texture.name, surfaces };
+
+    const extraInfo = new Map<string, string>();
+    extraInfo.set('Format', CMB.getTextureFormatName(texture.format));
+
+    return { name: texture.name, surfaces, extraInfo };
 }
 
 type RenderFunc = (renderState: RenderState) => void;
