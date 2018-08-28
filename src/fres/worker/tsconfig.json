@@ -6,6 +6,9 @@
             "es2015.promise",
             "es2016.array.include",
             "webworker",
-        ]
-    }
+        ],
+    },
+    "include": [
+        "gx2_swizzle_worker.ts",
+    ]
 }
