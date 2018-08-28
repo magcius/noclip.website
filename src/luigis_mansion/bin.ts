@@ -177,12 +177,6 @@ export function parse(buffer: ArrayBufferSlice): BIN {
         };
         const texGens = [texGen0];
 
-        const colorRegisters: GX_Material.Color[] = [];
-        colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
-        colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
-        colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
-        colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
-
         const lightChannel0: GX_Material.LightChannelControl = {
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX },
             colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX },
@@ -260,8 +254,6 @@ export function parse(buffer: ArrayBufferSlice): BIN {
             cullMode: GX.CullMode.BACK,
             lightChannels,
             texGens,
-            colorRegisters: colorRegisters,
-            colorConstants: colorRegisters,
             tevStages,
             alphaTest,
             ropInfo,

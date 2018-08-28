@@ -87,7 +87,8 @@ export function hexdump(buffer: ArrayBufferSlice, offs: number = 0, length: numb
     let S = '';
     const arr = buffer.createTypedArray(Uint8Array, offs, length);
     for (let i = 0; i < length; i += groupSize) {
-        S += `${hexzero(i, 8)}    `;
+        const addr = offs + i;
+        S += `${hexzero(addr, 8)}    `;
         for (let j = 0; j < groupSize; j++) {
             const b = arr[i + j];
             S += ` ${hexzero(b, 2)}`;

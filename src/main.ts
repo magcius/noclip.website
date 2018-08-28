@@ -22,6 +22,7 @@ import * as LM from './luigis_mansion/scenes';
 import * as ZSS from './rres/zss_scenes';
 import * as ELB from './rres/elb_scenes';
 import * as MKWII from './rres/mkwii_scenes';
+import * as TTYD from './ttyd/scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI } from './ui';
@@ -29,6 +30,7 @@ import { CameraControllerClass, FPSCameraController } from './Camera';
 import { RenderStatistics } from './render';
 
 const sceneGroups = [
+    TTYD.sceneGroup,
     ZTP.sceneGroup,
     ZSS.sceneGroup,
     ZWW.sceneGroup,
