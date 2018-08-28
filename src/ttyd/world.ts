@@ -291,6 +291,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     const vtxArrays: GX_Array[] = [];
     // First element of the blocks is item count, so we add 0x04 to skip past it.
 
+    const posShift = view.getUint32(vcd_tableOffs + 0x44);
+    const txc0Shift = view.getUint32(vcd_tableOffs + 0x48);
     vtxArrays[GX.VertexAttribute.POS] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x00) + 0x04 };
     // NRM, probably?
     vtxArrays[GX.VertexAttribute.NRM] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x04) + 0x04 };
@@ -395,7 +397,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
             assert((workingBits & VcdBitFlags.POS) !== 0);
             if ((workingBits & VcdBitFlags.POS) !== 0) {
-                vat[GX.VertexAttribute.POS] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.POS_XYZ, compShift: 0 };
+                vat[GX.VertexAttribute.POS] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.POS_XYZ, compShift: view.getUint32(vcd_tableOffs + 0x44) };
                 vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX16 };
                 workingBits &= ~VcdBitFlags.POS;
             }
@@ -413,13 +415,13 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             }
 
             if ((workingBits & VcdBitFlags.TEX0) !== 0) {
-                vat[GX.VertexAttribute.TEX0] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: 7 };
+                vat[GX.VertexAttribute.TEX0] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x48) };
                 vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX16 };
                 workingBits &= ~VcdBitFlags.TEX0;
             }
 
             if ((workingBits & VcdBitFlags.TEX1) !== 0) {
-                vat[GX.VertexAttribute.TEX1] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: 7 };
+                vat[GX.VertexAttribute.TEX1] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x4C) };
                 vcd[GX.VertexAttribute.TEX1] = { type: GX.AttrType.INDEX16 };
                 workingBits &= ~VcdBitFlags.TEX1;
             }
@@ -482,8 +484,15 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     }
 
     const rootMatrix = mat4.create();
+    const rootScale = 10;
+    mat4.fromScaling(rootMatrix, [rootScale, rootScale, rootScale]);
     const rootNode = readSceneGraph(sceneGraphRootOffs, rootMatrix);
     assert(rootNode.nextSibling === null);
+
+    const aNodes = rootNode.children.filter((child) => child.nameStr === 'A' || child.nameStr.startsWith('A_'));
+    for (const aNode of aNodes) {
+        aNode.visible = false;
+    }
 
     const information = { versionStr, nameStr, typeStr, dateStr };
     //#endregion

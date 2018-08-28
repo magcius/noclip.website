@@ -28,6 +28,7 @@ import * as J3D from './j3d/scenes';
 import { UI } from './ui';
 import { CameraControllerClass, FPSCameraController } from './Camera';
 import { RenderStatistics } from './render';
+import { hexdump } from './util';
 
 const sceneGroups = [
     ZTP.sceneGroup,
@@ -263,7 +264,6 @@ class Main {
             return;
 
         const desc = group.sceneDescs.find((d) => d.id === sceneId);
-        const hasDesc = desc !== undefined;
         this.lastSavedState = state;
         this._loadSceneDesc(group, desc, cameraState);
     }
@@ -392,6 +392,15 @@ declare global {
 }
 
 window.main = new Main();
+
+// Debug utilities.
+declare global {
+    interface Window {
+        hexdump: any;
+        debug: any;
+    }
+}
+window.hexdump = hexdump;
 
 // Parcel HMR workaround.
 declare var module: any;

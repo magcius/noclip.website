@@ -105,12 +105,3 @@ export function hexdump(buffer: ArrayBufferSlice, offs: number = 0, length: numb
     }
     console.log(S);
 }
-
-// Debug utilities.
-declare global {
-    interface Window {
-        hexdump: any;
-        debug: any;
-    }
-}
-window.hexdump = hexdump;
