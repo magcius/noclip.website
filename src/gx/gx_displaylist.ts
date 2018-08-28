@@ -367,8 +367,13 @@ export interface VtxLoader {
     runVertices: VtxLoaderFunc;
 }
 
-function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader {
+export interface LoaderOptions {
+    stopAtNull?: boolean;
+}
+
+function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[], loaderOptions?: LoaderOptions): VtxLoader {
     const loadedVertexLayout: VertexLayout = translateVertexLayout(vat, vcd);
+    const stopAtNull = loaderOptions !== undefined && loaderOptions.stopAtNull !== undefined ? loaderOptions.stopAtNull : true;
 
     function makeLoaderName(): string {
         let name = 'VtxLoader';
@@ -620,14 +625,15 @@ while (true) {
     if (drawCallIdx >= srcBuffer.byteLength)
         break;
     const cmd = dlView.getUint8(drawCallIdx);
+    drawCallIdx += 0x01;
     if (cmd === 0)
-        break;
+        ${stopAtNull ? `break` : `continue`};
 
     const primType = cmd & 0xF8;
     const vertexFormat = cmd & 0x07;
 
-    const vertexCount = dlView.getUint16(drawCallIdx + 0x01);
-    drawCallIdx += 0x03;
+    const vertexCount = dlView.getUint16(drawCallIdx);
+    drawCallIdx += 0x02;
     const srcOffs = drawCallIdx;
     const first = totalVertexCount;
     totalVertexCount += vertexCount;
@@ -743,24 +749,25 @@ return { indexFormat: ${AttributeFormat.U16}, indexData: dstIndexData.buffer, pa
 interface VtxLoaderDesc {
     vat: GX_VtxAttrFmt[][];
     vcd: GX_VtxDesc[];
+    loaderOptions?: LoaderOptions;
 }
 
 class VtxLoaderCache extends MemoizeCache<VtxLoaderDesc, VtxLoader> {
     protected make(key: VtxLoaderDesc): VtxLoader {
-        return _compileVtxLoader(key.vat, key.vcd);
+        return _compileVtxLoader(key.vat, key.vcd, key.loaderOptions);
     }
 
     protected makeKey(key: VtxLoaderDesc): string {
         return JSON.stringify(key);
     }
 
-    public compileVtxLoader = (vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VtxLoader => {
+    public compileVtxLoader = (vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[], loaderOptions?: LoaderOptions): VtxLoader => {
         const vat = [vatFormat];
-        return this.get({ vat, vcd });
+        return this.get({ vat, vcd, loaderOptions });
     }
 
-    public compileVtxLoaderMultiVat = (vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader => {
-        return this.get({ vat, vcd });
+    public compileVtxLoaderMultiVat = (vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[], loaderOptions?: LoaderOptions): VtxLoader => {
+        return this.get({ vat, vcd, loaderOptions });
     }
 }
 
