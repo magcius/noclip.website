@@ -489,13 +489,13 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     const rootNode = readSceneGraph(sceneGraphRootOffs, rootMatrix);
     assert(rootNode.nextSibling === null);
 
-    const aNodes = rootNode.children.filter((child) => child.nameStr === aNodeStr || child.nameStr.startsWith('A_'));
-    for (const aNode of aNodes) {
-        aNode.visible = false;
-    }
+    // The root node contains (at least) two nodes, the "A" node and the "S" node (possibly "animated" and "static").
+    // The "S" nodes appear to be the visual models we want, while "A" appear to mostly be collision meshes. Any
+    // other nodes at the root appear to be unused (!). We only want the visual stuff, so we only take "S".
+    const sNode = rootNode.children.find((child) => child.nameStr === sNodeStr);
 
     const information = { versionStr, aNodeStr, sNodeStr, dateStr };
     //#endregion
 
-    return { information, textureNameTable, rootNode, materials };
+    return { information, textureNameTable, rootNode: sNode, materials };
 }
