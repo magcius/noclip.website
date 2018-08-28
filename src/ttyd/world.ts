@@ -19,8 +19,8 @@ export interface TTYDWorld {
 
 export interface Information {
     versionStr: string;
-    nameStr: string;
-    typeStr: string;
+    sNodeStr: string;
+    aNodeStr: string;
     dateStr: string;
 }
 
@@ -313,8 +313,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     //#region information
     assert(informationOffs === 0x20);
     const versionStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x00));
-    const nameStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x08));
-    const typeStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x0C));
+    const sNodeStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x08));
+    const aNodeStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x0C));
     const dateStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x10));
 
     // Read meshes.
@@ -489,12 +489,12 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     const rootNode = readSceneGraph(sceneGraphRootOffs, rootMatrix);
     assert(rootNode.nextSibling === null);
 
-    const aNodes = rootNode.children.filter((child) => child.nameStr === 'A' || child.nameStr.startsWith('A_'));
+    const aNodes = rootNode.children.filter((child) => child.nameStr === aNodeStr || child.nameStr.startsWith('A_'));
     for (const aNode of aNodes) {
         aNode.visible = false;
     }
 
-    const information = { versionStr, nameStr, typeStr, dateStr };
+    const information = { versionStr, aNodeStr, sNodeStr, dateStr };
     //#endregion
 
     return { information, textureNameTable, rootNode, materials };
