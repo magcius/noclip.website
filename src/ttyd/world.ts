@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists } from "../util";
 import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
-import { mat4, quat } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 
 export interface TTYDWorld {
     information: Information;
@@ -45,18 +45,18 @@ interface TransformDebug {
     scaleX: number;
     scaleY: number;
     scaleZ: number;
-    rotateX: number;
-    rotateY: number;
-    rotateZ: number;
-    translate1_X: number;
-    translate1_Y: number;
-    translate1_Z: number;
-    translate2_X: number;
-    translate2_Y: number;
-    translate2_Z: number;
-    translate3_X: number;
-    translate3_Y: number;
-    translate3_Z: number;
+    rotationX: number;
+    rotationY: number;
+    rotationZ: number;
+    translationX: number;
+    translationY: number;
+    translationZ: number;
+    bboxMinX: number;
+    bboxMinY: number;
+    bboxMinZ: number;
+    bboxMaxX: number;
+    bboxMaxY: number;
+    bboxMaxZ: number;
 }
 
 export interface SceneGraphNode {
@@ -67,6 +67,36 @@ export interface SceneGraphNode {
     children: SceneGraphNode[];
     parts: SceneGraphPart[];
     visible?: boolean;
+}
+
+function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
+    const rX = Math.PI / 180 * rotationX;
+    const rY = Math.PI / 180 * rotationY;
+    const rZ = Math.PI / 180 * rotationZ;
+
+    const sinX = Math.sin(rX), cosX = Math.cos(rX);
+    const sinY = Math.sin(rY), cosY = Math.cos(rY);
+    const sinZ = Math.sin(rZ), cosZ = Math.cos(rZ);
+
+    dst[0] =  scaleX * (cosY * cosZ);
+    dst[1] =  scaleX * (sinZ * cosY);
+    dst[2] =  scaleX * (-sinY);
+    dst[3] =  0.0;
+
+    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ);
+    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
+    dst[6] =  scaleY * (sinX * cosY);
+    dst[7] =  0.0;
+
+    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
+    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
+    dst[10] = scaleZ * (cosY * cosX);
+    dst[11] = 0.0;
+
+    dst[12] = translationX;
+    dst[13] = translationY;
+    dst[14] = translationZ;
+    dst[15] = 1.0;
 }
 
 export function parse(buffer: ArrayBufferSlice): TTYDWorld {
@@ -303,36 +333,30 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const scaleX = view.getFloat32(offs + 0x18);
         const scaleY = view.getFloat32(offs + 0x1C);
         const scaleZ = view.getFloat32(offs + 0x20);
-        const rotateX = view.getFloat32(offs + 0x24) * Math.PI / 180;
-        const rotateY = view.getFloat32(offs + 0x28) * Math.PI / 180;
-        const rotateZ = view.getFloat32(offs + 0x2C) * Math.PI / 180;
+        const rotationX = view.getFloat32(offs + 0x24);
+        const rotationY = view.getFloat32(offs + 0x28);
+        const rotationZ = view.getFloat32(offs + 0x2C);
         // TODO(jstpierre): Figure out what on earth all of this is.
-        const translate1_X = view.getFloat32(offs + 0x30);
-        const translate1_Y = view.getFloat32(offs + 0x34);
-        const translate1_Z = view.getFloat32(offs + 0x38);
-        const translate2_X = view.getFloat32(offs + 0x3C);
-        const translate2_Y = view.getFloat32(offs + 0x40);
-        const translate2_Z = view.getFloat32(offs + 0x44);
-        const translate3_X = view.getFloat32(offs + 0x48);
-        const translate3_Y = view.getFloat32(offs + 0x4C);
-        const translate3_Z = view.getFloat32(offs + 0x50);
+        const translationX = view.getFloat32(offs + 0x30);
+        const translationY = view.getFloat32(offs + 0x34);
+        const translationZ = view.getFloat32(offs + 0x38);
+        const bboxMinX = view.getFloat32(offs + 0x3C);
+        const bboxMinY = view.getFloat32(offs + 0x40);
+        const bboxMinZ = view.getFloat32(offs + 0x44);
+        const bboxMaxX = view.getFloat32(offs + 0x48);
+        const bboxMaxY = view.getFloat32(offs + 0x4C);
+        const bboxMaxZ = view.getFloat32(offs + 0x50);
 
         const transformDebug = {
             scaleX, scaleY, scaleZ,
-            rotateX, rotateY, rotateZ,
-            translate1_X, translate1_Y, translate1_Z,
-            translate2_X, translate2_Y, translate2_Z,
-            translate3_X, translate3_Y, translate3_Z,
+            rotationX, rotationY, rotationZ,
+            translationX, translationY, translationZ,
+            bboxMinX, bboxMinY, bboxMinZ,
+            bboxMaxX, bboxMaxY, bboxMaxZ,
         };
 
         const modelMatrix = mat4.create();
-        mat4.translate(modelMatrix, modelMatrix, [translate1_X, translate1_Y, translate1_Z]);
-        // mat4.scale(modelMatrix, modelMatrix, [scaleX, scaleY, scaleZ]);
-        mat4.translate(modelMatrix, modelMatrix, [translate2_X, translate2_Y, translate2_Z]);
-        // mat4.rotateZ(modelMatrix, modelMatrix, rotateZ);
-        // mat4.rotateY(modelMatrix, modelMatrix, rotateY);
-        // mat4.rotateX(modelMatrix, modelMatrix, rotateX);
-        mat4.translate(modelMatrix, modelMatrix, [translate3_X, translate3_Y, translate3_Z]);
+        calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         mat4.mul(modelMatrix, parentMatrix, modelMatrix);
 
         const partTableCount = view.getUint32(offs + 0x5C);
@@ -446,9 +470,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             let child = readSceneGraph(mainDataOffs + firstChildOffs, modelMatrix);
             while (child !== null) {
                 children.push(child);
-                const oldChild = child;
                 child = child.nextSibling;
-                delete oldChild.nextSibling;
             }
         }
 
@@ -462,7 +484,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     const rootMatrix = mat4.create();
     const rootNode = readSceneGraph(sceneGraphRootOffs, rootMatrix);
     assert(rootNode.nextSibling === null);
-    delete rootNode.nextSibling;
 
     const information = { versionStr, nameStr, typeStr, dateStr };
     //#endregion

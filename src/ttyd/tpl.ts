@@ -13,9 +13,9 @@ export interface TPLTexture extends GX_Texture.Texture {
     minFilter: GX.TexFilter;
     magFilter: GX.TexFilter;
     lodBias: number;
-    edgeLod: number;
-    minLod: number;
-    maxLod: number;
+    edgeLOD: number;
+    minLOD: number;
+    maxLOD: number;
 }
 
 export interface TPL {
@@ -50,12 +50,12 @@ export function parse(buffer: ArrayBufferSlice, textureNames?: string[]): TPL {
         const minFilter = view.getUint32(textureOffs + 0x14);
         const magFilter = view.getUint32(textureOffs + 0x18);
         const lodBias = view.getFloat32(textureOffs + 0x1C);
-        const edgeLod = view.getUint8(textureOffs + 0x20);
-        const minLod = view.getUint8(textureOffs + 0x21);
-        const maxLod = view.getUint8(textureOffs + 0x22);
+        const edgeLOD = view.getUint8(textureOffs + 0x20);
+        const minLOD = view.getUint8(textureOffs + 0x21);
+        const maxLOD = view.getUint8(textureOffs + 0x22);
     
         // TODO(jstpierre): Is this right?
-        const mipCount = (maxLod - minLod) + 1;
+        const mipCount = (maxLOD - minLOD) + 1;
         const size = GX_Texture.calcTextureSize(format, width, height);
         const data = buffer.subarray(dataOffs, size);
 
@@ -72,9 +72,9 @@ export function parse(buffer: ArrayBufferSlice, textureNames?: string[]): TPL {
         const name = textureNames !== undefined ? textureNames[i] : `Texture${i}`;
 
         textures.push({
-            name,
-            height, width, format, wrapS, wrapT, minFilter, magFilter,
-            lodBias, edgeLod, minLod, maxLod, mipCount, data,
+            name, mipCount, data, width, height, format,
+            wrapS, wrapT, minFilter, magFilter,
+            lodBias, edgeLOD, minLOD, maxLOD,
             paletteFormat, paletteData,
         });
     }
