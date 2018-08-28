@@ -124,7 +124,7 @@ export class WorldRenderer implements Viewer.MainScene {
         if (!this.visible)
             return;
 
-        state.setClipPlanes(10, 500000);
+        state.setClipPlanes(10, 5000);
 
         this.renderHelper.bindUniformBuffers(state);
 
