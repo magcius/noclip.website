@@ -105,6 +105,14 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         return false;
     }
 
+    public findTexture(name: string): TextureType | null {
+        const textureEntryIndex = this.findTextureEntryIndex(name);
+        if (textureEntryIndex >= 0) {
+            return this.textureEntries[textureEntryIndex];
+        }
+        return null;
+    }
+
     public setTextureOverride(name: string, textureOverride: TextureOverride): void {
         // Only allow setting texture overrides for textures that exist.
         // TODO(jstpierre): Bring this back when I fix ZTP scene loader.

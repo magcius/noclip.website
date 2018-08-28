@@ -1,6 +1,6 @@
 
 import * as GX_Material from '../gx/gx_material';
-import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, translateTexFilter, translateWrapMode } from '../gx/gx_render';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart } from './world';
@@ -21,28 +21,56 @@ class Command_Material {
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
+    private glSampler: WebGLSampler | null = null;;
 
     constructor(gl: WebGL2RenderingContext, public material: Material) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
     }
 
-    public fillMaterialParams(materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
+    private static translateSampler(gl: WebGL2RenderingContext, sampler: TPL.TPLTexture): WebGLSampler {
+        const glSampler = gl.createSampler();
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
+        gl.samplerParameterf(glSampler, gl.TEXTURE_MIN_LOD, sampler.minLOD);
+        gl.samplerParameterf(glSampler, gl.TEXTURE_MAX_LOD, sampler.maxLOD);
+        return glSampler;
+    }
+
+    public fillMaterialParams(gl: WebGL2RenderingContext, materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
         // All we care about is textures...
-        if (this.material.textureName !== null)
-            textureHolder.fillTextureMapping(this.materialParams.m_TextureMapping[0], this.material.textureName);
+        if (this.material.textureName !== null) {
+            const texMapping = this.materialParams.m_TextureMapping[0];
+            textureHolder.fillTextureMapping(texMapping, this.material.textureName);
+
+            const tplTexture = textureHolder.findTexture(this.material.textureName);
+
+            if (this.glSampler === null) {
+                // TODO(jstpierre): Don't do this on demand.
+                this.glSampler = Command_Material.translateSampler(gl, tplTexture);
+            }
+
+            texMapping.glSampler = this.glSampler;
+            texMapping.lodBias = tplTexture.lodBias;
+        }
     }
 
     public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: TPLTextureHolder) {
+        const gl = state.gl;
+
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
-        this.fillMaterialParams(this.materialParams, textureHolder);
+        this.fillMaterialParams(gl, this.materialParams, textureHolder);
         renderHelper.bindMaterialParams(state, this.materialParams);
         renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.program.destroy(gl);
+        if (this.glSampler !== null)
+            gl.deleteSampler(this.glSampler);
     }
 }
 
