@@ -30,7 +30,6 @@ import { CameraControllerClass, FPSCameraController } from './Camera';
 import { RenderStatistics } from './render';
 
 const sceneGroups = [
-    TTYD.sceneGroup,
     ZTP.sceneGroup,
     ZSS.sceneGroup,
     ZWW.sceneGroup,
@@ -49,6 +48,7 @@ const sceneGroups = [
     ZELVIEW.sceneGroup,
     OOT3D.sceneGroup,
     DKSIV.sceneGroup,
+    TTYD.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {

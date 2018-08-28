@@ -131,5 +131,4 @@ export interface SceneGroup {
     id: string;
     name: string;
     sceneDescs: SceneDesc[];
-    hidden?: boolean;
 }

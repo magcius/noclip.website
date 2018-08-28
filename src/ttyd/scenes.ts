@@ -362,4 +362,4 @@ const sceneDescs: Viewer.SceneDesc[] = [
 
 const id = 'ttyd';
 const name = 'Paper Mario: The Thousand Year Door';
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
