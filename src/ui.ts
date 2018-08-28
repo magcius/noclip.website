@@ -380,7 +380,7 @@ class SceneSelect extends Panel {
 
     public setSceneGroups(sceneGroups: Viewer.SceneGroup[]) {
         this.sceneGroups = sceneGroups;
-        const strings = this.sceneGroups.filter((g) => !g.hidden && g.sceneDescs.length > 0).map((g) => g.name);
+        const strings = this.sceneGroups.filter((g) => g.sceneDescs.length > 0).map((g) => g.name);
         this.sceneGroupList.setStrings(strings);
         this.syncSceneDescs();
     }
