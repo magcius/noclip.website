@@ -817,7 +817,7 @@ class About extends Panel {
 <p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to go faster than that.
 <strong>B</strong> resets the camera, and <strong>Z</strong> toggles the UI. </p>
 
-<p><strong>CODE PRIMARILY WRITTEN</strong> by <a href="https://github.com/magcius">Jasper</a></p>
+<p><strong>CODE PRIMARILY WRITTEN</strong> by <a href="https://twitter.com/JasperRLZ">Jasper</a></p>
 
 <p><strong>MODELS</strong> © Nintendo, SEGA, Retro Studios, FROM Software, Konami</p>
 
@@ -834,6 +834,10 @@ class About extends Panel {
 <a href="https://twitter.com/instant_grat">Instant Grat</a>,
 <a href="https://twitter.com/__Aruki">Aruki</a>
 </p>
+
+<p><strong>OPEN SOURCE</strong> at <a href="https://github.com/magcius/model-viewer">GitHub</a></p>
+
+<p>Feature requests and bugs welcome!</p>
 
 <p><strong>ICONS</strong> from <a href="https://thenounproject.com/">The Noun Project</a>, used under Creative Commons CC-BY:</p>
 <ul>
