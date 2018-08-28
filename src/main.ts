@@ -276,8 +276,7 @@ class Main {
     }
 
     private _saveState() {
-        // If we're currently loading a scene, don't save out...
-        if (this.sceneLoader.currentScene === null)
+        if (this.currentSceneDesc === null)
             return;
 
         const newState = this._getState();

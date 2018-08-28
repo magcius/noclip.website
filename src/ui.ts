@@ -588,6 +588,8 @@ class ViewerSettings extends Panel {
     private fovSlider: HTMLElement;
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
+    private cullingOn: HTMLElement;
+    private cullingOff: HTMLElement;
 
     constructor(private viewer: Viewer.Viewer) {
         super();
@@ -634,12 +636,12 @@ class ViewerSettings extends Panel {
     cursor: pointer;
     background: #aaa;
 }
-.SettingsHeader, .CameraControllerWASD, .CameraControllerOrbit {
+.SettingsHeader, .SettingsButton {
     text-align: center;
     font-weight: bold;
     line-height: 24px;
 }
-.CameraControllerWASD, .CameraControllerOrbit {
+.SettingsButton {
     background: #444;
     line-height: 32px;
     cursor: pointer;
@@ -649,7 +651,11 @@ class ViewerSettings extends Panel {
 <div><input class="Slider FoVSlider" type="range" min="1" max="100"></div>
 <div class="SettingsHeader">Camera Controller</div>
 <div style="display: grid; grid-template-columns: 1fr 1fr;">
-<div class="CameraControllerWASD">WASD</div><div class="CameraControllerOrbit">Orbit</div>
+<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div>
+</div>
+<div class="SettingsHeader">Culling?</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr;">
+<div class="SettingsButton CullingOn">On</div><div class="SettingsButton CullingOff">Off</div>
 </div>
 `;
         this.fovSlider = this.contents.querySelector('.FoVSlider');
@@ -663,6 +669,16 @@ class ViewerSettings extends Panel {
         this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit');
         this.cameraControllerOrbit.onclick = () => {
             this.setCameraControllerClass(OrbitCameraController);
+        };
+
+        this.cullingOn = this.contents.querySelector('.CullingOn');
+        this.cullingOn.onclick = () => {
+            this.setCulling(true);
+        };
+
+        this.cullingOff = this.contents.querySelector('.CullingOff');
+        this.cullingOff.onclick = () => {
+            this.setCulling(false);
         };
     }
 
@@ -684,6 +700,12 @@ class ViewerSettings extends Panel {
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
         setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
         setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
+    }
+
+    public setCulling(value: boolean) {
+        this.viewer.renderState.forceDisableCulling = !value;
+        setElementHighlighted(this.cullingOn, value);
+        setElementHighlighted(this.cullingOff, !value);
     }
 }
 

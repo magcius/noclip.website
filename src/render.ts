@@ -58,11 +58,15 @@ interface RenderFlagsResolved {
     frontFace: FrontFaceMode;
 }
 
+interface RenderFlagHacks {
+    forceDisableCulling: boolean;
+}
+
 function flagChanged<T>(stateFlag: T, newFlag: T | undefined): boolean {
     return newFlag !== undefined && stateFlag !== newFlag;
 }
 
-function applyFlags(gl: WebGL2RenderingContext, stateFlags: RenderFlagsResolved, newFlags: RenderFlags): void {
+function applyFlags(gl: WebGL2RenderingContext, stateFlags: RenderFlagsResolved, newFlags: RenderFlags, hacks: RenderFlagHacks): void {
     if (flagChanged(stateFlags.depthWrite, newFlags.depthWrite)) {
         gl.depthMask(newFlags.depthWrite);
         stateFlags.depthWrite = newFlags.depthWrite;
@@ -97,20 +101,21 @@ function applyFlags(gl: WebGL2RenderingContext, stateFlags: RenderFlagsResolved,
         stateFlags.blendDst = newFlags.blendDst;
     }
 
-    if (flagChanged(stateFlags.cullMode, newFlags.cullMode)) {
+    const newCullMode = hacks.forceDisableCulling ? CullMode.NONE : newFlags.cullMode;
+    if (flagChanged(stateFlags.cullMode, newCullMode)) {
         // Try to be smart about this.
         if (stateFlags.cullMode === CullMode.NONE)
             gl.enable(gl.CULL_FACE);
-        else if (newFlags.cullMode === CullMode.NONE)
+        else if (newCullMode === CullMode.NONE)
             gl.disable(gl.CULL_FACE);
 
-        if (newFlags.cullMode === CullMode.BACK)
+        if (newCullMode === CullMode.BACK)
             gl.cullFace(gl.BACK);
-        else if (newFlags.cullMode === CullMode.FRONT)
+        else if (newCullMode === CullMode.FRONT)
             gl.cullFace(gl.FRONT);
-        else if (newFlags.cullMode === CullMode.FRONT_AND_BACK)
+        else if (newCullMode === CullMode.FRONT_AND_BACK)
             gl.cullFace(gl.FRONT_AND_BACK);
-        stateFlags.cullMode = newFlags.cullMode;
+        stateFlags.cullMode = newCullMode;
     }
 
     if (flagChanged(stateFlags.frontFace, newFlags.frontFace)) {
@@ -305,6 +310,7 @@ export class RenderState {
     public onscreenDepthTarget: DepthTarget;
 
     public renderStatisticsTracker = new RenderStatisticsTracker();
+    public forceDisableCulling: boolean = false;
 
     private fullscreenCopyProgram: FullscreenCopyProgram;
     private fullscreenFlags: RenderFlags;
@@ -464,6 +470,6 @@ export class RenderState {
 
     public useFlags(flags: RenderFlags) {
         const gl = this.gl;
-        applyFlags(gl, this.currentFlags, flags);
+        applyFlags(gl, this.currentFlags, flags, this);
     }
 }
