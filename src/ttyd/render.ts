@@ -3,7 +3,7 @@ import * as GX_Material from '../gx/gx_material';
 import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, translateTexFilter, translateWrapMode } from '../gx/gx_render';
 
 import * as TPL from './tpl';
-import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart } from './world';
+import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler } from './world';
 
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
@@ -21,39 +21,33 @@ class Command_Material {
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
-    private glSampler: WebGLSampler | null = null;;
+    private glSamplers: WebGLSampler[] = [];
 
     constructor(gl: WebGL2RenderingContext, public material: Material) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
+
+        this.glSamplers = this.material.samplers.map((sampler) => {
+            return Command_Material.translateSampler(gl, sampler);
+        });
     }
 
-    private static translateSampler(gl: WebGL2RenderingContext, sampler: TPL.TPLTexture): WebGLSampler {
+    private static translateSampler(gl: WebGL2RenderingContext, sampler: Sampler): WebGLSampler {
         const glSampler = gl.createSampler();
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
         gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
-        gl.samplerParameterf(glSampler, gl.TEXTURE_MIN_LOD, sampler.minLOD);
-        gl.samplerParameterf(glSampler, gl.TEXTURE_MAX_LOD, sampler.maxLOD);
         return glSampler;
     }
 
     public fillMaterialParams(gl: WebGL2RenderingContext, materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
-        // All we care about is textures...
-        if (this.material.textureName !== null) {
-            const texMapping = this.materialParams.m_TextureMapping[0];
-            textureHolder.fillTextureMapping(texMapping, this.material.textureName);
+        for (let i = 0; i < this.material.samplers.length; i++) {
+            const sampler = this.material.samplers[i];
 
-            const tplTexture = textureHolder.findTexture(this.material.textureName);
-
-            if (this.glSampler === null) {
-                // TODO(jstpierre): Don't do this on demand.
-                this.glSampler = Command_Material.translateSampler(gl, tplTexture);
-            }
-
-            texMapping.glSampler = this.glSampler;
-            texMapping.lodBias = tplTexture.lodBias;
+            const texMapping = this.materialParams.m_TextureMapping[i];
+            textureHolder.fillTextureMapping(texMapping, sampler.textureName);
+            texMapping.glSampler = this.glSamplers[i];
         }
     }
 
@@ -69,8 +63,7 @@ class Command_Material {
 
     public destroy(gl: WebGL2RenderingContext) {
         this.program.destroy(gl);
-        if (this.glSampler !== null)
-            gl.deleteSampler(this.glSampler);
+        this.glSamplers.forEach((sampler) => gl.deleteSampler(sampler));
     }
 }
 

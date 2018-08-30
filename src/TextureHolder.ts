@@ -82,6 +82,14 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         return this.findTextureEntryIndex(name) >= 0;
     }
 
+    protected fillTextureMappingFromEntry(textureMapping: TextureMapping, name: string, textureEntryIndex: number): void {
+        textureMapping.glTexture = this.glTextures[textureEntryIndex];
+        const tex0Entry = this.textureEntries[textureEntryIndex];
+        textureMapping.width = tex0Entry.width;
+        textureMapping.height = tex0Entry.height;
+        textureMapping.flipY = false;
+    }
+
     public fillTextureMapping(textureMapping: TextureMapping, name: string): boolean {
         const textureOverride = this.textureOverrides.get(name);
         if (textureOverride) {
@@ -94,11 +102,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
         const textureEntryIndex = this.findTextureEntryIndex(name);
         if (textureEntryIndex >= 0) {
-            textureMapping.glTexture = this.glTextures[textureEntryIndex];
-            const tex0Entry = this.textureEntries[textureEntryIndex];
-            textureMapping.width = tex0Entry.width;
-            textureMapping.height = tex0Entry.height;
-            textureMapping.flipY = false;
+            this.fillTextureMappingFromEntry(textureMapping, name, textureEntryIndex);
             return true;
         }
 
