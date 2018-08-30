@@ -52,7 +52,6 @@ assemblyscript/
 parcel/
 .cache/
 
-data/
 dist/*
 !dist/data
 post*.html
