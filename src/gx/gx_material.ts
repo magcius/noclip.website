@@ -226,6 +226,7 @@ export class GX_Program extends BaseProgram {
 
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks = null) {
         super();
+        this.name = material.name;
         this.generateShaders();
     }
 

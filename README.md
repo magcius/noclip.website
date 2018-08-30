@@ -1,6 +1,6 @@
 <img align="right" src="src/logo.png">
 
-# Model Viewer
+# <a href="https://noclip.website">noclip</a>
 
 View video game models in your browser. Mostly focused on Nintendo models.
 
