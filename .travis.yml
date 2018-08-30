@@ -15,7 +15,7 @@ before_install:
 - openssl aes-256-cbc -K $encrypted_0e4f6f173f5d_key -iv $encrypted_0e4f6f173f5d_iv -in deploy/deploy_rsa.enc -out deploy/deploy_rsa -d
 
 addons:
-  ssh_known_hosts: noclip.website
+  ssh_known_hosts: foxcraft.dreamhost.com
 
 deploy:
   - provider: pages
