@@ -358,22 +358,23 @@ export interface LoadedVertexData {
     packedVertexData: ArrayBuffer;
     totalTriangleCount: number;
     totalVertexCount: number;
+    vertexId: number;
 }
 
-type VtxLoaderFunc = (vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice) => LoadedVertexData;
+export interface LoadOptions {
+    stopAtNull?: boolean;
+    firstVertexId?: number;
+}
+
+type VtxLoaderFunc = (vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions) => LoadedVertexData;
 
 export interface VtxLoader {
     loadedVertexLayout: LoadedVertexLayout;
     runVertices: VtxLoaderFunc;
 }
 
-export interface LoaderOptions {
-    stopAtNull?: boolean;
-}
-
-function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[], loaderOptions?: LoaderOptions): VtxLoader {
+function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader {
     const loadedVertexLayout: VertexLayout = translateVertexLayout(vat, vcd);
-    const stopAtNull = loaderOptions !== undefined && loaderOptions.stopAtNull !== undefined ? loaderOptions.stopAtNull : true;
 
     function makeLoaderName(): string {
         let name = 'VtxLoader';
@@ -613,7 +614,10 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[], loaderOpti
     const source = `
 "use strict";
 
-return function ${loaderName}(vtxArrays, srcBuffer) {
+return function ${loaderName}(vtxArrays, srcBuffer, loadOptions) {
+const stopAtNull = (loadOptions !== undefined && loadOptions.stopAtNull !== undefined) ? loadOptions.stopAtNull : false;
+const firstVertexId = (loadOptions !== undefined && loadOptions.firstVertexId !== undefined) ? loadOptions.firstVertexId : false;
+
 // Parse display list.
 const dlView = srcBuffer.createDataView();
 const drawCalls = [];
@@ -626,8 +630,12 @@ while (true) {
         break;
     const cmd = dlView.getUint8(drawCallIdx);
     drawCallIdx += 0x01;
-    if (cmd === 0)
-        ${stopAtNull ? `break` : `continue`};
+    if (cmd === 0) {
+        if (stopAtNull)
+            break;
+        else
+            continue;
+    }
 
     const primType = cmd & 0xF8;
     const vertexFormat = cmd & 0x07;
@@ -666,7 +674,7 @@ while (true) {
 // Now make the data.
 let indexDataIdx = 0;
 const dstIndexData = new Uint16Array(totalTriangleCount * 3);
-let vertexId = 0;
+let vertexId = firstVertexId;
 
 const dstVertexDataSize = ${loadedVertexLayout.dstVertexSize} * totalVertexCount;
 const dstVertexData = new ArrayBuffer(dstVertexDataSize);
@@ -737,7 +745,7 @@ ${compileVatFormats()}
 if (dstIndexData.length !== totalTriangleCount * 3)
     throw new Error("Number of indexes does not match triangle count");
 
-return { indexFormat: ${AttributeFormat.U16}, indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount };
+return { indexFormat: ${AttributeFormat.U16}, indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount, vertexId: vertexId };
 
 };
 `;
@@ -749,28 +757,63 @@ return { indexFormat: ${AttributeFormat.U16}, indexData: dstIndexData.buffer, pa
 interface VtxLoaderDesc {
     vat: GX_VtxAttrFmt[][];
     vcd: GX_VtxDesc[];
-    loaderOptions?: LoaderOptions;
 }
 
 class VtxLoaderCache extends MemoizeCache<VtxLoaderDesc, VtxLoader> {
     protected make(key: VtxLoaderDesc): VtxLoader {
-        return _compileVtxLoader(key.vat, key.vcd, key.loaderOptions);
+        return _compileVtxLoader(key.vat, key.vcd);
     }
 
     protected makeKey(key: VtxLoaderDesc): string {
         return JSON.stringify(key);
     }
 
-    public compileVtxLoader = (vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[], loaderOptions?: LoaderOptions): VtxLoader => {
+    public compileVtxLoader = (vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VtxLoader => {
         const vat = [vatFormat];
-        return this.get({ vat, vcd, loaderOptions });
+        return this.get({ vat, vcd });
     }
 
-    public compileVtxLoaderMultiVat = (vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[], loaderOptions?: LoaderOptions): VtxLoader => {
-        return this.get({ vat, vcd, loaderOptions });
+    public compileVtxLoaderMultiVat = (vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader => {
+        return this.get({ vat, vcd });
     }
 }
 
 const cache = new VtxLoaderCache();
 export const compileVtxLoader = cache.compileVtxLoader;
 export const compileVtxLoaderMultiVat = cache.compileVtxLoaderMultiVat;
+
+export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVertexData {
+    let totalTriangleCount = 0;
+    let totalVertexCount = 0;
+    let indexDataSize = 0;
+    let packedVertexDataSize = 0;
+
+    for (const loadedData of loadedDatas) {
+        totalTriangleCount += loadedData.totalTriangleCount;
+        totalVertexCount += loadedData.totalVertexCount;
+        indexDataSize += loadedData.indexData.byteLength;
+        packedVertexDataSize += loadedData.packedVertexData.byteLength;
+        assert(loadedData.indexFormat === loadedDatas[0].indexFormat);
+    }
+
+    const indexData = new Uint8Array(indexDataSize);
+    const packedVertexData = new Uint8Array(packedVertexDataSize);
+
+    let indexDataOffs = 0;
+    let packedVertexDataOffs = 0;
+    for (const loadedData of loadedDatas) {
+        indexData.set(new Uint8Array(loadedData.indexData), indexDataOffs);
+        packedVertexData.set(new Uint8Array(loadedData.packedVertexData), packedVertexDataOffs);
+        indexDataOffs += loadedData.indexData.byteLength;
+        packedVertexDataOffs += loadedData.packedVertexData.byteLength;
+    }
+
+    return {
+        indexData: indexData.buffer,
+        indexFormat: loadedDatas[0].indexFormat,
+        packedVertexData: packedVertexData.buffer,
+        totalTriangleCount,
+        totalVertexCount,
+        vertexId: 0,
+    };
+}
