@@ -14,7 +14,6 @@ export function fetchData(url: string): Progressable<ArrayBufferSlice> {
             pr.setProgress(1);
             const buffer: ArrayBuffer = request.response;
             const slice = new ArrayBufferSlice(buffer);
-            console.log(slice);
             resolve(slice);
         };
         request.onerror = () => {
