@@ -6,9 +6,10 @@ import * as GX_Material from '../gx/gx_material';
 import { mat4, mat2d } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind } from "../gx/gx_render";
-import { texProjPerspMtx, texEnvMtx, AABB, IntersectionState } from "../Camera";
+import { texProjPerspMtx, texEnvMtx } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
+import { IntersectionState, AABB } from "../Geometry";
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {

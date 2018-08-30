@@ -1,8 +1,8 @@
 
 import { SimpleProgram } from "./Program";
-import { AABB } from "./Camera";
 import { vec4, mat4 } from "gl-matrix";
 import { RenderState } from "./render";
+import { AABB } from "./Geometry";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
     for (let t = 0; t < maxt; t += step) {

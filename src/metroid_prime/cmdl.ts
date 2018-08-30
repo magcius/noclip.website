@@ -6,7 +6,7 @@ import { assert, align } from "../util";
 
 import { ResourceSystem } from "./resource";
 import { Geometry, MaterialSet, parseGeometry, parseMaterialSet } from "./mrea";
-import { AABB } from "../Camera";
+import { AABB } from "../Geometry";
 
 export interface CMDL {
     bbox: AABB;
