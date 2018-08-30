@@ -5,7 +5,8 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import * as BRRES from './brres';
 
-import { fetch, assert, leftPad } from '../util';
+import { assert, leftPad } from '../util';
+import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState } from '../render';
@@ -78,7 +79,7 @@ class ElebitsSceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const paths = this.rooms.map((room) => makeElbPath(this.id, room));
-        const progressables: Progressable<ArrayBufferSlice>[] = paths.map((path) => fetch(path));
+        const progressables: Progressable<ArrayBufferSlice>[] = paths.map((path) => fetchData(path));
         return Progressable.all(progressables).then((buffers: ArrayBufferSlice[]) => {
             const stageRRESes = buffers.map((buffer) => BRRES.parse(buffer));
             return new BasicRRESScene(gl, stageRRESes);

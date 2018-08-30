@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import Progressable from '../Progressable';
-import { fetch } from '../util';
+import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as RARC from '../j3d/rarc';
 import * as BIN from './bin';
@@ -37,7 +37,7 @@ class LuigisMansionScene implements Viewer.MainScene {
 }
 
 function fetchBinScene(gl: WebGL2RenderingContext, path: string): Progressable<BinScene> {
-    return fetch(`data/luigis_mansion/${path}`).then((buffer: ArrayBufferSlice) => {
+    return fetchData(`data/luigis_mansion/${path}`).then((buffer: ArrayBufferSlice) => {
         let binBuffer;
         if (path.endsWith('.bin')) {
             binBuffer = buffer;

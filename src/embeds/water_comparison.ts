@@ -5,7 +5,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
 
 import { RenderState, depthClearFlags } from '../render';
-import { fetch } from '../util';
+import { fetchData } from '../fetch';
 import * as Viewer from '../viewer';
 
 import * as GX from '../gx/gx_enum';
@@ -192,7 +192,7 @@ class PlaneShape {
 }
 
 export function createScene(gl: WebGL2RenderingContext, name: string): Progressable<Viewer.MainScene> {
-    return fetch("data/j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
+    return fetchData("data/j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
         return Yaz0.decompress(buffer);
     }).then(async (buffer: ArrayBufferSlice) => {
         const rarc = RARC.parse(buffer);
@@ -208,7 +208,7 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
             const plane = new PlaneShape(gl, 2, new GX_Material.Color(1, 1, 1, 1));
             return new J3DRenderer(gl, skyboxScene, textureHolder, 5, plane, bmd, btk, '_umi');
         } else if (name === 'g2') {
-            const rarc = RARC.parse(await Yaz0.decompress(await fetch('data/j3d/smg/ObjectData/PeachCastleGardenPlanet.arc')));
+            const rarc = RARC.parse(await Yaz0.decompress(await fetchData('data/j3d/smg/ObjectData/PeachCastleGardenPlanet.arc')));
             const bdlFile = rarc.findFile('peachcastlegardenplanet.bdl');
             const btkFile = rarc.findFile('peachcastlegardenplanet.btk');
             const bmd = BMD.parse(bdlFile.buffer);
@@ -216,7 +216,7 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
             const plane = new PlaneShape(gl, 2, new GX_Material.Color(1, 1, 1, 1));
             return new J3DRenderer(gl, skyboxScene, textureHolder, 2, plane, bmd, btk, 'lambert119_v_x');
         } else if (name === 'g3') {
-            const rarc = RARC.parse(await Yaz0.decompress(await fetch('data/j3d/ztp/F_SP127/R00_00.arc')));
+            const rarc = RARC.parse(await Yaz0.decompress(await fetchData('data/j3d/ztp/F_SP127/R00_00.arc')));
             const bmdFile = rarc.findFile('bmdr/model4.bmd');
             const btkFile = rarc.findFile('btk/model4.btk');
             const bmd = BMD.parse(bmdFile.buffer);
@@ -224,7 +224,7 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
             const plane = new PlaneShape(gl, 2, new GX_Material.Color(1, 1, 1, 1));
             return new J3DRenderer(gl, skyboxScene, textureHolder, 1, plane, bmd, btk, 'cc_MA09_Nigori_Water_v');
         } else if (name === 'g4') {
-            const stage_u8 = U8.parse(await CX.decompress(await fetch('data/zss/F000_stg_l0.arc.LZ')));
+            const stage_u8 = U8.parse(await CX.decompress(await fetchData('data/zss/F000_stg_l0.arc.LZ')));
             const stage_rres = BRRES.parse(stage_u8.findFile('g3d/stage.brres').buffer);
 
             // Hackety hack.
@@ -232,7 +232,7 @@ export function createScene(gl: WebGL2RenderingContext, name: string): Progressa
             gxTextureHolder.addTextures(gl, stage_rres.tex0);
 
             // Animations
-            const objpack_u8 = U8.parse(await CX.decompress(await fetch('data/zss/ObjectPack.arc.LZ')));
+            const objpack_u8 = U8.parse(await CX.decompress(await fetchData('data/zss/ObjectPack.arc.LZ')));
             const common_u8 = U8.parse(objpack_u8.findFile('oarc/Common.arc').buffer);
             const common_rres = BRRES.parse(common_u8.findFile('g3d/model.brres').buffer);
 

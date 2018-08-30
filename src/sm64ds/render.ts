@@ -12,7 +12,7 @@ import { CullMode, RenderFlags, RenderState, BlendMode, depthClearFlags } from '
 import { SimpleProgram } from '../Program';
 import Progressable from '../Progressable';
 import RenderArena from '../RenderArena';
-import { fetch } from '../util';
+import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 
@@ -403,14 +403,14 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch('data/sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
+        return fetchData('data/sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
             const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
             return this._createSceneFromCRG1(gl, crg1);
         });
     }
 
     private _createBMDRenderer(gl: WebGL2RenderingContext, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): PromiseLike<BMDRenderer> {
-        return fetch(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
+        return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
             const renderer = new BMDRenderer(gl, bmd, level);
@@ -421,7 +421,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     private _createBMDObjRenderer(gl: WebGL2RenderingContext, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): PromiseLike<BMDRenderer> {
-        return fetch(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
+        return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
             const renderer = new BMDRenderer(gl, bmd, null);

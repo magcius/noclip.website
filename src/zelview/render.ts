@@ -5,7 +5,7 @@ import * as ZELVIEW0 from './zelview0';
 import Progressable from '../Progressable';
 import { CullMode, RenderFlags, RenderState, BlendMode } from '../render';
 import { SimpleProgram, BaseProgram } from '../Program';
-import { fetch } from '../util';
+import { fetchData } from '../fetch';
 
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -511,7 +511,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
-        return fetch(this.path).then((result: ArrayBufferSlice) => {
+        return fetchData(this.path).then((result: ArrayBufferSlice) => {
             const zelview0 = ZELVIEW0.readZELVIEW0(result);
             return new Scene(gl, zelview0);
         });

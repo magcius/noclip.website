@@ -5,7 +5,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
 
 import { RenderState } from '../render';
-import { fetch } from '../util';
+import { fetchData } from '../fetch';
 import { MainScene, Scene } from '../viewer';
 
 import * as GX from '../gx/gx_enum';
@@ -192,7 +192,7 @@ class PlaneShape {
 }
 
 export function createScene(gl: WebGL2RenderingContext, name: string): Progressable<MainScene> {
-    return fetch("data/j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
+    return fetchData("data/j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
         return Yaz0.decompress(buffer);
     }).then((buffer: ArrayBufferSlice) => {
         const rarc = RARC.parse(buffer);

@@ -1,31 +1,5 @@
 
 import ArrayBufferSlice from './ArrayBufferSlice';
-import Progressable from './Progressable';
-
-export function fetch(path: string): Progressable<ArrayBufferSlice> {
-    const request = new XMLHttpRequest();
-    request.open("GET", path, true);
-    request.responseType = "arraybuffer";
-    request.send();
-
-    const p = new Promise<ArrayBufferSlice>((resolve, reject) => {
-        request.onload = () => {
-            pr.setProgress(1);
-            const buffer: ArrayBuffer = request.response;
-            const slice = new ArrayBufferSlice(buffer);
-            resolve(slice);
-        };
-        request.onerror = () => {
-            reject();
-        };
-        request.onprogress = (e) => {
-            if (e.lengthComputable)
-                pr.setProgress(e.loaded / e.total);
-        };
-    });
-    const pr = new Progressable<ArrayBufferSlice>(p);
-    return pr;
-}
 
 export function assert(b: boolean): void {
     if (!b) { console.error(new Error().stack); throw new Error("Assert fail"); }

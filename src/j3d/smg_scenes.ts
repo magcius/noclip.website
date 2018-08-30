@@ -1,7 +1,8 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { assert, fetch } from '../util';
+import { assert } from '../util';
+import { fetchData } from '../fetch';
 
 import { RenderState, ColorTarget, RenderFlags, BlendMode, BlendFactor } from '../render';
 import { FullscreenProgram } from '../Program';
@@ -393,7 +394,7 @@ class ModelCache {
         if (this.cache.has(archiveName))
             return Progressable.resolve(this.cache.get(archiveName));
 
-        return fetch(`${pathBase}/ObjectData/${archiveName}.arc`).then((buffer: ArrayBufferSlice) => {
+        return fetchData(`${pathBase}/ObjectData/${archiveName}.arc`).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
                 console.warn(`Could not spawn archive ${archiveName}`);
                 return null;
@@ -635,8 +636,8 @@ class SMGSceneDesc implements Viewer.SceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const galaxyName = this.galaxyName;
         return Progressable.all([
-            fetch(`${pathBase}/ObjectData/PlanetMapDataTable.arc`),
-            fetch(`${pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`)
+            fetchData(`${pathBase}/ObjectData/PlanetMapDataTable.arc`),
+            fetchData(`${pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`)
         ]).then((buffers: ArrayBufferSlice[]) => {
             return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
         }).then((buffers: ArrayBufferSlice[]) => {
@@ -660,7 +661,7 @@ class SMGSceneDesc implements Viewer.SceneDesc {
             const masterZoneName = zoneNames[0];
             assert(masterZoneName === galaxyName);
 
-            return Progressable.all(zoneNames.map((zoneName) => fetch(`${pathBase}/StageData/${zoneName}.arc`))).then((buffers: ArrayBufferSlice[]) => {
+            return Progressable.all(zoneNames.map((zoneName) => fetchData(`${pathBase}/StageData/${zoneName}.arc`))).then((buffers: ArrayBufferSlice[]) => {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]) => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));

@@ -7,7 +7,8 @@ import * as CX from '../compression/CX';
 import * as BRRES from './brres';
 import * as U8 from './u8';
 
-import { fetch, assert, readString, assertExists } from '../util';
+import { assert, readString, assertExists } from '../util';
+import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState, ColorTarget, depthClearFlags } from '../render';
@@ -546,7 +547,7 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
         const systemPath = `${basePath}/System.arc`;
         const objPackPath = `${basePath}/ObjectPack.arc.LZ`;
         const stagePath = `${basePath}/${this.id}_stg_l0.arc.LZ`;
-        return Progressable.all([fetch(systemPath), fetch(objPackPath), fetch(stagePath)]).then((buffers: ArrayBufferSlice[]) => {
+        return Progressable.all([fetchData(systemPath), fetchData(objPackPath), fetchData(stagePath)]).then((buffers: ArrayBufferSlice[]) => {
             const [systemBuffer, objPackBuffer, stageBuffer] = buffers;
 
             const systemArchive = U8.parse(systemBuffer);

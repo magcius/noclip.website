@@ -3,7 +3,8 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { fetch, readString } from '../util';
+import { readString } from '../util';
+import { fetchData } from '../fetch';
 
 import { RenderState, depthClearFlags, RenderFlags } from '../render';
 import * as Viewer from '../viewer';
@@ -529,7 +530,7 @@ class SceneDesc {
     }
 
     private fetchRarc(path: string): Progressable<{ path: string, rarc: RARC.RARC }> {
-        return fetch(path).then((buffer: ArrayBufferSlice) => {
+        return fetchData(path).then((buffer: ArrayBufferSlice) => {
             if (readString(buffer, 0, 4) === 'Yaz0')
                 return Yaz0.decompress(buffer);
             else

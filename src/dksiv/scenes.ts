@@ -8,7 +8,7 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { fetch } from '../util';
+import { fetchData } from '../fetch';
 
 const dks1Paths = [
     "data/dksiv/dks1/15-0 Sens Fortress.iv",
@@ -98,7 +98,7 @@ class SceneDesc implements SceneDesc {
     }
 
     private createSceneForPath(gl: WebGL2RenderingContext, path: string): Progressable<Scene> {
-        return fetch(path).then((result: ArrayBufferSlice) => {
+        return fetchData(path).then((result: ArrayBufferSlice) => {
             const iv = parseIV(result);
             const basename = path.split('/').pop();
             return new Scene(gl, basename, iv);

@@ -6,7 +6,8 @@ import * as BRRES from './brres';
 import * as U8 from './u8';
 import * as Yaz0 from '../compression/Yaz0';
 
-import { fetch, assert } from '../util';
+import { assert } from '../util';
+import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
@@ -67,7 +68,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch(`data/mkwii/${this.id}.szs`).then((buffer: ArrayBufferSlice) => {
+        return fetchData(`data/mkwii/${this.id}.szs`).then((buffer: ArrayBufferSlice) => {
             return Yaz0.decompress(buffer);
         }).then((buffer: ArrayBufferSlice) => {
             const arch = U8.parse(buffer);

@@ -1,7 +1,8 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { fetch, readString, assert } from '../util';
+import { readString, assert } from '../util';
+import { fetchData } from '../fetch';
 
 import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import * as Viewer from '../viewer';
@@ -334,7 +335,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch(this.path).then((result: ArrayBufferSlice) => {
+        return fetchData(this.path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);
