@@ -55,3 +55,6 @@ parcel/
 dist/*
 !dist/data
 post*.html
+
+deploy_rsa
+deploy_rsa.pub
