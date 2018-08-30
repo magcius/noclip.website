@@ -9,6 +9,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists } from "../util";
 import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas } from '../gx/gx_displaylist';
 import { mat4 } from 'gl-matrix';
+import { AABB } from '../Geometry';
 
 export interface TTYDWorld {
     information: Information;
@@ -24,10 +25,16 @@ export interface Information {
     dateStr: string;
 }
 
+export interface Sampler {
+    textureName: string;
+    wrapS: GX.WrapMode;
+    wrapT: GX.WrapMode;
+}
+
 export interface Material {
     index: number;
     name: string;
-    textureName: string;
+    samplers: Sampler[];
     gxMaterial: GX_Material.GXMaterial;
 }
 
@@ -41,28 +48,10 @@ export interface SceneGraphPart {
     batch: Batch;
 }
 
-interface TransformDebug {
-    scaleX: number;
-    scaleY: number;
-    scaleZ: number;
-    rotationX: number;
-    rotationY: number;
-    rotationZ: number;
-    translationX: number;
-    translationY: number;
-    translationZ: number;
-    bboxMinX: number;
-    bboxMinY: number;
-    bboxMinZ: number;
-    bboxMaxX: number;
-    bboxMaxY: number;
-    bboxMaxZ: number;
-}
-
 export interface SceneGraphNode {
     nameStr: string;
     typeStr: string;
-    transformDebug: TransformDebug;
+    bbox: AABB;
     modelMatrix: mat4;
     children: SceneGraphNode[];
     parts: SceneGraphPart[];
@@ -165,38 +154,49 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const materialName2 = readString(buffer, mainDataOffs + view.getUint32(materialOffs + 0x00));
         assert(materialName === materialName2);
         const color = view.getUint32(materialOffs + 0x04);
-        // Probably counts of some sort?
-        const materialUnk08 = view.getUint32(materialOffs + 0x08);
-        const samplerOffsRel = view.getUint32(materialOffs + 0x0C);
+        const matSrc: GX.ColorSrc = view.getUint8(materialOffs + 0x08);
+        const samplerEntryTableCount = view.getUint8(materialOffs + 0x0B);
 
-        let textureName: string | null = null;
-        if (samplerOffsRel !== 0) {
-            const samplerOffs = mainDataOffs + samplerOffsRel;
+        const texGens: GX_Material.TexGen[] = [];
+        const samplers: Sampler[] = [];
+        let samplerEntryTableIdx = materialOffs + 0x0C;
+        for (let i = 0; i < samplerEntryTableCount; i++) {
+            const samplerOffs = mainDataOffs + view.getUint32(samplerEntryTableIdx);
             const textureEntryOffs = mainDataOffs + view.getUint32(samplerOffs + 0x00);
+
             const samplerUnk04 = view.getUint32(samplerOffs + 0x04);
             assert(samplerUnk04 === 0x00000000);
-            // Again, counts or flags of some form?
-            const samplerUnk08 = view.getUint32(samplerOffs + 0x08);
 
-            textureName = readString(buffer, mainDataOffs + view.getUint32(textureEntryOffs + 0x00));
+            const wrapS: GX.WrapMode = view.getUint8(samplerOffs + 0x08);
+            const wrapT: GX.WrapMode = view.getUint8(samplerOffs + 0x09);
+
+            const textureName = readString(buffer, mainDataOffs + view.getUint32(textureEntryOffs + 0x00));
+
             // Seems to be some byte. Flags?
             const textureEntryUnk04 = view.getUint8(textureEntryOffs + 0x04);
             const textureWidth = view.getUint16(textureEntryOffs + 0x08);
             const textureHeight = view.getUint16(textureEntryOffs + 0x0A);
             const textureEntryUnk0C = view.getUint8(textureEntryOffs + 0x0C);
             assert(textureEntryUnk0C === 0x00);
+
+            // For some reason, the game sets up samplers backwards.
+            const backwardsIndex = samplerEntryTableCount - i - 1;
+
+            const texGen = {
+                index: i,
+                type: GX.TexGenType.MTX2x4,
+                source: GX.TexGenSrc.TEX0 + backwardsIndex,
+                matrix: GX.TexGenMatrix.TEXMTX0 + i,
+                normalize: false,
+                postMatrix: GX.PostTexGenMatrix.PTIDENTITY
+            };
+            texGens[backwardsIndex] = texGen;
+            samplers[backwardsIndex] = { textureName, wrapS, wrapT };
+
+            samplerEntryTableIdx += 0x04;
         }
 
-        // Fake a GX material.
-        const texGen0 = {
-            index: 0,
-            type: GX.TexGenType.MTX2x4,
-            source: GX.TexGenSrc.TEX0,
-            matrix: GX.TexGenMatrix.IDENTITY,
-            normalize: false,
-            postMatrix: GX.PostTexGenMatrix.PTIDENTITY
-        };
-        const texGens = [texGen0];
+        const hasSampler0 = samplers[0];
 
         const lightChannel0: GX_Material.LightChannelControl = {
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX },
@@ -212,7 +212,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
             alphaInA: GX.CombineAlphaInput.ZERO,
             alphaInB: GX.CombineAlphaInput.RASA,
-            alphaInC: textureName !== null ? GX.CombineAlphaInput.TEXA : GX.CombineAlphaInput.KONST,
+            alphaInC: hasSampler0 ? GX.CombineAlphaInput.TEXA : GX.CombineAlphaInput.KONST,
             alphaInD: GX.CombineAlphaInput.ZERO,
             alphaOp: GX.TevOp.ADD,
             alphaBias: GX.TevBias.ZERO,
@@ -223,7 +223,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
             colorInA: GX.CombineColorInput.ZERO,
             colorInB: GX.CombineColorInput.RASC,
-            colorInC: textureName !== null ? GX.CombineColorInput.TEXC : GX.CombineColorInput.ONE,
+            colorInC: hasSampler0 ? GX.CombineColorInput.TEXC : GX.CombineColorInput.ONE,
             colorInD: GX.CombineColorInput.ZERO,
             colorOp: GX.TevOp.ADD,
             colorBias: GX.TevBias.ZERO,
@@ -281,7 +281,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             indTexStages: [],
         };
 
-        const material: Material = { index: i, name: materialName, textureName, gxMaterial };
+        const material: Material = { index: i, name: materialName, samplers, gxMaterial };
         materialMap.set(materialOffs, material);
         materials.push(material);
     }
@@ -349,14 +349,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const bboxMaxY = view.getFloat32(offs + 0x4C);
         const bboxMaxZ = view.getFloat32(offs + 0x50);
 
-        const transformDebug = {
-            scaleX, scaleY, scaleZ,
-            rotationX, rotationY, rotationZ,
-            translationX, translationY, translationZ,
-            bboxMinX, bboxMinY, bboxMinZ,
-            bboxMaxX, bboxMaxY, bboxMaxZ,
-        };
-
+        const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         const modelMatrix = mat4.create();
         calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         mat4.mul(modelMatrix, parentMatrix, modelMatrix);
@@ -387,8 +380,13 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 CLR1 = 1 << 3,
                 TEX0 = 1 << 4,
                 TEX1 = 1 << 5,
-                // TODO(jstpierre): Validate, verify?
-            };
+                TEX2 = 1 << 6,
+                TEX3 = 1 << 7,
+                TEX4 = 1 << 8,
+                TEX5 = 1 << 9,
+                TEX6 = 1 << 10,
+                TEX7 = 1 << 11,
+           };
 
             let workingBits = vcdBits;
 
@@ -464,7 +462,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         if (nextSiblingOffs !== 0)
             nextSibling = readSceneGraph(mainDataOffs + nextSiblingOffs, parentMatrix);
 
-        return { nameStr, typeStr, transformDebug, modelMatrix, children, nextSibling, parts };
+        return { nameStr, typeStr, modelMatrix, bbox, children, parts, nextSibling };
     }
 
     const rootMatrix = mat4.create();
