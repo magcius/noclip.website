@@ -7,7 +7,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists } from "../util";
-import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas } from '../gx/gx_displaylist';
 import { mat4 } from 'gl-matrix';
 
 export interface TTYDWorld {
@@ -429,38 +429,22 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             // No bits leftover.
             assert(workingBits === 0);
 
-            const vtxLoader = compileVtxLoader(vat, vcd, { stopAtNull: false });
+            const vtxLoader = compileVtxLoader(vat, vcd);
             const loadedVertexLayout = vtxLoader.loadedVertexLayout;
 
-            interface DrawEntry {
-                displayListOffs: number;
-                displayListSize: number;
-            }
-
-            const drawEntries: DrawEntry[] = [];
             let displayListTableIdx = meshOffs + 0x10;
+            const loadedDatas: LoadedVertexData[] = [];
+            let vertexId = 0;
             for (let i = 0; i < displayListTableCount; i++) {
                 const displayListOffs = mainDataOffs + view.getUint32(displayListTableIdx + 0x00);
                 const displayListSize = view.getUint32(displayListTableIdx + 0x04);
-                drawEntries[i] = { displayListOffs, displayListSize };
+                const loadedVertexData = vtxLoader.runVertices(vtxArrays, buffer.subarray(displayListOffs, displayListSize), { firstVertexId: vertexId });
+                vertexId = loadedVertexData.vertexId;
+                loadedDatas.push(loadedVertexData);
                 displayListTableIdx += 0x08;
             }
 
-            // Coalesce the entries together.
-            for (let i = 1; i < drawEntries.length;) {
-                const d0 = drawEntries[i - 1], d1 = drawEntries[i];
-                if (d0.displayListOffs + d0.displayListSize === d1.displayListOffs) {
-                    d0.displayListSize += d1.displayListSize;
-                    drawEntries.splice(i, 1);
-                } else {
-                    i++;
-                }
-            }
-
-            assert(drawEntries.length === 1);
-            const { displayListOffs, displayListSize } = drawEntries[0];
-            const loadedVertexData = vtxLoader.runVertices(vtxArrays, buffer.subarray(displayListOffs, displayListSize));
-
+            const loadedVertexData = coalesceLoadedDatas(loadedDatas);
             const batch: Batch = { loadedVertexLayout, loadedVertexData };
 
             parts.push({ material, batch });
