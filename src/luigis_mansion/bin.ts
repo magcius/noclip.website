@@ -6,7 +6,7 @@ import { mat4, vec3, quat } from "gl-matrix";
 import * as GX from "../gx/gx_enum";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import * as GX_Material from '../gx/gx_material';
-import { AABB } from "../Camera";
+import { AABB } from "../Geometry";
 
 export interface BIN {
     samplers: Sampler[];

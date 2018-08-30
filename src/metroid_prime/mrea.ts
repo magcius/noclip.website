@@ -10,9 +10,9 @@ import { ResourceSystem } from "./resource";
 import { assert, readString, align } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, VtxLoader, compileVtxLoader } from '../gx/gx_displaylist';
-import { AABB } from '../Camera';
 import { mat4 } from 'gl-matrix';
 import * as Pako from 'pako';
+import { AABB } from '../Geometry';
 
 export interface MREA {
     materialSet: MaterialSet;

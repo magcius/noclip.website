@@ -10,9 +10,9 @@ import { assert, readString } from '../util';
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { AABB } from '../Camera';
 import AnimationController from '../AnimationController';
 import { ColorKind } from '../gx/gx_render';
+import { AABB } from '../Geometry';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);

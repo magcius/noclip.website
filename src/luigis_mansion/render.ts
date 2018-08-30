@@ -9,7 +9,7 @@ import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelpe
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
-import { AABB, IntersectionState } from "../Camera";
+import { AABB, IntersectionState } from "../Geometry";
 
 class Command_Material {
     private renderFlags: RenderFlags;
