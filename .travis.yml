@@ -21,7 +21,7 @@ addons:
 deploy:
   - provider: script
     skip_cleanup: true
-    script: rsync -e "ssh -i deploy/deploy_rsa" -ar --quiet $TRAVIS_BUILD_DIR/dist/ baptistchurch@foxcraft.dreamhost.com:noclip.website/
+    script: rsync -e "ssh -i deploy/deploy_rsa" -ar --quiet --delete-after --exclude=data/ $TRAVIS_BUILD_DIR/dist/ gznoclip@foxcraft.dreamhost.com:noclip.website/
     on:
       branch: master
 
