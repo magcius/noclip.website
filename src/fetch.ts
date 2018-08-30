@@ -4,22 +4,9 @@ import Progressable from './Progressable';
 
 export const BASE_URL = `https://noclip.website/`;
 
-function isDevelopment(): boolean {
-    return window.location.protocol === 'file:' || window.location.hostname === 'localhost';
-}
-
-function resolveURL(url: string): string {
-    const siteBase = `https://noclip.website/`;
-    if (url.startsWith(`data/`) && !isDevelopment())
-        return `${siteBase}/${url}`;
-    else
-        return url;
-}
-
 export function fetchData(url: string): Progressable<ArrayBufferSlice> {
-    const resolvedURL = resolveURL(url);
     const request = new XMLHttpRequest();
-    request.open("GET", resolvedURL, true);
+    request.open("GET", url, true);
     request.responseType = "arraybuffer";
     request.send();
     const p = new Promise<ArrayBufferSlice>((resolve, reject) => {
