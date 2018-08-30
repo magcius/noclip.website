@@ -6,20 +6,10 @@ import { ResourceSystem } from './resource';
 import { MREARenderer, RetroTextureHolder } from './render';
 
 import * as Viewer from '../viewer';
-import { fetch, assert } from '../util';
+import { assert } from '../util';
+import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-
-// PAK Files are too big for GitHub.
-function findPakBase() {
-    if (document.location.protocol === 'file:' || document.location.hostname === 'localhost') {
-        return `data/dkcr`;
-    } else {
-        return `https://funny.computer/cloud/NBMDVD/DKCR`;
-    }
-}
-
-const pakBase = findPakBase();
 
 class DKCRSceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -28,7 +18,7 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        return fetch(`${pakBase}/${this.filename}`).then((buffer: ArrayBufferSlice) => {
+        return fetchData(`data/dkcr/${this.filename}`).then((buffer: ArrayBufferSlice) => {
             const levelPak = PAK.parse(buffer);
             const resourceSystem = new ResourceSystem([levelPak], null);
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {

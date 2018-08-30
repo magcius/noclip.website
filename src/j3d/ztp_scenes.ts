@@ -1,8 +1,7 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { fetch } from '../util';
-
+import { fetchData } from '../fetch';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
@@ -78,7 +77,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
     private transparentScenes: BMDModelInstance[] = [];
     private windowScenes: BMDModelInstance[] = [];
 
-    constructor(private textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: BMDModelInstance[], public roomScenes: BMDModelInstance[]) {
+    constructor(public textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: BMDModelInstance[], public roomScenes: BMDModelInstance[]) {
         this.textures = textureHolder.viewerTextures;
 
         this.roomScenes.forEach((scene) => {
@@ -204,7 +203,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchRarc(path: string): Progressable<RARC.RARC> {
-        return fetch(path).then((buffer: ArrayBufferSlice) => {
+        return fetchData(path).then((buffer: ArrayBufferSlice) => {
             return Yaz0.decompress(buffer);
         }).then((buffer: ArrayBufferSlice) => {
             return RARC.parse(buffer);

@@ -4,7 +4,7 @@ import * as Yaz0 from '../compression/Yaz0';
 
 import { RenderState, depthClearFlags } from '../render';
 import Progressable from '../Progressable';
-import { fetch } from '../util';
+import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as SARC from './sarc';
@@ -65,7 +65,7 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
     }
 
     private _createRenderersFromPath(gl: WebGL2RenderingContext, textureHolder: GX2TextureHolder, path: string, isSkybox: boolean): Progressable<ModelRenderer[]> {
-        return fetch(path).then((result: ArrayBufferSlice) => {
+        return fetchData(path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((result: ArrayBufferSlice) => {
             const renderers: ModelRenderer[] = [];

@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import { RenderFlags, RenderState, BlendMode } from '../render';
 import { SimpleProgram } from '../Program';
 import Progressable from '../Progressable';
-import { fetch } from '../util';
+import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { OrbitCameraController } from '../Camera';
 
@@ -259,7 +259,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
-        return fetch(this.path).then((result: ArrayBufferSlice) => {
+        return fetchData(this.path).then((result: ArrayBufferSlice) => {
             const mdl0 = MDL0.parse(result);
             return new Scene(gl, mdl0);
         });

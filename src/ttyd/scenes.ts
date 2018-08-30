@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import Progressable from '../Progressable';
-import { fetch } from '../util';
+import { fetchData } from '../fetch';
 
 import * as TPL from './tpl';
 import * as World from './world';
@@ -13,7 +13,7 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
         const pathBase = `data/ttyd/${this.id}`;
-        return Progressable.all([fetch(`${pathBase}/d.blob`), fetch(`${pathBase}/t.blob`)]).then(([dBuffer, tBuffer]) => {
+        return Progressable.all([fetchData(`${pathBase}/d.blob`), fetchData(`${pathBase}/t.blob`)]).then(([dBuffer, tBuffer]) => {
             const d = World.parse(dBuffer);
             const textureHolder = new TPLTextureHolder();
             const tpl = TPL.parse(tBuffer, d.textureNameTable);

@@ -11,7 +11,8 @@ import Progressable from '../Progressable';
 import { RenderState } from '../render';
 import { SimpleProgram } from '../Program';
 import RenderArena from '../RenderArena';
-import { fetch, assert } from '../util';
+import { assert } from '../util';
+import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import AnimationController from '../AnimationController';
 import { mat4 } from 'gl-matrix';
@@ -435,7 +436,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         // Fetch the ZAR & info ZSI.
         const path_zar = `data/oot3d/${this.id}.zar`;
         const path_info_zsi = `data/oot3d/${this.id}_info.zsi`;
-        return Progressable.all([fetch(path_zar), fetch(path_info_zsi)]).then(([zar, zsi]) => {
+        return Progressable.all([fetchData(path_zar), fetchData(path_info_zsi)]).then(([zar, zsi]) => {
             return this._createSceneFromData(gl, zar, zsi);
         });
     }
@@ -451,7 +452,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
 
         return Progressable.all(roomFilenames.map((filename, i) => {
-            return fetch(filename).then((roomResult) => {
+            return fetchData(filename).then((roomResult) => {
                 const zsi = ZSI.parse(roomResult);
                 assert(zsi.mesh !== null);
                 const roomRenderer = new RoomRenderer(gl, zsi, filename);

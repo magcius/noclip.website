@@ -7,22 +7,12 @@ import { MREARenderer, RetroTextureHolder, CMDLRenderer } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
-import { fetch, assert } from '../util';
+import { assert } from '../util';
+import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import { RenderState, depthClearFlags } from '../render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BYML from '../byml';
-
-// PAK Files are too big for GitHub.
-function findPakBase() {
-    if (document.location.protocol === 'file:' || document.location.hostname === 'localhost') {
-        return `data/metroid_prime/mp1/`;
-    } else {
-        return `https://funny.computer/cloud/NBMDVD/MetroidPrime1/`;
-    }
-}
-
-const pakBase = findPakBase();
 
 export class MetroidPrimeWorldScene implements Viewer.MainScene {
     public textures: Viewer.Texture[];
@@ -66,9 +56,9 @@ class MP1SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        const stringsPakP = fetch(`${pakBase}/Strings.pak`);
-        const levelPakP = fetch(`${pakBase}/${this.filename}`);
-        const nameDataP = fetch(`data/metroid_prime/mp1/MP1_NameData.crg1`);
+        const stringsPakP = fetchData(`data/metroid_prime/mp1/Strings.pak`);
+        const levelPakP = fetchData(`data/metroid_prime/mp1/${this.filename}`);
+        const nameDataP = fetchData(`data/metroid_prime/mp1/MP1_NameData.crg1`);
         return Progressable.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
             const levelPak = PAK.parse(datas[0]);
             const stringsPak = PAK.parse(datas[1]);

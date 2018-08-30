@@ -5,7 +5,8 @@ import { MultiScene, createScene } from './scenes';
 
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { fetch, readString, assert, assertExists } from '../util';
+import { readString, assert, assertExists } from '../util';
+import { fetchData } from '../fetch';
 import { mat4, quat } from 'gl-matrix';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance } from './render';
@@ -78,7 +79,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const path = `data/j3d/mkdd/Course/${this.path}`;
-        return fetch(path).then((buffer: ArrayBufferSlice) => {
+        return fetchData(path).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);
             // Find course name.
             const bolFile = rarc.files.find((f) => f.name.endsWith('_course.bol'));
