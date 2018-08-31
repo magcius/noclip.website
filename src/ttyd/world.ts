@@ -538,6 +538,51 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                 ... noIndTex,
             });
+        } else if (tevMode === 0x07) {
+            tevStages.push({
+                index: 0,
+
+                ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
+                ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
+                ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
+                ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+                ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+
+                konstColorSel: GX.KonstColorSel.KCSEL_1,
+                konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
+
+                ... noIndTex,
+            });
+
+            tevStages.push({
+                index: 1,
+
+                ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
+                ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO),
+                ... setTevAlphaIn(GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.TEXA),
+                ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+                ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+
+                konstColorSel: GX.KonstColorSel.KCSEL_1,
+                konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
+
+                ... noIndTex,
+            });
+
+            tevStages.push({
+                index: 2,
+
+                ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
+                ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
+                ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
+                ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+                ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+
+                konstColorSel: GX.KonstColorSel.KCSEL_1,
+                konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
+
+                ... noIndTex,
+            });
         } else {
             console.error(`Unimplemented TEV mode ${tevMode}`);
 
