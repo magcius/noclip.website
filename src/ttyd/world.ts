@@ -36,6 +36,7 @@ export interface Material {
     name: string;
     samplers: Sampler[];
     gxMaterial: GX_Material.GXMaterial;
+    matColorReg: GX_Material.Color;
 }
 
 export interface Batch {
@@ -173,8 +174,9 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         // Parse material.
         const materialName2 = readString(buffer, mainDataOffs + view.getUint32(materialOffs + 0x00));
         assert(materialName === materialName2);
-        const color = view.getUint32(materialOffs + 0x04);
-        const matSrc: GX.ColorSrc = view.getUint8(materialOffs + 0x08);
+        const matColorReg = new GX_Material.Color();
+        matColorReg.copy32(view.getUint32(materialOffs + 0x04));
+        const matColorSrc: GX.ColorSrc = view.getUint8(materialOffs + 0x08);
         const samplerEntryTableCount = view.getUint8(materialOffs + 0x0B);
 
         const texGens: GX_Material.TexGen[] = [];
@@ -228,8 +230,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         }
 
         const lightChannel0: GX_Material.LightChannelControl = {
-            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX },
-            colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX },
+            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: matColorSrc },
+            colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: matColorSrc },
         };
 
         const lightChannels: GX_Material.LightChannelControl[] = [lightChannel0, lightChannel0];
@@ -591,7 +593,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             indTexStages: [],
         };
 
-        const material: Material = { index: i, name: materialName, samplers, gxMaterial };
+        const material: Material = { index: i, name: materialName, samplers, gxMaterial, matColorReg };
         materialMap.set(materialOffs, material);
         materials.push(material);
     }

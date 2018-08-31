@@ -1,6 +1,6 @@
 
 import * as GX_Material from '../gx/gx_material';
-import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, translateTexFilter, translateWrapMode } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, translateTexFilter, translateWrapMode, ColorKind } from '../gx/gx_render';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler } from './world';
@@ -41,14 +41,16 @@ class Command_Material {
         return glSampler;
     }
 
-    public fillMaterialParams(gl: WebGL2RenderingContext, materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
+    public fillMaterialParams(materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
         for (let i = 0; i < this.material.samplers.length; i++) {
             const sampler = this.material.samplers[i];
 
-            const texMapping = this.materialParams.m_TextureMapping[i];
+            const texMapping = materialParams.m_TextureMapping[i];
             textureHolder.fillTextureMapping(texMapping, sampler.textureName);
             texMapping.glSampler = this.glSamplers[i];
         }
+
+        materialParams.u_Color[ColorKind.MAT0].copy(this.material.matColorReg);
     }
 
     public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: TPLTextureHolder) {
@@ -56,7 +58,7 @@ class Command_Material {
 
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
-        this.fillMaterialParams(gl, this.materialParams, textureHolder);
+        this.fillMaterialParams(this.materialParams, textureHolder);
         renderHelper.bindMaterialParams(state, this.materialParams);
         renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
     }
