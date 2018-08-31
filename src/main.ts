@@ -1,4 +1,14 @@
 
+// Parcel HMR workaround.
+// https://github.com/parcel-bundler/parcel/issues/289
+declare var module: any;
+if (module.hot) {
+    module.hot.dispose(() => {
+        window.location.reload();
+        throw new Error();
+    });
+}
+
 import { MainScene, SceneDesc, SceneGroup, Viewer } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
@@ -399,11 +409,3 @@ declare global {
     }
 }
 window.hexdump = hexdump;
-
-// Parcel HMR workaround.
-declare var module: any;
-if (module.hot) {
-    module.hot.dispose(() => {
-        window.location.reload();
-    });
-}
