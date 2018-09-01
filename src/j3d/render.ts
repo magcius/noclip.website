@@ -752,8 +752,7 @@ export class BMDModelInstance {
             if (matrixDefinition.kind === DRW1MatrixKind.Joint) {
                 const matrixVisible = this.jointVisibility[matrixDefinition.jointIndex];
                 this.shapeInstanceState.matrixVisibility[i] = matrixVisible;
-                if (matrixVisible)
-                    mat4.copy(dst, this.jointMatrices[matrixDefinition.jointIndex]);
+                mat4.copy(dst, this.jointMatrices[matrixDefinition.jointIndex]);
             } else if (matrixDefinition.kind === DRW1MatrixKind.Envelope) {
                 dst.fill(0);
                 const envelope = evp1.envelopes[matrixDefinition.envelopeIndex];
@@ -769,13 +768,11 @@ export class BMDModelInstance {
 
                 this.shapeInstanceState.matrixVisibility[i] = matrixVisible;
 
-                if (matrixVisible) {
-                    for (let i = 0; i < envelope.weightedBones.length; i++) {
-                        const weightedBone = envelope.weightedBones[i];
-                        const inverseBindPose = evp1.inverseBinds[weightedBone.index];
-                        mat4.mul(matrixScratch, this.jointMatrices[weightedBone.index], inverseBindPose);
-                        mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
-                    }
+                for (let i = 0; i < envelope.weightedBones.length; i++) {
+                    const weightedBone = envelope.weightedBones[i];
+                    const inverseBindPose = evp1.inverseBinds[weightedBone.index];
+                    mat4.mul(matrixScratch, this.jointMatrices[weightedBone.index], inverseBindPose);
+                    mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
                 }
             }
         }
