@@ -3,7 +3,7 @@
 
 import * as Viewer from './viewer';
 import Progressable from './Progressable';
-import { assertExists } from './util';
+import { assertExists, assert } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController } from './Camera';
 import { RenderStatistics } from './render';
 import { Color, colorToCSS } from './Color';
@@ -13,6 +13,33 @@ const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 
 function createDOMFromString(s: string): DocumentFragment {
     return document.createRange().createContextualFragment(s);
+}
+
+function setChildren(parent: Element, children: Element[]): void {
+    // We want to swap children around without removing them, since removing them will cause
+    // a relayout and possibly break scroll positions.
+
+    // Go through and add any new children.
+    for (let i = 0; i < children.length; i++)
+        if (children[i].parentNode !== parent)
+            parent.appendChild(children[i]);
+
+    // Remove any children that we don't want.
+    for (let i = 0; i < parent.childElementCount;) {
+        const child = parent.children.item(i);
+        if (children.includes(child))
+            i++;
+        else
+            parent.removeChild(child);
+    }
+
+    // Now the DOM node should only contain the children.
+    assert(parent.childElementCount === children.length);
+
+    // Put them in the right order by making as few moves as possible.
+    for (let i = 0; i < children.length - 1; i++)
+        if (parent.children.item(i) !== children[i])
+            parent.insertBefore(children[i], parent.children.item(i));
 }
 
 function setElementHighlighted(elem: HTMLElement, highlighted: boolean, normalTextColor: string = '') {
@@ -307,6 +334,7 @@ export class Panel implements Widget {
         this.svgIcon.style.gridColumn = '1';
         this.header.textContent = title;
         this.header.appendChild(this.svgIcon);
+        this.toplevel.dataset.title = title;
 
         this.setExpanded(false);
     }
@@ -960,10 +988,7 @@ export class UI {
     }
 
     private setPanels(panels: Panel[]): void {
-        this.toplevel.innerHTML = '';
-        for (const panel of panels) {
-            this.toplevel.appendChild(panel.elem);
-        }
+        setChildren(this.toplevel, panels.map((panel) => panel.elem));
     }
 
     public setScenePanels(panels: Panel[]): void {
