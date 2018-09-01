@@ -362,7 +362,6 @@ export interface LoadedVertexData {
 }
 
 export interface LoadOptions {
-    stopAtNull?: boolean;
     firstVertexId?: number;
 }
 
@@ -615,8 +614,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
 "use strict";
 
 return function ${loaderName}(vtxArrays, srcBuffer, loadOptions) {
-const stopAtNull = (loadOptions !== undefined && loadOptions.stopAtNull !== undefined) ? loadOptions.stopAtNull : false;
-const firstVertexId = (loadOptions !== undefined && loadOptions.firstVertexId !== undefined) ? loadOptions.firstVertexId : false;
+const firstVertexId = (loadOptions !== undefined && loadOptions.firstVertexId !== undefined) ? loadOptions.firstVertexId : 0;
 
 // Parse display list.
 const dlView = srcBuffer.createDataView();
@@ -629,19 +627,14 @@ while (true) {
     if (drawCallIdx >= srcBuffer.byteLength)
         break;
     const cmd = dlView.getUint8(drawCallIdx);
-    drawCallIdx += 0x01;
-    if (cmd === 0) {
-        if (stopAtNull)
-            break;
-        else
-            continue;
-    }
+    if (cmd === 0)
+        break;
 
     const primType = cmd & 0xF8;
     const vertexFormat = cmd & 0x07;
 
-    const vertexCount = dlView.getUint16(drawCallIdx);
-    drawCallIdx += 0x02;
+    const vertexCount = dlView.getUint16(drawCallIdx + 0x01);
+    drawCallIdx += 0x03;
     const srcOffs = drawCallIdx;
     const first = totalVertexCount;
     totalVertexCount += vertexCount;
