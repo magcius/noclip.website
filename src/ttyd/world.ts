@@ -15,6 +15,7 @@ export interface TTYDWorld {
     information: Information;
     textureNameTable: string[];
     rootNode: SceneGraphNode;
+    sNode: SceneGraphNode;
     materials: Material[];
 }
 
@@ -31,9 +32,18 @@ export interface Sampler {
     wrapT: GX.WrapMode;
 }
 
+const enum MaterialLayer {
+    OPAQUE = 0x00,
+    ALPHA_TEST = 0x01,
+    BLEND = 0x02,
+    OPAQUE_PUNCHTHROUGH = 0x03,
+    ALPHA_TEST_PUNCHTHROUGH = 0x04,
+}
+
 export interface Material {
     index: number;
     name: string;
+    materialLayer: MaterialLayer;
     samplers: Sampler[];
     gxMaterial: GX_Material.GXMaterial;
     matColorReg: GX_Material.Color;
@@ -56,6 +66,7 @@ export interface SceneGraphNode {
     modelMatrix: mat4;
     children: SceneGraphNode[];
     parts: SceneGraphPart[];
+    isTranslucent: boolean;
     visible?: boolean;
 }
 
@@ -177,6 +188,13 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const matColorReg = new GX_Material.Color();
         matColorReg.copy32(view.getUint32(materialOffs + 0x04));
         const matColorSrc: GX.ColorSrc = view.getUint8(materialOffs + 0x08);
+
+        let materialLayer: MaterialLayer = MaterialLayer.OPAQUE;
+
+        const materialLayerFlags: MaterialLayer = view.getUint8(materialOffs + 0x0A);
+        assert(materialLayerFlags <= MaterialLayer.BLEND);
+        materialLayer = Math.max(materialLayer, materialLayerFlags);
+
         const samplerEntryTableCount = view.getUint8(materialOffs + 0x0B);
 
         const texGens: GX_Material.TexGen[] = [];
@@ -191,6 +209,10 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
             const wrapS: GX.WrapMode = view.getUint8(samplerOffs + 0x08);
             const wrapT: GX.WrapMode = view.getUint8(samplerOffs + 0x09);
+
+            const materialLayerFlags: MaterialLayer = view.getUint8(samplerOffs + 0x0A);
+            assert(materialLayerFlags <= MaterialLayer.BLEND);
+            materialLayer = Math.max(materialLayer, materialLayerFlags);
 
             const textureName = readString(buffer, mainDataOffs + view.getUint32(textureEntryOffs + 0x00));
 
@@ -604,31 +626,91 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
         }
 
-        // Filter any pixels less than 0.1.
-        const alphaTest: GX_Material.AlphaTest = {
+        let alphaTest: GX_Material.AlphaTest;
+        let ropInfo: GX_Material.RopInfo;
+
+        if (materialLayer === MaterialLayer.OPAQUE) {
+            // Opaque.
+            // GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_OR);
+            // GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+            // GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+
+            alphaTest = {
             op: GX.AlphaOp.AND,
-            compareA: GX.CompareType.GEQUAL,
+                compareA: GX.CompareType.ALWAYS,
             compareB: GX.CompareType.ALWAYS,
-            referenceA: 0.1,
+                referenceA: 0.0,
             referenceB: 0.0,
         };
 
-        const blendMode: GX_Material.BlendMode = {
+            ropInfo = {
+                blendMode: {
             type: GX.BlendMode.NONE,
             srcFactor: GX.BlendFactor.ONE,
-            dstFactor: GX.BlendFactor.ONE,
+                    dstFactor: GX.BlendFactor.ZERO,
             logicOp: GX.LogicOp.CLEAR,
+                },
+
+                depthFunc: GX.CompareType.LEQUAL,
+                depthTest: true,
+                depthWrite: true,
+            };
+        } else if (materialLayer === MaterialLayer.ALPHA_TEST) {
+            // Alpha test.
+            // GXSetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
+            // GXSetAlphaCompare(GX_GEQUAL, 0x80, GX_AOP_OR, GX_NEVER, 0);
+            // GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
+
+            alphaTest = {
+                op: GX.AlphaOp.OR,
+                compareA: GX.CompareType.GEQUAL,
+                compareB: GX.CompareType.NEVER,
+                referenceA: 0.5,
+                referenceB: 0.0,
         };
 
-        const ropInfo: GX_Material.RopInfo = {
-            blendMode,
-            depthFunc: GX.CompareType.LESS,
+            ropInfo = {
+                blendMode: {
+                    type: GX.BlendMode.NONE,
+                    srcFactor: GX.BlendFactor.ONE,
+                    dstFactor: GX.BlendFactor.ZERO,
+                    logicOp: GX.LogicOp.CLEAR,
+                },
+
+                depthFunc: GX.CompareType.LEQUAL,
             depthTest: true,
             depthWrite: true,
         };
+        } else if (materialLayer === MaterialLayer.BLEND) {
+            // Transparent.
+            // GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+            // GXSetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+            // GXSetZMode(GX_TRUE, GX_LEQUAL, GX_FALSE);
+
+            alphaTest = {
+                op: GX.AlphaOp.AND,
+                compareA: GX.CompareType.ALWAYS,
+                compareB: GX.CompareType.ALWAYS,
+                referenceA: 0.0,
+                referenceB: 0.0,
+            };
+
+            ropInfo = {
+                blendMode: {
+                    type: GX.BlendMode.BLEND,
+                    srcFactor: GX.BlendFactor.SRCALPHA,
+                    dstFactor: GX.BlendFactor.INVSRCALPHA,
+                    logicOp: GX.LogicOp.CLEAR,
+                },
+
+                depthFunc: GX.CompareType.LEQUAL,
+                depthTest: true,
+                depthWrite: false,
+            };
+        }
 
         const gxMaterial: GX_Material.GXMaterial = {
-            index: i, name: '',
+            index: i, name: materialName,
             cullMode: GX.CullMode.BACK,
             lightChannels,
             texGens,
@@ -638,7 +720,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             indTexStages: [],
         };
 
-        const material: Material = { index: i, name: materialName, samplers, gxMaterial, matColorReg };
+        const material: Material = { index: i, name: materialName, materialLayer, samplers, gxMaterial, matColorReg };
         materialMap.set(materialOffs, material);
         materials.push(material);
     }
@@ -693,7 +775,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const rotationX = view.getFloat32(offs + 0x24);
         const rotationY = view.getFloat32(offs + 0x28);
         const rotationZ = view.getFloat32(offs + 0x2C);
-        // TODO(jstpierre): Figure out what on earth all of this is.
         const translationX = view.getFloat32(offs + 0x30);
         const translationY = view.getFloat32(offs + 0x34);
         const translationZ = view.getFloat32(offs + 0x38);
@@ -713,9 +794,13 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         let partTableIdx = offs + 0x60;
 
         const parts: SceneGraphPart[] = [];
+        let isTranslucent = false;
         for (let i = 0; i < partTableCount; i++) {
             const materialOffs = mainDataOffs + view.getUint32(partTableIdx + 0x00);
             const material = assertExists(materialMap.get(materialOffs));
+
+            if (material.materialLayer === MaterialLayer.BLEND)
+                isTranslucent = true;
 
             const meshOffs = mainDataOffs + view.getUint32(partTableIdx + 0x04);
 
@@ -808,7 +893,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         if (firstChildOffs !== 0) {
             let child = readSceneGraph(mainDataOffs + firstChildOffs, modelMatrix);
             while (child !== null) {
-                children.push(child);
+                children.unshift(child);
                 child = child.nextSibling;
             }
         }
@@ -817,7 +902,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         if (nextSiblingOffs !== 0)
             nextSibling = readSceneGraph(mainDataOffs + nextSiblingOffs, parentMatrix);
 
-        return { nameStr, typeStr, modelMatrix, bbox, children, parts, nextSibling };
+        return { nameStr, typeStr, modelMatrix, bbox, children, parts, isTranslucent, nextSibling };
     }
 
     const rootMatrix = mat4.create();
@@ -834,5 +919,5 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     const information = { versionStr, aNodeStr, sNodeStr, dateStr };
     //#endregion
 
-    return { information, textureNameTable, rootNode: sNode, materials };
+    return { information, textureNameTable, rootNode, sNode, materials };
 }
