@@ -133,16 +133,19 @@ export class WorldRenderer implements Viewer.MainScene {
             this.batchCommands[batchIndex].draw(state, this.renderHelper);
         };
 
-        const renderNode = (node: SceneGraphNode) => {
+        const renderNode = (node: SceneGraphNode, isTranslucent: boolean) => {
             if (node.visible === false)
                 return;
-            for (let i = 0; i < node.parts.length; i++)
-                renderPart(node.parts[i]);
+            if (node.isTranslucent === isTranslucent)
+                for (let i = 0; i < node.parts.length; i++)
+                    renderPart(node.parts[i]);
             for (let i = 0; i < node.children.length; i++)
-                renderNode(node.children[i]);
+                renderNode(node.children[i], isTranslucent);
         };
 
-        renderNode(this.d.rootNode);
+        // Dumb sorting.
+        renderNode(this.d.sNode, false);
+        renderNode(this.d.sNode, true);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
