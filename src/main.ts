@@ -33,6 +33,7 @@ import * as ZSS from './rres/zss_scenes';
 import * as ELB from './rres/elb_scenes';
 import * as MKWII from './rres/mkwii_scenes';
 import * as TTYD from './ttyd/scenes';
+import * as SPM from './ttyd/spm_scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI } from './ui';
@@ -60,6 +61,7 @@ const sceneGroups = [
     OOT3D.sceneGroup,
     DKSIV.sceneGroup,
     TTYD.sceneGroup,
+    SPM.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {
