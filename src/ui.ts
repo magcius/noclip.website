@@ -81,13 +81,17 @@ export abstract class ScrollSelect implements Widget {
         this.toplevel = document.createElement('div');
 
         this.scrollContainer = document.createElement('div');
-        this.scrollContainer.style.height = `200px`;
+        this.setHeight(`200px`);
         this.scrollContainer.style.overflow = 'auto';
         this.scrollContainer.style.userSelect = 'none';
         this.scrollContainer.style.webkitUserSelect = 'none';
         this.toplevel.appendChild(this.scrollContainer);
 
         this.elem = this.toplevel;
+    }
+
+    public setHeight(height: string): void {
+        this.scrollContainer.style.height = height;
     }
 
     public setStrings(strings: string[]): void {
@@ -380,7 +384,8 @@ class SceneSelect extends Panel {
 
         this.sceneDescList = new SingleSelect();
         this.sceneDescList.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-        this.sceneDescList.elem.style.width = '400px';
+        this.sceneDescList.elem.style.width = '500px';
+        this.sceneDescList.setHeight('250px');
         this.extraRack.appendChild(this.sceneDescList.elem);
 
         this.sceneGroupList.onselectionchange = (i: number) => {
