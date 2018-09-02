@@ -245,7 +245,7 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
 
     function readRooms(nRooms: number, roomTableAddr: number): Headers[] {
         const rooms = [];
-        for (let i = 0; i < 1; i++) {
+        for (let i = 0; i < nRooms; i++) {
             const pStart = loadAddress(roomTableAddr);
             const file = rom.lookupFile(pStart);
             const room = readRoom(file);
