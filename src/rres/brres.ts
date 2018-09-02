@@ -15,6 +15,7 @@ import { TextureMapping } from '../TextureHolder';
 import { RRESTextureHolder } from './render';
 import AnimationController from '../AnimationController';
 import { cv, Graph } from '../DebugJunk';
+import { GXTextureHolder } from '../gx/gx_render';
 
 //#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {
@@ -1901,7 +1902,7 @@ export class PAT0TexAnimator {
     constructor(public animationController: AnimationController, public pat0: PAT0, public texData: PAT0_TexData) {
     }
 
-    public calcTextureMapping(textureMapping: TextureMapping, textureHolder: RRESTextureHolder): void {
+    public fillTextureMapping(textureMapping: TextureMapping, textureHolder: GXTextureHolder): void {
         const texData = this.texData;
 
         const frame = this.animationController.getTimeInFrames();
