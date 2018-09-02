@@ -347,7 +347,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 index: 2,
 
                 ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
-
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
                 ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
@@ -395,7 +394,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 index: 2,
 
                 ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
-
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
                 ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
@@ -443,7 +441,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 index: 2,
 
                 ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
-
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
                 ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
@@ -454,6 +451,54 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                 ... noIndTex,
             });
+        } else if (tevMode === 0x04) {
+            // rgba = tex0.rgba * (1.0 - tex1.aaaa) * ras.rgba
+            tevStages.push({
+                index: 0,
+
+                ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
+                ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
+                ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
+                ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+                ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+
+                konstColorSel: GX.KonstColorSel.KCSEL_1,
+                konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
+
+                ... noIndTex,
+            });
+
+            tevStages.push({
+                index: 1,
+
+                ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
+                ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO),
+                ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO),
+                ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+                ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+
+                konstColorSel: GX.KonstColorSel.KCSEL_1,
+                konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
+
+                ... noIndTex,
+            });
+
+            tevStages.push({
+                index: 2,
+
+                ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
+                ... setTevColorIn(GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.APREV, GX.CombineColorInput.ZERO),
+                ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
+                ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+                ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+
+                konstColorSel: GX.KonstColorSel.KCSEL_1,
+                konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
+
+                ... noIndTex,
+            });
+
+            // No modulation against RASC? wtf?
         } else if (tevMode === 0x05) {
             // rgba = mix(tex0.rgba, tex1.rgba, tex2.aaaa) * ras.rgba
             tevStages.push({
@@ -636,19 +681,19 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             // GXSetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
 
             alphaTest = {
-            op: GX.AlphaOp.AND,
+                op: GX.AlphaOp.AND,
                 compareA: GX.CompareType.ALWAYS,
-            compareB: GX.CompareType.ALWAYS,
+                compareB: GX.CompareType.ALWAYS,
                 referenceA: 0.0,
-            referenceB: 0.0,
-        };
+                referenceB: 0.0,
+            };
 
             ropInfo = {
                 blendMode: {
-            type: GX.BlendMode.NONE,
-            srcFactor: GX.BlendFactor.ONE,
+                    type: GX.BlendMode.NONE,
+                    srcFactor: GX.BlendFactor.ONE,
                     dstFactor: GX.BlendFactor.ZERO,
-            logicOp: GX.LogicOp.CLEAR,
+                    logicOp: GX.LogicOp.CLEAR,
                 },
 
                 depthFunc: GX.CompareType.LEQUAL,
@@ -667,7 +712,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 compareB: GX.CompareType.NEVER,
                 referenceA: 0.5,
                 referenceB: 0.0,
-        };
+            };
 
             ropInfo = {
                 blendMode: {
@@ -678,9 +723,9 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 },
 
                 depthFunc: GX.CompareType.LEQUAL,
-            depthTest: true,
-            depthWrite: true,
-        };
+                depthTest: true,
+                depthWrite: true,
+            };
         } else if (materialLayer === MaterialLayer.BLEND) {
             // Transparent.
             // GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
@@ -742,9 +787,10 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     assert(view.getUint32(vcd_tableOffs + 0x10) === 0);
 
     const texCoordCount = view.getUint32(vcd_tableOffs + 0x14);
-    // assert(texCoordCount === 0x01);
+    assert(texCoordCount <= 0x03);
     vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x18) + 0x04 };
     vtxArrays[GX.VertexAttribute.TEX1] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x1C) + 0x04 };
+    vtxArrays[GX.VertexAttribute.TEX2] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x20) + 0x04 };
     //#endregion
 
     //#region information
@@ -807,7 +853,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             // Parse mesh.
             // VAT, perhaps? Doesn't seem like there's enough bits for that...
             const meshUnk00 = view.getUint32(meshOffs + 0x00);
-            assert(meshUnk00 === 0x01000001);
+            // assert(meshUnk00 === 0x01000001);
             const displayListTableCount = view.getUint32(meshOffs + 0x04);
             const vcdBits = view.getUint32(meshOffs + 0x08);
             const arrayOffs = mainDataOffs + view.getUint32(meshOffs + 0x0C);
@@ -862,6 +908,12 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 vat[GX.VertexAttribute.TEX1] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x4C) };
                 vcd[GX.VertexAttribute.TEX1] = { type: GX.AttrType.INDEX16 };
                 workingBits &= ~VcdBitFlags.TEX1;
+            }
+
+            if ((workingBits & VcdBitFlags.TEX2) !== 0) {
+                vat[GX.VertexAttribute.TEX2] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x50) };
+                vcd[GX.VertexAttribute.TEX2] = { type: GX.AttrType.INDEX16 };
+                workingBits &= ~VcdBitFlags.TEX2;
             }
 
             // No bits leftover.
