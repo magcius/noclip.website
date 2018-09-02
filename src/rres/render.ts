@@ -346,8 +346,13 @@ export class MaterialInstance {
         calcColor(ColorKind.C2, this.material.colorRegisters[3], BRRES.AnimatableColor.C2);
     }
 
-    public calcTextureMapping(dst: TextureMapping, name: string): void {
-        this.textureHolder.fillTextureMapping(dst, name);
+    public calcTextureMapping(dst: TextureMapping, i: number): void {
+        if (this.pat0Animators[i]) {
+            this.pat0Animators[i].fillTextureMapping(dst, this.textureHolder);
+        } else {
+            const name: string = this.material.samplers[i].name;
+            this.textureHolder.fillTextureMapping(dst, name);
+        }
     }
 }
 
@@ -434,7 +439,7 @@ export class Command_Material {
                 continue;
 
             const m = materialParams.m_TextureMapping[i];
-            materialInstance.calcTextureMapping(m, sampler.name);
+            materialInstance.calcTextureMapping(m, i);
             // Fill in sampler state.
             m.glSampler = this.glSamplers[i];
             m.lodBias = sampler.lodBias;
