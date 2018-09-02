@@ -275,10 +275,6 @@ export class GXShapeHelper {
                 case GX_Material.UniformStorage.VEC3:
                 case GX_Material.UniformStorage.VEC4:
                     gl.vertexAttribPointer(attribLocation, attrib.componentCount, type, normalized, stride, offset);
-                    if (gl.getError() !== gl.NO_ERROR) {
-                        console.log(vtxAttrib, attrib.componentCount, type, normalized, stride, offset);
-                        throw "xxx";
-                    }
                     break;
                 }
             } else {
