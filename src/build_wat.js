@@ -4,6 +4,7 @@
 const path = require('path');
 const wabt = require('wabt');
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 
 function buildBinaryArray(binary) {
     const binData = new Uint8Array(binary.buffer);
@@ -39,12 +40,26 @@ function buildModuleExportsInterface(exportName, wasmModule) {
     return lines.join('\n');
 }
 
-function buildModuleCode(module) {
-    const exportName = module.exportName;
-    const filename = module.filename;
+function compileAssemblyScript(filename) {
+    const outFilename = filename.replace('.ts', '.wat');
+    // TODO(jstpierre): noRuntime flag is gone, noLib seems to cause an assert fail in the compiler somewhere... ugh.
+    const res = spawnSync('node', [path.join(__dirname, '../node_modules/assemblyscript/bin/asc'), '--baseDir', __dirname, filename, '--noLib', '-O', '-c', '-o', outFilename]);
 
-    const wat = fs.readFileSync(path.join(__dirname, filename));
-    const wabtModule = wabt.parseWat(filename, wat);
+    if (res.status !== 0) {
+        console.error(res.stderr.toString('utf8'));
+        throw new Error("Could not compile");
+    }
+
+    return outFilename;
+}
+
+function buildModuleCode(mod) {
+    const exportName = mod.exportName;
+    const filename = mod.filename;
+
+    const watFilename = compileAssemblyScript(filename);
+    const wat = fs.readFileSync(path.join(__dirname, watFilename));
+    const wabtModule = wabt.parseWat(watFilename, wat);
     wabtModule.resolveNames();
     wabtModule.validate();
     const binary = wabtModule.toBinary({});
@@ -78,8 +93,8 @@ function buildModulesFile(modules) {
 
 function main() {
     const out = buildModulesFile([
-        { exportName: 'yaz0_as', filename: 'compression/Yaz0_as.wat' },
-        { exportName: 'gx_texture_as', filename: 'gx/gx_texture_as.wat' },
+        { exportName: 'yaz0_as', filename: 'assembly/Yaz0_as.ts' },
+        { exportName: 'gx_texture_as', filename: 'assembly/gx_texture_as.ts' },
     ]);
     fs.writeFileSync(path.join(__dirname, 'wat_modules.ts'), out);
 }

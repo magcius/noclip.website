@@ -95,24 +95,29 @@ export function calcMipChain(texture: Texture, mipCount: number = 0xFF): MipChai
     const mipLevels: Texture[] = [];
     const name = texture.name;
 
-    let textureSize = 0;
+    let mipOffs = 0;
     let mipLevel = 0;
     const format = texture.format;
     let width = texture.width;
     let height = texture.height;
-    while (width > 0 && height > 0 && mipLevel < mipCount) {
-        const mipSize = calcTextureSize(format, width, height);
-        const data = texture.data !== null ? texture.data.subarray(textureSize) : null;
+
+    // It seems like anything below 4x4 has junk data, at least from evidence from
+    // Super Paper Mario. Not sure if this data is even read by GC.
+    const sizeLimit = 2;
+    while (width > sizeLimit && height > sizeLimit && mipLevel < mipCount) {
+        const data = texture.data !== null ? texture.data.subarray(mipOffs) : null;
         const paletteFormat = texture.paletteFormat;
         const paletteData = texture.paletteData;
         mipLevels.push({ name: `${texture.name} mip level ${mipLevel}`, format, width, height, data, paletteFormat, paletteData });
         mipLevel++;
-        textureSize += mipSize;
+        const mipSize = calcTextureSize(format, width, height);
+        // Mipmap levels are aligned to 32B.
+        mipOffs += Math.max(mipSize, 32);
         width /= 2;
         height /= 2;
     }
 
-    return { name, mipLevels, fullTextureSize: textureSize };
+    return { name, mipLevels, fullTextureSize: mipOffs };
 }
 
 // XXX(jstpierre): Firefox has GC pressure when constructing new WebAssembly.Memory instances
@@ -332,6 +337,90 @@ export function getFormatName(format: GX.TexFormat, paletteFormat: GX.TexPalette
     }
 }
 
+// GX uses a HW approximation of 3/8 + 5/8 instead of 1/3 + 2/3.
+function s3tcblend(a: number, b: number): number {
+    // return (a*3 + b*5) / 8;
+    return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
+}
+
+function decode_CMPR(texture: Texture): DecodedTexture {
+    // GX's CMPR format is S3TC but using GX's tiled addressing.
+    const pixels = new Uint8Array(texture.width * texture.height * 4);
+    const view = texture.data.createDataView();
+    const colorTable = new Uint8Array(16);
+
+    // CMPR swizzles macroblocks to be in a 2x2 grid of UL, UR, BL, BR.
+    let srcOffs = 0;
+    for (let yy = 0; yy < texture.height; yy += 8) {
+        for (let xx = 0; xx < texture.width; xx += 8) {
+            for (let yb = 0; yb < 8; yb += 4) {
+                for (let xb = 0; xb < 8; xb += 4) {
+                    if (xx + xb >= texture.width || yy + yb > texture.height) {
+                        srcOffs += 0x08;
+                        continue;
+                    }
+
+                    // CMPR difference: Big-endian color1/2
+                    const color1 = view.getUint16(srcOffs + 0x00, false);
+                    const color2 = view.getUint16(srcOffs + 0x02, false);
+
+                    // Fill in first two colors in color table.
+                    colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
+                    colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
+                    colorTable[2] = expand5to8(color1 & 0x1F);
+                    colorTable[3] = 0xFF;
+
+                    colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
+                    colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
+                    colorTable[6] = expand5to8(color2 & 0x1F);
+                    colorTable[7] = 0xFF;
+
+                    if (color1 > color2) {
+                        // Predict gradients.
+                        colorTable[8]  = s3tcblend(colorTable[4], colorTable[0]);
+                        colorTable[9]  = s3tcblend(colorTable[5], colorTable[1]);
+                        colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
+                        colorTable[11] = 0xFF;
+
+                        colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
+                        colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
+                        colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
+                        colorTable[15] = 0xFF;
+                    } else {
+                        colorTable[8]  = (colorTable[0] + colorTable[4]) >>> 1;
+                        colorTable[9]  = (colorTable[1] + colorTable[5]) >>> 1;
+                        colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
+                        colorTable[11] = 0xFF;
+
+                        // CMPR difference: GX fills with an alpha 0 midway point here.
+                        colorTable[12] = colorTable[8];
+                        colorTable[13] = colorTable[9];
+                        colorTable[14] = colorTable[10];
+                        colorTable[15] = 0x00;
+                    }
+
+                    for (let y = 0; y < 4; y++) {
+                        let bits = view.getUint8(srcOffs + 0x04 + y);
+                        for (let x = 0; x < 4; x++) {
+                            const dstPx = (yy + yb + y) * texture.width + xx + xb + x;
+                            const dstOffs = dstPx * 4;
+                            const colorIdx = (bits >>> 6) & 0x03;
+                            pixels[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
+                            pixels[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
+                            pixels[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
+                            pixels[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
+                            bits <<= 2;
+                        }
+                    }
+
+                    srcOffs += 8;
+                }
+            }
+        }
+    }
+    return { pixels };
+}
+
 export function decodeTexture(texture: Texture): Promise<DecodedTexture> {
     if (texture.data === null)
         return Promise.resolve(decode_Dummy(texture));
@@ -353,7 +442,7 @@ export function decodeTexture(texture: Texture): Promise<DecodedTexture> {
         case GX.TexFormat.RGBA8:
             return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGBA8);
         case GX.TexFormat.CMPR:
-            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_CMPR, 16);
+            return decode_CMPR(texture);
         case GX.TexFormat.C4:
             return decode_C4(texture);
         case GX.TexFormat.C8:
