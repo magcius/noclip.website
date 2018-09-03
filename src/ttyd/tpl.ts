@@ -55,8 +55,7 @@ export function parse(buffer: ArrayBufferSlice, textureNames?: string[]): TPL {
         const maxLOD = view.getUint8(textureOffs + 0x22);
 
         // TODO(jstpierre): Is this right?
-        // TODO(jstpierre): Some mipmaps appear to be busted. Probably my loading code is bad. Don't go beyond 8x8.
-        const mipCount = Math.max((maxLOD - minLOD) - 2, 1);
+        const mipCount = (maxLOD - minLOD) + 1;
         const data = buffer.subarray(dataOffs);
 
         let paletteData: ArrayBufferSlice = undefined;

@@ -1,5 +1,5 @@
 
-// AssemblyScript version of Yaz0.
+import "builtins";
 
 @inline
 function get(offs: u32): u8 {

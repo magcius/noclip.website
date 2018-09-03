@@ -1,4 +1,6 @@
 
+import "builtins";
+
 // http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
 @inline
 function expand3to8(n: u8): u8 {
@@ -239,6 +241,11 @@ export function decode_CMPR(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32)
         for (let xx: u32 = 0; xx < w; xx += 8) {
             for (let yb: u32 = 0; yb < 8; yb += 4) {
                 for (let xb: u32 = 0; xb < 8; xb += 4) {
+                    if (xx + xb >= w || yy + yb > h) {
+                        srcOffs += 8;
+                        continue;
+                    }
+
                     // CMPR difference: Big-endian color1/2
                     let color1: u16 = get16be(srcOffs + 0x00);
                     let color2: u16 = get16be(srcOffs + 0x02);
