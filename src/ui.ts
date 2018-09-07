@@ -276,7 +276,6 @@ export class Panel implements Widget {
         this.toplevel.appendChild(this.mainPanel);
 
         this.extraRack = document.createElement('div');
-        this.extraRack.style.display = 'grid';
         this.extraRack.style.gridAutoFlow = 'column';
         this.extraRack.style.gridGap = '20px';
         this.extraRack.style.transition = '.15s ease-out .10s';
@@ -313,7 +312,7 @@ export class Panel implements Widget {
     }
 
     private syncSize() {
-        const widthExpanded = this.expanded || this.mainPanel.matches(':hover');
+        const widthExpanded = true || this.expanded || this.mainPanel.matches(':hover');
         this.mainPanel.style.width = widthExpanded ? '400px' : '28px';
 
         const heightExpanded = this.expanded;
@@ -321,10 +320,12 @@ export class Panel implements Widget {
             const height = this.header.offsetHeight + this.contents.offsetHeight;
             this.toplevel.style.height = `${height}px`;
             this.extraRack.style.opacity = '1';
+            this.extraRack.style.width = 'auto';
         } else {
             this.toplevel.style.transition = '.25s ease-out';
             this.toplevel.style.height = '28px';
             this.extraRack.style.opacity = '0';
+            this.extraRack.style.width = '0';
         }
     }
 
@@ -952,6 +953,7 @@ export class UI {
     public elem: HTMLElement;
 
     private toplevel: HTMLElement;
+    private panelContainer: HTMLElement;
 
     public sceneSelect: SceneSelect;
     public textureViewer: TextureViewer;
@@ -961,10 +963,26 @@ export class UI {
 
     constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
-        this.toplevel.style.display = 'grid';
-        this.toplevel.style.gridTemplateColumns = '1fr';
-        this.toplevel.style.gridGap = '20px';
-        this.toplevel.style.pointerEvents = 'none';
+        this.toplevel.style.position = 'absolute';
+        this.toplevel.style.left = '0';
+        this.toplevel.style.top = '0';
+        this.toplevel.style.minHeight = '100vh';
+        this.toplevel.style.padding = '2em';
+        this.toplevel.style.transition = '.2s background-color';
+        this.toplevel.onmouseover = () => {
+            this.toplevel.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
+            this.toplevel.style.overflow = 'auto';
+        };
+        this.toplevel.onmouseout = () => {
+            this.toplevel.style.backgroundColor = 'rgba(0, 0, 0, 0)';
+            this.toplevel.style.overflow = 'hidden';
+        };
+
+        this.panelContainer = document.createElement('div');
+        this.panelContainer.style.display = 'grid';
+        this.panelContainer.style.gridTemplateColumns = '1fr';
+        this.panelContainer.style.gridGap = '20px';
+        this.toplevel.appendChild(this.panelContainer);
 
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
@@ -993,7 +1011,7 @@ export class UI {
     }
 
     private setPanels(panels: Panel[]): void {
-        setChildren(this.toplevel, panels.map((panel) => panel.elem));
+        setChildren(this.panelContainer, panels.map((panel) => panel.elem));
     }
 
     public setScenePanels(panels: Panel[]): void {
