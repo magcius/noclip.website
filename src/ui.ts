@@ -317,7 +317,7 @@ export class Panel implements Widget {
 
         const heightExpanded = this.expanded;
         if (heightExpanded) {
-            const height = this.header.offsetHeight + this.contents.offsetHeight;
+            const height = Math.max(this.header.offsetHeight + this.contents.offsetHeight, this.extraRack.offsetHeight);
             this.toplevel.style.height = `${height}px`;
             this.extraRack.style.opacity = '1';
             this.extraRack.style.width = 'auto';
@@ -508,7 +508,6 @@ export class TextureViewer extends Panel {
         super();
 
         this.setTitle(TEXTURES_ICON, 'Textures');
-        this.extraRack.style.pointerEvents = 'none';
 
         this.scrollList = new SingleSelect();
         this.scrollList.elem.style.height = `200px`;
@@ -966,7 +965,7 @@ export class UI {
         this.toplevel.style.position = 'absolute';
         this.toplevel.style.left = '0';
         this.toplevel.style.top = '0';
-        this.toplevel.style.minHeight = '100vh';
+        this.toplevel.style.bottom = '0';
         this.toplevel.style.padding = '2em';
         this.toplevel.style.transition = '.2s background-color';
         this.toplevel.onmouseover = () => {
