@@ -312,7 +312,7 @@ export class Panel implements Widget {
     }
 
     private syncSize() {
-        const widthExpanded = true || this.expanded || this.mainPanel.matches(':hover');
+        const widthExpanded = this.expanded || this.mainPanel.matches(':hover');
         this.mainPanel.style.width = widthExpanded ? '400px' : '28px';
 
         const heightExpanded = this.expanded;
