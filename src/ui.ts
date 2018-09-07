@@ -11,7 +11,7 @@ import { TextureHolder } from './TextureHolder';
 
 const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 
-function createDOMFromString(s: string): DocumentFragment {
+export function createDOMFromString(s: string): DocumentFragment {
     return document.createRange().createContextualFragment(s);
 }
 
