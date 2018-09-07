@@ -30,12 +30,16 @@ export class Viewer {
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
 
-    constructor(public canvas: HTMLCanvasElement) {
+    public static make(canvas: HTMLCanvasElement): Viewer | null {
         const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
+        if (!gl)
+            return null;
+        return new Viewer(gl, canvas);
+    }
+
+    private constructor(gl: WebGL2RenderingContext, public canvas: HTMLCanvasElement) {
         this.renderState = new RenderState(gl);
-
         this.inputManager = new InputManager(this.canvas);
-
         this.cameraController = null;
     }
 
@@ -49,8 +53,11 @@ export class Viewer {
     public render() {
         const gl = this.renderState.gl;
 
-        if (!this.scene)
+        if (!this.scene) {
+            // Render black.
+            gl.clear(gl.COLOR_BUFFER_BIT);
             return;
+        }
 
         this.renderState.renderStatisticsTracker.beginFrame(gl);
 

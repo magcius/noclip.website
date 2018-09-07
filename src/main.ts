@@ -36,7 +36,7 @@ import * as TTYD from './ttyd/scenes';
 import * as SPM from './ttyd/spm_scenes';
 
 import * as J3D from './j3d/scenes';
-import { UI } from './ui';
+import { UI, createDOMFromString } from './ui';
 import { CameraControllerClass, FPSCameraController } from './Camera';
 import { RenderStatistics } from './render';
 import { hexdump } from './util';
@@ -189,6 +189,16 @@ class Main {
 
     constructor() {
         this.canvas = document.createElement('canvas');
+
+        this.uiContainers = document.createElement('div');
+        document.body.appendChild(this.uiContainers);
+
+        this.viewer = Viewer.make(this.canvas);
+        if (this.viewer === null) {
+            this._makeErrorUI_NoWebGL2();
+            return;
+        }
+
         this.canvas.onmousedown = () => {
             this._deselectUI();
         };
@@ -207,8 +217,6 @@ class Main {
         this._onResize();
 
         window.addEventListener('keydown', this._onKeyDown.bind(this));
-
-        this.viewer = new Viewer(this.canvas);
         this.viewer.onstatistics = (statistics: RenderStatistics): void => {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
         };
@@ -219,6 +227,7 @@ class Main {
 
         this.sceneLoader = new SceneLoader(this.viewer);
         this.sceneLoader.onscenechanged = this._onSceneChanged.bind(this);
+
         this._makeUI();
 
         this.groups = sceneGroups;
@@ -236,11 +245,28 @@ class Main {
             this.ui.sceneSelect.setExpanded(true);
     }
 
-    public destroy(): void {
-        this.sceneLoader.setScene(null, null, null);
-        document.body.removeChild(this.canvas);
-        document.body.removeChild(this.uiContainers);
-        window.onresize = null;
+    private _makeErrorUI(message: string): void {
+        const errorMessage = createDOMFromString(`
+<div style="display: flex; background-color: #220000; flex-direction: column; position: absolute; top: 0; bottom: 0; left: 0; right: 0; justify-content: center;">
+<div style="display: flex; background-color: #aa2233; justify-content: center; box-shadow: 0 0 32px black;">
+<div style="max-width: 1000px; font: 16pt sans-serif; color: white; text-align: justify;">
+<style>
+a:link, a:visited { color: #ccc; transition: .5s color; }
+a:hover { color: #fff; }
+</style>
+${message}
+`);
+
+        this.uiContainers.appendChild(errorMessage);
+    }
+
+    private _makeErrorUI_NoWebGL2(): void {
+        return this._makeErrorUI(`
+<p>Your browser does not appear to have WebGL 2 support. Please check <a href="http://webglreport.com/?v=2">WebGL Report</a> for further details.
+<p>If WebGL Report says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/model-viewer/issues/new">GitHub issue</a> with as much as information as possible.
+<p>Unfortunately, this means that Safari and iOS are not supported. The plan is to support <a href="https://github.com/gpuweb/gpuweb">WebGPU</a> once this arrives in browsers, which Apple has promised to support.
+<p style="text-align: right">Thanks, Jasper.</p>
+`);
     }
 
     private _deselectUI() {
@@ -356,9 +382,6 @@ class Main {
     }
 
     private _makeUI() {
-        this.uiContainers = document.createElement('div');
-        document.body.appendChild(this.uiContainers);
-
         this.ui = new UI(this.viewer);
         this.ui.elem.style.position = 'absolute';
         this.ui.elem.style.left = '2em';
