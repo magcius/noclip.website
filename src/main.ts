@@ -383,9 +383,6 @@ ${message}
 
     private _makeUI() {
         this.ui = new UI(this.viewer);
-        this.ui.elem.style.position = 'absolute';
-        this.ui.elem.style.left = '2em';
-        this.ui.elem.style.top = '2em';
         this.uiContainers.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
 
