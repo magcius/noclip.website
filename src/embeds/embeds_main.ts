@@ -1,16 +1,28 @@
 
+// Parcel HMR workaround.
+// https://github.com/parcel-bundler/parcel/issues/289
+declare var module: any;
+if (module.hot) {
+    module.hot.dispose(() => {
+        window.location.reload();
+        throw new Error();
+    });
+}
+
 import Progressable from '../Progressable';
 import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
 import * as water_comparison from './water_comparison';
+import * as cubemap_test from './cubemap_test';
 
 type CreateSceneFunc = (gl: WebGL2RenderingContext, name: string) => Progressable<Viewer.MainScene>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
     "sunshine_water": sunshine_water.createScene,
     "water_comparison": water_comparison.createScene,
+    "cubemap_test": cubemap_test.createScene,
 };
 
 class FsButton {
@@ -74,7 +86,7 @@ class Main {
         this.fsButton = new FsButton();
         document.body.appendChild(this.fsButton.elem);
 
-        this.viewer = new Viewer.Viewer(this.canvas);
+        this.viewer = Viewer.Viewer.make(this.canvas);
         this.viewer.start();
 
         // Dispatch to the main embed.
