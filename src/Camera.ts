@@ -255,6 +255,7 @@ export class OrbitCameraController implements CameraController {
     public ty: number = 0;
     public txVel: number = 0;
     public tyVel: number = 0;
+    public shouldOrbit: boolean = true;
 
     constructor() {
     }
@@ -267,6 +268,12 @@ export class OrbitCameraController implements CameraController {
     }
 
     public update(inputManager: InputManager, dt: number): boolean {
+        if (inputManager.isKeyDown('KeyG')) {
+            this.shouldOrbit = !this.shouldOrbit;
+        }
+
+        const shouldOrbit = this.shouldOrbit;
+
         // Get new velocities from inputs.
         if (inputManager.button === 1) {
             this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) /  5000;
@@ -274,7 +281,7 @@ export class OrbitCameraController implements CameraController {
         } else if (inputManager.isDragging()) {
             this.xVel += inputManager.dx / 200;
             this.yVel += inputManager.dy / 200;
-        } else {
+        } else if (shouldOrbit) {
             if (this.xVel > -0.05)
                 this.xVel -= 0.001;
         }
@@ -291,7 +298,6 @@ export class OrbitCameraController implements CameraController {
         if (inputManager.isKeyDown('KeyS')) {
             this.yVel -= 0.05;
         }
-
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
@@ -311,15 +317,6 @@ export class OrbitCameraController implements CameraController {
 
             this.ty += this.tyVel;
             this.tyVel *= drag;
-
-            if (this.y < 0.04) {
-                this.y = 0.04;
-                this.yVel = 0;
-            }
-            if (this.y > Math.PI / 2) {
-                this.y = Math.PI / 2;
-                this.yVel = 0;
-            }
 
             this.z += this.zVel;
             this.zVel *= 0.8;

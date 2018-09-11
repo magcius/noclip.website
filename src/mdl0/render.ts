@@ -243,6 +243,7 @@ class Scene implements Viewer.MainScene {
         gl.deleteBuffer(this.vtxBuffer);
         gl.deleteBuffer(this.idxBuffer);
         this.program.destroy(gl);
+        this.fancyGrid.destroy(gl);
     }
 }
 
