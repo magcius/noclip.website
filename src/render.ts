@@ -66,7 +66,7 @@ function flagChanged<T>(stateFlag: T, newFlag: T | undefined): boolean {
     return newFlag !== undefined && stateFlag !== newFlag;
 }
 
-function applyFlags(gl: WebGL2RenderingContext, stateFlags: RenderFlagsResolved, newFlags: RenderFlags, hacks: RenderFlagHacks): void {
+export function applyFlags(gl: WebGL2RenderingContext, stateFlags: RenderFlagsResolved, newFlags: RenderFlags, hacks: RenderFlagHacks): void {
     if (flagChanged(stateFlags.depthWrite, newFlags.depthWrite)) {
         gl.depthMask(newFlags.depthWrite);
         stateFlags.depthWrite = newFlags.depthWrite;
@@ -146,7 +146,7 @@ RenderFlags.default.depthWrite = true;
 RenderFlags.default.depthFunc = CompareMode.LEQUAL;
 RenderFlags.default.frontFace = FrontFaceMode.CCW;
 
-class FullscreenCopyProgram extends FullscreenProgram {
+export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
