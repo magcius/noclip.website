@@ -2,6 +2,7 @@
 import MemoizeCache from "./MemoizeCache";
 import CodeEditor from "./CodeEditor";
 import { assertExists, leftPad } from "./util";
+import { BufferLayout, parseBufferLayout } from "./gfx/helpers/BufferHelpers";
 
 const DEBUG = true;
 
@@ -34,6 +35,7 @@ export abstract class BaseProgram {
     // Add some extra fields so that the monstrosity of frag/vert doesn't show up in Firefox's debugger.
     public _pad0 = false;
     public _pad1 = false;
+    public both: string = '';
     public vert: string = '';
     public frag: string = '';
 
@@ -43,12 +45,12 @@ export abstract class BaseProgram {
     public compile(gl: WebGL2RenderingContext, programCache: ProgramCache) {
         if (!this.glProg || this.forceRecompile) {
             this.forceRecompile = false;
-            const vert = this.preprocessShader(gl, this.vert, "vert");
-            const frag = this.preprocessShader(gl, this.frag, "frag");
+            const vert = this.preprocessShader(gl, this.both + this.vert, "vert");
+            const frag = this.preprocessShader(gl, this.both + this.frag, "frag");
             const newProg = programCache.compileProgram(vert, frag);
             if (newProg !== null) {
                 this.glProg = newProg;
-                this.bind(gl, this.glProg);
+                this.bindEx(gl, this.glProg, vert, frag);
             }
         }
 
@@ -82,8 +84,10 @@ export abstract class BaseProgram {
         }).join('\n');
         return `
 #version 300 es
+#define ${type.toUpperCase()}
 #define attribute in
 #define varying ${type === 'vert' ? 'out' : 'in'}
+#define main${type === 'vert' ? 'VS' : 'PS'} main
 ${extensionDefines}
 #define gl_FragColor o_color
 #define texture2D texture
@@ -94,7 +98,12 @@ ${rest}
 `.trim();
     }
 
-    public abstract bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void;
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
+    }
+
+    protected bindEx(gl: WebGL2RenderingContext, prog: WebGLProgram, vert: string, frag: string): void {
+        this.bind(gl, prog);
+    }
 
     public destroy(gl: WebGL2RenderingContext) {
         // TODO(jstpierre): Refcounting in the program cache?
@@ -144,6 +153,43 @@ ${rest}
     }
 }
 
+function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
+    const results: RegExpExecArray[] = [];
+    while (true) {
+        const result = needle.exec(haystack);
+        if (!result)
+            break;
+        results.push(result);
+    }
+    return results;
+}
+
+export class DeviceProgram extends BaseProgram {
+    public uniformBufferLayouts: BufferLayout[];
+    public numSamplers: number = 0;
+
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
+        // Nothing, we use bindEx.
+    }
+
+    protected bindEx(gl: WebGL2RenderingContext, prog: WebGLProgram, vert: string, frag: string): void {
+        // All uniform blocks must appear in vert, in order.
+        const uniformBlocks = findall(vert, /uniform (\w+) {([^]*?)}/g);
+
+        this.uniformBufferLayouts = new Array(uniformBlocks.length);
+        for (let i = 0; i < uniformBlocks.length; i++) {
+            const [m, blockName, contents] = uniformBlocks[i];
+            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
+            this.uniformBufferLayouts[i] = parseBufferLayout(blockName, contents);
+        }
+
+        const samplers = findall(vert, /^uniform sampler2D (\w+)([\d+])?;$/g);
+        for (let i = 0; i < samplers.length; i++) {
+        }
+        // TODO(jstpierre): Samplers.
+    }
+}
+
 // TODO(jstpierre): Remove.
 export class SimpleProgram extends BaseProgram {
     public projectionLocation: WebGLUniformLocation | null = null;
@@ -155,7 +201,7 @@ export class SimpleProgram extends BaseProgram {
     }
 }
 
-export class FullscreenProgram extends BaseProgram {
+export class FullscreenProgram extends DeviceProgram {
     public vert: string = `
 out vec2 v_TexCoord;
 
@@ -166,10 +212,6 @@ void main() {
     gl_Position.zw = vec2(1);
 }
 `;
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
-        // Nothing to do.
-    }
 }
 
 interface ProgramKey {

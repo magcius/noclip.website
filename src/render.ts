@@ -1,4 +1,6 @@
 
+// Old GL render infrastructure.
+
 import { mat4 } from 'gl-matrix';
 import { assert, assertExists } from './util';
 import { BaseProgram, FullscreenProgram, ProgramCache, SimpleProgram } from './Program';
@@ -47,7 +49,7 @@ export enum BlendMode {
     REVERSE_SUBTRACT = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
 }
 
-interface RenderFlagsResolved {
+export class RenderFlagsTracker {
     depthWrite: boolean;
     depthTest: boolean;
     depthFunc: CompareMode;
@@ -56,6 +58,10 @@ interface RenderFlagsResolved {
     blendMode: BlendMode;
     cullMode: CullMode;
     frontFace: FrontFaceMode;
+
+    constructor() {
+        Object.assign(this, RenderFlags.default);
+    }
 }
 
 interface RenderFlagHacks {
@@ -66,7 +72,7 @@ function flagChanged<T>(stateFlag: T, newFlag: T | undefined): boolean {
     return newFlag !== undefined && stateFlag !== newFlag;
 }
 
-export function applyFlags(gl: WebGL2RenderingContext, stateFlags: RenderFlagsResolved, newFlags: RenderFlags, hacks: RenderFlagHacks): void {
+export function applyFlags(gl: WebGL2RenderingContext, stateFlags: RenderFlagsTracker, newFlags: RenderFlags, hacks: RenderFlagHacks): void {
     if (flagChanged(stateFlags.depthWrite, newFlags.depthWrite)) {
         gl.depthMask(newFlags.depthWrite);
         stateFlags.depthWrite = newFlags.depthWrite;
@@ -292,7 +298,7 @@ export class RenderState {
 
     // State.
     public currentProgram: BaseProgram | null = null;
-    public currentFlags: RenderFlags = new RenderFlags();
+    public currentFlags: RenderFlagsTracker = new RenderFlagsTracker();
 
     private currentColorTarget: ColorTarget | null = null;
     private currentDepthTarget: DepthTarget | null = null;
@@ -414,7 +420,7 @@ export class RenderState {
         return width / height;
     }
 
-    private updateProjection(): void {
+    public updateProjection(): void {
         this.camera.setPerspective(this.fov, this.getAspect(), this.nearClipPlane, this.farClipPlane);
     }
 

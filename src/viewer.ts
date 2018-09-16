@@ -6,6 +6,8 @@ import Progressable from './Progressable';
 import InputManager from './InputManager';
 import { CameraController, Camera, CameraControllerClass } from './Camera';
 import { TextureHolder } from './TextureHolder';
+import { GfxDevice, GfxPassRenderer, GfxSwapChain } from './gfx/platform/GfxPlatform';
+import { createSwapChainForWebGL2 } from './gfx/platform/GfxPlatformWebGL2';
 
 export interface Texture {
     name: string;
@@ -18,14 +20,35 @@ export interface Scene {
     destroy(gl: WebGL2RenderingContext): void;
 }
 
+export interface ViewerRenderInput {
+    camera: Camera;
+    time: number;
+    viewportWidth: number;
+    viewportHeight: number;
+}
+
+export interface Scene_Device {
+    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxPassRenderer;
+    destroy(device: GfxDevice): void;
+    createPanels?(): UI.Panel[];
+}
+
 export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController;
 
+    // GL method.
     public renderState: RenderState;
     private onscreenColorTarget: ColorTarget = new ColorTarget();
     private onscreenDepthTarget: DepthTarget = new DepthTarget();
+
+    // GfxPlatform method.
+    public gfxDevice: GfxDevice;
+    private gfxSwapChain: GfxSwapChain;
+    private viewerRenderInput: ViewerRenderInput;
+
     public scene: MainScene;
+    public scene_device: Scene_Device;
 
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
@@ -38,9 +61,21 @@ export class Viewer {
     }
 
     private constructor(gl: WebGL2RenderingContext, public canvas: HTMLCanvasElement) {
-        this.renderState = new RenderState(gl);
         this.inputManager = new InputManager(this.canvas);
         this.cameraController = null;
+
+        // GL
+        this.renderState = new RenderState(gl);
+
+        // GfxDevice.
+        this.gfxSwapChain = createSwapChainForWebGL2(gl);
+        this.gfxDevice = this.gfxSwapChain.getDevice();
+        this.viewerRenderInput = {
+            camera: this.renderState.camera,
+            time: 0,
+            viewportWidth: 0,
+            viewportHeight: 0,
+        }
     }
 
     public reset() {
@@ -50,15 +85,8 @@ export class Viewer {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     }
 
-    public render() {
+    private renderGL() {
         const gl = this.renderState.gl;
-
-        if (!this.scene) {
-            // Render black.
-            gl.clearColor(0, 0, 0, 1);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            return;
-        }
 
         this.renderState.renderStatisticsTracker.beginFrame(gl);
 
@@ -80,22 +108,63 @@ export class Viewer {
         this.onstatistics(renderStatistics);
     }
 
+    private renderGfxPlatform(): void {
+        // Hack in projection for now until we have that unfolded from RenderState.
+        const aspect = this.canvas.width / this.canvas.height;
+        this.viewerRenderInput.camera.setPerspective(this.renderState.fov, aspect, 10, 50000);
+
+        this.viewerRenderInput.time = this.renderState.time;
+        this.viewerRenderInput.viewportWidth = this.canvas.width;
+        this.viewerRenderInput.viewportHeight = this.canvas.height;
+        this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
+        const renderPass = this.scene_device.render(this.gfxDevice, this.viewerRenderInput);
+        const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+        renderPass.endPass(onscreenTexture);
+        this.gfxSwapChain.present();
+    }
+
+    private render(): void {
+        if (this.scene) {
+            this.renderGL();
+        } else if (this.scene_device) {
+            this.renderGfxPlatform();
+        } else {
+            const gl = this.renderState.gl;
+            // Render black.
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            return;
+        }
+    }
+
     public setCameraController(cameraController: CameraController) {
         this.cameraController = cameraController;
         this.cameraController.camera = this.renderState.camera;
         this.cameraController.forceUpdate = true;
     }
 
-    public setScene(scene: MainScene): void {
-        const gl = this.renderState.gl;
-
-        this.reset();
-
+    private destroyScenes(): void {
         if (this.scene) {
-            this.scene.destroy(gl);
+            this.scene.destroy(this.renderState.gl);
+            this.scene = null;
         }
 
+        if (this.scene_device) {
+            this.scene_device.destroy(this.gfxDevice);
+            this.scene_device = null;
+        }
+    }
+
+    public setScene(scene: MainScene): void {
+        this.reset();
+        this.destroyScenes();
         this.scene = scene;
+    }
+
+    public setSceneDevice(scene_device: Scene_Device): void {
+        this.reset();
+        this.destroyScenes();
+        this.scene_device = scene_device;
     }
 
     public start() {
@@ -131,7 +200,8 @@ export interface MainScene extends Scene {
 export interface SceneDesc {
     id: string;
     name: string;
-    createScene(gl: WebGL2RenderingContext): Progressable<MainScene>;
+    createScene?(gl: WebGL2RenderingContext): Progressable<MainScene>;
+    createScene_Device?(device: GfxDevice): Progressable<Scene_Device>;
     defaultCameraController?: CameraControllerClass;
 }
 
