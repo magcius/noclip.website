@@ -1,5 +1,6 @@
-
-import ArrayBufferSlice from "../ArrayBufferSlice";
+ 
+import { Color, colorNew } from "../Color";
+import { NamedArrayBufferSlice } from "../fetch";
 
 // Parser for the .iv file used by the Dark Souls Model Viewer
 // Presumably made by vlad001 from the Havok physics data shipped in the game.
@@ -10,18 +11,20 @@ export interface Chunk {
 }
 
 export interface IV {
-    color: Float32Array;
+    name: string;
+    color: Color;
     chunks: Chunk[];
 }
 
-export function parseIV(buffer: ArrayBufferSlice): IV {
+export function parseIV(buffer: NamedArrayBufferSlice): IV {
     const view = buffer.createDataView();
+    const name = buffer.name.split('/').pop();
 
     const numChunks = view.getUint32(0x00, true);
     const r = view.getFloat32(0x04, true);
     const g = view.getFloat32(0x08, true);
     const b = view.getFloat32(0x0C, true);
-    const color = new Float32Array([r, g, b]);
+    const color = colorNew(r, g, b);
 
     const chunks: Chunk[] = [];
     let chunkTableIdx = 0x10;
@@ -38,5 +41,5 @@ export function parseIV(buffer: ArrayBufferSlice): IV {
         chunkTableIdx += 0x10;
     }
 
-    return { color, chunks };
+    return { name, color, chunks };
 }

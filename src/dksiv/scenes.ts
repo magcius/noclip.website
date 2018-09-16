@@ -2,13 +2,22 @@
 import { parseIV } from './iv';
 import { Scene } from './render';
 
-import { RenderState } from '../render';
-import { MainScene, SceneGroup, Texture } from '../viewer';
-import * as UI from '../ui';
-
-import ArrayBufferSlice from '../ArrayBufferSlice';
+import * as Viewer from '../viewer';
 import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
+import { fetchData, NamedArrayBufferSlice } from '../fetch';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+
+class SceneDesc implements Viewer.SceneDesc {
+    constructor(public id: string, public name: string, public paths: string[]) {
+    }
+
+    public createScene_Device(gfxDevice: GfxDevice): Progressable<Viewer.Scene_Device> {
+        return Progressable.all(this.paths.map((path) => fetchData(path))).then((buffers: NamedArrayBufferSlice[]) => {
+            const ivs = buffers.map((buffer) => parseIV(buffer));
+            return new Scene(gfxDevice, ivs);
+        });
+    }
+}
 
 const dks1Paths = [
     "data/dksiv/dks1/15-0 Sens Fortress.iv",
@@ -57,55 +66,6 @@ const dks2Paths = [
     "data/dksiv/dks2/10_23_Huntsman's Copse & Undead Purgatory.iv",
 ];
 
-class MultiScene implements MainScene {
-    public scenes: Scene[];
-    public textures: Texture[];
-
-    constructor(scenes: Scene[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
-    }
-
-    public createPanels(): UI.Panel[] {
-        const layers = new UI.LayerPanel();
-        layers.setLayers(this.scenes);
-        return [layers];
-    }
-
-    public render(renderState: RenderState) {
-        this.scenes.forEach((scene) => {
-            scene.render(renderState);
-        });
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
-    }
-}
-
-class SceneDesc implements SceneDesc {
-    constructor(public id: string, public name: string, public paths: string[]) {
-    }
-
-    public createScene(gl: WebGL2RenderingContext): Progressable<MainScene> {
-        return Progressable.all(this.paths.map((path) => {
-            return this.createSceneForPath(gl, path);
-        })).then((scenes) => {
-            return new MultiScene(scenes);
-        });
-    }
-
-    private createSceneForPath(gl: WebGL2RenderingContext, path: string): Progressable<Scene> {
-        return fetchData(path).then((result: ArrayBufferSlice) => {
-            const iv = parseIV(result);
-            const basename = path.split('/').pop();
-            return new Scene(gl, basename, iv);
-        });
-    }
-}
-
 const sceneDescs: SceneDesc[] = [
     new SceneDesc('dks1', 'Dark Souls 1', dks1Paths),
     new SceneDesc('dks2', 'Dark Souls 2', dks2Paths),
@@ -114,4 +74,4 @@ const sceneDescs: SceneDesc[] = [
 const name = "Dark Souls Collision Data";
 const id = "dksiv";
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

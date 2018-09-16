@@ -4,16 +4,21 @@ import Progressable from './Progressable';
 
 export const BASE_URL = `https://noclip.website/`;
 
-export function fetchData(url: string): Progressable<ArrayBufferSlice> {
+export interface NamedArrayBufferSlice extends ArrayBufferSlice {
+    name: string;
+}
+
+export function fetchData(url: string): Progressable<NamedArrayBufferSlice> {
     const request = new XMLHttpRequest();
     request.open("GET", url, true);
     request.responseType = "arraybuffer";
     request.send();
-    const p = new Promise<ArrayBufferSlice>((resolve, reject) => {
+    const p = new Promise<NamedArrayBufferSlice>((resolve, reject) => {
         request.onload = () => {
             pr.setProgress(1);
             const buffer: ArrayBuffer = request.response;
-            const slice = new ArrayBufferSlice(buffer);
+            const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
+            slice.name = url;
             resolve(slice);
         };
         request.onerror = () => {
@@ -24,6 +29,6 @@ export function fetchData(url: string): Progressable<ArrayBufferSlice> {
                 pr.setProgress(e.loaded / e.total);
         };
     });
-    const pr = new Progressable<ArrayBufferSlice>(p);
+    const pr = new Progressable<NamedArrayBufferSlice>(p);
     return pr;
 }

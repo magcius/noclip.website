@@ -398,7 +398,7 @@ class SceneSelect extends Panel {
         };
     }
 
-    public setProgressable(p: Progressable<Viewer.MainScene>) {
+    public setProgressable(p: Progressable<any>) {
         this.setLoadProgress(p.progress);
         p.onProgress = () => {
             this.setLoadProgress(p.progress);

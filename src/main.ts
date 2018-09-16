@@ -9,7 +9,7 @@ if (module.hot) {
     });
 }
 
-import { MainScene, SceneDesc, SceneGroup, Viewer } from './viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer, Scene_Device } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -37,7 +37,7 @@ import * as SPM from './ttyd/spm_scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI, createDOMFromString } from './ui';
-import { CameraControllerClass, FPSCameraController } from './Camera';
+import { CameraControllerClass, FPSCameraController, Camera } from './Camera';
 import { RenderStatistics } from './render';
 import { hexdump } from './util';
 
@@ -126,16 +126,13 @@ class DroppedFileSceneDesc implements SceneDesc {
 }
 
 class SceneLoader {
-    public currentScene: MainScene = null;
     public loadingSceneDesc: SceneDesc = null;
     public onscenechanged: () => void;
 
     constructor(public viewer: Viewer) {
     }
 
-    public setScene(scene: MainScene, sceneDesc: SceneDesc, cameraState: string) {
-        this.currentScene = scene;
-
+    public setCameraState(sceneDesc: SceneDesc, cameraState: string, resetCamera: (camera: Camera) => void): void {
         let cameraControllerClass: CameraControllerClass;
         if (sceneDesc !== null)
             cameraControllerClass = sceneDesc.defaultCameraController;
@@ -145,33 +142,48 @@ class SceneLoader {
         const cameraController = new cameraControllerClass();
         this.viewer.setCameraController(cameraController);
 
-        if (cameraState !== null) {
+        if (cameraState) {
             cameraController.deserialize(cameraState);
         } else {
-            cameraController.camera.identity();
-            if (scene !== null && scene.resetCamera)
-                scene.resetCamera(cameraController.camera);
+            resetCamera(cameraController.camera);
         }
-
-        this.viewer.setScene(scene);
-
-        this.onscenechanged();
     }
 
-    public loadSceneDesc(sceneDesc: SceneDesc, cameraState: string): Progressable<MainScene> {
-        this.setScene(null, null, null);
+    public loadSceneDesc(sceneDesc: SceneDesc, cameraState: string): Progressable<MainScene> | Progressable<Scene_Device> {
+        this.viewer.setScene(null);
 
         this.loadingSceneDesc = sceneDesc;
 
         const gl = this.viewer.renderState.gl;
-        const progressable = sceneDesc.createScene(gl);
-        progressable.then((scene: MainScene) => {
-            if (this.loadingSceneDesc === sceneDesc) {
-                this.loadingSceneDesc = null;
-                this.setScene(scene, sceneDesc, cameraState);
-            }
-        });
-        return progressable;
+
+        if (sceneDesc.createScene !== undefined) {
+            const progressable = sceneDesc.createScene(gl);
+            progressable.then((scene: MainScene) => {
+                if (this.loadingSceneDesc === sceneDesc) {
+                    this.loadingSceneDesc = null;
+                    this.setCameraState(sceneDesc, cameraState, (camera) => {
+                        if (scene.resetCamera)
+                            scene.resetCamera(camera);
+                        else
+                            camera.identity();
+                    });
+                    this.viewer.setScene(scene);
+                }
+            });
+            return progressable;
+        } else if (sceneDesc.createScene_Device !== undefined) {
+            const progressable = sceneDesc.createScene_Device(this.viewer.gfxDevice);
+            progressable.then((scene: Scene_Device) => {
+                if (this.loadingSceneDesc === sceneDesc) {
+                    this.loadingSceneDesc = null;
+                    this.setCameraState(sceneDesc, cameraState, (camera) => camera.identity());
+                    this.viewer.setSceneDevice(scene);
+                }
+            });
+            return progressable;
+        } else {
+            throw "whoops";
+        }
     }
 }
 
@@ -291,7 +303,7 @@ class Main {
     private _getState() {
         const groupId = this.currentSceneGroup.id;
         const sceneId = this.currentSceneDesc.id;
-        const camera = this.viewer.cameraController.serialize();
+        const camera = this.viewer.cameraController ? this.viewer.cameraController.serialize() : '';
         return `${groupId}/${sceneId};${camera}`;
     }
 
