@@ -4,7 +4,7 @@
 import * as GX from './gx_enum';
 
 import { BlendFactor, BlendMode as RenderBlendMode, CompareMode, CullMode, FrontFaceMode, RenderFlags } from '../render';
-import { BaseProgram } from '../Program';
+import { DeviceProgram } from '../Program';
 import { colorCopy, colorFromRGBA8, colorToRGBA8 } from '../Color';
 
 // TODO(jstpierre): Move somewhere better...
@@ -217,28 +217,15 @@ export interface GXMaterialHacks {
 }
 
 const textureSamplerIdentities = Int32Array.of(0, 1, 2, 3, 4, 5, 6, 7);
-export class GX_Program extends BaseProgram {
+export class GX_Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
-
-    public u_Texture: WebGLUniformLocation;
 
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks = null) {
         super();
         this.name = material.name;
         this.generateShaders();
-    }
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_SceneParams`), GX_Program.ub_SceneParams);
-        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_MaterialParams`), GX_Program.ub_MaterialParams);
-        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_PacketParams`), GX_Program.ub_PacketParams);
-        this.u_Texture = gl.getUniformLocation(prog, `u_Texture`);
-    }
-
-    public bindTextureSamplerIdentities(gl: WebGL2RenderingContext): void {
-        gl.uniform1iv(this.u_Texture, textureSamplerIdentities);
     }
 
     private generateFloat(v: number): string {
@@ -855,25 +842,28 @@ layout(row_major, std140) uniform ub_PacketParams {
     }
 
     private generateShaders() {
-        const ubo = this.generateUBO();
-
-        this.vert = `
+        this.both = `
 // ${this.material.name}
 precision mediump float;
-${ubo}
+${this.generateUBO()}
+uniform sampler2D u_Texture[8];
+
+varying vec3 v_Position;
+varying vec3 v_Normal;
+varying vec4 v_Color0;
+varying vec4 v_Color1;
+varying vec3 v_TexCoord0;
+varying vec3 v_TexCoord1;
+varying vec3 v_TexCoord2;
+varying vec3 v_TexCoord3;
+varying vec3 v_TexCoord4;
+varying vec3 v_TexCoord5;
+varying vec3 v_TexCoord6;
+varying vec3 v_TexCoord7;
+`;
+
+        this.vert = `
 ${this.generateVertAttributeDefs()}
-out vec3 v_Position;
-out vec3 v_Normal;
-out vec4 v_Color0;
-out vec4 v_Color1;
-out vec3 v_TexCoord0;
-out vec3 v_TexCoord1;
-out vec3 v_TexCoord2;
-out vec3 v_TexCoord3;
-out vec3 v_TexCoord4;
-out vec3 v_TexCoord5;
-out vec3 v_TexCoord6;
-out vec3 v_TexCoord7;
 
 mat4 GetPosTexMatrix(uint mtxid) {
     if (mtxid == ${GX.TexGenMatrix.IDENTITY}u)
@@ -901,23 +891,6 @@ ${this.generateTexGens(this.material.texGens)}
         const alphaTest = this.material.alphaTest;
 
         this.frag = `
-// ${this.material.name}
-precision mediump float;
-${ubo}
-uniform sampler2D u_Texture[8];
-
-in vec3 v_Position;
-in vec3 v_Normal;
-in vec4 v_Color0;
-in vec4 v_Color1;
-in vec3 v_TexCoord0;
-in vec3 v_TexCoord1;
-in vec3 v_TexCoord2;
-in vec3 v_TexCoord3;
-in vec3 v_TexCoord4;
-in vec3 v_TexCoord5;
-in vec3 v_TexCoord6;
-in vec3 v_TexCoord7;
 ${this.generateTexCoordGetters()}
 
 float TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }
