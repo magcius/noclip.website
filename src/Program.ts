@@ -166,7 +166,7 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
 
 export class DeviceProgram extends BaseProgram {
     public uniformBufferLayouts: BufferLayout[];
-    public numSamplers: number = 0;
+    public samplerNames: string[];
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
         // Nothing, we use bindEx.
@@ -183,10 +183,24 @@ export class DeviceProgram extends BaseProgram {
             this.uniformBufferLayouts[i] = parseBufferLayout(blockName, contents);
         }
 
-        const samplers = findall(vert, /^uniform sampler2D (\w+)([\d+])?;$/g);
+        this.samplerNames = [];
+
+        const samplers = findall(vert, /^uniform sampler2D (\w+)(?:\[(\d+)\])?;$/gm);
+        gl.useProgram(prog);
         for (let i = 0; i < samplers.length; i++) {
+            const [m, samplerName, arraySizeStr] = samplers[i];
+            if (arraySizeStr !== undefined) {
+                const arraySize = parseInt(arraySizeStr);
+                for (let i = 0; i < arraySize; i++) {
+                    const locationName = `${samplerName}[${i}]`;
+                    const samplerIndex = this.samplerNames.push(locationName) - 1;
+                    gl.uniform1i(gl.getUniformLocation(prog, locationName), samplerIndex);
+                }
+            } else {
+                const samplerIndex = this.samplerNames.push(samplerName) - 1;
+                gl.uniform1i(gl.getUniformLocation(prog, samplerName), samplerIndex);
+            }
         }
-        // TODO(jstpierre): Samplers.
     }
 }
 

@@ -137,7 +137,6 @@ export class GXRenderHelper {
             gl.bindSampler(i, m.glSampler);
             state.renderStatisticsTracker.textureBindCount++;
         }
-        prog.bindTextureSamplerIdentities(gl);
     }
 
     public bindMaterialTextures(state: RenderState, materialParams: MaterialParams, prog: GX_Material.GX_Program): void {

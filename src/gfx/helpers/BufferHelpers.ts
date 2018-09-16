@@ -18,6 +18,7 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
 export const enum BufferTypeClass {
     float  = 'float',
     vec4   = 'vec4',
+    mat4x2 = 'mat4x2',
     mat4x3 = 'mat4x3',
     mat4   = 'mat4',
 }
@@ -41,6 +42,8 @@ function getBufferTypeClassWordSize(bufferTypeClass: BufferTypeClass): number {
         return 1;
     case BufferTypeClass.vec4:
         return 4;
+    case BufferTypeClass.mat4x2:
+        return 4*2;
     case BufferTypeClass.mat4x3:
         return 4*3;
     case BufferTypeClass.mat4:
