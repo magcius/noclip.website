@@ -521,7 +521,7 @@ export class TextureViewer extends Panel {
         this.surfaceView.style.width = '100%';
         this.surfaceView.style.height = '200px';
 
-        // TODO(jstpierre): Explicit icons.
+        // TODO(jstpierre): Make a less-sucky UI for the texture view.
         this.surfaceView.onmouseover = () => {
             // Checkerboard
             this.surfaceView.style.backgroundColor = 'white';

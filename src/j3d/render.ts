@@ -5,7 +5,8 @@ import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisp
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, translateTexFilter, translateWrapMode, GXTextureHolder, ColorKind } from '../gx/gx_render';
+import * as GX from '../gx/gx_enum';
+import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind } from '../gx/gx_render';
 
 import { RenderFlags, RenderState } from '../render';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx } from '../Camera';
@@ -14,6 +15,8 @@ import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray } from '../util';
 import { AABB, IntersectionState } from '../Geometry';
+import { GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
+import { getTransitionDeviceForWebGL2, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(gl: WebGL2RenderingContext, bmd: BMD, bmt: BMT = null) {
@@ -56,7 +59,7 @@ class ShapeInstanceState {
     public isSkybox: boolean;
 }
 
-// TODO(jstpierre): Rename the Command_* classes. Is it even worth having the Command_* vs. Instance split anymore?
+// XXX(jstpierre): Rename the Command_* classes.
 
 const scratchModelMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
@@ -201,7 +204,6 @@ export class Command_Material {
 
     private fillMaterialParams(materialParams: MaterialParams, state: RenderState, textureHolder: GXTextureHolder, materialInstance: MaterialInstance): void {
         // Bind color parameters.
-        // TODO(jstpierre): Replace separate buffers with one large array in gx_render?
         materialInstance.fillMaterialParams(materialParams);
 
         // Bind textures.
@@ -401,6 +403,34 @@ class DrawListItem {
     }
 }
 
+function translateWrapMode(wrapMode: GX.WrapMode): GfxWrapMode {
+    switch (wrapMode) {
+    case GX.WrapMode.CLAMP:
+        return GfxWrapMode.CLAMP;
+    case GX.WrapMode.MIRROR:
+        return GfxWrapMode.MIRROR;
+    case GX.WrapMode.REPEAT:
+        return GfxWrapMode.REPEAT;
+    }
+}
+
+function translateTexFilter(texFilter: GX.TexFilter): [GfxTexFilterMode, GfxMipFilterMode] {
+    switch (texFilter) {
+    case GX.TexFilter.LINEAR:
+        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP ];
+    case GX.TexFilter.NEAR:
+        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NO_MIP ];
+    case GX.TexFilter.LIN_MIP_LIN:
+        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR ];
+    case GX.TexFilter.NEAR_MIP_LIN:
+        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR ];
+    case GX.TexFilter.LIN_MIP_NEAR:
+        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST ];
+    case GX.TexFilter.NEAR_MIP_NEAR:
+        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST ];
+    }
+}
+
 export class BMDModel {
     private realized: boolean = false;
 
@@ -425,7 +455,8 @@ export class BMDModel {
         const tex1 = (bmt !== null && bmt.tex1 !== null) ? bmt.tex1 : bmd.tex1;
 
         this.tex1Samplers = tex1.samplers;
-        this.glSamplers = this.tex1Samplers.map((sampler) => BMDModel.translateSampler(gl, sampler));
+        const device = getTransitionDeviceForWebGL2(gl);
+        this.glSamplers = this.tex1Samplers.map((sampler) => BMDModel.translateSampler(device, sampler));
 
         // Load material data.
         this.materialCommands = mat3.materialEntries.map((material) => {
@@ -471,15 +502,19 @@ export class BMDModel {
         m.lodBias = tex1Sampler.lodBias;
     }
 
-    private static translateSampler(gl: WebGL2RenderingContext, sampler: TEX1_Sampler): WebGLSampler {
-        const glSampler = gl.createSampler();
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
-        gl.samplerParameterf(glSampler, gl.TEXTURE_MIN_LOD, sampler.minLOD);
-        gl.samplerParameterf(glSampler, gl.TEXTURE_MAX_LOD, sampler.maxLOD);
-        return glSampler;
+    private static translateSampler(device: GfxDevice, sampler: TEX1_Sampler): WebGLSampler {
+        const [minFilter, mipFilter] = translateTexFilter(sampler.minFilter);
+        const [magFilter]            = translateTexFilter(sampler.magFilter);
+
+        const gfxSampler = device.createSampler({
+            wrapS: translateWrapMode(sampler.wrapS),
+            wrapT: translateWrapMode(sampler.wrapT),
+            minFilter, mipFilter, magFilter,
+            minLOD: sampler.minLOD,
+            maxLOD: sampler.maxLOD,
+        });
+
+        return getPlatformSampler(gfxSampler);
     }
 
     private translateSceneGraph(node: HierarchyNode, drawListItem: DrawListItem | null): void {

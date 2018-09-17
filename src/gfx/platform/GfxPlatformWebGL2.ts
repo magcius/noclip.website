@@ -1,6 +1,6 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxBlendStateDescriptor, GfxDepthStencilStateDescriptor, GfxRasterizationStateDescriptor, GfxSwapChain, GfxPassRenderer, GfxHostUploader, GfxDevice, GfxTextureMipChain, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings } from "./GfxPlatformImpl";
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxBlendStateDescriptor, GfxDepthStencilStateDescriptor, GfxRasterizationStateDescriptor, GfxSwapChain, GfxPassRenderer, GfxHostUploader, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition } from './GfxPlatform';
+import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
 import { DeviceProgram, ProgramCache } from '../../Program';
@@ -12,6 +12,7 @@ interface GfxBufferP_GL extends GfxBuffer {
     gl_buffer: WebGLBuffer;
     gl_target: GLenum;
     usage: GfxBufferUsage;
+    byteSize: number;
 }
 
 interface GfxTextureP_GL extends GfxTexture {
@@ -184,7 +185,7 @@ function translateTextureInternalFormat(fmt: GfxFormat): GLenum {
 }
 
 function translateTextureFormat(fmt: GfxFormat): GLenum {
-    const compFlags: FormatCompFlags = getFormatCompByteSize(fmt);
+    const compFlags: FormatCompFlags = getFormatCompFlags(fmt);
     switch (compFlags) {
     case FormatCompFlags.COMP_R:
         return WebGL2RenderingContext.RED;
@@ -254,34 +255,39 @@ function translatePipelineStates(blendState: GfxBlendStateDescriptor, depthStenc
     return renderFlags;
 }
 
-function getPlatformBuffer(buffer_: GfxBuffer): WebGLBuffer {
+export function getPlatformBuffer(buffer_: GfxBuffer): WebGLBuffer {
     const buffer = buffer_ as GfxBufferP_GL;
     return buffer.gl_buffer;
 }
 
-function getPlatformTexture(texture_: GfxTexture): WebGLTexture {
+export function getPlatformTexture(texture_: GfxTexture): WebGLTexture {
     const texture = texture_ as GfxTextureP_GL;
     return texture.gl_texture;
 }
 
-function getPlatformSampler(sampler_: GfxSampler): WebGLSampler {
+export function getPlatformSampler(sampler_: GfxSampler): WebGLSampler {
     const sampler = sampler_ as GfxSamplerP_GL;
     return sampler.gl_sampler;
 }
 
-function getPlatformColorAttachment(colorAttachment_: GfxColorAttachment): WebGLRenderbuffer {
+export function getPlatformColorAttachment(colorAttachment_: GfxColorAttachment): WebGLRenderbuffer {
     const colorAttachment = colorAttachment_ as GfxColorAttachmentP_GL;
     return colorAttachment.gl_renderbuffer;
 }
 
-function getPlatformDepthStencilAttachment(depthStencilAttachment_: GfxDepthStencilAttachment): WebGLRenderbuffer {
+export function getPlatformDepthStencilAttachment(depthStencilAttachment_: GfxDepthStencilAttachment): WebGLRenderbuffer {
     const depthStencilAttachment = depthStencilAttachment_ as GfxDepthStencilAttachmentP_GL;
     return depthStencilAttachment.gl_renderbuffer;
 }
 
-function getPlatformRenderTarget(renderTarget_: GfxRenderTarget): WebGLFramebuffer {
+export function getPlatformRenderTarget(renderTarget_: GfxRenderTarget): WebGLFramebuffer {
     const renderTarget = renderTarget_ as GfxRenderTargetP_GL;
     return renderTarget.gl_framebuffer;
+}
+
+function assignPlatformName(o: any, name: string): void {
+    o.name = name;
+    o.__SPECTOR_Metadata = { name };
 }
 
 function calcMipLevels(w: number, h: number): number {
@@ -310,10 +316,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
     private _fullscreenCopyFlags = new RenderFlags();
     private _fullscreenCopyProgram: GfxProgramP_GL;
 
-    constructor(public gl: WebGL2RenderingContext) {
-        this._programCache = new ProgramCache(gl);
-        this._fullscreenCopyProgram = this.createProgram(new FullscreenCopyProgram()) as GfxProgramP_GL;
-        this._fullscreenCopyFlags.depthTest = false;
+    constructor(public gl: WebGL2RenderingContext, private isTransitionDevice: boolean = false) {
+        if (!this.isTransitionDevice) {
+            // Transition devices should use the RenderState Program system.
+            this._programCache = new ProgramCache(gl);
+            this._fullscreenCopyProgram = this.createProgram(new FullscreenCopyProgram()) as GfxProgramP_GL;
+            this._fullscreenCopyFlags.depthTest = false;
+        }
     }
 
     //#region GfxSwapChain
@@ -370,7 +379,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         const gl_hint = translateBufferHint(hint);
         gl.bindBuffer(gl_target, gl_buffer);
         gl.bufferData(gl_target, byteSize, gl_hint);
-        const buffer: GfxBufferP_GL = { _T: _T.Buffer, gl_buffer, gl_target, usage };
+        const buffer: GfxBufferP_GL = { _T: _T.Buffer, gl_buffer, gl_target, usage, byteSize };
         return buffer;
     }
 
@@ -540,6 +549,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
     }
 
     public createPassRenderer(renderTarget: GfxRenderTarget): GfxPassRenderer {
+        if (this.isTransitionDevice)
+            throw "whoops";
+
         this._setRenderTarget(renderTarget);
         return this;
     }
@@ -608,6 +620,25 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         const program = program_ as GfxProgramP_GL;
         const deviceProgram = program.deviceProgram;
         return { uniformBuffers: deviceProgram.uniformBufferLayouts };
+    }
+
+    public setResourceName(o: GfxResource, name: string): void {
+        o.ResourceName = name;
+
+        if (o._T === _T.Buffer)
+            assignPlatformName(getPlatformBuffer(o), name);
+        else if (o._T === _T.Texture)
+            assignPlatformName(getPlatformTexture(o), name);
+        else if (o._T === _T.Sampler)
+            assignPlatformName(getPlatformSampler(o), name);
+        else if (o._T === _T.RenderTarget)
+            assignPlatformName(getPlatformRenderTarget(o), name);
+        else if (o._T === _T.ColorAttachment)
+            assignPlatformName(getPlatformColorAttachment(o), name);
+        else if (o._T === _T.DepthStencilAttachment)
+            assignPlatformName(getPlatformDepthStencilAttachment(o), name);
+        else if (o._T === _T.InputState)
+            assignPlatformName((o as GfxInputStateP_GL).vao, name);
     }
     //#endregion
 
@@ -712,21 +743,29 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
     //#endregion
 
     //#region GfxHostUploader
-    public uploadBufferData(buffer: GfxBuffer, dstWordOffset: number, data: ArrayBufferView): void {
+    public uploadBufferData(buffer: GfxBuffer, dstWordOffset: number, data: ArrayBuffer, srcWordOffset: number = 0, wordCount: number = -1): void {
         const gl = this.gl;
         const dstByteOffset = dstWordOffset * 4;
-        const { gl_buffer, gl_target } = buffer as GfxBufferP_GL;
+        const srcByteOffset = srcWordOffset * 4;
+        const byteSize = wordCount >= 0 ? wordCount * 4 : data.byteLength;
+        const { gl_buffer, gl_target, byteSize: dstByteSize } = buffer as GfxBufferP_GL;
+        assert((dstByteOffset + byteSize) <= dstByteSize);
         gl.bindBuffer(gl_target, gl_buffer);
-        gl.bufferSubData(gl_target, dstByteOffset, data);
+        gl.bufferSubData(gl_target, dstByteOffset, new Uint8Array(data), srcByteOffset, byteSize);
     }
 
-    public uploadTextureData(texture: GfxTexture, data: GfxTextureMipChain): void {
+    public uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void {
         const gl = this.gl;
         const { gl_texture, gl_target, gl_format, gl_type, width, height } = texture as GfxTextureP_GL;
         gl.bindTexture(gl_target, gl_texture);
         let w = width, h = height;
-        for (let i = 0; i < data.mipLevels.length; i++) {
-            gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, data.mipLevels[i]);
+        const maxMipLevel = firstMipLevel + levelDatas.length;
+        for (let i = 0; i < maxMipLevel; i++) {
+            if (i >= firstMipLevel) {
+                const levelData = levelDatas[i - firstMipLevel];
+                gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
+            }
+
             w = Math.max((w / 2) | 0, 1);
             h = Math.max((h / 2) | 0, 1);
         }
@@ -753,4 +792,16 @@ export function gfxPassRendererGetImpl(gfxPassRenderer: GfxPassRenderer): GfxImp
 
 export function gfxDeviceGetImpl(gfxDevice: GfxDevice): GfxImplP_GL {
     return gfxDevice as GfxImplP_GL;
+}
+
+interface TransitionExpando {
+    _transitionDevice: GfxImplP_GL | undefined;
+}
+
+// Transition API. This lets clients use some parts of the implementation, etc. while still using RenderState.
+export function getTransitionDeviceForWebGL2(gl: WebGL2RenderingContext): GfxDevice {
+    const expando = gl as any as TransitionExpando;
+    if (expando._transitionDevice === undefined)
+        expando._transitionDevice = new GfxImplP_GL(gl, true);
+    return expando._transitionDevice;
 }

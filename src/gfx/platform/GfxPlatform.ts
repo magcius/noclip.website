@@ -4,7 +4,7 @@
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
 import { BlendMode, BlendFactor, RenderFlags, CompareMode, CullMode, FrontFaceMode } from "../../render";
-import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings } from "./GfxPlatformImpl";
+import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 import { DeviceProgram } from "../../Program";
 import { BufferLayout } from "../helpers/BufferHelpers";
@@ -40,13 +40,6 @@ export interface GfxVertexAttributeDescriptor {
     bufferOffset: number;
 }
 
-export interface GfxTextureMipChain {
-    mipLevels: ArrayBufferView[];
-}
-
-// Opaque interfaces.
-
-// Hack to get nominal typing.
 export interface GfxSamplerDescriptor {
     wrapS: GfxWrapMode;
     wrapT: GfxWrapMode;
@@ -155,11 +148,13 @@ export interface GfxDevice {
 
     queryLimits(): GfxDeviceLimits;
     queryProgram(program: GfxProgram): GfxProgramReflection;
+
+    setResourceName(o: GfxResource, s: string): void;
 }
 
 export interface GfxHostUploader {
-    uploadBufferData(buffer: GfxBuffer, dstOffset: number, data: ArrayBufferView): void;
-    uploadTextureData(texture: GfxTexture, data: GfxTextureMipChain): void;
+    uploadBufferData(buffer: GfxBuffer, dstOffset: number, data: ArrayBuffer, srcWordOffset?: number, srcWordCount?: number): void;
+    uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
 }
 
 export interface GfxPassRenderer {

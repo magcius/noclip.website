@@ -106,7 +106,7 @@ ${rest}
     }
 
     public destroy(gl: WebGL2RenderingContext) {
-        // TODO(jstpierre): Refcounting in the program cache?
+        // XXX(jstpierre): Should we have refcounting in the program cache?
     }
 
     private _editShader(n: 'vert' | 'frag') {

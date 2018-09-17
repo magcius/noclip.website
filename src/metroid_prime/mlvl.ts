@@ -73,7 +73,6 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
             areaTableIdx += 0x02; // Attached Area Index Array
         }
 
-        // TODO(jstpierre): Verify with Aruki. Seems to be undocumented?
         areaTableIdx += 0x04;
 
         const dependencyTableCount = view.getUint32(areaTableIdx);

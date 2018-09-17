@@ -144,7 +144,7 @@ export class MDL0ModelInstance {
         fillSceneParamsFromRenderState(this.sceneParams, state);
         this.renderHelper.bindSceneParams(state, this.sceneParams);
 
-        // TODO(jstpierre): Split into two draws.
+        // TODO(jstpierre): Split into two draws once we have a better renderer "framework".
         this.execDrawOpList(state, mdl0.sceneGraph.drawOpaOps);
         this.execDrawOpList(state, mdl0.sceneGraph.drawXluOps);
     }

@@ -6,5 +6,4 @@
 * MKDD flower cull
 * Archive / file explorer UI?
 * Collapsable left pane?
-* WebGPU prototype
 * Maya camera mode

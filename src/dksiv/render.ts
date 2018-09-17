@@ -111,8 +111,8 @@ class Chunk {
         this.posBuffer = device.createBuffer(posData.length, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
         this.nrmBuffer = device.createBuffer(nrmData.length, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
 
-        hostUploader.uploadBufferData(this.posBuffer, 0, posData);
-        hostUploader.uploadBufferData(this.nrmBuffer, 0, nrmData);
+        hostUploader.uploadBufferData(this.posBuffer, 0, posData.buffer);
+        hostUploader.uploadBufferData(this.nrmBuffer, 0, nrmData.buffer);
 
         this.inputState = device.createInputState(inputLayout, [
             { buffer: this.posBuffer, offset: 0, stride: 0 },
@@ -214,7 +214,7 @@ export class Scene implements Viewer.Scene_Device {
 
         this.colorUniformBuffer = device.createBuffer(colorBufferTotalWordCount, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.STATIC);
         const hostUploader = device.createHostUploader();
-        hostUploader.uploadBufferData(this.colorUniformBuffer, 0, colorData);
+        hostUploader.uploadBufferData(this.colorUniformBuffer, 0, colorData.buffer);
 
         device.destroyHostUploader(hostUploader);
 
