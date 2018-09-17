@@ -415,7 +415,6 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
     return { textures, textureRemapTable, materials };
 }
 
-// TODO(jstpierre): Reuse VCD parsing code from BRRES?
 export const vtxAttrFormats = [
     { vtxAttrib: GX.VertexAttribute.POS,  mask: 0x00000003 },
     { vtxAttrib: GX.VertexAttribute.NRM,  mask: 0x0000000C },
@@ -1101,7 +1100,7 @@ function parse_DKCR(resourceSystem: ResourceSystem, assetID: string, buffer: Arr
             vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
             vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
 
-            // TODO(jstpierre): I assume in the real came this comes from the different VAT formats.
+            // TODO(jstpierre): I assume in the real game this comes from the different VAT formats.
             const isShort = (uvArrayIndex === 1);
             for (let i = 0; i < 8; i++) {
                 vatFormat[GX.VertexAttribute.TEX0 + i] = { compCnt: GX.CompCnt.TEX_ST, compType: isShort ? GX.CompType.S16 : GX.CompType.F32, compShift: Math.log2(0x2000) };

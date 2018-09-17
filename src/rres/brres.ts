@@ -243,7 +243,6 @@ class DisplayListRegisters {
     }
 }
 
-// TODO(jstpierre): Move this to gx_displaylist.ts
 function runDisplayListRegisters(r: DisplayListRegisters, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
@@ -498,8 +497,6 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
             texGenSrc = GX.TexGenSrc.COLOR1;
         }
 
-        // TODO(jstpierre): Figure out texgen matrices. Seems like in most cases BRRES
-        // only supports postmtx.
         const matrix: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY;
 
         const dv = r.xfg(GX.XFRegister.XF_DUALTEX0_ID + i);

@@ -126,7 +126,7 @@ export interface TevStage {
     konstAlphaSel: GX.KonstAlphaSel;
 
     // SetTevSwapMode / SetTevSwapModeTable
-    // TODO(jstpierre): Dumb hack for now.
+    // TODO(jstpierre): Make these non-optional at some point?
     rasSwapTable?: GX.TevColorChan[];
     texSwapTable?: GX.TevColorChan[];
 
@@ -252,6 +252,7 @@ export class GX_Program extends DeviceProgram {
 
     private generateColorChannel(chan: ColorChannelControl, i: number, isAlpha: boolean) {
         // TODO(jstpierre): amb & lighting
+        // haha this will never get done lmao
         const matSource = this.generateMaterialSource(chan, i);
 
         if (chan.lightingEnabled) {

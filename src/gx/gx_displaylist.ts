@@ -52,7 +52,6 @@ export interface GX_VtxAttrFmt {
 // GX_SetVtxDesc
 export interface GX_VtxDesc {
     type: GX.AttrType;
-    // TODO(jstpierre): Find a better place to put this.
     enableOutput?: boolean;
 }
 
@@ -511,7 +510,6 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
         }
 
         function compileOneIndex(viewName: string, readIndex: string, drawCallIdxIncr: number, uniqueSuffix: string = ''): string {
-            // TODO(jstpierre): Stride.
             const attrOffsetBase = `(${readIndex}) * ${srcAttrByteSize}`;
             const arrayOffsetVarName = `arrayOffset${vtxAttrib}${uniqueSuffix}`;
             let S = '';

@@ -74,8 +74,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
             }
         }
 
-        // console.error("Cannot find texture", name);
-        return -1;
+        throw new Error(`Cannot find texture ${name}`);
     }
 
     public hasTexture(name: string): boolean {
@@ -119,9 +118,8 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
     public setTextureOverride(name: string, textureOverride: TextureOverride): void {
         // Only allow setting texture overrides for textures that exist.
-        // TODO(jstpierre): Bring this back when I fix ZTP scene loader.
-        // if (!this.hasTexture(name))
-        //    throw new Error(`Trying to override non-existent texture ${name}`);
+        if (!this.hasTexture(name))
+           throw new Error(`Trying to override non-existent texture ${name}`);
         this.textureOverrides.set(name, textureOverride);
     }
 
