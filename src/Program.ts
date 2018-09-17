@@ -1,7 +1,7 @@
 
 import MemoizeCache from "./MemoizeCache";
 import CodeEditor from "./CodeEditor";
-import { assertExists, leftPad } from "./util";
+import { assertExists, leftPad, assert } from "./util";
 import { BufferLayout, parseBufferLayout } from "./gfx/helpers/BufferHelpers";
 
 const DEBUG = true;
@@ -166,7 +166,12 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
 
 export class DeviceProgram extends BaseProgram {
     public uniformBufferLayouts: BufferLayout[];
-    public samplerNames: string[];
+    public samplerUniformLocation: WebGLUniformLocation;
+    public numSamplers: number = 0;
+
+    public bindSamplerIdentities(gl: WebGL2RenderingContext, samplerIdentities: number[]): void {
+        gl.uniform1iv(this.samplerUniformLocation, samplerIdentities);
+    }
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
         // Nothing, we use bindEx.
@@ -183,22 +188,17 @@ export class DeviceProgram extends BaseProgram {
             this.uniformBufferLayouts[i] = parseBufferLayout(blockName, contents);
         }
 
-        this.samplerNames = [];
-
         const samplers = findall(vert, /^uniform sampler2D (\w+)(?:\[(\d+)\])?;$/gm);
-        gl.useProgram(prog);
-        for (let i = 0; i < samplers.length; i++) {
-            const [m, samplerName, arraySizeStr] = samplers[i];
-            if (arraySizeStr !== undefined) {
-                const arraySize = parseInt(arraySizeStr);
-                for (let i = 0; i < arraySize; i++) {
-                    const locationName = `${samplerName}[${i}]`;
-                    const samplerIndex = this.samplerNames.push(locationName) - 1;
-                    gl.uniform1i(gl.getUniformLocation(prog, locationName), samplerIndex);
-                }
+        // We support at most one sampler binding name: either you use the array
+        // style to put multiple in one binding name, or you have a single sampler.
+        assert(samplers.length <= 1);
+        if (samplers.length === 1) {
+            const [m, samplerName, arraySizeStr] = samplers[0];
+            this.samplerUniformLocation = gl.getUniformLocation(prog, samplerName);
+            if (arraySizeStr) {
+                this.numSamplers = parseInt(arraySizeStr);
             } else {
-                const samplerIndex = this.samplerNames.push(samplerName) - 1;
-                gl.uniform1i(gl.getUniformLocation(prog, samplerName), samplerIndex);
+                this.numSamplers = 1;
             }
         }
     }

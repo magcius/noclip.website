@@ -127,16 +127,19 @@ export class GXRenderHelper {
     public bindMaterialTextureMapping(state: RenderState, textureMapping: TextureMapping[], prog: GX_Material.GX_Program): void {
         const gl = state.gl;
         assert(prog === state.currentProgram);
+        const samplerIdentities = [0, 0, 0, 0, 0, 0, 0, 0];
         for (let i = 0; i < 8; i++) {
             const m = textureMapping[i];
             if (m.glTexture === null)
                 continue;
 
+            samplerIdentities[i] = i;
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, m.glTexture);
             gl.bindSampler(i, m.glSampler);
             state.renderStatisticsTracker.textureBindCount++;
         }
+        prog.bindSamplerIdentities(gl, samplerIdentities);
     }
 
     public bindMaterialTextures(state: RenderState, materialParams: MaterialParams, prog: GX_Material.GX_Program): void {
