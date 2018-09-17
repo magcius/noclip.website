@@ -106,26 +106,26 @@ export class GXRenderHelper {
     }
 
     public bindSceneParams(state: RenderState, params: SceneParams): void {
+        const gl = state.gl;
         fillSceneParamsData(this.bufferDataScratch, params);
-        const hostUploader = getTransitionDeviceForWebGL2(state.gl).createHostUploader();
-        hostUploader.uploadBufferData(this.sceneParamsBuffer, 0, this.bufferDataScratch.buffer, 0, u_SceneParamsBufferSize);
+        gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.sceneParamsBuffer));
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, this.bufferDataScratch, 0, u_SceneParamsBufferSize);
         state.renderStatisticsTracker.bufferUploadCount++;
     }
 
     public bindMaterialParams(state: RenderState, params: MaterialParams): void {
-        // TODO(jstpierre): We can't have overlapping data like this in the newer explicit APIs.
-        // We rely on the driver copying our buffer here... we're going to have to find something
-        // better to do here, like preallocate a larger buffer which we can offset into...
+        const gl = state.gl;
         fillMaterialParamsData(this.bufferDataScratch, params);
-        const hostUploader = getTransitionDeviceForWebGL2(state.gl).createHostUploader();
-        hostUploader.uploadBufferData(this.materialParamsBuffer, 0, this.bufferDataScratch.buffer, 0, u_MaterialParamsBufferSize);
+        gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.materialParamsBuffer));
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, this.bufferDataScratch, 0, u_MaterialParamsBufferSize);
         state.renderStatisticsTracker.bufferUploadCount++;
     }
 
     public bindPacketParams(state: RenderState, params: PacketParams): void {
+        const gl = state.gl;
         fillPacketParamsData(this.bufferDataScratch, params);
-        const hostUploader = getTransitionDeviceForWebGL2(state.gl).createHostUploader();
-        hostUploader.uploadBufferData(this.packetParamsBuffer, 0, this.bufferDataScratch.buffer, 0, u_PacketParamsBufferSize);
+        gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.packetParamsBuffer));
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, this.bufferDataScratch, 0, u_PacketParamsBufferSize);
         state.renderStatisticsTracker.bufferUploadCount++;
     }
 
@@ -254,8 +254,9 @@ export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX
     const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, firstMipLevel.width, firstMipLevel.height, mipChain.mipLevels.length > 1, 1);
     device.setResourceName(gfxTexture, mipChain.name);
 
-    const hostUploader = device.createHostUploader();
-    const surfaces = [];
+    const hostAccessPass = device.createHostAccessPass();
+    const surfaces: HTMLCanvasElement[] = [];
+    const promises: Promise<void>[] = [];
     for (let i = 0; i < mipChain.mipLevels.length; i++) {
         const level = i;
         const mipLevel = mipChain.mipLevels[i];
@@ -266,16 +267,19 @@ export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX
         canvas.title = mipLevel.name;
         surfaces.push(canvas);
 
-        GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
-            hostUploader.uploadTextureData(gfxTexture, level, [rgbaTexture.pixels]);
+        promises.push(GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
+            hostAccessPass.uploadTextureData(gfxTexture, level, [rgbaTexture.pixels]);
 
             const ctx = canvas.getContext('2d');
             const imgData = new ImageData(mipLevel.width, mipLevel.height);
             imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
             ctx.putImageData(imgData, 0, 0);
-        });
+        }));
     }
-    device.destroyHostUploader(hostUploader);
+
+    Promise.all(promises).then(() => {
+        device.submitPass(hostAccessPass);
+    });
 
     const viewerExtraInfo = new Map<string, string>();
     viewerExtraInfo.set("Format", GX_Texture.getFormatName(firstMipLevel.format, firstMipLevel.paletteFormat));

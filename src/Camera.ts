@@ -105,6 +105,7 @@ export interface CameraControllerClass {
     new(): CameraController;
 }
 
+const vec3Zero = [0, 0, 0];
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
@@ -216,7 +217,7 @@ export class FPSCameraController implements CameraController {
             updated = true;
         }
 
-        if (!vec3.exactEquals(movement, [0, 0, 0])) {
+        if (!vec3.exactEquals(movement, vec3Zero)) {
             mat4.translate(camera.worldMatrix, camera.worldMatrix, movement);
             updated = true;
         }
