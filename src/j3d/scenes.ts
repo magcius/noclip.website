@@ -13,7 +13,6 @@ import { BMDModelInstance, J3DTextureHolder, BMDModel } from './render';
 
 export class MultiScene implements Viewer.MainScene {
     public scenes: BMDModelInstance[];
-    public textures: Viewer.Texture[];
 
     constructor(public textureHolder: J3DTextureHolder, scenes: BMDModelInstance[]) {
         this.setScenes(scenes);
@@ -39,7 +38,6 @@ export class MultiScene implements Viewer.MainScene {
 
     protected setScenes(scenes: BMDModelInstance[]): void {
         this.scenes = scenes;
-        this.textures = this.textureHolder.viewerTextures;
     }
 }
 

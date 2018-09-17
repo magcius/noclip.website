@@ -164,14 +164,16 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
     return results;
 }
 
+function range(stop: number): number[] {
+    const L: number[] = [];
+    for (let i = 0; i < stop; i++)
+        L.push(i);
+    return L;
+}
+
 export class DeviceProgram extends BaseProgram {
     public uniformBufferLayouts: BufferLayout[];
-    public samplerUniformLocation: WebGLUniformLocation;
     public numSamplers: number = 0;
-
-    public bindSamplerIdentities(gl: WebGL2RenderingContext, samplerIdentities: number[]): void {
-        gl.uniform1iv(this.samplerUniformLocation, samplerIdentities);
-    }
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
         // Nothing, we use bindEx.
@@ -194,11 +196,17 @@ export class DeviceProgram extends BaseProgram {
         assert(samplers.length <= 1);
         if (samplers.length === 1) {
             const [m, samplerName, arraySizeStr] = samplers[0];
-            this.samplerUniformLocation = gl.getUniformLocation(prog, samplerName);
             if (arraySizeStr) {
                 this.numSamplers = parseInt(arraySizeStr);
+                // Assign identities in order.
+                // XXX(jstpierre): This will cause a warning in Chrome, but I don't care rn.
+                // It's more expensive to bind this every frame than respect Chrome's validation wishes...
+                const samplerUniformLocation = gl.getUniformLocation(prog, samplerName);
+                gl.useProgram(prog);
+                gl.uniform1iv(samplerUniformLocation, range(this.numSamplers));
             } else {
                 this.numSamplers = 1;
+                // No need to assign identities, since they should default to 0.
             }
         }
     }

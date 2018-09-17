@@ -160,8 +160,6 @@ export class IVRenderer {
 }
 
 export class Scene implements Viewer.Scene_Device {
-    public textures: Viewer.Texture[] = [];
-
     private inputLayout: GfxInputLayout;
     private pipeline: GfxRenderPipeline;
     private program: GfxProgram;

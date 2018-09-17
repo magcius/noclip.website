@@ -13,10 +13,7 @@ import * as GX2Texture from './gx2_texture';
 import { GX2TextureHolder, ModelRenderer } from './render';
 
 class SplatoonRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
-
     constructor(public textureHolder: GX2TextureHolder, public mainRenderers: ModelRenderer[], public skyRenderers: ModelRenderer[]) {
-        this.textures = textureHolder.viewerTextures;
     }
 
     public render(state: RenderState) {

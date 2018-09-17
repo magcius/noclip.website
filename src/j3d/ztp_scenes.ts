@@ -69,8 +69,6 @@ function createScenesFromRARC(gl: WebGL2RenderingContext, textureHolder: J3DText
 }
 
 class TwilightPrincessRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[] = [];
-
     private mainColorTarget: ColorTarget = new ColorTarget();
     private opaqueScenes: BMDModelInstance[] = [];
     private indTexScenes: BMDModelInstance[] = [];
@@ -78,8 +76,6 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
     private windowScenes: BMDModelInstance[] = [];
 
     constructor(public textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: BMDModelInstance[], public roomScenes: BMDModelInstance[]) {
-        this.textures = textureHolder.viewerTextures;
-
         this.roomScenes.forEach((scene) => {
             if (scene.name.endsWith('model')) {
                 this.opaqueScenes.push(scene);

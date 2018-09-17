@@ -110,7 +110,6 @@ class ModelCache {
 }
 
 class SkywardSwordScene implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
     public animationController: AnimationController;
     private mainColorTarget: ColorTarget = new ColorTarget();
@@ -130,8 +129,6 @@ class SkywardSwordScene implements Viewer.MainScene {
     constructor(gl: WebGL2RenderingContext, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.textureHolder = new RRESTextureHolder();
         this.animationController = new AnimationController();
-
-        this.textures = this.textureHolder.viewerTextures;
 
         this.oarcCollection.addSearchPath(this.stageArchive);
         this.oarcCollection.addSearchPath(this.objPackArchive);

@@ -4,7 +4,8 @@
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
 import { BlendMode, BlendFactor, RenderFlags, CompareMode, CullMode, FrontFaceMode } from "../../render";
-import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxFormat } from "./GfxPlatformImpl";
+import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline } from "./GfxPlatformImpl";
+import { GfxFormat } from "./GfxPlatformFormat";
 import { DeviceProgram } from "../../Program";
 import { BufferLayout } from "../helpers/BufferHelpers";
 import { Color } from "../../Color";

@@ -20,7 +20,6 @@ const materialHacks: GXMaterialHacks = {
 };
 
 export class BasicRRESScene implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
     public textureHolder: RRESTextureHolder;
     public models: MDL0ModelInstance[] = [];
     public animationController: AnimationController;
@@ -28,8 +27,6 @@ export class BasicRRESScene implements Viewer.MainScene {
     constructor(gl: WebGL2RenderingContext, public stageRRESes: BRRES.RRES[]) {
         this.textureHolder = new RRESTextureHolder();
         this.animationController = new AnimationController();
-
-        this.textures = this.textureHolder.viewerTextures;
 
         for (const stageRRES of stageRRESes) {
             this.textureHolder.addRRESTextures(gl, stageRRES);
@@ -92,7 +89,7 @@ export function createBasicRRESSceneFromBuffer(gl: WebGL2RenderingContext, buffe
     return new BasicRRESScene(gl, [stageRRES]);
 }
 
-function range(start: number = 1, count: number = 18): number[] {
+function range(start: number, count: number): number[] {
     const L: number[] = [];
     for (let i = start; i < start + count; i++)
         L.push(i);

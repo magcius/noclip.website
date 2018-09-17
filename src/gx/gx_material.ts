@@ -6,6 +6,7 @@ import * as GX from './gx_enum';
 import { BlendFactor, BlendMode as RenderBlendMode, CompareMode, CullMode, FrontFaceMode, RenderFlags } from '../render';
 import { DeviceProgram } from '../Program';
 import { colorCopy, colorFromRGBA8, colorToRGBA8 } from '../Color';
+import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -173,24 +174,24 @@ export const enum UniformStorage {
 
 interface VertexAttributeGenDef {
     attrib: GX.VertexAttribute;
-    storage: UniformStorage;
+    format: GfxFormat;
     name: string;
 }
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  storage: UniformStorage.UINT },
-    { attrib: GX.VertexAttribute.POS,        name: "Position",   storage: UniformStorage.VEC3 },
-    { attrib: GX.VertexAttribute.NRM,        name: "Normal",     storage: UniformStorage.VEC3 },
-    { attrib: GX.VertexAttribute.CLR0,       name: "Color0",     storage: UniformStorage.VEC4 },
-    { attrib: GX.VertexAttribute.CLR1,       name: "Color1",     storage: UniformStorage.VEC4 },
-    { attrib: GX.VertexAttribute.TEX0,       name: "Tex0",       storage: UniformStorage.VEC2 },
-    { attrib: GX.VertexAttribute.TEX1,       name: "Tex1",       storage: UniformStorage.VEC2 },
-    { attrib: GX.VertexAttribute.TEX2,       name: "Tex2",       storage: UniformStorage.VEC2 },
-    { attrib: GX.VertexAttribute.TEX3,       name: "Tex3",       storage: UniformStorage.VEC2 },
-    { attrib: GX.VertexAttribute.TEX4,       name: "Tex4",       storage: UniformStorage.VEC2 },
-    { attrib: GX.VertexAttribute.TEX5,       name: "Tex5",       storage: UniformStorage.VEC2 },
-    { attrib: GX.VertexAttribute.TEX6,       name: "Tex6",       storage: UniformStorage.VEC2 },
-    { attrib: GX.VertexAttribute.TEX7,       name: "Tex7",       storage: UniformStorage.VEC2 },
+    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  format: GfxFormat.U8_R },
+    { attrib: GX.VertexAttribute.POS,        name: "Position",   format: GfxFormat.F32_RGB },
+    { attrib: GX.VertexAttribute.NRM,        name: "Normal",     format: GfxFormat.F32_RGB },
+    { attrib: GX.VertexAttribute.CLR0,       name: "Color0",     format: GfxFormat.F32_RGBA },
+    { attrib: GX.VertexAttribute.CLR1,       name: "Color1",     format: GfxFormat.F32_RGBA },
+    { attrib: GX.VertexAttribute.TEX0,       name: "Tex0",       format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX1,       name: "Tex1",       format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX2,       name: "Tex2",       format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX3,       name: "Tex3",       format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX4,       name: "Tex4",       format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX5,       name: "Tex5",       format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX6,       name: "Tex6",       format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX7,       name: "Tex7",       format: GfxFormat.F32_RG },
 ];
 
 export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
@@ -216,7 +217,6 @@ export interface GXMaterialHacks {
     alphaLightingFudge?: LightingFudgeGenerator;
 }
 
-const textureSamplerIdentities = Int32Array.of(0, 1, 2, 3, 4, 5, 6, 7);
 export class GX_Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -796,18 +796,19 @@ export class GX_Program extends DeviceProgram {
         discard;`;
     }
 
-    private generateStorageType(t: UniformStorage): string {
-        switch (t) {
-        case UniformStorage.UINT: return 'uint';
-        case UniformStorage.VEC2: return 'vec2';
-        case UniformStorage.VEC3: return 'vec3';
-        case UniformStorage.VEC4: return 'vec4';
+    private generateAttributeStorageType(fmt: GfxFormat): string {
+        switch (fmt) {
+        case GfxFormat.U8_R:     return 'uint';
+        case GfxFormat.F32_RG:   return 'vec2';
+        case GfxFormat.F32_RGB:  return 'vec3';
+        case GfxFormat.F32_RGBA: return 'vec4';
+        default: throw "whoops";
         }
     }
 
     private generateVertAttributeDefs() {
         return vtxAttributeGenDefs.map((a, i) => {
-            return `layout(location = ${i}) in ${this.generateStorageType(a.storage)} a_${a.name};`;
+            return `layout(location = ${i}) in ${this.generateAttributeStorageType(a.format)} a_${a.name};`;
         }).join('\n');
     }
 

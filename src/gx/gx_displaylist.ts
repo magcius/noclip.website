@@ -39,6 +39,8 @@ import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
+import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, FormatFlags, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatCompFlags, getFormatComponentCount } from '../gfx/platform/GfxPlatformFormat';
+import { Format } from '../sm64ds/nitro_tex';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -103,28 +105,30 @@ function getComponentSize(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFm
     return getComponentSizeRaw(vatFormat.compType);
 }
 
-export function getComponentCountRaw(vtxAttrib: GX.VertexAttribute, compCnt: GX.CompCnt): number {
+export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.VertexAttribute, compCnt: GX.CompCnt): number {
     switch (vtxAttrib) {
     case GX.VertexAttribute.POS:
         if (compCnt === GX.CompCnt.POS_XY)
-            return 2;
+            return FormatCompFlags.COMP_RG;
         else if (compCnt === GX.CompCnt.POS_XYZ)
-            return 3;
+            return FormatCompFlags.COMP_RGB;
     case GX.VertexAttribute.NRM:
         if (compCnt === GX.CompCnt.NRM_XYZ)
-            return 3;
+            return FormatCompFlags.COMP_RGB;
         // NBT*XYZ
+        // XXX(jstpierre): This is impossible in modern graphics APIs. We need to split this into three attributes...
+        // Thankfully, nobody seems to be using NRM_NBT.
         else if (compCnt === GX.CompCnt.NRM_NBT)
             return 9;
         // Separated NBT has three components per index.
         else if (compCnt === GX.CompCnt.NRM_NBT3)
-            return 3;
+            return FormatCompFlags.COMP_RGB;
     case GX.VertexAttribute.CLR0:
     case GX.VertexAttribute.CLR1:
         if (compCnt === GX.CompCnt.CLR_RGB)
-            return 3;
+            return FormatCompFlags.COMP_RGB;
         else if (compCnt === GX.CompCnt.CLR_RGBA)
-            return 4;
+            return FormatCompFlags.COMP_RGBA;
     case GX.VertexAttribute.TEX0:
     case GX.VertexAttribute.TEX1:
     case GX.VertexAttribute.TEX2:
@@ -134,9 +138,9 @@ export function getComponentCountRaw(vtxAttrib: GX.VertexAttribute, compCnt: GX.
     case GX.VertexAttribute.TEX6:
     case GX.VertexAttribute.TEX7:
         if (compCnt === GX.CompCnt.TEX_S)
-            return 1;
+            return FormatCompFlags.COMP_R;
         else if (compCnt === GX.CompCnt.TEX_ST)
-            return 2;
+            return FormatCompFlags.COMP_RG;
     case GX.VertexAttribute.NULL:
     default:
         // Shouldn't ever happen
@@ -144,12 +148,16 @@ export function getComponentCountRaw(vtxAttrib: GX.VertexAttribute, compCnt: GX.
     }
 }
 
-function getComponentCount(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
+export function getAttributeFormatCompFlags(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): FormatCompFlags {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
-        return 1;
+        return FormatCompFlags.COMP_R;
 
-    return getComponentCountRaw(vtxAttrib, vatFormat.compCnt);
+    return getAttributeFormatCompFlagsRaw(vtxAttrib, vatFormat.compCnt);
+}
+
+export function getAttributeComponentCount(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
+    return getFormatCompFlagsComponentCount(getAttributeFormatCompFlags(vtxAttrib, vatFormat));
 }
 
 function getComponentShiftRaw(compType: GX.CompType, compShift: number): number {
@@ -219,36 +227,17 @@ function getAttrName(vtxAttrib: GX.VertexAttribute): string {
     }
 }
 
-// TODO(jstpierre): Make this a core utility?
-export const enum AttributeFormat {
-    U8,
-    U16,
-    F32,
-}
-
-function getAttributeFormat(vtxAttrib: GX.VertexAttribute): AttributeFormat {
+function getAttributeFormatTypeFlags(vtxAttrib: GX.VertexAttribute): FormatTypeFlags {
     if (isVtxAttribMtxIdx(vtxAttrib))
-        return AttributeFormat.U8;
+        return FormatTypeFlags.U8;
 
-    return AttributeFormat.F32;
-}
-
-function getAttributeFormatSize(attributeFormat: AttributeFormat): number {
-    switch (attributeFormat) {
-    case AttributeFormat.U8:
-        return 1;
-    case AttributeFormat.U16:
-        return 2;
-    case AttributeFormat.F32:
-        return 4;
-    }
+    return FormatTypeFlags.F32;
 }
 
 export interface VertexAttributeLayout {
     vtxAttrib: GX.VertexAttribute;
     offset: number;
-    format: AttributeFormat;
-    componentCount: number;
+    format: GfxFormat;
 }
 
 // Describes the source vertex data for a specific VAT format & VCD.
@@ -295,7 +284,7 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
         switch (vtxAttrDesc.type) {
         case GX.AttrType.DIRECT: {
             const srcAttrCompSize = getComponentSize(vtxAttrib, vtxAttrFmt);
-            const srcAttrCompCount = getComponentCount(vtxAttrib, vtxAttrFmt);
+            const srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
             const srcAttrByteSize = srcAttrCompSize * srcAttrCompCount;
             srcVertexSize += srcAttrByteSize;
             break;
@@ -328,23 +317,22 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
         if (!enableOutput)
             continue;
 
-        // TODO(jstpierre): Worth supporting other component types?
-        const format = getAttributeFormat(vtxAttrib);
-        const formatComponentSize = getAttributeFormatSize(format);
+        const formatTypeFlags = getAttributeFormatTypeFlags(vtxAttrib);
+        const formatComponentSize = getFormatTypeFlagsByteSize(formatTypeFlags);
 
         dstVertexSize = align(dstVertexSize, formatComponentSize);
         const offset = dstVertexSize;
 
         // Find our maximum component count by choosing from a maximum of all the VAT formats.
-        let componentCount = 0;
+        let formatCompFlags = 0;
         vatLayouts.forEach((vatLayout) => {
-            const fmtComponentCount = getComponentCount(vtxAttrib, vatLayout.vatFormat[vtxAttrib]);
-            componentCount = Math.max(componentCount, fmtComponentCount);
+            formatCompFlags = Math.max(formatCompFlags, getAttributeFormatCompFlags(vtxAttrib, vatLayout.vatFormat[vtxAttrib]));
         });
 
-        dstVertexSize += formatComponentSize * componentCount;
+        dstVertexSize += formatComponentSize * getFormatCompFlagsComponentCount(formatCompFlags);
 
-        dstVertexAttributeLayouts.push({ vtxAttrib, offset, format, componentCount });
+        const format = makeFormat(formatTypeFlags, formatCompFlags, FormatFlags.NONE);
+        dstVertexAttributeLayouts.push({ vtxAttrib, offset, format });
     }
 
     // Align the whole thing to our minimum required alignment (F32).
@@ -353,7 +341,7 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
 }
 
 export interface LoadedVertexData {
-    indexFormat: AttributeFormat;
+    indexFormat: GfxFormat;
     indexData: ArrayBuffer;
     packedVertexData: ArrayBuffer;
     totalTriangleCount: number;
@@ -437,7 +425,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
         // We only need vtxAttrFmt if we're going to read the data.
         if (vtxAttrDesc.type === GX.AttrType.DIRECT || outputEnabled) {
             srcAttrCompSize = getComponentSize(vtxAttrib, vtxAttrFmt);
-            srcAttrCompCount = getComponentCount(vtxAttrib, vtxAttrFmt);
+            srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
             srcAttrByteSize = srcAttrCompSize * srcAttrCompCount;
         }
 
@@ -484,9 +472,10 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
         function compileWriteOneComponent(offs: number, value: string): string {
             const dstOffs = `dstVertexDataOffs + ${offs}`;
 
-            if (dstAttribLayout.format === AttributeFormat.F32)
+            const typeFlags = getFormatTypeFlags(dstAttribLayout.format);
+            if (typeFlags === FormatTypeFlags.F32)
                 return compileWriteOneComponentF32(dstOffs, value);
-            else if (dstAttribLayout.format === AttributeFormat.U8)
+            else if (typeFlags === FormatTypeFlags.U8)
                 return compileWriteOneComponentU8(dstOffs, value);
             else
                 throw "whoops";
@@ -496,8 +485,9 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
             let S = ``;
 
             if (outputEnabled) {
-                const dstComponentSize = getAttributeFormatSize(dstAttribLayout.format);
-                for (let i = 0; i < dstAttribLayout.componentCount; i++) {
+                const dstComponentSize = getFormatCompByteSize(dstAttribLayout.format);
+                const componentCount = getFormatComponentCount(dstAttribLayout.format);
+                for (let i = 0; i < componentCount; i++) {
                     const dstOffs: number = dstAttribLayout.offset + (i * dstComponentSize);
                     const srcOffs: string = `${attrOffsetBase} + ${i * srcAttrCompSize}`;
 
@@ -738,7 +728,7 @@ ${compileVatFormats()}
 if (dstIndexData.length !== totalTriangleCount * 3)
     throw new Error("Number of indexes does not match triangle count");
 
-return { indexFormat: ${AttributeFormat.U16}, indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount, vertexId: vertexId };
+return { indexFormat: ${GfxFormat.U16_R}, indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalTriangleCount: totalTriangleCount, vertexId: vertexId };
 
 };
 `;

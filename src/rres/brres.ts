@@ -7,7 +7,7 @@ import * as GX from '../gx/gx_enum';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import * as GX_Material from '../gx/gx_material';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getComponentSizeRaw, getComponentCountRaw } from '../gx/gx_displaylist';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getComponentSizeRaw, getAttributeFormatCompFlagsRaw, getAttributeComponentCount } from '../gx/gx_displaylist';
 import { mat4, mat2d } from 'gl-matrix';
 import { Endianness } from '../endian';
 import { AABB } from '../Geometry';
@@ -16,6 +16,7 @@ import { RRESTextureHolder } from './render';
 import AnimationController from '../AnimationController';
 import { cv, Graph } from '../DebugJunk';
 import { GXTextureHolder } from '../gx/gx_render';
+import { getFormatCompFlags, getFormatComponentCount, getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 
 //#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {
@@ -880,7 +881,7 @@ function parseMDL0_VtxData(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribu
         compShift = 0;
     }
 
-    const numComponents = getComponentCountRaw(vtxAttrib, compCnt);
+    const numComponents = getFormatCompFlagsComponentCount(getAttributeFormatCompFlagsRaw(vtxAttrib, compCnt));
     const compSize = getComponentSizeRaw(compType);
     const compByteSize = numComponents * compSize;
     const dataByteSize = compByteSize * count;

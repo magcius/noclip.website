@@ -15,10 +15,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BYML from '../byml';
 
 export class MetroidPrimeWorldScene implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
-
     constructor(public mlvl: MLVL.MLVL, public textureHolder: RetroTextureHolder, public skyboxRenderer: CMDLRenderer, public areaRenderers: MREARenderer[]) {
-        this.textures = textureHolder.viewerTextures;
     }
 
     public createPanels(): UI.Panel[] {

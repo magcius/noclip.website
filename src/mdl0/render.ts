@@ -177,7 +177,6 @@ void main() {
 }
 
 class Scene implements Viewer.MainScene {
-    public textures: Viewer.Texture[] = [];
     public program: MDL0_Program;
     public mdl0: MDL0.MDL0;
     public fancyGrid: FancyGrid;

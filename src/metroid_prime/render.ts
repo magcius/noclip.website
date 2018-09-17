@@ -37,8 +37,6 @@ export class RetroTextureHolder extends GXTextureHolder<TXTR> {
 const textureMappingScratch: TextureMapping[] = nArray(8, () => new TextureMapping());
 
 export class MREARenderer implements Viewer.Scene {
-    public textures: Viewer.Texture[] = [];
-
     private bufferCoalescer: BufferCoalescer;
     private materialCommands: Command_Material[] = [];
     private opaqueCommands: Command_Surface[] = [];
@@ -50,7 +48,6 @@ export class MREARenderer implements Viewer.Scene {
     public visible: boolean = true;
 
     constructor(gl: WebGL2RenderingContext, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
-        this.textures = textureHolder.viewerTextures;
         this.renderHelper = new GXRenderHelper(gl);
         this.translateModel(gl);
     }
@@ -198,8 +195,6 @@ export class MREARenderer implements Viewer.Scene {
 
 // TODO(jstpierre): Dedupe.
 export class CMDLRenderer implements Viewer.Scene {
-    public textures: Viewer.Texture[] = [];
-
     private bufferCoalescer: BufferCoalescer;
     private materialCommands: Command_Material[] = [];
     private surfaceCommands: Command_Surface[] = [];
