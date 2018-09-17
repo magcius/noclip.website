@@ -168,6 +168,7 @@ class SceneLoader {
                             camera.identity();
                     });
                     this.viewer.setScene(scene);
+                    this.onscenechanged();
                 }
             });
             return progressable;
@@ -178,6 +179,7 @@ class SceneLoader {
                     this.loadingSceneDesc = null;
                     this.setCameraState(sceneDesc, cameraState, (camera) => camera.identity());
                     this.viewer.setSceneDevice(scene);
+                    this.onscenechanged();
                 }
             });
             return progressable;

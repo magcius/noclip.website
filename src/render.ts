@@ -144,8 +144,8 @@ export class RenderFlags {
 }
 
 RenderFlags.default.blendMode = BlendMode.NONE;
-RenderFlags.default.blendSrc = BlendFactor.SRC_ALPHA;
-RenderFlags.default.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
+RenderFlags.default.blendSrc = BlendFactor.ONE;
+RenderFlags.default.blendDst = BlendFactor.ZERO;
 RenderFlags.default.cullMode = CullMode.NONE;
 RenderFlags.default.depthTest = false;
 RenderFlags.default.depthWrite = true;
