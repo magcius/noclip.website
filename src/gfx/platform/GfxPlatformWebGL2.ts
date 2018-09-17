@@ -18,8 +18,7 @@ interface GfxBufferP_GL extends GfxBuffer {
 interface GfxTextureP_GL extends GfxTexture {
     gl_texture: WebGLTexture;
     gl_target: GLenum;
-    gl_format: GLenum;
-    gl_type: GLenum;
+    format: GfxFormat;
     width: number;
     height: number;
 }
@@ -110,6 +109,8 @@ export function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLe
             return WebGL2RenderingContext.INT;
         case FormatTypeFlags.F32:
             return WebGL2RenderingContext.FLOAT;
+        default:
+            throw "whoops";
         }
     }
 
@@ -162,49 +163,6 @@ function translateBufferUsageToTarget(usage: GfxBufferUsage): GLenum {
         return WebGL2RenderingContext.ARRAY_BUFFER;
     case GfxBufferUsage.UNIFORM:
         return WebGL2RenderingContext.UNIFORM_BUFFER;
-    }
-}
-
-function translateTextureInternalFormat(fmt: GfxFormat): GLenum {
-    switch (fmt) {
-    case GfxFormat.F32_R:
-        return WebGL2RenderingContext.R32F;
-    case GfxFormat.F32_RG:
-        return WebGL2RenderingContext.RG32F;
-    case GfxFormat.F32_RGB:
-        return WebGL2RenderingContext.RGB32F;
-    case GfxFormat.F32_RGBA:
-        return WebGL2RenderingContext.RGBA32F;
-    case GfxFormat.U16_R:
-        return WebGL2RenderingContext.R16UI;
-    case GfxFormat.U8_RGBA:
-        return WebGL2RenderingContext.RGBA8;
-    default:
-        throw "whoops";
-    }
-}
-
-function translateTextureFormat(fmt: GfxFormat): GLenum {
-    const compFlags: FormatCompFlags = getFormatCompFlags(fmt);
-    switch (compFlags) {
-    case FormatCompFlags.COMP_R:
-        return WebGL2RenderingContext.RED;
-    case FormatCompFlags.COMP_RG:
-        return WebGL2RenderingContext.RG;
-    case FormatCompFlags.COMP_RGB:
-        return WebGL2RenderingContext.RGB;
-    case FormatCompFlags.COMP_RGBA:
-        return WebGL2RenderingContext.RGBA;
-    }
-}
-
-function translateTextureType(fmt: GfxFormat): GLenum {
-    const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
-    switch (typeFlags) {
-    case FormatTypeFlags.U8:
-        return WebGL2RenderingContext.UNSIGNED_BYTE;
-    default:
-        throw "whoops";
     }
 }
 
@@ -291,10 +249,10 @@ function assignPlatformName(o: any, name: string): void {
 }
 
 function calcMipLevels(w: number, h: number): number {
-    let m = Math.min(w, h);
+    let m = Math.max(w, h);
     let i = 0;
     while (m > 0) {
-        m /= 2;
+        m = (m / 2) | 0;
         i++;
     }
     return i;
@@ -316,7 +274,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
     private _fullscreenCopyFlags = new RenderFlags();
     private _fullscreenCopyProgram: GfxProgramP_GL;
 
+    private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null;
+    private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null;
+
     constructor(public gl: WebGL2RenderingContext, private isTransitionDevice: boolean = false) {
+        this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
+        this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+
         if (!this.isTransitionDevice) {
             // Transition devices should use the RenderState Program system.
             this._programCache = new ProgramCache(gl);
@@ -365,12 +329,81 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         this._applyFlags(this._fullscreenCopyFlags);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
+        gl.bindSampler(0, null);
         gl.useProgram(this._fullscreenCopyProgram.gl_program);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     //#endregion
 
     //#region GfxDevice
+    private translateTextureInternalFormat(fmt: GfxFormat): GLenum {
+        switch (fmt) {
+        case GfxFormat.F32_R:
+            return WebGL2RenderingContext.R32F;
+        case GfxFormat.F32_RG:
+            return WebGL2RenderingContext.RG32F;
+        case GfxFormat.F32_RGB:
+            return WebGL2RenderingContext.RGB32F;
+        case GfxFormat.F32_RGBA:
+            return WebGL2RenderingContext.RGBA32F;
+        case GfxFormat.U16_R:
+            return WebGL2RenderingContext.R16UI;
+        case GfxFormat.U8_RGBA:
+            return WebGL2RenderingContext.RGBA8;
+        case GfxFormat.U8_RGBA_SRGB:
+            return WebGL2RenderingContext.SRGB8_ALPHA8;
+        case GfxFormat.S8_RGBA_NORM:
+            return WebGL2RenderingContext.RGBA8_SNORM;
+        case GfxFormat.BC1:
+            return this._WEBGL_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT;
+        case GfxFormat.BC1_SRGB:
+            return this._WEBGL_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT5_EXT;
+        case GfxFormat.BC3:
+            return this._WEBGL_compressed_texture_s3tc_srgb.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
+        case GfxFormat.BC3_SRGB:
+            return this._WEBGL_compressed_texture_s3tc_srgb.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
+        default:
+            throw "whoops";
+        }
+    }
+    
+    private translateTextureFormat(fmt: GfxFormat): GLenum {
+        const compFlags: FormatCompFlags = getFormatCompFlags(fmt);
+        switch (compFlags) {
+        case FormatCompFlags.COMP_R:
+            return WebGL2RenderingContext.RED;
+        case FormatCompFlags.COMP_RG:
+            return WebGL2RenderingContext.RG;
+        case FormatCompFlags.COMP_RGB:
+            return WebGL2RenderingContext.RGB;
+        case FormatCompFlags.COMP_RGBA:
+            return WebGL2RenderingContext.RGBA;
+        }
+    }
+    
+    private translateTextureType(fmt: GfxFormat): GLenum {
+        const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
+        switch (typeFlags) {
+        case FormatTypeFlags.U8:
+            return WebGL2RenderingContext.UNSIGNED_BYTE;
+        case FormatTypeFlags.S8:
+            return WebGL2RenderingContext.BYTE;
+        default:
+            throw "whoops";
+        }
+    }
+
+    private isTextureFormatCompressed(fmt: GfxFormat): boolean {
+        const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
+        switch (typeFlags) {
+        case FormatTypeFlags.BC1:
+        case FormatTypeFlags.BC3:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
         const byteSize = wordCount * 4;
         const gl = this.gl;
@@ -389,12 +422,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         const gl_target = gl.TEXTURE_2D;
         const numLevels = mipmapped ? calcMipLevels(width, height) : 1;
         gl.bindTexture(gl_target, gl_texture);
-        const internalformat = translateTextureInternalFormat(format);
-        const gl_format = translateTextureFormat(format);
-        const gl_type = translateTextureType(format);
+        const internalformat = this.translateTextureInternalFormat(format);
         gl.texParameteri(gl_target, gl.TEXTURE_MAX_LEVEL, numLevels);
         gl.texStorage2D(gl_target, numLevels, internalformat, width, height);
-        const texture: GfxTextureP_GL = { _T: _T.Texture, gl_texture, gl_target, gl_format, gl_type, width, height };
+        const texture: GfxTextureP_GL = { _T: _T.Texture, gl_texture, gl_target, format, width, height };
         return texture;
     }
 
@@ -622,6 +653,19 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         return { uniformBuffers: deviceProgram.uniformBufferLayouts };
     }
 
+    public queryTextureFormatSupported(format: GfxFormat): boolean {
+        switch (format) {
+        case GfxFormat.BC1_SRGB:
+        case GfxFormat.BC3_SRGB:
+            return this._WEBGL_compressed_texture_s3tc_srgb !== null;
+        case GfxFormat.BC1:
+        case GfxFormat.BC3:
+            return this._WEBGL_compressed_texture_s3tc !== null;
+        default:
+            return true;
+        }
+    }
+
     public setResourceName(o: GfxResource, name: string): void {
         o.ResourceName = name;
 
@@ -756,14 +800,24 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
 
     public uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void {
         const gl = this.gl;
-        const { gl_texture, gl_target, gl_format, gl_type, width, height } = texture as GfxTextureP_GL;
+        const { gl_texture, gl_target, format, width, height } = texture as GfxTextureP_GL;
         gl.bindTexture(gl_target, gl_texture);
         let w = width, h = height;
         const maxMipLevel = firstMipLevel + levelDatas.length;
+
+        const isCompressed = this.isTextureFormatCompressed(format);
+        const gl_format = this.translateTextureFormat(format);
+
         for (let i = 0; i < maxMipLevel; i++) {
             if (i >= firstMipLevel) {
                 const levelData = levelDatas[i - firstMipLevel];
-                gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
+
+                if (isCompressed) {
+                    gl.compressedTexSubImage2D(gl_target, i, 0, 0, w, h, gl_format, levelData);
+                } else {
+                    const gl_type = this.translateTextureType(format);
+                    gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
+                }
             }
 
             w = Math.max((w / 2) | 0, 1);

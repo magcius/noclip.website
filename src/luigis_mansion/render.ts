@@ -10,6 +10,8 @@ import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
 import { AABB, IntersectionState } from "../Geometry";
+import { GfxTexture } from "../gfx/platform/GfxPlatform";
+import { getTransitionDeviceForWebGL2 } from "../gfx/platform/GfxPlatformWebGL2";
 
 class Command_Material {
     private renderFlags: RenderFlags;
@@ -30,7 +32,7 @@ class Command_Material {
             const samplerIndex = this.material.samplerIndexes[i];
             if (samplerIndex >= 0) {
                 const m = this.materialParams.m_TextureMapping[i];
-                m.glTexture = this.scene.glTextures[samplerIndex];
+                m.gfxTexture = this.scene.gfxTextures[samplerIndex];
             }
         }
     }
@@ -93,7 +95,7 @@ export class BinScene implements Viewer.MainScene {
     private bufferCoalescer: BufferCoalescer;
     private batches: Batch[];
 
-    public glTextures: WebGLTexture[] = [];
+    public gfxTextures: GfxTexture[] = [];
     public visible: boolean = true;
 
     public renderHelper: GXRenderHelper;
@@ -125,7 +127,8 @@ export class BinScene implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
-        this.glTextures.forEach((textureId) => gl.deleteTexture(textureId));
+        const device = getTransitionDeviceForWebGL2(gl);
+        this.gfxTextures.forEach((t) => device.destroyTexture(t));
         this.renderHelper.destroy(gl);
         this.bufferCoalescer.destroy(gl);
     }
@@ -159,7 +162,7 @@ export class BinScene implements Viewer.MainScene {
             const sampler = bin.samplers[i];
             const texture: GX_Texture.Texture = { ...sampler.texture, name: `unknown ${i}` };
             const mipChain = GX_Texture.calcMipChain(texture, 1);
-            const { glTexture, viewerTexture } = loadTextureFromMipChain(gl, mipChain);
+            const { gfxTexture, viewerTexture } = loadTextureFromMipChain(gl, mipChain);
 
             // GL texture is bound by loadTextureFromMipChain.
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -167,7 +170,7 @@ export class BinScene implements Viewer.MainScene {
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
 
-            this.glTextures.push(glTexture);
+            this.gfxTextures.push(gfxTexture);
             this.textures.push(viewerTexture);
         }
 

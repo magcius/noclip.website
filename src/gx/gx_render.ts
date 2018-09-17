@@ -13,11 +13,11 @@ import { assert, nArray } from '../util';
 import { LoadedVertexData, LoadedVertexLayout } from './gx_displaylist';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { TextureMapping, TextureHolder } from '../TextureHolder';
+import { TextureMapping, TextureHolder, LoadedTexture, getGLTextureFromMapping, getGLSamplerFromMapping } from '../TextureHolder';
 import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/BufferHelpers';
 import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
-import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer, getPlatformTexture } from '../gfx/platform/GfxPlatformWebGL2';
+import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -134,12 +134,14 @@ export class GXRenderHelper {
         assert(prog === state.currentProgram);
         for (let i = 0; i < 8; i++) {
             const m = textureMapping[i];
-            if (m.glTexture === null)
+            const glTexture = getGLTextureFromMapping(m);
+            if (glTexture === null)
                 continue;
 
+            const glSampler = getGLSamplerFromMapping(m);
             gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, m.glTexture);
-            gl.bindSampler(i, m.glSampler);
+            gl.bindTexture(gl.TEXTURE_2D, glTexture);
+            gl.bindSampler(i, glSampler);
             state.renderStatisticsTracker.textureBindCount++;
         }
     }
@@ -246,16 +248,11 @@ export function loadedDataCoalescer(gl: WebGL2RenderingContext, loadedVertexData
     );
 }
 
-export interface LoadedTexture {
-    glTexture: WebGLTexture;
-    viewerTexture: Viewer.Texture;
-}
-
 export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX_Texture.MipChain): LoadedTexture {
     const device = getTransitionDeviceForWebGL2(gl);
     const firstMipLevel = mipChain.mipLevels[0];
-    const texture = device.createTexture(GfxFormat.U8_RGBA, firstMipLevel.width, firstMipLevel.height, mipChain.mipLevels.length > 1, 1);
-    device.setResourceName(texture, mipChain.name);
+    const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, firstMipLevel.width, firstMipLevel.height, mipChain.mipLevels.length > 1, 1);
+    device.setResourceName(gfxTexture, mipChain.name);
 
     const hostUploader = device.createHostUploader();
     const surfaces = [];
@@ -270,7 +267,7 @@ export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX
         surfaces.push(canvas);
 
         GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
-            hostUploader.uploadTextureData(texture, level, [rgbaTexture.pixels]);
+            hostUploader.uploadTextureData(gfxTexture, level, [rgbaTexture.pixels]);
 
             const ctx = canvas.getContext('2d');
             const imgData = new ImageData(mipLevel.width, mipLevel.height);
@@ -284,8 +281,7 @@ export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX
     viewerExtraInfo.set("Format", GX_Texture.getFormatName(firstMipLevel.format, firstMipLevel.paletteFormat));
 
     const viewerTexture: Viewer.Texture = { name: mipChain.name, surfaces, extraInfo: viewerExtraInfo };
-    const glTexture = getPlatformTexture(texture);
-    return { glTexture, viewerTexture };
+    return { gfxTexture, viewerTexture };
 }
 
 export function translateTexFilter(gl: WebGL2RenderingContext, texFilter: GX.TexFilter): GLenum {

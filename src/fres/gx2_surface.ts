@@ -50,5 +50,5 @@ export function parseGX2Surface(buffer: ArrayBufferSlice, gx2SurfaceOffs: number
 export interface DeswizzledSurface {
     width: number;
     height: number;
-    pixels: ArrayBuffer;
+    pixels: Uint8Array;
 }

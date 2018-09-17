@@ -148,6 +148,7 @@ export interface GfxDevice {
 
     queryLimits(): GfxDeviceLimits;
     queryProgram(program: GfxProgram): GfxProgramReflection;
+    queryTextureFormatSupported(format: GfxFormat): boolean;
 
     setResourceName(o: GfxResource, s: string): void;
 }

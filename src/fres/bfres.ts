@@ -131,6 +131,8 @@ export interface TextureAssign {
     texFilterMag: GX2TexXYFilterType;
     texFilterMin: GX2TexXYFilterType;
     texFilterMip: GX2TexMipFilterType;
+    minLOD: number;
+    maxLOD: number;
 }
 
 enum UBOParameterType {
@@ -419,7 +421,9 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
             const texFilterMin = (samplerParam0 >>> 12) & 0x03;
             const texFilterMip = (samplerParam0 >>> 17) & 0x03;
 
-            textureAssigns.push({ attribName, textureName, ftexOffs, texClampU, texClampV, texFilterMin, texFilterMag, texFilterMip });
+            const minLOD = ((samplerParam1 >>>  0) & 0x3FF) / 64;
+            const maxLOD = ((samplerParam1 >>> 10) & 0x3FF) / 64;
+            textureAssigns.push({ attribName, textureName, ftexOffs, texClampU, texClampV, texFilterMin, texFilterMag, texFilterMip, minLOD, maxLOD });
         }
 
         let materialParameterArrayIdx = materialParameterArrayOffs;
