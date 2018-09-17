@@ -293,7 +293,7 @@ export function deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLeve
         }
     }
 
-    const pixels = dst.buffer;
+    const pixels = dst;
     const width = dstWidth;
     const height = dstHeight;
     return { width, height, pixels };

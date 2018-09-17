@@ -1,5 +1,5 @@
 
-import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat } from './gx2_enum';
+import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat, GX2SurfaceFormat } from './gx2_enum';
 import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 
@@ -9,7 +9,9 @@ import { assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
 import { CoalescedBuffer, coalesceBuffer } from '../BufferCoalescer';
-import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
+import { TextureHolder, LoadedTexture, TextureMapping, getGLTextureFromMapping, getGLSamplerFromMapping } from '../TextureHolder';
+import { getTransitionDeviceForWebGL2, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
+import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 
 class ProgramGambit_UBER extends SimpleProgram {
     public s_a0: WebGLUniformLocation;
@@ -331,13 +333,23 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
         this.addTextures(gl, fres.ftex);
     }
 
+    private translateSurfaceFormat(device: GfxDevice, format: GX2SurfaceFormat): GfxFormat {
+        // We always decode to software rn.
+        if (format & GX2SurfaceFormat.FLAG_SNORM)
+            return GfxFormat.S8_RGBA_NORM;
+        else if (format & GX2SurfaceFormat.FLAG_SRGB)
+            return GfxFormat.U8_RGBA_SRGB;
+        else
+            return GfxFormat.U8_RGBA;
+    }
+
     protected addTexture(gl: WebGL2RenderingContext, textureEntry: BFRES.FTEXEntry): LoadedTexture | null {
-        const glTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, glTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 0);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+        const device = getTransitionDeviceForWebGL2(gl);
         const texture = textureEntry.ftex;
         const surface = texture.surface;
+
+        const gfxTexture = device.createTexture(this.translateSurfaceFormat(device, surface.format), surface.width, surface.height, surface.numMips > 1, 1);
+        const hostUploader = device.createHostUploader();
 
         const canvases: HTMLCanvasElement[] = [];
 
@@ -354,54 +366,12 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
                 if (decodedSurface.width === 0 || decodedSurface.height === 0)
                     return;
 
-                gl.bindTexture(gl.TEXTURE_2D, glTexture);
-                // Decodes should show up in order, thanks to priority. Change this if we ever
-                // change the logic, because it is indeed sketchy...
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, mipLevel);
-
-                // XXX(jstpierre): Sometimes Splatoon uses non-block-sized textures. OpenGL does
-                // not like this one bit. If this is the case, decompress in software.
-                const isBlockSized = (texture.surface.width & 0x03) === 0 && (texture.surface.height & 0x03) === 0;
-
-                // First check if we have to decompress compressed textures.
-                switch (decodedSurface.type) {
-                case "BC1":
-                case "BC3":
-                case "BC4":
-                case "BC5":
-                    const compressedFormat = this.getCompressedFormat(gl, decodedSurface);
-                    if (compressedFormat === null || !isBlockSized)
-                        decodedSurface = GX2Texture.decompressBC(decodedSurface);
-                    break;
-                }
-
-                const pixels = decodedSurface.pixels;
-                const width = decodedSurface.width;
-                const height = decodedSurface.height;
-                assert(pixels.byteLength > 0);
-
-                switch (decodedSurface.type) {
-                case "RGBA": {
-                    const internalFormat = decodedSurface.flag === 'SRGB' ? gl.SRGB8_ALPHA8 : decodedSurface.flag === 'SNORM' ? gl.RGBA8_SNORM : gl.RGBA8;
-                    const type = decodedSurface.flag === 'SNORM' ? gl.BYTE : gl.UNSIGNED_BYTE;
-                    const data = decodedSurface.flag === 'SNORM' ? new Int8Array(pixels) : new Uint8Array(pixels);
-                    gl.texImage2D(gl.TEXTURE_2D, mipLevel, internalFormat, width, height, 0, gl.RGBA, type, data);
-                    break;
-                }
-                case "BC1":
-                case "BC3":
-                case "BC4":
-                case "BC5": {
-                    const compressedFormat = this.getCompressedFormat(gl, decodedSurface);
-                    assert(compressedFormat !== null);
-                    gl.compressedTexImage2D(gl.TEXTURE_2D, mipLevel, compressedFormat, width, height, 0, new Uint8Array(pixels));
-                    break;
-                }
-                }
+                // For now, always decompress surfaces in software.
+                const decompressedSurface = GX2Texture.decompressSurface(decodedSurface);
+                hostUploader.uploadTextureData(gfxTexture, mipLevel, [decompressedSurface.pixels]);
 
                 // XXX(jstpierre): Do this on a worker as well?
                 const canvas = canvases[mipLevel];
-                const decompressedSurface = GX2Texture.decompressSurface(decodedSurface);
                 canvas.width = decompressedSurface.width;
                 canvas.height = decompressedSurface.height;
                 canvas.title = `${textureEntry.entry.name} ${surface.format} (${surface.width}x${surface.height})`;
@@ -410,47 +380,13 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
         }
 
         const viewerTexture = { name: textureEntry.entry.name, surfaces: canvases };
-        return { viewerTexture, glTexture };
-    }
-
-    private getCompressedFormat(gl: WebGL2RenderingContext, tex: GX2Texture.DecodedSurfaceBC): number  {
-        switch (tex.type) {
-        case 'BC4':
-        case 'BC5':
-            return null;
-        }
-
-        const ext_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
-        // const ext_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
-
-        // XXX(jstpierre): Don't use sRGB for now since we sometimes fall back to SW decode.
-        /*
-        if (tex.flag === 'SRGB' && ext_compressed_texture_s3tc_srgb) {
-            switch (tex.type) {
-            case 'BC1':
-                return ext_compressed_texture_s3tc_srgb.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
-            case 'BC3':
-                return ext_compressed_texture_s3tc_srgb.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
-            }
-        }
-        */
-
-        if (tex.flag === 'UNORM' && ext_compressed_texture_s3tc) {
-            switch (tex.type) {
-            case 'BC1':
-                return ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT1_EXT;
-            case 'BC3':
-                return ext_compressed_texture_s3tc.COMPRESSED_RGBA_S3TC_DXT5_EXT;
-            }
-        }
-
-        return null;
+        return { viewerTexture, gfxTexture };
     }
 }
 
 class Command_Material {
     private prog: ProgramGambit_UBER = new ProgramGambit_UBER();
-    private samplers: WebGLSampler[] = [];
+    private samplers: GfxSampler[] = [];
     private renderFlags: RenderFlags;
     private attribNames: string[];
     private textureAssigns: BFRES.TextureAssign[];
@@ -467,12 +403,17 @@ class Command_Material {
         gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
+        const device = getTransitionDeviceForWebGL2(gl);
         for (const textureAssign of this.textureAssigns) {
-            const sampler = gl.createSampler();
-            gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, this.translateTexClamp(gl, textureAssign.texClampU));
-            gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, this.translateTexClamp(gl, textureAssign.texClampV));
-            gl.samplerParameteri(sampler, gl.TEXTURE_MAG_FILTER, this.translateTexFilter(gl, textureAssign.texFilterMag, GX2TexMipFilterType.NO_MIP));
-            gl.samplerParameteri(sampler, gl.TEXTURE_MIN_FILTER, this.translateTexFilter(gl, textureAssign.texFilterMin, textureAssign.texFilterMip));
+            const sampler = device.createSampler({
+                wrapS: this.translateTexClamp(textureAssign.texClampU),
+                wrapT: this.translateTexClamp(textureAssign.texClampV),
+                minFilter: this.translateTexFilter(textureAssign.texFilterMin),
+                mipFilter: this.translateMipFilter(textureAssign.texFilterMip),
+                magFilter: this.translateTexFilter(textureAssign.texFilterMag),
+                minLOD: textureAssign.minLOD,
+                maxLOD: textureAssign.maxLOD,
+            })
             this.samplers.push(sampler);
         }
 
@@ -502,10 +443,10 @@ class Command_Material {
                 const textureAssign = this.textureAssigns[textureAssignIndex];
                 this.textureHolder.fillTextureMapping(this.textureMapping, textureAssign.textureName);
 
-                gl.bindTexture(gl.TEXTURE_2D, this.textureMapping.glTexture);
+                gl.bindTexture(gl.TEXTURE_2D, getGLTextureFromMapping(this.textureMapping));
 
                 const sampler = this.samplers[textureAssignIndex];
-                gl.bindSampler(i, sampler);
+                gl.bindSampler(i, getPlatformSampler(sampler));
             } else {
                 gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
             }
@@ -513,37 +454,42 @@ class Command_Material {
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
+        const device = getTransitionDeviceForWebGL2(gl);
         gl.deleteTexture(this.blankTexture);
-        this.samplers.forEach((sampler) => gl.deleteSampler(sampler));
+        this.samplers.forEach((s) => device.destroySampler(s));
     }
 
-    private translateTexClamp(gl: WebGL2RenderingContext, clampMode: GX2TexClamp) {
+    private translateTexClamp(clampMode: GX2TexClamp): GfxWrapMode {
         switch (clampMode) {
         case GX2TexClamp.CLAMP:
-            return gl.CLAMP_TO_EDGE;
+            return GfxWrapMode.CLAMP;
         case GX2TexClamp.WRAP:
-            return gl.REPEAT;
+            return GfxWrapMode.REPEAT;
         case GX2TexClamp.MIRROR:
-            return gl.MIRRORED_REPEAT;
+            return GfxWrapMode.MIRROR;
         default:
             throw new Error(`Unknown tex clamp mode ${clampMode}`);
         }
     }
 
-    private translateTexFilter(gl: WebGL2RenderingContext, filter: GX2TexXYFilterType, mipFilter: GX2TexMipFilterType) {
-        if (mipFilter === GX2TexMipFilterType.LINEAR && filter === GX2TexXYFilterType.BILINEAR)
-            return WebGL2RenderingContext.LINEAR_MIPMAP_LINEAR;
-        if (mipFilter === GX2TexMipFilterType.LINEAR && filter === GX2TexXYFilterType.POINT)
-            return WebGL2RenderingContext.NEAREST_MIPMAP_LINEAR;
-        if (mipFilter === GX2TexMipFilterType.POINT && filter === GX2TexXYFilterType.BILINEAR)
-            return WebGL2RenderingContext.LINEAR_MIPMAP_NEAREST;
-        if (mipFilter === GX2TexMipFilterType.POINT && filter === GX2TexXYFilterType.POINT)
-            return WebGL2RenderingContext.NEAREST_MIPMAP_NEAREST;
-        if (mipFilter === GX2TexMipFilterType.NO_MIP && filter === GX2TexXYFilterType.BILINEAR)
-            return WebGL2RenderingContext.LINEAR;
-        if (mipFilter === GX2TexMipFilterType.NO_MIP && filter === GX2TexXYFilterType.POINT)
-            return WebGL2RenderingContext.NEAREST;
-        throw new Error(`Unknown texture filter mode`);
+    private translateTexFilter(texFilter: GX2TexXYFilterType): GfxTexFilterMode {
+        switch (texFilter) {
+        case GX2TexXYFilterType.BILINEAR:
+            return GfxTexFilterMode.BILINEAR;
+        case GX2TexXYFilterType.POINT:
+            return GfxTexFilterMode.POINT;
+        }
+    }
+
+    private translateMipFilter(mipFilter: GX2TexMipFilterType): GfxMipFilterMode {
+        switch (mipFilter) {
+        case GX2TexMipFilterType.NO_MIP:
+            return GfxMipFilterMode.NO_MIP;
+        case GX2TexMipFilterType.LINEAR:
+            return GfxMipFilterMode.LINEAR;
+        case GX2TexMipFilterType.POINT:
+            return GfxMipFilterMode.NEAREST;
+        }
     }
 
     private translateFrontFaceMode(frontFaceMode: GX2FrontFaceMode): FrontFaceMode {

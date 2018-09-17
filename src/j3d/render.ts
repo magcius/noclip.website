@@ -15,7 +15,7 @@ import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray } from '../util';
 import { AABB, IntersectionState } from '../Geometry';
-import { GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { getTransitionDeviceForWebGL2, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
@@ -434,7 +434,7 @@ function translateTexFilter(texFilter: GX.TexFilter): [GfxTexFilterMode, GfxMipF
 export class BMDModel {
     private realized: boolean = false;
 
-    private glSamplers!: WebGLSampler[];
+    private gfxSamplers!: GfxSampler[];
     private tex1Samplers!: TEX1_Sampler[];
 
     private bufferCoalescer: BufferCoalescer;
@@ -456,7 +456,7 @@ export class BMDModel {
 
         this.tex1Samplers = tex1.samplers;
         const device = getTransitionDeviceForWebGL2(gl);
-        this.glSamplers = this.tex1Samplers.map((sampler) => BMDModel.translateSampler(device, sampler));
+        this.gfxSamplers = this.tex1Samplers.map((sampler) => BMDModel.translateSampler(device, sampler));
 
         // Load material data.
         this.materialCommands = mat3.materialEntries.map((material) => {
@@ -488,21 +488,23 @@ export class BMDModel {
         if (!this.realized)
             return;
 
+        const device = getTransitionDeviceForWebGL2(gl);
         this.bufferCoalescer.destroy(gl);
         this.materialCommands.forEach((command) => command.destroy(gl));
         this.shapeCommands.forEach((command) => command.destroy(gl));
-        this.glSamplers.forEach((sampler) => gl.deleteSampler(sampler));
+
+        this.gfxSamplers.forEach((sampler) => device.destroySampler(sampler));
         this.realized = false;
     }
 
     public fillTextureMapping(m: TextureMapping, textureHolder: GXTextureHolder, texIndex: number): void {
         const tex1Sampler = this.tex1Samplers[texIndex];
         textureHolder.fillTextureMapping(m, tex1Sampler.name);
-        m.glSampler = this.glSamplers[tex1Sampler.index];
+        m.gfxSampler = this.gfxSamplers[tex1Sampler.index];
         m.lodBias = tex1Sampler.lodBias;
     }
 
-    private static translateSampler(device: GfxDevice, sampler: TEX1_Sampler): WebGLSampler {
+    private static translateSampler(device: GfxDevice, sampler: TEX1_Sampler): GfxSampler {
         const [minFilter, mipFilter] = translateTexFilter(sampler.minFilter);
         const [magFilter]            = translateTexFilter(sampler.magFilter);
 
@@ -514,7 +516,7 @@ export class BMDModel {
             maxLOD: sampler.maxLOD,
         });
 
-        return getPlatformSampler(gfxSampler);
+        return gfxSampler;
     }
 
     private translateSceneGraph(node: HierarchyNode, drawListItem: DrawListItem | null): void {

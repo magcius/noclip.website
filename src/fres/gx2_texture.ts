@@ -29,24 +29,49 @@ class Deswizzler {
 
 export const deswizzler: Deswizzler = new Deswizzler();
 
-interface DecodedSurfaceRGBA extends DeswizzledSurface {
-    type: 'RGBA';
-    flag: 'UNORM' | 'SNORM' | 'SRGB';
+interface DecodedSurfaceBase {
+    width: number;
+    height: number;
 }
 
-interface DecodedSurfaceBC13 extends DeswizzledSurface {
+interface DecodedSurfaceUN {
+    pixels: Uint8Array;
+}
+
+interface DecodedSurfaceSN {
+    flag: 'SNORM';
+    pixels: Int8Array;
+}
+
+interface DecodedSurfaceRGBAUN extends DecodedSurfaceBase, DecodedSurfaceUN {
+    type: 'RGBA';
+    flag: 'UNORM' | 'SRGB';
+}
+
+interface DecodedSurfaceRGBASN extends DecodedSurfaceBase, DecodedSurfaceSN {
+    type: 'RGBA';
+}
+
+interface DecodedSurfaceBC13UN extends DecodedSurfaceBase, DecodedSurfaceUN {
     type: 'BC1' | 'BC3';
     flag: 'UNORM' | 'SRGB';
 }
 
-interface DecodedSurfaceBC45 extends DeswizzledSurface {
+interface DecodedSurfaceBC45UN extends DecodedSurfaceBase, DecodedSurfaceUN {
     type: 'BC4' | 'BC5';
-    flag: 'UNORM' | 'SNORM';
+    flag: 'UNORM';
 }
 
-export type DecodedSurfaceBC = DecodedSurfaceBC13 | DecodedSurfaceBC45;
+interface DecodedSurfaceBC45SN extends DecodedSurfaceBase, DecodedSurfaceSN {
+    type: 'BC4' | 'BC5';
+}
+
+type DecodedSurfaceRGBA = DecodedSurfaceRGBAUN | DecodedSurfaceRGBASN;
+type DecodedSurfaceBC45 = DecodedSurfaceBC45UN | DecodedSurfaceBC45SN;
+
+export type DecodedSurfaceBC = DecodedSurfaceBC13UN | DecodedSurfaceBC45;
 export type DecodedSurfaceSW = DecodedSurfaceRGBA;
-export type DecodedSurface = DecodedSurfaceBC | DecodedSurfaceSW;
+export type DecodedSurface = DecodedSurfaceBC13UN | DecodedSurfaceBC45UN | DecodedSurfaceBC45SN | DecodedSurfaceRGBAUN | DecodedSurfaceRGBASN;
 
 // #region Texture Decode
 function expand5to8(n: number): number {
@@ -64,12 +89,12 @@ function s3tcblend(a: number, b: number): number {
 }
 
 // Software decompresses from standard BC1 (DXT1) to RGBA.
-function decompressBC1Surface(surface: DecodedSurfaceBC13): DecodedSurfaceRGBA {
+function decompressBC1Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBAUN {
     const bytesPerPixel = 4;
     const width = surface.width;
     const height = surface.height;
     const dst = new Uint8Array(width * height * bytesPerPixel);
-    const view = new DataView(surface.pixels);
+    const view = new DataView(surface.pixels.buffer);
     const colorTable = new Uint8Array(16);
 
     let srcOffs = 0;
@@ -131,17 +156,17 @@ function decompressBC1Surface(surface: DecodedSurfaceBC13): DecodedSurfaceRGBA {
         }
     }
 
-    const pixels = dst.buffer;
+    const pixels = dst;
     return { type: 'RGBA', flag: surface.flag, width, height, pixels };
 }
 
 // Software decompresses from standard BC3 (DXT5) to RGBA.
-function decompressBC3Surface(surface: DecodedSurfaceBC13): DecodedSurfaceRGBA {
+function decompressBC3Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBAUN {
     const bytesPerPixel = 4;
     const width = surface.width;
     const height = surface.height;
     const dst = new Uint8Array(width * height * bytesPerPixel);
-    const view = new DataView(surface.pixels);
+    const view = new DataView(surface.pixels.buffer);
     const colorTable = new Uint8Array(16);
     const alphaTable = new Uint8Array(8);
 
@@ -241,7 +266,7 @@ function decompressBC3Surface(surface: DecodedSurfaceBC13): DecodedSurfaceRGBA {
         }
     }
 
-    const pixels = dst.buffer;
+    const pixels = dst;
     return { type: 'RGBA', flag: surface.flag, width, height, pixels };
 }
 
@@ -252,7 +277,7 @@ function decompressBC45Surface(surface: DecodedSurfaceBC45): DecodedSurfaceRGBA 
     const height = surface.height;
 
     const signed = surface.flag === 'SNORM';
-    const view = new DataView(surface.pixels);
+    const view = new DataView(surface.pixels.buffer);
     let dst;
     let colorTable;
 
@@ -334,8 +359,13 @@ function decompressBC45Surface(surface: DecodedSurfaceBC45): DecodedSurfaceRGBA 
         }
     }
 
-    const pixels = dst.buffer;
-    return { type: 'RGBA', flag: surface.flag, width, height, pixels };
+    if (surface.flag === 'SNORM') {
+        const pixels: Int8Array = dst as Int8Array;
+        return { type: 'RGBA', flag: surface.flag, width, height, pixels };
+    } else {
+        const pixels: Uint8Array = dst as Uint8Array;
+        return { type: 'RGBA', flag: surface.flag, width, height, pixels };
+    }
 }
 
 export function decompressBC(surface: DecodedSurfaceBC): DecodedSurfaceSW {
@@ -378,11 +408,11 @@ export function decodeSurface(surface: GX2Surface, texData: ArrayBufferSlice, mi
         case GX2SurfaceFormat.BC4_UNORM:
             return { type: 'BC4', flag: 'UNORM', ...deswizzledSurface };
         case GX2SurfaceFormat.BC4_SNORM:
-            return { type: 'BC4', flag: 'SNORM', ...deswizzledSurface };
+            return { type: 'BC4', flag: 'SNORM', ...deswizzledSurface, pixels: new Int8Array(deswizzledSurface.pixels.buffer) };
         case GX2SurfaceFormat.BC5_UNORM:
             return { type: 'BC5', flag: 'UNORM', ...deswizzledSurface };
-        case GX2SurfaceFormat.BC5_SNORM:
-            return { type: 'BC5', flag: 'SNORM', ...deswizzledSurface };
+        case GX2SurfaceFormat.BC5_SNORM: {}
+            return { type: 'BC5', flag: 'SNORM', ...deswizzledSurface, pixels: new Int8Array(deswizzledSurface.pixels.buffer) };
         case GX2SurfaceFormat.TCS_R8_G8_B8_A8_UNORM:
             return { type: 'RGBA', flag: 'UNORM', ...deswizzledSurface };
         case GX2SurfaceFormat.TCS_R8_G8_B8_A8_SRGB:
@@ -402,14 +432,12 @@ export function surfaceToCanvas(canvas: HTMLCanvasElement, surface: DecodedSurfa
     switch (surface.type) {
     case 'RGBA':
         if (surface.flag === 'UNORM') {
-            const src = new Uint8Array(surface.pixels);
-            imageData.data.set(src);
+            imageData.data.set(surface.pixels);
         } else if (surface.flag === 'SRGB') {
             // XXX(jstpierre): SRGB
-            const src = new Uint8Array(surface.pixels);
-            imageData.data.set(src);
+            imageData.data.set(surface.pixels);
         } else if (surface.flag === 'SNORM') {
-            const src = new Int8Array(surface.pixels);
+            const src = surface.pixels;
             const data = new Uint8Array(surface.pixels.byteLength);
             for (let i = 0; i < src.length; i++) {
                 data[i] = src[i] + 128;

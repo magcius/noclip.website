@@ -1,5 +1,7 @@
 
 import * as Viewer from './viewer';
+import { GfxSampler, GfxTexture } from './gfx/platform/GfxPlatform';
+import { getTransitionDeviceForWebGL2, getPlatformTexture, getPlatformSampler } from './gfx/platform/GfxPlatformWebGL2';
 
 // Used mostly by indirect texture FB installations...
 export interface TextureOverride {
@@ -18,6 +20,8 @@ export interface TextureBase {
 export class TextureMapping {
     public glTexture: WebGLTexture = null;
     public glSampler: WebGLSampler = null;
+    public gfxTexture: GfxTexture = null;
+    public gfxSampler: GfxSampler = null;
     public width: number = 0;
     public height: number = 0;
     public lodBias: number = 0;
@@ -28,6 +32,8 @@ export class TextureMapping {
     public copy(other: TextureMapping): void {
         this.glTexture = other.glTexture;
         this.glSampler = other.glSampler;
+        this.gfxTexture = other.gfxTexture;
+        this.gfxSampler = other.gfxSampler;
         this.width = other.width;
         this.height = other.height;
         this.lodBias = other.lodBias;
@@ -36,19 +42,20 @@ export class TextureMapping {
 }
 
 export interface LoadedTexture {
-    glTexture: WebGLTexture;
+    gfxTexture: GfxTexture;
     viewerTexture: Viewer.Texture;
 }
 
 export abstract class TextureHolder<TextureType extends TextureBase> {
     public viewerTextures: Viewer.Texture[] = [];
-    public glTextures: WebGLTexture[] = [];
+    public gfxTextures: GfxTexture[] = [];
     public textureEntries: TextureType[] = [];
     public textureOverrides = new Map<string, TextureOverride>();
     public onnewtextures: (() => void) | null = null;
 
     public destroy(gl: WebGL2RenderingContext): void {
-        this.glTextures.forEach((texture) => gl.deleteTexture(texture));
+        const device = getTransitionDeviceForWebGL2(gl);
+        this.gfxTextures.forEach((texture) => device.destroyTexture(texture));
     }
 
     // TODO(jstpierre): Optimize interface to not require an array construct every frame...
@@ -81,8 +88,8 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         return this.findTextureEntryIndex(name) >= 0;
     }
 
-    protected fillTextureMappingFromEntry(textureMapping: TextureMapping, name: string, textureEntryIndex: number): void {
-        textureMapping.glTexture = this.glTextures[textureEntryIndex];
+    protected fillTextureMappingFromEntry(textureMapping: TextureMapping, textureEntryIndex: number): void {
+        textureMapping.gfxTexture = this.gfxTextures[textureEntryIndex];
         const tex0Entry = this.textureEntries[textureEntryIndex];
         textureMapping.width = tex0Entry.width;
         textureMapping.height = tex0Entry.height;
@@ -101,7 +108,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
         const textureEntryIndex = this.findTextureEntryIndex(name);
         if (textureEntryIndex >= 0) {
-            this.fillTextureMappingFromEntry(textureMapping, name, textureEntryIndex);
+            this.fillTextureMappingFromEntry(textureMapping, textureEntryIndex);
             return true;
         }
 
@@ -135,13 +142,31 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
             if (loadedTexture === null)
                 continue;
 
-            const { glTexture, viewerTexture } = loadedTexture;
+            const { gfxTexture, viewerTexture } = loadedTexture;
             this.textureEntries.push(texture);
-            this.glTextures.push(glTexture);
+            this.gfxTextures.push(gfxTexture);
             this.viewerTextures.push(viewerTexture);
         }
 
         if (this.onnewtextures !== null)
             this.onnewtextures();
     }
+}
+
+export function getGLTextureFromMapping(m: TextureMapping): WebGLTexture | null {
+    if (m.glTexture !== null)
+        return m.glTexture;
+    else if (m.gfxTexture !== null)
+        return getPlatformTexture(m.gfxTexture);
+    else
+        return null;
+}
+
+export function getGLSamplerFromMapping(m: TextureMapping): WebGLSampler | null {
+    if (m.glSampler !== null)
+        return m.glSampler;
+    else if (m.gfxSampler !== null)
+        return getPlatformSampler(m.gfxSampler);
+    else
+        return null;
 }

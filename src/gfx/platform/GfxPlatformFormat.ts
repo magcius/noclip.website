@@ -2,13 +2,17 @@
 // Format enums
 
 export const enum FormatTypeFlags {
-    U8  = 0x01,
-    U16 = 0x02,
-    U32 = 0x03,
-    S8  = 0x04,
-    S16 = 0x05,
-    S32 = 0x06,
-    F32 = 0x07,
+    U8 = 0x01,
+    U16,
+    U32,
+    S8,
+    S16,
+    S32,
+    F32,
+
+    // Special texture formats.
+    BC1 = 0x41,
+    BC3,
 };
 
 export const enum FormatCompFlags {
@@ -34,13 +38,20 @@ export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: 
 }
 
 export enum GfxFormat {
-    F32_R    = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
-    F32_RG   = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
-    F32_RGB  = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RGB,  FormatFlags.NONE),
-    F32_RGBA = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
-    U16_R    = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_R,    FormatFlags.NONE),
-    U8_R     = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_R,    FormatFlags.NONE),
-    U8_RGBA  = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
+    F32_R        = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
+    F32_RG       = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
+    F32_RGB      = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RGB,  FormatFlags.NONE),
+    F32_RGBA     = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
+    U16_R        = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_R,    FormatFlags.NONE),
+    U8_R         = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_R,    FormatFlags.NONE),
+    U8_RGBA      = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
+    U8_RGBA_NORM = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
+    S8_RGBA_NORM = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
+    U8_RGBA_SRGB = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
+    BC1          = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
+    BC1_SRGB     = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
+    BC3          = makeFormat(FormatTypeFlags.BC3, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
+    BC3_SRGB     = makeFormat(FormatTypeFlags.BC3, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
 }
 
 export function getFormatCompFlags(fmt: GfxFormat): FormatCompFlags {
@@ -67,6 +78,8 @@ export function getFormatTypeFlagsByteSize(typeFlags: FormatTypeFlags): number {
     case FormatTypeFlags.U8:
     case FormatTypeFlags.S8:
         return 1;
+    default:
+        throw "whoops";
     }
 }
 
