@@ -1,7 +1,7 @@
 
 import { vec3 } from 'gl-matrix';
 
-import { CullMode, RenderFlags } from '../render';
+import { RenderFlags } from '../render';
 import { DeviceProgram } from '../Program';
 import * as Viewer from '../viewer';
 
@@ -26,7 +26,7 @@ layout(row_major, std140) uniform ub_ObjectParams {
     vec4 u_Color;
 };
 
-varying vec4 v_LightColor;
+varying vec2 v_LightIntensity;
 
 #ifdef VERT
 layout(location = ${IVProgram.a_Position}) attribute vec3 a_Position;
@@ -36,15 +36,17 @@ void mainVS() {
     const float t_ModelScale = 20.0;
     gl_Position = u_Projection * u_ModelView * vec4(a_Position * t_ModelScale, 1.0);
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
-    float t_LightIntensity = dot(-a_Normal, t_LightDirection);
-    vec3 t_LightColor = t_LightIntensity * vec3(0.3);
-    v_LightColor = vec4(t_LightColor, 1.0);
+    float t_LightIntensityF = dot(-a_Normal, t_LightDirection);
+    float t_LightIntensityB = dot( a_Normal, t_LightDirection);
+    v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
 }
 #endif
 
 #ifdef FRAG
 void mainPS() {
-    gl_FragColor = v_LightColor + u_Color;
+    float t_LightIntensity = gl_FrontFacing ? v_LightIntensity.x : v_LightIntensity.y;
+    float t_LightTint = 0.3 * t_LightIntensity;
+    gl_FragColor = u_Color + t_LightTint;
 }
 #endif
 `;
@@ -185,7 +187,6 @@ export class Scene implements Viewer.Scene_Device {
         };
 
         this.renderFlags = new RenderFlags();
-        this.renderFlags.cullMode = CullMode.BACK;
         this.renderFlags.depthTest = true;
 
         this.pipeline = device.createRenderPipeline({
