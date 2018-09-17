@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxBlendStateDescriptor, GfxDepthStencilStateDescriptor, GfxRasterizationStateDescriptor, GfxSwapChain, GfxPassRenderer, GfxHostUploader, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxBlendStateDescriptor, GfxDepthStencilStateDescriptor, GfxRasterizationStateDescriptor, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -270,7 +270,96 @@ function createBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): Gfx
     return { numUniformBuffers: firstUniformBuffer, numSamplers: firstSampler, bindingLayoutTables };
 }
 
-class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUploader {
+type ArrayBufferView2 = Float32Array | Uint32Array;
+class Growable<T extends ArrayBufferView2> {
+    public b: T;
+    public i: number;
+    public o: number;
+
+    constructor(public m: (n: number) => T, public a: number = 0x400) {
+        this.i = this.a;
+        this.b = m(this.i);
+        this.o = 0;
+    }
+
+    public r() {
+        this.o = 0;
+    }
+
+    public n(v: number) {
+        if (this.o + 1 > this.b.length) {
+            const b = this.m(this.b.length + this.a);
+            b.set(this.b);
+            this.b = b;
+        }
+
+        this.b[this.o++] = v;
+    }
+}
+
+const enum RenderPassCmd { setRenderTarget = 471, setViewport, setBindings, setPipeline, setInputState, draw, drawIndexed, endPass, invalid = 0x1234 };
+class GfxRenderPassP_GL implements GfxRenderPass {
+    public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
+    public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
+    public gfxr: (GfxResource | null)[] = [];
+
+    private igfxr: number = 0;
+
+    public reset() { this.u32.r(); this.f32.r(); this.igfxr = 0; this.gfxr.length = 0; }
+
+    public pu32(c: number) { this.u32.n(c); }
+    public pcmd(c: number) { this.pu32(c); }
+    public pf32(c: number) { this.f32.n(c); }
+    public pgfxr(r: GfxResource | null) { this.gfxr[this.igfxr++] = r; }
+
+    public end() { this.pcmd(RenderPassCmd.invalid); }
+    public setRenderTarget(r: GfxRenderTarget)    { this.pcmd(RenderPassCmd.setRenderTarget); this.pgfxr(r); }
+    public setViewport(w: number, h: number)      { this.pcmd(RenderPassCmd.setViewport); this.pf32(w); this.pf32(h); }
+    public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.pgfxr(r); }
+    public setBindings(n: number, r: GfxBindings) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.pgfxr(r); }
+    public setInputState(r: GfxInputState)        { this.pcmd(RenderPassCmd.setInputState); this.pgfxr(r); }
+    public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
+    public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
+    public endPass(r: GfxTexture | null)          { this.pcmd(RenderPassCmd.endPass); this.pgfxr(r); }
+}
+
+enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
+class GfxHostAccessPassP_GL implements GfxHostAccessPass {
+    public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
+    public gfxr: GfxResource[] = [];
+    public bufr: (ArrayBuffer | ArrayBufferView)[] = [];
+
+    private igfxr: number = 0;
+    private ibufr: number = 0;
+
+    public reset() { this.u32.r(); this.igfxr = 0; this.ibufr = 0; this.gfxr.length = 0; this.bufr.length = 0; }
+
+    public pu32(c: number) { this.u32.n(c); }
+    public pcmd(c: number) { this.pu32(c); }
+    public pgfxr(r: GfxResource | null) { this.gfxr[this.igfxr++] = r; }
+    public pbufr(r: ArrayBuffer | ArrayBufferView) { this.bufr[this.ibufr++] = r; }
+
+    public end() { this.pcmd(HostAccessPassCmd.end); }
+    public uploadBufferData(r: GfxBuffer, dstWordOffset: number, data: ArrayBuffer, srcWordOffset?: number, wordCount?: number) {
+        this.pcmd(HostAccessPassCmd.uploadBufferData); this.pgfxr(r);
+        const dstByteOffset = dstWordOffset * 4;
+        const srcByteOffset = srcWordOffset * 4;
+        const byteSize = wordCount >= 0 ? wordCount * 4 : data.byteLength;
+        this.pu32(dstByteOffset);
+        this.pbufr(data);
+        this.pu32(srcByteOffset);
+        this.pu32(byteSize);
+    }
+
+    public uploadTextureData(r: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]) {
+        this.pcmd(HostAccessPassCmd.uploadTextureData); this.pgfxr(r);
+        this.pu32(firstMipLevel);
+        this.pu32(levelDatas.length);
+        for (let i = 0; i < levelDatas.length; i++) this.pbufr(levelDatas[i]);
+    }
+}
+
+class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _fullscreenCopyFlags = new RenderFlags();
     private _fullscreenCopyProgram: GfxProgramP_GL;
 
@@ -558,35 +647,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         return pipeline;
     }
 
-    public createHostUploader(): GfxHostUploader {
-        return this;
-    }
-
-    private _currentRenderTarget: GfxRenderTargetP_GL;
-    private _setRenderTarget(renderTarget: GfxRenderTarget): void {
-        const gl = this.gl;
-        this._currentRenderTarget = renderTarget as GfxRenderTargetP_GL;
-        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._currentRenderTarget.gl_framebuffer);
-        const clearBits = this._currentRenderTarget.clearBits;
-        if (clearBits & WebGL2RenderingContext.COLOR_BUFFER_BIT) {
-            const c = this._currentRenderTarget.colorClearColor;
-            gl.clearColor(c.r, c.b, c.g, c.a);
-        }
-        if (clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT)
-            gl.clearDepth(this._currentRenderTarget.depthClearValue);
-        if (clearBits & WebGL2RenderingContext.STENCIL_BUFFER_BIT)
-            gl.clearStencil(this._currentRenderTarget.stencilClearValue);
-        gl.clear(clearBits);
-    }
-
-    public createPassRenderer(renderTarget: GfxRenderTarget): GfxPassRenderer {
-        if (this.isTransitionDevice)
-            throw "whoops";
-
-        this._setRenderTarget(renderTarget);
-        return this;
-    }
-
     public destroyBuffer(o: GfxBuffer): void {
         this.gl.deleteBuffer(getPlatformBuffer(o));
     }
@@ -632,12 +692,34 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         // Nothing.
     }
 
-    public destroyHostUploader(o: GfxHostUploader): void {
-        // Nothing.
+    private _hostAccessPassPool: GfxHostAccessPassP_GL[] = [];
+    public createHostAccessPass(): GfxHostAccessPass {
+        const pass = this._hostAccessPassPool.length > 0 ? this._hostAccessPassPool.pop() : new GfxHostAccessPassP_GL();
+        return pass;
     }
 
-    public destroyPassRenderer(o: GfxPassRenderer): void {
-        // Nothing.
+    private _renderPassPool: GfxRenderPassP_GL[] = [];
+    public createRenderPass(renderTarget: GfxRenderTarget): GfxRenderPassP_GL {
+        if (this.isTransitionDevice)
+            throw "whoops";
+
+        const pass = this._renderPassPool.length > 0 ? this._renderPassPool.pop() : new GfxRenderPassP_GL();
+        pass.setRenderTarget(renderTarget);
+        return pass;
+    }
+
+    public submitPass(o: GfxPass): void {
+        if (o instanceof GfxRenderPassP_GL) {
+            o.end();
+            this.executeRenderPass(o.u32.b, o.f32.b, o.gfxr);
+            o.reset();
+            this._renderPassPool.push(o);
+        } else if (o instanceof GfxHostAccessPassP_GL) {
+            o.end();
+            this.executeHostAccessPass(o.u32.b, o.gfxr, o.bufr);
+            o.reset();
+            this._hostAccessPassPool.push(o);
+        }
     }
 
     public queryLimits(): GfxDeviceLimits {
@@ -686,12 +768,110 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
     }
     //#endregion
 
-    //#region GfxPassRenderer
+    // Debugging.
+    public getBufferData(buffer: GfxBuffer, dstBuffer: ArrayBufferView): void {
+        const gl = this.gl;
+        const { gl_buffer, gl_target } = buffer as GfxBufferP_GL;
+        gl.bindBuffer(gl_target, gl_buffer);
+        gl.getBufferSubData(gl_target, 0, dstBuffer);
+    }
+
+    //#region Pass execution
+    public executeRenderPass(u32: Uint32Array, f32: Float32Array, gfxr: (GfxResource | null)[]): void {
+        let iu32 = 0, if32 = 0, igfxr = 0;
+        while (true) {
+            const cmd = u32[iu32++] as RenderPassCmd;
+
+            if (cmd === RenderPassCmd.setRenderTarget) {
+                this.setRenderTarget(gfxr[igfxr++] as GfxRenderTarget);
+            } else if (cmd === RenderPassCmd.setViewport) {
+                this.setViewport(f32[if32++], f32[if32++]);
+            } else if (cmd === RenderPassCmd.setBindings) {
+                this.setBindings(u32[iu32++], gfxr[igfxr++] as GfxBindings);
+            } else if (cmd === RenderPassCmd.setPipeline) {
+                this.setPipeline(gfxr[igfxr++] as GfxRenderPipeline);
+            } else if (cmd === RenderPassCmd.setInputState) {
+                this.setInputState(gfxr[igfxr++] as GfxInputState);
+            } else if (cmd === RenderPassCmd.draw) {
+                this.draw(u32[iu32++], u32[iu32++]);
+            } else if (cmd === RenderPassCmd.drawIndexed) {
+                this.drawIndexed(u32[iu32++], u32[iu32++]);
+            } else if (cmd === RenderPassCmd.endPass) {
+                this.endPass(gfxr[igfxr++] as GfxTexture | null);
+                return;
+            } else {
+                throw new Error("Invalid execution");
+            }
+        }
+    }
+
+    public executeHostAccessPass(u32: Uint32Array, gfxr: GfxResource[], bufr: (ArrayBuffer | ArrayBufferView)[]): void {
+        let iu32 = 0, igfxr = 0, ibufr = 0;
+        while (true) {
+            const cmd = u32[iu32++] as HostAccessPassCmd;
+
+            if (cmd === HostAccessPassCmd.uploadBufferData) {
+                this.uploadBufferData(gfxr[igfxr++] as GfxBuffer, u32[iu32++], bufr[ibufr++] as ArrayBuffer, u32[iu32++], u32[iu32++]);
+            } else if (cmd === HostAccessPassCmd.uploadTextureData) {
+                // Implement inline to prevent allocation.
+                const texture = gfxr[igfxr++] as GfxTexture;
+                const firstMipLevel = u32[iu32++];
+                const numMipLevels = u32[iu32++];
+
+                const gl = this.gl;
+                const { gl_texture, gl_target, format, width, height } = texture as GfxTextureP_GL;
+                gl.bindTexture(gl_target, gl_texture);
+                let w = width, h = height;
+                const maxMipLevel = firstMipLevel + numMipLevels;
+
+                const isCompressed = this.isTextureFormatCompressed(format);
+                const gl_format = this.translateTextureFormat(format);
+
+                for (let i = 0; i < maxMipLevel; i++) {
+                    if (i >= firstMipLevel) {
+                        const levelData = bufr[ibufr++] as ArrayBufferView;
+
+                        if (isCompressed) {
+                            gl.compressedTexSubImage2D(gl_target, i, 0, 0, w, h, gl_format, levelData);
+                        } else {
+                            const gl_type = this.translateTextureType(format);
+                            gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
+                        }
+                    }
+        
+                    w = Math.max((w / 2) | 0, 1);
+                    h = Math.max((h / 2) | 0, 1);
+                }
+            } else if (cmd === HostAccessPassCmd.end) {
+                return;
+            } else {
+                throw new Error("Invalid execution");
+            }
+        }
+    }
+
+    private _currentRenderTarget: GfxRenderTargetP_GL;
+    private setRenderTarget(renderTarget: GfxRenderTarget): void {
+        const gl = this.gl;
+        this._currentRenderTarget = renderTarget as GfxRenderTargetP_GL;
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._currentRenderTarget.gl_framebuffer);
+        const clearBits = this._currentRenderTarget.clearBits;
+        if (clearBits & WebGL2RenderingContext.COLOR_BUFFER_BIT) {
+            const c = this._currentRenderTarget.colorClearColor;
+            gl.clearColor(c.r, c.b, c.g, c.a);
+        }
+        if (clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT)
+            gl.clearDepth(this._currentRenderTarget.depthClearValue);
+        if (clearBits & WebGL2RenderingContext.STENCIL_BUFFER_BIT)
+            gl.clearStencil(this._currentRenderTarget.stencilClearValue);
+        gl.clear(clearBits);
+    }
+
     private _currentPipeline: GfxRenderPipelineP_GL;
     private _currentInputState: GfxInputStateP_GL;
     private _currentRenderFlags = new RenderFlagsTracker();
 
-    public setBindings(bindingLayoutIndex: number, bindings_: GfxBindings): void {
+    private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings): void {
         const gl = this.gl;
 
         assert(bindingLayoutIndex < this._currentPipeline.bindingLayouts.bindingLayoutTables.length);
@@ -720,7 +900,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         }
     }
 
-    public setViewport(w: number, h: number): void {
+    private setViewport(w: number, h: number): void {
         const gl = this.gl;
         gl.viewport(0, 0, w, h);
     }
@@ -729,14 +909,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         applyFlags(this.gl, this._currentRenderFlags, flags, { forceDisableCulling: false });
     }
 
-    public setPipeline(pipeline: GfxRenderPipeline): void {
+    private setPipeline(pipeline: GfxRenderPipeline): void {
         const gl = this.gl;
         this._currentPipeline = pipeline as GfxRenderPipelineP_GL;
         this._applyFlags(this._currentPipeline.renderFlags);
         gl.useProgram(this._currentPipeline.program.gl_program);
     }
 
-    public setInputState(inputState_: GfxInputState): void {
+    private setInputState(inputState_: GfxInputState): void {
         const gl = this.gl;
         const inputState = inputState_ as GfxInputStateP_GL;
         assert(inputState.inputLayout === this._currentPipeline.inputLayout);
@@ -744,13 +924,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
         gl.bindVertexArray(this._currentInputState.vao);
     }
 
-    public draw(count: number, firstVertex: number): void {
+    private draw(count: number, firstVertex: number): void {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
         gl.drawArrays(pipeline.drawMode, firstVertex, count);
     }
 
-    public drawIndexed(count: number, firstIndex: number): void {
+    private drawIndexed(count: number, firstIndex: number): void {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
         const inputState = this._currentInputState;
@@ -760,7 +940,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
     private _passReadFramebuffer: WebGLFramebuffer | null = null;
     private _passDrawFramebuffer: WebGLFramebuffer | null = null;
 
-    public endPass(resolveColorTo_: GfxTexture | null): void {
+    private endPass(resolveColorTo_: GfxTexture | null): void {
         if (resolveColorTo_ !== null) {
             const gl = this.gl;
 
@@ -784,64 +964,19 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
         }
     }
-    //#endregion
 
-    //#region GfxHostUploader
-    public uploadBufferData(buffer: GfxBuffer, dstWordOffset: number, data: ArrayBuffer, srcWordOffset: number = 0, wordCount: number = -1): void {
+    private uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: ArrayBuffer, srcByteOffset: number, byteSize: number): void {
         const gl = this.gl;
-        const dstByteOffset = dstWordOffset * 4;
-        const srcByteOffset = srcWordOffset * 4;
-        const byteSize = wordCount >= 0 ? wordCount * 4 : data.byteLength;
         const { gl_buffer, gl_target, byteSize: dstByteSize } = buffer as GfxBufferP_GL;
         assert((dstByteOffset + byteSize) <= dstByteSize);
         gl.bindBuffer(gl_target, gl_buffer);
         gl.bufferSubData(gl_target, dstByteOffset, new Uint8Array(data), srcByteOffset, byteSize);
     }
-
-    public uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void {
-        const gl = this.gl;
-        const { gl_texture, gl_target, format, width, height } = texture as GfxTextureP_GL;
-        gl.bindTexture(gl_target, gl_texture);
-        let w = width, h = height;
-        const maxMipLevel = firstMipLevel + levelDatas.length;
-
-        const isCompressed = this.isTextureFormatCompressed(format);
-        const gl_format = this.translateTextureFormat(format);
-
-        for (let i = 0; i < maxMipLevel; i++) {
-            if (i >= firstMipLevel) {
-                const levelData = levelDatas[i - firstMipLevel];
-
-                if (isCompressed) {
-                    gl.compressedTexSubImage2D(gl_target, i, 0, 0, w, h, gl_format, levelData);
-                } else {
-                    const gl_type = this.translateTextureType(format);
-                    gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
-                }
-            }
-
-            w = Math.max((w / 2) | 0, 1);
-            h = Math.max((h / 2) | 0, 1);
-        }
-    }
     //#endregion
-
-    // Debugging.
-    public getBufferData(buffer: GfxBuffer, dstBuffer: ArrayBufferView): void {
-        const gl = this.gl;
-        const { gl_buffer, gl_target } = buffer as GfxBufferP_GL;
-        gl.bindBuffer(gl_target, gl_buffer);
-        gl.getBufferSubData(gl_target, 0, dstBuffer);
-    }
 }
 
 export function createSwapChainForWebGL2(gl: WebGL2RenderingContext): GfxSwapChain {
     return new GfxImplP_GL(gl);
-}
-
-// Debugging.
-export function gfxPassRendererGetImpl(gfxPassRenderer: GfxPassRenderer): GfxImplP_GL {
-    return gfxPassRenderer as GfxImplP_GL;
 }
 
 export function gfxDeviceGetImpl(gfxDevice: GfxDevice): GfxImplP_GL {

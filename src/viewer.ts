@@ -6,7 +6,7 @@ import Progressable from './Progressable';
 import InputManager from './InputManager';
 import { CameraController, Camera, CameraControllerClass } from './Camera';
 import { TextureHolder } from './TextureHolder';
-import { GfxDevice, GfxPassRenderer, GfxSwapChain } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxRenderPass } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2 } from './gfx/platform/GfxPlatformWebGL2';
 
 export interface Texture {
@@ -28,7 +28,7 @@ export interface ViewerRenderInput {
 }
 
 export interface Scene_Device {
-    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxPassRenderer;
+    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass;
     destroy(device: GfxDevice): void;
     createPanels?(): UI.Panel[];
 }
@@ -120,6 +120,7 @@ export class Viewer {
         const renderPass = this.scene_device.render(this.gfxDevice, this.viewerRenderInput);
         const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
         renderPass.endPass(onscreenTexture);
+        this.gfxDevice.submitPass(renderPass);
         this.gfxSwapChain.present();
     }
 

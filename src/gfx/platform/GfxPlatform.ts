@@ -117,6 +117,29 @@ export interface GfxSwapChain {
     present(): void;
 }
 
+export interface GfxHostAccessPass {
+    // Transfer commands.
+    uploadBufferData(buffer: GfxBuffer, dstWordOffset: number, data: ArrayBuffer, srcWordOffset?: number, wordCount?: number): void;
+    uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
+}
+
+export interface GfxRenderPass {
+    // State management.
+    setViewport(width: number, height: number): void;
+    setPipeline(pipeline: GfxRenderPipeline): void;
+    setBindings(bindingLayoutIndex: number, bindings: GfxBindings): void;
+    setInputState(inputState: GfxInputState): void;
+
+    // Draw commands.
+    draw(count: number, firstIndex: number): void;
+    drawIndexed(count: number, firstIndex: number): void;
+
+    // Pass resolution.
+    endPass(resolveColorAttachmentTo: GfxTexture | null): void;
+};
+
+export type GfxPass = GfxRenderPass | GfxHostAccessPass;
+
 export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
     createTexture(format: GfxFormat, width: number, height: number, mipmapped: boolean, numSamples: number): GfxTexture;
@@ -129,8 +152,6 @@ export interface GfxDevice {
     createInputLayout(attributes: GfxVertexAttributeDescriptor[], indexBufferFormat: GfxFormat | null): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: GfxVertexBufferDescriptor[], indexBuffer: GfxBuffer | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
-    createHostUploader(): GfxHostUploader;
-    createPassRenderer(renderTarget: GfxRenderTarget): GfxPassRenderer;
 
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
@@ -143,8 +164,12 @@ export interface GfxDevice {
     destroyInputLayout(o: GfxInputLayout): void;
     destroyInputState(o: GfxInputState): void;
     destroyRenderPipeline(o: GfxRenderPipeline): void;
-    destroyHostUploader(o: GfxHostUploader): void;
-    destroyPassRenderer(o: GfxPassRenderer): void;
+
+    // Command submission.
+    createHostAccessPass(): GfxHostAccessPass;
+    createRenderPass(renderTarget: GfxRenderTarget): GfxRenderPass;
+    // Consumes and destroys the pass.
+    submitPass(o: GfxPass): void;
 
     queryLimits(): GfxDeviceLimits;
     queryProgram(program: GfxProgram): GfxProgramReflection;
@@ -153,20 +178,10 @@ export interface GfxDevice {
     setResourceName(o: GfxResource, s: string): void;
 }
 
-export interface GfxHostUploader {
-    uploadBufferData(buffer: GfxBuffer, dstOffset: number, data: ArrayBuffer, srcWordOffset?: number, srcWordCount?: number): void;
-    uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
-}
+export interface GfxQueue {
 
-export interface GfxPassRenderer {
-    setPipeline(pipeline: GfxRenderPipeline): void;
-    setBindings(bindingLayoutIndex: number, bindings: GfxBindings): void;
-    setInputState(inputState: GfxInputState): void;
-    setViewport(width: number, height: number): void;
-    draw(count: number, firstIndex: number): void;
-    drawIndexed(count: number, firstIndex: number): void;
-    endPass(resolveColorTo: GfxTexture | null): void;
-};
+}
 
 export { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline };
 export { GfxFormat };
+ 

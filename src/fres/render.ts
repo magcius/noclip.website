@@ -349,7 +349,6 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
         const surface = texture.surface;
 
         const gfxTexture = device.createTexture(this.translateSurfaceFormat(device, surface.format), surface.width, surface.height, surface.numMips > 1, 1);
-        const hostUploader = device.createHostUploader();
 
         const canvases: HTMLCanvasElement[] = [];
 
@@ -367,14 +366,15 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
                     return;
 
                 // For now, always decompress surfaces in software.
+                // TODO(jstpierre): Proper mip streaming.
                 const decompressedSurface = GX2Texture.decompressSurface(decodedSurface);
-                hostUploader.uploadTextureData(gfxTexture, mipLevel, [decompressedSurface.pixels]);
+                const hostAccessPass = device.createHostAccessPass();
+                hostAccessPass.uploadTextureData(gfxTexture, mipLevel, [decompressedSurface.pixels]);
+                device.submitPass(hostAccessPass);
 
-                // XXX(jstpierre): Do this on a worker as well?
                 const canvas = canvases[mipLevel];
                 canvas.width = decompressedSurface.width;
                 canvas.height = decompressedSurface.height;
-                canvas.title = `${textureEntry.entry.name} ${surface.format} (${surface.width}x${surface.height})`;
                 GX2Texture.surfaceToCanvas(canvas, decompressedSurface);
             });
         }

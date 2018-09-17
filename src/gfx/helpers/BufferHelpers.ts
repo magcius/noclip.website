@@ -1,7 +1,7 @@
 
 import { Color } from "../../Color";
 import { mat4, mat2d } from "gl-matrix";
-import { GfxHostUploader, GfxBuffer } from "../platform/GfxPlatform";
+import { GfxBuffer, GfxHostAccessPass } from "../platform/GfxPlatform";
 import { assert } from "../../util";
 
 function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
@@ -85,9 +85,9 @@ export class BufferFillerHelper {
         this.offs = this.startOffs;
     }
 
-    public endAndUpload(hostUploader: GfxHostUploader, gfxBuffer: GfxBuffer): void {
+    public endAndUpload(hostAccessPass: GfxHostAccessPass, gfxBuffer: GfxBuffer, dstOffs: number = 0): void {
         assert(this.offs === this.bufferLayout.totalWordSize);
-        hostUploader.uploadBufferData(gfxBuffer, 0, this.d);
+        hostAccessPass.uploadBufferData(gfxBuffer, dstOffs, this.d.buffer);
     }
 
     public fillVec4(v0: number, v1: number = 0, v2: number = 0, v3: number = 0): void {

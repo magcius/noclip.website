@@ -7,7 +7,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxPassRenderer } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { BufferFillerHelper, fillColor } from '../gfx/helpers/BufferHelpers';
 import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxBindings } from '../gfx/platform/GfxPlatformImpl';
@@ -106,13 +106,15 @@ class Chunk {
             nrmData[(i + 2) * 3 + 2] = t[2];
         }
 
-        const hostUploader = device.createHostUploader();
+        const hostAccessPass = device.createHostAccessPass();
 
         this.posBuffer = device.createBuffer(posData.length, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
         this.nrmBuffer = device.createBuffer(nrmData.length, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
 
-        hostUploader.uploadBufferData(this.posBuffer, 0, posData.buffer);
-        hostUploader.uploadBufferData(this.nrmBuffer, 0, nrmData.buffer);
+        hostAccessPass.uploadBufferData(this.posBuffer, 0, posData.buffer);
+        hostAccessPass.uploadBufferData(this.nrmBuffer, 0, nrmData.buffer);
+
+        device.submitPass(hostAccessPass);
 
         this.inputState = device.createInputState(inputLayout, [
             { buffer: this.posBuffer, offset: 0, stride: 0 },
@@ -122,7 +124,7 @@ class Chunk {
         this.numVertices = chunk.indexData.length;
     }
 
-    public render(passRenderer: GfxPassRenderer): void {
+    public render(passRenderer: GfxRenderPass): void {
         passRenderer.setInputState(this.inputState);
         passRenderer.draw(this.numVertices, 0);
     }
@@ -150,15 +152,14 @@ export class IVRenderer {
         this.visible = v;
     }
 
-    public render(passRenderer: GfxPassRenderer): void {
+    public render(passRenderer: GfxRenderPass): void {
         if (!this.visible)
             return;
 
         passRenderer.setBindings(1, this.objBindings);
 
-        this.chunks.forEach((chunk) => {
-            chunk.render(passRenderer);
-        });
+        for (let i = 0; i < this.chunks.length; i++)
+            this.chunks[i].render(passRenderer);
     }
 
     public destroy(device: GfxDevice): void {
@@ -213,10 +214,9 @@ export class Scene implements Viewer.Scene_Device {
             fillColor(colorData, colorWordCount * i, this.ivs[i].color);
 
         this.colorUniformBuffer = device.createBuffer(colorBufferTotalWordCount, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.STATIC);
-        const hostUploader = device.createHostUploader();
+        const hostUploader = device.createHostAccessPass();
         hostUploader.uploadBufferData(this.colorUniformBuffer, 0, colorData.buffer);
-
-        device.destroyHostUploader(hostUploader);
+        device.submitPass(hostUploader);
 
         const sceneBufferLayout = device.queryProgram(this.program).uniformBuffers[0];
         this.sceneUniformBufferFiller = new BufferFillerHelper(sceneBufferLayout);
@@ -234,17 +234,17 @@ export class Scene implements Viewer.Scene_Device {
         });
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxPassRenderer {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         this.sceneUniformBufferFiller.reset();
         this.sceneUniformBufferFiller.fillMatrix4x4(viewerInput.camera.projectionMatrix);
         this.sceneUniformBufferFiller.fillMatrix4x4(viewerInput.camera.viewMatrix);
-        const hostUploader = device.createHostUploader();
-        this.sceneUniformBufferFiller.endAndUpload(hostUploader, this.sceneUniformBuffer);
-        device.destroyHostUploader(hostUploader);
+        const hostAccessPass = device.createHostAccessPass();
+        this.sceneUniformBufferFiller.endAndUpload(hostAccessPass, this.sceneUniformBuffer);
+        device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        const passRenderer = device.createPassRenderer(this.renderTarget.gfxRenderTarget);
+        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget);
         passRenderer.setPipeline(this.pipeline);
         passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         passRenderer.setBindings(0, this.sceneUniformBufferBinding);
