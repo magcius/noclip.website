@@ -4,11 +4,13 @@ import { vec3 } from 'gl-matrix';
 import { RenderFlags } from '../render';
 import { DeviceProgram } from '../Program';
 import * as Viewer from '../viewer';
+import * as UI from '../ui';
 
 import * as IV from './iv';
 import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxPassRenderer } from '../gfx/platform/GfxPlatform';
 import { BufferFillerHelper, fillColor } from '../gfx/helpers/BufferHelpers';
 import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxBindings } from '../gfx/platform/GfxPlatformImpl';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -138,7 +140,7 @@ export class IVRenderer {
 
     private chunks: Chunk[];
 
-    constructor(device: GfxDevice, public iv: IV.IV, inputLayout: GfxInputLayout) {
+    constructor(device: GfxDevice, public iv: IV.IV, inputLayout: GfxInputLayout, public objBindings: GfxBindings) {
         // TODO(jstpierre): Coalesce chunks?
         this.name = iv.name;
         this.chunks = this.iv.chunks.map((chunk) => new Chunk(device, chunk, inputLayout));
@@ -149,6 +151,11 @@ export class IVRenderer {
     }
 
     public render(passRenderer: GfxPassRenderer): void {
+        if (!this.visible)
+            return;
+
+        passRenderer.setBindings(1, this.objBindings);
+
         this.chunks.forEach((chunk) => {
             chunk.render(passRenderer);
         });
@@ -156,6 +163,7 @@ export class IVRenderer {
 
     public destroy(device: GfxDevice): void {
         this.chunks.forEach((chunk) => chunk.destroy(device));
+        device.destroyBindings(this.objBindings);
     }
 }
 
@@ -167,9 +175,9 @@ export class Scene implements Viewer.Scene_Device {
     private sceneUniformBufferFiller: BufferFillerHelper;
     private sceneUniformBuffer: GfxBuffer;
     private colorUniformBuffer: GfxBuffer;
-    private colorWordCount: number;
     private renderTarget = new BasicRenderTarget();
     private ivRenderers: IVRenderer[] = [];
+    private sceneUniformBufferBinding: GfxBindings;
 
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
         this.program = device.createProgram(new IVProgram());
@@ -179,29 +187,30 @@ export class Scene implements Viewer.Scene_Device {
             { location: IVProgram.a_Normal,   bufferIndex: 1, bufferOffset: 0, format: GfxFormat.F32_RGB },
         ], null);
 
-        const bindingLayout: GfxBindingLayoutDescriptor = {
-            numUniformBuffers: 2,
-            numSamplers: 0,
-        };
+        // Two binding layouts: one scene level, one object level.
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+            { numUniformBuffers: 1, numSamplers: 0 }, // ub_SceneParams
+            { numUniformBuffers: 1, numSamplers: 0 }, // ub_ObjectParams
+        ];
 
         this.renderFlags = new RenderFlags();
         this.renderFlags.depthTest = true;
 
         this.pipeline = device.createRenderPipeline({
             topology: GfxPrimitiveTopology.TRIANGLES,
-            bindingLayout: bindingLayout,
+            bindingLayouts: bindingLayouts,
             inputLayout: this.inputLayout,
             program: this.program,
             renderFlags: this.renderFlags,
         });
 
         const deviceLimits = device.queryLimits();
-        this.colorWordCount = Math.max(4, deviceLimits.uniformBufferWordAlignment);
-        const colorBufferTotalWordCount = this.colorWordCount * this.ivs.length;
+        const colorWordCount = Math.max(4, deviceLimits.uniformBufferWordAlignment);
+        const colorBufferTotalWordCount = colorWordCount * this.ivs.length;
         const colorData = new Float32Array(colorBufferTotalWordCount);
 
         for (let i = 0; i < this.ivs.length; i++)
-            fillColor(colorData, this.colorWordCount * i, this.ivs[i].color);
+            fillColor(colorData, colorWordCount * i, this.ivs[i].color);
 
         this.colorUniformBuffer = device.createBuffer(colorBufferTotalWordCount, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.STATIC);
         const hostUploader = device.createHostUploader();
@@ -213,7 +222,16 @@ export class Scene implements Viewer.Scene_Device {
         this.sceneUniformBufferFiller = new BufferFillerHelper(sceneBufferLayout);
         this.sceneUniformBuffer = device.createBuffer(sceneBufferLayout.totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
 
-        this.ivRenderers = this.ivs.map((iv) => new IVRenderer(device, iv, this.inputLayout));
+        this.sceneUniformBufferBinding = device.createBindings(bindingLayouts[0], [
+            { buffer: this.sceneUniformBuffer, wordOffset: 0, wordCount: this.sceneUniformBufferFiller.bufferLayout.totalWordSize },
+        ], []);
+
+        this.ivRenderers = this.ivs.map((iv, i) => {
+            const objBindings = device.createBindings(bindingLayouts[1], [
+                { buffer: this.colorUniformBuffer, wordOffset: colorWordCount * i, wordCount: colorWordCount }
+            ], []);
+            return new IVRenderer(device, iv, this.inputLayout, objBindings);
+        });
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxPassRenderer {
@@ -229,22 +247,11 @@ export class Scene implements Viewer.Scene_Device {
         const passRenderer = device.createPassRenderer(this.renderTarget.gfxRenderTarget);
         passRenderer.setPipeline(this.pipeline);
         passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        passRenderer.setBindings(0, [
-            { buffer: this.sceneUniformBuffer, wordOffset: 0, wordCount: this.sceneUniformBufferFiller.bufferLayout.totalWordSize },
-            { buffer: this.colorUniformBuffer, wordOffset: 0, wordCount: this.colorWordCount },
-        ], 0, []);
+        passRenderer.setBindings(0, this.sceneUniformBufferBinding);
 
-        for (let i = 0; i < this.ivRenderers.length; i++) {
-            const ivRenderer = this.ivRenderers[i];
-            if (!ivRenderer.visible)
-                continue;
+        for (let i = 0; i < this.ivRenderers.length; i++)
+            this.ivRenderers[i].render(passRenderer);
 
-            passRenderer.setBindings(1, [
-                { buffer: this.colorUniformBuffer, wordOffset: i * this.colorWordCount, wordCount: this.colorWordCount },
-            ], 0, []);
-
-            ivRenderer.render(passRenderer);
-        }
         return passRenderer;
     }
 
@@ -254,5 +261,13 @@ export class Scene implements Viewer.Scene_Device {
         device.destroyRenderPipeline(this.pipeline);
         device.destroyInputLayout(this.inputLayout);
         device.destroyProgram(this.program);
+        device.destroyBindings(this.sceneUniformBufferBinding);
+        this.ivRenderers.forEach((r) => r.destroy(device));
+    }
+
+    public createPanels(): UI.Panel[] {
+        const layersPanel = new UI.LayerPanel();
+        layersPanel.setLayers(this.ivRenderers);
+        return [layersPanel];
     }
 }

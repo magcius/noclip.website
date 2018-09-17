@@ -4,7 +4,7 @@
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
 import { BlendMode, BlendFactor, RenderFlags, CompareMode, CullMode, FrontFaceMode } from "../../render";
-import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline } from "./GfxPlatformImpl";
+import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 import { DeviceProgram } from "../../Program";
 import { BufferLayout } from "../helpers/BufferHelpers";
@@ -69,10 +69,6 @@ export interface GfxSamplerBinding {
 }
 
 export interface GfxBindingLayoutDescriptor {
-    // This is a vastly simplified interface over Vk / Metal / WebGPU.
-    // In our case, we only support *one* BindGroup / DescriptorSet,
-    // and each binding starts at 0 and increments. The goal is to find
-    // a good middleground between WebGL and WebGPU.
     numUniformBuffers: number;
     numSamplers: number;
 }
@@ -106,7 +102,7 @@ export interface GfxRenderTargetDescriptor {
 }
 
 export interface GfxRenderPipelineDescriptor {
-    bindingLayout: GfxBindingLayoutDescriptor;
+    bindingLayouts: GfxBindingLayoutDescriptor[];
     inputLayout: GfxInputLayout;
     program: GfxProgram;
     topology: GfxPrimitiveTopology;
@@ -136,6 +132,7 @@ export interface GfxDevice {
     createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;
     createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget;
     createProgram(program: DeviceProgram): GfxProgram;
+    createBindings(bindingLayout: GfxBindingLayoutDescriptor, uniformBuffers: GfxBufferBinding[], samplers: GfxSamplerBinding[]): GfxBindings;
     createInputLayout(attributes: GfxVertexAttributeDescriptor[], indexBufferFormat: GfxFormat | null): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: GfxVertexBufferDescriptor[], indexBuffer: GfxBuffer | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
@@ -149,6 +146,7 @@ export interface GfxDevice {
     destroyDepthStencilAttachment(o: GfxDepthStencilAttachment): void;
     destroyRenderTarget(o: GfxRenderTarget): void;
     destroyProgram(o: GfxProgram): void;
+    destroyBindings(o: GfxBindings): void;
     destroyInputLayout(o: GfxInputLayout): void;
     destroyInputState(o: GfxInputState): void;
     destroyRenderPipeline(o: GfxRenderPipeline): void;
@@ -166,7 +164,7 @@ export interface GfxHostUploader {
 
 export interface GfxPassRenderer {
     setPipeline(pipeline: GfxRenderPipeline): void;
-    setBindings(unchangedUniformBuffers: number, uniformBuffers: GfxBufferBinding[], unchangedSamplers: number, samplers: GfxSamplerBinding[]): void;
+    setBindings(bindingLayoutIndex: number, bindings: GfxBindings): void;
     setInputState(inputState: GfxInputState): void;
     setViewport(width: number, height: number): void;
     draw(count: number, firstIndex: number): void;
