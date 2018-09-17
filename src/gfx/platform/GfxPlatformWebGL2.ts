@@ -1,7 +1,7 @@
 
 import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxBlendStateDescriptor, GfxDepthStencilStateDescriptor, GfxRasterizationStateDescriptor, GfxSwapChain, GfxPassRenderer, GfxHostUploader, GfxDevice, GfxTextureMipChain, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, FormatTypeFlags, FormatCompFlags, FormatFlags } from "./GfxPlatformImpl";
-import { GfxFormat, getFormatCompByteSize } from "./GfxPlatformImpl";
+import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline } from "./GfxPlatformImpl";
+import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
 import { DeviceProgram, ProgramCache } from '../../Program';
 import { RenderFlags, CompareMode, FullscreenCopyProgram, applyFlags, RenderFlagsTracker } from '../../render';
@@ -74,7 +74,7 @@ interface GfxRenderPipelineP_GL extends GfxRenderPipeline {
     inputLayout: GfxInputLayoutP_GL;
 }
 
-function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, normalized: boolean } {
+export function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, normalized: boolean } {
     function translateType(flags: FormatTypeFlags): GLenum {
         switch (flags) {
         case FormatTypeFlags.U8:
@@ -107,8 +107,8 @@ function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, no
         }
     }
 
-    const typeFlags: FormatTypeFlags = (fmt >>> 16) & 0xFF;
-    const compFlags: FormatCompFlags = (fmt >>>  8) & 0xFF;
+    const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
+    const compFlags: FormatCompFlags = getFormatCompFlags(fmt);
     const flags: FormatFlags = fmt & 0xFF;
 
     const type = translateType(typeFlags);
@@ -166,7 +166,7 @@ function translateTextureInternalFormat(fmt: GfxFormat): GLenum {
 }
 
 function translateTextureFormat(fmt: GfxFormat): GLenum {
-    const compFlags: FormatCompFlags = (fmt >>>  8) & 0xFF;
+    const compFlags: FormatCompFlags = getFormatCompByteSize(fmt);
     switch (compFlags) {
     case FormatCompFlags.COMP_R:
         return WebGL2RenderingContext.RED;
@@ -180,7 +180,7 @@ function translateTextureFormat(fmt: GfxFormat): GLenum {
 }
 
 function translateTextureType(fmt: GfxFormat): GLenum {
-    const typeFlags: FormatTypeFlags = (fmt >>> 16) & 0xFF;
+    const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
     switch (typeFlags) {
     case FormatTypeFlags.U8:
         return WebGL2RenderingContext.UNSIGNED_BYTE;
@@ -442,7 +442,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice, GfxPassRenderer, GfxHostUp
             const buffer = vertexBuffer.buffer as GfxBufferP_GL;
             assert(buffer.usage === GfxBufferUsage.VERTEX);
             gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
-            gl.vertexAttribPointer(attr.location, size, type, normalized, vertexBuffer.stride, vertexBuffer.offset + attr.bufferOffset);
+
+            const bufferOffset = vertexBuffer.offset + attr.bufferOffset;
+            if (type === gl.FLOAT) {
+                gl.vertexAttribPointer(attr.location, size, type, normalized, vertexBuffer.stride, bufferOffset);
+            } else {
+                gl.vertexAttribIPointer(attr.location, size, type, vertexBuffer.stride, bufferOffset);
+            }
+
             gl.enableVertexAttribArray(attr.location);
         }
 

@@ -158,8 +158,6 @@ function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder
 }
 
 class WindWakerRoomRenderer implements Viewer.Scene {
-    public textures: Viewer.Texture[];
-
     public model: BMDModelInstance;
     public model1: BMDModelInstance;
     public model2: BMDModelInstance;
@@ -180,8 +178,6 @@ class WindWakerRoomRenderer implements Viewer.Scene {
 
         // Windows / doors.
         this.model3 = createScene(gl, textureHolder, roomRarc, `model3`);
-
-        this.textures = this.textureHolder.viewerTextures;
     }
 
     public setModelMatrix(modelMatrix: mat4): void {

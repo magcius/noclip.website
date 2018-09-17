@@ -10,11 +10,14 @@ import * as Viewer from '../viewer';
 
 import { RenderState } from '../render';
 import { assert, nArray } from '../util';
-import { LoadedVertexData, LoadedVertexLayout, AttributeFormat } from './gx_displaylist';
+import { LoadedVertexData, LoadedVertexLayout } from './gx_displaylist';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder } from '../TextureHolder';
 import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/BufferHelpers';
+import { GfxFormat } from '../gfx/platform/GfxPlatform';
+import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
+import { translateVertexFormat } from '../gfx/platform/GfxPlatformWebGL2';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -127,19 +130,16 @@ export class GXRenderHelper {
     public bindMaterialTextureMapping(state: RenderState, textureMapping: TextureMapping[], prog: GX_Material.GX_Program): void {
         const gl = state.gl;
         assert(prog === state.currentProgram);
-        const samplerIdentities = [0, 0, 0, 0, 0, 0, 0, 0];
         for (let i = 0; i < 8; i++) {
             const m = textureMapping[i];
             if (m.glTexture === null)
                 continue;
 
-            samplerIdentities[i] = i;
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, m.glTexture);
             gl.bindSampler(i, m.glSampler);
             state.renderStatisticsTracker.textureBindCount++;
         }
-        prog.bindSamplerIdentities(gl, samplerIdentities);
     }
 
     public bindMaterialTextures(state: RenderState, materialParams: MaterialParams, prog: GX_Material.GX_Program): void {
@@ -160,24 +160,11 @@ export class GXRenderHelper {
     }
 }
 
-function translateAttribType(gl: WebGL2RenderingContext, attribFormat: AttributeFormat): { type: GLenum, normalized: boolean } {
-    switch (attribFormat) {
-    case AttributeFormat.U8:
-        return { type: gl.UNSIGNED_BYTE, normalized: false };
-    case AttributeFormat.U16:
-        return { type: gl.UNSIGNED_SHORT, normalized: false };
-    case AttributeFormat.F32:
-        return { type: gl.FLOAT, normalized: false };
-    default:
-        throw "whoops";
-    }
-}
-
 export class GXShapeHelper {
     public vao: WebGLVertexArrayObject;
 
     constructor(gl: WebGL2RenderingContext, public coalescedBuffers: CoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
-        assert(this.loadedVertexData.indexFormat === AttributeFormat.U16);
+        assert(this.loadedVertexData.indexFormat === GfxFormat.U16_R);
 
         this.vao = gl.createVertexArray();
         gl.bindVertexArray(this.vao);
@@ -195,33 +182,21 @@ export class GXShapeHelper {
             const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
             const attrib = this.loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
             if (attrib !== undefined) {
-                const { type, normalized } = translateAttribType(gl, attrib.format);
-
                 const stride = this.loadedVertexLayout.dstVertexSize;
                 const offset = coalescedBuffers.vertexBuffer.offset + attrib.offset;
 
+                const { type, size, normalized } = translateVertexFormat(attribGenDef.format);
+
                 gl.enableVertexAttribArray(attribLocation);
-                switch (attribGenDef.storage) {
-                case GX_Material.UniformStorage.UINT:
-                    gl.vertexAttribIPointer(attribLocation, attrib.componentCount, type, stride, offset);
-                    break;
-                case GX_Material.UniformStorage.VEC2:
-                case GX_Material.UniformStorage.VEC3:
-                case GX_Material.UniformStorage.VEC4:
-                    gl.vertexAttribPointer(attribLocation, attrib.componentCount, type, normalized, stride, offset);
-                    break;
+                if (type === gl.FLOAT) {
+                    gl.vertexAttribPointer(attribLocation, size, type, normalized, stride, offset);
+                } else {
+                    gl.vertexAttribIPointer(attribLocation, size, type, stride, offset);
                 }
             } else {
-                // Set default.
-                switch (attribGenDef.storage) {
-                case GX_Material.UniformStorage.UINT:
+                if (getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32) {
+                    // TODO(jstpierre): Remove ghost buffer usage... replace with something saner.
                     gl.vertexAttribI4ui(attribLocation, 0, 0, 0, 0);
-                    break;
-                case GX_Material.UniformStorage.VEC2:
-                case GX_Material.UniformStorage.VEC3:
-                case GX_Material.UniformStorage.VEC3:
-                    // Float defaults don't need to be initialized in GLES.
-                    break;
                 }
             }
         }
