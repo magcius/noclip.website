@@ -251,7 +251,7 @@ export function loadedDataCoalescer(gl: WebGL2RenderingContext, loadedVertexData
 export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX_Texture.MipChain): LoadedTexture {
     const device = getTransitionDeviceForWebGL2(gl);
     const firstMipLevel = mipChain.mipLevels[0];
-    const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, firstMipLevel.width, firstMipLevel.height, mipChain.mipLevels.length > 1, 1);
+    const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, firstMipLevel.width, firstMipLevel.height, mipChain.mipLevels.length);
     device.setResourceName(gfxTexture, mipChain.name);
 
     const hostAccessPass = device.createHostAccessPass();
@@ -269,7 +269,6 @@ export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX
 
         promises.push(GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
             hostAccessPass.uploadTextureData(gfxTexture, level, [rgbaTexture.pixels]);
-
             const ctx = canvas.getContext('2d');
             const imgData = new ImageData(mipLevel.width, mipLevel.height);
             imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));

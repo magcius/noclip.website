@@ -29,6 +29,17 @@ export class TextureMapping {
     // gx_render does *not* use this parameter at all!
     public flipY: boolean = false;
 
+    public reset(): void {
+        this.glTexture = null;
+        this.glSampler = null;
+        this.gfxTexture = null;
+        this.gfxSampler = null;
+        this.width = 0;
+        this.height = 0;
+        this.lodBias = 0;
+        this.flipY = false;
+    }
+
     public copy(other: TextureMapping): void {
         this.glTexture = other.glTexture;
         this.glSampler = other.glSampler;

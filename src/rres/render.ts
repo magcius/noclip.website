@@ -2,14 +2,17 @@
 import { RenderState, RenderFlags } from "../render";
 import * as BRRES from './brres';
 
+import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { mat4, mat2d } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
-import { MaterialParams, translateTexFilter, translateWrapMode, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind } from "../gx/gx_render";
+import { MaterialParams, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind } from "../gx/gx_render";
 import { texProjPerspMtx, texEnvMtx } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
+import { getTransitionDeviceForWebGL2 } from "../gfx/platform/GfxPlatformWebGL2";
+import { GfxDevice, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxSampler } from "../gfx/platform/GfxPlatform";
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
@@ -356,12 +359,40 @@ export class MaterialInstance {
     }
 }
 
+function translateWrapMode(wrapMode: GX.WrapMode): GfxWrapMode {
+    switch (wrapMode) {
+    case GX.WrapMode.CLAMP:
+        return GfxWrapMode.CLAMP;
+    case GX.WrapMode.MIRROR:
+        return GfxWrapMode.MIRROR;
+    case GX.WrapMode.REPEAT:
+        return GfxWrapMode.REPEAT;
+    }
+}
+
+function translateTexFilter(texFilter: GX.TexFilter): [GfxTexFilterMode, GfxMipFilterMode] {
+    switch (texFilter) {
+    case GX.TexFilter.LINEAR:
+        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP ];
+    case GX.TexFilter.NEAR:
+        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NO_MIP ];
+    case GX.TexFilter.LIN_MIP_LIN:
+        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR ];
+    case GX.TexFilter.NEAR_MIP_LIN:
+        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR ];
+    case GX.TexFilter.LIN_MIP_NEAR:
+        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST ];
+    case GX.TexFilter.NEAR_MIP_NEAR:
+        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST ];
+    }
+}
+
 const matrixScratch = mat4.create();
 export class Command_Material {
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
-    private glSamplers: WebGLSampler[] = [];
+    private gfxSamplers: GfxSampler[] = [];
 
     constructor(
         gl: WebGL2RenderingContext,
@@ -372,22 +403,30 @@ export class Command_Material {
         this.program.name = this.material.name;
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
-        this.translateSamplers(gl);
+        const device = getTransitionDeviceForWebGL2(gl);
+        this.translateSamplers(device);
     }
 
-    private translateSamplers(gl: WebGL2RenderingContext): void {
+    private translateSamplers(device: GfxDevice): void {
         for (let i = 0; i < 8; i++) {
             const sampler = this.material.samplers[i];
             if (!sampler)
                 continue;
 
-            const glSampler = gl.createSampler();
-            gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, translateTexFilter(gl, sampler.minFilter));
-            gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, translateTexFilter(gl, sampler.magFilter));
-            gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
-            gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
+            const [minFilter, mipFilter] = translateTexFilter(sampler.minFilter);
+            const [magFilter]            = translateTexFilter(sampler.magFilter);
+    
+            // In RRES, the minLOD / maxLOD are in the texture, not the sampler.
 
-            this.glSamplers[i] = glSampler;
+            const gfxSampler = device.createSampler({
+                wrapS: translateWrapMode(sampler.wrapS),
+                wrapT: translateWrapMode(sampler.wrapT),
+                minFilter, mipFilter, magFilter,
+                minLOD: 0,
+                maxLOD: 100,
+            });
+
+            this.gfxSamplers[i] = gfxSampler;
         }
     }
 
@@ -434,14 +473,16 @@ export class Command_Material {
 
     private calcMaterialParams(materialParams: MaterialParams, state: RenderState, materialInstance: MaterialInstance): void {
         for (let i = 0; i < 8; i++) {
+            const m = materialParams.m_TextureMapping[i];
+            m.reset();
+
             const sampler = this.material.samplers[i];
             if (!sampler)
                 continue;
 
-            const m = materialParams.m_TextureMapping[i];
             materialInstance.calcTextureMapping(m, i);
             // Fill in sampler state.
-            m.glSampler = this.glSamplers[i];
+            m.gfxSampler = this.gfxSamplers[i];
             m.lodBias = sampler.lodBias;
         }
 
@@ -465,7 +506,8 @@ export class Command_Material {
 
     public destroy(gl: WebGL2RenderingContext) {
         this.program.destroy(gl);
-        this.glSamplers.forEach((sampler) => gl.deleteSampler(sampler));
+        const device = getTransitionDeviceForWebGL2(gl);
+        this.gfxSamplers.forEach((r) => device.destroySampler(r));
     }
 }
 

@@ -348,7 +348,7 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
         const texture = textureEntry.ftex;
         const surface = texture.surface;
 
-        const gfxTexture = device.createTexture(this.translateSurfaceFormat(device, surface.format), surface.width, surface.height, surface.numMips > 1, 1);
+        const gfxTexture = device.createTexture(this.translateSurfaceFormat(device, surface.format), surface.width, surface.height, surface.numMips);
 
         const canvases: HTMLCanvasElement[] = [];
 
