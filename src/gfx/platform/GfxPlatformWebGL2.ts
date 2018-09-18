@@ -392,7 +392,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (this._scTexture !== null)
                 this.destroyTexture(this._scTexture);
 
-            this._scTexture = this.createTexture(GfxFormat.U8_RGBA, this._scWidth, this._scHeight, false, 1);
+            this._scTexture = this.createTexture(GfxFormat.U8_RGBA, this._scWidth, this._scHeight, 1);
             gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(this._scTexture));
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -505,14 +505,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return buffer;
     }
 
-    public createTexture(format: GfxFormat, width: number, height: number, mipmapped: boolean, numSamples: number): GfxTexture {
+    public createTexture(format: GfxFormat, width: number, height: number, numLevels: number): GfxTexture {
         const gl = this.gl;
         const gl_texture = gl.createTexture();
         const gl_target = gl.TEXTURE_2D;
-        const numLevels = mipmapped ? calcMipLevels(width, height) : 1;
         gl.bindTexture(gl_target, gl_texture);
         const internalformat = this.translateTextureInternalFormat(format);
-        gl.texParameteri(gl_target, gl.TEXTURE_MAX_LEVEL, numLevels);
+        gl.texParameteri(gl_target, gl.TEXTURE_MAX_LEVEL, numLevels - 1);
         gl.texStorage2D(gl_target, numLevels, internalformat, width, height);
         const texture: GfxTextureP_GL = { _T: _T.Texture, gl_texture, gl_target, format, width, height };
         return texture;

@@ -209,11 +209,11 @@ export class Command_Material {
         // Bind textures.
         for (let i = 0; i < this.material.textureIndexes.length; i++) {
             const texIndex = this.material.textureIndexes[i];
-            if (texIndex >= 0) {
+            const m = materialParams.m_TextureMapping[i];
+            m.reset();
+
+            if (texIndex >= 0)
                 this.bmdModel.fillTextureMapping(materialParams.m_TextureMapping[i], textureHolder, texIndex);
-            } else {
-                materialParams.m_TextureMapping[i].glTexture = null;
-            }
         }
 
         // Bind our texture matrices.
