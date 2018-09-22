@@ -387,14 +387,14 @@ interface AnimOptions {
 const pathBase = `data/j3d/smg`;
 
 class ModelCache {
-    public cache = new Map<string, BMDModel>();
+    public promiseCache = new Map<string, Progressable<BMDModel>>();
     public archiveCache = new Map<string, RARC.RARC>();
 
     public getModel(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, archiveName: string): Progressable<BMDModel> {
-        if (this.cache.has(archiveName))
-            return Progressable.resolve(this.cache.get(archiveName));
+        if (this.promiseCache.has(archiveName))
+            return this.promiseCache.get(archiveName);
 
-        return fetchData(`${pathBase}/ObjectData/${archiveName}.arc`).then((buffer: ArrayBufferSlice) => {
+        const p = fetchData(`${pathBase}/ObjectData/${archiveName}.arc`).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
                 console.warn(`Could not spawn archive ${archiveName}`);
                 return null;
@@ -408,10 +408,12 @@ class ModelCache {
             const bmd = rarc.findFileData(`${lowerName}.bdl`) !== null ? BMD.parse(rarc.findFileData(`${lowerName}.bdl`)) : null;
             const bmdModel = new BMDModel(gl, bmd, null, materialHacks);
             textureHolder.addJ3DTextures(gl, bmd);
-            this.cache.set(archiveName, bmdModel);
             this.archiveCache.set(archiveName, rarc);
             return bmdModel;
         });
+        
+        this.promiseCache.set(archiveName, p);
+        return p;
     }
 }
 
