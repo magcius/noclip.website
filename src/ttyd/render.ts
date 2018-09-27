@@ -3,13 +3,14 @@ import * as GX_Material from '../gx/gx_material';
 import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, translateTexFilter, translateWrapMode, ColorKind } from '../gx/gx_render';
 
 import * as TPL from './tpl';
-import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler } from './world';
+import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry } from './world';
 
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { mat4 } from 'gl-matrix';
 import { assert } from '../util';
+import AnimationController from '../AnimationController';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(gl: WebGL2RenderingContext, tpl: TPL.TPL): void {
@@ -22,6 +23,7 @@ class Command_Material {
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
     private glSamplers: WebGLSampler[] = [];
+    private materialAnimators: MaterialAnimator[] = [];
 
     constructor(gl: WebGL2RenderingContext, public material: Material) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
@@ -48,14 +50,26 @@ class Command_Material {
             const texMapping = materialParams.m_TextureMapping[i];
             textureHolder.fillTextureMapping(texMapping, sampler.textureName);
             texMapping.glSampler = this.glSamplers[i];
+
+            if (this.materialAnimators[i]) {
+                this.materialAnimators[i].calcTexMtx(materialParams.u_TexMtx[i]);
+            } else {
+                mat4.copy(materialParams.u_TexMtx[i], this.material.texMtx[i]);
+            }
         }
 
         materialParams.u_Color[ColorKind.MAT0].copy(this.material.matColorReg);
     }
 
-    public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: TPLTextureHolder) {
-        const gl = state.gl;
+    public bindAnimation(animationController: AnimationController, animation: AnimationEntry): void {
+        for (let i = 0; i < this.material.samplers.length; i++) {
+            const m = bindMaterialAnimator(animationController, animation, this.material.name, i);
+            if (m)
+                this.materialAnimators[i] = m;
+        }
+    }
 
+    public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: TPLTextureHolder) {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
         this.fillMaterialParams(this.materialParams, textureHolder);
@@ -105,10 +119,27 @@ export class WorldRenderer implements Viewer.MainScene {
 
     public renderHelper: GXRenderHelper;
     private sceneParams = new SceneParams();
+    private animationController = new AnimationController();
 
     constructor(gl: WebGL2RenderingContext, private d: TTYDWorld, public textureHolder: TPLTextureHolder) {
         this.translateModel(gl, d);
         this.renderHelper = new GXRenderHelper(gl);
+
+        // Bind all the animations b/c why not.
+        for (let i = 0; i < d.animations.length; i++)
+            this.bindAnimation(d.animations[i]);
+    }
+
+    public bindAnimation(animation: AnimationEntry): void {
+        if (animation.materialAnimation !== null)
+            for (let i = 0; i < this.materialCommands.length; i++)
+                this.materialCommands[i].bindAnimation(this.animationController, animation);
+    }
+
+    public bindAnimationName(animationName: string): void {
+        const animation = this.d.animations.find((a) => a.name === animationName);
+        if (animation)
+            this.bindAnimation(animation);
     }
 
     public setVisible(visible: boolean) {
@@ -121,6 +152,7 @@ export class WorldRenderer implements Viewer.MainScene {
 
         state.setClipPlanes(10, 5000);
 
+        this.animationController.updateTime(state.time);
         this.renderHelper.bindUniformBuffers(state);
 
         fillSceneParamsFromRenderState(this.sceneParams, state);
