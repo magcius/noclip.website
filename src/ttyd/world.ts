@@ -362,7 +362,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 index: i,
                 type: GX.TexGenType.MTX2x4,
                 source: GX.TexGenSrc.TEX0 + backwardsIndex,
-                matrix: texMatrices[i],
+                matrix: texMatrices[backwardsIndex],
                 normalize: false,
                 postMatrix: GX.PostTexGenMatrix.PTIDENTITY
             };
