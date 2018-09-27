@@ -63,8 +63,7 @@ class Command_Material {
 
     public bindAnimation(animationController: AnimationController, animation: AnimationEntry): void {
         for (let i = 0; i < this.material.samplers.length; i++) {
-            const backwardsIndex = this.material.samplers.length - i - 1;
-            const m = bindMaterialAnimator(animationController, animation, this.material.name, backwardsIndex);
+            const m = bindMaterialAnimator(animationController, animation, this.material.name, i);
             if (m)
                 this.materialAnimators[i] = m;
         }
