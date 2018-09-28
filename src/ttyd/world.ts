@@ -11,6 +11,7 @@ import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData
 import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import AnimationController from '../AnimationController';
+import { RenderFlags } from '../render';
 
 export interface TTYDWorld {
     information: Information;
@@ -70,6 +71,7 @@ export interface SceneGraphNode {
     children: SceneGraphNode[];
     parts: SceneGraphPart[];
     isTranslucent: boolean;
+    renderFlags: RenderFlags;
     visible?: boolean;
 }
 
@@ -477,10 +479,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             samplerEntryTableIdx += 0x04;
             xformTableIdx += 0x1C;
         }
-
-        const renderModeStructOffs = mainDataOffs + view.getUint32(materialOffs + 0x58);
-        const cullModes: GX.CullMode[] = [GX.CullMode.FRONT, GX.CullMode.BACK, GX.CullMode.ALL, GX.CullMode.NONE];
-        const cullMode: GX.CullMode = cullModes[view.getUint8(renderModeStructOffs + 0x01)];
 
         const lightChannel0: GX_Material.LightChannelControl = {
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: matColorSrc },
@@ -987,7 +985,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
         const gxMaterial: GX_Material.GXMaterial = {
             index: i, name: materialName,
-            cullMode,
+            cullMode: GX.CullMode.BACK,
             lightChannels,
             texGens,
             tevStages,
@@ -1065,6 +1063,10 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         const modelMatrix = mat4.create();
         calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+
+        const renderModeStructOffs = mainDataOffs + view.getUint32(offs + 0x58);
+        const cullModes: GX.CullMode[] = [GX.CullMode.FRONT, GX.CullMode.BACK, GX.CullMode.ALL, GX.CullMode.NONE];
+        const cullMode: GX.CullMode = cullModes[view.getUint8(renderModeStructOffs + 0x01)];
 
         const partTableCount = view.getUint32(offs + 0x5C);
         let partTableIdx = offs + 0x60;
@@ -1184,7 +1186,10 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         if (nextSiblingOffs !== 0)
             nextSibling = readSceneGraph(mainDataOffs + nextSiblingOffs);
 
-        return { nameStr, typeStr, modelMatrix, bbox, children, parts, isTranslucent, nextSibling };
+        const renderFlags = new RenderFlags();
+        renderFlags.cullMode = GX_Material.translateCullMode(cullMode);
+
+        return { nameStr, typeStr, modelMatrix, bbox, children, parts, isTranslucent, renderFlags, nextSibling };
     }
 
     const rootNode = readSceneGraph(sceneGraphRootOffs);

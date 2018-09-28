@@ -939,7 +939,7 @@ ${this.generateAlphaTest(alphaTest)}
 // #endregion
 
 // #region Material flags generation.
-function translateCullMode(cullMode: GX.CullMode): CullMode {
+export function translateCullMode(cullMode: GX.CullMode): CullMode {
     switch (cullMode) {
     case GX.CullMode.ALL:
         return CullMode.FRONT_AND_BACK;
