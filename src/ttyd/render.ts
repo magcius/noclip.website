@@ -63,12 +63,21 @@ class Command_Material {
         materialParams.u_Color[ColorKind.MAT0].copy(this.material.matColorReg);
     }
 
-    public bindAnimation(animationController: AnimationController, animation: AnimationEntry): void {
+    public stopAnimation(): void {
+        for (let i = 0; i < this.material.samplers.length; i++)
+            this.materialAnimators[i] = null;
+    }
+
+    public playAnimation(animationController: AnimationController, animation: AnimationEntry): boolean {
+        let hasAnimation = false;
         for (let i = 0; i < this.material.samplers.length; i++) {
             const m = bindMaterialAnimator(animationController, animation, this.material.name, i);
-            if (m)
+            if (m) {
                 this.materialAnimators[i] = m;
+                hasAnimation = true;
+            }
         }
+        return hasAnimation;
     }
 
     public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: TPLTextureHolder) {
@@ -124,13 +133,20 @@ class Command_Node {
         }
     }
 
-    public bindAnimation(animationController: AnimationController, animation: AnimationEntry): void {
+    public stopAnimation(): void {
+        this.meshAnimator = null;
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].stopAnimation();
+    }
+
+    public playAnimation(animationController: AnimationController, animation: AnimationEntry): void {
         const m = bindMeshAnimator(animationController, animation, this.node.nameStr);
         if (m)
             this.meshAnimator = m;
 
         for (let i = 0; i < this.children.length; i++)
-            this.children[i].bindAnimation(animationController, animation);
+            this.children[i].playAnimation(animationController, animation);
     }
 }
 
@@ -150,32 +166,52 @@ export class WorldRenderer implements Viewer.MainScene {
     public renderHelper: GXRenderHelper;
     private sceneParams = new SceneParams();
     private animationController = new AnimationController();
+    private animationNames: string[];
 
     constructor(gl: WebGL2RenderingContext, private d: TTYDWorld, public textureHolder: TPLTextureHolder) {
         this.translateModel(gl, d);
         this.renderHelper = new GXRenderHelper(gl);
 
-        // Bind all the animations b/c why not.
-        for (let i = 0; i < d.animations.length; i++)
-            this.bindAnimation(d.animations[i]);
-
         const rootScale = 10;
         mat4.fromScaling(this.rootMatrix, [rootScale, rootScale, rootScale]);
+
+        this.animationNames = this.d.animations.map((a) => a.name);
+
+        // Play all animations b/c why not.
+        this.playAllAnimations();
     }
 
-    public bindAnimation(animation: AnimationEntry): void {
+    public playAllAnimations(): void {
+        for (let i = 0; i < this.d.animations.length; i++)
+            this.playAnimation(this.d.animations[i]);
+    }
+
+    public playAnimation(animation: AnimationEntry): void {
         if (animation.materialAnimation !== null)
             for (let i = 0; i < this.materialCommands.length; i++)
-                this.materialCommands[i].bindAnimation(this.animationController, animation);
+                this.materialCommands[i].playAnimation(this.animationController, animation);
 
         if (animation.meshAnimation !== null)
-            this.rootNode.bindAnimation(this.animationController, animation);
+            this.rootNode.playAnimation(this.animationController, animation);
     }
 
-    public bindAnimationName(animationName: string): void {
+    public playAnimationName(animationName: string): boolean {
+        this.stopAllAnimations();
+
         const animation = this.d.animations.find((a) => a.name === animationName);
-        if (animation)
-            this.bindAnimation(animation);
+        if (animation) {
+            this.playAnimation(animation);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public stopAllAnimations(): void {
+        for (let i = 0; i < this.materialCommands.length; i++)
+            this.materialCommands[i].stopAnimation();
+
+        this.rootNode.stopAnimation();
     }
 
     public setVisible(visible: boolean) {
