@@ -6,7 +6,7 @@ import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator } from './world';
 
 import * as Viewer from '../viewer';
-import { RenderState, RenderFlags } from '../render';
+import { RenderState, RenderFlags, CullMode } from '../render';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { mat4 } from 'gl-matrix';
 import { assert, nArray } from '../util';
@@ -28,6 +28,8 @@ class Command_Material {
     constructor(gl: WebGL2RenderingContext, public material: Material) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
+        // Hack to let the surface cull mode go through.
+        this.renderFlags.cullMode = undefined;
 
         this.glSamplers = this.material.samplers.map((sampler) => {
             return Command_Material.translateSampler(gl, sampler);
@@ -212,9 +214,13 @@ export class WorldRenderer implements Viewer.MainScene {
             const node = nodeCommand.node;
             if (node.visible === false)
                 return;
-            if (node.isTranslucent === isTranslucent)
+
+            if (node.isTranslucent === isTranslucent && node.parts.length > 0) {
+                state.useFlags(node.renderFlags);
                 for (let i = 0; i < node.parts.length; i++)
                     renderPart(node.parts[i]);
+            }
+
             for (let i = 0; i < nodeCommand.children.length; i++)
                 renderNode(nodeCommand.children[i], isTranslucent);
         };
