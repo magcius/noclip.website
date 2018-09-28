@@ -479,7 +479,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         }
 
         const renderModeStructOffs = mainDataOffs + view.getUint32(materialOffs + 0x58);
-        const cullMode: GX.CullMode = view.getUint8(renderModeStructOffs + 0x01);
+        const cullModes: GX.CullMode[] = [GX.CullMode.FRONT, GX.CullMode.BACK, GX.CullMode.ALL, GX.CullMode.NONE];
+        const cullMode: GX.CullMode = cullModes[view.getUint8(renderModeStructOffs + 0x01)];
 
         const lightChannel0: GX_Material.LightChannelControl = {
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: matColorSrc },
