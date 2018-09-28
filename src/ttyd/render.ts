@@ -3,13 +3,13 @@ import * as GX_Material from '../gx/gx_material';
 import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, translateTexFilter, translateWrapMode, ColorKind } from '../gx/gx_render';
 
 import * as TPL from './tpl';
-import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry } from './world';
+import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator } from './world';
 
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags } from '../render';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { mat4 } from 'gl-matrix';
-import { assert } from '../util';
+import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
@@ -87,12 +87,12 @@ class Command_Batch {
     private shapeHelper: GXShapeHelper;
     private packetParams = new PacketParams();
 
-    constructor(gl: WebGL2RenderingContext, private sceneGraphNode: SceneGraphNode, private batch: Batch, private coalescedBuffers: CoalescedBuffers) {
+    constructor(gl: WebGL2RenderingContext, private nodeCommand: Command_Node, private batch: Batch, private coalescedBuffers: CoalescedBuffers) {
         this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
     private computeModelView(dst: mat4, state: RenderState): void {
-        mat4.copy(dst, state.updateModelView(false, this.sceneGraphNode.modelMatrix));
+        mat4.copy(dst, state.updateModelView(false, this.nodeCommand.modelMatrix));
     }
 
     public draw(state: RenderState, renderHelper: GXRenderHelper): void {
@@ -106,6 +106,32 @@ class Command_Batch {
     }
 }
 
+class Command_Node {
+    constructor(public node: SceneGraphNode) {}
+    public children: Command_Node[] = [];
+    public modelMatrix: mat4 = mat4.create();
+    public meshAnimator: MeshAnimator | null = null;
+
+    public updateModelMatrix(parentMatrix: mat4): void {
+        if (this.meshAnimator !== null) {
+            this.meshAnimator.calcModelMtx(this.modelMatrix);
+            mat4.mul(this.modelMatrix, this.node.modelMatrix, this.modelMatrix);
+            mat4.mul(this.modelMatrix, parentMatrix, this.modelMatrix);
+        } else {
+            mat4.mul(this.modelMatrix, parentMatrix, this.node.modelMatrix);
+        }
+    }
+
+    public bindAnimation(animationController: AnimationController, animation: AnimationEntry): void {
+        const m = bindMeshAnimator(animationController, animation, this.node.nameStr);
+        if (m)
+            this.meshAnimator = m;
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].bindAnimation(animationController, animation);
+    }
+}
+
 export class WorldRenderer implements Viewer.MainScene {
     public name: string;
 
@@ -114,6 +140,8 @@ export class WorldRenderer implements Viewer.MainScene {
 
     private batchCommands: Command_Batch[] = [];
     private materialCommands: Command_Material[] = [];
+    private rootNode: Command_Node;
+    private rootMatrix: mat4 = mat4.create();
 
     public visible: boolean = true;
 
@@ -128,12 +156,18 @@ export class WorldRenderer implements Viewer.MainScene {
         // Bind all the animations b/c why not.
         for (let i = 0; i < d.animations.length; i++)
             this.bindAnimation(d.animations[i]);
+
+        const rootScale = 10;
+        mat4.fromScaling(this.rootMatrix, [rootScale, rootScale, rootScale]);
     }
 
     public bindAnimation(animation: AnimationEntry): void {
         if (animation.materialAnimation !== null)
             for (let i = 0; i < this.materialCommands.length; i++)
                 this.materialCommands[i].bindAnimation(this.animationController, animation);
+
+        if (animation.meshAnimation !== null)
+            this.rootNode.bindAnimation(this.animationController, animation);
     }
 
     public bindAnimationName(animationName: string): void {
@@ -158,6 +192,15 @@ export class WorldRenderer implements Viewer.MainScene {
         fillSceneParamsFromRenderState(this.sceneParams, state);
         this.renderHelper.bindSceneParams(state, this.sceneParams);
 
+        // Update nodes.
+        const updateNode = (nodeCommand: Command_Node, parentMatrix: mat4) => {
+            nodeCommand.updateModelMatrix(parentMatrix);
+            for (let i = 0; i < nodeCommand.children.length; i++)
+                updateNode(nodeCommand.children[i], nodeCommand.modelMatrix);
+        };
+
+        updateNode(this.rootNode, this.rootMatrix);
+
         const renderPart = (part: SceneGraphPart) => {
             const materialIndex = part.material.index;
             this.materialCommands[materialIndex].bindMaterial(state, this.renderHelper, this.textureHolder);
@@ -165,19 +208,20 @@ export class WorldRenderer implements Viewer.MainScene {
             this.batchCommands[batchIndex].draw(state, this.renderHelper);
         };
 
-        const renderNode = (node: SceneGraphNode, isTranslucent: boolean) => {
+        const renderNode = (nodeCommand: Command_Node, isTranslucent: boolean) => {
+            const node = nodeCommand.node;
             if (node.visible === false)
                 return;
             if (node.isTranslucent === isTranslucent)
                 for (let i = 0; i < node.parts.length; i++)
                     renderPart(node.parts[i]);
-            for (let i = 0; i < node.children.length; i++)
-                renderNode(node.children[i], isTranslucent);
+            for (let i = 0; i < nodeCommand.children.length; i++)
+                renderNode(nodeCommand.children[i], isTranslucent);
         };
 
         // Dumb sorting.
-        renderNode(this.d.sNode, false);
-        renderNode(this.d.sNode, true);
+        renderNode(this.rootNode, false);
+        renderNode(this.rootNode, true);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
@@ -187,19 +231,21 @@ export class WorldRenderer implements Viewer.MainScene {
         this.batchCommands.forEach((cmd) => cmd.destroy(gl));
     }
 
-    private translatePart(gl: WebGL2RenderingContext, node: SceneGraphNode, part: SceneGraphPart): void {
+    private translatePart(gl: WebGL2RenderingContext, nodeCommand: Command_Node, part: SceneGraphPart): void {
         const batch = part.batch;
         const batchIndex = this.batches.indexOf(batch);
         assert(batchIndex >= 0);
-        const batchCommand = new Command_Batch(gl, node, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
+        const batchCommand = new Command_Batch(gl, nodeCommand, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
         this.batchCommands.push(batchCommand);
     }
 
-    private translateSceneGraph(gl: WebGL2RenderingContext, node: SceneGraphNode): void {
+    private translateSceneGraph(gl: WebGL2RenderingContext, node: SceneGraphNode): Command_Node {
+        const nodeCommand = new Command_Node(node);
         for (const part of node.parts)
-            this.translatePart(gl, node, part);
+            this.translatePart(gl, nodeCommand, part);
         for (const child of node.children)
-            this.translateSceneGraph(gl, child);
+            nodeCommand.children.push(this.translateSceneGraph(gl, child));
+        return nodeCommand;
     }
 
     private collectBatches(batches: Batch[], node: SceneGraphNode): void {
@@ -212,12 +258,14 @@ export class WorldRenderer implements Viewer.MainScene {
     private translateModel(gl: WebGL2RenderingContext, d: TTYDWorld): void {
         this.materialCommands = d.materials.map((material) => new Command_Material(gl, material));
 
+        const rootNode = d.sNode;
+
         this.batches = [];
-        this.collectBatches(this.batches, d.rootNode);
+        this.collectBatches(this.batches, rootNode);
 
         // Coalesce buffers.
         this.bufferCoalescer = loadedDataCoalescer(gl, this.batches.map((batch) => batch.loadedVertexData));
 
-        this.translateSceneGraph(gl, d.rootNode);
+        this.rootNode = this.translateSceneGraph(gl, rootNode);
     }
 }

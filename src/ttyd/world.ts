@@ -80,7 +80,42 @@ export interface AnimationEntry {
     meshAnimation: MeshAnimation | null;
 }
 
+export interface AnimationTrackComponent {
+    value: number;
+    tangentIn: number;
+    tangentOut: number;
+    step: boolean;
+}
+
 interface MeshAnimation {
+    tracks: MeshAnimationTrack[];
+}
+
+interface MeshAnimationTrack {
+    meshName: string;
+    translationOffsetX: number;
+    translationOffsetY: number;
+    translationOffsetZ: number;
+    rotationOffsetX: number;
+    rotationOffsetY: number;
+    rotationOffsetZ: number;
+    scaleDividerX: number;
+    scaleDividerY: number;
+    scaleDividerZ: number;
+    frames: MeshAnimationTrackKeyframe[];
+}
+
+interface MeshAnimationTrackKeyframe {
+    time: number;
+    translationX: AnimationTrackComponent;
+    translationY: AnimationTrackComponent;
+    translationZ: AnimationTrackComponent;
+    rotationX: AnimationTrackComponent;
+    rotationY: AnimationTrackComponent;
+    rotationZ: AnimationTrackComponent;
+    scaleX: AnimationTrackComponent;
+    scaleY: AnimationTrackComponent;
+    scaleZ: AnimationTrackComponent;
 }
 
 interface MaterialAnimation {
@@ -92,23 +127,16 @@ interface MaterialAnimationTrack {
     texGenIndex: number;
     skewS: number;
     skewT: number;
-    keyframes: MaterialAnimationTrackKeyframe[];
+    frames: MaterialAnimationTrackKeyframe[];
 }
 
 interface MaterialAnimationTrackKeyframe {
     time: number;
-    translationS: MaterialAnimationTrackComponent;
-    translationT: MaterialAnimationTrackComponent;
-    scaleS: MaterialAnimationTrackComponent;
-    scaleT: MaterialAnimationTrackComponent;
-    rotation: MaterialAnimationTrackComponent;
-}
-
-export interface MaterialAnimationTrackComponent {
-    value: number;
-    tangentIn: number;
-    tangentOut: number;
-    step: boolean;
+    translationS: AnimationTrackComponent;
+    translationT: AnimationTrackComponent;
+    scaleS: AnimationTrackComponent;
+    scaleT: AnimationTrackComponent;
+    rotation: AnimationTrackComponent;
 }
 
 function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
@@ -242,6 +270,73 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         let meshAnimation: MeshAnimation | null = null;
         let materialAnimation: MaterialAnimation | null = null;
 
+        if (meshTrackTableRelOffs !== 0) {
+            const meshTrackTableOffs = mainDataOffs + meshTrackTableRelOffs;
+            const meshTrackTableCount = view.getUint32(meshTrackTableOffs + 0x00);
+            let meshTrackTableIdx = meshTrackTableOffs + 0x04;
+            const tracks: MeshAnimationTrack[] = [];
+            for (let j = 0; j < meshTrackTableCount; j++) {
+                let trackEntryIdx = mainDataOffs + view.getUint32(meshTrackTableIdx + 0x00);
+                const meshNameOffs = mainDataOffs + view.getUint32(trackEntryIdx + 0x00);
+                const meshName = readString(buffer, meshNameOffs, 0x40, true);
+                const translationOffsetX = view.getFloat32(trackEntryIdx + 0x04);
+                const translationOffsetY = view.getFloat32(trackEntryIdx + 0x08);
+                const translationOffsetZ = view.getFloat32(trackEntryIdx + 0x0C);
+                const rotationOffsetX = view.getFloat32(trackEntryIdx + 0x10);
+                const rotationOffsetY = view.getFloat32(trackEntryIdx + 0x14);
+                const rotationOffsetZ = view.getFloat32(trackEntryIdx + 0x18);
+                const scaleDividerX = view.getFloat32(trackEntryIdx + 0x1C);
+                const scaleDividerY = view.getFloat32(trackEntryIdx + 0x20);
+                const scaleDividerZ = view.getFloat32(trackEntryIdx + 0x24);
+                const frameCount = view.getUint32(trackEntryIdx + 0x58);
+                trackEntryIdx += 0x5C;
+
+                const frames: MeshAnimationTrackKeyframe[] = [];
+                for (let k = 0; k < frameCount; k++) {
+                    const time = view.getFloat32(trackEntryIdx + 0x00);
+                    trackEntryIdx += 0x04;
+
+                    const readComponent = (): AnimationTrackComponent => {
+                        const value = view.getFloat32(trackEntryIdx + 0x00);
+                        const tangentIn = view.getFloat32(trackEntryIdx + 0x04);
+                        const tangentOut = view.getFloat32(trackEntryIdx + 0x08);
+                        const step = !!view.getUint32(trackEntryIdx + 0x10);
+                        trackEntryIdx += 0x14;
+                        return { value, tangentIn, tangentOut, step };
+                    };
+
+                    const translationX = readComponent();
+                    const translationY = readComponent();
+                    const translationZ = readComponent();
+                    const rotationX = readComponent();
+                    const rotationY = readComponent();
+                    const rotationZ = readComponent();
+                    const scaleX = readComponent();
+                    const scaleY = readComponent();
+                    const scaleZ = readComponent();
+
+                    // unk tracks
+                    trackEntryIdx += 0x14 * 12;
+
+                    frames.push({ time,
+                        translationX, translationY, translationZ,
+                        rotationX, rotationY, rotationZ,
+                        scaleX, scaleY, scaleZ,
+                    });
+                }
+
+                meshTrackTableIdx += 0x04;
+                tracks.push({ meshName,
+                    translationOffsetX, translationOffsetY, translationOffsetZ,
+                    rotationOffsetX, rotationOffsetY, rotationOffsetZ,
+                    scaleDividerX, scaleDividerY, scaleDividerZ,
+                    frames,
+                });
+            }
+
+            meshAnimation = { tracks };
+        }
+
         if (materialTrackTableRelOffs !== 0) {
             const materialTrackTableOffs = mainDataOffs + materialTrackTableRelOffs;
             const materialTrackTableCount = view.getUint32(materialTrackTableOffs + 0x00);
@@ -254,15 +349,15 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 const texGenIndex = view.getUint32(trackEntryIdx + 0x04);
                 const skewS = view.getFloat32(trackEntryIdx + 0x08);
                 const skewT = view.getFloat32(trackEntryIdx + 0x0C);
-                const keyframeCount = view.getUint32(trackEntryIdx + 0x10);
+                const frameCount = view.getUint32(trackEntryIdx + 0x10);
                 trackEntryIdx += 0x14;
 
-                const keyframes: MaterialAnimationTrackKeyframe[] = [];
-                for (let k = 0; k < keyframeCount; k++) {
+                const frames: MaterialAnimationTrackKeyframe[] = [];
+                for (let k = 0; k < frameCount; k++) {
                     const time = view.getFloat32(trackEntryIdx + 0x00);
                     trackEntryIdx += 0x04;
 
-                    const readComponent = (): MaterialAnimationTrackComponent => {
+                    const readComponent = (): AnimationTrackComponent => {
                         const value = view.getFloat32(trackEntryIdx + 0x00);
                         const tangentIn = view.getFloat32(trackEntryIdx + 0x04);
                         const tangentOut = view.getFloat32(trackEntryIdx + 0x08);
@@ -276,11 +371,11 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     const scaleS = readComponent();
                     const scaleT = readComponent();
                     const rotation = readComponent();
-                    keyframes.push({ time, translationS, translationT, scaleS, scaleT, rotation });
+                    frames.push({ time, translationS, translationT, scaleS, scaleT, rotation });
                 }
 
                 materialTrackTableIdx += 0x04;
-                tracks.push({ materialName, texGenIndex, skewS, skewT, keyframes });
+                tracks.push({ materialName, texGenIndex, skewS, skewT, frames });
             }
 
             materialAnimation = { tracks };
@@ -464,7 +559,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                 ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO),
-                ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
+                ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV),
                 ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
                 ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
 
@@ -939,7 +1034,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         nextSibling: SceneGraphNodeInternal | null;
     }
 
-    function readSceneGraph(offs: number, parentMatrix: mat4): SceneGraphNodeInternal {
+    function readSceneGraph(offs: number): SceneGraphNodeInternal {
         const nameStr = readString(buffer, mainDataOffs + view.getUint32(offs + 0x00));
         const typeStr = readString(buffer, mainDataOffs + view.getUint32(offs + 0x04));
         const parentOffs = view.getUint32(offs + 0x08);
@@ -966,7 +1061,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         const modelMatrix = mat4.create();
         calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        mat4.mul(modelMatrix, parentMatrix, modelMatrix);
 
         const partTableCount = view.getUint32(offs + 0x5C);
         let partTableIdx = offs + 0x60;
@@ -1075,7 +1169,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
         const children: SceneGraphNode[] = [];
         if (firstChildOffs !== 0) {
-            let child = readSceneGraph(mainDataOffs + firstChildOffs, modelMatrix);
+            let child = readSceneGraph(mainDataOffs + firstChildOffs);
             while (child !== null) {
                 children.unshift(child);
                 child = child.nextSibling;
@@ -1084,15 +1178,12 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
         let nextSibling: SceneGraphNodeInternal | null = null;
         if (nextSiblingOffs !== 0)
-            nextSibling = readSceneGraph(mainDataOffs + nextSiblingOffs, parentMatrix);
+            nextSibling = readSceneGraph(mainDataOffs + nextSiblingOffs);
 
         return { nameStr, typeStr, modelMatrix, bbox, children, parts, isTranslucent, nextSibling };
     }
 
-    const rootMatrix = mat4.create();
-    const rootScale = 10;
-    mat4.fromScaling(rootMatrix, [rootScale, rootScale, rootScale]);
-    const rootNode = readSceneGraph(sceneGraphRootOffs, rootMatrix);
+    const rootNode = readSceneGraph(sceneGraphRootOffs);
     assert(rootNode.nextSibling === null);
 
     // The root node contains (at least) two nodes, the "A" node and the "S" node (possibly "animated" and "static").
@@ -1104,25 +1195,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     //#endregion
 
     return { information, textureNameTable, rootNode, sNode, materials, animations };
-}
-
-function materialNameMatches(trackName: string, materialName: string): boolean {
-    if (trackName === materialName)
-        return true;
-    if (trackName === materialName.replace(/_[vx]/g, ''))
-        return true;
-    return false;
-}
-
-function findMaterialAnimationTrack(animation: AnimationEntry, materialName: string, texGenIndex: number): MaterialAnimationTrack | null {
-    if (animation.materialAnimation !== null) {
-        for (const track of animation.materialAnimation.tracks) {
-            if (materialNameMatches(track.materialName, materialName) && texGenIndex === track.texGenIndex)
-                return track;
-        }
-    }
-
-    return null;
 }
 
 export const enum LoopMode {
@@ -1156,7 +1228,7 @@ function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number
     return (((cf0 * t + cf1) * t + cf2) * t + cf3);
 }
 
-function interpKeyframes(k0: MaterialAnimationTrackComponent, k1: MaterialAnimationTrackComponent, t: number, d: number): number {
+function interpKeyframes(k0: AnimationTrackComponent, k1: AnimationTrackComponent, t: number, d: number): number {
     if (k0.step)
         return k0.value;
 
@@ -1171,6 +1243,63 @@ function interpKeyframes(k0: MaterialAnimationTrackComponent, k1: MaterialAnimat
     return cubicEval(cf0, cf1, cf2, cf3, t);
 }
 
+export class MeshAnimator {
+    constructor(public animationController: AnimationController, private animation: AnimationEntry, private track: MeshAnimationTrack) {}
+
+    public calcModelMtx(dst: mat4): void {
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.animation, frame);
+
+        const frames = this.track.frames;
+        let k0: MeshAnimationTrackKeyframe;
+        let k1: MeshAnimationTrackKeyframe;
+        if (frames.length === 1) {
+            k0 = k1 = frames[0];
+        } else {
+            // Find the first frame.
+            const idx1 = frames.findIndex((key) => (animFrame < key.time));
+            if (idx1 < 0) {
+                k0 = k1 = frames[frames.length - 1];
+            } else {
+                const idx0 = idx1 - 1;
+                k0 = frames[idx0];
+                k1 = frames[idx1];
+            }
+        }
+
+        const d = (k1.time - k0.time);
+        let t = d > 0 ? (animFrame - k0.time) / d : 0;
+        const translationX = interpKeyframes(k0.translationX, k1.translationX, t, d) - this.track.translationOffsetX;
+        const translationY = interpKeyframes(k0.translationY, k1.translationY, t, d) - this.track.translationOffsetY;
+        const translationZ = interpKeyframes(k0.translationZ, k1.translationZ, t, d) - this.track.translationOffsetZ;
+        const rotationX = interpKeyframes(k0.rotationX, k1.rotationX, t, d) - this.track.rotationOffsetX;
+        const rotationY = interpKeyframes(k0.rotationY, k1.rotationY, t, d) - this.track.rotationOffsetY;
+        const rotationZ = interpKeyframes(k0.rotationZ, k1.rotationZ, t, d) - this.track.rotationOffsetZ;
+        const scaleX = interpKeyframes(k0.scaleX, k1.scaleX, t, d) / this.track.scaleDividerX;
+        const scaleY = interpKeyframes(k0.scaleY, k1.scaleY, t, d) / this.track.scaleDividerY;
+        const scaleZ = interpKeyframes(k0.scaleZ, k1.scaleZ, t, d) / this.track.scaleDividerZ;
+        calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    }
+}
+
+function findMeshAnimationTrack(animation: AnimationEntry, meshName: string): MeshAnimationTrack | null {
+    if (animation.meshAnimation !== null) {
+        const track = animation.meshAnimation.tracks.find((a) => a.meshName === meshName);
+        if (track)
+            return track;
+    }
+
+    return null;
+}
+
+export function bindMeshAnimator(animationController: AnimationController, animation: AnimationEntry, meshName: string): MeshAnimator | null {
+    const track = findMeshAnimationTrack(animation, meshName);
+    if (track !== null)
+        return new MeshAnimator(animationController, animation, track);
+
+    return null;
+}
+
 export class MaterialAnimator {
     constructor(public animationController: AnimationController, private animation: AnimationEntry, private track: MaterialAnimationTrack) {}
 
@@ -1178,7 +1307,7 @@ export class MaterialAnimator {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.animation, frame);
 
-        const frames = this.track.keyframes;
+        const frames = this.track.frames;
         let k0: MaterialAnimationTrackKeyframe;
         let k1: MaterialAnimationTrackKeyframe;
         if (frames.length === 1) {
@@ -1206,6 +1335,25 @@ export class MaterialAnimator {
         const translationT = interpKeyframes(k0.translationT, k1.translationT, t, d);
         calcTexMtx(dst, translationS, translationT, scaleS, scaleT, rotation, skewS, skewT);
     }
+}
+
+function materialNameMatches(trackName: string, materialName: string): boolean {
+    if (trackName === materialName)
+        return true;
+    if (trackName === materialName.replace(/_[vx]/g, ''))
+        return true;
+    return false;
+}
+
+function findMaterialAnimationTrack(animation: AnimationEntry, materialName: string, texGenIndex: number): MaterialAnimationTrack | null {
+    if (animation.materialAnimation !== null) {
+        for (const track of animation.materialAnimation.tracks) {
+            if (materialNameMatches(track.materialName, materialName) && texGenIndex === track.texGenIndex)
+                return track;
+        }
+    }
+
+    return null;
 }
 
 export function bindMaterialAnimator(animationController: AnimationController, animation: AnimationEntry, materialName: string, texGenIndex: number): MaterialAnimator | null {
