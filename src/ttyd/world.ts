@@ -478,6 +478,9 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             xformTableIdx += 0x1C;
         }
 
+        const renderModeStructOffs = mainDataOffs + view.getUint32(materialOffs + 0x58);
+        const cullMode: GX.CullMode = view.getUint8(renderModeStructOffs + 0x01);
+
         const lightChannel0: GX_Material.LightChannelControl = {
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: matColorSrc },
             colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: matColorSrc },
@@ -983,7 +986,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
         const gxMaterial: GX_Material.GXMaterial = {
             index: i, name: materialName,
-            cullMode: GX.CullMode.BACK,
+            cullMode,
             lightChannels,
             texGens,
             tevStages,
