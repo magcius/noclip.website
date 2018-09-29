@@ -3,12 +3,12 @@ import * as GX_Material from '../gx/gx_material';
 import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, translateTexFilter, translateWrapMode, ColorKind } from '../gx/gx_render';
 
 import * as TPL from './tpl';
-import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator } from './world';
+import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';
 
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags, fullscreenFlags } from '../render';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
-import { mat4 } from 'gl-matrix';
+import { mat4, quat } from 'gl-matrix';
 import { assert } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
@@ -30,15 +30,16 @@ class BackgroundBillboardProgram extends DeviceProgram {
 out vec2 v_TexCoord;
 
 layout(row_major, std140) uniform ub_Params {
-    vec4 u_Scale;
+    vec4 u_ScaleOffset;
 };
 
 void main() {
-    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
+    vec2 p;
+    p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    p.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = p * vec2(2) - vec2(1);
     gl_Position.zw = vec2(1);
-    v_TexCoord *= u_Scale.xy;
+    v_TexCoord = p * u_ScaleOffset.xy + u_ScaleOffset.zw;
 }
 `;
 
@@ -69,9 +70,11 @@ class BackgroundBillboardRenderer {
     }
 
     public render(device: GfxDevice, state: RenderState): void {
+        // Extract yaw
+        const o = Math.atan2(-state.view[2], state.view[0]) / (Math.PI * 2) * 4;
         const hostAccessPass = device.createHostAccessPass();
         this.bufferFiller.reset();
-        this.bufferFiller.fillVec4(state.getAspect(), -1, 0, 0);
+        this.bufferFiller.fillVec4(state.getAspect(), -1, o, 0);
         this.bufferFiller.endAndUpload(hostAccessPass, this.paramsBuffer);
         device.submitPass(hostAccessPass);
 
@@ -155,6 +158,16 @@ class Command_Material {
     public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: TPLTextureHolder) {
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
+
+        // Polygon offset isn't in RenderFlags, have to do this manually.
+        const gl = state.gl;
+        if (this.material.materialLayer === MaterialLayer.ALPHA_TEST) {
+            gl.enable(gl.POLYGON_OFFSET_FILL);
+            gl.polygonOffset(-0.5, -0.5);
+        } else {
+            gl.disable(gl.POLYGON_OFFSET_FILL);
+        }
+
         this.fillMaterialParams(this.materialParams, textureHolder);
         renderHelper.bindMaterialParams(state, this.materialParams);
         renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
