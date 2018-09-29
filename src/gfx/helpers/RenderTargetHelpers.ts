@@ -1,6 +1,6 @@
 
 import { GfxRenderTarget, GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition } from "../platform/GfxPlatform";
-import { Color, colorNew } from "../../Color";
+import { colorNew } from "../../Color";
 
 const DEFAULT_NUM_SAMPLES = 4;
 

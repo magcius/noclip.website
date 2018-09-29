@@ -35,7 +35,7 @@ export interface Sampler {
     wrapT: GX.WrapMode;
 }
 
-const enum MaterialLayer {
+export const enum MaterialLayer {
     OPAQUE = 0x00,
     ALPHA_TEST = 0x01,
     BLEND = 0x02,
