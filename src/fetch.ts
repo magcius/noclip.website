@@ -16,11 +16,16 @@ export function fetchData(url: string): Progressable<NamedArrayBufferSlice> {
     const p = new Promise<NamedArrayBufferSlice>((resolve, reject) => {
         request.onload = () => {
             pr.setProgress(1);
-            const buffer: ArrayBuffer = request.response;
-            const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
+            let slice: NamedArrayBufferSlice;
+            if (request.status !== 200) {
+                slice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
+            } else {
+                const buffer: ArrayBuffer = request.response;
+                slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
+            }
             slice.name = url;
             resolve(slice);
-        };
+    };
         request.onerror = () => {
             reject();
         };
