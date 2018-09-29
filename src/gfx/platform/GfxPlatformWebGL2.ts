@@ -4,7 +4,7 @@ import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachmen
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
 import { DeviceProgram, ProgramCache } from '../../Program';
-import { RenderFlags, CompareMode, FullscreenCopyProgram, applyFlags, RenderFlagsTracker } from '../../render';
+import { RenderFlags, CompareMode, FullscreenCopyProgram, applyFlags, RenderFlagsTracker, RenderState } from '../../render';
 import { assert } from '../../util';
 import { Color } from '../../Color';
 
@@ -248,16 +248,6 @@ function assignPlatformName(o: any, name: string): void {
     o.__SPECTOR_Metadata = { name };
 }
 
-function calcMipLevels(w: number, h: number): number {
-    let m = Math.max(w, h);
-    let i = 0;
-    while (m > 0) {
-        m = (m / 2) | 0;
-        i++;
-    }
-    return i;
-}
-
 function createBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): GfxBindingLayoutsP_GL {
     let firstUniformBuffer = 0, firstSampler = 0;
     const bindingLayoutTables: GfxBindingLayoutTableP_GL[] = [];
@@ -366,13 +356,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null;
 
-    constructor(public gl: WebGL2RenderingContext, private isTransitionDevice: boolean = false) {
+    constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null, private isTransitionDevice: boolean = false) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
 
-        if (!this.isTransitionDevice) {
-            // Transition devices should use the RenderState Program system.
+        if (programCache !== null) {
+            this._programCache = programCache;
+        } else {
             this._programCache = new ProgramCache(gl);
+        }
+
+        if (!this.isTransitionDevice) {
             this._fullscreenCopyProgram = this.createProgram(new FullscreenCopyProgram()) as GfxProgramP_GL;
             this._fullscreenCopyFlags.depthTest = false;
         }
@@ -986,10 +980,14 @@ interface TransitionExpando {
     _transitionDevice: GfxImplP_GL | undefined;
 }
 
+export function createTransitionDeviceForWebGL2(gl: WebGL2RenderingContext, state: RenderState): void {
+    const expando = gl as any as TransitionExpando;
+    assert(expando._transitionDevice === undefined)
+    expando._transitionDevice = new GfxImplP_GL(gl, state.programCache, true);
+}
+
 // Transition API. This lets clients use some parts of the implementation, etc. while still using RenderState.
 export function getTransitionDeviceForWebGL2(gl: WebGL2RenderingContext): GfxDevice {
     const expando = gl as any as TransitionExpando;
-    if (expando._transitionDevice === undefined)
-        expando._transitionDevice = new GfxImplP_GL(gl, true);
     return expando._transitionDevice;
 }

@@ -5,6 +5,7 @@ import { mat4 } from 'gl-matrix';
 import { assert, assertExists } from './util';
 import { BaseProgram, FullscreenProgram, ProgramCache, SimpleProgram } from './Program';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from './Camera';
+import { createTransitionDeviceForWebGL2 } from './gfx/platform/GfxPlatformWebGL2';
 
 export enum CompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
@@ -291,10 +292,15 @@ class RenderStatisticsTracker {
     }
 }
 
+export const fullscreenFlags = new RenderFlags();
+fullscreenFlags.depthTest = false;
+fullscreenFlags.blendMode = BlendMode.NONE;
+fullscreenFlags.cullMode = CullMode.NONE;
+
 // XXX(jstpierre): This is becoming a lot more than just some render state.
 // Rename to "SceneRenderer" at some point?
 export class RenderState {
-    private programCache: ProgramCache;
+    public programCache: ProgramCache;
 
     // State.
     public currentProgram: BaseProgram | null = null;
@@ -319,12 +325,14 @@ export class RenderState {
     public forceDisableCulling: boolean = false;
 
     private fullscreenCopyProgram: FullscreenCopyProgram;
-    private fullscreenFlags: RenderFlags;
     private msaaFramebuffer: WebGLFramebuffer;
     private scratchMatrix = mat4.create();
 
     constructor(public gl: WebGL2RenderingContext) {
         this.programCache = new ProgramCache(this.gl);
+
+        // Create the program cache immediately.
+        createTransitionDeviceForWebGL2(this.gl, this);
 
         this.time = 0;
         this.fov = Math.PI / 4;
@@ -332,10 +340,6 @@ export class RenderState {
         this.camera = new Camera();
 
         this.fullscreenCopyProgram = new FullscreenCopyProgram();
-        this.fullscreenFlags = new RenderFlags();
-        this.fullscreenFlags.depthTest = false;
-        this.fullscreenFlags.blendMode = BlendMode.NONE;
-        this.fullscreenFlags.cullMode = CullMode.NONE;
 
         this.msaaFramebuffer = assertExists(gl.createFramebuffer());
     }
@@ -359,7 +363,7 @@ export class RenderState {
     // XXX(jstpierre): Design a better API than this.
     public runFullscreen(flags: RenderFlags | null = null): void {
         const gl = this.gl;
-        this.useFlags(flags !== null ? flags : this.fullscreenFlags);
+        this.useFlags(flags !== null ? flags : fullscreenFlags);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 

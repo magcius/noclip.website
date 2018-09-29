@@ -21,11 +21,17 @@ class SPMSceneDesc implements Viewer.SceneDesc {
             const arc = U8.parse(decompressed);
             const dFile = arc.findFile(`./dvd/map/${this.id}/map.dat`);
             const tFile = arc.findFile(`./dvd/map/${this.id}/texture.tpl`);
+            const bDir = arc.findDir(`./dvd/bg`);
+            // TODO(jstpierre): Figure out how these BG files fit together.
+            const bFile = bDir.files[0];
             const d = World.parse(dFile.buffer);
             const textureHolder = new TPLTextureHolder();
             const tpl = TPL.parse(tFile.buffer, d.textureNameTable);
             textureHolder.addTPLTextures(gl, tpl);
-            return new WorldRenderer(gl, d, textureHolder);
+            const backgroundTextureName = `bg_${this.id}`;
+            const bgTpl = TPL.parse(bFile.buffer, [backgroundTextureName]);
+            textureHolder.addTPLTextures(gl, bgTpl);
+            return new WorldRenderer(gl, d, textureHolder, backgroundTextureName);
         });
     }
 }

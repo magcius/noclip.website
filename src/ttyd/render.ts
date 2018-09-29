@@ -6,15 +6,87 @@ import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator } from './world';
 
 import * as Viewer from '../viewer';
-import { RenderState, RenderFlags, CullMode } from '../render';
+import { RenderState, RenderFlags, fullscreenFlags } from '../render';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { mat4 } from 'gl-matrix';
-import { assert, nArray } from '../util';
+import { assert } from '../util';
 import AnimationController from '../AnimationController';
+import { DeviceProgram } from '../Program';
+import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxProgram } from '../gfx/platform/GfxPlatform';
+import { BufferFillerHelper } from '../gfx/helpers/BufferHelpers';
+import { TextureMapping, getGLTextureFromMapping, getGLSamplerFromMapping } from '../TextureHolder';
+import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(gl: WebGL2RenderingContext, tpl: TPL.TPL): void {
         this.addTextures(gl, tpl.textures);
+    }
+}
+
+class BackgroundBillboardProgram extends DeviceProgram {
+    public static ub_Params = 0;
+
+    public vert: string = `
+out vec2 v_TexCoord;
+
+layout(row_major, std140) uniform ub_Params {
+    vec4 u_Scale;
+};
+
+void main() {
+    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
+    gl_Position.zw = vec2(1);
+    v_TexCoord *= u_Scale.xy;
+}
+`;
+
+    public frag: string = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 color = texture(u_Texture, v_TexCoord);
+    gl_FragColor = vec4(color.rgb, 1.0);
+}
+`;
+}
+
+class BackgroundBillboardRenderer {
+    private program = new BackgroundBillboardProgram();
+    private paramsBuffer: GfxBuffer;
+    private bufferFiller: BufferFillerHelper;
+    private textureMapping = new TextureMapping();
+
+    constructor(device: GfxDevice, public textureHolder: TPLTextureHolder, public textureName: string) {
+        const deviceLimits = device.queryLimits();
+        const paramsWordCount = Math.max(4, deviceLimits.uniformBufferWordAlignment);
+        this.paramsBuffer = device.createBuffer(paramsWordCount, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+        const gfxProgram = device.createProgram(this.program);
+        const paramsLayout = device.queryProgram(gfxProgram).uniformBuffers[0];
+        this.bufferFiller = new BufferFillerHelper(paramsLayout);
+    }
+
+    public render(device: GfxDevice, state: RenderState): void {
+        const hostAccessPass = device.createHostAccessPass();
+        this.bufferFiller.reset();
+        this.bufferFiller.fillVec4(state.getAspect(), -1, 0, 0);
+        this.bufferFiller.endAndUpload(hostAccessPass, this.paramsBuffer);
+        device.submitPass(hostAccessPass);
+
+        const gl = state.gl;
+
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, BackgroundBillboardProgram.ub_Params, getPlatformBuffer(this.paramsBuffer));
+
+        this.textureHolder.fillTextureMapping(this.textureMapping, this.textureName);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, getGLTextureFromMapping(this.textureMapping));
+        gl.bindSampler(0, getGLSamplerFromMapping(this.textureMapping));
+
+        state.useProgram(this.program);
+        state.useFlags(fullscreenFlags);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 }
 
@@ -164,11 +236,12 @@ export class WorldRenderer implements Viewer.MainScene {
     public visible: boolean = true;
 
     public renderHelper: GXRenderHelper;
+    private backgroundRenderer: BackgroundBillboardRenderer | null = null;
     private sceneParams = new SceneParams();
     private animationController = new AnimationController();
-    private animationNames: string[];
+    public animationNames: string[];
 
-    constructor(gl: WebGL2RenderingContext, private d: TTYDWorld, public textureHolder: TPLTextureHolder) {
+    constructor(gl: WebGL2RenderingContext, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
         this.translateModel(gl, d);
         this.renderHelper = new GXRenderHelper(gl);
 
@@ -179,6 +252,11 @@ export class WorldRenderer implements Viewer.MainScene {
 
         // Play all animations b/c why not.
         this.playAllAnimations();
+
+        if (backgroundTextureName !== null) {
+            const device = getTransitionDeviceForWebGL2(gl);
+            this.backgroundRenderer = new BackgroundBillboardRenderer(device, textureHolder, backgroundTextureName);
+        }
     }
 
     public playAllAnimations(): void {
@@ -223,6 +301,9 @@ export class WorldRenderer implements Viewer.MainScene {
             return;
 
         state.setClipPlanes(10, 5000);
+
+        if (this.backgroundRenderer !== null)
+            this.backgroundRenderer.render(getTransitionDeviceForWebGL2(state.gl), state);
 
         this.animationController.updateTime(state.time);
         this.renderHelper.bindUniformBuffers(state);
