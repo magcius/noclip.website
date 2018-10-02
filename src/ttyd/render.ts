@@ -1,18 +1,19 @@
 
 import * as GX_Material from '../gx/gx_material';
-import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, translateTexFilter, translateWrapMode, ColorKind } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, ColorKind } from '../gx/gx_render';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';
 
+import * as GX from '../gx/gx_enum';
 import * as Viewer from '../viewer';
 import { RenderState, RenderFlags, fullscreenFlags } from '../render';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
-import { mat4, quat } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import { assert } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxProgram } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxSampler, GfxTexFilterMode, GfxWrapMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { BufferFillerHelper } from '../gfx/helpers/BufferHelpers';
 import { TextureMapping, getGLTextureFromMapping, getGLSamplerFromMapping } from '../TextureHolder';
 import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
@@ -93,31 +94,47 @@ class BackgroundBillboardRenderer {
     }
 }
 
+function translateWrapMode(wrapMode: GX.WrapMode): GfxWrapMode {
+    switch (wrapMode) {
+    case GX.WrapMode.CLAMP:
+        return GfxWrapMode.CLAMP;
+    case GX.WrapMode.MIRROR:
+        return GfxWrapMode.MIRROR;
+    case GX.WrapMode.REPEAT:
+        return GfxWrapMode.REPEAT;
+    }
+}
+
 class Command_Material {
     private renderFlags: RenderFlags;
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
-    private glSamplers: WebGLSampler[] = [];
+    private gfxSamplers: GfxSampler[] = [];
     private materialAnimators: MaterialAnimator[] = [];
 
     constructor(gl: WebGL2RenderingContext, public material: Material) {
+        const device = getTransitionDeviceForWebGL2(gl);
+
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
         // Hack to let the surface cull mode go through.
         this.renderFlags.cullMode = undefined;
 
-        this.glSamplers = this.material.samplers.map((sampler) => {
-            return Command_Material.translateSampler(gl, sampler);
+        this.gfxSamplers = this.material.samplers.map((sampler) => {
+            return Command_Material.translateSampler(device, sampler);
         });
     }
 
-    private static translateSampler(gl: WebGL2RenderingContext, sampler: Sampler): WebGLSampler {
-        const glSampler = gl.createSampler();
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.samplerParameteri(glSampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
-        gl.samplerParameteri(glSampler, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
-        return glSampler;
+    private static translateSampler(device: GfxDevice, sampler: Sampler): GfxSampler {
+        return device.createSampler({
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.POINT,
+            mipFilter: GfxMipFilterMode.LINEAR,
+            wrapS: translateWrapMode(sampler.wrapS),
+            wrapT: translateWrapMode(sampler.wrapT),
+            maxLOD: 100,
+            minLOD: 0,
+        });
     }
 
     public fillMaterialParams(materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
@@ -126,7 +143,7 @@ class Command_Material {
 
             const texMapping = materialParams.m_TextureMapping[i];
             textureHolder.fillTextureMapping(texMapping, sampler.textureName);
-            texMapping.glSampler = this.glSamplers[i];
+            texMapping.gfxSampler = this.gfxSamplers[i];
 
             if (this.materialAnimators[i]) {
                 this.materialAnimators[i].calcTexMtx(materialParams.u_TexMtx[i]);
@@ -173,9 +190,8 @@ class Command_Material {
         renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
     }
 
-    public destroy(gl: WebGL2RenderingContext) {
-        this.program.destroy(gl);
-        this.glSamplers.forEach((sampler) => gl.deleteSampler(sampler));
+    public destroy(device: GfxDevice) {
+        this.gfxSamplers.forEach((sampler) => device.destroySampler(sampler));
     }
 }
 
@@ -361,9 +377,10 @@ export class WorldRenderer implements Viewer.MainScene {
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
+        const device = getTransitionDeviceForWebGL2(gl);
         this.renderHelper.destroy(gl);
         this.bufferCoalescer.destroy(gl);
-        this.materialCommands.forEach((cmd) => cmd.destroy(gl));
+        this.materialCommands.forEach((cmd) => cmd.destroy(device));
         this.batchCommands.forEach((cmd) => cmd.destroy(gl));
     }
 
