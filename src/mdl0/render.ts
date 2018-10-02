@@ -3,7 +3,7 @@ import * as MDL0 from './mdl0';
 
 import * as Viewer from '../viewer';
 
-import { RenderFlags, RenderState, BlendMode } from '../render';
+import { RenderFlags, RenderState, BlendMode, BlendFactor } from '../render';
 import { SimpleProgram } from '../Program';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
@@ -92,6 +92,8 @@ class FancyGrid {
 
         this.renderFlags = new RenderFlags();
         this.renderFlags.blendMode = BlendMode.ADD;
+        this.renderFlags.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
+        this.renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
     }
 
     public render(state: RenderState) {

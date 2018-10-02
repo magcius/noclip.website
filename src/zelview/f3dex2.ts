@@ -4,7 +4,7 @@ import { mat4, vec3, vec4 } from 'gl-matrix';
 import * as Render from './render';
 import * as ZELVIEW0 from './zelview0';
 
-import { CullMode, RenderState, RenderFlags, BlendMode } from '../render';
+import { CullMode, RenderState, RenderFlags, BlendMode, BlendFactor } from '../render';
 import * as Viewer from '../viewer';
 
 function extractBits(value: number, offset: number, bits: number) {
@@ -342,6 +342,8 @@ function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
 
     if (newMode & OtherModeL.FORCE_BL) {
         renderFlags.blendMode = BlendMode.ADD;
+        renderFlags.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
+        renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
     } else {
         renderFlags.blendMode = BlendMode.NONE;
     }

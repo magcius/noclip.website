@@ -15,7 +15,7 @@ import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture, getGLTextureFromMapping, getGLSamplerFromMapping } from '../TextureHolder';
 import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/BufferHelpers';
-import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 

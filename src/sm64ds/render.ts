@@ -8,7 +8,7 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, RenderFlags, RenderState, BlendMode, depthClearFlags } from '../render';
+import { CullMode, RenderFlags, RenderState, BlendMode, depthClearFlags, BlendFactor } from '../render';
 import { SimpleProgram } from '../Program';
 import Progressable from '../Progressable';
 import RenderArena from '../RenderArena';
@@ -213,6 +213,8 @@ class BMDRenderer {
 
         const renderFlags = new RenderFlags();
         renderFlags.blendMode = BlendMode.ADD;
+        renderFlags.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
+        renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
         renderFlags.depthTest = true;
         renderFlags.depthWrite = material.depthWrite;
         renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
