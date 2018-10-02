@@ -167,6 +167,21 @@ void main() {
 
 const RENDER_SAMPLES = 4;
 
+function getNumSamplesForFormat(gl: WebGL2RenderingContext, format: GLenum, preferredSamples: number): number {
+    const possibleSamples: number[] = gl.getInternalformatParameter(gl.RENDERBUFFER, format, gl.SAMPLES);
+    const samples = possibleSamples.find((n) => n <= preferredSamples);
+    if (samples === undefined)
+        return 0;
+    return samples;
+}
+
+function getNumSamples(gl: WebGL2RenderingContext, preferredSamples: number): number {
+    // We check depth format of this because on some GPUs (*cough* Haswell) there's no multisampling support for
+    // depth buffer, but there is for color format. We could check RGBA8, but I don't think it's likely that we'll
+    // see higher sample counts for depth over color.
+    return getNumSamplesForFormat(gl, gl.DEPTH24_STENCIL8, preferredSamples);
+}
+
 export class ColorTarget {
     public width: number;
     public height: number;
@@ -185,7 +200,7 @@ export class ColorTarget {
     }
 
     public setParameters(gl: WebGL2RenderingContext, width: number, height: number, samples: number = RENDER_SAMPLES) {
-        samples = Math.min(samples, gl.getParameter(gl.MAX_SAMPLES));
+        samples = getNumSamples(gl, samples);
 
         if (this.width === width && this.height === height && this.samples === samples)
             return;
@@ -241,6 +256,8 @@ export class DepthTarget {
     }
 
     public setParameters(gl: WebGL2RenderingContext, width: number, height: number, samples: number = RENDER_SAMPLES) {
+        samples = getNumSamples(gl, samples);
+
         if (this.width === width && this.height === height && this.samples === samples)
             return;
 
