@@ -243,6 +243,9 @@ class Main {
         this.viewer.oncamerachanged = () => {
             this._queueSaveState();
         };
+        this.viewer.inputManager.onisdraggingchanged = () => {
+            this.ui.setIsDragging(this.viewer.inputManager.isDragging());
+        };
         this.viewer.start();
 
         this.sceneLoader = new SceneLoader(this.viewer);

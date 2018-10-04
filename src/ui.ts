@@ -272,14 +272,12 @@ export class Panel implements Widget {
         this.mainPanel.style.overflow = 'hidden';
         this.mainPanel.style.transition = '.25s ease-out';
         this.mainPanel.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-        this.mainPanel.style.pointerEvents = 'auto';
         this.toplevel.appendChild(this.mainPanel);
 
         this.extraRack = document.createElement('div');
         this.extraRack.style.gridAutoFlow = 'column';
         this.extraRack.style.gridGap = '20px';
         this.extraRack.style.transition = '.15s ease-out .10s';
-        this.extraRack.style.pointerEvents = 'auto';
         this.toplevel.appendChild(this.extraRack);
 
         this.header = document.createElement('h1');
@@ -1015,5 +1013,9 @@ export class UI {
 
     public setScenePanels(panels: Panel[]): void {
         this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
+    }
+
+    public setIsDragging(isDragging: boolean): void {
+        this.elem.style.pointerEvents = isDragging ? 'none' : '';
     }
 }
