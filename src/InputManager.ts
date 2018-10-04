@@ -9,6 +9,7 @@ export default class InputManager {
     private lastX: number;
     private lastY: number;
     public grabbing: boolean = false;
+    public onisdraggingchanged: () => void | null = null;
 
     constructor(toplevel: HTMLElement) {
         this.toplevel = toplevel;
@@ -55,7 +56,6 @@ export default class InputManager {
         this.grabbing = v;
         this.toplevel.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
         this.toplevel.style.cursor = v ? 'grabbing' : 'grab';
-        this.toplevel.style.setProperty('pointer-events', v ? 'auto' : '', 'important');
 
         if (v) {
             document.addEventListener('mousemove', this._onMouseMove);
@@ -64,6 +64,9 @@ export default class InputManager {
             document.removeEventListener('mousemove', this._onMouseMove);
             document.removeEventListener('mouseup', this._onMouseUp);
         }
+
+        if (this.onisdraggingchanged)
+            this.onisdraggingchanged();
     }
 
     private _onMouseMove = (e: MouseEvent) => {
