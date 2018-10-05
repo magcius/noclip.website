@@ -70,7 +70,7 @@ function readSklChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     const bones: Bone[] = [];
     let boneTableIdx = 0x10;
     for (let i = 0; i < boneTableCount; i++) {
-        const boneId = view.getInt16(boneTableIdx + 0x00, true);
+        const boneId = view.getInt16(boneTableIdx + 0x00, true) & 0x0FFF;
         const parentBoneId = view.getInt16(boneTableIdx + 0x02, true);
 
         const scaleX = view.getFloat32(boneTableIdx + 0x04, true);

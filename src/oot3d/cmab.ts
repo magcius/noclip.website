@@ -322,7 +322,7 @@ export class TextureAnimator {
             const tx = (this.animEntry.tracks[0] !== undefined) ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 0;
             const ty = (this.animEntry.tracks[1] !== undefined) ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 0;
             mat4.identity(dst);
-            dst[12] = tx;
+            dst[12] = -tx;
             dst[13] = -ty;
         } else {
             throw "whoops";
