@@ -49,9 +49,12 @@ void main() {
     v_TexCoord.t = 1.0 - v_TexCoord.t;
 
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
-    v_LightIntensity = dot(-a_Normal, t_LightDirection);
+    // Disable normals for now until I can solve them.
+    v_LightIntensity = 1.0;
+    // v_LightIntensity = dot(-a_Normal, t_LightDirection);
 
     // Hacky Ambient.
+    v_Color.rgb = clamp(v_Color.rgb + 0.3, vec3(0), vec3(1));
     v_LightIntensity = clamp(v_LightIntensity + 0.6, 0.0, 1.0);
 }`;
 
@@ -66,9 +69,13 @@ varying float v_LightIntensity;
 
 void main() {
     vec4 t_Color = texture2D(u_Sampler, v_TexCoord) * v_Color;
+
     t_Color.rgb *= v_LightIntensity;
+
+    // TODO(jstpierre): Full alpha reference.
     if (u_AlphaTest && t_Color.a <= 0.8)
         discard;
+
     gl_FragColor = t_Color;
 }`;
 

@@ -61,7 +61,7 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     private _createSceneFromData(gl: WebGL2RenderingContext, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.MainScene> {
-        const zar = ZAR.parse(zarBuffer);
+        const zar = zarBuffer.byteLength ? ZAR.parse(zarBuffer) : null;
 
         const zsi = ZSI.parse(zsiBuffer);
         assert(zsi.rooms !== null);
@@ -75,10 +75,12 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zsi = ZSI.parse(roomResult);
                 assert(zsi.mesh !== null);
                 const roomRenderer = new RoomRenderer(gl, zsi, filename);
-                const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
-                if (cmabFile) {
-                    const cmab = CMAB.parse(CMAB.Version.Ocarina, cmabFile.buffer);
-                    roomRenderer.bindCMAB(cmab);
+                if (zar !== null) {
+                    const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
+                    if (cmabFile) {
+                        const cmab = CMAB.parse(CMAB.Version.Ocarina, cmabFile.buffer);
+                        roomRenderer.bindCMAB(cmab);
+                    }
                 }
                 return new Progressable(Promise.resolve(roomRenderer));
             });
