@@ -81,10 +81,12 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const alphaTestEnable = !!view.getUint8(offs + 0x130);
 
         const renderFlags = new RenderFlags();
+        const blendEnable = !!view.getUint8(offs + 0x138);
         renderFlags.blendSrc = view.getUint16(offs + 0x13C, true) as BlendFactor;
         renderFlags.blendDst = view.getUint16(offs + 0x13E, true) as BlendFactor;
-        renderFlags.blendMode = BlendMode.ADD;
+        renderFlags.blendMode = blendEnable ? view.getUint16(offs + 0x140, true) as BlendMode : BlendMode.NONE;
         renderFlags.depthTest = true;
+        renderFlags.depthWrite = !blendEnable;
         renderFlags.cullMode = CullMode.BACK;
 
         cmb.materials.push({ index: i, textureBindings, alphaTestEnable, renderFlags });
@@ -543,7 +545,8 @@ function readPrmChunk(cmb: CMB, buffer: ArrayBufferSlice): Prm {
     const prm = new Prm();
     prm.indexType = view.getUint32(0x10, true);
     prm.count = view.getUint16(0x14, true);
-    prm.offset = view.getUint16(0x16, true);
+    // No idea why this is always specified in terms of shorts, even when the indexType is byte...
+    prm.offset = view.getUint16(0x16, true) * 2;
 
     return prm;
 }

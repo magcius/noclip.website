@@ -9,8 +9,8 @@ const enum Version {
 }
 
 export class ZSI {
-    mesh: Mesh;
-    rooms: string[];
+    mesh: Mesh = null;
+    rooms: string[] = [];
     collision: Collision;
 }
 
@@ -20,6 +20,7 @@ const enum HeaderCommands {
     Rooms = 0x04,
     Mesh = 0x0A,
     End = 0x14,
+    MultiSetup = 0x18,
 }
 
 export interface Mesh {
@@ -95,10 +96,9 @@ function readCollision(buffer: ArrayBufferSlice, offs: number): Collision {
 }
 
 // ZSI headers are a slight modification of the original Z64 headers.
-function readHeaders(version: Version, buffer: ArrayBufferSlice): ZSI {
+function readHeaders(version: Version, buffer: ArrayBufferSlice, offs: number = 0): ZSI {
     const view = buffer.createDataView();
 
-    let offs = 0;
     const zsi = new ZSI();
 
     while (true) {
@@ -112,6 +112,22 @@ function readHeaders(version: Version, buffer: ArrayBufferSlice): ZSI {
             break;
 
         switch (cmdType) {
+        case HeaderCommands.MultiSetup: {
+            const nSetups = (cmd1 >> 16) & 0xFF;
+            let setupIdx = cmd2;
+            // Pick the first usable setup.
+            for (let i = 0; i < nSetups; i++) {
+                const setupOffs = view.getUint32(setupIdx, true);
+                setupIdx += 0x04;
+                if (setupOffs === 0)
+                    continue;
+                const setupZsi = readHeaders(version, buffer, setupOffs);
+                if (setupZsi.rooms.length || setupZsi.mesh !== null)
+                    return setupZsi;
+            }
+            // Still setups to try after this command.
+            break;
+        }
         case HeaderCommands.Rooms:
             const nRooms = (cmd1 >> 16) & 0xFF;
             zsi.rooms = readRooms(version, buffer, nRooms, cmd2);
