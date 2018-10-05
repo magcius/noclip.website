@@ -66,22 +66,29 @@ const enum ValueType {
     UINT32, FLOAT32,
 }
 
-function parseTrack(buffer: ArrayBufferSlice, valueType: ValueType): AnimationTrack {
+export const enum Version {
+    Ocarina, Majora
+}
+
+function parseTrack(version: Version, buffer: ArrayBufferSlice, valueType: ValueType): AnimationTrack {
     const view = buffer.createDataView();
 
-    const type: AnimationTrackType = view.getUint32(0x00, true);
-    const numKeyframes = view.getUint32(0x04, true);
+    let type: AnimationTrackType;
+    let numKeyframes: number;
+
+    if (version === Version.Ocarina) {
+        type = view.getUint32(0x00, true);
+        numKeyframes = view.getUint32(0x04, true);
+    } else if (version === Version.Majora) {
+        type = view.getUint16(0x00, true);
+        numKeyframes = view.getUint16(0x02, true);
+    }
+
+    let keyframeTableIdx: number = 0x10;
 
     // WTF does this mean?
     if (numKeyframes === 0)
         return undefined;
-
-    // Time start? Flags?
-    const unk7 = view.getUint32(0x08, true);
-    // assert(unk7 === 0x00);
-    const timeEnd = view.getUint32(0x0C, true);
-
-    let keyframeTableIdx = 0x10;
 
     function getValue(offs: number) {
         if (valueType === ValueType.FLOAT32)
@@ -117,7 +124,7 @@ function parseTrack(buffer: ArrayBufferSlice, valueType: ValueType): AnimationTr
     }
 }
 
-function parseMmad(buffer: ArrayBufferSlice): AnimationEntry {
+function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04, false) === 'mmad');
@@ -140,7 +147,7 @@ function parseMmad(buffer: ArrayBufferSlice): AnimationEntry {
             if (tracks.length === 0)
                 assert(trackOffs === 0x14);
 
-            tracks[i] = parseTrack(buffer.slice(trackOffs), ValueType.FLOAT32);
+            tracks[i] = parseTrack(version, buffer.slice(trackOffs), ValueType.FLOAT32);
         }
     } else if (animationType === AnimationType.COLOR) {
         for (let i = 0; i < 4; i++) {
@@ -153,7 +160,7 @@ function parseMmad(buffer: ArrayBufferSlice): AnimationEntry {
             if (tracks.length === 0)
                 assert(trackOffs === 0x18);
 
-            tracks[i] = parseTrack(buffer.slice(trackOffs), ValueType.UINT32);
+            tracks[i] = parseTrack(version, buffer.slice(trackOffs), ValueType.UINT32);
         }
     } else if (animationType === AnimationType.UNK_05) {
         for (let i = 0; i < 2; i++) {
@@ -166,19 +173,20 @@ function parseMmad(buffer: ArrayBufferSlice): AnimationEntry {
             if (tracks.length === 0)
                 assert(trackOffs === 0x14);
 
-            tracks[i] = parseTrack(buffer.slice(trackOffs), ValueType.FLOAT32);
+            tracks[i] = parseTrack(version, buffer.slice(trackOffs), ValueType.FLOAT32);
         }
     }
 
     return { animationType, materialIndex, channelIndex, tracks };
 }
 
-export function parse(buffer: ArrayBufferSlice): CMAB {
+export function parse(version: Version, buffer: ArrayBufferSlice): CMAB {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04, false) === 'cmab');
-    const version = view.getUint32(0x04, true);
-    assert(version === 0x01);
+    // smh Nintendo doesn't change the version field
+    const subversion = view.getUint32(0x04, true);
+    assert(subversion === 0x01);
 
     const size = view.getUint32(0x08);
     assert(view.getUint32(0x0C, true) === 0x00);
@@ -206,7 +214,7 @@ export function parse(buffer: ArrayBufferSlice): CMAB {
     let mmadAnimationTableIdx = madsChunkOffs + 0x08;
     for (let i = 0; i < numAnimations; i++) {
         const mmadAnimChunkOffs = madsChunkOffs + view.getUint32(mmadAnimationTableIdx + 0x00, true);
-        animEntries.push(parseMmad(buffer.slice(mmadAnimChunkOffs)));
+        animEntries.push(parseMmad(version, buffer.slice(mmadAnimChunkOffs)));
         mmadAnimationTableIdx += 0x04;
     }
 

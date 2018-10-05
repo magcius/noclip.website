@@ -77,7 +77,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const roomRenderer = new RoomRenderer(gl, zsi, filename);
                 const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
                 if (cmabFile) {
-                    const cmab = CMAB.parse(cmabFile.buffer);
+                    const cmab = CMAB.parse(CMAB.Version.Ocarina, cmabFile.buffer);
                     roomRenderer.bindCMAB(cmab);
                 }
                 return new Progressable(Promise.resolve(roomRenderer));
