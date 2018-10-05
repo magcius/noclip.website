@@ -16,6 +16,7 @@ class OoT3D_Program extends SimpleProgram {
     public u_TexCoordScale: WebGLUniformLocation;
     public u_AlphaTest: WebGLUniformLocation;
     public u_TexCoordMtx: WebGLUniformLocation;
+    public u_LocalMatrix: WebGLUniformLocation;
 
     public static a_Position = 0;
     public static a_Normal = 1;
@@ -26,8 +27,9 @@ class OoT3D_Program extends SimpleProgram {
 precision mediump float;
 
 uniform mat4 u_modelView;
-uniform mat4 u_localMatrix;
 uniform mat4 u_projection;
+
+uniform mat4 u_LocalMatrix;
 uniform float u_PosScale;
 uniform float u_TexCoordScale;
 uniform mat4 u_TexCoordMtx;
@@ -40,7 +42,7 @@ varying vec2 v_TexCoord;
 varying float v_LightIntensity;
 
 void main() {
-    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0) * u_PosScale;
+    gl_Position = u_projection * u_modelView * u_LocalMatrix * vec4(a_Position, 1.0) * u_PosScale;
     v_Color = a_Color;
     vec2 t_TexCoord = a_TexCoord * u_TexCoordScale;
     v_TexCoord = (u_TexCoordMtx * vec4(t_TexCoord, 0.0, 1.0)).st;
@@ -77,6 +79,7 @@ void main() {
         this.u_TexCoordScale = gl.getUniformLocation(prog, "u_TexCoordScale");
         this.u_AlphaTest = gl.getUniformLocation(prog, "u_AlphaTest");
         this.u_TexCoordMtx = gl.getUniformLocation(prog, "u_TexCoordMtx");
+        this.u_LocalMatrix = gl.getUniformLocation(prog, "u_LocalMatrix");
     }
 }
 
@@ -123,6 +126,7 @@ export class CmbRenderer {
     public model: RenderFunc;
     public visible: boolean = true;
     public textures: Viewer.Texture[] = [];
+    public boneMatrices: mat4[] = [];
 
     constructor(gl: WebGL2RenderingContext, public cmb: CMB.CMB, public name: string = '') {
         this.program = new OoT3D_Program();
@@ -208,7 +212,13 @@ export class CmbRenderer {
             gl.bindVertexArray(vao);
 
             for (let i = 0; i < sepd.prms.length; i++) {
-                const prm = sepd.prms[i];
+                const prms = sepd.prms[i];
+                const prm = prms.prm;
+
+                const localMatrixId = prms.boneTable[0];
+                const boneMatrix = this.boneMatrices[localMatrixId];
+                gl.uniformMatrix4fv(this.program.u_LocalMatrix, false, boneMatrix);
+
                 gl.drawElements(gl.TRIANGLES, prm.count, this.translateDataType(gl, prm.indexType), prm.offset);
             }
 
@@ -317,6 +327,16 @@ export class CmbRenderer {
         const idxBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer.castToBuffer(), gl.STATIC_DRAW);
+
+        for (let i = 0; i < cmb.bones.length; i++) {
+            const bone = cmb.bones[i];
+            this.boneMatrices[bone.boneId] = mat4.create();
+            if (bone.parentBoneId >= 0) {
+                mat4.mul(this.boneMatrices[bone.boneId], this.boneMatrices[bone.parentBoneId], bone.modelMatrix);
+            } else {
+                mat4.copy(this.boneMatrices[bone.boneId], bone.modelMatrix);
+            }
+        }
 
         const cmbContext: CmbContext = {
             posBuffer,
