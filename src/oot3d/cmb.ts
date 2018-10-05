@@ -3,15 +3,20 @@ import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderFlags, CullMode, BlendFactor, BlendMode } from '../render';
 
-class VertexBufferSlices {
-    public posBuffer: ArrayBufferSlice;
-    public nrmBuffer: ArrayBufferSlice;
-    public colBuffer: ArrayBufferSlice;
-    public txcBuffer: ArrayBufferSlice;
+interface VertexBufferSlices {
+    posBuffer: ArrayBufferSlice;
+    nrmBuffer: ArrayBufferSlice;
+    colBuffer: ArrayBufferSlice;
+    txcBuffer: ArrayBufferSlice;
+}
+
+const enum Version {
+    Ocarina, Majora
 }
 
 export class CMB {
     public name: string;
+    public version: Version;
     public textures: Texture[] = [];
     public vertexBufferSlices: VertexBufferSlices;
 
@@ -84,6 +89,9 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         cmb.materials.push({ index: i, textureBindings, alphaTestEnable, renderFlags });
         offs += 0x15C;
+
+        if (cmb.version === Version.Majora)
+            offs += 0x10;
     }
 }
 
@@ -460,23 +468,32 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
 
     assert(readString(buffer, 0x00, 0x04) === 'vatr');
 
-    cmb.vertexBufferSlices = new VertexBufferSlices();
+    let idx = 0x0C;
 
-    const posSize = view.getUint32(0x0C, true);
-    const posOffs = view.getUint32(0x10, true);
-    cmb.vertexBufferSlices.posBuffer = buffer.slice(posOffs, posOffs + posSize);
+    const posSize = view.getUint32(idx + 0x00, true);
+    const posOffs = view.getUint32(idx + 0x04, true);
+    const posBuffer = buffer.subarray(posOffs, posSize);
+    idx += 0x08;
 
-    const nrmSize = view.getUint32(0x14, true);
-    const nrmOffs = view.getUint32(0x18, true);
-    cmb.vertexBufferSlices.nrmBuffer = buffer.slice(nrmOffs, nrmOffs + nrmSize);
+    const nrmSize = view.getUint32(idx + 0x00, true);
+    const nrmOffs = view.getUint32(idx + 0x04, true);
+    const nrmBuffer = buffer.subarray(nrmOffs, nrmSize);
+    idx += 0x08;
 
-    const colSize = view.getUint32(0x1C, true);
-    const colOffs = view.getUint32(0x20, true);
-    cmb.vertexBufferSlices.colBuffer = buffer.slice(colOffs, colOffs + colSize);
+    if (cmb.version === Version.Majora)
+        idx += 0x08;
 
-    const txcSize = view.getUint32(0x24, true);
-    const txcOffs = view.getUint32(0x28, true);
-    cmb.vertexBufferSlices.txcBuffer = buffer.slice(txcOffs, txcOffs + txcSize);
+    const colSize = view.getUint32(idx + 0x00, true);
+    const colOffs = view.getUint32(idx + 0x04, true);
+    const colBuffer = buffer.subarray(colOffs, colSize);
+    idx += 0x08;
+
+    const txcSize = view.getUint32(idx + 0x00, true);
+    const txcOffs = view.getUint32(idx + 0x04, true);
+    const txcBuffer = buffer.subarray(txcOffs, txcSize);
+    idx += 0x08;
+
+    cmb.vertexBufferSlices = { posBuffer, nrmBuffer, colBuffer, txcBuffer };
 }
 
 export class Mesh {
@@ -489,13 +506,16 @@ function readMshsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
 
     assert(readString(buffer, 0x00, 0x04) === 'mshs');
     const count = view.getUint32(0x08, true);
-    let offs = 0x10;
+    let idx = 0x10;
     for (let i = 0; i < count; i++) {
         const mesh = new Mesh();
-        mesh.sepdIdx = view.getUint16(offs, true);
-        mesh.matsIdx = view.getUint8(offs + 2);
+        mesh.sepdIdx = view.getUint16(idx, true);
+        mesh.matsIdx = view.getUint8(idx + 0x02);
         cmb.meshs.push(mesh);
-        offs += 0x04;
+        idx += 0x04;
+
+        if (cmb.version === Version.Majora)
+            idx += 0x08;
     }
 }
 
@@ -565,28 +585,37 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     const sepd = new Sepd();
 
-    let offs = 0x108;
+    let sepdArrIdx = 0x24;
+
+    sepd.posStart = view.getUint32(sepdArrIdx + 0x00, true);
+    sepd.posScale = view.getFloat32(sepdArrIdx + 0x04, true);
+    sepd.posType = view.getUint16(sepdArrIdx + 0x08, true);
+    sepdArrIdx += 0x1C;
+
+    sepd.nrmStart = view.getUint32(sepdArrIdx + 0x00, true);
+    sepd.nrmScale = view.getFloat32(sepdArrIdx + 0x04, true);
+    sepd.nrmType = view.getUint16(sepdArrIdx + 0x08, true);
+    sepdArrIdx += 0x1C;
+
+    if (cmb.version === Version.Majora)
+        sepdArrIdx += 0x1C;
+
+    sepd.colStart = view.getUint32(sepdArrIdx + 0x00, true);
+    sepd.colScale = view.getFloat32(sepdArrIdx + 0x04, true);
+    sepd.colType = view.getUint16(sepdArrIdx + 0x08, true);
+    sepdArrIdx += 0x1C;
+
+    sepd.txcStart = view.getUint32(sepdArrIdx + 0x00, true);
+    sepd.txcScale = view.getFloat32(sepdArrIdx + 0x04, true);
+    sepd.txcType = view.getUint16(sepdArrIdx + 0x08, true);
+    sepdArrIdx += 0x1C;
+
+    let offs = cmb.version === Version.Majora ? 0x124 : 0x108;
     for (let i = 0; i < count; i++) {
         const prmsOffs = view.getUint16(offs, true);
         sepd.prms.push(readPrmsChunk(cmb, buffer.slice(prmsOffs)));
         offs += 0x02;
     }
-
-    sepd.posStart = view.getUint32(0x24, true);
-    sepd.posScale = view.getFloat32(0x28, true);
-    sepd.posType = view.getUint16(0x2C, true);
-
-    sepd.nrmStart = view.getUint32(0x40, true);
-    sepd.nrmScale = view.getFloat32(0x44, true);
-    sepd.nrmType = view.getUint16(0x48, true);
-
-    sepd.colStart = view.getUint32(0x5C, true);
-    sepd.colScale = view.getFloat32(0x60, true);
-    sepd.colType = view.getUint16(0x64, true);
-
-    sepd.txcStart = view.getUint32(0x78, true);
-    sepd.txcScale = view.getFloat32(0x7C, true);
-    sepd.txcType = view.getUint16(0x80, true);
 
     return sepd;
 }
@@ -626,21 +655,37 @@ export function parse(buffer: ArrayBufferSlice): CMB {
     const size = view.getUint32(0x04, true);
     cmb.name = readString(buffer, 0x10, 0x10);
 
-    const matsChunkOffs = view.getUint32(0x28, true);
+    const numChunks = view.getUint32(0x08, true);
+    cmb.version = (numChunks === 0x0A) ? Version.Majora : Version.Ocarina;
+
+    let chunkIdx = 0x24;
+    chunkIdx += 0x04; // Skl
+
+    if (cmb.version === Version.Majora)
+        chunkIdx += 0x04; // Qtrs
+
+    const matsChunkOffs = view.getUint32(chunkIdx, true);
+    chunkIdx += 0x04;
     readMatsChunk(cmb, buffer.slice(matsChunkOffs));
 
-    const texDataOffs = view.getUint32(0x40, true);
+    const texDataOffs = view.getUint32(chunkIdx + 0x14, true);
 
-    const texChunkOffs = view.getUint32(0x2C, true);
+    const texChunkOffs = view.getUint32(chunkIdx, true);
+    chunkIdx += 0x04;
     readTexChunk(cmb, buffer.slice(texChunkOffs), buffer.slice(texDataOffs));
 
-    const vatrChunkOffs = view.getUint32(0x38, true);
-    readVatrChunk(cmb, buffer.slice(vatrChunkOffs));
-
-    const sklmChunkOffs = view.getUint32(0x30, true);
+    const sklmChunkOffs = view.getUint32(chunkIdx, true);
+    chunkIdx += 0x04;
     readSklmChunk(cmb, buffer.slice(sklmChunkOffs));
 
-    const idxDataOffs = view.getUint32(0x3C, true);
+    chunkIdx += 0x04; // Luts
+
+    const vatrChunkOffs = view.getUint32(chunkIdx, true);
+    chunkIdx += 0x04;
+    readVatrChunk(cmb, buffer.slice(vatrChunkOffs));
+
+    const idxDataOffs = view.getUint32(chunkIdx, true);
+
     const idxDataCount = view.getUint32(0x20, true);
     cmb.indexBuffer = buffer.slice(idxDataOffs, idxDataOffs + idxDataCount * 2);
 

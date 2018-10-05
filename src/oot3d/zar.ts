@@ -4,6 +4,11 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 
+const enum Magic {
+    ZAR1 = 'ZAR\x01',
+    GAR2 = 'GAR\x02',
+}
+
 export interface ZARFile {
     name: string;
     buffer: ArrayBufferSlice;
@@ -16,7 +21,8 @@ export interface ZAR {
 export function parse(buffer: ArrayBufferSlice): ZAR {
     const view = buffer.createDataView();
 
-    assert(readString(buffer, 0x00, 0x04, false) === 'ZAR\x01');
+    const magic: Magic = readString(buffer, 0x00, 0x04, false) as Magic;
+    assert([Magic.ZAR1, Magic.GAR2].includes(magic));
 
     const size = view.getUint32(0x04, true);
     const numFileTypes = view.getUint16(0x08, true);
@@ -25,7 +31,8 @@ export function parse(buffer: ArrayBufferSlice): ZAR {
     const fileTableOffs = view.getUint32(0x10, true);
     const dataOffsTableOffs = view.getUint32(0x14, true);
 
-    assert(readString(buffer, 0x18, 0x08, false) === 'queen\0\0\0');
+    const codename = readString(buffer, 0x18, 0x08, false);
+    assert(['queen\0\0\0', 'jenkins\0'].includes(codename));
 
     const files: ZARFile[] = [];
 
@@ -33,14 +40,14 @@ export function parse(buffer: ArrayBufferSlice): ZAR {
     let dataOffsTableIdx = dataOffsTableOffs;
     for (let i = 0; i < numFiles; i++) {
         const fileSize = view.getUint32(fileTableIdx + 0x00, true);
-        const fileNameOffs = view.getUint32(fileTableIdx + 0x04, true);
-        const fileName = readString(buffer, fileNameOffs, 0xFF, true);
+        const filePathOffs = view.getUint32(fileTableIdx + (magic === Magic.GAR2 ? 0x08 : 0x04), true);
+        const filePath = readString(buffer, filePathOffs, 0xFF, true);
         const fileDataOffs = view.getUint32(dataOffsTableIdx + 0x00, true);
 
         const fileBuffer = buffer.subarray(fileDataOffs, fileSize);
-        files.push({ name: fileName, buffer: fileBuffer });
+        files.push({ name: filePath, buffer: fileBuffer });
 
-        fileTableIdx += 0x08;
+        fileTableIdx += (magic === Magic.GAR2 ? 0x0C : 0x08);
         dataOffsTableIdx += 0x04;
     }
 

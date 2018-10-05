@@ -22,7 +22,8 @@ import * as SMG from './j3d/smg_scenes';
 import * as SM64DS from './sm64ds/scenes';
 import * as MDL0 from './mdl0/scenes';
 import * as ZELVIEW from './zelview/scenes';
-import * as OOT3D from './oot3d/scenes';
+import * as OOT3D from './oot3d/oot3d_scenes';
+import * as MM3D from './oot3d/mm3d_scenes';
 import * as FRES from './fres/scenes';
 import * as SPL from './fres/splatoon_scenes';
 import * as DKSIV from './dksiv/scenes';
@@ -61,6 +62,7 @@ const sceneGroups = [
     SPL.sceneGroup,
     MDL0.sceneGroup,
     OOT3D.sceneGroup,
+    MM3D.sceneGroup,
     ZELVIEW.sceneGroup,
 ];
 
@@ -106,9 +108,6 @@ class DroppedFileSceneDesc implements SceneDesc {
 
         if (file.name.endsWith('.szs'))
             return FRES.createSceneFromSARCBuffer(gl, buffer);
-
-        if (file.name.endsWith('.zar'))
-            return Promise.resolve(OOT3D.createSceneFromZARBuffer(gl, buffer));
 
         // XXX(jstpierre): Figure out WTF to do here...
         const promise = J3D.createMultiSceneFromBuffer(gl, buffer);
