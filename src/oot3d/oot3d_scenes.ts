@@ -1,20 +1,27 @@
 
 import * as CMAB from './cmab';
-import * as CMB from './cmb';
 import * as ZAR from './zar';
+import * as ZSI from './zsi';
 
+import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
-import { SceneDesc, CmbRenderer } from './render';
-import { SceneGroup, MainScene, Texture } from '../viewer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import Progressable from '../Progressable';
+import { RoomRenderer } from './render';
+import { SceneGroup } from '../viewer';
 import { RenderState } from '../render';
+import { assert } from '../util';
+import { fetchData } from '../fetch';
 
-class MultiScene implements MainScene {
-    public textures: Texture[] = [];
+class MultiScene implements Viewer.MainScene {
+    public scenes: RoomRenderer[];
+    public textures: Viewer.Texture[];
 
-    constructor(public scenes: CmbRenderer[]) {
-        for (const scene of scenes)
+    constructor(scenes: RoomRenderer[]) {
+        this.scenes = scenes;
+        this.textures = [];
+        for (const scene of this.scenes)
             this.textures = this.textures.concat(scene.textures);
     }
 
@@ -24,9 +31,9 @@ class MultiScene implements MainScene {
         return [layerPanel];
     }
 
-    public render(state: RenderState): void {
+    public render(renderState: RenderState) {
         this.scenes.forEach((scene) => {
-            scene.render(state);
+            scene.render(renderState);
         });
     }
 
@@ -35,31 +42,50 @@ class MultiScene implements MainScene {
     }
 }
 
-function basename(str: string): string {
-    const parts = str.split('/');
-    return parts.pop();
-}
+class SceneDesc implements Viewer.SceneDesc {
+    public name: string;
+    public id: string;
 
-function setExtension(str: string, ext: string): string {
-    const dot = str.lastIndexOf('.');
-    if (dot < 0)
-        return `${str}${ext}`;
-    else
-        return `${str.slice(0, dot)}${ext}`;
-}
+    constructor(name: string, id: string) {
+        this.name = name;
+        this.id = id;
+    }
 
-export function createSceneFromZARBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): MainScene {
-    const zar = ZAR.parse(buffer);
-    const cmbFiles = zar.files.filter((file) => file.name.endsWith('.cmb'));
-    const renderers = cmbFiles.map((cmbFile) => {
-        const cmbRenderer = new CmbRenderer(gl, CMB.parse(cmbFile.buffer), cmbFile.name);
-        const cmabFileName = `misc/${basename(setExtension(cmbFile.name, '.cmab'))}`;
-        const cmabFile = zar.files.find((file) => file.name === cmabFileName);
-        if (cmabFile)
-            cmbRenderer.bindCMAB(CMAB.parse(cmabFile.buffer));
-        return cmbRenderer;
-    });
-    return new MultiScene(renderers);
+    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+        // Fetch the ZAR & info ZSI.
+        const path_zar = `data/oot3d/${this.id}.zar`;
+        const path_info_zsi = `data/oot3d/${this.id}_info.zsi`;
+        return Progressable.all([fetchData(path_zar), fetchData(path_info_zsi)]).then(([zar, zsi]) => {
+            return this._createSceneFromData(gl, zar, zsi);
+        });
+    }
+
+    private _createSceneFromData(gl: WebGL2RenderingContext, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.MainScene> {
+        const zar = ZAR.parse(zarBuffer);
+
+        const zsi = ZSI.parse(zsiBuffer);
+        assert(zsi.rooms !== null);
+        const roomFilenames = zsi.rooms.map((romPath) => {
+            const filename = romPath.split('/').pop();
+            return `data/oot3d/${filename}`;
+        });
+
+        return Progressable.all(roomFilenames.map((filename, i) => {
+            return fetchData(filename).then((roomResult) => {
+                const zsi = ZSI.parse(roomResult);
+                assert(zsi.mesh !== null);
+                const roomRenderer = new RoomRenderer(gl, zsi, filename);
+                const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
+                if (cmabFile) {
+                    const cmab = CMAB.parse(cmabFile.buffer);
+                    roomRenderer.bindCMAB(cmab);
+                }
+                return new Progressable(Promise.resolve(roomRenderer));
+            });
+        })).then((scenes: RoomRenderer[]) => {
+            return new MultiScene(scenes);
+        });
+    }
 }
 
 const id = "oot3d";

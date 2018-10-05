@@ -4,6 +4,10 @@ import * as CMB from './cmb';
 import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
+const enum Version {
+    Ocarina, Majora
+}
+
 export class ZSI {
     mesh: Mesh;
     rooms: string[];
@@ -11,7 +15,7 @@ export class ZSI {
 }
 
 // Subset of Z64 command types.
-enum HeaderCommands {
+const enum HeaderCommands {
     Collision = 0x03,
     Rooms = 0x04,
     Mesh = 0x0A,
@@ -23,11 +27,12 @@ export interface Mesh {
     transparent: CMB.CMB | null;
 }
 
-function readRooms(buffer: ArrayBufferSlice, nRooms: number, offs: number): string[] {
+function readRooms(version: Version, buffer: ArrayBufferSlice, nRooms: number, offs: number): string[] {
     const rooms = [];
+    const roomSize = version === Version.Ocarina ? 0x44 : 0x34;
     for (let i = 0; i < nRooms; i++) {
-        rooms.push(readString(buffer, offs, 0x44));
-        offs += 0x44;
+        rooms.push(readString(buffer, offs, roomSize));
+        offs += roomSize;
     }
     return rooms;
 }
@@ -39,6 +44,9 @@ function readMesh(buffer: ArrayBufferSlice, offs: number): Mesh {
     const type = (hdr >> 24);
     const nEntries = (hdr >> 16) & 0xFF;
     const entriesAddr = view.getUint32(offs + 4, true);
+
+    if (nEntries === 0x00)
+        return { opaque: null, transparent: null };
 
     assert(type === 0x02);
     assert(nEntries === 0x01);
@@ -87,7 +95,7 @@ function readCollision(buffer: ArrayBufferSlice, offs: number): Collision {
 }
 
 // ZSI headers are a slight modification of the original Z64 headers.
-function readHeaders(buffer: ArrayBufferSlice): ZSI {
+function readHeaders(version: Version, buffer: ArrayBufferSlice): ZSI {
     const view = buffer.createDataView();
 
     let offs = 0;
@@ -106,7 +114,7 @@ function readHeaders(buffer: ArrayBufferSlice): ZSI {
         switch (cmdType) {
         case HeaderCommands.Rooms:
             const nRooms = (cmd1 >> 16) & 0xFF;
-            zsi.rooms = readRooms(buffer, nRooms, cmd2);
+            zsi.rooms = readRooms(version, buffer, nRooms, cmd2);
             break;
         case HeaderCommands.Mesh:
             zsi.mesh = readMesh(buffer, cmd2);
@@ -121,10 +129,12 @@ function readHeaders(buffer: ArrayBufferSlice): ZSI {
 }
 
 export function parse(buffer:ArrayBufferSlice): ZSI {
-    assert(readString(buffer, 0x00, 0x04) === 'ZSI\x01');
+    const magic = readString(buffer, 0x00, 0x04);
+    assert(['ZSI\x01', 'ZSI\x09'].includes(magic));
+    const version = magic === 'ZSI\x01' ? Version.Ocarina : Version.Majora;
     const name = readString(buffer, 0x04, 0x0C);
 
     // ZSI header is done. It's that simple! Now for the actual data.
     const headersBuf = buffer.slice(0x10);
-    return readHeaders(headersBuf);
+    return readHeaders(version, headersBuf);
 }

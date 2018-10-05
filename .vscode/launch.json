@@ -7,7 +7,7 @@
             "reAttach": true,
             "name": "Launch localhost",
             "url": "http://localhost:1234/",
-            "webRoot": "${workspaceFolder}/src",
+            "webRoot": "${workspaceFolder}/src/test/",
             "firefoxExecutable": "C:\\Program Files\\Nightly\\firefox.exe"
         },
         {
@@ -15,7 +15,7 @@
             "request": "launch",
             "name": "Launch Chrome",
             "url": "http://localhost:1234/",
-            "webRoot": "${workspaceFolder}/src"
+            "webRoot": "${workspaceFolder}/src/"
         }
     ]
 }

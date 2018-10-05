@@ -1,19 +1,13 @@
 
 import * as CMB from './cmb';
 import * as CMAB from './cmab';
-import * as ZAR from './zar';
 import * as ZSI from './zsi';
 
 import * as Viewer from '../viewer';
-import * as UI from '../ui';
 
-import Progressable from '../Progressable';
 import { RenderState } from '../render';
 import { SimpleProgram } from '../Program';
 import RenderArena from '../RenderArena';
-import { assert } from '../util';
-import { fetchData } from '../fetch';
-import ArrayBufferSlice from '../ArrayBufferSlice';
 import AnimationController from '../AnimationController';
 import { mat4 } from 'gl-matrix';
 
@@ -24,8 +18,9 @@ class OoT3D_Program extends SimpleProgram {
     public u_TexCoordMtx: WebGLUniformLocation;
 
     public static a_Position = 0;
-    public static a_Color = 1;
-    public static a_TexCoord = 2;
+    public static a_Normal = 1;
+    public static a_Color = 2;
+    public static a_TexCoord = 3;
 
     public vert = `
 precision mediump float;
@@ -37,10 +32,12 @@ uniform float u_PosScale;
 uniform float u_TexCoordScale;
 uniform mat4 u_TexCoordMtx;
 layout(location = ${OoT3D_Program.a_Position}) in vec3 a_Position;
+layout(location = ${OoT3D_Program.a_Normal}) in vec3 a_Normal;
 layout(location = ${OoT3D_Program.a_Color}) in vec4 a_Color;
 layout(location = ${OoT3D_Program.a_TexCoord}) in vec2 a_TexCoord;
 varying vec4 v_Color;
 varying vec2 v_TexCoord;
+varying float v_LightIntensity;
 
 void main() {
     gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0) * u_PosScale;
@@ -48,20 +45,29 @@ void main() {
     vec2 t_TexCoord = a_TexCoord * u_TexCoordScale;
     v_TexCoord = (u_TexCoordMtx * vec4(t_TexCoord, 0.0, 1.0)).st;
     v_TexCoord.t = 1.0 - v_TexCoord.t;
+
+    vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
+    v_LightIntensity = dot(-a_Normal, t_LightDirection);
+
+    // Hacky Ambient.
+    v_LightIntensity = clamp(v_LightIntensity + 0.6, 0.0, 1.0);
 }`;
 
     public frag = `
 precision mediump float;
-varying vec2 v_TexCoord;
-varying vec4 v_Color;
 uniform sampler2D u_Sampler;
 uniform bool u_AlphaTest;
 
+varying vec2 v_TexCoord;
+varying vec4 v_Color;
+varying float v_LightIntensity;
+
 void main() {
-    gl_FragColor = texture2D(u_Sampler, v_TexCoord);
-    gl_FragColor *= v_Color;
-    if (u_AlphaTest && gl_FragColor.a <= 0.8)
+    vec4 t_Color = texture2D(u_Sampler, v_TexCoord) * v_Color;
+    t_Color.rgb *= v_LightIntensity;
+    if (u_AlphaTest && t_Color.a <= 0.8)
         discard;
+    gl_FragColor = t_Color;
 }`;
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
@@ -145,10 +151,10 @@ export class CmbRenderer {
 
     public bindCMAB(cmab: CMAB.CMAB): void {
         // TODO(jstpierre): Support better stuff here when we get a better renderer...
-        for (const animEntry of cmab.animEntries) {
-            if (animEntry.channelIndex === 0 && animEntry.animationType === CMAB.AnimationType.XY_SCROLL) {
+        for (let i = 0; i < cmab.animEntries.length; i++) {
+            const animEntry = cmab.animEntries[i];
+            if (animEntry.channelIndex === 0 && animEntry.animationType === CMAB.AnimationType.XY_SCROLL)
                 this.materialAnimators[animEntry.materialIndex] = new CMAB.TextureAnimator(this.animationController, cmab, animEntry);
-            }
         }
     }
 
@@ -188,6 +194,10 @@ export class CmbRenderer {
         gl.vertexAttribPointer(OoT3D_Program.a_Position, 3, this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
         gl.enableVertexAttribArray(OoT3D_Program.a_Position);
 
+        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.nrmBuffer);
+        gl.vertexAttribPointer(OoT3D_Program.a_Normal, 3, this.translateDataType(gl, sepd.nrmType), true, 0, sepd.nrmStart);
+        gl.enableVertexAttribArray(OoT3D_Program.a_Normal);
+
         if (cmbContext.colBuffer !== null) {
             gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
             gl.vertexAttribPointer(OoT3D_Program.a_Color, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
@@ -212,7 +222,7 @@ export class CmbRenderer {
 
             for (let i = 0; i < sepd.prms.length; i++) {
                 const prm = sepd.prms[i];
-                gl.drawElements(gl.TRIANGLES, prm.count, this.translateDataType(gl, prm.indexType), prm.offset * this.dataTypeSize(prm.indexType));
+                gl.drawElements(gl.TRIANGLES, prm.count, this.translateDataType(gl, prm.indexType), prm.offset * 2);
             }
 
             gl.bindVertexArray(null);
@@ -339,14 +349,14 @@ export class CmbRenderer {
 
         return (state: RenderState) => {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-            for (const func of meshFuncs)
-                func(state);
+            for (let i = 0; i < meshFuncs.length; i++)
+                meshFuncs[i](state);
         };
     }
 }
 
 const scratchMatrix = mat4.create();
-class RoomRenderer implements Viewer.Scene {
+export class RoomRenderer implements Viewer.Scene {
     public visible: boolean = true;
     public textures: Viewer.Texture[];
     public opaqueMesh: CmbRenderer | null;
@@ -392,79 +402,5 @@ class RoomRenderer implements Viewer.Scene {
             this.opaqueMesh.destroy(gl);
         if (this.transparentMesh !== null)
             this.transparentMesh.destroy(gl);
-    }
-}
-
-class MultiScene implements Viewer.MainScene {
-    public scenes: RoomRenderer[];
-    public textures: Viewer.Texture[];
-
-    constructor(scenes: RoomRenderer[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
-    }
-
-    public createPanels(): UI.Panel[] {
-        const layerPanel = new UI.LayerPanel();
-        layerPanel.setLayers(this.scenes);
-        return [layerPanel];
-    }
-
-    public render(renderState: RenderState) {
-        this.scenes.forEach((scene) => {
-            scene.render(renderState);
-        });
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
-    }
-}
-
-export class SceneDesc implements Viewer.SceneDesc {
-    public name: string;
-    public id: string;
-
-    constructor(name: string, id: string) {
-        this.name = name;
-        this.id = id;
-    }
-
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        // Fetch the ZAR & info ZSI.
-        const path_zar = `data/oot3d/${this.id}.zar`;
-        const path_info_zsi = `data/oot3d/${this.id}_info.zsi`;
-        return Progressable.all([fetchData(path_zar), fetchData(path_info_zsi)]).then(([zar, zsi]) => {
-            return this._createSceneFromData(gl, zar, zsi);
-        });
-    }
-
-    private _createSceneFromData(gl: WebGL2RenderingContext, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.MainScene> {
-        const zar = ZAR.parse(zarBuffer);
-
-        const zsi = ZSI.parse(zsiBuffer);
-        assert(zsi.rooms !== null);
-        const roomFilenames = zsi.rooms.map((romPath) => {
-            const filename = romPath.split('/').pop();
-            return `data/oot3d/${filename}`;
-        });
-
-        return Progressable.all(roomFilenames.map((filename, i) => {
-            return fetchData(filename).then((roomResult) => {
-                const zsi = ZSI.parse(roomResult);
-                assert(zsi.mesh !== null);
-                const roomRenderer = new RoomRenderer(gl, zsi, filename);
-                const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
-                if (cmabFile) {
-                    const cmab = CMAB.parse(cmabFile.buffer);
-                    roomRenderer.bindCMAB(cmab);
-                }
-                return new Progressable(Promise.resolve(roomRenderer));
-            });
-        })).then((scenes: RoomRenderer[]) => {
-            return new MultiScene(scenes);
-        });
     }
 }

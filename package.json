@@ -5,7 +5,7 @@
     "assemblyscript": "github:AssemblyScript/assemblyscript",
     "gl-matrix": "^2.7.1",
     "pako": "^1.0.6",
-    "parcel-bundler": "^1.9.7",
+    "parcel-bundler": "^1.10.1",
     "typescript": "^2.9.2",
     "wabt": "^1.0.0"
   },

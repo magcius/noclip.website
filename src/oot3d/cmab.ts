@@ -71,9 +71,14 @@ function parseTrack(buffer: ArrayBufferSlice, valueType: ValueType): AnimationTr
 
     const type: AnimationTrackType = view.getUint32(0x00, true);
     const numKeyframes = view.getUint32(0x04, true);
+
+    // WTF does this mean?
+    if (numKeyframes === 0)
+        return undefined;
+
     // Time start? Flags?
     const unk7 = view.getUint32(0x08, true);
-    assert(unk7 === 0x00);
+    // assert(unk7 === 0x00);
     const timeEnd = view.getUint32(0x0C, true);
 
     let keyframeTableIdx = 0x10;
