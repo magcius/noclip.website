@@ -171,19 +171,6 @@ export class CmbRenderer {
         }
     }
 
-    private dataTypeSize(dataType: CMB.DataType) {
-        switch (dataType) {
-            case CMB.DataType.Byte:   return 1;
-            case CMB.DataType.UByte:  return 1;
-            case CMB.DataType.Short:  return 2;
-            case CMB.DataType.UShort: return 2;
-            case CMB.DataType.Int:    return 4;
-            case CMB.DataType.UInt:   return 4;
-            case CMB.DataType.Float:  return 4;
-            default: throw new Error();
-        }
-    }
-
     private translateSepd(gl: WebGL2RenderingContext, cmbContext: CmbContext, sepd: CMB.Sepd): RenderFunc {
         const vao = this.arena.createVertexArray(gl);
         gl.bindVertexArray(vao);
@@ -222,7 +209,7 @@ export class CmbRenderer {
 
             for (let i = 0; i < sepd.prms.length; i++) {
                 const prm = sepd.prms[i];
-                gl.drawElements(gl.TRIANGLES, prm.count, this.translateDataType(gl, prm.indexType), prm.offset * 2);
+                gl.drawElements(gl.TRIANGLES, prm.count, this.translateDataType(gl, prm.indexType), prm.offset);
             }
 
             gl.bindVertexArray(null);
