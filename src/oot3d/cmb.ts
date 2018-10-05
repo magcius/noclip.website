@@ -2,6 +2,7 @@
 import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderFlags, CullMode, BlendFactor, BlendMode } from '../render';
+import { mat4 } from 'gl-matrix';
 
 interface VertexBufferSlices {
     posBuffer: ArrayBufferSlice;
@@ -21,9 +22,78 @@ export class CMB {
     public vertexBufferSlices: VertexBufferSlices;
 
     public materials: Material[] = [];
+    public bones: Bone[] = [];
     public sepds: Sepd[] = [];
     public meshs: Mesh[] = [];
     public indexBuffer: ArrayBufferSlice;
+}
+
+interface Bone {
+    boneId: number;
+    parentBoneId: number;
+    modelMatrix: mat4;
+}
+
+function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
+    const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
+    const sinY = Math.sin(rotationY), cosY = Math.cos(rotationY);
+    const sinZ = Math.sin(rotationZ), cosZ = Math.cos(rotationZ);
+
+    dst[0] =  scaleX * (cosY * cosZ);
+    dst[1] =  scaleX * (sinZ * cosY);
+    dst[2] =  scaleX * (-sinY);
+    dst[3] =  0.0;
+
+    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ);
+    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
+    dst[6] =  scaleY * (sinX * cosY);
+    dst[7] =  0.0;
+
+    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
+    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
+    dst[10] = scaleZ * (cosY * cosX);
+    dst[11] = 0.0;
+
+    dst[12] = translationX;
+    dst[13] = translationY;
+    dst[14] = translationZ;
+    dst[15] = 1.0;
+}
+
+function readSklChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'skl ');
+
+    const boneTableCount = view.getUint32(0x08, true);
+
+    const bones: Bone[] = [];
+    let boneTableIdx = 0x10;
+    for (let i = 0; i < boneTableCount; i++) {
+        const boneId = view.getInt16(boneTableIdx + 0x00, true);
+        const parentBoneId = view.getInt16(boneTableIdx + 0x02, true);
+
+        const scaleX = view.getFloat32(boneTableIdx + 0x04, true);
+        const scaleY = view.getFloat32(boneTableIdx + 0x08, true);
+        const scaleZ = view.getFloat32(boneTableIdx + 0x0C, true);
+        const rotationX = view.getFloat32(boneTableIdx + 0x10, true);
+        const rotationY = view.getFloat32(boneTableIdx + 0x14, true);
+        const rotationZ = view.getFloat32(boneTableIdx + 0x18, true);
+        const translationX = view.getFloat32(boneTableIdx + 0x1C, true);
+        const translationY = view.getFloat32(boneTableIdx + 0x20, true);
+        const translationZ = view.getFloat32(boneTableIdx + 0x24, true);
+
+        const modelMatrix = mat4.create();
+        calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+
+        const bone: Bone = { boneId, parentBoneId, modelMatrix };
+        bones.push(bone);
+
+        boneTableIdx += 0x28;
+        if (cmb.version === Version.Majora)
+            boneTableIdx += 0x04;
+    }
+    cmb.bones = bones;
 }
 
 export enum TextureFilter {
@@ -551,17 +621,45 @@ function readPrmChunk(cmb: CMB, buffer: ArrayBufferSlice): Prm {
     return prm;
 }
 
-function readPrmsChunk(cmb: CMB, buffer: ArrayBufferSlice): Prm {
+export const enum SkinningMode {
+    SINGLE_BONE = 0x00,
+    PER_VERTEX = 0x01,
+    PER_VERTEX_NO_TRANS = 0x02,
+}
+
+export interface Prms {
+    prm: Prm;
+    skinningMode: SkinningMode;
+    boneTable: Uint16Array;
+}
+
+function readPrmsChunk(cmb: CMB, buffer: ArrayBufferSlice): Prms {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'prms');
 
+    const skinningMode: SkinningMode = view.getUint16(0x0C, true);
+    if (skinningMode !== SkinningMode.SINGLE_BONE)
+        console.warn("Found complex skinning case");
+
+    const boneTableCount = view.getUint16(0x0E, true);
+    const boneTable = new Uint16Array(boneTableCount);
+
     const prmOffs = view.getUint32(0x14, true);
-    return readPrmChunk(cmb, buffer.slice(prmOffs));
+
+    const prm = readPrmChunk(cmb, buffer.slice(prmOffs));
+
+    let boneTableIdx = view.getUint32(0x10, true);
+    for (let i = 0; i < boneTableCount; i++) {
+        boneTable[i] = view.getUint16(boneTableIdx, true);
+        boneTableIdx += 0x02;
+    }
+
+    return { prm, skinningMode, boneTable };
 }
 
 export class Sepd {
-    public prms: Prm[] = [];
+    public prms: Prms[] = [];
 
     public posStart: number;
     public posScale: number;
@@ -662,7 +760,10 @@ export function parse(buffer: ArrayBufferSlice): CMB {
     cmb.version = (numChunks === 0x0A) ? Version.Majora : Version.Ocarina;
 
     let chunkIdx = 0x24;
-    chunkIdx += 0x04; // Skl
+
+    const sklChunkOffs = view.getUint32(chunkIdx, true);
+    chunkIdx += 0x04;
+    readSklChunk(cmb, buffer.slice(sklChunkOffs));
 
     if (cmb.version === Version.Majora)
         chunkIdx += 0x04; // Qtrs
