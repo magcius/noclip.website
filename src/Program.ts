@@ -39,18 +39,27 @@ export abstract class BaseProgram {
     public vert: string = '';
     public frag: string = '';
 
+    public preprocessedVert: string = '';
+    public preprocessedFrag: string = '';
+
     private glProg: WebGLProgram;
     private forceRecompile: boolean = false;
 
+    public preprocessProgram(): void {
+        this.preprocessedVert = this.preprocessShader(this.both + this.vert, 'vert');
+        this.preprocessedFrag = this.preprocessShader(this.both + this.frag, 'frag');
+    }
+
     public compile(gl: WebGL2RenderingContext, programCache: ProgramCache) {
         if (!this.glProg || this.forceRecompile) {
+            this.preprocessProgram();
             this.forceRecompile = false;
-            const vert = this.preprocessShader(gl, this.both + this.vert, "vert");
-            const frag = this.preprocessShader(gl, this.both + this.frag, "frag");
+            const vert = this.preprocessShader2(gl, this.preprocessedVert);
+            const frag = this.preprocessShader2(gl, this.preprocessedFrag);
             const newProg = programCache.compileProgram(vert, frag);
             if (newProg !== null) {
                 this.glProg = newProg;
-                this.bindEx(gl, this.glProg, vert, frag);
+                this.bind(gl, this.glProg);
             }
         }
 
@@ -60,7 +69,7 @@ export abstract class BaseProgram {
         return this.glProg;
     }
 
-    protected preprocessShader(gl: WebGL2RenderingContext, source: string, type: "vert" | "frag") {
+    protected preprocessShader(source: string, type: "vert" | "frag") {
         // Garbage WebGL2 shader compiler until I get something better down the line...
         const lines = source.split('\n').map((n) => {
             // Remove comments.
@@ -79,16 +88,11 @@ export abstract class BaseProgram {
         ).join('\n');
         const rest = lines.filter((line) => !line.startsWith('precision') && !line.startsWith('#extension')).join('\n');
 
-        const extensionDefines = assertExists(gl.getSupportedExtensions()).map((s) => {
-            return `#define HAS_${s}`;
-        }).join('\n');
         return `
-#version 300 es
 #define ${type.toUpperCase()}
 #define attribute in
 #define varying ${type === 'vert' ? 'out' : 'in'}
 #define main${type === 'vert' ? 'VS' : 'PS'} main
-${extensionDefines}
 #define gl_FragColor o_color
 #define texture2D texture
 ${extensions}
@@ -98,11 +102,19 @@ ${rest}
 `.trim();
     }
 
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
+    protected preprocessShader2(gl: WebGL2RenderingContext, source: string): string {
+        const extensionDefines = assertExists(gl.getSupportedExtensions()).map((s) => {
+            return `#define HAS_${s}`;
+        }).join('\n');
+
+return `
+#version 300 es
+${extensionDefines}
+${source}
+`.trim();
     }
 
-    protected bindEx(gl: WebGL2RenderingContext, prog: WebGLProgram, vert: string, frag: string): void {
-        this.bind(gl, prog);
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -174,19 +186,19 @@ function range(stop: number): number[] {
 export class DeviceProgram extends BaseProgram {
     public uniformBufferLayouts: BufferLayout[];
     public numSamplers: number = 0;
+    public samplerBindingName: string = '';
 
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
-        // Nothing, we use bindEx.
+    public preprocessProgram(): void {
+        super.preprocessProgram();
+        this.parseBufferLayouts(this.preprocessedVert);
     }
 
-    protected bindEx(gl: WebGL2RenderingContext, prog: WebGLProgram, vert: string, frag: string): void {
+    private parseBufferLayouts(vert: string): void {
         // All uniform blocks must appear in vert, in order.
         const uniformBlocks = findall(vert, /uniform (\w+) {([^]*?)}/g);
-
         this.uniformBufferLayouts = new Array(uniformBlocks.length);
         for (let i = 0; i < uniformBlocks.length; i++) {
             const [m, blockName, contents] = uniformBlocks[i];
-            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
             this.uniformBufferLayouts[i] = parseBufferLayout(blockName, contents);
         }
 
@@ -196,18 +208,28 @@ export class DeviceProgram extends BaseProgram {
         assert(samplers.length <= 1);
         if (samplers.length === 1) {
             const [m, samplerName, arraySizeStr] = samplers[0];
+            this.samplerBindingName = samplerName;
             if (arraySizeStr) {
                 this.numSamplers = parseInt(arraySizeStr);
-                // Assign identities in order.
-                // XXX(jstpierre): This will cause a warning in Chrome, but I don't care rn.
-                // It's more expensive to bind this every frame than respect Chrome's validation wishes...
-                const samplerUniformLocation = gl.getUniformLocation(prog, samplerName);
-                gl.useProgram(prog);
-                gl.uniform1iv(samplerUniformLocation, range(this.numSamplers));
             } else {
                 this.numSamplers = 1;
-                // No need to assign identities, since they should default to 0.
             }
+        }
+    }
+
+    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
+        for (let i = 0; i < this.uniformBufferLayouts.length; i++) {
+            const uniformBufferLayout = this.uniformBufferLayouts[i];
+            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, uniformBufferLayout.blockName), i);
+        }
+
+        if (this.numSamplers > 0) {
+            // Assign identities in order.
+            // XXX(jstpierre): This will cause a warning in Chrome, but I don't care rn.
+            // It's more expensive to bind this every frame than respect Chrome's validation wishes...
+            const samplerUniformLocation = gl.getUniformLocation(prog, this.samplerBindingName);
+            gl.useProgram(prog);
+            gl.uniform1iv(samplerUniformLocation, range(this.numSamplers));
         }
     }
 }

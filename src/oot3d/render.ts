@@ -6,47 +6,67 @@ import * as ZSI from './zsi';
 import * as Viewer from '../viewer';
 
 import { RenderState } from '../render';
-import { SimpleProgram } from '../Program';
+import { DeviceProgram } from '../Program';
 import RenderArena from '../RenderArena';
 import AnimationController from '../AnimationController';
-import { mat4, vec4 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
+import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
+import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
+import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/BufferHelpers';
+import { colorNew, colorFromRGBA } from '../Color';
 
-class OoT3D_Program extends SimpleProgram {
-    public u_PosScale: WebGLUniformLocation;
-    public u_TexCoordScale: WebGLUniformLocation;
-    public u_AlphaTest: WebGLUniformLocation;
-    public u_TexCoordMtx: WebGLUniformLocation;
-    public u_LocalMatrix: WebGLUniformLocation;
-    public u_MaterialColor: WebGLUniformLocation;
-
+class OoT3D_Program extends DeviceProgram {
     public static a_Position = 0;
     public static a_Normal = 1;
     public static a_Color = 2;
     public static a_TexCoord = 3;
 
-    public vert = `
+    public both = `
 precision mediump float;
+    
+// Expected to be constant across the entire scene.
+layout(row_major, std140) uniform ub_SceneParams {
+    mat4 u_Projection;
+};
 
-uniform mat4 u_modelView;
-uniform mat4 u_projection;
+// Expected to change with each material.
+layout(row_major, std140) uniform ub_MaterialParams {
+    vec4 u_MaterialColor;
+    mat4x3 u_TexMtx[1];
+    vec4 u_MaterialMisc;
+};
 
-uniform mat4 u_LocalMatrix;
-uniform float u_PosScale;
-uniform float u_TexCoordScale;
-uniform mat4 u_TexCoordMtx;
+#define u_AlphaReference (u_MaterialMisc[0])
+
+layout(row_major, std140) uniform ub_PrmParams {
+    mat4x3 u_BoneMatrix[1];
+    vec4 u_PrmMisc[1];
+};
+
+uniform sampler2D u_Texture[1];
+
+#define u_PosScale (u_PrmMisc[0][0])
+#define u_TexCoordScale (u_PrmMisc[0][1])
+
+varying vec4 v_Color;
+varying vec2 v_TexCoord;
+varying float v_LightIntensity;
+`;
+
+    public vert = `
 layout(location = ${OoT3D_Program.a_Position}) in vec3 a_Position;
 layout(location = ${OoT3D_Program.a_Normal}) in vec3 a_Normal;
 layout(location = ${OoT3D_Program.a_Color}) in vec4 a_Color;
 layout(location = ${OoT3D_Program.a_TexCoord}) in vec2 a_TexCoord;
-varying vec4 v_Color;
-varying vec2 v_TexCoord;
-varying float v_LightIntensity;
 
 void main() {
-    gl_Position = u_projection * u_modelView * u_LocalMatrix * vec4(a_Position, 1.0) * u_PosScale;
+    vec4 t_Position = vec4(a_Position * u_PosScale, 1.0);
+    gl_Position = u_Projection * mat4(u_BoneMatrix[0]) * t_Position;
+
     v_Color = a_Color;
+
     vec2 t_TexCoord = a_TexCoord * u_TexCoordScale;
-    v_TexCoord = (u_TexCoordMtx * vec4(t_TexCoord, 0.0, 1.0)).st;
+    v_TexCoord = (u_TexMtx[0] * vec4(t_TexCoord, 0.0, 1.0)).st;
     v_TexCoord.t = 1.0 - v_TexCoord.t;
 
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
@@ -60,38 +80,21 @@ void main() {
 }`;
 
     public frag = `
-precision mediump float;
-uniform sampler2D u_Sampler;
-uniform vec4 u_MaterialColor;
-uniform bool u_AlphaTest;
-
-varying vec2 v_TexCoord;
-varying vec4 v_Color;
-varying float v_LightIntensity;
-
 void main() {
-    vec4 t_Color = texture2D(u_Sampler, v_TexCoord) * v_Color;
+    vec4 t_Color = texture2D(u_Texture[0], v_TexCoord) * v_Color;
 
     t_Color.rgb *= v_LightIntensity;
     t_Color *= u_MaterialColor;
 
-    // TODO(jstpierre): Full alpha reference.
-    if (u_AlphaTest && t_Color.a <= 0.8)
+    if (t_Color.a <= u_AlphaReference)
         discard;
 
     gl_FragColor = t_Color;
 }`;
+}
 
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-
-        this.u_PosScale = gl.getUniformLocation(prog, "u_PosScale");
-        this.u_TexCoordScale = gl.getUniformLocation(prog, "u_TexCoordScale");
-        this.u_AlphaTest = gl.getUniformLocation(prog, "u_AlphaTest");
-        this.u_TexCoordMtx = gl.getUniformLocation(prog, "u_TexCoordMtx");
-        this.u_LocalMatrix = gl.getUniformLocation(prog, "u_LocalMatrix");
-        this.u_MaterialColor = gl.getUniformLocation(prog, `u_MaterialColor`);
-    }
+function fillSceneParamsData(d: Float32Array, state: RenderState, offs: number = 0): void {
+    offs += fillMatrix4x4(d, offs, state.camera.projectionMatrix);
 }
 
 function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
@@ -130,7 +133,7 @@ interface CmbContext {
 }
 
 const scratchMatrix = mat4.create();
-const scratchColor = vec4.create();
+const scratchColor = colorNew(0, 0, 0, 1);
 
 export class CmbRenderer {
     public program = new OoT3D_Program();
@@ -143,11 +146,23 @@ export class CmbRenderer {
     public textures: Viewer.Texture[] = [];
     public boneMatrices: mat4[] = [];
 
+    private sceneParamsBuffer: GfxBuffer;
+    private materialParamsBuffer: GfxBuffer;
+    private prmParamsBuffer: GfxBuffer;
+    private scratchParams = new Float32Array(64);
+
     constructor(gl: WebGL2RenderingContext, public cmb: CMB.CMB, public name: string = '') {
-        this.program = new OoT3D_Program();
+        const device = getTransitionDeviceForWebGL2(gl);
+
         this.arena = new RenderArena();
         this.model = this.translateCmb(gl, cmb);
         this.textures = cmb.textures.map((tex) => textureToCanvas(tex));
+
+        const prog = device.createProgram(this.program);
+        const uniformBuffers = device.queryProgram(prog).uniformBuffers;
+        this.sceneParamsBuffer = device.createBuffer(uniformBuffers[0].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+        this.materialParamsBuffer = device.createBuffer(uniformBuffers[1].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+        this.prmParamsBuffer = device.createBuffer(uniformBuffers[2].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
     }
 
     public setVisible(visible: boolean): void {
@@ -165,7 +180,11 @@ export class CmbRenderer {
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
+        const device = getTransitionDeviceForWebGL2(gl);
         this.arena.destroy(gl);
+        device.destroyBuffer(this.sceneParamsBuffer);
+        device.destroyBuffer(this.materialParamsBuffer);
+        device.destroyBuffer(this.prmParamsBuffer);
     }
 
     public bindCMAB(cmab: CMAB.CMAB): void {
@@ -226,8 +245,7 @@ export class CmbRenderer {
         gl.bindVertexArray(null);
 
         return (state: RenderState) => {
-            gl.uniform1f(this.program.u_TexCoordScale, sepd.txcScale);
-            gl.uniform1f(this.program.u_PosScale, sepd.posScale);
+            gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.prmParamsBuffer));
 
             gl.bindVertexArray(vao);
 
@@ -237,8 +255,15 @@ export class CmbRenderer {
 
                 const localMatrixId = prms.boneTable[0];
                 const boneMatrix = this.boneMatrices[localMatrixId];
-                gl.uniformMatrix4fv(this.program.u_LocalMatrix, false, boneMatrix);
+                mat4.mul(scratchMatrix, state.view, boneMatrix);
 
+                let offs = 0;
+                offs += fillMatrix4x3(this.scratchParams, offs, scratchMatrix);
+                offs += fillVec4(this.scratchParams, offs, sepd.posScale, sepd.txcScale);
+
+                gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.prmParamsBuffer));
+                gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
+    
                 gl.drawElements(gl.TRIANGLES, prm.count, this.translateDataType(gl, prm.indexType), prm.offset);
             }
 
@@ -279,21 +304,26 @@ export class CmbRenderer {
         return (state: RenderState): void => {
             state.useFlags(material.renderFlags);
 
-            gl.uniform1i(this.program.u_AlphaTest, material.alphaTestEnable ? 1 : 0);
+            let offs = 0;
+            if (this.colorAnimators[material.index]) {
+                this.colorAnimators[material.index].calcMaterialColor(scratchColor);
+            } else {
+                colorFromRGBA(scratchColor, 1, 1, 1, 1);
+            }
+            offs += fillColor(this.scratchParams, offs, scratchColor);
 
             if (this.srtAnimators[material.index]) {
                 this.srtAnimators[material.index].calcTexMtx(scratchMatrix);
             } else {
                 mat4.identity(scratchMatrix);
             }
-            gl.uniformMatrix4fv(this.program.u_TexCoordMtx, false, scratchMatrix);
+            offs += fillMatrix4x3(this.scratchParams, offs, scratchMatrix);
 
-            if (this.colorAnimators[material.index]) {
-                this.colorAnimators[material.index].calcMaterialColor(scratchColor);
-            } else {
-                vec4.set(scratchColor, 1, 1, 1, 1);
-            }
-            gl.uniform4fv(this.program.u_MaterialColor, scratchColor);
+            const alphaReference = material.alphaTestEnable ? 1 : 0;
+            offs += fillVec4(this.scratchParams, offs, alphaReference);
+
+            gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.materialParamsBuffer));
+            gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
 
             for (let i = 0; i < 1; i++) {
                 const binding = material.textureBindings[i];
@@ -381,7 +411,15 @@ export class CmbRenderer {
         const meshFuncs = cmb.meshs.map((mesh) => this.translateMesh(gl, cmbContext, mesh));
 
         return (state: RenderState) => {
+            gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, getPlatformBuffer(this.sceneParamsBuffer));
+            gl.bindBufferBase(gl.UNIFORM_BUFFER, 1, getPlatformBuffer(this.materialParamsBuffer));
+            gl.bindBufferBase(gl.UNIFORM_BUFFER, 2, getPlatformBuffer(this.prmParamsBuffer));
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+
+            gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.sceneParamsBuffer));
+            fillSceneParamsData(this.scratchParams, state);
+            gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
+
             for (let i = 0; i < meshFuncs.length; i++)
                 meshFuncs[i](state);
         };
