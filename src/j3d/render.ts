@@ -16,7 +16,7 @@ import AnimationController from '../AnimationController';
 import { nArray } from '../util';
 import { AABB, IntersectionState } from '../Geometry';
 import { GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
-import { getTransitionDeviceForWebGL2, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
+import { getTransitionDeviceForWebGL2 } from '../gfx/platform/GfxPlatformWebGL2';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(gl: WebGL2RenderingContext, bmd: BMD, bmt: BMT = null) {

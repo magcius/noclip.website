@@ -3,6 +3,7 @@ import AnimationController from "../AnimationController";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert } from "../util";
 import { mat4, vec4 } from "gl-matrix";
+import { Color, colorFromRGBA } from "../Color";
 
 // CMAB (CTR Material Animation Binary)
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?
@@ -326,12 +327,12 @@ export class ColorAnimator {
         assert(animEntry.animationType === AnimationType.UNK_04);
     }
 
-    public calcMaterialColor(dst: vec4): void {
+    public calcMaterialColor(dst: Color): void {
         const animFrame = getAnimFrame(this.cmab, this.animationController.getTimeInFrames());
         const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 1;
         const g = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 1;
         const b = this.animEntry.tracks[2] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[2], animFrame) : 1;
         const a = this.animEntry.tracks[3] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[3], animFrame) : 1;
-        vec4.set(dst, r, g, b, a);
+        colorFromRGBA(dst, r, g, b, a);
     }
 }

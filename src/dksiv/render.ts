@@ -195,6 +195,7 @@ export class Scene implements Viewer.Scene_Device {
         ];
 
         this.renderFlags = new RenderFlags();
+        this.renderFlags.depthWrite = true;
         this.renderFlags.depthTest = true;
 
         this.pipeline = device.createRenderPipeline({
