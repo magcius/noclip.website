@@ -18,6 +18,14 @@ export interface ZAR {
     files: ZARFile[];
 }
 
+export function findFile(zar: ZAR, filePath: string): ZARFile | null {
+    const f = zar.files.find((file) => file.name.toLowerCase() === filePath.toLowerCase());
+    if (f !== undefined)
+        return f;
+    else
+        return null;
+}
+
 export function parse(buffer: ArrayBufferSlice): ZAR {
     const view = buffer.createDataView();
 

@@ -1,5 +1,6 @@
 
 import * as CMAB from './cmab';
+import * as CMB from './cmb';
 import * as ZAR from './zar';
 import * as ZSI from './zsi';
 import * as LzS from '../compression/LzS';
@@ -12,7 +13,7 @@ import Progressable from '../Progressable';
 import { RoomRenderer } from './render';
 import { SceneGroup } from '../viewer';
 import { RenderState } from '../render';
-import { assert, readString } from '../util';
+import { assert, readString, leftPad } from '../util';
 import { fetchData, NamedArrayBufferSlice } from '../fetch';
 
 function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
@@ -54,7 +55,7 @@ class SceneDesc implements Viewer.SceneDesc {
     public name: string;
     public id: string;
 
-    constructor(name: string, id: string) {
+    constructor(name: string, id: string, public disabledRooms: number[]) {
         this.name = name;
         this.id = id;
     }
@@ -73,22 +74,40 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const zsi = ZSI.parse(maybeDecompress(zsiBuffer));
         assert(zsi.rooms !== null);
-        const roomFilenames = zsi.rooms.map((romPath) => {
-            const filename = romPath.split('/').pop();
-            return `data/mm3d/${filename}`;
-        });
 
-        return Progressable.all(roomFilenames.map((filename, i) => {
-            return fetchData(filename).then((roomResult) => {
+        return Progressable.all(zsi.rooms.map((romPath, i) => {
+            const filename = romPath.split('/').pop();
+            return fetchData(`data/mm3d/${filename}`).then((roomResult) => {
                 const zsi = ZSI.parse(maybeDecompress(roomResult));
                 assert(zsi.mesh !== null);
-                const roomRenderer = new RoomRenderer(gl, zsi, filename);
-                const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
-                if (cmabFile) {
+
+                const roomNameBase = `ROOM${i}/${this.id}_${leftPad(`${i}`, 2, '0')}`;
+
+                const wCmbFile = ZAR.findFile(zar, `${roomNameBase}_w.cmb`);
+                let wCmb: CMB.CMB | null = null;
+                if (wCmbFile !== null) {
+                    // TODO(jstpierre): Add these once we figure out where to place them.
+                    // wCmb = CMB.parse(wCmbFile.buffer);
+                }
+
+                const roomRenderer = new RoomRenderer(gl, zsi, filename, wCmb);
+
+                const cmabFile = ZAR.findFile(zar, `${roomNameBase}.cmab`);
+                if (cmabFile !== null) {
                     const cmab = CMAB.parse(CMAB.Version.Majora, cmabFile.buffer);
                     roomRenderer.bindCMAB(cmab);
                 }
-                return new Progressable(Promise.resolve(roomRenderer));
+
+                const wcmabFile = ZAR.findFile(zar, `${roomNameBase}_w.cmab`);
+                if (wcmabFile !== null) {
+                    const wcmab = CMAB.parse(CMAB.Version.Majora, wcmabFile.buffer);
+                    roomRenderer.bindWCMAB(wcmab);
+                }
+
+                if (this.disabledRooms.includes(i))
+                    roomRenderer.setVisible(false);
+
+                return roomRenderer;
             });
         })).then((scenes: RoomRenderer[]) => {
             return new MultiScene(scenes);
@@ -106,8 +125,8 @@ const sceneDescs: SceneDesc[] = [
     { id: "z2_miturin_bs", name: "Woodfall Temple (Boss)" },
     { id: "z2_sea", name: "Great Bay Temple" },
     { id: "z2_sea_bs", name: "Great Bay Temple (Boss)" },
-    { id: "z2_inisie_n", name: "Stone Tower Temple" },
-    { id: "z2_inisie_r", name: "Stone Tower Temple (Upside Down)" },
+    { id: "z2_inisie_n", name: "Stone Tower Temple", disabledRooms: [5, 6, 11] },
+    { id: "z2_inisie_r", name: "Stone Tower Temple (Upside Down)", disabledRooms: [7, 9] },
     { id: "z2_sougen", name: "The Moon" },
     { id: "z2_last_link", name: "The Moon - Link's Moon Trial" },
     { id: "z2_last_deku", name: "The Moon - Deku Link's Trial" },
@@ -165,7 +184,7 @@ const sceneDescs: SceneDesc[] = [
     { id: "z2_goronrace", name: "Goron Racetrack" },
     { id: "z2_goronshop", name: "Goron Shop" },
     { id: "z2_hakashita", name: "Ikana Grave (Night One & Two)" },
-    { id: "z2_ikana", name: "Ikana Valley" },
+    { id: "z2_ikana", name: "Ikana Canyon" },
     { id: "z2_ikanamae", name: "Ikana Trail" },
     { id: "z2_ikninside", name: "Ancient Castle of Ikana Throne Room" },
     { id: "z2_insidetower", name: "Clock Tower" },
@@ -213,7 +232,7 @@ const sceneDescs: SceneDesc[] = [
     { id: "z2_zolashop" },
 ].map((entry): SceneDesc => {
     const name = entry.name || entry.id;
-    return new SceneDesc(name, entry.id);
+    return new SceneDesc(name, entry.id, entry.disabledRooms || []);
 });
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

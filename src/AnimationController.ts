@@ -1,7 +1,8 @@
 
 export default class AnimationController {
-    public fps: number = 30;
     private timeMilliseconds: number;
+
+    constructor(public fps: number = 30) {}
 
     public getTimeInFrames(): number {
         const ms = this.timeMilliseconds;
