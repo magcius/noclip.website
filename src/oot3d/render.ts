@@ -9,7 +9,7 @@ import { RenderState } from '../render';
 import { SimpleProgram } from '../Program';
 import RenderArena from '../RenderArena';
 import AnimationController from '../AnimationController';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec4 } from 'gl-matrix';
 
 class OoT3D_Program extends SimpleProgram {
     public u_PosScale: WebGLUniformLocation;
@@ -17,6 +17,7 @@ class OoT3D_Program extends SimpleProgram {
     public u_AlphaTest: WebGLUniformLocation;
     public u_TexCoordMtx: WebGLUniformLocation;
     public u_LocalMatrix: WebGLUniformLocation;
+    public u_MaterialColor: WebGLUniformLocation;
 
     public static a_Position = 0;
     public static a_Normal = 1;
@@ -61,6 +62,7 @@ void main() {
     public frag = `
 precision mediump float;
 uniform sampler2D u_Sampler;
+uniform vec4 u_MaterialColor;
 uniform bool u_AlphaTest;
 
 varying vec2 v_TexCoord;
@@ -71,6 +73,7 @@ void main() {
     vec4 t_Color = texture2D(u_Sampler, v_TexCoord) * v_Color;
 
     t_Color.rgb *= v_LightIntensity;
+    t_Color *= u_MaterialColor;
 
     // TODO(jstpierre): Full alpha reference.
     if (u_AlphaTest && t_Color.a <= 0.8)
@@ -87,6 +90,7 @@ void main() {
         this.u_AlphaTest = gl.getUniformLocation(prog, "u_AlphaTest");
         this.u_TexCoordMtx = gl.getUniformLocation(prog, "u_TexCoordMtx");
         this.u_LocalMatrix = gl.getUniformLocation(prog, "u_LocalMatrix");
+        this.u_MaterialColor = gl.getUniformLocation(prog, `u_MaterialColor`);
     }
 }
 
@@ -125,11 +129,15 @@ interface CmbContext {
     matFuncs: RenderFunc[];
 }
 
+const scratchMatrix = mat4.create();
+const scratchColor = vec4.create();
+
 export class CmbRenderer {
     public program = new OoT3D_Program();
     public arena = new RenderArena();
     public animationController = new AnimationController();
-    public materialAnimators: CMAB.TextureAnimator[] = [];
+    public srtAnimators: CMAB.TextureAnimator[] = [];
+    public colorAnimators: CMAB.ColorAnimator[] = [];
     public model: RenderFunc;
     public visible: boolean = true;
     public textures: Viewer.Texture[] = [];
@@ -164,8 +172,13 @@ export class CmbRenderer {
         // TODO(jstpierre): Support better stuff here when we get a better renderer...
         for (let i = 0; i < cmab.animEntries.length; i++) {
             const animEntry = cmab.animEntries[i];
-            if (animEntry.channelIndex === 0 && animEntry.animationType === CMAB.AnimationType.XY_SCROLL)
-                this.materialAnimators[animEntry.materialIndex] = new CMAB.TextureAnimator(this.animationController, cmab, animEntry);
+            if (animEntry.channelIndex === 0) {
+                if (animEntry.animationType === CMAB.AnimationType.TRANSLATION || animEntry.animationType === CMAB.AnimationType.ROTATION) {
+                    this.srtAnimators[animEntry.materialIndex] = new CMAB.TextureAnimator(this.animationController, cmab, animEntry);
+                } else if (animEntry.animationType === CMAB.AnimationType.UNK_04) {
+                    this.colorAnimators[animEntry.materialIndex] = new CMAB.ColorAnimator(this.animationController, cmab, animEntry);
+                }
+            }
         }
     }
 
@@ -268,13 +281,19 @@ export class CmbRenderer {
 
             gl.uniform1i(this.program.u_AlphaTest, material.alphaTestEnable ? 1 : 0);
 
-            if (this.materialAnimators[material.index] !== undefined) {
-                this.materialAnimators[material.index].calcTexMtx(scratchMatrix);
+            if (this.srtAnimators[material.index]) {
+                this.srtAnimators[material.index].calcTexMtx(scratchMatrix);
             } else {
                 mat4.identity(scratchMatrix);
             }
-
             gl.uniformMatrix4fv(this.program.u_TexCoordMtx, false, scratchMatrix);
+
+            if (this.colorAnimators[material.index]) {
+                this.colorAnimators[material.index].calcMaterialColor(scratchColor);
+            } else {
+                vec4.set(scratchColor, 1, 1, 1, 1);
+            }
+            gl.uniform4fv(this.program.u_MaterialColor, scratchColor);
 
             for (let i = 0; i < 1; i++) {
                 const binding = material.textureBindings[i];
@@ -369,18 +388,19 @@ export class CmbRenderer {
     }
 }
 
-const scratchMatrix = mat4.create();
 export class RoomRenderer implements Viewer.Scene {
     public visible: boolean = true;
     public textures: Viewer.Texture[];
     public opaqueMesh: CmbRenderer | null;
     public transparentMesh: CmbRenderer | null;
+    public wMesh: CmbRenderer | null;
 
-    constructor(gl: WebGL2RenderingContext, public zsi: ZSI.ZSI, public name: string) {
+    constructor(gl: WebGL2RenderingContext, public zsi: ZSI.ZSI, public name: string, public wCmb: CMB.CMB) {
         const mesh = zsi.mesh;
 
         this.opaqueMesh = mesh.opaque !== null ? new CmbRenderer(gl, mesh.opaque) : null;
         this.transparentMesh = mesh.transparent !== null ? new CmbRenderer(gl, mesh.transparent) : null;
+        this.wMesh = wCmb !== null ? new CmbRenderer(gl, wCmb) : null;
 
         // TODO(jstpierre): TextureHolder.
         this.textures = [];
@@ -388,6 +408,8 @@ export class RoomRenderer implements Viewer.Scene {
             this.textures = this.textures.concat(this.opaqueMesh.textures);
         if (this.transparentMesh !== null)
             this.textures = this.textures.concat(this.transparentMesh.textures);
+        if (this.wMesh !== null)
+            this.textures = this.textures.concat(this.wMesh.textures);
     }
 
     public bindCMAB(cmab: CMAB.CMAB): void {
@@ -395,6 +417,11 @@ export class RoomRenderer implements Viewer.Scene {
             this.opaqueMesh.bindCMAB(cmab);
         if (this.transparentMesh !== null)
             this.transparentMesh.bindCMAB(cmab);
+    }
+
+    public bindWCMAB(cmab: CMAB.CMAB): void {
+        if (this.wMesh !== null)
+            this.wMesh.bindCMAB(cmab);
     }
 
     public setVisible(visible: boolean): void {
@@ -409,6 +436,8 @@ export class RoomRenderer implements Viewer.Scene {
             this.opaqueMesh.render(state);
         if (this.transparentMesh !== null)
             this.transparentMesh.render(state);
+        if (this.wMesh !== null)
+            this.wMesh.render(state);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -416,5 +445,7 @@ export class RoomRenderer implements Viewer.Scene {
             this.opaqueMesh.destroy(gl);
         if (this.transparentMesh !== null)
             this.transparentMesh.destroy(gl);
+        if (this.wMesh !== null)
+            this.wMesh.destroy(gl);
     }
 }
