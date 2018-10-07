@@ -144,7 +144,7 @@ function readHeaders(version: Version, buffer: ArrayBufferSlice, offs: number = 
     return zsi;
 }
 
-export function parse(buffer:ArrayBufferSlice): ZSI {
+export function parse(buffer: ArrayBufferSlice): ZSI {
     const magic = readString(buffer, 0x00, 0x04);
     assert(['ZSI\x01', 'ZSI\x09'].includes(magic));
     const version = magic === 'ZSI\x01' ? Version.Ocarina : Version.Majora;
