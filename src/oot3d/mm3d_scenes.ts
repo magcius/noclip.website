@@ -10,7 +10,7 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer } from './render';
+import { RoomRenderer, CtrTextureHolder } from './render';
 import { SceneGroup } from '../viewer';
 import { RenderState } from '../render';
 import { assert, readString, leftPad } from '../util';
@@ -24,14 +24,7 @@ function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
 }
 
 class MultiScene implements Viewer.MainScene {
-    public scenes: RoomRenderer[];
-    public textures: Viewer.Texture[];
-
-    constructor(scenes: RoomRenderer[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
+    constructor(public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
     }
 
     public createPanels(): UI.Panel[] {
@@ -70,6 +63,8 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     private _createSceneFromData(gl: WebGL2RenderingContext, zarBuffer: NamedArrayBufferSlice, zsiBuffer: NamedArrayBufferSlice): Progressable<Viewer.MainScene> {
+        const textureHolder = new CtrTextureHolder();
+
         const zar = ZAR.parse(maybeDecompress(zarBuffer));
 
         const zsi = ZSI.parse(maybeDecompress(zsiBuffer));
@@ -90,7 +85,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     // wCmb = CMB.parse(wCmbFile.buffer);
                 }
 
-                const roomRenderer = new RoomRenderer(gl, zsi, filename, wCmb);
+                const roomRenderer = new RoomRenderer(gl, textureHolder, zsi, filename, wCmb);
 
                 const cmabFile = ZAR.findFile(zar, `${roomNameBase}.cmab`);
                 if (cmabFile !== null) {
@@ -110,7 +105,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 return roomRenderer;
             });
         })).then((scenes: RoomRenderer[]) => {
-            return new MultiScene(scenes);
+            return new MultiScene(scenes, textureHolder);
         });
     }
 }

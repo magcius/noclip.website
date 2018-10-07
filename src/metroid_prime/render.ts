@@ -13,7 +13,7 @@ import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { AABB, IntersectionState } from '../Geometry';
 import { TXTR } from './txtr';
 import { CMDL } from './cmdl';
-import { TextureMapping } from '../TextureHolder';
+import { TextureMapping, bindGLTextureMappings } from '../TextureHolder';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0,  0, 0,
@@ -185,7 +185,7 @@ export class MREARenderer implements Viewer.Scene {
 
     private bindTextures(state: RenderState, material: Material, program: GX_Material.GX_Program): void {
         this.fillTextureMapping(textureMappingScratch, material);
-        this.renderHelper.bindMaterialTextureMapping(state, textureMappingScratch, program);
+        bindGLTextureMappings(state, textureMappingScratch);
     }
 
     private computeModelView(dst: mat4, state: RenderState): void {
@@ -324,7 +324,7 @@ export class CMDLRenderer implements Viewer.Scene {
 
     private bindTextures(state: RenderState, material: Material, program: GX_Material.GX_Program): void {
         this.fillTextureMapping(textureMappingScratch, material);
-        this.renderHelper.bindMaterialTextureMapping(state, textureMappingScratch, program);
+        bindGLTextureMappings(state, textureMappingScratch);
     }
 
     private computeModelView(dst: mat4, state: RenderState): void {
