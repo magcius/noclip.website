@@ -44,7 +44,7 @@ class Command_Material {
         state.useFlags(this.renderFlags);
 
         this.scene.renderHelper.bindMaterialParams(state, this.materialParams);
-        this.scene.renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
+        this.scene.renderHelper.bindMaterialTextures(state, this.materialParams);
     }
 
     public destroy(gl: WebGL2RenderingContext) {

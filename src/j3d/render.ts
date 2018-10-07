@@ -195,7 +195,7 @@ export class Command_Material {
         const materialParams = Command_Material.materialParams;
         this.fillMaterialParams(materialParams, state, textureHolder, materialInstance);
         renderHelper.bindMaterialParams(state, materialParams);
-        renderHelper.bindMaterialTextures(state, materialParams, this.program);
+        renderHelper.bindMaterialTextures(state, materialParams);
     }
 
     public destroy(gl: WebGL2RenderingContext) {

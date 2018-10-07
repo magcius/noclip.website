@@ -501,7 +501,7 @@ export class Command_Material {
         this.calcMaterialParams(this.materialParams, state, materialInstance);
 
         renderHelper.bindMaterialParams(state, this.materialParams);
-        renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
+        renderHelper.bindMaterialTextures(state, this.materialParams);
     }
 
     public destroy(gl: WebGL2RenderingContext) {

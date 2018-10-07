@@ -10,12 +10,12 @@ import * as Viewer from '../viewer';
 import { RenderState, RenderFlags, fullscreenFlags } from '../render';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { mat4 } from 'gl-matrix';
-import { assert } from '../util';
+import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
 import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxSampler, GfxTexFilterMode, GfxWrapMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { BufferFillerHelper } from '../gfx/helpers/BufferHelpers';
-import { TextureMapping, getGLTextureFromMapping, getGLSamplerFromMapping } from '../TextureHolder';
+import { TextureMapping, getGLTextureFromMapping, getGLSamplerFromMapping, bindGLTextureMappings } from '../TextureHolder';
 import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
@@ -59,7 +59,7 @@ class BackgroundBillboardRenderer {
     private program = new BackgroundBillboardProgram();
     private paramsBuffer: GfxBuffer;
     private bufferFiller: BufferFillerHelper;
-    private textureMapping = new TextureMapping();
+    private textureMapping = nArray(1, () => new TextureMapping());
 
     constructor(device: GfxDevice, public textureHolder: TPLTextureHolder, public textureName: string) {
         const deviceLimits = device.queryLimits();
@@ -83,10 +83,8 @@ class BackgroundBillboardRenderer {
 
         gl.bindBufferBase(gl.UNIFORM_BUFFER, BackgroundBillboardProgram.ub_Params, getPlatformBuffer(this.paramsBuffer));
 
-        this.textureHolder.fillTextureMapping(this.textureMapping, this.textureName);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, getGLTextureFromMapping(this.textureMapping));
-        gl.bindSampler(0, getGLSamplerFromMapping(this.textureMapping));
+        this.textureHolder.fillTextureMapping(this.textureMapping[0], this.textureName);
+        bindGLTextureMappings(state, this.textureMapping);
 
         state.useProgram(this.program);
         state.useFlags(fullscreenFlags);
@@ -187,7 +185,7 @@ class Command_Material {
 
         this.fillMaterialParams(this.materialParams, textureHolder);
         renderHelper.bindMaterialParams(state, this.materialParams);
-        renderHelper.bindMaterialTextures(state, this.materialParams, this.program);
+        renderHelper.bindMaterialTextures(state, this.materialParams);
     }
 
     public destroy(device: GfxDevice) {

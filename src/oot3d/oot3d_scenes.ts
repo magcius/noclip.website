@@ -8,21 +8,14 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer } from './render';
+import { RoomRenderer, CtrTextureHolder } from './render';
 import { SceneGroup } from '../viewer';
 import { RenderState } from '../render';
 import { assert } from '../util';
 import { fetchData } from '../fetch';
 
 class MultiScene implements Viewer.MainScene {
-    public scenes: RoomRenderer[];
-    public textures: Viewer.Texture[];
-
-    constructor(scenes: RoomRenderer[]) {
-        this.scenes = scenes;
-        this.textures = [];
-        for (const scene of this.scenes)
-            this.textures = this.textures.concat(scene.textures);
+    constructor(public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
     }
 
     public createPanels(): UI.Panel[] {
@@ -61,6 +54,8 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     private _createSceneFromData(gl: WebGL2RenderingContext, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.MainScene> {
+        const textureHolder = new CtrTextureHolder();
+
         const zar = zarBuffer.byteLength ? ZAR.parse(zarBuffer) : null;
 
         const zsi = ZSI.parse(zsiBuffer);
@@ -74,7 +69,7 @@ class SceneDesc implements Viewer.SceneDesc {
             return fetchData(filename).then((roomResult) => {
                 const zsi = ZSI.parse(roomResult);
                 assert(zsi.mesh !== null);
-                const roomRenderer = new RoomRenderer(gl, zsi, filename, null);
+                const roomRenderer = new RoomRenderer(gl, textureHolder, zsi, filename, null);
                 if (zar !== null) {
                     const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
                     if (cmabFile) {
@@ -86,7 +81,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 return new Progressable(Promise.resolve(roomRenderer));
             });
         })).then((scenes: RoomRenderer[]) => {
-            return new MultiScene(scenes);
+            return new MultiScene(scenes, textureHolder);
         });
     }
 }

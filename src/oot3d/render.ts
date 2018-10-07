@@ -10,10 +10,53 @@ import { DeviceProgram } from '../Program';
 import RenderArena from '../RenderArena';
 import AnimationController from '../AnimationController';
 import { mat4 } from 'gl-matrix';
-import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
-import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
+import { getTransitionDeviceForWebGL2, getPlatformBuffer, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
+import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/BufferHelpers';
 import { colorNew, colorFromRGBA } from '../Color';
+import { getTextureFormatName } from './pica_texture';
+import { TextureHolder, LoadedTexture, TextureMapping, bindGLTextureMappings } from '../TextureHolder';
+import { nArray } from '../util';
+
+function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
+    const canvas = document.createElement("canvas");
+    canvas.width = textureLevel.width;
+    canvas.height = textureLevel.height;
+    canvas.title = textureLevel.name;
+
+    const ctx = canvas.getContext("2d");
+    const imgData = ctx.createImageData(canvas.width, canvas.height);
+
+    imgData.data.set(textureLevel.pixels, 0);
+
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+}
+
+function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
+    const surfaces = texture.levels.map((textureLevel) => surfaceToCanvas(textureLevel));
+
+    const extraInfo = new Map<string, string>();
+    extraInfo.set('Format', getTextureFormatName(texture.format));
+
+    return { name: texture.name, surfaces, extraInfo };
+}
+
+export class CtrTextureHolder extends TextureHolder<CMB.Texture> {
+    public addTexture(gl: WebGL2RenderingContext, texture: CMB.Texture): LoadedTexture {
+        const device = getTransitionDeviceForWebGL2(gl);
+
+        const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, texture.width, texture.height, texture.levels.length);
+        device.setResourceName(gfxTexture, texture.name);
+
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(gfxTexture, 0, texture.levels.map((level) => level.pixels));
+
+        device.submitPass(hostAccessPass);
+        const viewerTexture = textureToCanvas(texture);
+        return { gfxTexture, viewerTexture };
+    }
+}
 
 class OoT3D_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -97,27 +140,6 @@ function fillSceneParamsData(d: Float32Array, state: RenderState, offs: number =
     offs += fillMatrix4x4(d, offs, state.camera.projectionMatrix);
 }
 
-function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    canvas.width = texture.width;
-    canvas.height = texture.height;
-    canvas.title = texture.name;
-
-    const ctx = canvas.getContext("2d");
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-
-    for (let i = 0; i < imgData.data.length; i++)
-        imgData.data[i] = texture.pixels[i];
-
-    ctx.putImageData(imgData, 0, 0);
-    const surfaces = [ canvas ];
-
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', CMB.getTextureFormatName(texture.format));
-
-    return { name: texture.name, surfaces, extraInfo };
-}
-
 type RenderFunc = (renderState: RenderState) => void;
 
 interface CmbContext {
@@ -126,7 +148,6 @@ interface CmbContext {
     nrmBuffer: WebGLBuffer | null;
     txcBuffer: WebGLBuffer | null;
     idxBuffer: WebGLBuffer;
-    textures: WebGLBuffer[];
 
     sepdFuncs: RenderFunc[];
     matFuncs: RenderFunc[];
@@ -143,20 +164,20 @@ export class CmbRenderer {
     public colorAnimators: CMAB.ColorAnimator[] = [];
     public model: RenderFunc;
     public visible: boolean = true;
-    public textures: Viewer.Texture[] = [];
     public boneMatrices: mat4[] = [];
 
     private sceneParamsBuffer: GfxBuffer;
     private materialParamsBuffer: GfxBuffer;
     private prmParamsBuffer: GfxBuffer;
     private scratchParams = new Float32Array(64);
+    private textureMapping = nArray(1, () => new TextureMapping());
 
-    constructor(gl: WebGL2RenderingContext, public cmb: CMB.CMB, public name: string = '') {
+    constructor(gl: WebGL2RenderingContext, private textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
         const device = getTransitionDeviceForWebGL2(gl);
 
         this.arena = new RenderArena();
+        this.textureHolder.addTextures(gl, cmb.textures);
         this.model = this.translateCmb(gl, cmb);
-        this.textures = cmb.textures.map((tex) => textureToCanvas(tex));
 
         const prog = device.createProgram(this.program);
         const uniformBuffers = device.queryProgram(prog).uniformBuffers;
@@ -271,34 +292,57 @@ export class CmbRenderer {
         };
     }
 
-    private translateTexture(gl: WebGL2RenderingContext, texture: CMB.Texture): WebGLTexture {
-        const texId = this.arena.createTexture(gl);
-        gl.bindTexture(gl.TEXTURE_2D, texId);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
-        return texId;
-    }
-
-    private translateMaterial(gl: WebGL2RenderingContext, cmbContext: CmbContext, material: CMB.Material): RenderFunc {
-        function translateWrapMode(wrapMode: CMB.TextureWrapMode) {
+    private translateMaterial(gl: WebGL2RenderingContext, material: CMB.Material): RenderFunc {
+        function translateWrapMode(wrapMode: CMB.TextureWrapMode): GfxWrapMode {
             switch (wrapMode) {
-            case CMB.TextureWrapMode.CLAMP: return gl.CLAMP_TO_EDGE;
-            case CMB.TextureWrapMode.CLAMP_TO_EDGE: return gl.CLAMP_TO_EDGE;
-            case CMB.TextureWrapMode.REPEAT: return gl.REPEAT;
-            case CMB.TextureWrapMode.MIRRORED_REPEAT: return gl.MIRRORED_REPEAT;
+            case CMB.TextureWrapMode.CLAMP: return GfxWrapMode.CLAMP;
+            case CMB.TextureWrapMode.CLAMP_TO_EDGE: return GfxWrapMode.CLAMP;
+            case CMB.TextureWrapMode.REPEAT: return GfxWrapMode.REPEAT;
+            case CMB.TextureWrapMode.MIRRORED_REPEAT: return GfxWrapMode.MIRROR;
             default: throw new Error();
             }
         }
 
-        function translateTextureFilter(filter: CMB.TextureFilter) {
+        function translateTextureFilter(filter: CMB.TextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
             switch (filter) {
-            case CMB.TextureFilter.LINEAR: return gl.LINEAR;
-            case CMB.TextureFilter.NEAREST: return gl.NEAREST;
-            case CMB.TextureFilter.LINEAR_MIPMAP_LINEAR: return gl.NEAREST;
-            case CMB.TextureFilter.LINEAR_MIPMAP_NEAREST: return gl.NEAREST;
-            case CMB.TextureFilter.NEAREST_MIPMAP_NEAREST: return gl.NEAREST;
-            case CMB.TextureFilter.NEAREST_MIPMIP_LINEAR: return gl.NEAREST;
+            case CMB.TextureFilter.LINEAR:
+                return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+            case CMB.TextureFilter.NEAREST:
+                return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+            case CMB.TextureFilter.LINEAR_MIPMAP_LINEAR:
+                return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
+            case CMB.TextureFilter.LINEAR_MIPMAP_NEAREST:
+                return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
+            case CMB.TextureFilter.NEAREST_MIPMIP_LINEAR:
+                return [GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR];
+            case CMB.TextureFilter.NEAREST_MIPMAP_NEAREST:
+                return [GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST];
             default: throw new Error();
             }
+        }
+
+        const device = getTransitionDeviceForWebGL2(gl);
+        const gfxSamplers: GfxSampler[] = [];
+        for (let i = 0; i < material.textureBindings.length; i++) {
+            if (i >= 1) break;
+            const binding = material.textureBindings[i];
+            if (binding.textureIdx < 0)
+                continue;
+
+            const [minFilter, mipFilter] = translateTextureFilter(binding.minFilter);
+            const [magFilter] = translateTextureFilter(binding.magFilter);
+
+            const gfxSampler = device.createSampler({
+                wrapS: translateWrapMode(binding.wrapS),
+                wrapT: translateWrapMode(binding.wrapT),
+                magFilter,
+                minFilter,
+                mipFilter,
+                minLOD: 0,
+                maxLOD: 100,
+            });
+            gfxSamplers.push(gfxSampler);
+            this.arena.samplers.push(getPlatformSampler(gfxSampler));
         }
 
         return (state: RenderState): void => {
@@ -330,13 +374,12 @@ export class CmbRenderer {
                 if (binding.textureIdx === -1)
                     continue;
 
-                gl.activeTexture(gl.TEXTURE0 + i);
-                gl.bindTexture(gl.TEXTURE_2D, cmbContext.textures[binding.textureIdx]);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, translateTextureFilter(binding.minFilter));
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, translateTextureFilter(binding.magFilter));
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, translateWrapMode(binding.wrapS));
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, translateWrapMode(binding.wrapT));
+                const texture = this.cmb.textures[binding.textureIdx];
+                this.textureHolder.fillTextureMapping(this.textureMapping[0], texture.name);
+                this.textureMapping[0].gfxSampler = gfxSamplers[i];
             }
+
+            bindGLTextureMappings(state, this.textureMapping);
         };
     }
 
@@ -376,10 +419,6 @@ export class CmbRenderer {
             gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.txcBuffer.castToBuffer(), gl.STATIC_DRAW);
         }
 
-        const textures: WebGLTexture[] = cmb.textures.map((texture) => {
-            return this.translateTexture(gl, texture);
-        });
-
         const idxBuffer = this.arena.createBuffer(gl);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer.castToBuffer(), gl.STATIC_DRAW);
@@ -400,13 +439,12 @@ export class CmbRenderer {
             nrmBuffer,
             txcBuffer,
             idxBuffer,
-            textures,
             sepdFuncs: [],
             matFuncs: [],
         };
 
         cmbContext.sepdFuncs = cmb.sepds.map((sepd) => this.translateSepd(gl, cmbContext, sepd));
-        cmbContext.matFuncs = cmb.materials.map((material) => this.translateMaterial(gl, cmbContext, material));
+        cmbContext.matFuncs = cmb.materials.map((material) => this.translateMaterial(gl, material));
 
         const meshFuncs = cmb.meshs.map((mesh) => this.translateMesh(gl, cmbContext, mesh));
 
@@ -426,28 +464,18 @@ export class CmbRenderer {
     }
 }
 
-export class RoomRenderer implements Viewer.Scene {
+export class RoomRenderer {
     public visible: boolean = true;
-    public textures: Viewer.Texture[];
     public opaqueMesh: CmbRenderer | null;
     public transparentMesh: CmbRenderer | null;
     public wMesh: CmbRenderer | null;
 
-    constructor(gl: WebGL2RenderingContext, public zsi: ZSI.ZSI, public name: string, public wCmb: CMB.CMB) {
+    constructor(gl: WebGL2RenderingContext, textureHolder: CtrTextureHolder, public zsi: ZSI.ZSI, public name: string, public wCmb: CMB.CMB) {
         const mesh = zsi.mesh;
 
-        this.opaqueMesh = mesh.opaque !== null ? new CmbRenderer(gl, mesh.opaque) : null;
-        this.transparentMesh = mesh.transparent !== null ? new CmbRenderer(gl, mesh.transparent) : null;
-        this.wMesh = wCmb !== null ? new CmbRenderer(gl, wCmb) : null;
-
-        // TODO(jstpierre): TextureHolder.
-        this.textures = [];
-        if (this.opaqueMesh !== null)
-            this.textures = this.textures.concat(this.opaqueMesh.textures);
-        if (this.transparentMesh !== null)
-            this.textures = this.textures.concat(this.transparentMesh.textures);
-        if (this.wMesh !== null)
-            this.textures = this.textures.concat(this.wMesh.textures);
+        this.opaqueMesh = mesh.opaque !== null ? new CmbRenderer(gl, textureHolder, mesh.opaque) : null;
+        this.transparentMesh = mesh.transparent !== null ? new CmbRenderer(gl, textureHolder, mesh.transparent) : null;
+        this.wMesh = wCmb !== null ? new CmbRenderer(gl, textureHolder, wCmb) : null;
     }
 
     public bindCMAB(cmab: CMAB.CMAB): void {

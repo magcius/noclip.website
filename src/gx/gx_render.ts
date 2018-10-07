@@ -13,9 +13,9 @@ import { assert, nArray } from '../util';
 import { LoadedVertexData, LoadedVertexLayout } from './gx_displaylist';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { TextureMapping, TextureHolder, LoadedTexture, getGLTextureFromMapping, getGLSamplerFromMapping } from '../TextureHolder';
+import { TextureMapping, TextureHolder, LoadedTexture, bindGLTextureMappings } from '../TextureHolder';
 import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/BufferHelpers';
-import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 
@@ -129,25 +129,8 @@ export class GXRenderHelper {
         state.renderStatisticsTracker.bufferUploadCount++;
     }
 
-    public bindMaterialTextureMapping(state: RenderState, textureMapping: TextureMapping[], prog: GX_Material.GX_Program): void {
-        const gl = state.gl;
-        assert(prog === state.currentProgram);
-        for (let i = 0; i < 8; i++) {
-            const m = textureMapping[i];
-            const glTexture = getGLTextureFromMapping(m);
-            if (glTexture === null)
-                continue;
-
-            const glSampler = getGLSamplerFromMapping(m);
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, glTexture);
-            gl.bindSampler(i, glSampler);
-            state.renderStatisticsTracker.textureBindCount++;
-        }
-    }
-
-    public bindMaterialTextures(state: RenderState, materialParams: MaterialParams, prog: GX_Material.GX_Program): void {
-        this.bindMaterialTextureMapping(state, materialParams.m_TextureMapping, prog);
+    public bindMaterialTextures(state: RenderState, materialParams: MaterialParams): void {
+        bindGLTextureMappings(state, materialParams.m_TextureMapping);
     }
 
     public bindUniformBuffers(state: RenderState): void {

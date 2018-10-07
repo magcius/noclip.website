@@ -2,6 +2,7 @@
 import * as Viewer from './viewer';
 import { GfxSampler, GfxTexture } from './gfx/platform/GfxPlatform';
 import { getTransitionDeviceForWebGL2, getPlatformTexture, getPlatformSampler } from './gfx/platform/GfxPlatformWebGL2';
+import { RenderState } from './render';
 
 // Used mostly by indirect texture FB installations...
 export interface TextureOverride {
@@ -180,4 +181,21 @@ export function getGLSamplerFromMapping(m: TextureMapping): WebGLSampler | null 
         return getPlatformSampler(m.gfxSampler);
     else
         return null;
+}
+
+export function bindGLTextureMappings(state: RenderState, textureMappings: TextureMapping[]): void {
+    const gl = state.gl;
+
+    for (let i = 0; i < textureMappings.length; i++) {
+        const m = textureMappings[i];
+        const glTexture = getGLTextureFromMapping(m);
+        if (glTexture === null)
+            continue;
+
+        const glSampler = getGLSamplerFromMapping(m);
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, glTexture);
+        gl.bindSampler(i, glSampler);
+        state.renderStatisticsTracker.textureBindCount++;
+    }
 }
