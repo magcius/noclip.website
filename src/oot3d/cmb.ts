@@ -199,14 +199,16 @@ function readTexChunk(cmb: CMB, buffer: ArrayBufferSlice, texData: ArrayBufferSl
         const format = view.getUint32(offs + 0x0C, true);
         let dataOffs = view.getUint32(offs + 0x10, true);
         const dataEnd = dataOffs + size;
-        const name = readString(buffer, offs + 0x14, 0x10);
+        const texName = readString(buffer, offs + 0x14, 0x10);
+        // TODO(jstpierre): Maybe find another way to dedupe? Name seems inconsistent.
+        const name = `${cmb.name}/${i}_${texName}`;
         offs += 0x24;
 
         const levels: TextureLevel[] = [];
         let mipWidth = width, mipHeight = height;
         for (let i = 0; i < maxLevel; i++) {
             const pixels = decodeTexture(format, mipWidth, mipHeight, texData.slice(dataOffs, dataEnd));
-            levels.push({ name, width, height, pixels });
+            levels.push({ name, width: mipWidth, height: mipHeight, pixels });
             dataOffs += computeTextureByteSize(format, mipWidth, mipHeight);
             mipWidth /= 2;
             mipHeight /= 2;
