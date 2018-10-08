@@ -363,8 +363,7 @@ export class CmbRenderer {
             }
             offs += fillMatrix4x3(this.scratchParams, offs, scratchMatrix);
 
-            const alphaReference = material.alphaTestEnable ? 1 : 0;
-            offs += fillVec4(this.scratchParams, offs, alphaReference);
+            offs += fillVec4(this.scratchParams, offs, material.alphaTestReference);
 
             gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.materialParamsBuffer));
             gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
