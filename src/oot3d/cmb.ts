@@ -124,7 +124,7 @@ interface TextureBinding {
 export interface Material {
     index: number;
     textureBindings: TextureBinding[];
-    alphaTestEnable: boolean;
+    alphaTestReference: number;
     renderFlags: RenderFlags;
 }
 
@@ -150,6 +150,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         }
 
         const alphaTestEnable = !!view.getUint8(offs + 0x130);
+        const alphaTestReference = alphaTestEnable ? (view.getUint8(offs + 0x131) / 0xFF) : -1;
 
         const renderFlags = new RenderFlags();
         const blendEnable = !!view.getUint8(offs + 0x138);
@@ -160,7 +161,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         renderFlags.depthWrite = !blendEnable;
         renderFlags.cullMode = CullMode.BACK;
 
-        cmb.materials.push({ index: i, textureBindings, alphaTestEnable, renderFlags });
+        cmb.materials.push({ index: i, textureBindings, alphaTestReference, renderFlags });
         offs += 0x15C;
 
         if (cmb.version === Version.Majora)
