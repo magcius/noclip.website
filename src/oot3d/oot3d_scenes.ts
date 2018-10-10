@@ -121,7 +121,7 @@ const sceneDescs: SceneDesc[] = [
     { name: "Kakariko Village", id: "spot01" },
     { name: "Kakariko Graveyard", id: "spot02" },
     { name: "Zora's River", id: "spot03" },
-    { name: "Kokiri Firest", id: "spot04" },
+    { name: "Kokiri Forest", id: "spot04" },
     { name: "Sacred Forest Meadow", id: "spot05" },
     { name: "Lake Hylia", id: "spot06" },
     { name: "Zora's Domain", id: "spot07" },
