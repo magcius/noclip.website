@@ -2,7 +2,7 @@
 import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderFlags, CullMode, BlendFactor, BlendMode } from '../render';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize } from './pica_texture';
 
 interface VertexBufferSlices {
@@ -342,24 +342,26 @@ function readPrmsChunk(cmb: CMB, buffer: ArrayBufferSlice): Prms {
     return { prm, skinningMode, boneTable };
 }
 
+export const enum SepdVertexAttribMode {
+    ARRAY = 0,
+    CONSTANT = 1,
+}
+
+export interface SepdVertexAttrib {
+    mode: SepdVertexAttribMode;
+    start: number;
+    scale: number;
+    dataType: DataType;
+    constant: vec4;
+}
+
 export class Sepd {
     public prms: Prms[] = [];
 
-    public posStart: number;
-    public posScale: number;
-    public posType: DataType;
-
-    public nrmStart: number;
-    public nrmScale: number;
-    public nrmType: DataType;
-
-    public colStart: number;
-    public colScale: number;
-    public colType: DataType;
-
-    public txcStart: number;
-    public txcScale: number;
-    public txcType: DataType;
+    public position: SepdVertexAttrib;
+    public normal: SepdVertexAttrib;
+    public color: SepdVertexAttrib;
+    public textureCoord: SepdVertexAttrib;
 }
 
 function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
@@ -372,28 +374,28 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     let sepdArrIdx = 0x24;
 
-    sepd.posStart = view.getUint32(sepdArrIdx + 0x00, true);
-    sepd.posScale = view.getFloat32(sepdArrIdx + 0x04, true);
-    sepd.posType = view.getUint16(sepdArrIdx + 0x08, true);
-    sepdArrIdx += 0x1C;
+    function readVertexAttrib(): SepdVertexAttrib {
+        const start = view.getUint32(sepdArrIdx + 0x00, true);
+        const scale = view.getFloat32(sepdArrIdx + 0x04, true);
+        const dataType: DataType = view.getUint16(sepdArrIdx + 0x08, true);
+        const mode: SepdVertexAttribMode = view.getUint16(sepdArrIdx + 0x0A, true);
+        const c0 = view.getFloat32(sepdArrIdx + 0x0C, true);
+        const c1 = view.getFloat32(sepdArrIdx + 0x10, true);
+        const c2 = view.getFloat32(sepdArrIdx + 0x14, true);
+        const c3 = view.getFloat32(sepdArrIdx + 0x18, true);
+        const constant: vec4 = vec4.fromValues(c0, c1, c2, c3);
+        sepdArrIdx += 0x1C;
+        return { start, scale, dataType, mode, constant };
+    }
 
-    sepd.nrmStart = view.getUint32(sepdArrIdx + 0x00, true);
-    sepd.nrmScale = view.getFloat32(sepdArrIdx + 0x04, true);
-    sepd.nrmType = view.getUint16(sepdArrIdx + 0x08, true);
-    sepdArrIdx += 0x1C;
+    sepd.position = readVertexAttrib();
+    sepd.normal = readVertexAttrib();
 
     if (cmb.version === Version.Majora)
-        sepdArrIdx += 0x1C;
+        readVertexAttrib();
 
-    sepd.colStart = view.getUint32(sepdArrIdx + 0x00, true);
-    sepd.colScale = view.getFloat32(sepdArrIdx + 0x04, true);
-    sepd.colType = view.getUint16(sepdArrIdx + 0x08, true);
-    sepdArrIdx += 0x1C;
-
-    sepd.txcStart = view.getUint32(sepdArrIdx + 0x00, true);
-    sepd.txcScale = view.getFloat32(sepdArrIdx + 0x04, true);
-    sepd.txcType = view.getUint16(sepdArrIdx + 0x08, true);
-    sepdArrIdx += 0x1C;
+    sepd.color = readVertexAttrib();
+    sepd.textureCoord = readVertexAttrib();
 
     let offs = cmb.version === Version.Majora ? 0x124 : 0x108;
     for (let i = 0; i < count; i++) {

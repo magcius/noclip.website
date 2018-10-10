@@ -241,27 +241,30 @@ export class CmbRenderer {
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cmbContext.idxBuffer);
 
+        const bindVertexAttrib = (attribLocation: number, size: number, normalized: boolean, vertexAttrib: CMB.SepdVertexAttrib) => {
+            if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY) {
+                gl.vertexAttribPointer(attribLocation, size, this.translateDataType(gl, vertexAttrib.dataType), normalized, 0, vertexAttrib.start);
+                gl.enableVertexAttribArray(attribLocation);
+            } else if (size === 4) {
+                gl.vertexAttrib4fv(attribLocation, vertexAttrib.constant);
+            } else if (size === 3) {
+                gl.vertexAttrib3fv(attribLocation, vertexAttrib.constant.slice(0, 3));
+            }
+        };
+
         gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_Position, 3, this.translateDataType(gl, sepd.posType), false, 0, sepd.posStart);
-        gl.enableVertexAttribArray(OoT3D_Program.a_Position);
+        bindVertexAttrib(OoT3D_Program.a_Position, 3, false, sepd.position);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.nrmBuffer);
-        gl.vertexAttribPointer(OoT3D_Program.a_Normal, 3, this.translateDataType(gl, sepd.nrmType), true, 0, sepd.nrmStart);
-        gl.enableVertexAttribArray(OoT3D_Program.a_Normal);
+        bindVertexAttrib(OoT3D_Program.a_Normal, 3, true, sepd.normal);
 
-        if (cmbContext.colBuffer !== null) {
+        if (cmbContext.colBuffer !== null)
             gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
-            gl.vertexAttribPointer(OoT3D_Program.a_Color, 4, this.translateDataType(gl, sepd.colType), true, 0, sepd.colStart);
-            gl.enableVertexAttribArray(OoT3D_Program.a_Color);
-        } else {
-            gl.vertexAttrib4f(OoT3D_Program.a_Color, 1.0, 1.0, 1.0, 1.0);
-        }
+        bindVertexAttrib(OoT3D_Program.a_Color, 4, true, sepd.color);
 
-        if (cmbContext.txcBuffer !== null) {
+        if (cmbContext.txcBuffer !== null)
             gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
-            gl.vertexAttribPointer(OoT3D_Program.a_TexCoord, 2, this.translateDataType(gl, sepd.txcType), false, 0, sepd.txcStart);
-            gl.enableVertexAttribArray(OoT3D_Program.a_TexCoord);
-        }
+        bindVertexAttrib(OoT3D_Program.a_TexCoord, 2, false, sepd.textureCoord);
 
         gl.bindVertexArray(null);
 
@@ -280,7 +283,7 @@ export class CmbRenderer {
 
                 let offs = 0;
                 offs += fillMatrix4x3(this.scratchParams, offs, scratchMatrix);
-                offs += fillVec4(this.scratchParams, offs, sepd.posScale, sepd.txcScale);
+                offs += fillVec4(this.scratchParams, offs, sepd.position.scale, sepd.textureCoord.scale);
 
                 gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.prmParamsBuffer));
                 gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
