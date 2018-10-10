@@ -76,10 +76,10 @@ layout(row_major, std140) uniform ub_SceneParams {
 layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_MaterialColor;
     mat4x3 u_TexMtx[1];
-    vec4 u_MaterialMisc;
+    vec4 u_MaterialMisc[1];
 };
 
-#define u_AlphaReference (u_MaterialMisc[0])
+#define u_AlphaReference (u_MaterialMisc[0][0])
 
 layout(row_major, std140) uniform ub_PrmParams {
     mat4x3 u_BoneMatrix[1];
