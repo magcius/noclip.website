@@ -141,7 +141,10 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         for (let j = 0; j < 3; j++) {
             const textureIdx = view.getInt16(bindingOffs + 0x00, true);
-            const minFilter = view.getUint16(bindingOffs + 0x04, true);
+            let minFilter = view.getUint16(bindingOffs + 0x04, true);
+            // XXX(jstpierre): Hack to force trilinear filtering. Looks much better.
+            if (minFilter === TextureFilter.LINEAR_MIPMAP_NEAREST)
+                minFilter = TextureFilter.LINEAR_MIPMAP_LINEAR;
             const magFilter = view.getUint16(bindingOffs + 0x06, true);
             const wrapS = view.getUint16(bindingOffs + 0x08, true);
             const wrapT = view.getUint16(bindingOffs + 0x0A, true);
