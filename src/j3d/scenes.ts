@@ -88,10 +88,10 @@ export function createScenesFromBuffer(gl: WebGL2RenderingContext, textureHolder
             let scenes = bmdFiles.map((bmdFile) => {
                 // Find the corresponding btk.
                 const basename = bmdFile.name.split('.')[0];
-                const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`);
-                const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`);
-                const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`);
-                const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`);
+                const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`) || null;
+                const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`) || null;
+                const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
+                const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
                 let scene;
                 try {
                     scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
