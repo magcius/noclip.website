@@ -93,7 +93,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
             }
         }
 
-        throw new Error(`Cannot find texture ${name}`);
+        return -1;
     }
 
     public hasTexture(name: string): boolean {
@@ -124,6 +124,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
             return true;
         }
 
+        throw new Error(`Cannot find texture ${name}`);
         return false;
     }
 

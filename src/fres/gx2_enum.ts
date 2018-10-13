@@ -105,3 +105,33 @@ export const enum GX2FrontFaceMode {
     CCW = 0x00,
     CW  = 0x01,
 }
+
+export const enum GX2BlendFunction {
+    ZERO = 0,
+    ONE = 1,
+    SRC_COLOR = 2,
+    ONE_MINUS_SRC_COLOR = 3,
+    SRC_ALPHA = 4,
+    ONE_MINUS_SRC_ALPHA = 5,
+    DST_ALPHA = 6,
+    ONE_MINUS_DST_ALPHA = 7,
+    DST_COLOR = 8,
+    ONE_MINUS_DST_COLOR = 8,
+    SRC_ALPHA_SATURATE = 10,
+    CONSTANT_COLOR = 13,
+    ONE_MINUS_CONSTANT_COLOR = 14,
+    SRC1_COLOR = 15,
+    ONE_MINUS_SRC1_COLOR = 16,
+    SRC1_ALPHA = 17,
+    ONE_MINUS_SRC1_ALPHA = 18,
+    CONSTANT_ALPHA = 19,
+    ONE_MINUS_CONSTANT_ALPHA = 20,
+}
+
+export const enum GX2BlendCombine {
+    ADD = 0,
+    SRC_MINUS_DST = 1,
+    MIN = 2,
+    MAX = 3,
+    DST_MINUS_SRC = 4,
+}

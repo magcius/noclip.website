@@ -1,6 +1,6 @@
 
 import { GX2Surface, parseGX2Surface } from './gx2_surface';
-import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode, GX2SurfaceFormat } from './gx2_enum';
+import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode, GX2SurfaceFormat, GX2BlendFunction, GX2BlendCombine } from './gx2_enum';
 
 import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -203,6 +203,13 @@ export interface RenderState {
     depthTest: boolean;
     depthWrite: boolean;
     depthCompareFunc: GX2CompareFunction;
+    blendEnabled: boolean;
+    blendColorCombine: GX2BlendCombine;
+    blendAlphaCombine: GX2BlendFunction
+    blendSrcColorFunc: GX2BlendFunction;
+    blendDstColorFunc: GX2BlendFunction;
+    blendSrcAlphaFunc: GX2BlendFunction;
+    blendDstAlphaFunc: GX2BlendCombine;
 }
 
 export interface FMAT {
@@ -462,18 +469,35 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
 
         // Render state.
         const renderState0 = view.getUint32(renderStateOffs + 0x00, littleEndian);
-        const renderState1 = view.getUint32(renderStateOffs + 0x04, littleEndian);
-        const renderState2 = view.getUint32(renderStateOffs + 0x08, littleEndian);
+        const polygonControl = view.getUint32(renderStateOffs + 0x04, littleEndian);
+        const depthStencilControl = view.getUint32(renderStateOffs + 0x08, littleEndian);
+        const alphaTestControl = view.getUint32(renderStateOffs + 0x0C, littleEndian);
+        const alphaTestReference = view.getFloat32(renderStateOffs + 0x10, littleEndian);
+        const colorControl = view.getUint32(renderStateOffs + 0x14, littleEndian);
+        const blendControlTarget = view.getUint32(renderStateOffs + 0x18, littleEndian);
+        const blendControlFlags = view.getUint32(renderStateOffs + 0x1C, littleEndian);
 
-        const cullFront = !!((renderState1 >>> 0) & 0x01);
-        const cullBack = !!((renderState1 >>> 1) & 0x01);
-        const frontFaceMode = (renderState1 >>> 2) & 0x01;
+        const cullFront = !!((polygonControl >>> 0) & 0x01);
+        const cullBack = !!((polygonControl >>> 1) & 0x01);
+        const frontFaceMode = (polygonControl >>> 2) & 0x01;
 
-        const depthTest = !!((renderState2 >>> 1) & 0x01);
-        const depthWrite = !!((renderState2 >>> 2) & 0x01);
-        const depthCompareFunc = (renderState2 >> 4) & 0x07;
+        const depthTest = !!((depthStencilControl >>> 1) & 0x01);
+        const depthWrite = !!((depthStencilControl >>> 2) & 0x01);
+        const depthCompareFunc = (depthStencilControl >>> 4) & 0x07;
 
-        const renderState: RenderState = { cullFront, cullBack, frontFaceMode, depthTest, depthWrite, depthCompareFunc };
+        const blendEnabled = !!((colorControl >>> 8) & 0x01);
+        const blendSrcColorFunc: GX2BlendFunction = (blendControlFlags >>> 0) & 0x1F;
+        const blendColorCombine: GX2BlendCombine = (blendControlFlags >>> 5) & 0x07;
+        const blendDstColorFunc: GX2BlendFunction = (blendControlFlags >>> 8) & 0x1F;
+        const blendSrcAlphaFunc: GX2BlendFunction = (blendControlFlags >>> 16) & 0x1F;
+        const blendAlphaCombine: GX2BlendFunction = (blendControlFlags >>> 21) & 0x07;
+        const blendDstAlphaFunc: GX2BlendCombine = (blendControlFlags >>> 24) & 0x1F;
+
+        const renderState: RenderState = {
+            cullFront, cullBack, frontFaceMode, depthTest, depthWrite, depthCompareFunc,
+            blendEnabled, blendColorCombine, blendAlphaCombine,
+            blendSrcColorFunc, blendSrcAlphaFunc, blendDstColorFunc, blendDstAlphaFunc,
+        };
 
         fmat.push({ name, renderInfoParameters, textureAssigns, materialParameterDataBuffer, materialParameters, shaderAssign, renderState });
     }

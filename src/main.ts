@@ -24,6 +24,7 @@ import * as MDL0 from './mdl0/scenes';
 import * as ZELVIEW from './zelview/scenes';
 import * as OOT3D from './oot3d/oot3d_scenes';
 import * as MM3D from './oot3d/mm3d_scenes';
+import * as LM3D from './oot3d/lm3d_scenes';
 import * as FRES from './fres/scenes';
 import * as SPL from './fres/splatoon_scenes';
 import * as DKSIV from './dksiv/scenes';
@@ -43,6 +44,7 @@ import { RenderStatistics } from './render';
 import { hexdump } from './util';
 
 const sceneGroups = [
+    LM3D.sceneGroup,
     SMS.sceneGroup,
     MKDD.sceneGroup,
     MKWII.sceneGroup,

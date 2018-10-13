@@ -13,7 +13,7 @@ interface VertexBufferSlices {
 }
 
 const enum Version {
-    Ocarina, Majora
+    Ocarina, Majora, LuigisMansion
 }
 
 export class CMB {
@@ -91,7 +91,7 @@ function readSklChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
         bones.push(bone);
 
         boneTableIdx += 0x28;
-        if (cmb.version === Version.Majora)
+        if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
             boneTableIdx += 0x04;
     }
     cmb.bones = bones;
@@ -152,6 +152,10 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             bindingOffs += 0x18;
         }
 
+        // Hack for Luigi's Mansion: use second texture binding
+        if (cmb.version === Version.LuigisMansion)
+            textureBindings[0] = textureBindings[1];
+
         const alphaTestEnable = !!view.getUint8(offs + 0x130);
         const alphaTestReference = alphaTestEnable ? (view.getUint8(offs + 0x131) / 0xFF) : -1;
 
@@ -165,9 +169,10 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         renderFlags.cullMode = CullMode.BACK;
 
         cmb.materials.push({ index: i, textureBindings, alphaTestReference, renderFlags });
+
         offs += 0x15C;
 
-        if (cmb.version === Version.Majora)
+        if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
             offs += 0x10;
     }
 }
@@ -239,7 +244,7 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     const nrmBuffer = buffer.subarray(nrmOffs, nrmSize);
     idx += 0x08;
 
-    if (cmb.version === Version.Majora)
+    if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
         idx += 0x08;
 
     const colSize = view.getUint32(idx + 0x00, true);
@@ -271,10 +276,13 @@ function readMshsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
         mesh.sepdIdx = view.getUint16(idx, true);
         mesh.matsIdx = view.getUint8(idx + 0x02);
         cmb.meshs.push(mesh);
-        idx += 0x04;
 
-        if (cmb.version === Version.Majora)
-            idx += 0x08;
+        if (cmb.version === Version.Ocarina)
+            idx += 0x04;
+        else if (cmb.version === Version.Majora)
+            idx += 0x0C;
+        else if (cmb.version === Version.LuigisMansion)
+            idx += 0x58;
     }
 }
 
@@ -375,7 +383,7 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     const sepd = new Sepd();
 
-    let sepdArrIdx = 0x24;
+    let sepdArrIdx = cmb.version === Version.LuigisMansion ? 0x3C : 0x24;
 
     function readVertexAttrib(): SepdVertexAttrib {
         const start = view.getUint32(sepdArrIdx + 0x00, true);
@@ -394,17 +402,24 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
     sepd.position = readVertexAttrib();
     sepd.normal = readVertexAttrib();
 
-    if (cmb.version === Version.Majora)
+    if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
         readVertexAttrib();
 
     sepd.color = readVertexAttrib();
     sepd.textureCoord = readVertexAttrib();
 
-    let offs = cmb.version === Version.Majora ? 0x124 : 0x108;
+    readVertexAttrib();
+    readVertexAttrib();
+    readVertexAttrib();
+    readVertexAttrib();
+
+    // Two 16-bit values at 0x104.
+    sepdArrIdx += 0x04;
+
     for (let i = 0; i < count; i++) {
-        const prmsOffs = view.getUint16(offs, true);
+        const prmsOffs = view.getUint16(sepdArrIdx + 0x00, true);
         sepd.prms.push(readPrmsChunk(cmb, buffer.slice(prmsOffs)));
-        offs += 0x02;
+        sepdArrIdx += 0x02;
     }
 
     return sepd;
@@ -446,7 +461,14 @@ export function parse(buffer: ArrayBufferSlice): CMB {
     cmb.name = readString(buffer, 0x10, 0x10);
 
     const numChunks = view.getUint32(0x08, true);
-    cmb.version = (numChunks === 0x0A) ? Version.Majora : Version.Ocarina;
+    if (numChunks === 0x0F)
+        cmb.version = Version.LuigisMansion;
+    else if (numChunks === 0x0A)
+        cmb.version = Version.Majora
+    else if (numChunks === 0x06)
+        cmb.version = Version.Ocarina;
+    else
+        throw "whoops";
 
     let chunkIdx = 0x24;
 
@@ -454,7 +476,7 @@ export function parse(buffer: ArrayBufferSlice): CMB {
     chunkIdx += 0x04;
     readSklChunk(cmb, buffer.slice(sklChunkOffs));
 
-    if (cmb.version === Version.Majora)
+    if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
         chunkIdx += 0x04; // Qtrs
 
     const matsChunkOffs = view.getUint32(chunkIdx, true);
