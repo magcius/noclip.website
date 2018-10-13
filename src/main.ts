@@ -44,7 +44,6 @@ import { RenderStatistics } from './render';
 import { hexdump } from './util';
 
 const sceneGroups = [
-    LM3D.sceneGroup,
     SMS.sceneGroup,
     MKDD.sceneGroup,
     MKWII.sceneGroup,
@@ -66,6 +65,7 @@ const sceneGroups = [
     OOT3D.sceneGroup,
     MM3D.sceneGroup,
     ZELVIEW.sceneGroup,
+    LM3D.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {
@@ -110,6 +110,9 @@ class DroppedFileSceneDesc implements SceneDesc {
 
         if (file.name.endsWith('.szs'))
             return FRES.createSceneFromSARCBuffer(gl, buffer);
+
+        if (file.name.endsWith('.gar'))
+            return Promise.resolve(LM3D.createSceneFromGARBuffer(gl, buffer));
 
         // XXX(jstpierre): Figure out WTF to do here...
         const promise = J3D.createMultiSceneFromBuffer(gl, buffer);
