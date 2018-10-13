@@ -18,6 +18,10 @@ import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping, bindGLTextureMappings } from '../TextureHolder';
 import { nArray } from '../util';
 
+// @ts-ignore
+// This feature is provided by Parcel.
+import { readFileSync } from 'fs';
+
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
     canvas.width = textureLevel.width;
@@ -64,76 +68,7 @@ class OoT3D_Program extends DeviceProgram {
     public static a_Color = 2;
     public static a_TexCoord = 3;
 
-    public both = `
-precision mediump float;
-    
-// Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
-};
-
-// Expected to change with each material.
-layout(row_major, std140) uniform ub_MaterialParams {
-    vec4 u_MaterialColor;
-    mat4x3 u_TexMtx[1];
-    vec4 u_MaterialMisc[1];
-};
-
-#define u_AlphaReference (u_MaterialMisc[0][0])
-
-layout(row_major, std140) uniform ub_PrmParams {
-    mat4x3 u_BoneMatrix[1];
-    vec4 u_PrmMisc[1];
-};
-
-uniform sampler2D u_Texture[1];
-
-#define u_PosScale (u_PrmMisc[0][0])
-#define u_TexCoordScale (u_PrmMisc[0][1])
-
-varying vec4 v_Color;
-varying vec2 v_TexCoord;
-varying float v_LightIntensity;
-`;
-
-    public vert = `
-layout(location = ${OoT3D_Program.a_Position}) in vec3 a_Position;
-layout(location = ${OoT3D_Program.a_Normal}) in vec3 a_Normal;
-layout(location = ${OoT3D_Program.a_Color}) in vec4 a_Color;
-layout(location = ${OoT3D_Program.a_TexCoord}) in vec2 a_TexCoord;
-
-void main() {
-    vec4 t_Position = vec4(a_Position * u_PosScale, 1.0);
-    gl_Position = u_Projection * mat4(u_BoneMatrix[0]) * t_Position;
-
-    v_Color = a_Color;
-
-    vec2 t_TexCoord = a_TexCoord * u_TexCoordScale;
-    v_TexCoord = (u_TexMtx[0] * vec4(t_TexCoord, 0.0, 1.0)).st;
-    v_TexCoord.t = 1.0 - v_TexCoord.t;
-
-    vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
-    // Disable normals for now until I can solve them.
-    v_LightIntensity = 1.0;
-    // v_LightIntensity = dot(-a_Normal, t_LightDirection);
-
-    // Hacky Ambient.
-    v_Color.rgb = clamp(v_Color.rgb + 0.3, vec3(0), vec3(1));
-    v_LightIntensity = clamp(v_LightIntensity + 0.6, 0.0, 1.0);
-}`;
-
-    public frag = `
-void main() {
-    vec4 t_Color = texture2D(u_Texture[0], v_TexCoord) * v_Color;
-
-    t_Color.rgb *= v_LightIntensity;
-    t_Color *= u_MaterialColor;
-
-    if (t_Color.a <= u_AlphaReference)
-        discard;
-
-    gl_FragColor = t_Color;
-}`;
+    public both = readFileSync('src/oot3d/program.glsl', { encoding: 'utf8' });
 }
 
 function fillSceneParamsData(d: Float32Array, state: RenderState, offs: number = 0): void {
@@ -172,7 +107,7 @@ export class CmbRenderer {
     private scratchParams = new Float32Array(64);
     private textureMapping = nArray(1, () => new TextureMapping());
 
-    constructor(gl: WebGL2RenderingContext, private textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
+    constructor(gl: WebGL2RenderingContext, public textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
         const device = getTransitionDeviceForWebGL2(gl);
 
         this.arena = new RenderArena();

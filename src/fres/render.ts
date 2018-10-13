@@ -1,9 +1,9 @@
 
-import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat, GX2SurfaceFormat } from './gx2_enum';
+import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat, GX2SurfaceFormat, GX2BlendCombine, GX2BlendFunction } from './gx2_enum';
 import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 
-import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode } from '../render';
+import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode, BlendMode, BlendFactor } from '../render';
 import { SimpleProgram } from '../Program';
 import { assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -439,17 +439,20 @@ class Command_Material {
             gl.uniform1i(uniformLocation, i);
 
             const textureAssignIndex = this.textureAssigns.findIndex((textureAssign) => textureAssign.attribName === attribName);
+            let boundTexture = false;
             if (textureAssignIndex >= 0) {
                 const textureAssign = this.textureAssigns[textureAssignIndex];
-                this.textureHolder.fillTextureMapping(this.textureMapping, textureAssign.textureName);
-
-                gl.bindTexture(gl.TEXTURE_2D, getGLTextureFromMapping(this.textureMapping));
-
-                const sampler = this.samplers[textureAssignIndex];
-                gl.bindSampler(i, getPlatformSampler(sampler));
-            } else {
-                gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
+                if (this.textureHolder.hasTexture(textureAssign.textureName)) {
+                    this.textureHolder.fillTextureMapping(this.textureMapping, textureAssign.textureName);
+                    gl.bindTexture(gl.TEXTURE_2D, getGLTextureFromMapping(this.textureMapping));
+                    const sampler = this.samplers[textureAssignIndex];
+                    gl.bindSampler(i, getPlatformSampler(sampler));
+                    boundTexture = true;
+                }
             }
+
+            if (!boundTexture)
+                gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
         }
     }
 
@@ -533,6 +536,59 @@ class Command_Material {
             return CullMode.NONE;
     }
 
+    private translateBlendCombine(enabled: boolean, combine: GX2BlendCombine): BlendMode {
+        if (enabled) {
+            switch (combine) {
+            case GX2BlendCombine.ADD:
+                return BlendMode.ADD;
+            case GX2BlendCombine.DST_MINUS_SRC:
+                return BlendMode.SUBTRACT;
+            case GX2BlendCombine.SRC_MINUS_DST:
+                return BlendMode.REVERSE_SUBTRACT;
+            default:
+                throw "whoops";
+            }
+        } else {
+            return BlendMode.NONE;
+        }
+    }
+
+    private translateBlendFunction(func: GX2BlendFunction): BlendFactor {
+        switch (func) {
+        case GX2BlendFunction.ZERO:
+            return BlendFactor.ZERO;
+        case GX2BlendFunction.ONE:
+            return BlendFactor.ONE;
+
+        case GX2BlendFunction.SRC_ALPHA:
+        case GX2BlendFunction.SRC1_ALPHA:
+            return BlendFactor.SRC_ALPHA;
+        case GX2BlendFunction.ONE_MINUS_SRC_ALPHA:
+        case GX2BlendFunction.ONE_MINUS_SRC1_ALPHA:
+            return BlendFactor.ONE_MINUS_SRC_ALPHA;
+
+        case GX2BlendFunction.DST_ALPHA:
+            return BlendFactor.DST_ALPHA;
+        case GX2BlendFunction.ONE_MINUS_DST_ALPHA:
+            return BlendFactor.ONE_MINUS_DST_ALPHA;
+
+        case GX2BlendFunction.SRC_COLOR:
+        case GX2BlendFunction.SRC1_COLOR:
+            return BlendFactor.SRC_COLOR;
+        case GX2BlendFunction.ONE_MINUS_SRC_COLOR:
+        case GX2BlendFunction.ONE_MINUS_SRC1_COLOR:
+            return BlendFactor.ONE_MINUS_SRC_COLOR;
+
+        case GX2BlendFunction.DST_COLOR:
+            return BlendFactor.DST_COLOR;
+        case GX2BlendFunction.ONE_MINUS_DST_COLOR:
+            return BlendFactor.ONE_MINUS_DST_COLOR;
+
+        default:
+            throw "whoops";
+        }
+    }
+
     private translateRenderState(renderState: BFRES.RenderState): RenderFlags {
         const renderFlags = new RenderFlags();
         renderFlags.frontFace = this.translateFrontFaceMode(renderState.frontFaceMode);
@@ -540,6 +596,9 @@ class Command_Material {
         renderFlags.depthFunc = this.translateCompareFunction(renderState.depthCompareFunc);
         renderFlags.depthWrite = renderState.depthWrite;
         renderFlags.cullMode = this.translateCullMode(renderState.cullFront, renderState.cullBack);
+        renderFlags.blendMode = this.translateBlendCombine(renderState.blendEnabled, renderState.blendColorCombine);
+        renderFlags.blendDst = this.translateBlendFunction(renderState.blendDstColorFunc);
+        renderFlags.blendSrc = this.translateBlendFunction(renderState.blendSrcColorFunc);
         return renderFlags;
     }
 }

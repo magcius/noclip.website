@@ -34,6 +34,7 @@ class FRESRenderer implements Viewer.MainScene {
 export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): FRESRenderer {
     const fres = BFRES.parse(buffer);
     const textureHolder = new GX2TextureHolder();
+    textureHolder.addFRESTextures(gl, fres);
     return new FRESRenderer(textureHolder, new ModelRenderer(gl, textureHolder, fres, fres.fmdl[0].fmdl));
 }
 
