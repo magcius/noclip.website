@@ -107,6 +107,8 @@ export class CmbRenderer {
     private scratchParams = new Float32Array(64);
     private textureMapping = nArray(1, () => new TextureMapping());
 
+    public modelMatrix = mat4.create();
+
     constructor(gl: WebGL2RenderingContext, public textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
         const device = getTransitionDeviceForWebGL2(gl);
 
@@ -366,7 +368,7 @@ export class CmbRenderer {
             if (bone.parentBoneId >= 0) {
                 mat4.mul(this.boneMatrices[bone.boneId], this.boneMatrices[bone.parentBoneId], bone.modelMatrix);
             } else {
-                mat4.copy(this.boneMatrices[bone.boneId], bone.modelMatrix);
+                mat4.mul(this.boneMatrices[bone.boneId], this.modelMatrix, bone.modelMatrix);
             }
         }
 

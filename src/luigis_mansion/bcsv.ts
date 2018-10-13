@@ -98,22 +98,22 @@ export interface Bcsv {
     records: BcsvRecord[];
 }
 
-export function parse(buffer: ArrayBufferSlice): Bcsv {
-    const view = buffer.createDataView();
+export function parse(buffer: ArrayBufferSlice, endian: boolean): Bcsv {
+    const view = buffer.createDataView(); 
 
-    const recordCount = view.getUint32(0x00, false);
-    const fieldCount = view.getUint32(0x04, false);
-    const recordOffs = view.getUint32(0x08, false);
-    const recordSize = view.getUint32(0x0C, false);
+    const recordCount = view.getUint32(0x00, endian);
+    const fieldCount = view.getUint32(0x04, endian);
+    const recordOffs = view.getUint32(0x08, endian);
+    const recordSize = view.getUint32(0x0C, endian);
     const strTableOffs = recordOffs + (recordCount * recordSize);
 
     let fieldTableIdx = 0x10;
     const fields: BcsvField[] = [];
     for (let i = 0; i < fieldCount; i++) {
-        const nameHash = view.getUint32(fieldTableIdx + 0x00);
+        const nameHash = view.getUint32(fieldTableIdx + 0x00, endian);
         const debugName = findNameFromHash(nameHash);
-        const bitmask = view.getUint32(fieldTableIdx + 0x04);
-        const recordOffset = view.getUint16(fieldTableIdx + 0x08);
+        const bitmask = view.getUint32(fieldTableIdx + 0x04, endian);
+        const recordOffset = view.getUint16(fieldTableIdx + 0x08, endian);
         const shift = view.getInt8(fieldTableIdx + 0x0A);
         const type = view.getUint8(fieldTableIdx + 0x0B);
         fields.push({ nameHash, debugName, bitmask, recordOffset, shift, type });
@@ -130,16 +130,16 @@ export function parse(buffer: ArrayBufferSlice): Bcsv {
             let value;
             switch (field.type) {
             case BcsvFieldType.Int:
-                value = (view.getUint32(fieldOffs, false) >> field.shift) & field.bitmask;
+                value = (view.getUint32(fieldOffs, endian) >> field.shift) & field.bitmask;
                 break;
             case BcsvFieldType.String:
                 value = readString(buffer, fieldOffs, 0x20, true);
                 break;
             case BcsvFieldType.Float:
-                value = view.getFloat32(fieldOffs, false);
+                value = view.getFloat32(fieldOffs, endian);
                 break;
             case BcsvFieldType.Short:
-                value = (view.getUint16(fieldOffs, false) >> field.shift) & field.bitmask;
+                value = (view.getUint16(fieldOffs, endian) >> field.shift) & field.bitmask;
                 break;
             case BcsvFieldType.Byte:
                 value = (view.getUint8(fieldOffs) >> field.shift) & field.bitmask;

@@ -382,13 +382,13 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
     const count = view.getUint16(0x08, true);
 
     const sepd = new Sepd();
-
     let sepdArrIdx = cmb.version === Version.LuigisMansion ? 0x3C : 0x24;
 
     function readVertexAttrib(): SepdVertexAttrib {
         const start = view.getUint32(sepdArrIdx + 0x00, true);
         const scale = view.getFloat32(sepdArrIdx + 0x04, true);
         const dataType: DataType = view.getUint16(sepdArrIdx + 0x08, true);
+
         const mode: SepdVertexAttribMode = view.getUint16(sepdArrIdx + 0x0A, true);
         const c0 = view.getFloat32(sepdArrIdx + 0x0C, true);
         const c1 = view.getFloat32(sepdArrIdx + 0x10, true);
@@ -407,7 +407,7 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     sepd.color = readVertexAttrib();
     sepd.textureCoord = readVertexAttrib();
-
+    
     readVertexAttrib();
     readVertexAttrib();
     readVertexAttrib();
