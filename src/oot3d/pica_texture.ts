@@ -3,6 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 export enum TextureFormat {
     ETC1     = 0x0000675A,
     ETC1A4   = 0x0000675B,
+    RGBA4444 = 0x80336752,
     RGBA5551 = 0x80346752,
     RGB565   = 0x83636754,
     A8       = 0x14016756,
@@ -26,6 +27,7 @@ export function computeTextureByteSize(format: TextureFormat, width: number, hei
         return width * height / 2;
     case TextureFormat.ETC1A4:
         return width * height;
+    case TextureFormat.RGBA4444:
     case TextureFormat.RGBA5551:
     case TextureFormat.RGB565:
     case TextureFormat.LA8:
@@ -149,7 +151,7 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
 
         // Indexes march down and to the right here.
         const y = i & 0x03;
-        const x = i >> 2;
+        const x = i >>> 2;
         const dstIndex = dstOffs + ((y * stride) + x) * 4;
 
         // Whether we're in block 1 or block 2;
@@ -233,7 +235,7 @@ function decodeTexture_Tiled(width: number, height: number, decoder: PixelDecode
 
     function morton7(n: number) {
         // 0a0b0c => 000abc
-        return ((n >> 2) & 0x04) | ((n >> 1) & 0x02) | (n & 0x01);
+        return ((n >>> 2) & 0x04) | ((n >>> 1) & 0x02) | (n & 0x01);
     }
 
     for (let yy = 0; yy < height; yy += 8) {
@@ -241,7 +243,7 @@ function decodeTexture_Tiled(width: number, height: number, decoder: PixelDecode
             // Iterate in Morton order inside each tile.
             for (let i = 0; i < 0x40; i++) {
                 const x = morton7(i);
-                const y = morton7(i >> 1);
+                const y = morton7(i >>> 1);
                 const dstOffs = ((yy + y) * stride + xx + x) * 4;
                 decoder(pixels, dstOffs);
             }
@@ -251,14 +253,27 @@ function decodeTexture_Tiled(width: number, height: number, decoder: PixelDecode
     return pixels;
 }
 
+function decodeTexture_RGBA4444(width: number, height: number, texData: ArrayBufferSlice) {
+    const src = texData.createDataView();
+    let srcOffs = 0;
+    return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
+        const p = src.getUint16(srcOffs, true);
+        pixels[dstOffs + 0] = expand4to8((p >>> 12) & 0x0F);
+        pixels[dstOffs + 1] = expand4to8((p >>> 8) & 0x0F);
+        pixels[dstOffs + 2] = expand4to8((p >>> 4) & 0x0F);
+        pixels[dstOffs + 3] = expand4to8((p >>> 0) & 0x0F);
+        srcOffs += 2;
+    });
+}
+
 function decodeTexture_RGBA5551(width: number, height: number, texData: ArrayBufferSlice) {
     const src = texData.createDataView();
     let srcOffs = 0;
     return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
-        pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
-        pixels[dstOffs + 1] = expand5to8((p >> 6) & 0x1F);
-        pixels[dstOffs + 2] = expand5to8((p >> 1) & 0x1F);
+        pixels[dstOffs + 0] = expand5to8((p >>> 11) & 0x1F);
+        pixels[dstOffs + 1] = expand5to8((p >>> 6) & 0x1F);
+        pixels[dstOffs + 2] = expand5to8((p >>> 1) & 0x1F);
         pixels[dstOffs + 3] = (p & 0x01) ? 0xFF : 0x00;
         srcOffs += 2;
     });
@@ -269,8 +284,8 @@ function decodeTexture_RGB565(width: number, height: number, texData: ArrayBuffe
     let srcOffs = 0;
     return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
         const p = src.getUint16(srcOffs, true);
-        pixels[dstOffs + 0] = expand5to8((p >> 11) & 0x1F);
-        pixels[dstOffs + 1] = expand6to8((p >> 5) & 0x3F);
+        pixels[dstOffs + 1] = expand6to8((p >>> 5) & 0x3F);
+        pixels[dstOffs + 0] = expand5to8((p >>> 11) & 0x1F);
         pixels[dstOffs + 2] = expand5to8(p & 0x1F);
         pixels[dstOffs + 3] = 0xFF;
         srcOffs += 2;
@@ -335,6 +350,8 @@ export function decodeTexture(format: TextureFormat, width: number, height: numb
         return decodeTexture_ETC1(width, height, texData, false);
     case TextureFormat.ETC1A4:
         return decodeTexture_ETC1(width, height, texData, true);
+    case TextureFormat.RGBA4444:
+        return decodeTexture_RGBA4444(width, height, texData);
     case TextureFormat.RGBA5551:
         return decodeTexture_RGBA5551(width, height, texData);
     case TextureFormat.RGB565:
@@ -356,6 +373,7 @@ export function getTextureFormatName(format: TextureFormat): string {
     switch (format) {
     case TextureFormat.ETC1: return 'ETC1';
     case TextureFormat.ETC1A4: return 'ETC1A4';
+    case TextureFormat.RGBA4444: return 'RGBA4444';
     case TextureFormat.RGBA5551: return 'RGBA5551';
     case TextureFormat.RGB565: return 'RGB565';
     case TextureFormat.A8: return 'A8';
