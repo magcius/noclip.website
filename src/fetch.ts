@@ -38,17 +38,22 @@ export function fetchData(url: string): Progressable<NamedArrayBufferSlice> {
     return pr;
 }
 
-function downloadBlob(filename: string, blob: Blob): void {
-    var url = window.URL.createObjectURL(blob);
-    var elem = document.createElement('a');
-    elem.setAttribute('href', url);
+function downloadHref(filename: string, href: string): void {
+    const elem = document.createElement('a');
+    elem.setAttribute('href', href);
     elem.setAttribute('download', filename);
     document.body.appendChild(elem);
     elem.click();
     document.body.removeChild(elem);
 }
 
+export function downloadBlob(filename: string, blob: Blob): void {
+    const url = window.URL.createObjectURL(blob);
+    downloadHref(filename, url);
+    window.URL.revokeObjectURL(url);
+}
+
 export function downloadBuffer(filename: string, buffer: ArrayBufferSlice, type: string = 'application/octet-stream'): void {
     const blob = new Blob([buffer.castToBuffer()], { type });
-    return downloadBlob(filename, blob);
+    downloadBlob(filename, blob);
 }

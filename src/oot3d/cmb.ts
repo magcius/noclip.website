@@ -373,6 +373,11 @@ export class Sepd {
     public normal: SepdVertexAttrib;
     public color: SepdVertexAttrib;
     public textureCoord: SepdVertexAttrib;
+    public unk0: SepdVertexAttrib;
+    public unk1: SepdVertexAttrib;
+    public unk2: SepdVertexAttrib;
+    public unk3: SepdVertexAttrib;
+    public unk4: SepdVertexAttrib;
 }
 
 function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
@@ -403,15 +408,15 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
     sepd.normal = readVertexAttrib();
 
     if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
-        readVertexAttrib();
+        sepd.unk0 = readVertexAttrib();
 
     sepd.color = readVertexAttrib();
     sepd.textureCoord = readVertexAttrib();
 
-    readVertexAttrib();
-    readVertexAttrib();
-    readVertexAttrib();
-    readVertexAttrib();
+    sepd.unk1 = readVertexAttrib();
+    sepd.unk2 = readVertexAttrib();
+    sepd.unk3 = readVertexAttrib();
+    sepd.unk4 = readVertexAttrib();
 
     // Two 16-bit values at 0x104.
     sepdArrIdx += 0x04;

@@ -7,7 +7,8 @@ import InputManager from './InputManager';
 import { CameraController, Camera, CameraControllerClass } from './Camera';
 import { TextureHolder } from './TextureHolder';
 import { GfxDevice, GfxSwapChain, GfxRenderPass } from './gfx/platform/GfxPlatform';
-import { createSwapChainForWebGL2 } from './gfx/platform/GfxPlatformWebGL2';
+import { createSwapChainForWebGL2, gfxDeviceGetImpl } from './gfx/platform/GfxPlatformWebGL2';
+import { downloadTextureToCanvas, downloadRenderbufferToCanvas } from './Screenshot';
 
 export interface Texture {
     name: string;
@@ -46,6 +47,7 @@ export class Viewer {
     public gfxDevice: GfxDevice;
     private gfxSwapChain: GfxSwapChain;
     private viewerRenderInput: ViewerRenderInput;
+    private t: number = 0;
 
     public scene: MainScene;
     public scene_device: Scene_Device;
@@ -81,7 +83,7 @@ export class Viewer {
     public reset() {
         const gl = this.renderState.gl;
         gl.activeTexture(gl.TEXTURE0);
-        gl.clearColor(0.88, 0.88, 0.88, 1);
+        gl.clearColor(0.88, 0.88, 0.88, 0.0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     }
 
@@ -168,26 +170,44 @@ export class Viewer {
         this.scene_device = scene_device;
     }
 
-    public start() {
-        let t = 0;
-        const update = (nt: number) => {
-            const dt = nt - t;
-            t = nt;
+    public update(nt: number): void {
+        const dt = nt - this.t;
+        this.t = nt;
 
-            if (this.cameraController) {
-                const updated = this.cameraController.update(this.inputManager, dt);
-                if (updated)
-                    this.oncamerachanged();
-            }
+        if (this.cameraController) {
+            const updated = this.cameraController.update(this.inputManager, dt);
+            if (updated)
+                this.oncamerachanged();
+        }
 
-            this.inputManager.resetMouse();
+        // TODO(jstpierre): Move this to main
+        this.inputManager.afterFrame();
 
-            this.renderState.time += dt;
-            this.render();
+        this.renderState.time += dt;
+        this.render();
+    }
 
-            window.requestAnimationFrame(update);
-        };
-        update(0);
+    public takeScreenshotToCanvas(): HTMLCanvasElement {
+        const canvas = document.createElement('canvas');
+
+        // TODO(jstpierre)
+        // Reading the resolved color texture gives us fringes, because the standard box filter will
+        // add the clear color just like the standard texture sample fringes... in order to get a
+        // nice-looking screenshot, we'd need to do a custom resolve of the MSAA render target.
+
+        if (this.scene !== null) {
+            // RenderState GL.
+            const gl = this.renderState.gl;
+            const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
+            const texture = this.renderState.onscreenColorTarget.resolvedColorTexture;
+            downloadTextureToCanvas(gl, texture, width, height, canvas);
+        } else if (this.scene_device !== null) {
+            const gl = gfxDeviceGetImpl(this.gfxDevice).gl;
+            const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
+            downloadTextureToCanvas(gl, this.gfxSwapChain.getOnscreenTexture(), width, height, canvas);
+        }
+
+        return canvas;
     }
 }
 

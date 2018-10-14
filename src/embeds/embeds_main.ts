@@ -87,14 +87,20 @@ class Main {
         document.body.appendChild(this.fsButton.elem);
 
         this.viewer = Viewer.Viewer.make(this.canvas);
-        this.viewer.start();
 
         // Dispatch to the main embed.
         const hash = window.location.hash.slice(1);
 
         this.onResize();
         this.loadScene(hash);
+
+        this._updateLoop(0);
     }
+
+    private _updateLoop = (time: number) => {
+        this.viewer.update(time);
+        window.requestAnimationFrame(this._updateLoop);
+    };
 
     private async loadScene(hash: string) {
         const [file, name] = hash.split('/');
