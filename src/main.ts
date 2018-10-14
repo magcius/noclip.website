@@ -195,6 +195,7 @@ class SceneLoader {
 }
 
 class Main {
+    public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
     public groups: SceneGroup[];
@@ -213,10 +214,13 @@ class Main {
     private saveTimeout: number;
 
     constructor() {
+        this.toplevel = document.createElement('div');
+        document.body.appendChild(this.toplevel);
+
         this.canvas = document.createElement('canvas');
 
         this.uiContainers = document.createElement('div');
-        document.body.appendChild(this.uiContainers);
+        this.toplevel.appendChild(this.uiContainers);
 
         this.viewer = Viewer.make(this.canvas);
         if (this.viewer === null) {
@@ -227,17 +231,17 @@ class Main {
         this.canvas.onmousedown = () => {
             this._deselectUI();
         };
-        this.canvas.ondragover = (e) => {
+        this.toplevel.ondragover = (e) => {
             this.dragHighlight.style.display = 'block';
             e.preventDefault();
         };
-        this.canvas.ondragleave = (e) => {
+        this.toplevel.ondragleave = (e) => {
             this.dragHighlight.style.display = 'none';
             e.preventDefault();
         };
-        this.canvas.ondrop = this._onDrop.bind(this);
+        this.toplevel.ondrop = this._onDrop.bind(this);
 
-        document.body.appendChild(this.canvas);
+        this.toplevel.appendChild(this.canvas);
         window.onresize = this._onResize.bind(this);
         this._onResize();
 
