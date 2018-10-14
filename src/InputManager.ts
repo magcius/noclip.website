@@ -1,6 +1,7 @@
 
 export default class InputManager {
     public toplevel: HTMLElement;
+    // tristate. non-existent = not pressed, false = pressed but not this frame, true = pressed this frame.
     public keysDown: Map<string, boolean>;
     public dx: number;
     public dy: number;
@@ -20,25 +21,34 @@ export default class InputManager {
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
         this.toplevel.addEventListener('mousedown', this._onMouseDown);
 
-        this.resetMouse();
+        this.afterFrame();
+    }
+
+    public isKeyDownEventTriggered(key: string): boolean {
+        return !!this.keysDown.get(key);
     }
 
     public isKeyDown(key: string): boolean {
-        return !!this.keysDown.get(key);
+        return this.keysDown.has(key);
     }
 
     public isDragging(): boolean {
         return this.grabbing;
     }
 
-    public resetMouse() {
+    public afterFrame() {
         this.dx = 0;
         this.dy = 0;
         this.dz = 0;
+
+        // Go through and mark all keys as non-event-triggered.
+        this.keysDown.forEach((v, k) => {
+            this.keysDown.set(k, false);
+        });
     }
 
     private _onKeyDown = (e: KeyboardEvent) => {
-        this.keysDown.set(e.code, true);
+        this.keysDown.set(e.code, !e.repeat);
     };
     private _onKeyUp = (e: KeyboardEvent) => {
         this.keysDown.delete(e.code);

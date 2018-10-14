@@ -63,7 +63,7 @@ export class BasicRenderTarget {
     public colorAttachment = new ColorAttachment();
     public depthStencilAttachment = new DepthStencilAttachment();
 
-    public colorClearColor = colorNew(0.88, 0.88, 0.88, 1.0);
+    public colorClearColor = colorNew(0.88, 0.88, 0.88, 0.0);
     public depthClearValue = 1.0;
     public stencilClearValue = 0.0;
 

@@ -42,6 +42,7 @@ import { UI, createDOMFromString } from './ui';
 import { CameraControllerClass, FPSCameraController, Camera } from './Camera';
 import { RenderStatistics } from './render';
 import { hexdump } from './util';
+import { downloadBlob } from './fetch';
 
 const sceneGroups = [
     SMS.sceneGroup,
@@ -240,7 +241,6 @@ class Main {
         window.onresize = this._onResize.bind(this);
         this._onResize();
 
-        window.addEventListener('keydown', this._onKeyDown.bind(this));
         this.viewer.onstatistics = (statistics: RenderStatistics): void => {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
         };
@@ -250,7 +250,6 @@ class Main {
         this.viewer.inputManager.onisdraggingchanged = () => {
             this.ui.setIsDragging(this.viewer.inputManager.isDragging());
         };
-        this.viewer.start();
 
         this.sceneLoader = new SceneLoader(this.viewer);
         this.sceneLoader.onscenechanged = this._onSceneChanged.bind(this);
@@ -270,7 +269,23 @@ class Main {
         // Make the user choose a scene if there's nothing loaded by default...
         if (this.currentSceneDesc === undefined)
             this.ui.sceneSelect.setExpanded(true);
+
+        this._updateLoop(0);
     }
+
+    private _updateLoop = (time: number) => {
+        if (this.viewer.inputManager.isKeyDownEventTriggered('KeyZ'))
+            this._toggleUI();
+
+        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
+
+        this.viewer.update(time);
+
+        if (shouldTakeScreenshot)
+            this._takeScreenshot();
+
+        window.requestAnimationFrame(this._updateLoop);
+    };
 
     private _deselectUI() {
         this.canvas.focus();
@@ -430,11 +445,16 @@ ${message}
         this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? '' : 'none';
     }
 
-    private _onKeyDown(e: KeyboardEvent) {
-        if (e.code === 'KeyZ') {
-            this._toggleUI();
-            e.preventDefault();
-        }
+    private _takeScreenshot() {
+        const canvas = this.viewer.takeScreenshotToCanvas();
+
+        const groupId = this.currentSceneGroup.id;
+        const sceneId = this.currentSceneDesc.id;
+        const date = new Date();
+        const filename = `${groupId}_${sceneId}_${date.toISOString()}.png`;
+        canvas.toBlob((blob) => {
+            downloadBlob(filename, blob);
+        }, 'image/png');
     }
 }
 

@@ -269,7 +269,7 @@ export class OrbitCameraController implements CameraController {
     }
 
     public update(inputManager: InputManager, dt: number): boolean {
-        if (inputManager.isKeyDown('KeyG')) {
+        if (inputManager.isKeyDownEventTriggered('KeyG')) {
             this.shouldOrbit = !this.shouldOrbit;
         }
 
