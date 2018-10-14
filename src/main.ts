@@ -374,7 +374,7 @@ class Main {
         const groupId = this.currentSceneGroup.id;
         const sceneId = this.currentSceneDesc.id;
 
-        if (gtag !== undefined) {
+        if (typeof gtag !== 'undefined') {
             gtag("event", "loadScene", {
                 'event_category': "Scenes",
                 'event_label': `${groupId}/${sceneId}`,
