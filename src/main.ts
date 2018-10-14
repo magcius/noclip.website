@@ -374,10 +374,12 @@ class Main {
         const groupId = this.currentSceneGroup.id;
         const sceneId = this.currentSceneDesc.id;
 
-        gtag("event", "loadScene", {
-            'event_category': "Scenes",
-            'event_label': `${groupId}/${sceneId}`,
-        });
+        if (gtag !== undefined) {
+            gtag("event", "loadScene", {
+                'event_category': "Scenes",
+                'event_label': `${groupId}/${sceneId}`,
+            });
+        }
     }
 
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, cameraState: string = null) {
