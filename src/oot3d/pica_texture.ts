@@ -1,3 +1,4 @@
+
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export enum TextureFormat {

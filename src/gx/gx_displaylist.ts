@@ -40,7 +40,6 @@ import { align, assert } from '../util';
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
 import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, FormatFlags, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatCompFlags, getFormatComponentCount } from '../gfx/platform/GfxPlatformFormat';
-import { Format } from '../sm64ds/nitro_tex';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {

@@ -64,7 +64,7 @@ const enum LoopMode {
 }
 
 export const enum Version {
-    Ocarina, Majora
+    Ocarina, Majora, LuigisMansion
 }
 
 function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack {
@@ -81,7 +81,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
         timeEnd = view.getUint32(0x08, true);
         unk1 = 1.0;
         unk2 = view.getUint32(0x0C, true);
-    } else if (version === Version.Majora) {
+    } else if (version === Version.Majora || version === Version.LuigisMansion) {
         type = view.getUint16(0x00, true);
         numKeyframes = view.getUint16(0x02, true);
         timeEnd = view.getUint32(0x04, true);

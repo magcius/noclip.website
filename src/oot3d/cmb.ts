@@ -193,12 +193,14 @@ export interface Texture {
     totalTextureSize: number;
 }
 
-function readTexChunk(cmb: CMB, buffer: ArrayBufferSlice, texData: ArrayBufferSlice): void {
+export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, cmbName: string = ''): Texture[] {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'tex ');
     const count = view.getUint32(0x08, true);
     let offs = 0x0C;
+
+    const textures: Texture[] = [];
     for (let i = 0; i < count; i++) {
         const size = view.getUint32(offs + 0x00, true);
         const maxLevel = view.getUint16(offs + 0x04, true);
@@ -210,21 +212,30 @@ function readTexChunk(cmb: CMB, buffer: ArrayBufferSlice, texData: ArrayBufferSl
         const dataEnd = dataOffs + size;
         const texName = readString(buffer, offs + 0x14, 0x10);
         // TODO(jstpierre): Maybe find another way to dedupe? Name seems inconsistent.
-        const name = `${cmb.name}/${i}_${texName}`;
+        const name = `${cmbName}/${i}/${texName}`;
         offs += 0x24;
 
         const levels: TextureLevel[] = [];
-        let mipWidth = width, mipHeight = height;
-        for (let i = 0; i < maxLevel; i++) {
-            const pixels = decodeTexture(format, mipWidth, mipHeight, texData.slice(dataOffs, dataEnd));
-            levels.push({ name, width: mipWidth, height: mipHeight, pixels });
-            dataOffs += computeTextureByteSize(format, mipWidth, mipHeight);
-            mipWidth /= 2;
-            mipHeight /= 2;
+
+        if (texData !== null) {
+            let mipWidth = width, mipHeight = height;
+            for (let i = 0; i < maxLevel; i++) {
+                const pixels = decodeTexture(format, mipWidth, mipHeight, texData.slice(dataOffs, dataEnd));
+                levels.push({ name, width: mipWidth, height: mipHeight, pixels });
+                dataOffs += computeTextureByteSize(format, mipWidth, mipHeight);
+                mipWidth /= 2;
+                mipHeight /= 2;
+            }
         }
 
-        cmb.textures.push({ name, format, width, height, levels, totalTextureSize: size });
+        textures.push({ name, format, width, height, levels, totalTextureSize: size });
     }
+
+    return textures;
+}
+
+function readTexChunk(cmb: CMB, buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null): void {
+    cmb.textures = parseTexChunk(buffer, texData, cmb.name);
 }
 
 function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
@@ -234,28 +245,21 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
 
     let idx = 0x0C;
 
-    const posSize = view.getUint32(idx + 0x00, true);
-    const posOffs = view.getUint32(idx + 0x04, true);
-    const posBuffer = buffer.subarray(posOffs, posSize);
-    idx += 0x08;
+    function readSlice(): ArrayBufferSlice {
+        const size = view.getUint32(idx + 0x00, true);
+        const offs = view.getUint32(idx + 0x04, true);
+        idx += 0x08;
+        return buffer.subarray(offs, size);
+    }
 
-    const nrmSize = view.getUint32(idx + 0x00, true);
-    const nrmOffs = view.getUint32(idx + 0x04, true);
-    const nrmBuffer = buffer.subarray(nrmOffs, nrmSize);
-    idx += 0x08;
+    const posBuffer = readSlice();
+    const nrmBuffer = readSlice();
 
     if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
-        idx += 0x08;
+        readSlice();
 
-    const colSize = view.getUint32(idx + 0x00, true);
-    const colOffs = view.getUint32(idx + 0x04, true);
-    const colBuffer = buffer.subarray(colOffs, colSize);
-    idx += 0x08;
-
-    const txcSize = view.getUint32(idx + 0x00, true);
-    const txcOffs = view.getUint32(idx + 0x04, true);
-    const txcBuffer = buffer.subarray(txcOffs, txcSize);
-    idx += 0x08;
+    const colBuffer = readSlice();
+    const txcBuffer = readSlice();
 
     cmb.vertexBufferSlices = { posBuffer, nrmBuffer, colBuffer, txcBuffer };
 }
@@ -492,7 +496,8 @@ export function parse(buffer: ArrayBufferSlice): CMB {
 
     const texChunkOffs = view.getUint32(chunkIdx, true);
     chunkIdx += 0x04;
-    readTexChunk(cmb, buffer.slice(texChunkOffs), buffer.slice(texDataOffs));
+
+    readTexChunk(cmb, buffer.slice(texChunkOffs), texDataOffs !== 0 ? buffer.slice(texDataOffs) : null);
 
     const sklmChunkOffs = view.getUint32(chunkIdx, true);
     chunkIdx += 0x04;
