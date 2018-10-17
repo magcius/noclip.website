@@ -111,7 +111,7 @@ export class CmbRenderer {
         const device = getTransitionDeviceForWebGL2(gl);
 
         this.arena = new RenderArena();
-        this.textureHolder.addTextures(gl, cmb.textures);
+        this.textureHolder.addTextures(gl, cmb.textures.filter((texture) => texture.levels.length > 0));
         this.model = this.translateCmb(gl, cmb);
 
         const prog = device.createProgram(this.program);
@@ -143,11 +143,11 @@ export class CmbRenderer {
         device.destroyBuffer(this.prmParamsBuffer);
     }
 
-    public bindCMAB(cmab: CMAB.CMAB): void {
+    public bindCMAB(cmab: CMAB.CMAB, channelIndex: number = 0): void {
         // TODO(jstpierre): Support better stuff here when we get a better renderer...
         for (let i = 0; i < cmab.animEntries.length; i++) {
             const animEntry = cmab.animEntries[i];
-            if (animEntry.channelIndex === 0) {
+            if (animEntry.channelIndex === channelIndex) {
                 if (animEntry.animationType === CMAB.AnimationType.TRANSLATION || animEntry.animationType === CMAB.AnimationType.ROTATION) {
                     this.srtAnimators[animEntry.materialIndex] = new CMAB.TextureAnimator(this.animationController, cmab, animEntry);
                 } else if (animEntry.animationType === CMAB.AnimationType.UNK_04) {
