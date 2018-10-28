@@ -1,16 +1,16 @@
 
 import { vec3 } from 'gl-matrix';
 
-import { RenderFlags } from '../render';
 import { DeviceProgram } from '../Program';
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxRenderPass, GfxCompareMode } from '../gfx/platform/GfxPlatform';
 import { BufferFillerHelper, fillColor } from '../gfx/helpers/BufferHelpers';
 import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxBindings } from '../gfx/platform/GfxPlatformImpl';
+import { RenderFlagsChain } from '../gfx/helpers/RenderFlagsHelpers';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -172,7 +172,7 @@ export class Scene implements Viewer.Scene_Device {
     private inputLayout: GfxInputLayout;
     private pipeline: GfxRenderPipeline;
     private program: GfxProgram;
-    private renderFlags: RenderFlags;
+    private renderFlags: RenderFlagsChain;
     private sceneUniformBufferFiller: BufferFillerHelper;
     private sceneUniformBuffer: GfxBuffer;
     private colorUniformBuffer: GfxBuffer;
@@ -194,16 +194,16 @@ export class Scene implements Viewer.Scene_Device {
             { numUniformBuffers: 1, numSamplers: 0 }, // ub_ObjectParams
         ];
 
-        this.renderFlags = new RenderFlags();
+        this.renderFlags = new RenderFlagsChain();
         this.renderFlags.depthWrite = true;
-        this.renderFlags.depthTest = true;
+        this.renderFlags.depthCompare = GfxCompareMode.LEQUAL;
 
         this.pipeline = device.createRenderPipeline({
             topology: GfxPrimitiveTopology.TRIANGLES,
             bindingLayouts: bindingLayouts,
             inputLayout: this.inputLayout,
             program: this.program,
-            renderFlags: this.renderFlags,
+            megaStateDescriptor: this.renderFlags.resolveMegaState(),
         });
 
         const deviceLimits = device.queryLimits();

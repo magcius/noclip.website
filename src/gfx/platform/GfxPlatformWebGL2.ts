@@ -1,12 +1,13 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxBlendStateDescriptor, GfxDepthStencilStateDescriptor, GfxRasterizationStateDescriptor, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
 import { DeviceProgram, ProgramCache } from '../../Program';
-import { RenderFlags, CompareMode, FullscreenCopyProgram, applyFlags, RenderFlagsTracker, RenderState } from '../../render';
+import { FullscreenCopyProgram, RenderState } from '../../render';
 import { assert } from '../../util';
 import { Color } from '../../Color';
+import { RenderFlagsChain } from '../helpers/RenderFlagsHelpers';
 
 interface GfxBufferP_GL extends GfxBuffer {
     gl_buffer: WebGLBuffer;
@@ -88,7 +89,7 @@ interface GfxRenderPipelineP_GL extends GfxRenderPipeline {
     bindingLayouts: GfxBindingLayoutsP_GL;
     program: GfxProgramP_GL;
     drawMode: GLenum;
-    renderFlags: RenderFlags;
+    megaState: GfxMegaStateDescriptor;
     inputLayout: GfxInputLayoutP_GL;
 }
 
@@ -198,19 +199,6 @@ function translatePrimitiveTopology(topology: GfxPrimitiveTopology): GLenum {
     case GfxPrimitiveTopology.TRIANGLES:
         return WebGL2RenderingContext.TRIANGLES;
     }
-}
-
-function translatePipelineStates(blendState: GfxBlendStateDescriptor, depthStencilState: GfxDepthStencilStateDescriptor, rasterizationState: GfxRasterizationStateDescriptor): RenderFlags {
-    const renderFlags = new RenderFlags();
-    renderFlags.blendMode = blendState.blendMode;
-    renderFlags.blendSrc = blendState.srcFactor;
-    renderFlags.blendDst = blendState.dstFactor;
-    renderFlags.depthTest = depthStencilState.depthCompare !== CompareMode.ALWAYS;
-    renderFlags.depthFunc = depthStencilState.depthCompare;
-    renderFlags.depthWrite = depthStencilState.depthWrite;
-    renderFlags.cullMode = rasterizationState.cullMode;
-    renderFlags.frontFace = rasterizationState.frontFace;
-    return renderFlags;
 }
 
 export function getPlatformBuffer(buffer_: GfxBuffer): WebGLBuffer {
@@ -349,8 +337,27 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     }
 }
 
+function _getFullscreenCopyMegaState(): GfxMegaStateDescriptor {
+    const flags = new RenderFlagsChain();
+    flags.depthWrite = false;
+    return flags.resolveMegaState();
+}
+
+function _getDefaultMegaState(): GfxMegaStateDescriptor {
+    // Default mega state *needs* to match platform defaults.
+    return {
+        blendMode: GfxBlendMode.NONE,
+        blendSrcFactor: GfxBlendFactor.ONE,
+        blendDstFactor: GfxBlendFactor.ZERO,
+        cullMode: GfxCullMode.NONE,
+        depthCompare: GfxCompareMode.NEVER,
+        depthWrite: false,
+        frontFace: GfxFrontFaceMode.CCW,
+    };
+}
+
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
-    private _fullscreenCopyFlags = new RenderFlags();
+    private _fullscreenCopyMegaState = _getFullscreenCopyMegaState();
     private _fullscreenCopyProgram: GfxProgramP_GL;
 
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null;
@@ -368,7 +375,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (!this.isTransitionDevice) {
             this._fullscreenCopyProgram = this.createProgram(new FullscreenCopyProgram()) as GfxProgramP_GL;
-            this._fullscreenCopyFlags.depthTest = false;
         }
     }
 
@@ -409,7 +415,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private blitFullscreenTexture(texture: GfxTexture): void {
         const gl = this.gl;
-        this._applyFlags(this._fullscreenCopyFlags);
+        this._setMegaState(this._fullscreenCopyMegaState);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
@@ -633,10 +639,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const drawMode = translatePrimitiveTopology(descriptor.topology);
         const program = descriptor.program as GfxProgramP_GL;
         assert(program.deviceProgram.uniformBufferLayouts.length === bindingLayouts.numUniformBuffers);
-        // const renderFlags = translatePipelineStates(descriptor.blendState, descriptor.depthStencilState, descriptor.rasterizationState);
-        const renderFlags = descriptor.renderFlags;
+        const megaState = descriptor.megaStateDescriptor;
         const inputLayout = descriptor.inputLayout as GfxInputLayoutP_GL;
-        const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, bindingLayouts, drawMode, program, renderFlags, inputLayout };
+        const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, bindingLayouts, drawMode, program, megaState, inputLayout };
         return pipeline;
     }
 
@@ -853,8 +858,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const c = this._currentRenderTarget.colorClearColor;
             gl.clearColor(c.r, c.b, c.g, c.a);
         }
-        if (clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT)
+        if (clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT) {
+            // GL clears obey the masks... bad API or worst API?
+            gl.depthMask(true);
             gl.clearDepth(this._currentRenderTarget.depthClearValue);
+        }
         if (clearBits & WebGL2RenderingContext.STENCIL_BUFFER_BIT)
             gl.clearStencil(this._currentRenderTarget.stencilClearValue);
         gl.clear(clearBits);
@@ -862,7 +870,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private _currentPipeline: GfxRenderPipelineP_GL;
     private _currentInputState: GfxInputStateP_GL;
-    private _currentRenderFlags = new RenderFlagsTracker();
+    private _currentMegaState: GfxMegaStateDescriptor = _getDefaultMegaState();
 
     private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings): void {
         const gl = this.gl;
@@ -898,14 +906,68 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.viewport(0, 0, w, h);
     }
 
-    private _applyFlags(flags: RenderFlags): void {
-        applyFlags(this.gl, this._currentRenderFlags, flags, { forceDisableCulling: false });
+    private _setMegaState(newMegaState: GfxMegaStateDescriptor): void {
+        const gl = this.gl;
+
+        if (this._currentMegaState.depthWrite !== newMegaState.depthWrite) {
+            gl.depthMask(newMegaState.depthWrite);
+            this._currentMegaState.depthWrite = newMegaState.depthWrite;
+        }
+
+        if (this._currentMegaState.depthCompare !== newMegaState.depthCompare) {
+            if (this._currentMegaState.depthCompare === GfxCompareMode.NEVER)
+                gl.enable(gl.DEPTH_TEST);
+            else if (newMegaState.depthCompare === GfxCompareMode.NEVER)
+                gl.disable(gl.DEPTH_TEST);
+
+            if (newMegaState.depthCompare !== GfxCompareMode.NEVER)
+                gl.depthFunc(newMegaState.depthCompare);
+            this._currentMegaState.depthCompare = newMegaState.depthCompare;
+        }
+
+        if (this._currentMegaState.blendMode !== newMegaState.blendMode) {
+            if (this._currentMegaState.blendMode === GfxBlendMode.NONE)
+                gl.enable(gl.BLEND);
+            else if (newMegaState.blendMode === GfxBlendMode.NONE)
+                gl.disable(gl.BLEND);
+
+            if (newMegaState.blendMode !== GfxBlendMode.NONE)
+                gl.blendEquation(newMegaState.blendMode);
+            this._currentMegaState.blendMode = newMegaState.blendMode;
+        }
+
+        if (this._currentMegaState.blendSrcFactor !== newMegaState.blendSrcFactor ||
+            this._currentMegaState.blendDstFactor !== newMegaState.blendDstFactor) {
+            gl.blendFunc(newMegaState.blendSrcFactor, newMegaState.blendDstFactor);
+            this._currentMegaState.blendSrcFactor = newMegaState.blendSrcFactor;
+            this._currentMegaState.blendDstFactor = newMegaState.blendDstFactor;
+        }
+
+        if (this._currentMegaState.cullMode !== newMegaState.cullMode) {
+            if (this._currentMegaState.cullMode === GfxCullMode.NONE)
+                gl.enable(gl.CULL_FACE);
+            else if (newMegaState.cullMode === GfxCullMode.NONE)
+                gl.disable(gl.CULL_FACE);
+
+            if (newMegaState.cullMode === GfxCullMode.BACK)
+                gl.cullFace(gl.BACK);
+            else if (newMegaState.cullMode === GfxCullMode.FRONT)
+                gl.cullFace(gl.FRONT);
+            else if (newMegaState.cullMode === GfxCullMode.FRONT_AND_BACK)
+                gl.cullFace(gl.FRONT_AND_BACK);
+            this._currentMegaState.cullMode = newMegaState.cullMode;
+        }
+
+        if (this._currentMegaState.frontFace !== newMegaState.frontFace) {
+            gl.frontFace(newMegaState.frontFace);
+            this._currentMegaState.frontFace = newMegaState.frontFace;
+        }
     }
 
     private setPipeline(pipeline: GfxRenderPipeline): void {
         const gl = this.gl;
         this._currentPipeline = pipeline as GfxRenderPipelineP_GL;
-        this._applyFlags(this._currentPipeline.renderFlags);
+        this._setMegaState(this._currentPipeline.megaState);
         gl.useProgram(this._currentPipeline.program.gl_program);
     }
 

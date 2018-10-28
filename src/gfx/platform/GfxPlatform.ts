@@ -3,12 +3,55 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import { BlendMode, BlendFactor, RenderFlags, CompareMode, CullMode, FrontFaceMode } from "../../render";
+// TODO(jstpierre): Remove the RenderFlags system.
 import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 import { DeviceProgram } from "../../Program";
 import { BufferLayout } from "../helpers/BufferHelpers";
 import { Color } from "../../Color";
+
+export enum GfxCompareMode {
+    NEVER   = WebGLRenderingContext.NEVER,
+    LESS    = WebGLRenderingContext.LESS,
+    EQUAL   = WebGLRenderingContext.EQUAL,
+    LEQUAL  = WebGLRenderingContext.LEQUAL,
+    GREATER = WebGLRenderingContext.GREATER,
+    NEQUAL  = WebGLRenderingContext.NOTEQUAL,
+    GEQUAL  = WebGLRenderingContext.GEQUAL,
+    ALWAYS  = WebGLRenderingContext.ALWAYS,
+}
+
+export enum GfxFrontFaceMode {
+    CCW = WebGLRenderingContext.CCW,
+    CW  = WebGLRenderingContext.CW,
+}
+
+export enum GfxCullMode {
+    NONE,
+    FRONT,
+    BACK,
+    FRONT_AND_BACK,
+}
+
+export enum GfxBlendFactor {
+    ZERO                = WebGLRenderingContext.ZERO,
+    ONE                 = WebGLRenderingContext.ONE,
+    SRC_COLOR           = WebGLRenderingContext.SRC_COLOR,
+    ONE_MINUS_SRC_COLOR = WebGLRenderingContext.ONE_MINUS_SRC_COLOR,
+    DST_COLOR           = WebGLRenderingContext.DST_COLOR,
+    ONE_MINUS_DST_COLOR = WebGLRenderingContext.ONE_MINUS_DST_COLOR,
+    SRC_ALPHA           = WebGLRenderingContext.SRC_ALPHA,
+    ONE_MINUS_SRC_ALPHA = WebGLRenderingContext.ONE_MINUS_SRC_ALPHA,
+    DST_ALPHA           = WebGLRenderingContext.DST_ALPHA,
+    ONE_MINUS_DST_ALPHA = WebGLRenderingContext.ONE_MINUS_DST_ALPHA,
+}
+
+export enum GfxBlendMode {
+    NONE             = 0,
+    ADD              = WebGLRenderingContext.FUNC_ADD,
+    SUBTRACT         = WebGLRenderingContext.FUNC_SUBTRACT,
+    REVERSE_SUBTRACT = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
+}
 
 export const enum GfxLoadDisposition { CLEAR, LOAD }
 export const enum GfxWrapMode { CLAMP, REPEAT, MIRROR }
@@ -66,20 +109,14 @@ export interface GfxBindingLayoutDescriptor {
     numSamplers: number;
 }
 
-export interface GfxBlendStateDescriptor {
-    blendMode: BlendMode;
-    srcFactor: BlendFactor;
-    dstFactor: BlendFactor;
-}
-
-export interface GfxDepthStencilStateDescriptor {
-    depthCompare: CompareMode;
+export interface GfxMegaStateDescriptor {
+    blendMode: GfxBlendMode;
+    blendSrcFactor: GfxBlendFactor;
+    blendDstFactor: GfxBlendFactor;
+    depthCompare: GfxCompareMode;
     depthWrite: boolean;
-}
-
-export interface GfxRasterizationStateDescriptor {
-    cullMode: CullMode;
-    frontFace: FrontFaceMode;
+    cullMode: GfxCullMode;
+    frontFace: GfxFrontFaceMode;
 }
 
 export interface GfxRenderTargetDescriptor {
@@ -99,7 +136,7 @@ export interface GfxRenderPipelineDescriptor {
     inputLayout: GfxInputLayout;
     program: GfxProgram;
     topology: GfxPrimitiveTopology;
-    renderFlags: RenderFlags;
+    megaStateDescriptor: GfxMegaStateDescriptor;
 }
 
 export interface GfxDeviceLimits {
