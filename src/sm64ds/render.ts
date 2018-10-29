@@ -1,5 +1,5 @@
 
-import { mat3, mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import * as BYML from '../byml';
 import * as LZ77 from './lz77';
@@ -8,61 +8,66 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { CullMode, RenderFlags, RenderState, BlendMode, depthClearFlags, BlendFactor } from '../render';
-import { SimpleProgram } from '../Program';
+import { RenderFlags, RenderState, BlendMode, depthClearFlags, BlendFactor } from '../render';
+import { DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
 import RenderArena from '../RenderArena';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
+import { TextureHolder, LoadedTexture, bindGLTextureMappings, TextureMapping } from '../TextureHolder';
+import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
+import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
+import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/BufferHelpers';
 
-class NITRO_Program extends SimpleProgram {
-    public texCoordMatLocation: WebGLUniformLocation;
-
-    public static a_position = 0;
-    public static a_uv = 1;
-    public static a_color = 2;
+export class NITRO_Program extends DeviceProgram {
+    public static a_Position = 0;
+    public static a_UV = 1;
+    public static a_Color = 2;
 
     public vert = `
 precision mediump float;
-uniform mat4 u_modelView;
-uniform mat4 u_projection;
-uniform mat3 u_texCoordMat;
-layout(location = ${NITRO_Program.a_position}) in vec3 a_position;
-layout(location = ${NITRO_Program.a_uv}) in vec2 a_uv;
-layout(location = ${NITRO_Program.a_color}) in vec4 a_color;
-out vec4 v_color;
-out vec2 v_uv;
+
+// Expected to be constant across the entire scene.
+layout(row_major, std140) uniform ub_SceneParams {
+    mat4 u_Projection;
+};
+
+// Expected to change with each material.
+layout(row_major, std140) uniform ub_MaterialParams {
+    mat4x3 u_TexMtx[1];
+};
+
+layout(row_major, std140) uniform ub_PacketParams {
+    mat4x3 u_ModelView;
+};
+
+layout(location = ${NITRO_Program.a_Position}) in vec3 a_Position;
+layout(location = ${NITRO_Program.a_UV}) in vec2 a_UV;
+layout(location = ${NITRO_Program.a_Color}) in vec4 a_Color;
+out vec4 v_Color;
+out vec2 v_UV;
 
 void main() {
-    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);
-    v_color = a_color;
-    v_uv = (u_texCoordMat * vec3(a_uv, 1.0)).st;
+    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
+    v_Color = a_Color;
+    v_UV = (u_TexMtx[0] * vec4(a_UV, 1.0, 1.0)).st;
 }
 `;
     public frag = `
 precision mediump float;
-in vec2 v_uv;
-in vec4 v_color;
-uniform sampler2D u_texture;
+in vec2 v_UV;
+in vec4 v_Color;
+uniform sampler2D u_Texture;
 
 void main() {
-    gl_FragColor = texture2D(u_texture, v_uv);
-    gl_FragColor *= v_color;
+    gl_FragColor = texture2D(u_Texture, v_UV);
+    gl_FragColor *= v_Color;
     if (gl_FragColor.a == 0.0)
         discard;
 }
 `;
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-        this.texCoordMatLocation = gl.getUniformLocation(prog, "u_texCoordMat");
-    }
 }
-
-// 3 pos + 4 color + 2 uv
-const VERTEX_SIZE = 9;
-const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
 function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -92,10 +97,67 @@ class YSpinAnimation {
     }
 }
 
+export class NITROTextureHolder extends TextureHolder<NITRO_BMD.Texture> {
+    public addTexture(gl: WebGL2RenderingContext, texture: NITRO_BMD.Texture): LoadedTexture {
+        const device = getTransitionDeviceForWebGL2(gl);
+
+        const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, texture.width, texture.height, 1);
+        device.setResourceName(gfxTexture, texture.name);
+
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
+
+        device.submitPass(hostAccessPass);
+        const viewerTexture: Viewer.Texture = textureToCanvas(texture);
+        return { gfxTexture, viewerTexture };
+    }
+}
+
+export class Command_VertexData {
+    public vertBuffer: WebGLBuffer;
+    public idxBuffer: WebGLBuffer;
+    public vao: WebGLVertexArrayObject;
+
+    constructor(gl: WebGL2RenderingContext, public vertexData: NITRO_GX.VertexData) {
+        this.vao = gl.createVertexArray();
+        gl.bindVertexArray(this.vao);
+
+        this.vertBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, vertexData.packedVertexBuffer, gl.STATIC_DRAW);
+
+        this.idxBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, vertexData.indexBuffer, gl.STATIC_DRAW);
+
+        gl.vertexAttribPointer(NITRO_Program.a_Position, 3, gl.FLOAT, false, NITRO_GX.VERTEX_BYTES, 0);
+        gl.vertexAttribPointer(NITRO_Program.a_Color, 4, gl.FLOAT, false, NITRO_GX.VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+        gl.vertexAttribPointer(NITRO_Program.a_UV, 2, gl.FLOAT, false, NITRO_GX.VERTEX_BYTES, 7 * Float32Array.BYTES_PER_ELEMENT);
+        gl.enableVertexAttribArray(NITRO_Program.a_Position);
+        gl.enableVertexAttribArray(NITRO_Program.a_Color);
+        gl.enableVertexAttribArray(NITRO_Program.a_UV);
+
+        gl.bindVertexArray(null);
+    }
+
+    public draw(state: RenderState): void {
+        const gl = state.gl;
+
+        gl.bindVertexArray(this.vao);
+        for (let i = 0; i < this.vertexData.drawCalls.length; i++)
+            gl.drawElements(gl.TRIANGLES, this.vertexData.drawCalls[i].numIndices, gl.UNSIGNED_SHORT, this.vertexData.drawCalls[i].startIndex * 2);
+        gl.bindVertexArray(null);
+    }
+
+    public destroy(gl: WebGL2RenderingContext): void {
+        gl.deleteBuffer(this.vertBuffer);
+        gl.deleteBuffer(this.idxBuffer);
+    }
+}
+
 const scratchModelMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
 class BMDRenderer {
-    public textures: Viewer.Texture[];
     public bmd: NITRO_BMD.BMD;
     public crg1Level: CRG1Level;
     public isSkybox: boolean;
@@ -104,19 +166,32 @@ class BMDRenderer {
 
     public opaqueCommands: RenderFunc[] = [];
     public transparentCommands: RenderFunc[] = [];
+    private vertexDataCommands: Command_VertexData[] = [];
 
     private arena: RenderArena;
     private program: NITRO_Program = new NITRO_Program();
 
-    constructor(gl: WebGL2RenderingContext, bmd: NITRO_BMD.BMD, crg1Level: CRG1Level) {
+    public sceneParamsBuffer: GfxBuffer;
+    public materialParamsBuffer: GfxBuffer;
+    public packetParamsBuffer: GfxBuffer;
+    private scratchParams = new Float32Array(64);
+
+    constructor(gl: WebGL2RenderingContext, public textureHolder: NITROTextureHolder, bmd: NITRO_BMD.BMD, crg1Level: CRG1Level) {
         this.bmd = bmd;
         this.crg1Level = crg1Level;
         this.isSkybox = false;
         this.arena = new RenderArena();
 
-        this.textures = bmd.textures.map((texture) => {
-            return textureToCanvas(texture);
-        });
+        const device = getTransitionDeviceForWebGL2(gl);
+        const prog = device.createProgram(this.program);
+        const uniformBuffers = device.queryProgram(prog).uniformBuffers;
+        this.sceneParamsBuffer = device.createBuffer(uniformBuffers[0].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+        this.materialParamsBuffer = device.createBuffer(uniformBuffers[1].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+        this.packetParamsBuffer = device.createBuffer(uniformBuffers[2].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+
+        this.opaqueCommands.push(this.translateSceneParams(gl));
+
+        this.textureHolder.addTextures(gl, bmd.textures);
         this.translateBMD(gl, this.bmd);
 
         const scaleFactor = this.bmd.scaleFactor;
@@ -124,62 +199,8 @@ class BMDRenderer {
         mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
     }
 
-    private translatePacket(gl: WebGL2RenderingContext, packet: NITRO_GX.Packet): RenderFunc {
-        const vertBuffer = this.arena.createBuffer(gl);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, packet.vertData, gl.STATIC_DRAW);
-
-        const idxBuffer = this.arena.createBuffer(gl);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, packet.idxData, gl.STATIC_DRAW);
-
-        const vao = this.arena.createVertexArray(gl);
-        gl.bindVertexArray(vao);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-
-        gl.vertexAttribPointer(NITRO_Program.a_position, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-        gl.vertexAttribPointer(NITRO_Program.a_color, 4, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-        gl.vertexAttribPointer(NITRO_Program.a_uv, 2, gl.FLOAT, false, VERTEX_BYTES, 7 * Float32Array.BYTES_PER_ELEMENT);
-        gl.enableVertexAttribArray(NITRO_Program.a_position);
-        gl.enableVertexAttribArray(NITRO_Program.a_color);
-        gl.enableVertexAttribArray(NITRO_Program.a_uv);
-
-        gl.bindVertexArray(null);
-
-        return (renderState: RenderState) => {
-            gl.bindVertexArray(vao);
-            gl.drawElements(gl.TRIANGLES, packet.idxData.length, gl.UNSIGNED_SHORT, 0);
-            gl.bindVertexArray(null);
-        };
-    }
-
-    private translatePoly(gl: WebGL2RenderingContext, poly: NITRO_BMD.Poly): RenderFunc {
-        const funcs = poly.packets.map((packet) => this.translatePacket(gl, packet));
-        return (state: RenderState) => {
-            funcs.forEach((f) => { f(state); });
-        };
-    }
-
-    private translateCullMode(renderWhichFaces: number): CullMode {
-        switch (renderWhichFaces) {
-        case 0x00: // Render Nothing
-            return CullMode.FRONT_AND_BACK;
-        case 0x01: // Render Back
-            return CullMode.FRONT;
-        case 0x02: // Render Front
-            return CullMode.BACK;
-        case 0x03: // Render Front and Back
-            return CullMode.NONE;
-        default:
-            throw new Error("Unknown renderWhichFaces");
-        }
-    }
-
     private translateMaterial(gl: WebGL2RenderingContext, material: NITRO_BMD.Material) {
         const texture = material.texture;
-        let texId: WebGLTexture;
 
         function wrapMode(repeat: boolean, flip: boolean) {
             if (repeat)
@@ -188,28 +209,25 @@ class BMDRenderer {
                 return gl.CLAMP_TO_EDGE;
         }
 
-        if (texture !== null) {
-            texId = this.arena.createTexture(gl);
-            gl.bindTexture(gl.TEXTURE_2D, texId);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        const textureMapping = new TextureMapping();
 
+        if (texture !== null) {
+            const sampler = this.arena.createSampler(gl);
             const repeatS = !!((material.texParams >> 16) & 0x01);
             const repeatT = !!((material.texParams >> 17) & 0x01);
             const flipS = !!((material.texParams >> 18) & 0x01);
             const flipT = !!((material.texParams >> 19) & 0x01);
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapMode(repeatS, flipS));
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapMode(repeatT, flipT));
-
-            gl.bindTexture(gl.TEXTURE_2D, texId);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texture.width, texture.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, texture.pixels);
+            gl.samplerParameteri(sampler, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.samplerParameteri(sampler, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, wrapMode(repeatS, flipS));
+            gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, wrapMode(repeatT, flipT));
+            this.textureHolder.fillTextureMapping(textureMapping, texture.name);
+            textureMapping.glSampler = sampler;
         }
 
         // Find any possible material animations.
         const crg1mat = this.crg1Level ? this.crg1Level.TextureAnimations.find((c) => c.MaterialName === material.name) : undefined;
-        const texCoordMat = mat3.create();
-        mat3.fromMat2d(texCoordMat, material.texCoordMat);
+        const texAnimMat = mat4.clone(material.texCoordMat);
 
         const renderFlags = new RenderFlags();
         renderFlags.blendMode = BlendMode.ADD;
@@ -217,9 +235,7 @@ class BMDRenderer {
         renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
         renderFlags.depthTest = true;
         renderFlags.depthWrite = material.depthWrite;
-        renderFlags.cullMode = this.translateCullMode(material.renderWhichFaces);
-
-        const texAnimMat = mat3.create();
+        renderFlags.cullMode = material.cullMode;
 
         return (state: RenderState) => {
             function selectArray(arr: Float32Array, time: number): number {
@@ -232,28 +248,26 @@ class BMDRenderer {
                 const rotation = selectArray(crg1mat.Rotation, time);
                 const x = selectArray(crg1mat.X, time);
                 const y = selectArray(crg1mat.Y, time);
-                mat3.identity(texAnimMat);
-                mat3.scale(texAnimMat, texAnimMat, [scale, scale]);
-                mat3.rotate(texAnimMat, texAnimMat, rotation / 180 * Math.PI);
-                mat3.translate(texAnimMat, texAnimMat, [-x, y]);
-                mat3.fromMat2d(texCoordMat, material.texCoordMat);
-                mat3.multiply(texCoordMat, texAnimMat, texCoordMat);
+                mat4.identity(texAnimMat);
+                mat4.scale(texAnimMat, texAnimMat, [scale, scale]);
+                mat4.rotateZ(texAnimMat, texAnimMat, rotation / 180 * Math.PI);
+                mat4.translate(texAnimMat, texAnimMat, [-x, y]);
+                mat4.mul(texAnimMat, texAnimMat, material.texCoordMat);
             }
 
             if (texture !== null) {
-                const prog = (<NITRO_Program> state.currentProgram);
-                gl.uniformMatrix3fv(prog.texCoordMatLocation, false, texCoordMat);
-                gl.bindTexture(gl.TEXTURE_2D, texId);
+                let offs = 0;
+                offs += fillMatrix4x3(this.scratchParams, offs, texAnimMat);
+                gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.materialParamsBuffer));
+                gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
+                bindGLTextureMappings(state, [textureMapping]);
             }
 
             state.useFlags(renderFlags);
         };
     }
 
-    public bindModelView(state: RenderState, isBillboard: boolean) {
-        const gl = state.gl;
-        const prog = this.program;
-
+    public computeModelView(state: RenderState, isBillboard: boolean): mat4 {
         // Build model matrix
         const modelMatrix = scratchModelMatrix;
         if (isBillboard) {
@@ -276,26 +290,43 @@ class BMDRenderer {
         }
 
         mat4.mul(viewMatrix, viewMatrix, modelMatrix);
-
-        gl.uniformMatrix4fv(prog.projectionLocation, false, state.camera.projectionMatrix);
-        gl.uniformMatrix4fv(prog.modelViewLocation, false, viewMatrix);
+        return viewMatrix;
     }
 
     private translateBatch(gl: WebGL2RenderingContext, model: NITRO_BMD.Model, batch: NITRO_BMD.Batch): void {
         const applyMaterial = this.translateMaterial(gl, batch.material);
-        const renderPoly = this.translatePoly(gl, batch.poly);
+        const vertexDataCommand = new Command_VertexData(gl, batch.vertexData);
+        this.vertexDataCommands.push(vertexDataCommand);
 
         const func = (state: RenderState): void => {
             state.useProgram(this.program);
             applyMaterial(state);
-            this.bindModelView(state, model.billboard);
-            renderPoly(state);
+
+            let offs = 0;
+            offs += fillMatrix4x3(this.scratchParams, offs, this.computeModelView(state, model.billboard));
+            gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.packetParamsBuffer));
+            gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
+
+            vertexDataCommand.draw(state);
         };
 
         if (batch.material.isTranslucent)
             this.transparentCommands.push(func);
         else
             this.opaqueCommands.push(func);
+    }
+
+    private translateSceneParams(gl: WebGL2RenderingContext): RenderFunc {
+        return (state: RenderState) => {
+            gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, getPlatformBuffer(this.sceneParamsBuffer));
+            gl.bindBufferBase(gl.UNIFORM_BUFFER, 1, getPlatformBuffer(this.materialParamsBuffer));
+            gl.bindBufferBase(gl.UNIFORM_BUFFER, 2, getPlatformBuffer(this.packetParamsBuffer));
+
+            let offs = 0;
+            offs += fillMatrix4x4(this.scratchParams, offs, state.camera.projectionMatrix);
+            gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.sceneParamsBuffer));
+            gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
+        };
     }
 
     private translateBMD(gl: WebGL2RenderingContext, bmd: NITRO_BMD.BMD) {
@@ -309,19 +340,8 @@ class BMDRenderer {
     }
 }
 
-function collectTextures(scenes: BMDRenderer[]): Viewer.Texture[] {
-    const textures: Viewer.Texture[] = [];
-    for (const scene of scenes)
-        if (scene)
-            textures.push.apply(textures, scene.textures);
-    return textures;
-}
-
 class SM64DSRenderer implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
-
-    constructor(public mainBMD: BMDRenderer, public skyboxBMD: BMDRenderer, public extraBMDs: BMDRenderer[]) {
-        this.textures = collectTextures([this.mainBMD, this.skyboxBMD, ...this.extraBMDs]);
+    constructor(public textureHolder: NITROTextureHolder, public mainBMD: BMDRenderer, public skyboxBMD: BMDRenderer, public extraBMDs: BMDRenderer[]) {
     }
 
     private runCommands(state: RenderState, funcs: RenderFunc[]) {
@@ -407,26 +427,27 @@ export class SceneDesc implements Viewer.SceneDesc {
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         return fetchData('data/sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
             const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
-            return this._createSceneFromCRG1(gl, crg1);
+            const textureHolder = new NITROTextureHolder();
+            return this._createSceneFromCRG1(gl, textureHolder, crg1);
         });
     }
 
-    private _createBMDRenderer(gl: WebGL2RenderingContext, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): PromiseLike<BMDRenderer> {
+    private _createBMDRenderer(gl: WebGL2RenderingContext, textureHolder: NITROTextureHolder, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): PromiseLike<BMDRenderer> {
         return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
-            const renderer = new BMDRenderer(gl, bmd, level);
+            const renderer = new BMDRenderer(gl, textureHolder, bmd, level);
             mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
             renderer.isSkybox = isSkybox;
             return renderer;
         });
     }
 
-    private _createBMDObjRenderer(gl: WebGL2RenderingContext, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): PromiseLike<BMDRenderer> {
+    private _createBMDObjRenderer(gl: WebGL2RenderingContext, textureHolder: NITROTextureHolder, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): PromiseLike<BMDRenderer> {
         return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
-            const renderer = new BMDRenderer(gl, bmd, null);
+            const renderer = new BMDRenderer(gl, textureHolder, bmd, null);
             vec3.scale(translation, translation, 16 / bmd.scaleFactor);
             mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
             mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
@@ -441,7 +462,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDRendererForObject(gl: WebGL2RenderingContext, object: CRG1Object): PromiseLike<BMDRenderer> {
+    private _createBMDRendererForObject(gl: WebGL2RenderingContext, textureHolder: NITROTextureHolder, object: CRG1Object): PromiseLike<BMDRenderer> {
         const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
         // WTF is with the Tau? And the object scales?
         vec3.scale(translation, translation, Math.PI * 2);
@@ -459,27 +480,27 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 21: // Koopa
             return null;
         case 23: // Brick Block
-            return this._createBMDObjRenderer(gl, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 0.8);
         case 24: // Brick Block Larger
-            return this._createBMDObjRenderer(gl, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 1.2);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 1.2);
         case 26: // Powerup inside block?
         case 29: // Cannon hatch
             return null;
         case 30: // Item Block
-            return this._createBMDObjRenderer(gl, `normal_obj/obj_hatena_box/hatena_box.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/obj_hatena_box/hatena_box.bmd`, translation, rotationY, 0.8);
         case 36: // Pole
-            return this._createBMDObjRenderer(gl, `normal_obj/obj_pile/pile.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/obj_pile/pile.bmd`, translation, rotationY, 0.8);
         case 37: // Coin
-            return this._createBMDObjRenderer(gl, `normal_obj/coin/coin_poly32.bmd`, translation, rotationY, 0.8, 0.1);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/coin/coin_poly32.bmd`, translation, rotationY, 0.8, 0.1);
         case 38: // Red Coin
-            return this._createBMDObjRenderer(gl, `normal_obj/coin/coin_red_poly32.bmd`, translation, rotationY, 0.8, 0.1);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/coin/coin_red_poly32.bmd`, translation, rotationY, 0.8, 0.1);
         case 39: // Blue Coin
-            return this._createBMDObjRenderer(gl, `normal_obj/coin/coin_blue_poly32.bmd`, translation, rotationY, 0.8, 0.1);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/coin/coin_blue_poly32.bmd`, translation, rotationY, 0.8, 0.1);
         case 41: { // Tree
             const treeType = (object.Parameters[0] >>> 4) & 0x07;
             const treeFilenames = ['bomb', 'toge', 'yuki', 'yashi', 'castle', 'castle', 'castle', 'castle'];
             const filename = `normal_obj/tree/${treeFilenames[treeType]}_tree.bmd`;
-            return this._createBMDObjRenderer(gl, filename, translation, rotationY);
+            return this._createBMDObjRenderer(gl, textureHolder, filename, translation, rotationY);
         }
         case 42: { // Castle Painting
             const painting = (object.Parameters[0] >>> 8) & 0x1F;
@@ -490,7 +511,7 @@ export class SceneDesc implements Viewer.SceneDesc {
             const filename = `picture/${filenames[painting]}.bmd`;
             const scale = ((object.Parameters[0] & 0xF) + 1);
             translation[1] += scale * 0.3;
-            return this._createBMDObjRenderer(gl, filename, translation, rotationY, scale);
+            return this._createBMDObjRenderer(gl, textureHolder, filename, translation, rotationY, scale);
         }
         case 43: // Switch
         case 44: // Switch-powered Star
@@ -509,9 +530,9 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 61: // Star Target
             return null;
         case 62: // Silver Star
-            return this._createBMDObjRenderer(gl, `normal_obj/star/obj_star_silver.bmd`, translation, rotationY, 0.8, 0.08);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/star/obj_star_silver.bmd`, translation, rotationY, 0.8, 0.08);
         case 63: // Star
-            return this._createBMDObjRenderer(gl, `normal_obj/star/obj_star.bmd`, translation, rotationY, 0.8, 0.08);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/star/obj_star.bmd`, translation, rotationY, 0.8, 0.08);
         case 64: // Whomp
         case 65: // Big Whomp
         case 66: // Thwomp
@@ -519,9 +540,9 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 74: // Minigame Cabinet Trigger (Invisible)
             return null;
         case 75: // Wall sign
-            return this._createBMDObjRenderer(gl, `normal_obj/obj_kanban/obj_kanban.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/obj_kanban/obj_kanban.bmd`, translation, rotationY, 0.8);
         case 76: // Signpost
-            return this._createBMDObjRenderer(gl, `normal_obj/obj_tatefuda/obj_tatefuda.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/obj_tatefuda/obj_tatefuda.bmd`, translation, rotationY, 0.8);
         case 79: // Heart
         case 80: // Toad
         case 167: // Peach's Castle Tippy TTC Hour Hand
@@ -529,9 +550,9 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 169: // Peach's Castle Tippy TTC Pendulum
             return null;
         case 187: // Left Arrow Sign
-            return this._createBMDObjRenderer(gl, `normal_obj/obj_yajirusi_l/yajirusi_l.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/obj_yajirusi_l/yajirusi_l.bmd`, translation, rotationY, 0.8);
         case 188: // Right Arrow Sign
-            return this._createBMDObjRenderer(gl, `normal_obj/obj_yajirusi_r/yajirusi_r.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/obj_yajirusi_r/yajirusi_r.bmd`, translation, rotationY, 0.8);
         case 196: // WF
         case 197: // WF
         case 198: // WF
@@ -542,7 +563,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 203: // WF Tower
             return null;
         case 204: // WF Spinning Island
-            return this._createBMDObjRenderer(gl, `special_obj/bk_ukisima/bk_ukisima.bmd`, translation, rotationY, 1, 0.1);
+            return this._createBMDObjRenderer(gl, textureHolder, `special_obj/bk_ukisima/bk_ukisima.bmd`, translation, rotationY, 1, 0.1);
         case 205: // WF
         case 206: // WF
         case 207: // WF
@@ -565,18 +586,18 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 282: // Koopa the Quick Finish Flag
             return null;
         case 284: // Wario Block
-            return this._createBMDObjRenderer(gl, `normal_obj/obj_block/broken_block_ll.bmd`, translation, rotationY);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/obj_block/broken_block_ll.bmd`, translation, rotationY);
         case 293: // Water
-            return this._createBMDObjRenderer(gl, `special_obj/mc_water/mc_water.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `special_obj/mc_water/mc_water.bmd`, translation, rotationY, 0.8);
         case 295: // Metal net
-            return this._createBMDObjRenderer(gl, `special_obj/mc_metalnet/mc_metalnet.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `special_obj/mc_metalnet/mc_metalnet.bmd`, translation, rotationY, 0.8);
         case 298: // Flag
-            return this._createBMDObjRenderer(gl, `special_obj/mc_flag/mc_flag.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `special_obj/mc_flag/mc_flag.bmd`, translation, rotationY, 0.8);
         case 303: // Castle Basement Water
         case 304: // Secret number thingy
             return null;
         case 305: // Blue Coin Switch
-            return this._createBMDObjRenderer(gl, `normal_obj/b_coin_switch/b_coin_switch.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(gl, textureHolder, `normal_obj/b_coin_switch/b_coin_switch.bmd`, translation, rotationY, 0.8);
         case 314: // Hidden Pirahna Plant
         case 315: // Enemy spawner trigger
         case 316: // Enemy spawner
@@ -590,20 +611,20 @@ export class SceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private _createSceneFromCRG1(gl: WebGL2RenderingContext, crg1: Sm64DSCRG1): PromiseLike<Viewer.MainScene> {
+    private _createSceneFromCRG1(gl: WebGL2RenderingContext, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1): PromiseLike<Viewer.MainScene> {
         const level = crg1.Levels[this.levelId];
-        const renderers = [this._createBMDRenderer(gl, level.MapBmdFile, 100, level, false)];
+        const renderers = [this._createBMDRenderer(gl, textureHolder, level.MapBmdFile, 100, level, false)];
         if (level.VrboxBmdFile)
-            renderers.push(this._createBMDRenderer(gl, level.VrboxBmdFile, 0.8, level, true));
+            renderers.push(this._createBMDRenderer(gl, textureHolder, level.VrboxBmdFile, 0.8, level, true));
         else
             renderers.push(Promise.resolve(null));
         for (const object of level.Objects) {
-            const objRenderer = this._createBMDRendererForObject(gl, object);
+            const objRenderer = this._createBMDRendererForObject(gl, textureHolder, object);
             if (objRenderer)
             renderers.push(objRenderer);
         }
         return Promise.all(renderers).then(([mainBMD, skyboxBMD, ...extraBMDs]) => {
-            return new SM64DSRenderer(mainBMD, skyboxBMD, extraBMDs);
+            return new SM64DSRenderer(textureHolder, mainBMD, skyboxBMD, extraBMDs);
         });
     }
 }

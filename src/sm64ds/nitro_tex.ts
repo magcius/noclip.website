@@ -235,3 +235,18 @@ export function readTexture(format: Format, width: number, height: number, texDa
         throw new Error(`Unsupported texture type! ${format}`);
     }
 }
+
+export interface TexImageParam {
+    format: Format;
+    width: number;
+    height: number;
+    color0: boolean;
+}
+
+export function parseTexImageParam(w0: number): TexImageParam {
+    const format = (w0 >> 26) & 0x07;
+    const width = 8 << ((w0 >> 20) & 0x07);
+    const height = 8 << ((w0 >> 23) & 0x07);
+    const color0 = !!((w0 >> 29) & 0x01);
+    return { format, width, height, color0 };
+}

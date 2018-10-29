@@ -1,33 +1,30 @@
 
-import { mat2d } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 
 import * as NITRO_GX from './nitro_gx';
 import * as NITRO_Tex from './nitro_tex';
 
 import { readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { CullMode } from '../render';
 
 // Super Mario 64 DS .bmd format
-
-export interface Poly {
-    packets: NITRO_GX.Packet[];
-}
 
 export class Material {
     public name: string;
     public isTranslucent: boolean;
     public depthWrite: boolean;
-    public renderWhichFaces: number;
+    public cullMode: CullMode;
     public diffuse: NITRO_GX.Color;
     public alpha: number;
-    public texCoordMat: mat2d;
+    public texCoordMat: mat4;
     public texture: Texture;
     public texParams: number;
 }
 
 export interface Batch {
     material: Material;
-    poly: Poly;
+    vertexData: NITRO_GX.VertexData;
 }
 
 export class Model {
@@ -74,15 +71,15 @@ function parseModel(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
         const baseCtx = { color: material.diffuse, alpha: material.alpha };
 
         const polyIdx = view.getUint8(batchPolyOffs + i);
-        const poly = parsePoly(bmd, buffer, polyIdx, baseCtx);
+        const vertexData = parsePoly(bmd, buffer, polyIdx, baseCtx);
 
-        model.batches.push({ material, poly });
+        model.batches.push({ material, vertexData });
     }
 
     return model;
 }
 
-function parsePoly(bmd: BMD, buffer: ArrayBufferSlice, idx: number, baseCtx: NITRO_GX.Context): Poly {
+function parsePoly(bmd: BMD, buffer: ArrayBufferSlice, idx: number, baseCtx: NITRO_GX.Context): NITRO_GX.VertexData {
     const view = buffer.createDataView();
     const offs = view.getUint32((bmd.polyOffsBase + idx * 0x08) + 0x04, true);
 
@@ -91,8 +88,26 @@ function parsePoly(bmd: BMD, buffer: ArrayBufferSlice, idx: number, baseCtx: NIT
 
     const gxCmdBuf = buffer.slice(gxCmdOffs, gxCmdOffs + gxCmdSize);
 
-    const packets = NITRO_GX.readCmds(gxCmdBuf, baseCtx);
-    return { packets };
+    return NITRO_GX.readCmds(gxCmdBuf, baseCtx);
+}
+
+function expand5to8(n: number): number {
+    return (n << (8 - 5)) | (n >>> (10 - 8));
+}
+
+function translateCullMode(renderWhichFaces: number): CullMode {
+    switch (renderWhichFaces) {
+    case 0x00: // Render Nothing
+        return CullMode.FRONT_AND_BACK;
+    case 0x01: // Render Back
+        return CullMode.FRONT;
+    case 0x02: // Render Front
+        return CullMode.BACK;
+    case 0x03: // Render Front and Back
+        return CullMode.NONE;
+    default:
+        throw new Error("Unknown renderWhichFaces");
+    }
 }
 
 function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Material {
@@ -101,7 +116,7 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
 
     const material = new Material();
     material.name = readString(buffer, view.getUint32(offs + 0x00, true), 0xFF);
-    material.texCoordMat = mat2d.create();
+    material.texCoordMat = mat4.create();
 
     const textureIdx = view.getUint32(offs + 0x04, true);
     if (textureIdx !== 0xFFFFFFFF) {
@@ -115,11 +130,11 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
             const scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
             const transS = view.getInt32(offs + 0x18, true) / 4096.0;
             const transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-            mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-            mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
+            mat4.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
+            mat4.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
         }
         const texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
-        mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
+        mat4.scale(material.texCoordMat, material.texCoordMat, texScale);
     } else {
         material.texture = null;
         material.texParams = 0;
@@ -127,17 +142,16 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
 
     const polyAttribs = view.getUint32(offs + 0x24, true);
 
-    let alpha = (polyAttribs >> 16) & 0x1F;
-    alpha = (alpha << (8 - 5)) | (alpha >>> (10 - 8));
-
     const renderWhichFaces = (polyAttribs >> 6) & 0x03;
-    material.renderWhichFaces = renderWhichFaces;
+    material.cullMode = translateCullMode(renderWhichFaces);
+
+    material.alpha = expand5to8((polyAttribs >> 16) & 0x1F);
 
     // NITRO's Rendering Engine uses two passes. Opaque, then Transparent.
     // A transparent polygon is one that has an alpha of < 0xFF, or uses
     // A5I3 / A3I5 textures.
 
-    material.isTranslucent = (alpha < 0xFF) || (material.texture && material.texture.isTranslucent);
+    material.isTranslucent = (material.alpha < 0xFF) || (material.texture && material.texture.isTranslucent);
 
     // Do transparent polys write to the depth buffer?
     const xl = (polyAttribs >>> 11) & 0x01;
@@ -151,8 +165,6 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
         material.diffuse = NITRO_GX.bgr5(difAmb);
     else
         material.diffuse = { r: 0xFF, g: 0xFF, b: 0xFF };
-
-    material.alpha = alpha;
 
     return material;
 }
@@ -201,10 +213,11 @@ function parseTexture(bmd: BMD, buffer: ArrayBufferSlice, key: TextureKey): Text
     const texData = buffer.slice(texDataOffs);
 
     texture.params = view.getUint32(texOffs + 0x10, true);
-    texture.format = (texture.params >> 26) & 0x07;
-    texture.width = 8 << ((texture.params >> 20) & 0x07);
-    texture.height = 8 << ((texture.params >> 23) & 0x07);
-    const color0 = !!((texture.params >> 29) & 0x01);
+    const texImageParams = NITRO_Tex.parseTexImageParam(texture.params);
+    texture.format = texImageParams.format;
+    texture.width = texImageParams.width;
+    texture.height = texImageParams.height;
+    const color0 = texImageParams.color0;
 
     let palData = null;
     if (key.palIdx !== 0xFFFFFFFF) {

@@ -33,8 +33,8 @@ enum PolyType {
 }
 
 // 3 pos + 4 color + 2 uv
-const VERTEX_SIZE = 9;
-const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+export const VERTEX_SIZE = 9;
+export const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
 const tmp = new Uint8Array(3);
 export function bgr5(pixel: number): Color {
@@ -194,82 +194,58 @@ function cmd_BEGIN_VTXS(ctx: ContextInternal) {
     const param = ctx.readParam();
     const polyType = param & 0x03;
     ctx.s_polyType = polyType;
-    ctx.vtxs = [];
+    ctx.s_startVertexIndex = ctx.vtxs.length;
 }
 
-export interface Packet {
-    vertData: Float32Array;
-    idxData: Uint16Array;
-    polyType: PolyType;
+export interface DrawCall {
+    startIndex: number;
+    numIndices: number;
 }
 
 function cmd_END_VTXS(ctx: ContextInternal) {
-    const nVerts = ctx.vtxs.length;
-    const vtxBuffer = new Float32Array(nVerts * VERTEX_SIZE);
+    const baseVertex = ctx.s_startVertexIndex;
+    const nVerts = ctx.vtxs.length - baseVertex;
 
-    for (let i = 0; i < nVerts; i++) {
-        const v = ctx.vtxs[i];
-        const vtxArray = new Float32Array(vtxBuffer.buffer, i * VERTEX_BYTES, VERTEX_SIZE);
+    // Make index buffer.
 
-        vtxArray[0] = v.pos.x;
-        vtxArray[1] = v.pos.y;
-        vtxArray[2] = v.pos.z;
-
-        vtxArray[3] = v.color.r / 0xFF;
-        vtxArray[4] = v.color.g / 0xFF;
-        vtxArray[5] = v.color.b / 0xFF;
-        vtxArray[6] = ctx.alpha / 0xFF;
-
-        vtxArray[7] = v.uv.s;
-        vtxArray[8] = v.uv.t;
-    }
-
-    let idxBuffer;
-
+    const startIndex = ctx.indexes.length;
     if (ctx.s_polyType === PolyType.TRIANGLES) {
-        idxBuffer = new Uint16Array(nVerts);
         for (let i = 0; i < nVerts; i++)
-            idxBuffer[i] = i;
+            ctx.indexes.push(baseVertex + i);
     } else if (ctx.s_polyType === PolyType.QUADS) {
-        idxBuffer = new Uint16Array(nVerts / 4 * 6);
-        let dst = 0;
         for (let i = 0; i < nVerts; i += 4) {
-            idxBuffer[dst++] = i + 0;
-            idxBuffer[dst++] = i + 1;
-            idxBuffer[dst++] = i + 2;
-            idxBuffer[dst++] = i + 2;
-            idxBuffer[dst++] = i + 3;
-            idxBuffer[dst++] = i + 0;
+            ctx.indexes.push(baseVertex + i + 0);
+            ctx.indexes.push(baseVertex + i + 1);
+            ctx.indexes.push(baseVertex + i + 2);
+            ctx.indexes.push(baseVertex + i + 2);
+            ctx.indexes.push(baseVertex + i + 3);
+            ctx.indexes.push(baseVertex + i + 0);
         }
     } else if (ctx.s_polyType === PolyType.TRIANGLE_STRIP) {
-        idxBuffer = new Uint16Array((nVerts - 2) * 3);
-        let dst = 0;
         for (let i = 0; i < nVerts - 2; i++) {
             if (i % 2 === 0) {
-                idxBuffer[dst++] = i + 0;
-                idxBuffer[dst++] = i + 1;
-                idxBuffer[dst++] = i + 2;
+                ctx.indexes.push(baseVertex + i + 0);
+                ctx.indexes.push(baseVertex + i + 1);
+                ctx.indexes.push(baseVertex + i + 2);
             } else {
-                idxBuffer[dst++] = i + 1;
-                idxBuffer[dst++] = i + 0;
-                idxBuffer[dst++] = i + 2;
+                ctx.indexes.push(baseVertex + i + 1);
+                ctx.indexes.push(baseVertex + i + 0);
+                ctx.indexes.push(baseVertex + i + 2);
             }
         }
     } else if (ctx.s_polyType === PolyType.QUAD_STRIP) {
-        idxBuffer = new Uint16Array(((nVerts - 2) / 2) * 6);
-        let dst = 0;
         for (let i = 0; i < nVerts; i += 2) {
-            idxBuffer[dst++] = i + 0;
-            idxBuffer[dst++] = i + 1;
-            idxBuffer[dst++] = i + 3;
-            idxBuffer[dst++] = i + 3;
-            idxBuffer[dst++] = i + 2;
-            idxBuffer[dst++] = i + 0;
+            ctx.indexes.push(baseVertex + i + 0);
+            ctx.indexes.push(baseVertex + i + 1);
+            ctx.indexes.push(baseVertex + i + 3);
+            ctx.indexes.push(baseVertex + i + 3);
+            ctx.indexes.push(baseVertex + i + 2);
+            ctx.indexes.push(baseVertex + i + 0);
         }
     }
+    const numIndices = ctx.indexes.length - startIndex;
 
-    const packet = { vertData: vtxBuffer, idxData: idxBuffer, polyType: ctx.s_polyType };
-    ctx.packets.push(packet);
+    ctx.drawCalls.push({ startIndex, numIndices });
 }
 
 function runCmd(ctx: ContextInternal, cmd: number) {
@@ -331,28 +307,56 @@ class ContextInternal {
     public s_vtx: Point;
     public s_nrm: Point;
     public s_polyType: PolyType;
+    public s_startVertexIndex: number = 0;
 
-    public vtxs: Vertex[];
-    public packets: Packet[];
+    public vtxs: Vertex[] = [];
+    public indexes: number[] = [];
+    public drawCalls: DrawCall[] = [];
 
     constructor(buffer: ArrayBufferSlice, baseCtx: Context) {
         this.alpha = baseCtx.alpha;
         this.s_color = baseCtx.color;
         this.view = buffer.createDataView();
         this.s_texCoord = { s: 0, t: 0 };
-        this.packets = [];
     }
 
     public readParam(): number {
         return this.view.getUint32((this.offs += 4) - 4, true);
     }
+
     public vtx(x: number, y: number, z: number) {
         this.s_vtx = { x, y, z };
         this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord });
     }
+
+
+    public makePackedVertexBuffer(): Float32Array {
+        const vtxBuffer = new Float32Array(this.vtxs.length * VERTEX_SIZE);
+
+        for (let i = 0; i < this.vtxs.length; i++) {
+            const v = this.vtxs[i];
+            vtxBuffer[i * VERTEX_SIZE + 0] = v.pos.x;
+            vtxBuffer[i * VERTEX_SIZE + 1] = v.pos.y;
+            vtxBuffer[i * VERTEX_SIZE + 2] = v.pos.z;
+            vtxBuffer[i * VERTEX_SIZE + 3] = v.color.r  / 0xFF;
+            vtxBuffer[i * VERTEX_SIZE + 4] = v.color.g  / 0xFF;
+            vtxBuffer[i * VERTEX_SIZE + 5] = v.color.b  / 0xFF;
+            vtxBuffer[i * VERTEX_SIZE + 6] = this.alpha / 0xFF;
+            vtxBuffer[i * VERTEX_SIZE + 7] = v.uv.s;
+            vtxBuffer[i * VERTEX_SIZE + 8] = v.uv.t;
+        }
+
+        return vtxBuffer;
+    }
 }
 
-export function readCmds(buffer: ArrayBufferSlice, baseCtx: Context) {
+export interface VertexData {
+    packedVertexBuffer: Float32Array;
+    indexBuffer: Uint16Array;
+    drawCalls: DrawCall[];
+}
+
+export function readCmds(buffer: ArrayBufferSlice, baseCtx: Context): VertexData {
     const ctx = new ContextInternal(buffer, baseCtx);
 
     while (ctx.offs < buffer.byteLength) {
@@ -368,5 +372,8 @@ export function readCmds(buffer: ArrayBufferSlice, baseCtx: Context) {
         runCmd(ctx, cmd3);
     }
 
-    return ctx.packets;
+    const packedVertexBuffer = ctx.makePackedVertexBuffer();
+    const indexBuffer = new Uint16Array(ctx.indexes);
+
+    return { packedVertexBuffer, indexBuffer, drawCalls: ctx.drawCalls };
 }

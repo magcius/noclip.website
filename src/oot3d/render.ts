@@ -131,7 +131,6 @@ export class CmbRenderer {
 
         this.animationController.updateTime(state.time);
         state.useProgram(this.program);
-        state.bindModelView();
         this.model(state);
     }
 
@@ -222,7 +221,7 @@ export class CmbRenderer {
 
                 gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.prmParamsBuffer));
                 gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
-    
+
                 gl.drawElements(gl.TRIANGLES, prm.count, this.translateDataType(gl, prm.indexType), prm.offset);
             }
 
