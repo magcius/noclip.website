@@ -12,11 +12,10 @@ import { mat4, mat2d } from 'gl-matrix';
 import { Endianness } from '../endian';
 import { AABB } from '../Geometry';
 import { TextureMapping } from '../TextureHolder';
-import { RRESTextureHolder } from './render';
 import AnimationController from '../AnimationController';
 import { cv, Graph } from '../DebugJunk';
 import { GXTextureHolder } from '../gx/gx_render';
-import { getFormatCompFlags, getFormatComponentCount, getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
+import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 
 //#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {

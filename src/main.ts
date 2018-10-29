@@ -36,6 +36,7 @@ import * as ELB from './rres/elb_scenes';
 import * as MKWII from './rres/mkwii_scenes';
 import * as TTYD from './ttyd/scenes';
 import * as SPM from './ttyd/spm_scenes';
+import * as MKDS from './nns_g3d/mkds_scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI, createDOMFromString } from './ui';
@@ -67,6 +68,7 @@ const sceneGroups = [
     MM3D.sceneGroup,
     ZELVIEW.sceneGroup,
     LM3D.sceneGroup,
+    MKDS.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {
