@@ -264,6 +264,8 @@ interface ProgramKey {
 }
 
 export class ProgramCache extends MemoizeCache<ProgramKey, WebGLProgram> {
+    private _uniqueKey = 0;
+
     constructor(private gl: WebGL2RenderingContext) {
         super();
     }
@@ -287,6 +289,7 @@ export class ProgramCache extends MemoizeCache<ProgramKey, WebGLProgram> {
             gl.deleteProgram(prog);
             return null;
         }
+        (prog as any).uniqueKey = this._uniqueKey++;
         return prog;
     }
 

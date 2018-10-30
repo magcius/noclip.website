@@ -359,11 +359,12 @@ class Main {
     }
 
     private _onSceneChanged(): void {
-        const scene = this.viewer.scene;
         this.ui.sceneChanged();
 
-        if (scene && scene.createPanels)
-            this.ui.setScenePanels(scene.createPanels());
+        if (this.viewer.scene && this.viewer.scene.createPanels)
+            this.ui.setScenePanels(this.viewer.scene.createPanels());
+        else if (this.viewer.scene_device && this.viewer.scene_device.createPanels)
+            this.ui.setScenePanels(this.viewer.scene_device.createPanels());
         else
             this.ui.setScenePanels([]);
     }

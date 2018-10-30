@@ -2,6 +2,7 @@
     "compilerOptions": {
         "target": "es5",
         "alwaysStrict": true,
+        "downlevelIteration": true,
         "noImplicitReturns": true,
         "noImplicitThis": true,
         "noImplicitAny": true,

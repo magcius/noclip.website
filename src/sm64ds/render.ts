@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat2d, mat4, vec3 } from 'gl-matrix';
 
 import * as BYML from '../byml';
 import * as LZ77 from './lz77';
@@ -18,7 +18,7 @@ import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybo
 import { TextureHolder, LoadedTexture, bindGLTextureMappings, TextureMapping } from '../TextureHolder';
 import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
-import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/BufferHelpers';
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2 } from '../gfx/helpers/BufferHelpers';
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -35,7 +35,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
-    mat4x3 u_TexMtx[1];
+    mat4x2 u_TexMtx[1];
 };
 
 layout(row_major, std140) uniform ub_PacketParams {
@@ -189,7 +189,9 @@ class BMDRenderer {
         this.materialParamsBuffer = device.createBuffer(uniformBuffers[1].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
         this.packetParamsBuffer = device.createBuffer(uniformBuffers[2].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
 
-        this.opaqueCommands.push(this.translateSceneParams(gl));
+        const prologue = this.translateSceneParams(gl);
+        this.opaqueCommands.push(prologue);
+        this.transparentCommands.push(prologue);
 
         this.textureHolder.addTextures(gl, bmd.textures);
         this.translateBMD(gl, this.bmd);
@@ -227,7 +229,7 @@ class BMDRenderer {
 
         // Find any possible material animations.
         const crg1mat = this.crg1Level ? this.crg1Level.TextureAnimations.find((c) => c.MaterialName === material.name) : undefined;
-        const texAnimMat = mat4.clone(material.texCoordMat);
+        const texAnimMat = mat2d.clone(material.texCoordMat);
 
         const renderFlags = new RenderFlags();
         renderFlags.blendMode = BlendMode.ADD;
@@ -248,16 +250,16 @@ class BMDRenderer {
                 const rotation = selectArray(crg1mat.Rotation, time);
                 const x = selectArray(crg1mat.X, time);
                 const y = selectArray(crg1mat.Y, time);
-                mat4.identity(texAnimMat);
-                mat4.scale(texAnimMat, texAnimMat, [scale, scale]);
-                mat4.rotateZ(texAnimMat, texAnimMat, rotation / 180 * Math.PI);
-                mat4.translate(texAnimMat, texAnimMat, [-x, y]);
-                mat4.mul(texAnimMat, texAnimMat, material.texCoordMat);
+                mat2d.identity(texAnimMat);
+                mat2d.scale(texAnimMat, texAnimMat, [scale, scale, scale]);
+                mat2d.rotate(texAnimMat, texAnimMat, rotation / 180 * Math.PI);
+                mat2d.translate(texAnimMat, texAnimMat, [-x, y, 0]);
+                mat2d.mul(texAnimMat, texAnimMat, material.texCoordMat);
             }
 
             if (texture !== null) {
                 let offs = 0;
-                offs += fillMatrix4x3(this.scratchParams, offs, texAnimMat);
+                offs += fillMatrix3x2(this.scratchParams, offs, texAnimMat);
                 gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.materialParamsBuffer));
                 gl.bufferData(gl.UNIFORM_BUFFER, this.scratchParams, gl.DYNAMIC_DRAW);
                 bindGLTextureMappings(state, [textureMapping]);
@@ -336,6 +338,10 @@ class BMDRenderer {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
+        const device = getTransitionDeviceForWebGL2(gl);
+        device.destroyBuffer(this.sceneParamsBuffer);
+        device.destroyBuffer(this.materialParamsBuffer);
+        device.destroyBuffer(this.packetParamsBuffer);
         this.arena.destroy(gl);
     }
 }

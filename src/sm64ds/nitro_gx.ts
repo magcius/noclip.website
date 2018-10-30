@@ -3,6 +3,7 @@
 
 import { bgr5 as _bgr5 } from './nitro_tex';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 
 // tslint:disable:variable-name
 
@@ -202,48 +203,28 @@ export interface DrawCall {
     numIndices: number;
 }
 
+function translatePolyType(polyType: PolyType): GfxTopology {
+    switch (polyType) {
+    case PolyType.TRIANGLES:
+        return GfxTopology.TRIANGLES;
+    case PolyType.TRIANGLE_STRIP:
+        return GfxTopology.TRISTRIP;
+    case PolyType.QUADS:
+        return GfxTopology.QUADS;
+    case PolyType.QUAD_STRIP:
+        return GfxTopology.QUADSTRIP;
+    }
+}
+
 function cmd_END_VTXS(ctx: ContextInternal) {
     const baseVertex = ctx.s_startVertexIndex;
-    const nVerts = ctx.vtxs.length - baseVertex;
-
-    // Make index buffer.
+    const numVertices = ctx.vtxs.length - baseVertex;
 
     const startIndex = ctx.indexes.length;
-    if (ctx.s_polyType === PolyType.TRIANGLES) {
-        for (let i = 0; i < nVerts; i++)
-            ctx.indexes.push(baseVertex + i);
-    } else if (ctx.s_polyType === PolyType.QUADS) {
-        for (let i = 0; i < nVerts; i += 4) {
-            ctx.indexes.push(baseVertex + i + 0);
-            ctx.indexes.push(baseVertex + i + 1);
-            ctx.indexes.push(baseVertex + i + 2);
-            ctx.indexes.push(baseVertex + i + 2);
-            ctx.indexes.push(baseVertex + i + 3);
-            ctx.indexes.push(baseVertex + i + 0);
-        }
-    } else if (ctx.s_polyType === PolyType.TRIANGLE_STRIP) {
-        for (let i = 0; i < nVerts - 2; i++) {
-            if (i % 2 === 0) {
-                ctx.indexes.push(baseVertex + i + 0);
-                ctx.indexes.push(baseVertex + i + 1);
-                ctx.indexes.push(baseVertex + i + 2);
-            } else {
-                ctx.indexes.push(baseVertex + i + 1);
-                ctx.indexes.push(baseVertex + i + 0);
-                ctx.indexes.push(baseVertex + i + 2);
-            }
-        }
-    } else if (ctx.s_polyType === PolyType.QUAD_STRIP) {
-        for (let i = 0; i < nVerts; i += 2) {
-            ctx.indexes.push(baseVertex + i + 0);
-            ctx.indexes.push(baseVertex + i + 1);
-            ctx.indexes.push(baseVertex + i + 3);
-            ctx.indexes.push(baseVertex + i + 3);
-            ctx.indexes.push(baseVertex + i + 2);
-            ctx.indexes.push(baseVertex + i + 0);
-        }
-    }
-    const numIndices = ctx.indexes.length - startIndex;
+    const newIndexBuffer = makeTriangleIndexBuffer(translatePolyType(ctx.s_polyType), baseVertex, numVertices);
+    for (let i = 0; i < newIndexBuffer.length; i++)
+        ctx.indexes.push(newIndexBuffer[i]);
+    const numIndices = newIndexBuffer.length;
 
     ctx.drawCalls.push({ startIndex, numIndices });
 }
