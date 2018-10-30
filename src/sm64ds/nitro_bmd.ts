@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { mat2d } from 'gl-matrix';
 
 import * as NITRO_GX from './nitro_gx';
 import * as NITRO_Tex from './nitro_tex';
@@ -17,7 +17,7 @@ export class Material {
     public cullMode: CullMode;
     public diffuse: NITRO_GX.Color;
     public alpha: number;
-    public texCoordMat: mat4;
+    public texCoordMat: mat2d;
     public texture: Texture;
     public texParams: number;
 }
@@ -116,7 +116,7 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
 
     const material = new Material();
     material.name = readString(buffer, view.getUint32(offs + 0x00, true), 0xFF);
-    material.texCoordMat = mat4.create();
+    material.texCoordMat = mat2d.create();
 
     const textureIdx = view.getUint32(offs + 0x04, true);
     if (textureIdx !== 0xFFFFFFFF) {
@@ -130,11 +130,11 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
             const scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
             const transS = view.getInt32(offs + 0x18, true) / 4096.0;
             const transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-            mat4.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-            mat4.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
+            mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
+            mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
         }
         const texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
-        mat4.scale(material.texCoordMat, material.texCoordMat, texScale);
+        mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
     } else {
         material.texture = null;
         material.texParams = 0;

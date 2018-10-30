@@ -144,6 +144,7 @@ export interface GfxDeviceLimits {
 }
 
 export interface GfxProgramReflection {
+    uniqueKey: number;
     uniformBuffers: BufferLayout[];
 }
 
@@ -217,10 +218,6 @@ export interface GfxDevice {
     setResourceName(o: GfxResource, s: string): void;
 }
 
-export interface GfxQueue {
-
-}
-
-export { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline };
+export { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
 export { GfxFormat };
  
