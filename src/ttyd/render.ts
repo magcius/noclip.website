@@ -1,26 +1,29 @@
 
 import * as GX_Material from '../gx/gx_material';
-import { GXTextureHolder, MaterialParams, GXRenderHelper, SceneParams, fillSceneParamsFromRenderState, GXShapeHelper, PacketParams, loadedDataCoalescer, ColorKind } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx } from '../gx/gx_render';
 
 import * as TPL from './tpl';
-import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';
+import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator } from './world';
 
 import * as GX from '../gx/gx_enum';
 import * as Viewer from '../viewer';
-import { RenderState, RenderFlags, fullscreenFlags } from '../render';
-import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { mat4 } from 'gl-matrix';
 import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxSampler, GfxTexFilterMode, GfxWrapMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
-import { BufferFillerHelper } from '../gfx/helpers/BufferHelpers';
-import { TextureMapping, getGLTextureFromMapping, getGLSamplerFromMapping, bindGLTextureMappings } from '../TextureHolder';
-import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxWrapMode, GfxMipFilterMode, GfxRenderPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
+import { TextureMapping } from '../TextureHolder';
+import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
+import { GfxRenderInst, GfxRenderInstBuilder, makeSortKey, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { fullscreenFlags } from '../gfx/helpers/RenderFlagsHelpers';
+import { Camera, computeViewMatrix } from '../Camera';
+import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
-    public addTPLTextures(gl: WebGL2RenderingContext, tpl: TPL.TPL): void {
-        this.addTextures(gl, tpl.textures);
+    public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
+        this.addTexturesGfx(device, tpl.textures);
     }
 }
 
@@ -57,38 +60,50 @@ void main() {
 
 class BackgroundBillboardRenderer {
     private program = new BackgroundBillboardProgram();
-    private paramsBuffer: GfxBuffer;
     private bufferFiller: BufferFillerHelper;
-    private textureMapping = nArray(1, () => new TextureMapping());
+    private paramsBuffer: GfxRenderBuffer;
+    private paramsBufferOffset: number;
+    private renderInst: GfxRenderInst;
+    private textureMappings = nArray(1, () => new TextureMapping());
 
-    constructor(device: GfxDevice, public textureHolder: TPLTextureHolder, public textureName: string) {
-        const deviceLimits = device.queryLimits();
-        const paramsWordCount = Math.max(4, deviceLimits.uniformBufferWordAlignment);
-        this.paramsBuffer = device.createBuffer(paramsWordCount, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+    constructor(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer, public textureHolder: TPLTextureHolder, public textureName: string) {
         const gfxProgram = device.createProgram(this.program);
-        const paramsLayout = device.queryProgram(gfxProgram).uniformBuffers[0];
+        const programReflection = device.queryProgram(gfxProgram);
+        const paramsLayout = programReflection.uniformBufferLayouts[0];
         this.bufferFiller = new BufferFillerHelper(paramsLayout);
+        this.paramsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
+
+        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.paramsBuffer ]);
+        this.renderInst = renderInstBuilder.newRenderInst();
+        this.renderInst.name = 'BackgroundBillboardRenderer';
+        this.renderInst.drawTriangles(3);
+        this.renderInst.sortKey = makeSortKey(0, 0, programReflection.uniqueKey);
+        // No input state, we don't use any vertex buffers for full-screen passes.
+        this.renderInst.inputState = null;
+        this.renderInst.gfxProgram = gfxProgram;
+        this.renderInst.renderFlags = fullscreenFlags;
+        this.renderInst.samplerBindings = [null];
+        this.paramsBufferOffset = renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
+        renderInstBuilder.finish(device, viewRenderer);
     }
 
-    public render(device: GfxDevice, state: RenderState): void {
+    public prepareForRender(hostAccessPass: GfxHostAccessPass, renderInput: Viewer.ViewerRenderInput): void {
+        // Set our texture bindings.
+        this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
+        this.renderInst.fillBindingsFromTextureMappings(this.textureMappings);
+
+        // Upload new buffer data.
+
         // Extract yaw
-        const o = Math.atan2(-state.view[2], state.view[0]) / (Math.PI * 2) * 4;
-        const hostAccessPass = device.createHostAccessPass();
+        const view = renderInput.camera.viewMatrix;
+        const o = Math.atan2(-view[2], view[0]) / (Math.PI * 2) * 4;
         this.bufferFiller.reset();
-        this.bufferFiller.fillVec4(state.getAspect(), -1, o, 0);
-        this.bufferFiller.endAndUpload(hostAccessPass, this.paramsBuffer);
-        device.submitPass(hostAccessPass);
-
-        const gl = state.gl;
-
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, BackgroundBillboardProgram.ub_Params, getPlatformBuffer(this.paramsBuffer));
-
-        this.textureHolder.fillTextureMapping(this.textureMapping[0], this.textureName);
-        bindGLTextureMappings(state, this.textureMapping);
-
-        state.useProgram(this.program);
-        state.useFlags(fullscreenFlags);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        const aspect = renderInput.viewportWidth / renderInput.viewportHeight;
+        this.bufferFiller.fillVec4(aspect, -1, o, 0);
+        this.bufferFiller.endAndUpload(hostAccessPass, this.paramsBuffer, this.paramsBufferOffset);
+        this.paramsBuffer.prepareToRender(hostAccessPass);
     }
 }
 
@@ -104,23 +119,28 @@ function translateWrapMode(wrapMode: GX.WrapMode): GfxWrapMode {
 }
 
 class Command_Material {
-    private renderFlags: RenderFlags;
-    private program: GX_Material.GX_Program;
+    private gfxProgram: GfxProgram;
     private materialParams = new MaterialParams();
     private gfxSamplers: GfxSampler[] = [];
     private materialAnimators: MaterialAnimator[] = [];
+    private materialParamsBufferOffset: number;
+    public templateRenderInst: GfxRenderInst;
 
-    constructor(gl: WebGL2RenderingContext, public material: Material) {
-        const device = getTransitionDeviceForWebGL2(gl);
-
-        this.program = new GX_Material.GX_Program(this.material.gxMaterial);
-        this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
-        // Hack to let the surface cull mode go through.
-        this.renderFlags.cullMode = undefined;
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public material: Material) {
+        const program = new GX_Material.GX_Program(this.material.gxMaterial);
+        this.gfxProgram = device.createProgram(program);
 
         this.gfxSamplers = this.material.samplers.map((sampler) => {
             return Command_Material.translateSampler(device, sampler);
         });
+
+        this.templateRenderInst = renderHelper.renderInstBuilder.newTemplateRenderInst();
+        this.templateRenderInst.gfxProgram = this.gfxProgram;
+        this.templateRenderInst.samplerBindings = nArray(8, () => null);
+        this.templateRenderInst.sortKey = makeSortKey(10 + material.materialLayer, 0, device.queryProgram(this.gfxProgram).uniqueKey);
+        GX_Material.translateRenderFlagsGfx(this.templateRenderInst.renderFlags, this.material.gxMaterial);
+        // Allocate our material buffer slot.
+        this.materialParamsBufferOffset = renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, 1);
     }
 
     private static translateSampler(device: GfxDevice, sampler: Sampler): GfxSampler {
@@ -135,7 +155,7 @@ class Command_Material {
         });
     }
 
-    public fillMaterialParams(materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
+    private fillMaterialParams(materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
         for (let i = 0; i < this.material.samplers.length; i++) {
             const sampler = this.material.samplers[i];
 
@@ -170,22 +190,10 @@ class Command_Material {
         return hasAnimation;
     }
 
-    public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: TPLTextureHolder) {
-        state.useProgram(this.program);
-        state.useFlags(this.renderFlags);
-
-        // Polygon offset isn't in RenderFlags, have to do this manually.
-        const gl = state.gl;
-        if (this.material.materialLayer === MaterialLayer.ALPHA_TEST) {
-            gl.enable(gl.POLYGON_OFFSET_FILL);
-            gl.polygonOffset(-0.5, -0.5);
-        } else {
-            gl.disable(gl.POLYGON_OFFSET_FILL);
-        }
-
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, renderHelper: GXRenderHelperGfx, textureHolder: TPLTextureHolder): void {
         this.fillMaterialParams(this.materialParams, textureHolder);
-        renderHelper.bindMaterialParams(state, this.materialParams);
-        renderHelper.bindMaterialTextures(state, this.materialParams);
+        renderHelper.fillMaterialParams(this.materialParams, this.materialParamsBufferOffset);
+        this.templateRenderInst.fillBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
     }
 
     public destroy(device: GfxDevice) {
@@ -194,25 +202,40 @@ class Command_Material {
 }
 
 class Command_Batch {
-    private shapeHelper: GXShapeHelper;
+    private shapeHelper: GXShapeHelperGfx;
+    private renderInst: GfxRenderInst;
     private packetParams = new PacketParams();
+    private hasTextures: boolean = false;
 
-    constructor(gl: WebGL2RenderingContext, private nodeCommand: Command_Node, private batch: Batch, private coalescedBuffers: CoalescedBuffers) {
-        this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private nodeCommand: Command_Node, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffers) {
+        this.shapeHelper = new GXShapeHelperGfx(device, renderHelper.renderInstBuilder, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+        this.renderInst = this.shapeHelper.renderInst;
+        this.renderInst.name = nodeCommand.node.nameStr;
+        // Pull in the node's cull mode.
+        this.renderInst.renderFlags.cullMode = nodeCommand.node.renderFlags.cullMode;
     }
 
-    private computeModelView(dst: mat4, state: RenderState): void {
-        mat4.copy(dst, state.updateModelView(false, this.nodeCommand.modelMatrix));
+    private computeModelView(dst: mat4, camera: Camera): void {
+        computeViewMatrix(dst, camera);
+        mat4.mul(dst, dst, this.nodeCommand.modelMatrix);
     }
 
-    public draw(state: RenderState, renderHelper: GXRenderHelper): void {
-        this.computeModelView(this.packetParams.u_PosMtx[0], state);
-        renderHelper.bindPacketParams(state, this.packetParams);
-        this.shapeHelper.draw(state);
+    public prepareForRender(hostAccessPass: GfxHostAccessPass, renderHelper: GXRenderHelperGfx, renderInput: Viewer.ViewerRenderInput): void {
+        this.renderInst.visible = !(this.nodeCommand.node.visible === false);
+
+        if (this.renderInst.visible) {
+            this.computeModelView(this.packetParams.u_PosMtx[0], renderInput.camera);
+            this.shapeHelper.fillPacketParams(this.packetParams, renderHelper);
+
+            if (!this.hasTextures && this.renderInst.samplerBindings[0] !== null) {
+                this.renderInst.samplerBindingsDirty = true;
+                this.hasTextures = true;
+            }
+        }
     }
 
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.shapeHelper.destroy(gl);
+    public destroy(device: GfxDevice): void {
+        this.shapeHelper.destroy(device);
     }
 }
 
@@ -249,10 +272,10 @@ class Command_Node {
     }
 }
 
-export class WorldRenderer implements Viewer.MainScene {
+export class WorldRenderer implements Viewer.Scene_Device {
     public name: string;
 
-    private bufferCoalescer: BufferCoalescer;
+    private bufferCoalescer: GfxBufferCoalescer;
     private batches: Batch[];
 
     private batchCommands: Command_Batch[] = [];
@@ -262,15 +285,16 @@ export class WorldRenderer implements Viewer.MainScene {
 
     public visible: boolean = true;
 
-    public renderHelper: GXRenderHelper;
+    private renderHelper: GXRenderHelperGfx;
+    public viewRenderer: GfxRenderInstViewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
     private backgroundRenderer: BackgroundBillboardRenderer | null = null;
-    private sceneParams = new SceneParams();
     private animationController = new AnimationController();
     public animationNames: string[];
 
-    constructor(gl: WebGL2RenderingContext, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
-        this.translateModel(gl, d);
-        this.renderHelper = new GXRenderHelper(gl);
+    constructor(device: GfxDevice, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
+        this.renderHelper = new GXRenderHelperGfx(device);
+        this.translateModel(device, d);
 
         const rootScale = 10;
         mat4.fromScaling(this.rootMatrix, [rootScale, rootScale, rootScale]);
@@ -280,10 +304,8 @@ export class WorldRenderer implements Viewer.MainScene {
         // Play all animations b/c why not.
         this.playAllAnimations();
 
-        if (backgroundTextureName !== null) {
-            const device = getTransitionDeviceForWebGL2(gl);
-            this.backgroundRenderer = new BackgroundBillboardRenderer(device, textureHolder, backgroundTextureName);
-        }
+        if (backgroundTextureName !== null)
+            this.backgroundRenderer = new BackgroundBillboardRenderer(device, this.viewRenderer, textureHolder, backgroundTextureName);
     }
 
     public playAllAnimations(): void {
@@ -323,22 +345,24 @@ export class WorldRenderer implements Viewer.MainScene {
         this.visible = visible;
     }
 
-    public render(state: RenderState): void {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         if (!this.visible)
-            return;
+            return null;
 
-        state.setClipPlanes(10, 5000);
+        this.animationController.updateTime(viewerInput.time);
+
+        const hostAccessPass = device.createHostAccessPass();
 
         if (this.backgroundRenderer !== null)
-            this.backgroundRenderer.render(getTransitionDeviceForWebGL2(state.gl), state);
+            this.backgroundRenderer.prepareForRender(hostAccessPass, viewerInput);
 
-        this.animationController.updateTime(state.time);
-        this.renderHelper.bindUniformBuffers(state);
+        this.renderHelper.fillSceneParams(viewerInput);
 
-        fillSceneParamsFromRenderState(this.sceneParams, state);
-        this.renderHelper.bindSceneParams(state, this.sceneParams);
+        // Update models.
+        for (let i = 0; i < this.materialCommands.length; i++)
+            this.materialCommands[i].prepareToRender(hostAccessPass, this.renderHelper, this.textureHolder);
 
-        // Update nodes.
+        // Recursively update node model matrices.
         const updateNode = (nodeCommand: Command_Node, parentMatrix: mat4) => {
             nodeCommand.updateModelMatrix(parentMatrix);
             for (let i = 0; i < nodeCommand.children.length; i++)
@@ -347,55 +371,43 @@ export class WorldRenderer implements Viewer.MainScene {
 
         updateNode(this.rootNode, this.rootMatrix);
 
-        const renderPart = (part: SceneGraphPart) => {
-            const materialIndex = part.material.index;
-            this.materialCommands[materialIndex].bindMaterial(state, this.renderHelper, this.textureHolder);
-            const batchIndex = this.batches.indexOf(part.batch);
-            this.batchCommands[batchIndex].draw(state, this.renderHelper);
-        };
+        // Update shapes
+        for (let i = 0; i < this.batchCommands.length; i++)
+            this.batchCommands[i].prepareForRender(hostAccessPass, this.renderHelper, viewerInput);
 
-        const renderNode = (nodeCommand: Command_Node, isTranslucent: boolean) => {
-            const node = nodeCommand.node;
-            if (node.visible === false)
-                return;
+        this.renderHelper.prepareToRender(hostAccessPass);
+        device.submitPass(hostAccessPass);
 
-            if (node.isTranslucent === isTranslucent && node.parts.length > 0) {
-                state.useFlags(node.renderFlags);
-                for (let i = 0; i < node.parts.length; i++)
-                    renderPart(node.parts[i]);
-            }
-
-            for (let i = 0; i < nodeCommand.children.length; i++)
-                renderNode(nodeCommand.children[i], isTranslucent);
-        };
-
-        // Dumb sorting.
-        renderNode(this.rootNode, false);
-        renderNode(this.rootNode, true);
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.executeOnPass(device, passRenderer);
+        return passRenderer;
     }
 
-    public destroy(gl: WebGL2RenderingContext): void {
-        const device = getTransitionDeviceForWebGL2(gl);
-        this.renderHelper.destroy(gl);
-        this.bufferCoalescer.destroy(gl);
+    public destroy(device: GfxDevice): void {
+        this.bufferCoalescer.destroy(device);
         this.materialCommands.forEach((cmd) => cmd.destroy(device));
-        this.batchCommands.forEach((cmd) => cmd.destroy(gl));
+        this.batchCommands.forEach((cmd) => cmd.destroy(device));
     }
 
-    private translatePart(gl: WebGL2RenderingContext, nodeCommand: Command_Node, part: SceneGraphPart): void {
+    private translatePart(device: GfxDevice, nodeCommand: Command_Node, part: SceneGraphPart): void {
         const batch = part.batch;
         const batchIndex = this.batches.indexOf(batch);
         assert(batchIndex >= 0);
-        const batchCommand = new Command_Batch(gl, nodeCommand, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
+        const materialCommand = this.materialCommands[part.material.index];
+        this.renderHelper.renderInstBuilder.pushTemplateRenderInst(materialCommand.templateRenderInst);
+        const batchCommand = new Command_Batch(device, this.renderHelper, nodeCommand, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
+        this.renderHelper.renderInstBuilder.popTemplateRenderInst();
         this.batchCommands.push(batchCommand);
     }
 
-    private translateSceneGraph(gl: WebGL2RenderingContext, node: SceneGraphNode): Command_Node {
+    private translateSceneGraph(device: GfxDevice, node: SceneGraphNode): Command_Node {
         const nodeCommand = new Command_Node(node);
         for (const part of node.parts)
-            this.translatePart(gl, nodeCommand, part);
+            this.translatePart(device, nodeCommand, part);
         for (const child of node.children)
-            nodeCommand.children.push(this.translateSceneGraph(gl, child));
+            nodeCommand.children.push(this.translateSceneGraph(device, child));
         return nodeCommand;
     }
 
@@ -406,8 +418,8 @@ export class WorldRenderer implements Viewer.MainScene {
             this.collectBatches(batches, child);
     }
 
-    private translateModel(gl: WebGL2RenderingContext, d: TTYDWorld): void {
-        this.materialCommands = d.materials.map((material) => new Command_Material(gl, material));
+    private translateModel(device: GfxDevice, d: TTYDWorld): void {
+        this.materialCommands = d.materials.map((material) => new Command_Material(device, this.renderHelper, material));
 
         const rootNode = d.sNode;
 
@@ -415,8 +427,9 @@ export class WorldRenderer implements Viewer.MainScene {
         this.collectBatches(this.batches, rootNode);
 
         // Coalesce buffers.
-        this.bufferCoalescer = loadedDataCoalescer(gl, this.batches.map((batch) => batch.loadedVertexData));
+        this.bufferCoalescer = loadedDataCoalescerGfx(device, this.batches.map((batch) => batch.loadedVertexData));
 
-        this.rootNode = this.translateSceneGraph(gl, rootNode);
+        this.rootNode = this.translateSceneGraph(device, rootNode);
+        this.renderHelper.renderInstBuilder.finish(device, this.viewRenderer);
     }
 }

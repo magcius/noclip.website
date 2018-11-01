@@ -993,17 +993,18 @@ export class UI {
     }
 
     public sceneChanged() {
-        const scene = this.viewer.scene;
         const cameraControllerClass = (<CameraControllerClass> this.viewer.cameraController.constructor);
         // Set up UI.
         this.viewerSettings.cameraControllerSelected(cameraControllerClass);
-        if (scene !== null) {
+        if (this.viewer.scene !== null) {
+            const scene = this.viewer.scene;
             if (scene.textures !== undefined)
                 this.textureViewer.setTextureList(scene.textures);
             else if (scene.textureHolder !== undefined)
                 this.textureViewer.setTextureHolder(scene.textureHolder);
             else
                 this.textureViewer.setTextureList([]);
+        } else if (this.viewer.scene_device !== null) {
         }
     }
 

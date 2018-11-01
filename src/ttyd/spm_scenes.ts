@@ -10,12 +10,13 @@ import * as TPL from './tpl';
 import * as World from './world';
 import { WorldRenderer, TPLTextureHolder } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 class SPMSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         return fetchData(`data/spm/${this.id}.bin`).then((buffer: ArrayBufferSlice) => {
             const decompressed = CX.decompress(buffer);
             const arc = U8.parse(decompressed);
@@ -27,11 +28,11 @@ class SPMSceneDesc implements Viewer.SceneDesc {
             const d = World.parse(dFile.buffer);
             const textureHolder = new TPLTextureHolder();
             const tpl = TPL.parse(tFile.buffer, d.textureNameTable);
-            textureHolder.addTPLTextures(gl, tpl);
+            textureHolder.addTPLTextures(device, tpl);
             const backgroundTextureName = `bg_${this.id}`;
             const bgTpl = TPL.parse(bFile.buffer, [backgroundTextureName]);
-            textureHolder.addTPLTextures(gl, bgTpl);
-            return new WorldRenderer(gl, d, textureHolder, backgroundTextureName);
+            textureHolder.addTPLTextures(device, bgTpl);
+            return new WorldRenderer(device, d, textureHolder, backgroundTextureName);
         });
     }
 }

@@ -12,7 +12,7 @@ import AnimationController from '../AnimationController';
 import { mat4 } from 'gl-matrix';
 import { getTransitionDeviceForWebGL2, getPlatformBuffer, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
 import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
-import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/BufferHelpers';
+import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNew, colorFromRGBA } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping, bindGLTextureMappings } from '../TextureHolder';
@@ -115,7 +115,7 @@ export class CmbRenderer {
         this.model = this.translateCmb(gl, cmb);
 
         const prog = device.createProgram(this.program);
-        const uniformBuffers = device.queryProgram(prog).uniformBuffers;
+        const uniformBuffers = device.queryProgram(prog).uniformBufferLayouts;
         this.sceneParamsBuffer = device.createBuffer(uniformBuffers[0].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
         this.materialParamsBuffer = device.createBuffer(uniformBuffers[1].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
         this.prmParamsBuffer = device.createBuffer(uniformBuffers[2].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);

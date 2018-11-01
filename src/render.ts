@@ -6,49 +6,9 @@ import { assert, assertExists } from './util';
 import { BaseProgram, FullscreenProgram, ProgramCache, SimpleProgram } from './Program';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from './Camera';
 import { createTransitionDeviceForWebGL2 } from './gfx/platform/GfxPlatformWebGL2';
+import { GfxCompareMode as CompareMode, GfxFrontFaceMode as FrontFaceMode, GfxCullMode as CullMode, GfxBlendFactor as BlendFactor, GfxBlendMode as BlendMode } from './gfx/platform/GfxPlatform';
 
-export enum CompareMode {
-    NEVER   = WebGLRenderingContext.NEVER,
-    LESS    = WebGLRenderingContext.LESS,
-    EQUAL   = WebGLRenderingContext.EQUAL,
-    LEQUAL  = WebGLRenderingContext.LEQUAL,
-    GREATER = WebGLRenderingContext.GREATER,
-    NEQUAL  = WebGLRenderingContext.NOTEQUAL,
-    GEQUAL  = WebGLRenderingContext.GEQUAL,
-    ALWAYS  = WebGLRenderingContext.ALWAYS,
-}
-
-export enum FrontFaceMode {
-    CCW = WebGLRenderingContext.CCW,
-    CW  = WebGLRenderingContext.CW,
-}
-
-export enum CullMode {
-    NONE,
-    FRONT,
-    BACK,
-    FRONT_AND_BACK,
-}
-
-export enum BlendFactor {
-    ZERO                = WebGLRenderingContext.ZERO,
-    ONE                 = WebGLRenderingContext.ONE,
-    SRC_COLOR           = WebGLRenderingContext.SRC_COLOR,
-    ONE_MINUS_SRC_COLOR = WebGLRenderingContext.ONE_MINUS_SRC_COLOR,
-    DST_COLOR           = WebGLRenderingContext.DST_COLOR,
-    ONE_MINUS_DST_COLOR = WebGLRenderingContext.ONE_MINUS_DST_COLOR,
-    SRC_ALPHA           = WebGLRenderingContext.SRC_ALPHA,
-    ONE_MINUS_SRC_ALPHA = WebGLRenderingContext.ONE_MINUS_SRC_ALPHA,
-    DST_ALPHA           = WebGLRenderingContext.DST_ALPHA,
-    ONE_MINUS_DST_ALPHA = WebGLRenderingContext.ONE_MINUS_DST_ALPHA,
-}
-
-export enum BlendMode {
-    NONE             = 0,
-    ADD              = WebGLRenderingContext.FUNC_ADD,
-    SUBTRACT         = WebGLRenderingContext.FUNC_SUBTRACT,
-    REVERSE_SUBTRACT = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
-}
+export { CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode };
 
 export class RenderFlagsTracker {
     depthWrite: boolean;
