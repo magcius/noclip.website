@@ -12,10 +12,14 @@ import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstViewRenderer, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { RenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
+import { assert } from '../util';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_Normal = 1;
+
+    public static ub_SceneParams = 0;
+    public static ub_ObjectParams = 1;
 
     public both = `
 precision mediump float;
@@ -62,7 +66,7 @@ class Chunk {
     public inputState: GfxInputState;
     public renderInst: GfxRenderInst;
 
-    constructor(device: GfxDevice, public chunk: IV.Chunk, renderInstBuilder: GfxRenderInstBuilder, inputLayout: GfxInputLayout) {
+    constructor(device: GfxDevice, public chunk: IV.Chunk, inputLayout: GfxInputLayout, renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst) {
         // Run through our data, calculate normals and such.
         const t = vec3.create();
 
@@ -125,9 +129,10 @@ class Chunk {
 
         this.numVertices = chunk.indexData.length;
 
-        this.renderInst = renderInstBuilder.newRenderInst();
+        this.renderInst = new GfxRenderInst(baseRenderInst);
         this.renderInst.drawTriangles(this.numVertices);
         this.renderInst.inputState = this.inputState;
+        renderInstBuilder.pushRenderInst(this.renderInst);
     }
 
     public prepareForRender(hostAccessPass: GfxHostAccessPass, visible: boolean): void {
@@ -148,14 +153,14 @@ export class IVRenderer {
 
     private chunks: Chunk[];
 
-    constructor(device: GfxDevice, public iv: IV.IV, inputLayout: GfxInputLayout, renderInstBuilder: GfxRenderInstBuilder) {
+    constructor(device: GfxDevice, public iv: IV.IV, inputLayout: GfxInputLayout, renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst) {
         // TODO(jstpierre): Coalesce chunks?
         this.name = iv.name;
-        const renderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.colorBufferOffset = renderInstBuilder.newUniformBufferInstance(renderInst, 1);
 
-        this.chunks = this.iv.chunks.map((chunk) => new Chunk(device, chunk, renderInstBuilder, inputLayout));
-        renderInstBuilder.popTemplateRenderInst();
+        const renderInst = new GfxRenderInst(baseRenderInst);
+        this.colorBufferOffset = renderInstBuilder.newUniformBufferInstance(renderInst, IVProgram.ub_ObjectParams);
+
+        this.chunks = this.iv.chunks.map((chunk) => new Chunk(device, chunk, inputLayout, renderInstBuilder, renderInst));
     }
 
     public fillColorUniformBufferData(hostAccessPass: GfxHostAccessPass, buffer: GfxRenderBuffer): void {
@@ -221,22 +226,22 @@ export class Scene implements Viewer.Scene_Device {
         this.colorUniformBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.STATIC);
 
         const programReflection = device.queryProgram(this.program);
-        const sceneBufferLayout = programReflection.uniformBufferLayouts[0];
+        const sceneBufferLayout = programReflection.uniformBufferLayouts[IVProgram.ub_SceneParams];
         this.sceneUniformBufferFiller = new BufferFillerHelper(sceneBufferLayout);
 
         const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.sceneUniformBuffer, this.colorUniformBuffer ]);
 
-        const baseRenderInst = renderInstBuilder.pushTemplateRenderInst();
+        const baseRenderInst = new GfxRenderInst();
         baseRenderInst.pipeline = this.pipeline;
 
         // Nab a scene buffer instance.
-        renderInstBuilder.newUniformBufferInstance(baseRenderInst, 0);
+        const sceneParamsOffs = renderInstBuilder.newUniformBufferInstance(baseRenderInst, IVProgram.ub_SceneParams);
+        assert(sceneParamsOffs == 0);
 
         this.ivRenderers = this.ivs.map((iv) => {
-            return new IVRenderer(device, iv, this.inputLayout, renderInstBuilder);
+            return new IVRenderer(device, iv, this.inputLayout, renderInstBuilder, baseRenderInst);
         });
 
-        renderInstBuilder.popTemplateRenderInst();
         renderInstBuilder.finish(device, this.viewRenderer);
 
         // Now that we have our buffers created, fill 'em in.

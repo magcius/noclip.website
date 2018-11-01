@@ -76,7 +76,7 @@ class BackgroundBillboardRenderer {
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 
         const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.paramsBuffer ]);
-        this.renderInst = renderInstBuilder.newRenderInst();
+        this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.name = 'BackgroundBillboardRenderer';
         this.renderInst.drawTriangles(3);
         this.renderInst.sortKey = makeSortKey(0, 0, programReflection.uniqueKey);
@@ -134,7 +134,7 @@ class Command_Material {
             return Command_Material.translateSampler(device, sampler);
         });
 
-        this.templateRenderInst = renderHelper.renderInstBuilder.newTemplateRenderInst();
+        this.templateRenderInst = renderHelper.renderInstBuilder.newRenderInst();
         this.templateRenderInst.gfxProgram = this.gfxProgram;
         this.templateRenderInst.samplerBindings = nArray(8, () => null);
         this.templateRenderInst.sortKey = makeSortKey(10 + material.materialLayer, 0, device.queryProgram(this.gfxProgram).uniqueKey);
@@ -208,8 +208,9 @@ class Command_Batch {
     private packetParams = new PacketParams();
     private hasTextures: boolean = false;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private nodeCommand: Command_Node, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffers) {
-        this.shapeHelper = new GXShapeHelperGfx(device, renderHelper.renderInstBuilder, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, materialCommand: Command_Material, private nodeCommand: Command_Node, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffers) {
+        this.shapeHelper = new GXShapeHelperGfx(device, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+        this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder, materialCommand.templateRenderInst);
         this.renderInst = this.shapeHelper.renderInst;
         this.renderInst.name = nodeCommand.node.nameStr;
         // Pull in the node's cull mode.
@@ -397,9 +398,7 @@ export class WorldRenderer implements Viewer.Scene_Device {
         const batchIndex = this.batches.indexOf(batch);
         assert(batchIndex >= 0);
         const materialCommand = this.materialCommands[part.material.index];
-        this.renderHelper.renderInstBuilder.pushTemplateRenderInst(materialCommand.templateRenderInst);
-        const batchCommand = new Command_Batch(device, this.renderHelper, nodeCommand, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
-        this.renderHelper.renderInstBuilder.popTemplateRenderInst();
+        const batchCommand = new Command_Batch(device, this.renderHelper, materialCommand, nodeCommand, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
         this.batchCommands.push(batchCommand);
     }
 
