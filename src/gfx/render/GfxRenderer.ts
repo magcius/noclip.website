@@ -27,6 +27,16 @@ export function makeSortKey(layer: number, depth: number, programKey: number): n
             ((programKey & 0xFF)));
 }
 
+function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
+    dst.sortKey = src.sortKey;
+    dst.gfxProgram = src.gfxProgram;
+    dst.samplerBindings = src.samplerBindings;
+    dst.inputState = src.inputState;
+    dst.pipeline = src.pipeline;
+    dst.uniformBufferOffsets = src.uniformBufferOffsets.slice();
+    dst.renderFlags = new RenderFlags(src.renderFlags);
+}
+
 // The finished, low-level instance of a draw call. This is what's sorted and executed.
 export class GfxRenderInst {
     public visible: boolean = true;
@@ -57,6 +67,11 @@ export class GfxRenderInst {
     public uniformBufferBindings: GfxBufferBinding[] = [];
     public samplerBindingsDirty: boolean = false;
     public samplerBindings: GfxSamplerBinding[] = [];
+
+    constructor(other: GfxRenderInst = null) {
+        if (other)
+            assignRenderInst(this, other);
+    }
 
     public setPipelineDirect(pipeline: GfxRenderPipeline): void {
         this.pipeline = pipeline;
@@ -172,10 +187,10 @@ export class GfxRenderInstViewRenderer {
 }
 
 export class GfxRenderInstBuilder {
-    private templateStack: GfxRenderInst[] = [];
     private uniformBufferOffsets: number[] = [];
     private uniformBufferWordAlignment: number;
     private renderInsts: GfxRenderInst[] = [];
+    private templateStack: GfxRenderInst[] = [];
 
     constructor(device: GfxDevice, public programReflection: DeviceProgramReflection, public bindingLayouts: GfxBindingLayoutDescriptor[], public uniformBuffers: GfxRenderBuffer[]) {
         this.uniformBufferWordAlignment = device.queryLimits().uniformBufferWordAlignment;
@@ -183,9 +198,8 @@ export class GfxRenderInstBuilder {
         for (let i = 0; i < this.programReflection.uniformBufferLayouts.length; i++)
             this.uniformBufferOffsets[i] = 0;
 
-        const baseRenderInst = new GfxRenderInst();
+        const baseRenderInst = this.pushTemplateRenderInst();
         baseRenderInst.renderFlags = new RenderFlags();
-        this.templateStack.push(baseRenderInst);
     }
 
     private newUniformBufferOffset(index: number): number {
@@ -201,25 +215,9 @@ export class GfxRenderInstBuilder {
         return offs;
     }
 
-    private assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst) {
-        dst.sortKey = src.sortKey;
-        dst.gfxProgram = src.gfxProgram;
-        dst.samplerBindings = src.samplerBindings;
-        dst.inputState = src.inputState;
-        dst.pipeline = src.pipeline;
-        dst.uniformBufferOffsets = src.uniformBufferOffsets.slice();
-        dst.renderFlags = new RenderFlags(src.renderFlags);
-    }
-
-    public newTemplateRenderInst(): GfxRenderInst {
-        const o = new GfxRenderInst();
-        this.assignRenderInst(o, this.templateStack[0]);
-        return o;
-    }
-
     public pushTemplateRenderInst(o: GfxRenderInst = null): GfxRenderInst {
         if (o === null)
-            o = this.newTemplateRenderInst();
+            o = this.newRenderInst();
         this.templateStack.unshift(o);
         return o;
     }
@@ -228,10 +226,17 @@ export class GfxRenderInstBuilder {
         this.templateStack.shift();
     }
 
-    public newRenderInst(): GfxRenderInst {
-        const o = this.newTemplateRenderInst();
-        this.renderInsts.push(o);
-        return o;
+    public newRenderInst(baseRenderInst: GfxRenderInst = null): GfxRenderInst {
+        if (baseRenderInst === null)
+            baseRenderInst = this.templateStack[0];
+        return new GfxRenderInst(baseRenderInst);
+    }
+
+    public pushRenderInst(renderInst: GfxRenderInst = null): GfxRenderInst {
+        if (renderInst === null)
+            renderInst = this.newRenderInst();
+        this.renderInsts.push(renderInst);
+        return renderInst;
     }
 
     public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {

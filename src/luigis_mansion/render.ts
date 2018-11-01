@@ -18,7 +18,7 @@ class Command_Material {
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
 
-    constructor(gl: WebGL2RenderingContext, public scene: BinScene, public material: Material) {
+    constructor(public scene: BinScene, public material: Material) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
         this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
 
@@ -30,16 +30,12 @@ class Command_Material {
         // All we care about is textures...
         for (let i = 0; i < this.material.samplerIndexes.length; i++) {
             const samplerIndex = this.material.samplerIndexes[i];
-            if (samplerIndex >= 0) {
-                const m = this.materialParams.m_TextureMapping[i];
-                m.gfxTexture = this.scene.gfxTextures[samplerIndex];
-            }
+            if (samplerIndex >= 0)
+                materialParams.m_TextureMapping[i].gfxTexture = this.scene.gfxTextures[samplerIndex];
         }
     }
 
     public exec(state: RenderState) {
-        const gl = state.gl;
-
         state.useProgram(this.program);
         state.useFlags(this.renderFlags);
 
@@ -134,7 +130,7 @@ export class BinScene implements Viewer.MainScene {
     }
 
     private translatePart(gl: WebGL2RenderingContext, node: SceneGraphNode, part: SceneGraphPart): void {
-        const materialCommand = new Command_Material(gl, this, part.material);
+        const materialCommand = new Command_Material(this, part.material);
         this.commands.push(materialCommand);
         const batch = part.batch;
         const batchIndex = this.batches.indexOf(batch);
