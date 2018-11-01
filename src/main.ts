@@ -68,7 +68,7 @@ const sceneGroups = [
     MM3D.sceneGroup,
     ZELVIEW.sceneGroup,
     LM3D.sceneGroup,
-    MKDS.sceneGroup,
+    // MKDS.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {
