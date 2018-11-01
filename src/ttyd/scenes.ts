@@ -6,29 +6,29 @@ import { fetchData } from '../fetch';
 import * as TPL from './tpl';
 import * as World from './world';
 import { WorldRenderer, TPLTextureHolder } from './render';
-import { assert } from '../util';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 class TTYDSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.Scene> {
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         const pathBase = `data/ttyd/${this.id}`;
         const bgPath = `data/ttyd/b/${this.id}.tpl`;
         return Progressable.all([fetchData(`${pathBase}/d.blob`), fetchData(`${pathBase}/t.blob`), fetchData(bgPath)]).then(([dBuffer, tBuffer, bgBuffer]) => {
             const d = World.parse(dBuffer);
             const textureHolder = new TPLTextureHolder();
             const tpl = TPL.parse(tBuffer, d.textureNameTable);
-            textureHolder.addTPLTextures(gl, tpl);
+            textureHolder.addTPLTextures(device, tpl);
 
             let backgroundTextureName: string | null = null;
             if (bgBuffer.byteLength > 0) {
                 backgroundTextureName = `bg_${this.id}`;
                 const bgTpl = TPL.parse(bgBuffer, [backgroundTextureName]);
-                textureHolder.addTPLTextures(gl, bgTpl);
+                textureHolder.addTPLTextures(device, bgTpl);
             }
 
-            return new WorldRenderer(gl, d, textureHolder, backgroundTextureName);
+            return new WorldRenderer(device, d, textureHolder, backgroundTextureName);
         });
     }
 }

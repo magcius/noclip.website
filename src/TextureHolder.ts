@@ -1,6 +1,6 @@
 
 import * as Viewer from './viewer';
-import { GfxSampler, GfxTexture } from './gfx/platform/GfxPlatform';
+import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform';
 import { getTransitionDeviceForWebGL2, getPlatformTexture, getPlatformSampler } from './gfx/platform/GfxPlatformWebGL2';
 import { RenderState } from './render';
 
@@ -144,6 +144,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
     }
 
     protected abstract addTexture(gl: WebGL2RenderingContext, textureEntry: TextureType): LoadedTexture | null;
+    protected addTextureGfx(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null { return null; }
 
     public addTextures(gl: WebGL2RenderingContext, textureEntries: TextureType[]): void {
         for (const texture of textureEntries) {
@@ -152,6 +153,26 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
                 continue;
 
             const loadedTexture = this.addTexture(gl, texture);
+            if (loadedTexture === null)
+                continue;
+
+            const { gfxTexture, viewerTexture } = loadedTexture;
+            this.textureEntries.push(texture);
+            this.gfxTextures.push(gfxTexture);
+            this.viewerTextures.push(viewerTexture);
+        }
+
+        if (this.onnewtextures !== null)
+            this.onnewtextures();
+    }
+
+    public addTexturesGfx(device: GfxDevice, textureEntries: TextureType[]): void {
+        for (const texture of textureEntries) {
+            // Don't add dupes for the same name.
+            if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
+                continue;
+
+            const loadedTexture = this.addTextureGfx(device, texture);
             if (loadedTexture === null)
                 continue;
 

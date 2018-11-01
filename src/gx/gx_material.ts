@@ -3,10 +3,12 @@
 
 import * as GX from './gx_enum';
 
-import { BlendFactor, BlendMode as RenderBlendMode, CompareMode, CullMode, FrontFaceMode, RenderFlags } from '../render';
-import { DeviceProgram } from '../Program';
+import { RenderFlags } from '../render';
+import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import { colorCopy, colorFromRGBA8, colorToRGBA8 } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
+import { RenderFlags as GfxRenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
+import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode } from '../gfx/platform/GfxPlatform';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -813,41 +815,41 @@ export class GX_Program extends DeviceProgram {
         }).join('\n');
     }
 
-    private generateUBO() {
-        return `
+    public static UBODefinition = `
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
-    vec4 u_Misc0;
+mat4 u_Projection;
+vec4 u_Misc0;
 };
 
 #define u_SceneTextureLODBias u_Misc0[0]
 
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
-    vec4 u_ColorMatReg[2];
-    vec4 u_ColorAmbReg[2];
-    vec4 u_KonstColor[4];
-    vec4 u_Color[4];
-    mat4x3 u_TexMtx[10];
-    mat4x3 u_PostTexMtx[20];
-    mat4x2 u_IndTexMtx[3];
-    // SizeX, SizeY, 0, Bias
-    vec4 u_TextureParams[8];
+vec4 u_ColorMatReg[2];
+vec4 u_ColorAmbReg[2];
+vec4 u_KonstColor[4];
+vec4 u_Color[4];
+mat4x3 u_TexMtx[10];
+mat4x3 u_PostTexMtx[20];
+mat4x2 u_IndTexMtx[3];
+// SizeX, SizeY, 0, Bias
+vec4 u_TextureParams[8];
 };
 
 // Expected to change with each shape packet.
 layout(row_major, std140) uniform ub_PacketParams {
-    mat4x3 u_PosMtx[10];
+mat4x3 u_PosMtx[10];
 };
 `;
-    }
+
+    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(GX_Program.UBODefinition);
 
     private generateShaders() {
         this.both = `
 // ${this.material.name}
 precision mediump float;
-${this.generateUBO()}
+${GX_Program.UBODefinition}
 uniform sampler2D u_Texture[8];
 
 varying vec3 v_Position;
@@ -939,78 +941,78 @@ ${this.generateAlphaTest(alphaTest)}
 // #endregion
 
 // #region Material flags generation.
-export function translateCullMode(cullMode: GX.CullMode): CullMode {
+export function translateCullMode(cullMode: GX.CullMode): GfxCullMode {
     switch (cullMode) {
     case GX.CullMode.ALL:
-        return CullMode.FRONT_AND_BACK;
+        return GfxCullMode.FRONT_AND_BACK;
     case GX.CullMode.FRONT:
-        return CullMode.FRONT;
+        return GfxCullMode.FRONT;
     case GX.CullMode.BACK:
-        return CullMode.BACK;
+        return GfxCullMode.BACK;
     case GX.CullMode.NONE:
-        return CullMode.NONE;
+        return GfxCullMode.NONE;
     }
 }
 
-function translateBlendFactorCommon(blendFactor: GX.BlendFactor): BlendFactor {
+function translateBlendFactorCommon(blendFactor: GX.BlendFactor): GfxBlendFactor {
     switch (blendFactor) {
     case GX.BlendFactor.ZERO:
-        return BlendFactor.ZERO;
+        return GfxBlendFactor.ZERO;
     case GX.BlendFactor.ONE:
-        return BlendFactor.ONE;
+        return GfxBlendFactor.ONE;
     case GX.BlendFactor.SRCALPHA:
-        return BlendFactor.SRC_ALPHA;
+        return GfxBlendFactor.SRC_ALPHA;
     case GX.BlendFactor.INVSRCALPHA:
-        return BlendFactor.ONE_MINUS_SRC_ALPHA;
+        return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
     case GX.BlendFactor.DSTALPHA:
-        return BlendFactor.DST_ALPHA;
+        return GfxBlendFactor.DST_ALPHA;
     case GX.BlendFactor.INVDSTALPHA:
-        return BlendFactor.ONE_MINUS_DST_ALPHA;
+        return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
     default:
         throw new Error("whoops");
     }
 }
 
-function translateBlendSrcFactor(blendFactor: GX.BlendFactor): BlendFactor {
+function translateBlendSrcFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
     switch (blendFactor) {
     case GX.BlendFactor.SRCCLR:
-        return BlendFactor.DST_COLOR;
+        return GfxBlendFactor.DST_COLOR;
     case GX.BlendFactor.INVSRCCLR:
-        return BlendFactor.ONE_MINUS_DST_COLOR;
+        return GfxBlendFactor.ONE_MINUS_DST_COLOR;
     default:
         return translateBlendFactorCommon(blendFactor);
     }
 }
 
-function translateBlendDstFactor(blendFactor: GX.BlendFactor): BlendFactor {
+function translateBlendDstFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
     switch (blendFactor) {
     case GX.BlendFactor.SRCCLR:
-        return BlendFactor.SRC_COLOR;
+        return GfxBlendFactor.SRC_COLOR;
     case GX.BlendFactor.INVSRCCLR:
-        return BlendFactor.ONE_MINUS_SRC_COLOR;
+        return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
     default:
         return translateBlendFactorCommon(blendFactor);
     }
 }
 
-function translateCompareType(compareType: GX.CompareType): CompareMode {
+function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
     switch (compareType) {
     case GX.CompareType.NEVER:
-        return CompareMode.NEVER;
+        return GfxCompareMode.NEVER;
     case GX.CompareType.LESS:
-        return CompareMode.LESS;
+        return GfxCompareMode.LESS;
     case GX.CompareType.EQUAL:
-        return CompareMode.EQUAL;
+        return GfxCompareMode.EQUAL;
     case GX.CompareType.LEQUAL:
-        return CompareMode.LEQUAL;
+        return GfxCompareMode.LEQUAL;
     case GX.CompareType.GREATER:
-        return CompareMode.GREATER;
+        return GfxCompareMode.GREATER;
     case GX.CompareType.NEQUAL:
-        return CompareMode.NEQUAL;
+        return GfxCompareMode.NEQUAL;
     case GX.CompareType.GEQUAL:
-        return CompareMode.GEQUAL;
+        return GfxCompareMode.GEQUAL;
     case GX.CompareType.ALWAYS:
-        return CompareMode.ALWAYS;
+        return GfxCompareMode.ALWAYS;
     }
 }
 
@@ -1020,21 +1022,41 @@ export function translateRenderFlags(material: GXMaterial): RenderFlags {
     renderFlags.depthWrite = material.ropInfo.depthWrite;
     renderFlags.depthTest = material.ropInfo.depthTest;
     renderFlags.depthFunc = translateCompareType(material.ropInfo.depthFunc);
-    renderFlags.frontFace = FrontFaceMode.CW;
+    renderFlags.frontFace = GfxFrontFaceMode.CW;
     if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
-        renderFlags.blendMode = RenderBlendMode.NONE;
+        renderFlags.blendMode = GfxBlendMode.NONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
-        renderFlags.blendMode = RenderBlendMode.ADD;
+        renderFlags.blendMode = GfxBlendMode.ADD;
         renderFlags.blendSrc = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
         renderFlags.blendDst = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.SUBTRACT) {
-        renderFlags.blendMode = RenderBlendMode.REVERSE_SUBTRACT;
-        renderFlags.blendSrc = BlendFactor.ONE;
-        renderFlags.blendDst = BlendFactor.ONE;
+        renderFlags.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
+        renderFlags.blendSrc = GfxBlendFactor.ONE;
+        renderFlags.blendDst = GfxBlendFactor.ONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
         throw new Error("whoops");
     }
     return renderFlags;
+}
+
+export function translateRenderFlagsGfx(renderFlags: GfxRenderFlags, material: GXMaterial) {
+    renderFlags.cullMode = translateCullMode(material.cullMode);
+    renderFlags.depthWrite = material.ropInfo.depthWrite;
+    renderFlags.depthCompare = material.ropInfo.depthTest ? translateCompareType(material.ropInfo.depthFunc) : GfxCompareMode.NEVER;
+    renderFlags.frontFace = GfxFrontFaceMode.CW;
+    if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
+        renderFlags.blendMode = GfxBlendMode.NONE;
+    } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
+        renderFlags.blendMode = GfxBlendMode.ADD;
+        renderFlags.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
+        renderFlags.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
+    } else if (material.ropInfo.blendMode.type === GX.BlendMode.SUBTRACT) {
+        renderFlags.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
+        renderFlags.blendSrcFactor = GfxBlendFactor.ONE;
+        renderFlags.blendDstFactor = GfxBlendFactor.ONE;
+    } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
+        throw new Error("whoops");
+    }
 }
 // #endregion
 

@@ -1,13 +1,13 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
-import { DeviceProgram, ProgramCache } from '../../Program';
+import { DeviceProgram, ProgramCache, DeviceProgramReflection } from '../../Program';
 import { FullscreenCopyProgram, RenderState } from '../../render';
 import { assert } from '../../util';
 import { Color } from '../../Color';
-import { RenderFlagsChain } from '../helpers/RenderFlagsHelpers';
+import { fullscreenFlags, defaultFlags } from '../helpers/RenderFlagsHelpers';
 
 interface GfxBufferP_GL extends GfxBuffer {
     gl_buffer: WebGLBuffer;
@@ -48,7 +48,7 @@ interface GfxProgramP_GL extends GfxProgram {
 
 interface GfxBindingsP_GL extends GfxBindings {
     uniformBuffers: GfxBufferBinding[];
-    samplers: GfxSamplerBinding[];
+    samplers: (GfxSamplerBinding | null)[];
 }
 
 interface GfxRenderTargetP_GL extends GfxRenderTarget {
@@ -68,6 +68,7 @@ interface GfxInputLayoutP_GL extends GfxInputLayout {
 
 interface GfxInputStateP_GL extends GfxInputState {
     vao: WebGLVertexArrayObject;
+    indexBufferWordOffset: number;
     indexBufferType: GLenum;
     indexBufferCompByteSize: number;
     inputLayout: GfxInputLayoutP_GL;
@@ -91,7 +92,7 @@ interface GfxRenderPipelineP_GL extends GfxRenderPipeline {
     program: GfxProgramP_GL;
     drawMode: GLenum;
     megaState: GfxMegaStateDescriptor;
-    inputLayout: GfxInputLayoutP_GL;
+    inputLayout: GfxInputLayoutP_GL | null;
 }
 
 export function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, normalized: boolean } {
@@ -278,37 +279,38 @@ class Growable<T extends ArrayBufferView2> {
     }
 }
 
-const enum RenderPassCmd { setRenderTarget = 471, setViewport, setBindings, setPipeline, setInputState, draw, drawIndexed, endPass, invalid = 0x1234 };
+const enum RenderPassCmd { setRenderTarget = 471, setViewport, setBindings, setPipeline, setInputState, updateBindings, draw, drawIndexed, endPass, invalid = 0x1234 };
 class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
-    public gfxr: (GfxResource | null)[] = [];
+    public o: (object | null)[] = [];
 
-    private igfxr: number = 0;
+    private io: number = 0;
 
-    public reset() { this.u32.r(); this.f32.r(); this.igfxr = 0; this.gfxr.length = 0; }
+    public reset() { this.u32.r(); this.f32.r(); this.o.length = 0; }
 
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
     public pf32(c: number) { this.f32.n(c); }
-    public pgfxr(r: GfxResource | null) { this.gfxr[this.igfxr++] = r; }
+    public po(r: object | null) { this.o.push(r); }
 
     public end() { this.pcmd(RenderPassCmd.invalid); }
-    public setRenderTarget(r: GfxRenderTarget)    { this.pcmd(RenderPassCmd.setRenderTarget); this.pgfxr(r); }
+    public setRenderTarget(r: GfxRenderTarget)    { this.pcmd(RenderPassCmd.setRenderTarget); this.po(r); }
     public setViewport(w: number, h: number)      { this.pcmd(RenderPassCmd.setViewport); this.pf32(w); this.pf32(h); }
-    public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.pgfxr(r); }
-    public setBindings(n: number, r: GfxBindings) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.pgfxr(r); }
-    public setInputState(r: GfxInputState)        { this.pcmd(RenderPassCmd.setInputState); this.pgfxr(r); }
+    public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
+    public setBindings(n: number, r: GfxBindings) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); }
+    public setInputState(r: GfxInputState | null) { this.pcmd(RenderPassCmd.setInputState); this.po(r); }
+    public updateBindings(r: GfxBindings, b: GfxBufferBinding[], s: GfxSamplerBinding[]) { this.pcmd(RenderPassCmd.updateBindings); this.po(r); this.po(b); this.po(s); }
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
-    public endPass(r: GfxTexture | null)          { this.pcmd(RenderPassCmd.endPass); this.pgfxr(r); }
+    public endPass(r: GfxTexture | null)          { this.pcmd(RenderPassCmd.endPass); this.po(r); }
 }
 
 enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
 class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public gfxr: GfxResource[] = [];
-    public bufr: (ArrayBuffer | ArrayBufferView)[] = [];
+    public bufr: ArrayBufferView[] = [];
 
     private igfxr: number = 0;
     private ibufr: number = 0;
@@ -318,18 +320,19 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
     public pgfxr(r: GfxResource | null) { this.gfxr[this.igfxr++] = r; }
-    public pbufr(r: ArrayBuffer | ArrayBufferView) { this.bufr[this.ibufr++] = r; }
+    public pbufr(r: ArrayBufferView) { this.bufr[this.ibufr++] = r; }
 
     public end() { this.pcmd(HostAccessPassCmd.end); }
-    public uploadBufferData(r: GfxBuffer, dstWordOffset: number, data: ArrayBuffer, srcWordOffset?: number, wordCount?: number) {
+    public uploadBufferData(r: GfxBuffer, dstWordOffset: number, data: Uint8Array, srcWordOffset?: number, wordCount?: number) {
+        assert(!!r);
         this.pcmd(HostAccessPassCmd.uploadBufferData); this.pgfxr(r);
         const dstByteOffset = dstWordOffset * 4;
-        const srcByteOffset = srcWordOffset * 4;
-        const byteSize = wordCount >= 0 ? wordCount * 4 : data.byteLength;
+        const srcByteOffset = (srcWordOffset !== undefined) ? (srcWordOffset * 4) : 0;
+        const byteCount = (wordCount !== undefined) ? (wordCount * 4) : (data.byteLength - srcByteOffset);
         this.pu32(dstByteOffset);
         this.pbufr(data);
         this.pu32(srcByteOffset);
-        this.pu32(byteSize);
+        this.pu32(byteCount);
     }
 
     public uploadTextureData(r: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]) {
@@ -340,27 +343,8 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     }
 }
 
-function _getFullscreenCopyMegaState(): GfxMegaStateDescriptor {
-    const flags = new RenderFlagsChain();
-    flags.depthWrite = false;
-    return flags.resolveMegaState();
-}
-
-function _getDefaultMegaState(): GfxMegaStateDescriptor {
-    // Default mega state *needs* to match platform defaults.
-    return {
-        blendMode: GfxBlendMode.NONE,
-        blendSrcFactor: GfxBlendFactor.ONE,
-        blendDstFactor: GfxBlendFactor.ZERO,
-        cullMode: GfxCullMode.NONE,
-        depthCompare: GfxCompareMode.NEVER,
-        depthWrite: false,
-        frontFace: GfxFrontFaceMode.CCW,
-    };
-}
-
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
-    private _fullscreenCopyMegaState = _getFullscreenCopyMegaState();
+    private _fullscreenCopyMegaState = fullscreenFlags.resolveMegaState();
     private _fullscreenCopyProgram: GfxProgramP_GL;
 
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null;
@@ -419,10 +403,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private blitFullscreenTexture(texture: GfxTexture): void {
         const gl = this.gl;
         this._setMegaState(this._fullscreenCopyMegaState);
-        gl.activeTexture(gl.TEXTURE0);
+        this._setActiveTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
-        gl.useProgram(this._fullscreenCopyProgram.gl_program);
+        this._useProgram(this._fullscreenCopyProgram.gl_program);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     //#endregion
@@ -496,13 +480,37 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
+    private _currentActiveTexture: GLenum | null = null;
+    private _setActiveTexture(texture: GLenum): void {
+        if (this._currentActiveTexture !== texture) {
+            this.gl.activeTexture(texture);
+            this._currentActiveTexture = texture;
+        }
+    }
+
+    private _currentBoundBuffers: WebGLBuffer[] = [];
+    private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer, force: boolean = false): void {
+        if (this._currentBoundBuffers[gl_target] !== gl_buffer || force) {
+            this.gl.bindBuffer(gl_target, gl_buffer);
+            this._currentBoundBuffers[gl_target] = gl_buffer;
+        }
+    }
+
+    private _currentProgram: WebGLProgram | null = null;
+    private _useProgram(program: WebGLProgram): void {
+        if (this._currentProgram !== program) {
+            this.gl.useProgram(program);
+            this._currentProgram = program;
+        }
+    }
+
     public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
         const byteSize = wordCount * 4;
         const gl = this.gl;
         const gl_buffer = gl.createBuffer();
         const gl_target = translateBufferUsageToTarget(usage);
         const gl_hint = translateBufferHint(hint);
-        gl.bindBuffer(gl_target, gl_buffer);
+        this._bindBuffer(gl_target, gl_buffer);
         gl.bufferData(gl_target, byteSize, gl_hint);
         const buffer: GfxBufferP_GL = { _T: _T.Buffer, gl_buffer, gl_target, usage, byteSize };
         return buffer;
@@ -585,7 +593,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return program;
     }
 
-    public createBindings(bindingLayout: GfxBindingLayoutDescriptor, uniformBuffers: GfxBufferBinding[], samplers: GfxSamplerBinding[]): GfxBindings {
+    public createBindings(bindingLayout: GfxBindingLayoutDescriptor, uniformBuffers: GfxBufferBinding[], samplers: (GfxSamplerBinding | null)[]): GfxBindings {
         assert(bindingLayout.numUniformBuffers === uniformBuffers.length);
         assert(bindingLayout.numSamplers === samplers.length);
         const bindings: GfxBindingsP_GL = { _T: _T.Bindings, uniformBuffers, samplers };
@@ -597,7 +605,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return inputLayout;
     }
 
-    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: GfxVertexBufferDescriptor[], indexBuffer: GfxBuffer | null): GfxInputState {
+    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: GfxVertexBufferDescriptor[], indexBufferBinding: GfxBufferBinding | null): GfxInputState {
         const inputLayout = inputLayout_ as GfxInputLayoutP_GL;
 
         const gl = this.gl;
@@ -608,33 +616,48 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const attr = inputLayout.attributes[i];
             const { size, type, normalized } = translateVertexFormat(attr.format);
             const vertexBuffer = vertexBuffers[attr.bufferIndex];
-            const buffer = vertexBuffer.buffer as GfxBufferP_GL;
-            assert(buffer.usage === GfxBufferUsage.VERTEX);
-            gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
 
-            const bufferOffset = vertexBuffer.offset + attr.bufferOffset;
-            if (type === gl.FLOAT) {
-                gl.vertexAttribPointer(attr.location, size, type, normalized, vertexBuffer.stride, bufferOffset);
+            // TODO(jstpierre): Replace this hack with a proper ghost buffer.
+            if (attr.bufferIndex >= 0) {
+                const buffer = vertexBuffer.buffer as GfxBufferP_GL;
+                assert(buffer.usage === GfxBufferUsage.VERTEX);
+                gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
+
+                const bufferWordOffset = vertexBuffer.wordOffset + attr.bufferWordOffset;
+                const bufferOffset = bufferWordOffset * 4;
+                if (type === gl.FLOAT) {
+                    gl.vertexAttribPointer(attr.location, size, type, normalized, vertexBuffer.byteStride, bufferOffset);
+                } else {
+                    gl.vertexAttribIPointer(attr.location, size, type, vertexBuffer.byteStride, bufferOffset);
+                }
+
+                gl.enableVertexAttribArray(attr.location);
             } else {
-                gl.vertexAttribIPointer(attr.location, size, type, vertexBuffer.stride, bufferOffset);
+                if (type === gl.FLOAT) {
+                    // Nothing.
+                } else if (type === gl.UNSIGNED_BYTE || type === gl.UNSIGNED_SHORT || type === gl.UNSIGNED_INT) {
+                    gl.vertexAttribI4ui(attr.location, 0, 0, 0, 0);
+                } else if (type === gl.BYTE || type === gl.SHORT || type === gl.INT) {
+                    gl.vertexAttribI4i(attr.location, 0, 0, 0, 0);
+                }
             }
-
-            gl.enableVertexAttribArray(attr.location);
         }
 
         let indexBufferType: GLenum | null = null;
         let indexBufferCompByteSize: number | null = null;
-        if (indexBuffer !== null) {
-            const buffer = indexBuffer as GfxBufferP_GL;
+        let indexBufferWordOffset: number | null = null;
+        if (indexBufferBinding !== null) {
+            const buffer = indexBufferBinding.buffer as GfxBufferP_GL;
             assert(buffer.usage === GfxBufferUsage.INDEX);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(indexBuffer));
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(indexBufferBinding.buffer));
             indexBufferType = translateIndexFormat(inputLayout.indexBufferFormat);
             indexBufferCompByteSize = getFormatCompByteSize(inputLayout.indexBufferFormat);
+            indexBufferWordOffset = indexBufferBinding.wordOffset;
         }
 
         gl.bindVertexArray(null);
 
-        const inputState: GfxInputStateP_GL = { _T: _T.InputState, vao, indexBufferType, indexBufferCompByteSize, inputLayout };
+        const inputState: GfxInputStateP_GL = { _T: _T.InputState, vao, indexBufferWordOffset, indexBufferType, indexBufferCompByteSize, inputLayout };
         return inputState;
     }
 
@@ -644,7 +667,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const program = descriptor.program as GfxProgramP_GL;
         assert(program.deviceProgram.uniformBufferLayouts.length === bindingLayouts.numUniformBuffers);
         const megaState = descriptor.megaStateDescriptor;
-        const inputLayout = descriptor.inputLayout as GfxInputLayoutP_GL;
+        const inputLayout = descriptor.inputLayout as GfxInputLayoutP_GL | null;
         const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, bindingLayouts, drawMode, program, megaState, inputLayout };
         return pipeline;
     }
@@ -713,7 +736,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public submitPass(o: GfxPass): void {
         if (o instanceof GfxRenderPassP_GL) {
             o.end();
-            this.executeRenderPass(o.u32.b, o.f32.b, o.gfxr);
+            this.executeRenderPass(o.u32.b, o.f32.b, o.o);
             o.reset();
             this._renderPassPool.push(o);
         } else if (o instanceof GfxHostAccessPassP_GL) {
@@ -734,8 +757,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public queryProgram(program_: GfxProgram): GfxProgramReflection {
         const program = program_ as GfxProgramP_GL;
         const uniqueKey = program.uniqueKey;
-        const deviceProgram = program.deviceProgram;
-        return { uniqueKey, uniformBuffers: deviceProgram.uniformBufferLayouts };
+        const deviceProgram = program.deviceProgram as DeviceProgramReflection;
+        return { ...deviceProgram, uniqueKey };
+    }
+
+    public queryInputState(inputState_: GfxInputState): GfxInputStateReflection {
+        const inputState = inputState_ as GfxInputStateP_GL;
+        const inputLayout = inputState.inputLayout;
+        return { inputLayout };
     }
 
     public queryTextureFormatSupported(format: GfxFormat): boolean {
@@ -772,15 +801,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     //#endregion
 
     // Debugging.
-    public getBufferData(buffer: GfxBuffer, dstBuffer: ArrayBufferView): void {
+    public getBufferData(buffer: GfxBuffer, dstBuffer: ArrayBufferView, wordOffset: number = 0): void {
         const gl = this.gl;
         const { gl_buffer, gl_target } = buffer as GfxBufferP_GL;
-        gl.bindBuffer(gl_target, gl_buffer);
-        gl.getBufferSubData(gl_target, 0, dstBuffer);
+        this._bindBuffer(gl_target, gl_buffer);
+        gl.getBufferSubData(gl_target, wordOffset * 4, dstBuffer);
     }
 
     //#region Pass execution
-    public executeRenderPass(u32: Uint32Array, f32: Float32Array, gfxr: (GfxResource | null)[]): void {
+    public executeRenderPass(u32: Uint32Array, f32: Float32Array, gfxr: (object | null)[]): void {
         let iu32 = 0, if32 = 0, igfxr = 0;
         while (true) {
             const cmd = u32[iu32++] as RenderPassCmd;
@@ -794,7 +823,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             } else if (cmd === RenderPassCmd.setPipeline) {
                 this.setPipeline(gfxr[igfxr++] as GfxRenderPipeline);
             } else if (cmd === RenderPassCmd.setInputState) {
-                this.setInputState(gfxr[igfxr++] as GfxInputState);
+                this.setInputState(gfxr[igfxr++] as GfxInputState | null);
+            } else if (cmd === RenderPassCmd.updateBindings) {
+                this.updateBindings(gfxr[igfxr++] as GfxBindings, gfxr[igfxr++] as GfxBufferBinding[], gfxr[igfxr++] as GfxSamplerBinding[]);
             } else if (cmd === RenderPassCmd.draw) {
                 this.draw(u32[iu32++], u32[iu32++]);
             } else if (cmd === RenderPassCmd.drawIndexed) {
@@ -808,13 +839,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    public executeHostAccessPass(u32: Uint32Array, gfxr: GfxResource[], bufr: (ArrayBuffer | ArrayBufferView)[]): void {
+    public executeHostAccessPass(u32: Uint32Array, gfxr: GfxResource[], bufr: ArrayBufferView[]): void {
         let iu32 = 0, igfxr = 0, ibufr = 0;
         while (true) {
             const cmd = u32[iu32++] as HostAccessPassCmd;
 
             if (cmd === HostAccessPassCmd.uploadBufferData) {
-                this.uploadBufferData(gfxr[igfxr++] as GfxBuffer, u32[iu32++], bufr[ibufr++] as ArrayBuffer, u32[iu32++], u32[iu32++]);
+                this.uploadBufferData(gfxr[igfxr++] as GfxBuffer, u32[iu32++], bufr[ibufr++] as Uint8Array, u32[iu32++], u32[iu32++]);
             } else if (cmd === HostAccessPassCmd.uploadTextureData) {
                 // Implement inline to prevent allocation.
                 const texture = gfxr[igfxr++] as GfxTexture;
@@ -875,7 +906,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private _currentPipeline: GfxRenderPipelineP_GL;
     private _currentInputState: GfxInputStateP_GL;
-    private _currentMegaState: GfxMegaStateDescriptor = _getDefaultMegaState();
+    private _currentMegaState: GfxMegaStateDescriptor = defaultFlags.resolveMegaState();
+    private _currentSamplers: WebGLSampler[] = [];
+    private _currentTextures: WebGLTexture[] = [];
 
     private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings): void {
         const gl = this.gl;
@@ -894,15 +927,30 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const byteOffset = binding.wordOffset * 4;
             const byteSize = binding.wordCount * 4;
             gl.bindBufferRange(gl.UNIFORM_BUFFER, bindingLayoutTable.firstUniformBuffer + i, getPlatformBuffer(binding.buffer), byteOffset, byteSize);
+            this._currentBoundBuffers[gl.UNIFORM_BUFFER] = getPlatformBuffer(binding.buffer);
         }
 
         for (let i = 0; i < samplers.length; i++) {
             const binding = samplers[i];
             const samplerIndex = bindingLayoutTable.firstSampler + i;
-            gl.activeTexture(gl.TEXTURE0 + samplerIndex);
-            gl.bindSampler(samplerIndex, getPlatformSampler(binding.sampler));
-            const { gl_texture, gl_target } = (binding.texture as GfxTextureP_GL);
-            gl.bindTexture(gl_target, gl_texture);
+            const gl_sampler = binding.sampler !== null ? getPlatformSampler(binding.sampler) : null;
+            const gl_texture = binding.texture !== null ? getPlatformTexture(binding.texture) : null;
+
+            if (this._currentSamplers[samplerIndex] !== gl_sampler) {
+                gl.bindSampler(samplerIndex, gl_sampler);
+                this._currentSamplers[samplerIndex] = gl_sampler;
+            }
+
+            if (this._currentTextures[samplerIndex] !== gl_texture) {
+                this._setActiveTexture(gl.TEXTURE0 + samplerIndex);
+                if (binding.texture !== null) {
+                    const { gl_target } = (binding.texture as GfxTextureP_GL);
+                    gl.bindTexture(gl_target, gl_texture);
+                } else {
+                    // XXX(jstpierre): wtf do I do here? Maybe do nothing?
+                }
+                this._currentTextures[samplerIndex] = gl_texture;
+            }
         }
     }
 
@@ -973,15 +1021,29 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         this._currentPipeline = pipeline as GfxRenderPipelineP_GL;
         this._setMegaState(this._currentPipeline.megaState);
-        gl.useProgram(this._currentPipeline.program.gl_program);
+        // Hotpatch support.
+        if (this._currentPipeline.program.deviceProgram.forceRecompile)
+            this._currentPipeline.program.gl_program = this._currentPipeline.program.deviceProgram.compile(gl, this._programCache);
+        this._useProgram(this._currentPipeline.program.gl_program);
     }
 
-    private setInputState(inputState_: GfxInputState): void {
+    private setInputState(inputState_: GfxInputState | null): void {
         const gl = this.gl;
         const inputState = inputState_ as GfxInputStateP_GL;
-        assert(inputState.inputLayout === this._currentPipeline.inputLayout);
         this._currentInputState = inputState;
-        gl.bindVertexArray(this._currentInputState.vao);
+        if (this._currentInputState !== null) {
+            assert(this._currentPipeline.inputLayout === this._currentInputState.inputLayout);
+            gl.bindVertexArray(this._currentInputState.vao);
+        } else {
+            assert(this._currentPipeline.inputLayout === null)
+            gl.bindVertexArray(null);
+        }
+    }
+
+    private updateBindings(bindings_: GfxBindings, uniformBuffers: GfxBufferBinding[], samplers: GfxSamplerBinding[]): void {
+        const bindings = bindings_ as GfxBindingsP_GL;
+        bindings.uniformBuffers = uniformBuffers;
+        bindings.samplers = samplers;
     }
 
     private draw(count: number, firstVertex: number): void {
@@ -994,7 +1056,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
         const inputState = this._currentInputState;
-        gl.drawElements(pipeline.drawMode, count, inputState.indexBufferType, firstIndex * inputState.indexBufferCompByteSize);
+        const baseOffset = inputState.indexBufferWordOffset * 4;
+        const fullOffset = baseOffset + firstIndex * inputState.indexBufferCompByteSize;
+        gl.drawElements(pipeline.drawMode, count, inputState.indexBufferType, fullOffset);
     }
 
     private _passReadFramebuffer: WebGLFramebuffer | null = null;
@@ -1025,12 +1089,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: ArrayBuffer, srcByteOffset: number, byteSize: number): void {
+    private uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number, byteSize: number): void {
         const gl = this.gl;
         const { gl_buffer, gl_target, byteSize: dstByteSize } = buffer as GfxBufferP_GL;
+        if (gl_target === gl.UNIFORM_BUFFER && dstByteOffset !== 0)
+            throw new Error("Updating uniform buffers at non-zero offsets is not allowed. Trust me, I'm doing this for your own sake.");
         assert((dstByteOffset + byteSize) <= dstByteSize);
-        gl.bindBuffer(gl_target, gl_buffer);
-        gl.bufferSubData(gl_target, dstByteOffset, new Uint8Array(data), srcByteOffset, byteSize);
+        this._bindBuffer(gl_target, gl_buffer);
+        gl.bufferSubData(gl_target, dstByteOffset, data, srcByteOffset, byteSize);
     }
     //#endregion
 }

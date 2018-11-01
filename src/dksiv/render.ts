@@ -7,11 +7,11 @@ import * as UI from '../ui';
 
 import * as IV from './iv';
 import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxRenderPass, GfxCompareMode, GfxBindings, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import { BufferFillerHelper, fillColor } from '../gfx/helpers/BufferHelpers';
+import { BufferFillerHelper, fillColor } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
-import { RenderFlagsChain } from '../gfx/helpers/RenderFlagsHelpers';
 import { GfxRenderInst, GfxRenderInstViewRenderer, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { RenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -113,24 +113,24 @@ class Chunk {
         this.posBuffer = device.createBuffer(posData.length, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
         this.nrmBuffer = device.createBuffer(nrmData.length, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
 
-        hostAccessPass.uploadBufferData(this.posBuffer, 0, posData.buffer);
-        hostAccessPass.uploadBufferData(this.nrmBuffer, 0, nrmData.buffer);
+        hostAccessPass.uploadBufferData(this.posBuffer, 0, new Uint8Array(posData.buffer));
+        hostAccessPass.uploadBufferData(this.nrmBuffer, 0, new Uint8Array(nrmData.buffer));
 
         device.submitPass(hostAccessPass);
 
         this.inputState = device.createInputState(inputLayout, [
-            { buffer: this.posBuffer, offset: 0, stride: 0 },
-            { buffer: this.nrmBuffer, offset: 0, stride: 0 },
+            { buffer: this.posBuffer, wordOffset: 0, byteStride: 0 },
+            { buffer: this.nrmBuffer, wordOffset: 0, byteStride: 0 },
         ], null);
 
         this.numVertices = chunk.indexData.length;
 
         this.renderInst = renderInstBuilder.newRenderInst();
-        this.renderInst.indexCount = this.numVertices;
+        this.renderInst.drawTriangles(this.numVertices);
         this.renderInst.inputState = this.inputState;
     }
 
-    public updateRenderInst(visible: boolean): void {
+    public prepareForRender(hostAccessPass: GfxHostAccessPass, visible: boolean): void {
         this.renderInst.visible = visible;
     }
 
@@ -158,20 +158,20 @@ export class IVRenderer {
         renderInstBuilder.popTemplateRenderInst();
     }
 
-    public fillColorUniformBufferData(hostAccessPass: GfxHostAccessPass, buffer: GfxBuffer): void {
+    public fillColorUniformBufferData(hostAccessPass: GfxHostAccessPass, buffer: GfxRenderBuffer): void {
         const d = new Float32Array(4);
         let offs = 0;
         offs += fillColor(d, offs, this.iv.color);
-        hostAccessPass.uploadBufferData(buffer, this.colorBufferOffset, d.buffer);
+        buffer.uploadSubData(hostAccessPass, this.colorBufferOffset, d);
     }
 
     public setVisible(v: boolean) {
         this.visible = v;
     }
 
-    public updateRenderInst(): void {
+    public prepareForRender(hostAccessPass: GfxHostAccessPass): void {
         for (let i = 0; i < this.chunks.length; i++)
-            this.chunks[i].updateRenderInst(this.visible);
+            this.chunks[i].prepareForRender(hostAccessPass, this.visible);
     }
 
     public destroy(device: GfxDevice): void {
@@ -183,21 +183,20 @@ export class Scene implements Viewer.Scene_Device {
     private inputLayout: GfxInputLayout;
     private pipeline: GfxRenderPipeline;
     private program: GfxProgram;
-    private renderFlags: RenderFlagsChain;
     private sceneUniformBufferFiller: BufferFillerHelper;
     private sceneUniformBuffer: GfxRenderBuffer;
     private colorUniformBuffer: GfxRenderBuffer;
     private renderTarget = new BasicRenderTarget();
     private ivRenderers: IVRenderer[] = [];
     private sceneUniformBufferBinding: GfxBindings;
-    private viewRenderer: GfxRenderInstViewRenderer;
+    private viewRenderer = new GfxRenderInstViewRenderer();
 
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
         this.program = device.createProgram(new IVProgram());
 
         this.inputLayout = device.createInputLayout([
-            { location: IVProgram.a_Position, bufferIndex: 0, bufferOffset: 0, format: GfxFormat.F32_RGB },
-            { location: IVProgram.a_Normal,   bufferIndex: 1, bufferOffset: 0, format: GfxFormat.F32_RGB },
+            { location: IVProgram.a_Position, bufferIndex: 0, bufferWordOffset: 0, format: GfxFormat.F32_RGB },
+            { location: IVProgram.a_Normal,   bufferIndex: 1, bufferWordOffset: 0, format: GfxFormat.F32_RGB },
         ], null);
 
         // Two binding layouts: one scene level, one object level.
@@ -206,26 +205,26 @@ export class Scene implements Viewer.Scene_Device {
             { numUniformBuffers: 1, numSamplers: 0 }, // ub_ObjectParams
         ];
 
-        this.renderFlags = new RenderFlagsChain();
-        this.renderFlags.depthWrite = true;
-        this.renderFlags.depthCompare = GfxCompareMode.LEQUAL;
+        const renderFlags = new RenderFlags();
+        renderFlags.depthWrite = true;
+        renderFlags.depthCompare = GfxCompareMode.LEQUAL;
 
         this.pipeline = device.createRenderPipeline({
             topology: GfxPrimitiveTopology.TRIANGLES,
             bindingLayouts: bindingLayouts,
             inputLayout: this.inputLayout,
             program: this.program,
-            megaStateDescriptor: this.renderFlags.resolveMegaState(),
+            megaStateDescriptor: renderFlags.resolveMegaState(),
         });
 
         this.sceneUniformBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
         this.colorUniformBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.STATIC);
 
-        const bufferLayouts = device.queryProgram(this.program).uniformBuffers;
-        const sceneBufferLayout = bufferLayouts[0];
+        const programReflection = device.queryProgram(this.program);
+        const sceneBufferLayout = programReflection.uniformBufferLayouts[0];
         this.sceneUniformBufferFiller = new BufferFillerHelper(sceneBufferLayout);
 
-        const renderInstBuilder = new GfxRenderInstBuilder(device, bindingLayouts, [ this.sceneUniformBuffer, this.colorUniformBuffer ], bufferLayouts);
+        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.sceneUniformBuffer, this.colorUniformBuffer ]);
 
         const baseRenderInst = renderInstBuilder.pushTemplateRenderInst();
         baseRenderInst.pipeline = this.pipeline;
@@ -238,30 +237,33 @@ export class Scene implements Viewer.Scene_Device {
         });
 
         renderInstBuilder.popTemplateRenderInst();
-        this.viewRenderer = renderInstBuilder.finish(device);
+        renderInstBuilder.finish(device, this.viewRenderer);
 
         // Now that we have our buffers created, fill 'em in.
         const hostAccessPass = device.createHostAccessPass();
         for (let i = 0; i < this.ivRenderers.length; i++)
-            this.ivRenderers[i].fillColorUniformBufferData(hostAccessPass, this.colorUniformBuffer.getGfxBuffer());
+            this.ivRenderers[i].fillColorUniformBufferData(hostAccessPass, this.colorUniformBuffer);
+        this.colorUniformBuffer.prepareToRender(hostAccessPass);
         device.submitPass(hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        for (let i = 0; i < this.ivRenderers.length; i++)
-            this.ivRenderers[i].updateRenderInst();
-
+        const hostAccessPass = device.createHostAccessPass();
         this.sceneUniformBufferFiller.reset();
         this.sceneUniformBufferFiller.fillMatrix4x4(viewerInput.camera.projectionMatrix);
         this.sceneUniformBufferFiller.fillMatrix4x4(viewerInput.camera.viewMatrix);
-        const hostAccessPass = device.createHostAccessPass();
-        this.sceneUniformBufferFiller.endAndUpload(hostAccessPass, this.sceneUniformBuffer.getGfxBuffer());
+        this.sceneUniformBufferFiller.endAndUpload(hostAccessPass, this.sceneUniformBuffer);
+
+        for (let i = 0; i < this.ivRenderers.length; i++)
+            this.ivRenderers[i].prepareForRender(hostAccessPass);
+
+        this.sceneUniformBuffer.prepareToRender(hostAccessPass);
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.executeOnPass(passRenderer);
+        this.viewRenderer.executeOnPass(device, passRenderer);
         return passRenderer;
     }
 

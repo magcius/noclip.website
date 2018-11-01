@@ -1,177 +1,77 @@
 
-import { Color } from "../../Color";
-import { mat4, mat2d } from "gl-matrix";
-import { GfxBuffer, GfxHostAccessPass, GfxBufferBinding } from "../platform/GfxPlatform";
-import { assert } from "../../util";
+// Gfx version of BufferCoalescer, etc.
 
-function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
-    const results: RegExpExecArray[] = [];
-    while (true) {
-        const result = needle.exec(haystack);
-        if (!result)
-            break;
-        results.push(result);
+import ArrayBufferSlice from "../../ArrayBufferSlice";
+import { assert, align } from "../../util";
+import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
+
+export interface GfxCoalescedBuffer {
+    buffer: GfxBuffer;
+    wordOffset: number;
+    wordCount: number;
+}
+
+export interface GfxCoalescedBuffers {
+    vertexBuffer: GfxCoalescedBuffer;
+    indexBuffer: GfxCoalescedBuffer;
+}
+
+export function coalesceBuffer(device: GfxDevice, usage: GfxBufferUsage, datas: ArrayBufferSlice[]): GfxCoalescedBuffer[] {
+    let dataLength = 0;
+    for (const data of datas) {
+        dataLength += data.byteLength;
+        dataLength = align(dataLength, 4);
     }
-    return results;
-}
 
-export const enum BufferTypeClass {
-    float  = 'float',
-    vec4   = 'vec4',
-    mat4x2 = 'mat4x2',
-    mat4x3 = 'mat4x3',
-    mat4   = 'mat4',
-}
+    const wordCount = dataLength / 4;
+    const buffer = device.createBuffer(wordCount, usage, GfxBufferFrequencyHint.STATIC);
+    const hostAccessPass = device.createHostAccessPass();
 
-export interface BufferField {
-    name: string;
-    type: BufferTypeClass;
-    arraySize: number;
-    wordSize: number;
-}
+    const coalescedBuffers: GfxCoalescedBuffer[] = [];
 
-export interface BufferLayout {
-    blockName: string;
-    fields: BufferField[];
-    totalWordSize: number;
-}
-
-function getBufferTypeClassWordSize(bufferTypeClass: BufferTypeClass): number {
-    switch (bufferTypeClass) {
-    case BufferTypeClass.float:
-        return 1;
-    case BufferTypeClass.vec4:
-        return 4;
-    case BufferTypeClass.mat4x2:
-        return 4*2;
-    case BufferTypeClass.mat4x3:
-        return 4*3;
-    case BufferTypeClass.mat4:
-        return 4*4;
-    default:
-        throw "whoops";
+    let wordOffset: number = 0;
+    for (let i = 0; i < datas.length; i++) {
+        const data = datas[i];
+        const size = align(data.byteLength, 4);
+        const wordCount: number = size / 4;
+        coalescedBuffers.push({ buffer, wordOffset, wordCount });
+        hostAccessPass.uploadBufferData(buffer, wordOffset, data.createTypedArray(Uint8Array));
+        wordOffset += wordCount;
     }
+
+    device.submitPass(hostAccessPass);
+    return coalescedBuffers;
 }
 
-export function parseBufferLayout(blockName: string, contents: string): BufferLayout {
-    const uniformBufferVariables = findall(contents, /^\s+(\w+) (\w+)(?:\[(\d+)\])?;$/mg);
-    const fields: BufferField[] = [];
-    let totalWordSize = 0;
-    for (let i = 0; i < uniformBufferVariables.length; i++) {
-        const [m, typeStr, name, arraySizeStr] = uniformBufferVariables[i];
-        const type: BufferTypeClass = typeStr as BufferTypeClass;
-        let arraySize: number = 1;
-        if (arraySizeStr !== undefined)
-            arraySize = parseInt(arraySizeStr);
-        const rawWordSize = getBufferTypeClassWordSize(type) * arraySize;
-        // Round up to the nearest 4, per std140 alignment rules.
-        const wordSize = (rawWordSize + 3) & ~3;
-        totalWordSize += wordSize;
-        fields.push({ type, name, arraySize, wordSize });
-    }
-    return { blockName, fields, totalWordSize };
-}
+export class GfxBufferCoalescer {
+    public coalescedBuffers: GfxCoalescedBuffers[];
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
 
-export class BufferFillerHelper {
-    private offs: number;
+    constructor(device: GfxDevice, vertexDatas: ArrayBufferSlice[], indexDatas: ArrayBufferSlice[]) {
+        assert(vertexDatas.length === indexDatas.length);
 
-    constructor(public bufferLayout: BufferLayout, public d: Float32Array = null, public startOffs: number = 0) {
-        if (this.d === null) {
-            this.d = new Float32Array(bufferLayout.totalWordSize);
+        // Don't do anything if we have no data to care about.
+        if (vertexDatas.length === 0)
+            return;
+
+        const vertexCoalescedBuffers = coalesceBuffer(device, GfxBufferUsage.VERTEX, vertexDatas);
+        const indexCoalescedBuffers = coalesceBuffer(device, GfxBufferUsage.INDEX, indexDatas);
+
+        const coalescedBuffers = [];
+        for (let i = 0; i < vertexCoalescedBuffers.length; i++) {
+            const vertexBuffer = vertexCoalescedBuffers[i];
+            const indexBuffer = indexCoalescedBuffers[i];
+            coalescedBuffers.push({ vertexBuffer, indexBuffer });
         }
+
+        this.coalescedBuffers = coalescedBuffers;
+        this.vertexBuffer = this.coalescedBuffers[0].vertexBuffer.buffer;
+        this.indexBuffer = this.coalescedBuffers[0].indexBuffer.buffer;
     }
 
-    public reset(): void {
-        this.offs = this.startOffs;
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
     }
-
-    public getBufferBinding(buffer: GfxBuffer): GfxBufferBinding {
-        return { buffer, wordOffset: this.startOffs, wordCount: this.bufferLayout.totalWordSize };
-    }
-
-    public endAndUpload(hostAccessPass: GfxHostAccessPass, gfxBuffer: GfxBuffer, dstOffs: number = 0): void {
-        assert(this.offs === this.bufferLayout.totalWordSize);
-        hostAccessPass.uploadBufferData(gfxBuffer, dstOffs, this.d.buffer);
-    }
-
-    public fillVec4(v0: number, v1: number = 0, v2: number = 0, v3: number = 0): void {
-        this.offs += fillVec4(this.d, this.offs, v0, v1, v2, v3);
-    }
-
-    public fillColor(c: Color): void {
-        this.offs += fillColor(this.d, this.offs, c);
-    }
-
-    public fillMatrix4x4(m: mat4): void {
-        this.offs += fillMatrix4x4(this.d, this.offs, m);
-    }
-}
-
-export function fillVec4(d: Float32Array, offs: number, v0: number, v1: number = 0, v2: number = 0, v3: number = 0): number {
-    d[offs + 0] = v0;
-    d[offs + 1] = v1;
-    d[offs + 2] = v2;
-    d[offs + 3] = v3;
-    return 4;
-}
-
-export function fillColor(d: Float32Array, offs: number, c: Color): number {
-    d[offs + 0] = c.r;
-    d[offs + 1] = c.g;
-    d[offs + 2] = c.b;
-    d[offs + 3] = c.a;
-    return 4;
-}
-
-// All of our matrices are row-major.
-export function fillMatrix4x4(d: Float32Array, offs: number, m: mat4): number {
-    d[offs +  0] = m[0];
-    d[offs +  1] = m[4];
-    d[offs +  2] = m[8];
-    d[offs +  3] = m[12];
-    d[offs +  4] = m[1];
-    d[offs +  5] = m[5];
-    d[offs +  6] = m[9];
-    d[offs +  7] = m[13];
-    d[offs +  8] = m[2];
-    d[offs +  9] = m[6];
-    d[offs + 10] = m[10];
-    d[offs + 11] = m[14];
-    d[offs + 12] = m[3];
-    d[offs + 13] = m[7];
-    d[offs + 14] = m[11];
-    d[offs + 15] = m[15];
-    return 4*4;
-}
-
-export function fillMatrix4x3(d: Float32Array, offs: number, m: mat4): number {
-    d[offs +  0] = m[0];
-    d[offs +  1] = m[4];
-    d[offs +  2] = m[8];
-    d[offs +  3] = m[12];
-    d[offs +  4] = m[1];
-    d[offs +  5] = m[5];
-    d[offs +  6] = m[9];
-    d[offs +  7] = m[13];
-    d[offs +  8] = m[2];
-    d[offs +  9] = m[6];
-    d[offs + 10] = m[10];
-    d[offs + 11] = m[14];
-    return 4*3;
-}
-
-export function fillMatrix3x2(d: Float32Array, offs: number, m: mat2d): number {
-    // 3x2 matrices are actually sent across as 4x2.
-    const ma = m[0], mb = m[1];
-    const mc = m[2], md = m[3];
-    const mx = m[4], my = m[5];
-    d[offs + 0] = ma;
-    d[offs + 1] = mc;
-    d[offs + 2] = mx;
-    d[offs + 3] = 0;
-    d[offs + 4] = mb;
-    d[offs + 5] = md;
-    d[offs + 6] = my;
-    d[offs + 7] = 0;
-    return 4*2;
 }

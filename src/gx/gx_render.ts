@@ -14,10 +14,15 @@ import { LoadedVertexData, LoadedVertexLayout } from './gx_displaylist';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture, bindGLTextureMappings } from '../TextureHolder';
-import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/BufferHelpers';
-import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
+
+import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
+import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
+import { Camera } from '../Camera';
+import { GfxRenderInstBuilder, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -48,20 +53,21 @@ export const u_PacketParamsBufferSize = 4*3*10;
 export const u_MaterialParamsBufferSize = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8;
 export const u_SceneParamsBufferSize = 4*4 + 4;
 
-export function fillSceneParamsData(d: Float32Array, sceneParams: SceneParams): void {
-    let offs = 0;
+export function fillSceneParamsData(d: Float32Array, sceneParams: SceneParams, bOffs: number = 0): void {
+    let offs = bOffs;
 
     offs += fillMatrix4x4(d, offs, sceneParams.u_Projection);
     // u_Misc0
     offs += fillVec4(d, offs, sceneParams.u_SceneTextureLODBias);
 
-    assert(offs === u_SceneParamsBufferSize);
+    assert(offs === bOffs + u_SceneParamsBufferSize);
     assert(d.length >= offs);
 }
 
-export function fillMaterialParamsData(d: Float32Array, materialParams: MaterialParams): void {
+export function fillMaterialParamsData(d: Float32Array, materialParams: MaterialParams, bOffs: number = 0): void {
+    let offs = bOffs;
+
     // Texture mapping requires special effort.
-    let offs = 0;
 
     for (let i = 0; i < 12; i++)
         offs += fillColor(d, offs, materialParams.u_Color[i]);
@@ -74,17 +80,17 @@ export function fillMaterialParamsData(d: Float32Array, materialParams: Material
     for (let i = 0; i < 8; i++)
         offs += fillVec4(d, offs, materialParams.m_TextureMapping[i].width, materialParams.m_TextureMapping[i].height, 0, materialParams.m_TextureMapping[i].lodBias);
 
-    assert(offs === u_MaterialParamsBufferSize);
+    assert(offs === bOffs + u_MaterialParamsBufferSize);
     assert(d.length >= offs);
 }
 
-export function fillPacketParamsData(d: Float32Array, packetParams: PacketParams): void {
-    let offs = 0;
+export function fillPacketParamsData(d: Float32Array, packetParams: PacketParams, bOffs: number = 0): void {
+    let offs = bOffs;
 
     for (let i = 0; i < 10; i++)
         offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[i]);
 
-    assert(offs === u_PacketParamsBufferSize);
+    assert(offs === bOffs + u_PacketParamsBufferSize);
     assert(d.length >= offs);
 }
 
@@ -209,19 +215,124 @@ export class GXShapeHelper {
     }
 }
 
-// Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
-// which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
-// make sure textures are sampled correctly...
-export function getTextureLODBias(state: RenderState): number {
-    const viewportWidth = state.onscreenColorTarget.width;
-    const viewportHeight = state.onscreenColorTarget.height;
+export class GXShapeHelperGfx {
+    public inputState: GfxInputState;
+    public inputLayout: GfxInputLayout;
+    public renderInst: GfxRenderInst;
+    public packetParamsBufferOffset: number;
+
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+        assert(this.loadedVertexData.indexFormat === GfxFormat.U16_R);
+
+        // First, build the inputLayout
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+
+        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < GX.VertexAttribute.MAX; vtxAttrib++) {
+            const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
+
+            // TODO(jstpierre): Handle TEXMTXIDX attributes.
+            if (attribLocation === -1)
+                continue;
+
+            const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
+            const attrib = this.loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
+            const format = attribGenDef.format;
+            if (attrib !== undefined) {
+                assert((attrib.offset & 3) === 0);
+                const bufferWordOffset = attrib.offset / 4;
+                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 0, bufferWordOffset });
+            } else {
+                // TODO(jstpierre): Emulate ghost buffer usage with divisor.
+                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: -1, bufferWordOffset: 0 });
+            }
+        }
+
+        this.inputLayout = device.createInputLayout(vertexAttributeDescriptors, this.loadedVertexData.indexFormat);
+        const buffers: GfxVertexBufferDescriptor[] = [{
+            buffer: coalescedBuffers.vertexBuffer.buffer,
+            wordOffset: coalescedBuffers.vertexBuffer.wordOffset,
+            byteStride: loadedVertexLayout.dstVertexSize,
+        }];
+        this.inputState = device.createInputState(this.inputLayout, buffers, coalescedBuffers.indexBuffer);
+
+        this.renderInst = renderInstBuilder.newRenderInst();
+        this.renderInst.drawIndexes(this.loadedVertexData.totalTriangleCount * 3);
+        this.renderInst.inputState = this.inputState;
+        this.packetParamsBufferOffset = renderInstBuilder.newUniformBufferInstance(this.renderInst, 2);
+    }
+
+    public fillPacketParams(packetParams: PacketParams, renderHelper: GXRenderHelperGfx): void {
+        renderHelper.fillPacketParams(packetParams, this.packetParamsBufferOffset);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputState);
+    }
+}
+
+export class GXRenderHelperGfx {
+    private sceneParams = new SceneParams();
+
+    public sceneParamsBuffer: GfxRenderBuffer;
+    public materialParamsBuffer: GfxRenderBuffer;
+    public packetParamsBuffer: GfxRenderBuffer;
+    public renderInstBuilder: GfxRenderInstBuilder;
+
+    constructor(device: GfxDevice) {
+        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+        this.materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+        this.packetParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+
+        // Standard GX binding model of three bind groups.
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+            { numUniformBuffers: 1, numSamplers: 0, }, // Scene
+            { numUniformBuffers: 1, numSamplers: 8, }, // Material
+            { numUniformBuffers: 1, numSamplers: 0, }, // Packet
+        ]
+        this.renderInstBuilder = new GfxRenderInstBuilder(device, GX_Material.GX_Program.programReflection, bindingLayouts, [ this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer ]);
+        const sceneRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
+        // Create our scene buffer slot.
+        this.renderInstBuilder.newUniformBufferInstance(sceneRenderInst, 0);
+    }
+
+    public fillSceneParams(viewerInput: Viewer.ViewerRenderInput): void {
+        fillSceneParams(this.sceneParams, viewerInput.camera, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        fillSceneParamsData(this.sceneParamsBuffer.getShadowBufferF32(), this.sceneParams);
+    }
+
+    public fillMaterialParams(materialParams: MaterialParams, dstWordOffset: number): void {
+        fillMaterialParamsData(this.materialParamsBuffer.getShadowBufferF32(), materialParams, dstWordOffset);
+    }
+
+    public fillPacketParams(packetParams: PacketParams, dstWordOffset: number): void {
+        fillPacketParamsData(this.packetParamsBuffer.getShadowBufferF32(), packetParams, dstWordOffset);
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass): void {
+        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
+        this.materialParamsBuffer.prepareToRender(hostAccessPass);
+        this.packetParamsBuffer.prepareToRender(hostAccessPass);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.sceneParamsBuffer.destroy(device);
+        this.materialParamsBuffer.destroy(device);
+        this.packetParamsBuffer.destroy(device);
+    }
+}
+
+export function fillSceneParams(sceneParams: SceneParams, camera: Camera, viewportWidth: number, viewportHeight: number): void {
+    mat4.copy(sceneParams.u_Projection, camera.projectionMatrix);
+    // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
+    // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
+    // make sure textures are sampled correctly...
     const textureLODBias = Math.log2(Math.min(viewportWidth / GX_Material.EFB_WIDTH, viewportHeight / GX_Material.EFB_HEIGHT));
-    return textureLODBias;
+    sceneParams.u_SceneTextureLODBias = textureLODBias;
 }
 
 export function fillSceneParamsFromRenderState(sceneParams: SceneParams, state: RenderState): void {
-    mat4.copy(sceneParams.u_Projection, state.camera.projectionMatrix);
-    sceneParams.u_SceneTextureLODBias = getTextureLODBias(state);
+    fillSceneParams(sceneParams, state.camera, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
 }
 
 export function loadedDataCoalescer(gl: WebGL2RenderingContext, loadedVertexDatas: LoadedVertexData[]): BufferCoalescer {
@@ -231,8 +342,14 @@ export function loadedDataCoalescer(gl: WebGL2RenderingContext, loadedVertexData
     );
 }
 
-export function loadTextureFromMipChain(gl: WebGL2RenderingContext, mipChain: GX_Texture.MipChain): LoadedTexture {
-    const device = getTransitionDeviceForWebGL2(gl);
+export function loadedDataCoalescerGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[]): GfxBufferCoalescer {
+    return new GfxBufferCoalescer(device,
+        loadedVertexDatas.map((data) => new ArrayBufferSlice(data.packedVertexData)),
+        loadedVertexDatas.map((data) => new ArrayBufferSlice(data.indexData))
+    );
+}
+
+export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.MipChain): LoadedTexture {
     const firstMipLevel = mipChain.mipLevels[0];
     const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, firstMipLevel.width, firstMipLevel.height, mipChain.mipLevels.length);
     device.setResourceName(gfxTexture, mipChain.name);
@@ -299,12 +416,16 @@ export function translateWrapMode(gl: WebGL2RenderingContext, wrapMode: GX.WrapM
 }
 
 export class GXTextureHolder<TextureType extends GX_Texture.Texture = GX_Texture.Texture> extends TextureHolder<TextureType> {
-    protected addTexture(gl: WebGL2RenderingContext, texture: TextureType): LoadedTexture | null {
+    protected addTextureGfx(device: GfxDevice, texture: TextureType): LoadedTexture | null {
         // Don't add textures without data.
         if (texture.data === null)
             return null;
 
         const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
-        return loadTextureFromMipChain(gl, mipChain);
+        return loadTextureFromMipChain(device, mipChain);
+    }
+
+    protected addTexture(gl: WebGL2RenderingContext, texture: TextureType): LoadedTexture | null {
+        return this.addTextureGfx(getTransitionDeviceForWebGL2(gl), texture);
     }
 }

@@ -18,7 +18,7 @@ import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybo
 import { TextureHolder, LoadedTexture, bindGLTextureMappings, TextureMapping } from '../TextureHolder';
 import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2 } from '../gfx/helpers/BufferHelpers';
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2 } from '../gfx/helpers/UniformBufferHelpers';
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -184,7 +184,7 @@ class BMDRenderer {
 
         const device = getTransitionDeviceForWebGL2(gl);
         const prog = device.createProgram(this.program);
-        const uniformBuffers = device.queryProgram(prog).uniformBuffers;
+        const uniformBuffers = device.queryProgram(prog).uniformBufferLayouts;
         this.sceneParamsBuffer = device.createBuffer(uniformBuffers[0].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
         this.materialParamsBuffer = device.createBuffer(uniformBuffers[1].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
         this.packetParamsBuffer = device.createBuffer(uniformBuffers[2].totalWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);

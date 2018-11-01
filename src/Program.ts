@@ -2,7 +2,7 @@
 import MemoizeCache from "./MemoizeCache";
 import CodeEditor from "./CodeEditor";
 import { assertExists, leftPad, assert } from "./util";
-import { BufferLayout, parseBufferLayout } from "./gfx/helpers/BufferHelpers";
+import { BufferLayout, parseBufferLayout } from "./gfx/helpers/UniformBufferHelpers";
 
 const DEBUG = true;
 
@@ -43,7 +43,7 @@ export abstract class BaseProgram {
     public preprocessedFrag: string = '';
 
     private glProg: WebGLProgram;
-    private forceRecompile: boolean = false;
+    public forceRecompile: boolean = false;
 
     public preprocessProgram(): void {
         this.preprocessedVert = this.preprocessShader(this.both + this.vert, 'vert');
@@ -183,6 +183,12 @@ function range(stop: number): number[] {
     return L;
 }
 
+export interface DeviceProgramReflection {
+    uniformBufferLayouts: BufferLayout[];
+    numSamplers: number;
+    samplerBindingName: string;
+}
+
 export class DeviceProgram extends BaseProgram {
     public uniformBufferLayouts: BufferLayout[];
     public numSamplers: number = 0;
@@ -190,16 +196,16 @@ export class DeviceProgram extends BaseProgram {
 
     public preprocessProgram(): void {
         super.preprocessProgram();
-        this.parseBufferLayouts(this.preprocessedVert);
+        DeviceProgram.parseReflectionDefinitionsInto(this, this.preprocessedVert);
     }
 
-    private parseBufferLayouts(vert: string): void {
+    private static parseReflectionDefinitionsInto(refl: DeviceProgramReflection, vert: string) {
         // All uniform blocks must appear in vert, in order.
         const uniformBlocks = findall(vert, /uniform (\w+) {([^]*?)}/g);
-        this.uniformBufferLayouts = new Array(uniformBlocks.length);
+        refl.uniformBufferLayouts = new Array(uniformBlocks.length);
         for (let i = 0; i < uniformBlocks.length; i++) {
             const [m, blockName, contents] = uniformBlocks[i];
-            this.uniformBufferLayouts[i] = parseBufferLayout(blockName, contents);
+            refl.uniformBufferLayouts[i] = parseBufferLayout(blockName, contents);
         }
 
         const samplers = findall(vert, /^uniform sampler2D (\w+)(?:\[(\d+)\])?;$/gm);
@@ -208,13 +214,19 @@ export class DeviceProgram extends BaseProgram {
         assert(samplers.length <= 1);
         if (samplers.length === 1) {
             const [m, samplerName, arraySizeStr] = samplers[0];
-            this.samplerBindingName = samplerName;
+            refl.samplerBindingName = samplerName;
             if (arraySizeStr) {
-                this.numSamplers = parseInt(arraySizeStr);
+                refl.numSamplers = parseInt(arraySizeStr);
             } else {
-                this.numSamplers = 1;
+                refl.numSamplers = 1;
             }
         }
+    }
+
+    public static parseReflectionDefinitions(vert: string): DeviceProgramReflection {
+        const refl: DeviceProgramReflection = {} as DeviceProgramReflection;
+        DeviceProgram.parseReflectionDefinitionsInto(refl, vert);
+        return refl;
     }
 
     public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {

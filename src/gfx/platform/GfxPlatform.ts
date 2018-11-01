@@ -6,8 +6,7 @@
 // TODO(jstpierre): Remove the RenderFlags system.
 import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
-import { DeviceProgram } from "../../Program";
-import { BufferLayout } from "../helpers/BufferHelpers";
+import { DeviceProgram, DeviceProgramReflection } from "../../Program";
 import { Color } from "../../Color";
 
 export enum GfxCompareMode {
@@ -72,15 +71,15 @@ export enum GfxBufferFrequencyHint {
 
 export interface GfxVertexBufferDescriptor {
     buffer: GfxBuffer;
-    offset: number;
-    stride: number;
+    wordOffset: number;
+    byteStride: number;
 }
 
 export interface GfxVertexAttributeDescriptor {
     location: number;
     format: GfxFormat;
     bufferIndex: number;
-    bufferOffset: number;
+    bufferWordOffset: number;
 }
 
 export interface GfxSamplerDescriptor {
@@ -133,7 +132,7 @@ export interface GfxRenderTargetDescriptor {
 
 export interface GfxRenderPipelineDescriptor {
     bindingLayouts: GfxBindingLayoutDescriptor[];
-    inputLayout: GfxInputLayout;
+    inputLayout: GfxInputLayout | null;
     program: GfxProgram;
     topology: GfxPrimitiveTopology;
     megaStateDescriptor: GfxMegaStateDescriptor;
@@ -143,9 +142,12 @@ export interface GfxDeviceLimits {
     uniformBufferWordAlignment: number;
 }
 
-export interface GfxProgramReflection {
+export interface GfxProgramReflection extends DeviceProgramReflection {
     uniqueKey: number;
-    uniformBuffers: BufferLayout[];
+}
+
+export interface GfxInputStateReflection {
+    inputLayout: GfxInputLayout;
 }
 
 export interface GfxSwapChain {
@@ -157,7 +159,7 @@ export interface GfxSwapChain {
 
 export interface GfxHostAccessPass {
     // Transfer commands.
-    uploadBufferData(buffer: GfxBuffer, dstWordOffset: number, data: ArrayBuffer, srcWordOffset?: number, wordCount?: number): void;
+    uploadBufferData(buffer: GfxBuffer, dstWordOffset: number, data: Uint8Array, srcWordOffset?: number, wordCount?: number): void;
     uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
 }
 
@@ -166,7 +168,10 @@ export interface GfxRenderPass {
     setViewport(width: number, height: number): void;
     setPipeline(pipeline: GfxRenderPipeline): void;
     setBindings(bindingLayoutIndex: number, bindings: GfxBindings): void;
-    setInputState(inputState: GfxInputState): void;
+    setInputState(inputState: GfxInputState | null): void;
+
+    // Mid-commandbuffer binding updates.
+    updateBindings(bindings: GfxBindings, uniformBuffers: GfxBufferBinding[], samplers: GfxSamplerBinding[]): void;
 
     // Draw commands.
     draw(count: number, firstIndex: number): void;
@@ -188,9 +193,9 @@ export interface GfxDevice {
     createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;
     createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget;
     createProgram(program: DeviceProgram): GfxProgram;
-    createBindings(bindingLayout: GfxBindingLayoutDescriptor, uniformBuffers: GfxBufferBinding[], samplers: GfxSamplerBinding[]): GfxBindings;
+    createBindings(bindingLayout: GfxBindingLayoutDescriptor, uniformBuffers: GfxBufferBinding[], samplers: (GfxSamplerBinding | null)[]): GfxBindings;
     createInputLayout(attributes: GfxVertexAttributeDescriptor[], indexBufferFormat: GfxFormat | null): GfxInputLayout;
-    createInputState(inputLayout: GfxInputLayout, buffers: GfxVertexBufferDescriptor[], indexBuffer: GfxBuffer | null): GfxInputState;
+    createInputState(inputLayout: GfxInputLayout, buffers: GfxVertexBufferDescriptor[], indexBuffer: GfxBufferBinding | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
 
     destroyBuffer(o: GfxBuffer): void;
@@ -213,6 +218,7 @@ export interface GfxDevice {
 
     queryLimits(): GfxDeviceLimits;
     queryProgram(program: GfxProgram): GfxProgramReflection;
+    queryInputState(o: GfxInputState): GfxInputStateReflection;
     queryTextureFormatSupported(format: GfxFormat): boolean;
 
     setResourceName(o: GfxResource, s: string): void;
