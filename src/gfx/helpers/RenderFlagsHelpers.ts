@@ -9,18 +9,18 @@ export interface RenderFlagsPossibilities {
     depthWrite?: boolean;
     cullMode?: GfxCullMode;
     frontFace?: GfxFrontFaceMode;
+    polygonOffset: boolean;
 }
 
-// The Gfx equivalent of RenderFlags. Based on a stack, rather than the "last wins" model, though.
-
 export class RenderFlags {
-    blendMode: GfxBlendMode;
-    blendSrcFactor: GfxBlendFactor;
-    blendDstFactor: GfxBlendFactor;
-    depthCompare: GfxCompareMode;
-    depthWrite: boolean;
-    cullMode: GfxCullMode;
-    frontFace: GfxFrontFaceMode;
+    public blendMode: GfxBlendMode;
+    public blendSrcFactor: GfxBlendFactor;
+    public blendDstFactor: GfxBlendFactor;
+    public depthCompare: GfxCompareMode;
+    public depthWrite: boolean;
+    public cullMode: GfxCullMode;
+    public frontFace: GfxFrontFaceMode;
+    public polygonOffset: boolean;
 
     constructor(setFrom: RenderFlags = defaultFlags) {
         if (setFrom !== null)
@@ -39,6 +39,7 @@ export class RenderFlags {
         this.depthWrite = this.resolveField(other.depthWrite, this.depthWrite);
         this.cullMode = this.resolveField(other.cullMode, this.cullMode);
         this.frontFace = this.resolveField(other.frontFace, this.frontFace);
+        this.polygonOffset = this.resolveField(other.polygonOffset, this.polygonOffset);
     }
 
     public resolveMegaState(): GfxMegaStateDescriptor {
@@ -54,6 +55,7 @@ defaultFlags.cullMode = GfxCullMode.NONE;
 defaultFlags.depthWrite = true;
 defaultFlags.depthCompare = GfxCompareMode.LEQUAL;
 defaultFlags.frontFace = GfxFrontFaceMode.CCW;
+defaultFlags.polygonOffset = false;
 
 export const fullscreenFlags = new RenderFlags();
 fullscreenFlags.depthCompare = GfxCompareMode.NEVER;

@@ -116,6 +116,7 @@ export interface GfxMegaStateDescriptor {
     depthWrite: boolean;
     cullMode: GfxCullMode;
     frontFace: GfxFrontFaceMode;
+    polygonOffset: boolean;
 }
 
 export interface GfxRenderTargetDescriptor {
