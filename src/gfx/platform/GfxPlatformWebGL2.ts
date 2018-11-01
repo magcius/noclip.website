@@ -1015,6 +1015,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.frontFace(newMegaState.frontFace);
             this._currentMegaState.frontFace = newMegaState.frontFace;
         }
+
+        if (this._currentMegaState.polygonOffset !== newMegaState.polygonOffset) {
+            if (newMegaState.polygonOffset) {
+                gl.polygonOffset(-0.5, -0.5);
+                gl.enable(gl.POLYGON_OFFSET_FILL);
+            } else {
+                gl.disable(gl.POLYGON_OFFSET_FILL);
+            }
+            this._currentMegaState.polygonOffset = newMegaState.polygonOffset;
+        }
     }
 
     private setPipeline(pipeline: GfxRenderPipeline): void {

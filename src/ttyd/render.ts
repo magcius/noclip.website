@@ -3,7 +3,7 @@ import * as GX_Material from '../gx/gx_material';
 import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx } from '../gx/gx_render';
 
 import * as TPL from './tpl';
-import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator } from './world';
+import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';
 
 import * as GX from '../gx/gx_enum';
 import * as Viewer from '../viewer';
@@ -139,6 +139,7 @@ class Command_Material {
         this.templateRenderInst.samplerBindings = nArray(8, () => null);
         this.templateRenderInst.sortKey = makeSortKey(10 + material.materialLayer, 0, device.queryProgram(this.gfxProgram).uniqueKey);
         GX_Material.translateRenderFlagsGfx(this.templateRenderInst.renderFlags, this.material.gxMaterial);
+        this.templateRenderInst.renderFlags.polygonOffset = material.materialLayer === MaterialLayer.ALPHA_TEST;
         // Allocate our material buffer slot.
         this.materialParamsBufferOffset = renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, 1);
     }
