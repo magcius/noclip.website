@@ -162,7 +162,7 @@ export class BinScene implements Viewer.MainScene {
             const sampler = bin.samplers[i];
             const texture: GX_Texture.Texture = { ...sampler.texture, name: `unknown ${i}` };
             const mipChain = GX_Texture.calcMipChain(texture, 1);
-            const { gfxTexture, viewerTexture } = loadTextureFromMipChain(gl, mipChain);
+            const { gfxTexture, viewerTexture } = loadTextureFromMipChain(getTransitionDeviceForWebGL2(gl), mipChain);
 
             // GL texture is bound by loadTextureFromMipChain.
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
