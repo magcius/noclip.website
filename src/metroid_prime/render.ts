@@ -355,7 +355,7 @@ class Command_Material {
 
     constructor(public material: Material) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial);
-        this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
+        GX_Material.translateRenderFlagsGfx(this.renderFlags = new RenderFlags(), this.material.gxMaterial);
     }
 
     public exec(state: RenderState, modelMatrix: mat4 | null, isSkybox: boolean, renderHelper: GXRenderHelper) {

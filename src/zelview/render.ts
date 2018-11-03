@@ -3,12 +3,13 @@ import * as F3DEX2 from './f3dex2';
 import * as ZELVIEW0 from './zelview0';
 
 import Progressable from '../Progressable';
-import { CullMode, RenderFlags, RenderState, BlendMode, BlendFactor } from '../render';
+import { RenderFlags, RenderState } from '../render';
 import { SimpleProgram, BaseProgram } from '../Program';
 import { fetchData } from '../fetch';
 
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GfxBlendFactor, GfxBlendMode, GfxCullMode } from '../gfx/platform/GfxPlatform';
 
 export type RenderFunc = (renderState: RenderState) => void;
 
@@ -445,10 +446,9 @@ class Scene implements Viewer.MainScene {
         gl.bufferData(gl.ARRAY_BUFFER, coll.verts, gl.STATIC_DRAW);
 
         const renderFlags = new RenderFlags();
-        renderFlags.depthTest = true;
-        renderFlags.blendMode = BlendMode.ADD;
-        renderFlags.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
-        renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
+        renderFlags.blendMode = GfxBlendMode.ADD;
+        renderFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        renderFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
 
         return (state: RenderState) => {
             const prog = this.program_COLL;
@@ -478,10 +478,11 @@ class Scene implements Viewer.MainScene {
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
 
         const renderFlags = new RenderFlags();
-        renderFlags.blendMode = BlendMode.ADD;
-        renderFlags.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
-        renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
-        renderFlags.cullMode = CullMode.NONE;
+        renderFlags.depthWrite = false;
+        renderFlags.blendMode = GfxBlendMode.ADD;
+        renderFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        renderFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+        renderFlags.cullMode = GfxCullMode.NONE;
 
         return (state: RenderState) => {
             const prog = this.program_WATERS;

@@ -8,7 +8,7 @@ import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
 
-import { RenderFlags, RenderState, BlendMode, depthClearFlags, BlendFactor } from '../render';
+import { RenderFlags, RenderState, depthClearFlags } from '../render';
 import { DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
 import RenderArena from '../RenderArena';
@@ -17,7 +17,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureHolder, LoadedTexture, bindGLTextureMappings, TextureMapping } from '../TextureHolder';
 import { getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
-import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2 } from '../gfx/helpers/UniformBufferHelpers';
 
 export class NITRO_Program extends DeviceProgram {
@@ -232,10 +232,9 @@ class BMDRenderer {
         const texAnimMat = mat2d.clone(material.texCoordMat);
 
         const renderFlags = new RenderFlags();
-        renderFlags.blendMode = BlendMode.ADD;
-        renderFlags.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
-        renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
-        renderFlags.depthTest = true;
+        renderFlags.blendMode = GfxBlendMode.ADD;
+        renderFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        renderFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
         renderFlags.depthWrite = material.depthWrite;
         renderFlags.cullMode = material.cullMode;
 

@@ -212,7 +212,6 @@ export class Scene implements Viewer.Scene_Device {
 
         const renderFlags = new RenderFlags();
         renderFlags.depthWrite = true;
-        renderFlags.depthCompare = GfxCompareMode.LEQUAL;
 
         this.pipeline = device.createRenderPipeline({
             topology: GfxPrimitiveTopology.TRIANGLES,
