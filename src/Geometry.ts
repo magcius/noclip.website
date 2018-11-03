@@ -1,5 +1,5 @@
 
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, vec4 } from "gl-matrix";
 import { nArray } from "./util";
 
 class Plane {
@@ -95,6 +95,12 @@ export class AABB {
             a.minX > b.maxX || b.minX > a.maxX ||
             a.minY > b.maxY || b.minY > a.maxY ||
             a.minZ > b.maxZ || b.minZ > a.maxZ);
+    }
+
+    public centerPoint(v: vec3): void {
+        v[0] = (this.minX + this.maxX) / 2;
+        v[1] = (this.minY + this.maxY) / 2;
+        v[2] = (this.minZ + this.maxZ) / 2;
     }
 }
 
@@ -265,6 +271,10 @@ export class Frustum {
         }
 
         return res;
+    }
+
+    public contains(aabb: AABB): boolean {
+        return this.intersect(aabb) !== IntersectionState.FULLY_OUTSIDE;
     }
 
     public newFrame(): void {

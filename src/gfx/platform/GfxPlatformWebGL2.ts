@@ -279,13 +279,11 @@ class Growable<T extends ArrayBufferView2> {
     }
 }
 
-const enum RenderPassCmd { setRenderTarget = 471, setViewport, setBindings, setPipeline, setInputState, updateBindings, draw, drawIndexed, endPass, invalid = 0x1234 };
+const enum RenderPassCmd { setRenderTarget = 471, setViewport, setBindings, setPipeline, setInputState, draw, drawIndexed, endPass, invalid = 0x1234 };
 class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
     public o: (object | null)[] = [];
-
-    private io: number = 0;
 
     public reset() { this.u32.r(); this.f32.r(); this.o.length = 0; }
 
@@ -300,7 +298,6 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
     public setBindings(n: number, r: GfxBindings) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); }
     public setInputState(r: GfxInputState | null) { this.pcmd(RenderPassCmd.setInputState); this.po(r); }
-    public updateBindings(r: GfxBindings, b: GfxBufferBinding[], s: GfxSamplerBinding[]) { this.pcmd(RenderPassCmd.updateBindings); this.po(r); this.po(b); this.po(s); }
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
     public endPass(r: GfxTexture | null)          { this.pcmd(RenderPassCmd.endPass); this.po(r); }
@@ -312,15 +309,12 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     public gfxr: GfxResource[] = [];
     public bufr: ArrayBufferView[] = [];
 
-    private igfxr: number = 0;
-    private ibufr: number = 0;
-
-    public reset() { this.u32.r(); this.igfxr = 0; this.ibufr = 0; this.gfxr.length = 0; this.bufr.length = 0; }
+    public reset() { this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
 
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
-    public pgfxr(r: GfxResource | null) { this.gfxr[this.igfxr++] = r; }
-    public pbufr(r: ArrayBufferView) { this.bufr[this.ibufr++] = r; }
+    public pgfxr(r: GfxResource | null) { this.gfxr.push(r); }
+    public pbufr(r: ArrayBufferView) { this.bufr.push(r); }
 
     public end() { this.pcmd(HostAccessPassCmd.end); }
     public uploadBufferData(r: GfxBuffer, dstWordOffset: number, data: Uint8Array, srcWordOffset?: number, wordCount?: number) {
@@ -824,8 +818,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 this.setPipeline(gfxr[igfxr++] as GfxRenderPipeline);
             } else if (cmd === RenderPassCmd.setInputState) {
                 this.setInputState(gfxr[igfxr++] as GfxInputState | null);
-            } else if (cmd === RenderPassCmd.updateBindings) {
-                this.updateBindings(gfxr[igfxr++] as GfxBindings, gfxr[igfxr++] as GfxBufferBinding[], gfxr[igfxr++] as GfxSamplerBinding[]);
             } else if (cmd === RenderPassCmd.draw) {
                 this.draw(u32[iu32++], u32[iu32++]);
             } else if (cmd === RenderPassCmd.drawIndexed) {
@@ -933,8 +925,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         for (let i = 0; i < samplers.length; i++) {
             const binding = samplers[i];
             const samplerIndex = bindingLayoutTable.firstSampler + i;
-            const gl_sampler = binding.sampler !== null ? getPlatformSampler(binding.sampler) : null;
-            const gl_texture = binding.texture !== null ? getPlatformTexture(binding.texture) : null;
+            const gl_sampler = binding !== null && binding.sampler !== null ? getPlatformSampler(binding.sampler) : null;
+            const gl_texture = binding !== null && binding.texture !== null ? getPlatformTexture(binding.texture) : null;
 
             if (this._currentSamplers[samplerIndex] !== gl_sampler) {
                 gl.bindSampler(samplerIndex, gl_sampler);
@@ -943,7 +935,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
             if (this._currentTextures[samplerIndex] !== gl_texture) {
                 this._setActiveTexture(gl.TEXTURE0 + samplerIndex);
-                if (binding.texture !== null) {
+                if (gl_texture !== null) {
                     const { gl_target } = (binding.texture as GfxTextureP_GL);
                     gl.bindTexture(gl_target, gl_texture);
                 } else {
@@ -1048,12 +1040,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             assert(this._currentPipeline.inputLayout === null)
             gl.bindVertexArray(null);
         }
-    }
-
-    private updateBindings(bindings_: GfxBindings, uniformBuffers: GfxBufferBinding[], samplers: GfxSamplerBinding[]): void {
-        const bindings = bindings_ as GfxBindingsP_GL;
-        bindings.uniformBuffers = uniformBuffers;
-        bindings.samplers = samplers;
     }
 
     private draw(count: number, firstVertex: number): void {

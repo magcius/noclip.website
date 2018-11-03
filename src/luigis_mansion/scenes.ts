@@ -5,38 +5,12 @@ import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as RARC from '../j3d/rarc';
 import * as BIN from './bin';
-import { BinScene } from './render';
+import { LuigisMansionRenderer } from './render';
 import { RenderState } from '../render';
 import * as UI from '../ui';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
-interface LayerScene extends Viewer.Scene, UI.Layer {}
-
-class LuigisMansionScene implements Viewer.MainScene {
-    public textures: Viewer.Texture[];
-
-    constructor(public roomScenes: LayerScene[]) {
-        // TODO(jstpierre): Texture holder
-        this.textures = [];
-    }
-
-    public createPanels(): UI.Panel[] {
-        const layers = new UI.LayerPanel();
-        layers.setLayers(this.roomScenes);
-        return [layers];
-    }
-
-    public render(state: RenderState): void {
-        this.roomScenes.forEach((scene) => {
-            scene.render(state);
-        });
-    }
-
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.roomScenes.forEach((scene) => scene.destroy(gl));
-    }
-}
-
-function fetchBinScene(gl: WebGL2RenderingContext, path: string): Progressable<BinScene> {
+function fetchBin(path: string): Progressable<BIN.BIN> {
     return fetchData(`data/luigis_mansion/${path}`).then((buffer: ArrayBufferSlice) => {
         let binBuffer;
         if (path.endsWith('.bin')) {
@@ -47,25 +21,22 @@ function fetchBinScene(gl: WebGL2RenderingContext, path: string): Progressable<B
             binBuffer = roomBinFile.buffer;
         }
 
-        const bin = BIN.parse(binBuffer);
-        const binScene = new BinScene(gl, bin);
-        binScene.name = path.split('/').pop();
-        return binScene;
+        const name = path.split('/').pop();
+        return BIN.parse(binBuffer, name);
     });
 }
 
 class LuigisMansionBinSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public paths: string[]) {}
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        const promises: Progressable<LayerScene>[] = this.paths.map((path) => fetchBinScene(gl, path));
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+        const promises: Progressable<BIN.BIN>[] = this.paths.map((path) => fetchBin(path));
 
         // TODO(jstpierre): J3D format in VRB has a different version with a different MAT3 chunk.
         // promises.unshift(fetchVRBScene(gl, `vrball_B.szp`));
 
-        return Progressable.all(promises).then((roomScenes: LayerScene[]) => {
-            roomScenes = roomScenes.filter((s) => !!s);
-            return new LuigisMansionScene(roomScenes);
+        return Progressable.all(promises).then((bins: BIN.BIN[]) => {
+            return new LuigisMansionRenderer(device, bins);
         });
     }
 }

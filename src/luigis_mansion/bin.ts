@@ -11,6 +11,7 @@ import { AABB } from "../Geometry";
 export interface BIN {
     samplers: Sampler[];
     rootNode: SceneGraphNode;
+    name: string;
 }
 
 interface Texture {
@@ -49,13 +50,13 @@ export interface SceneGraphNode {
     parts: SceneGraphPart[];
 }
 
-export function parse(buffer: ArrayBufferSlice): BIN {
+export function parse(buffer: ArrayBufferSlice, name: string): BIN {
     const view = buffer.createDataView();
 
     const version = view.getUint8(0x00);
     assert(version === 0x01 || version === 0x02);
 
-    const name = readString(buffer, 0x01, 0x0B);
+    const internalName = readString(buffer, 0x01, 0x0B);
 
     const textureChunkOffs = view.getUint32(0x0C, false);
     const samplerChunkOffs = view.getUint32(0x10, false);
@@ -347,6 +348,6 @@ export function parse(buffer: ArrayBufferSlice): BIN {
     const rootNode: SceneGraphNode = { children: [], modelMatrix: mat4.create(), bbox: null, parts: [] };
     traverseSceneGraph(rootNode, 0);
 
-    const bin: BIN = { rootNode, samplers };
+    const bin: BIN = { rootNode, samplers, name };
     return bin;
 }

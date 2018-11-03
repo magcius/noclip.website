@@ -5,11 +5,12 @@ import { RenderFlags, CullMode, BlendFactor, BlendMode } from '../render';
 import { mat4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize } from './pica_texture';
 
-interface VertexBufferSlices {
-    posBuffer: ArrayBufferSlice;
-    nrmBuffer: ArrayBufferSlice;
-    colBuffer: ArrayBufferSlice;
-    txcBuffer: ArrayBufferSlice;
+export interface VatrChunk {
+    dataBuffer: ArrayBufferSlice;
+    positionOffs: number;
+    colorOffs: number;
+    normalOffs: number;
+    textureCoordOffs: number;
 }
 
 const enum Version {
@@ -20,7 +21,7 @@ export class CMB {
     public name: string;
     public version: Version;
     public textures: Texture[] = [];
-    public vertexBufferSlices: VertexBufferSlices;
+    public vatrChunk: VatrChunk;
 
     public materials: Material[] = [];
     public bones: Bone[] = [];
@@ -242,26 +243,30 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'vatr');
+    const fullBufferSize = view.getUint32(0x04, true);
 
     let idx = 0x0C;
 
-    function readSlice(): ArrayBufferSlice {
+    function readSlice(baseOffs: number = 0): number {
         const size = view.getUint32(idx + 0x00, true);
         const offs = view.getUint32(idx + 0x04, true);
         idx += 0x08;
-        return buffer.subarray(offs, size);
+        return offs - baseOffs;
     }
 
-    const posBuffer = readSlice();
-    const nrmBuffer = readSlice();
+    const baseOffs = readSlice();
+    const dataBuffer = buffer.slice(baseOffs, fullBufferSize);
+
+    const positionOffs = 0;
+    const normalOffs = readSlice(baseOffs);
 
     if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
         readSlice();
 
-    const colBuffer = readSlice();
-    const txcBuffer = readSlice();
+    const colorOffs = readSlice(baseOffs);
+    const textureCoordOffs = readSlice(baseOffs);
 
-    cmb.vertexBufferSlices = { posBuffer, nrmBuffer, colBuffer, txcBuffer };
+    cmb.vatrChunk = { dataBuffer, positionOffs, normalOffs, colorOffs, textureCoordOffs };
 }
 
 export class Mesh {

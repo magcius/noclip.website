@@ -1,149 +1,137 @@
 
 import * as Viewer from "../viewer";
-import { RenderState, RenderFlags } from "../render";
+import * as UI from '../ui';
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
 import * as GX_Texture from '../gx/gx_texture';
-import * as GX_Material from '../gx/gx_material';
-import { SceneParams, MaterialParams, PacketParams, GXShapeHelper, GXRenderHelper, fillSceneParamsFromRenderState, loadedDataCoalescer, loadTextureFromMipChain, translateWrapMode } from '../gx/gx_render';
+import { MaterialParams, PacketParams, loadTextureFromMipChain, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, loadedDataCoalescerGfx, translateWrapMode, translateWrapModeGfx } from '../gx/gx_render';
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
-import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
-import { AABB, IntersectionState } from "../Geometry";
-import { GfxTexture } from "../gfx/platform/GfxPlatform";
-import { getTransitionDeviceForWebGL2 } from "../gfx/platform/GfxPlatformWebGL2";
+import { AABB } from "../Geometry";
+import { GfxTexture, GfxDevice, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxCoalescedBuffers, GfxBufferCoalescer } from "../gfx/helpers/BufferHelpers";
+import { GfxRenderInst, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
+import { Camera, computeViewMatrix } from "../Camera";
+import { BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 
+const materialParamsScratch = new MaterialParams();
 class Command_Material {
-    private renderFlags: RenderFlags;
-    private program: GX_Material.GX_Program;
-    private materialParams = new MaterialParams();
+    private materialHelper: GXMaterialHelperGfx;
+    public templateRenderInst: GfxRenderInst;
 
-    constructor(public scene: BinScene, public material: Material) {
-        this.program = new GX_Material.GX_Program(this.material.gxMaterial);
-        this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public scene: Command_Bin, public material: Material) {
+        this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, material.gxMaterial);
+        this.templateRenderInst = this.materialHelper.templateRenderInst;
 
         // We don't animate, so we only need to compute this once.
-        this.fillMaterialParams(this.materialParams);
+        this.fillMaterialParams(materialParamsScratch);
     }
 
     private fillMaterialParams(materialParams: MaterialParams): void {
         // All we care about is textures...
         for (let i = 0; i < this.material.samplerIndexes.length; i++) {
             const samplerIndex = this.material.samplerIndexes[i];
-            if (samplerIndex >= 0)
+            if (samplerIndex >= 0) {
                 materialParams.m_TextureMapping[i].gfxTexture = this.scene.gfxTextures[samplerIndex];
+                materialParams.m_TextureMapping[i].gfxSampler = this.scene.gfxSamplers[samplerIndex];
+            }
         }
+
+        this.templateRenderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 
-    public exec(state: RenderState) {
-        state.useProgram(this.program);
-        state.useFlags(this.renderFlags);
-
-        this.scene.renderHelper.bindMaterialParams(state, this.materialParams);
-        this.scene.renderHelper.bindMaterialTextures(state, this.materialParams);
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        this.program.destroy(gl);
+    public prepareToRender(renderHelper: GXRenderHelperGfx): void {
+        this.materialHelper.fillMaterialParams(materialParamsScratch, renderHelper);
     }
 }
 
 const bboxScratch = new AABB();
 class Command_Batch {
-    private shapeHelper: GXShapeHelper;
+    private shapeHelper: GXShapeHelperGfx;
     private packetParams = new PacketParams();
+    private renderInst: GfxRenderInst;
 
-    constructor(gl: WebGL2RenderingContext, private scene: BinScene, private sceneGraphNode: SceneGraphNode, private batch: Batch, private coalescedBuffers: CoalescedBuffers) {
-        this.shapeHelper = new GXShapeHelper(gl, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private sceneGraphNode: SceneGraphNode, batch: Batch, coalescedBuffers: GfxCoalescedBuffers) {
+        this.shapeHelper = new GXShapeHelperGfx(device, renderHelper.renderInstBuilder, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+        this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder);
     }
 
-    private computeModelView(dst: mat4, state: RenderState): void {
-        mat4.copy(dst, state.updateModelView(false, this.sceneGraphNode.modelMatrix));
+    private computeModelView(dst: mat4, camera: Camera): void {
+        computeViewMatrix(dst, camera);
+        mat4.mul(dst, dst, this.sceneGraphNode.modelMatrix);
     }
 
-    public exec(state: RenderState): void {
-        if (this.sceneGraphNode.bbox) {
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {
+        this.renderInst.visible = visible;
+
+        if (this.renderInst.visible && this.sceneGraphNode.bbox) {
             bboxScratch.transform(this.sceneGraphNode.bbox, this.sceneGraphNode.modelMatrix);
-            if (state.camera.frustum.intersect(bboxScratch) === IntersectionState.FULLY_OUTSIDE) {
-               return;
-            }
+            this.renderInst.visible = viewerInput.camera.frustum.contains(bboxScratch);
         }
 
-        this.computeModelView(this.packetParams.u_PosMtx[0], state);
-
-        this.scene.renderHelper.bindPacketParams(state, this.packetParams);
-
-        this.shapeHelper.draw(state);
+        if (this.renderInst.visible) {
+            this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera);
+            this.shapeHelper.fillPacketParams(this.packetParams, this.renderInst, renderHelper);
+        }
     }
 
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.shapeHelper.destroy(gl);
+    public destroy(device: GfxDevice): void {
+        this.shapeHelper.destroy(device);
     }
 }
 
-type RenderCommand = Command_Batch | Command_Material;
-
-export class BinScene implements Viewer.MainScene {
+class Command_Bin {
     public name: string;
-    public textures: Viewer.Texture[] = [];
 
-    private commands: RenderCommand[];
-    private bufferCoalescer: BufferCoalescer;
+    private batchCommands: Command_Batch[] = [];
+    private materialCommands: Command_Material[] = [];
+    private bufferCoalescer: GfxBufferCoalescer;
     private batches: Batch[];
 
+    public gfxSamplers: GfxSampler[] = [];
     public gfxTextures: GfxTexture[] = [];
     public visible: boolean = true;
 
-    public renderHelper: GXRenderHelper;
-    private sceneParams = new SceneParams();
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private bin: BIN) {
+        this.translateModel(device, renderHelper, bin);
+    }
 
-    constructor(gl: WebGL2RenderingContext, private bin: BIN) {
-        this.translateModel(gl, bin);
-        this.renderHelper = new GXRenderHelper(gl);
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.materialCommands.length; i++)
+            this.materialCommands[i].prepareToRender(renderHelper);
+        for (let i = 0; i < this.batchCommands.length; i++)
+            this.batchCommands[i].prepareToRender(renderHelper, viewerInput, this.visible);
     }
 
     public setVisible(visible: boolean) {
         this.visible = visible;
     }
 
-    public render(state: RenderState): void {
-        if (!this.visible)
-            return;
-
-        state.setClipPlanes(10, 500000);
-
-        this.renderHelper.bindUniformBuffers(state);
-
-        fillSceneParamsFromRenderState(this.sceneParams, state);
-        this.renderHelper.bindSceneParams(state, this.sceneParams);
-
-        this.commands.forEach((command) => {
-            command.exec(state);
-        });
-    }
-
-    public destroy(gl: WebGL2RenderingContext): void {
-        const device = getTransitionDeviceForWebGL2(gl);
+    public destroy(device: GfxDevice): void {
         this.gfxTextures.forEach((t) => device.destroyTexture(t));
-        this.renderHelper.destroy(gl);
-        this.bufferCoalescer.destroy(gl);
+        this.gfxSamplers.forEach((t) => device.destroySampler(t));
+        this.bufferCoalescer.destroy(device);
     }
 
-    private translatePart(gl: WebGL2RenderingContext, node: SceneGraphNode, part: SceneGraphPart): void {
-        const materialCommand = new Command_Material(this, part.material);
-        this.commands.push(materialCommand);
+    private translatePart(device: GfxDevice, renderHelper: GXRenderHelperGfx, node: SceneGraphNode, part: SceneGraphPart): void {
+        const materialCommand = new Command_Material(device, renderHelper, this, part.material);
+        this.materialCommands.push(materialCommand);
         const batch = part.batch;
         const batchIndex = this.batches.indexOf(batch);
         assert(batchIndex >= 0);
-        const batchCommand = new Command_Batch(gl, this, node, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
-        this.commands.push(batchCommand);
+
+        renderHelper.renderInstBuilder.pushTemplateRenderInst(materialCommand.templateRenderInst);
+        const batchCommand = new Command_Batch(device, renderHelper, node, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
+        renderHelper.renderInstBuilder.popTemplateRenderInst();
+
+        this.batchCommands.push(batchCommand);
     }
 
-    private translateSceneGraph(gl: WebGL2RenderingContext, node: SceneGraphNode): void {
+    private translateSceneGraph(device: GfxDevice, renderHelper: GXRenderHelperGfx, node: SceneGraphNode): void {
         for (const part of node.parts)
-            this.translatePart(gl, node, part);
+            this.translatePart(device, renderHelper, node, part);
         for (const child of node.children)
-            this.translateSceneGraph(gl, child);
+            this.translateSceneGraph(device, renderHelper, child);
     }
 
     private collectBatches(batches: Batch[], node: SceneGraphNode): void {
@@ -153,21 +141,26 @@ export class BinScene implements Viewer.MainScene {
             this.collectBatches(batches, child);
     }
 
-    private translateModel(gl: WebGL2RenderingContext, bin: BIN): void {
+    private translateModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, bin: BIN): void {
         for (let i = 0; i < bin.samplers.length; i++) {
             const sampler = bin.samplers[i];
             const texture: GX_Texture.Texture = { ...sampler.texture, name: `unknown ${i}` };
             const mipChain = GX_Texture.calcMipChain(texture, 1);
-            const { gfxTexture, viewerTexture } = loadTextureFromMipChain(getTransitionDeviceForWebGL2(gl), mipChain);
+            const { gfxTexture, viewerTexture } = loadTextureFromMipChain(device, mipChain);
 
             // GL texture is bound by loadTextureFromMipChain.
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, translateWrapMode(gl, sampler.wrapS));
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, translateWrapMode(gl, sampler.wrapT));
+            const gfxSampler = device.createSampler({
+                wrapS: translateWrapModeGfx(sampler.wrapS),
+                wrapT: translateWrapModeGfx(sampler.wrapT),
+                minFilter: GfxTexFilterMode.BILINEAR,
+                magFilter: GfxTexFilterMode.BILINEAR,
+                mipFilter: GfxMipFilterMode.NO_MIP,
+                minLOD: 0,
+                maxLOD: 100,
+            });
 
             this.gfxTextures.push(gfxTexture);
-            this.textures.push(viewerTexture);
+            this.gfxSamplers.push(gfxSampler);
         }
 
         // First, collect all the batches we're rendering.
@@ -175,9 +168,53 @@ export class BinScene implements Viewer.MainScene {
         this.collectBatches(this.batches, bin.rootNode);
 
         // Coalesce buffers.
-        this.bufferCoalescer = loadedDataCoalescer(gl, this.batches.map((batch) => batch.loadedVertexData));
+        this.bufferCoalescer = loadedDataCoalescerGfx(device, this.batches.map((batch) => batch.loadedVertexData));
+        this.translateSceneGraph(device, renderHelper, bin.rootNode);
+    }
+}
 
-        this.commands = [];
-        this.translateSceneGraph(gl, bin.rootNode);
+export class LuigisMansionRenderer implements Viewer.Scene_Device {
+    private binCommands: Command_Bin[] = [];
+    private renderHelper: GXRenderHelperGfx;
+    public viewRenderer: GfxRenderInstViewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
+
+    constructor(device: GfxDevice, private bins: BIN[]) {
+        this.renderHelper = new GXRenderHelperGfx(device);
+        for (let i = 0; i < bins.length; i++)
+            this.binCommands.push(new Command_Bin(device, this.renderHelper, bins[i]));
+        this.renderHelper.renderInstBuilder.finish(device, this.viewRenderer);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const layers = new UI.LayerPanel();
+        layers.setLayers(this.binCommands);
+        return [layers];
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+
+        this.renderHelper.fillSceneParams(viewerInput);
+
+        for (let i = 0; i < this.binCommands.length; i++)
+            this.binCommands[i].prepareToRender(this.renderHelper, viewerInput);
+
+        this.renderHelper.prepareToRender(hostAccessPass);
+        device.submitPass(hostAccessPass);
+
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.executeOnPass(device, passRenderer);
+        return passRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.binCommands.length; i++)
+            this.binCommands[i].destroy(device);
+        this.renderHelper.destroy(device);
+        this.renderTarget.destroy(device);
+        this.viewRenderer.destroy(device);
     }
 }

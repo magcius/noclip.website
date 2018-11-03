@@ -11,12 +11,12 @@ import RenderArena from '../RenderArena';
 import AnimationController from '../AnimationController';
 import { mat4 } from 'gl-matrix';
 import { getTransitionDeviceForWebGL2, getPlatformBuffer, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
-import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNew, colorFromRGBA } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping, bindGLTextureMappings } from '../TextureHolder';
-import { nArray } from '../util';
+import { nArray, wordCountFromByteCount } from '../util';
 
 // @ts-ignore
 // This feature is provided by Parcel.
@@ -78,11 +78,9 @@ function fillSceneParamsData(d: Float32Array, state: RenderState, offs: number =
 type RenderFunc = (renderState: RenderState) => void;
 
 interface CmbContext {
-    posBuffer: WebGLBuffer;
-    colBuffer: WebGLBuffer | null;
-    nrmBuffer: WebGLBuffer | null;
-    txcBuffer: WebGLBuffer | null;
-    idxBuffer: WebGLBuffer;
+    vertexBuffer: GfxBuffer;
+    vatrChunk: CMB.VatrChunk;
+    idxBuffer: GfxBuffer;
 
     sepdFuncs: RenderFunc[];
     matFuncs: RenderFunc[];
@@ -173,11 +171,12 @@ export class CmbRenderer {
         const vao = this.arena.createVertexArray(gl);
         gl.bindVertexArray(vao);
 
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cmbContext.idxBuffer);
+        gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(cmbContext.vertexBuffer));
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(cmbContext.idxBuffer));
 
-        const bindVertexAttrib = (attribLocation: number, size: number, normalized: boolean, vertexAttrib: CMB.SepdVertexAttrib) => {
+        const bindVertexAttrib = (attribLocation: number, size: number, normalized: boolean, baseOffset: number, vertexAttrib: CMB.SepdVertexAttrib) => {
             if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY) {
-                gl.vertexAttribPointer(attribLocation, size, this.translateDataType(gl, vertexAttrib.dataType), normalized, 0, vertexAttrib.start);
+                gl.vertexAttribPointer(attribLocation, size, this.translateDataType(gl, vertexAttrib.dataType), normalized, 0, baseOffset + vertexAttrib.start);
                 gl.enableVertexAttribArray(attribLocation);
             } else if (size === 4) {
                 gl.vertexAttrib4fv(attribLocation, vertexAttrib.constant);
@@ -186,19 +185,11 @@ export class CmbRenderer {
             }
         };
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.posBuffer);
-        bindVertexAttrib(OoT3D_Program.a_Position, 3, false, sepd.position);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.nrmBuffer);
-        bindVertexAttrib(OoT3D_Program.a_Normal, 3, true, sepd.normal);
-
-        if (cmbContext.colBuffer !== null)
-            gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.colBuffer);
-        bindVertexAttrib(OoT3D_Program.a_Color, 4, true, sepd.color);
-
-        if (cmbContext.txcBuffer !== null)
-            gl.bindBuffer(gl.ARRAY_BUFFER, cmbContext.txcBuffer);
-        bindVertexAttrib(OoT3D_Program.a_TexCoord, 2, false, sepd.textureCoord);
+        const vatrChunk = cmbContext.vatrChunk;
+        bindVertexAttrib(OoT3D_Program.a_Position, 3, false, vatrChunk.positionOffs, sepd.position);
+        bindVertexAttrib(OoT3D_Program.a_Normal, 3, true, vatrChunk.normalOffs, sepd.normal);
+        bindVertexAttrib(OoT3D_Program.a_Color, 4, true, vatrChunk.colorOffs, sepd.color);
+        bindVertexAttrib(OoT3D_Program.a_TexCoord, 2, false, vatrChunk.textureCoordOffs, sepd.textureCoord);
 
         gl.bindVertexArray(null);
 
@@ -330,34 +321,16 @@ export class CmbRenderer {
     }
 
     private translateCmb(gl: WebGL2RenderingContext, cmb: CMB.CMB): RenderFunc {
-        const posBuffer = this.arena.createBuffer(gl);
-        gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.posBuffer.castToBuffer(), gl.STATIC_DRAW);
+        const device = getTransitionDeviceForWebGL2(gl);
 
-        let colBuffer: WebGLBuffer | null = null;
-        if (cmb.vertexBufferSlices.colBuffer.byteLength > 0) {
-            colBuffer = this.arena.createBuffer(gl);
-            gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.colBuffer.castToBuffer(), gl.STATIC_DRAW);
-        }
+        const hostAccessPass = device.createHostAccessPass();
 
-        let nrmBuffer: WebGLBuffer | null = null;
-        if (cmb.vertexBufferSlices.nrmBuffer.byteLength > 0) {
-            nrmBuffer = this.arena.createBuffer(gl);
-            gl.bindBuffer(gl.ARRAY_BUFFER, nrmBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.nrmBuffer.castToBuffer(), gl.STATIC_DRAW);
-        }
+        const vertexBuffer = device.createBuffer(wordCountFromByteCount(cmb.vatrChunk.dataBuffer.byteLength), GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
+        hostAccessPass.uploadBufferData(vertexBuffer, 0, cmb.vatrChunk.dataBuffer.createTypedArray(Uint8Array));
+        const idxBuffer = device.createBuffer(wordCountFromByteCount(cmb.indexBuffer.byteLength), GfxBufferUsage.INDEX, GfxBufferFrequencyHint.STATIC);
+        hostAccessPass.uploadBufferData(idxBuffer, 0, cmb.indexBuffer.createTypedArray(Uint8Array));
 
-        let txcBuffer: WebGLBuffer | null = null;
-        if (cmb.vertexBufferSlices.txcBuffer.byteLength > 0) {
-            txcBuffer = this.arena.createBuffer(gl);
-            gl.bindBuffer(gl.ARRAY_BUFFER, txcBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, cmb.vertexBufferSlices.txcBuffer.castToBuffer(), gl.STATIC_DRAW);
-        }
-
-        const idxBuffer = this.arena.createBuffer(gl);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cmb.indexBuffer.castToBuffer(), gl.STATIC_DRAW);
+        device.submitPass(hostAccessPass);
 
         for (let i = 0; i < cmb.bones.length; i++) {
             const bone = cmb.bones[i];
@@ -369,11 +342,10 @@ export class CmbRenderer {
             }
         }
 
+        const vatrChunk = cmb.vatrChunk;
         const cmbContext: CmbContext = {
-            posBuffer,
-            colBuffer,
-            nrmBuffer,
-            txcBuffer,
+            vertexBuffer,
+            vatrChunk,
             idxBuffer,
             sepdFuncs: [],
             matFuncs: [],
@@ -388,7 +360,6 @@ export class CmbRenderer {
             gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, getPlatformBuffer(this.sceneParamsBuffer));
             gl.bindBufferBase(gl.UNIFORM_BUFFER, 1, getPlatformBuffer(this.materialParamsBuffer));
             gl.bindBufferBase(gl.UNIFORM_BUFFER, 2, getPlatformBuffer(this.prmParamsBuffer));
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
 
             gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.sceneParamsBuffer));
             fillSceneParamsData(this.scratchParams, state);

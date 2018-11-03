@@ -17,12 +17,13 @@ import { TextureMapping, TextureHolder, LoadedTexture, bindGLTextureMappings } f
 
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 import { Camera } from '../Camera';
 import { GfxRenderInstBuilder, GfxRenderInst } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { RenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -219,13 +220,31 @@ export class GXShapeHelper {
     }
 }
 
+export class GXMaterialHelperGfx {
+    public templateRenderInst: GfxRenderInst;
+    public gfxProgram: GfxProgram;
+
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, material: GX_Material.GXMaterial, materialHacks?: GX_Material.GXMaterialHacks) {
+        this.templateRenderInst = renderHelper.renderInstBuilder.newRenderInst();
+        // TODO(jstpierre): Cache on RenderHelper?
+        const program = new GX_Material.GX_Program(material, materialHacks);
+        this.templateRenderInst.gfxProgram = device.createProgram(program);
+        GX_Material.translateRenderFlagsGfx(this.templateRenderInst.renderFlags, material);
+        this.templateRenderInst.samplerBindings = nArray(8, () => null);
+        renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
+    }
+
+    public fillMaterialParams(materialParams: MaterialParams, renderHelper: GXRenderHelperGfx): void {
+        this.templateRenderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderHelper.fillMaterialParams(materialParams, this.templateRenderInst.uniformBufferOffsets[ub_MaterialParams]);
+    }
+}
+
 export class GXShapeHelperGfx {
     public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
-    public renderInst: GfxRenderInst;
-    public packetParamsBufferOffset: number;
 
-    constructor(device: GfxDevice, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         assert(this.loadedVertexData.indexFormat === GfxFormat.U16_R);
 
         // First, build the inputLayout
@@ -251,6 +270,7 @@ export class GXShapeHelperGfx {
             }
         }
 
+        // TODO(jstpierre): Cache off input layouts? For a *lot* of shapes we're probably going to be 99% the same...
         this.inputLayout = device.createInputLayout(vertexAttributeDescriptors, this.loadedVertexData.indexFormat);
         const buffers: GfxVertexBufferDescriptor[] = [{
             buffer: coalescedBuffers.vertexBuffer.buffer,
@@ -261,19 +281,19 @@ export class GXShapeHelperGfx {
     }
 
     public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {
-        this.renderInst = renderInstBuilder.newRenderInst(baseRenderInst);
-        this.renderInst.drawIndexes(this.loadedVertexData.totalTriangleCount * 3);
-        this.renderInst.inputState = this.inputState;
-        this.packetParamsBufferOffset = renderInstBuilder.newUniformBufferInstance(this.renderInst, 2);
-        return this.renderInst;
+        const renderInst = renderInstBuilder.newRenderInst(baseRenderInst);
+        renderInstBuilder.newUniformBufferInstance(renderInst, ub_PacketParams);
+        renderInst.drawIndexes(this.loadedVertexData.totalTriangleCount * 3);
+        renderInst.inputState = this.inputState;
+        return renderInst;
     }
 
     public pushRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {
         return renderInstBuilder.pushRenderInst(this.buildRenderInst(renderInstBuilder, baseRenderInst));
     }
 
-    public fillPacketParams(packetParams: PacketParams, renderHelper: GXRenderHelperGfx): void {
-        renderHelper.fillPacketParams(packetParams, this.packetParamsBufferOffset);
+    public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst, renderHelper: GXRenderHelperGfx): void {
+        renderHelper.fillPacketParams(packetParams, renderInst.uniformBufferOffsets[ub_PacketParams]);
     }
 
     public destroy(device: GfxDevice): void {
@@ -423,6 +443,34 @@ export function translateWrapMode(gl: WebGL2RenderingContext, wrapMode: GX.WrapM
         return gl.MIRRORED_REPEAT;
     case GX.WrapMode.REPEAT:
         return gl.REPEAT;
+    }
+}
+
+export function translateWrapModeGfx(wrapMode: GX.WrapMode): GfxWrapMode {
+    switch (wrapMode) {
+    case GX.WrapMode.CLAMP:
+        return GfxWrapMode.CLAMP;
+    case GX.WrapMode.MIRROR:
+        return GfxWrapMode.MIRROR;
+    case GX.WrapMode.REPEAT:
+        return GfxWrapMode.REPEAT;
+    }
+}
+
+export function translateTexFilterGfx(texFilter: GX.TexFilter): [GfxTexFilterMode, GfxMipFilterMode] {
+    switch (texFilter) {
+    case GX.TexFilter.LINEAR:
+        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP ];
+    case GX.TexFilter.NEAR:
+        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NO_MIP ];
+    case GX.TexFilter.LIN_MIP_LIN:
+        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR ];
+    case GX.TexFilter.NEAR_MIP_LIN:
+        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR ];
+    case GX.TexFilter.LIN_MIP_NEAR:
+        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST ];
+    case GX.TexFilter.NEAR_MIP_NEAR:
+        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST ];
     }
 }
 

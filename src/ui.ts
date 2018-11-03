@@ -1005,6 +1005,11 @@ export class UI {
             else
                 this.textureViewer.setTextureList([]);
         } else if (this.viewer.scene_device !== null) {
+            const scene_device = this.viewer.scene_device;
+            if (scene_device.textureHolder !== undefined)
+                this.textureViewer.setTextureHolder(scene_device.textureHolder);
+            else
+                this.textureViewer.setTextureList([]);
         }
     }
 

@@ -2,17 +2,16 @@
 import { RenderState, RenderFlags } from "../render";
 import * as BRRES from './brres';
 
-import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { mat4, mat2d } from "gl-matrix";
 import BufferCoalescer, { CoalescedBuffers } from "../BufferCoalescer";
-import { MaterialParams, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind } from "../gx/gx_render";
+import { MaterialParams, GXShapeHelper, GXRenderHelper, PacketParams, SceneParams, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
 import { texProjPerspMtx, texEnvMtx } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
 import { getTransitionDeviceForWebGL2 } from "../gfx/platform/GfxPlatformWebGL2";
-import { GfxDevice, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxSampler } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
@@ -359,34 +358,6 @@ export class MaterialInstance {
     }
 }
 
-function translateWrapMode(wrapMode: GX.WrapMode): GfxWrapMode {
-    switch (wrapMode) {
-    case GX.WrapMode.CLAMP:
-        return GfxWrapMode.CLAMP;
-    case GX.WrapMode.MIRROR:
-        return GfxWrapMode.MIRROR;
-    case GX.WrapMode.REPEAT:
-        return GfxWrapMode.REPEAT;
-    }
-}
-
-function translateTexFilter(texFilter: GX.TexFilter): [GfxTexFilterMode, GfxMipFilterMode] {
-    switch (texFilter) {
-    case GX.TexFilter.LINEAR:
-        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP ];
-    case GX.TexFilter.NEAR:
-        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NO_MIP ];
-    case GX.TexFilter.LIN_MIP_LIN:
-        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR ];
-    case GX.TexFilter.NEAR_MIP_LIN:
-        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR ];
-    case GX.TexFilter.LIN_MIP_NEAR:
-        return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST ];
-    case GX.TexFilter.NEAR_MIP_NEAR:
-        return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST ];
-    }
-}
-
 const matrixScratch = mat4.create();
 export class Command_Material {
     private renderFlags: RenderFlags;
@@ -413,14 +384,14 @@ export class Command_Material {
             if (!sampler)
                 continue;
 
-            const [minFilter, mipFilter] = translateTexFilter(sampler.minFilter);
-            const [magFilter]            = translateTexFilter(sampler.magFilter);
+            const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
+            const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
     
             // In RRES, the minLOD / maxLOD are in the texture, not the sampler.
 
             const gfxSampler = device.createSampler({
-                wrapS: translateWrapMode(sampler.wrapS),
-                wrapT: translateWrapMode(sampler.wrapT),
+                wrapS: translateWrapModeGfx(sampler.wrapS),
+                wrapT: translateWrapModeGfx(sampler.wrapT),
                 minFilter, mipFilter, magFilter,
                 minLOD: 0,
                 maxLOD: 100,
