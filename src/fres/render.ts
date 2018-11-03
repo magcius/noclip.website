@@ -3,15 +3,15 @@ import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, 
 import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 
-import { RenderState, RenderFlags, FrontFaceMode, CompareMode, CullMode, BlendMode, BlendFactor } from '../render';
+import { RenderState, RenderFlags } from '../render';
 import { SimpleProgram } from '../Program';
 import { assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
 import { CoalescedBuffer, coalesceBuffer } from '../BufferCoalescer';
-import { TextureHolder, LoadedTexture, TextureMapping, getGLTextureFromMapping, getGLSamplerFromMapping } from '../TextureHolder';
+import { TextureHolder, LoadedTexture, TextureMapping, getGLTextureFromMapping } from '../TextureHolder';
 import { getTransitionDeviceForWebGL2, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
-import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxFrontFaceMode, GfxCullMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 
 class ProgramGambit_UBER extends SimpleProgram {
     public s_a0: WebGLUniformLocation;
@@ -495,94 +495,94 @@ class Command_Material {
         }
     }
 
-    private translateFrontFaceMode(frontFaceMode: GX2FrontFaceMode): FrontFaceMode {
+    private translateFrontFaceMode(frontFaceMode: GX2FrontFaceMode): GfxFrontFaceMode {
         switch (frontFaceMode) {
         case GX2FrontFaceMode.CCW:
-            return FrontFaceMode.CCW;
+            return GfxFrontFaceMode.CCW;
         case GX2FrontFaceMode.CW:
-            return FrontFaceMode.CW;
+            return GfxFrontFaceMode.CW;
         }
     }
 
-    private translateCompareFunction(compareFunc: GX2CompareFunction): CompareMode {
+    private translateCompareFunction(compareFunc: GX2CompareFunction): GfxCompareMode {
         switch (compareFunc) {
         case GX2CompareFunction.NEVER:
-            return CompareMode.NEVER;
+            return GfxCompareMode.NEVER;
         case GX2CompareFunction.LESS:
-            return CompareMode.LESS;
+            return GfxCompareMode.LESS;
         case GX2CompareFunction.EQUAL:
-            return CompareMode.EQUAL;
+            return GfxCompareMode.EQUAL;
         case GX2CompareFunction.LEQUAL:
-            return CompareMode.LEQUAL;
+            return GfxCompareMode.LEQUAL;
         case GX2CompareFunction.GREATER:
-            return CompareMode.GREATER;
+            return GfxCompareMode.GREATER;
         case GX2CompareFunction.NOTEQUAL:
-            return CompareMode.NEQUAL;
+            return GfxCompareMode.NEQUAL;
         case GX2CompareFunction.GEQUAL:
-            return CompareMode.GEQUAL;
+            return GfxCompareMode.GEQUAL;
         case GX2CompareFunction.ALWAYS:
-            return CompareMode.ALWAYS;
+            return GfxCompareMode.ALWAYS;
         }
     }
 
-    private translateCullMode(cullFront: boolean, cullBack: boolean): CullMode {
+    private translateCullMode(cullFront: boolean, cullBack: boolean): GfxCullMode {
         if (cullFront && cullBack)
-            return CullMode.FRONT_AND_BACK;
+            return GfxCullMode.FRONT_AND_BACK;
         else if (cullFront)
-            return CullMode.FRONT;
+            return GfxCullMode.FRONT;
         else if (cullBack)
-            return CullMode.BACK;
+            return GfxCullMode.BACK;
         else
-            return CullMode.NONE;
+            return GfxCullMode.NONE;
     }
 
-    private translateBlendCombine(enabled: boolean, combine: GX2BlendCombine): BlendMode {
+    private translateBlendCombine(enabled: boolean, combine: GX2BlendCombine): GfxBlendMode {
         if (enabled) {
             switch (combine) {
             case GX2BlendCombine.ADD:
-                return BlendMode.ADD;
+                return GfxBlendMode.ADD;
             case GX2BlendCombine.DST_MINUS_SRC:
-                return BlendMode.SUBTRACT;
+                return GfxBlendMode.SUBTRACT;
             case GX2BlendCombine.SRC_MINUS_DST:
-                return BlendMode.REVERSE_SUBTRACT;
+                return GfxBlendMode.REVERSE_SUBTRACT;
             default:
                 throw "whoops";
             }
         } else {
-            return BlendMode.NONE;
+            return GfxBlendMode.NONE;
         }
     }
 
-    private translateBlendFunction(func: GX2BlendFunction): BlendFactor {
+    private translateBlendFunction(func: GX2BlendFunction): GfxBlendFactor {
         switch (func) {
         case GX2BlendFunction.ZERO:
-            return BlendFactor.ZERO;
+            return GfxBlendFactor.ZERO;
         case GX2BlendFunction.ONE:
-            return BlendFactor.ONE;
+            return GfxBlendFactor.ONE;
 
         case GX2BlendFunction.SRC_ALPHA:
         case GX2BlendFunction.SRC1_ALPHA:
-            return BlendFactor.SRC_ALPHA;
+            return GfxBlendFactor.SRC_ALPHA;
         case GX2BlendFunction.ONE_MINUS_SRC_ALPHA:
         case GX2BlendFunction.ONE_MINUS_SRC1_ALPHA:
-            return BlendFactor.ONE_MINUS_SRC_ALPHA;
+            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
 
         case GX2BlendFunction.DST_ALPHA:
-            return BlendFactor.DST_ALPHA;
+            return GfxBlendFactor.DST_ALPHA;
         case GX2BlendFunction.ONE_MINUS_DST_ALPHA:
-            return BlendFactor.ONE_MINUS_DST_ALPHA;
+            return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
 
         case GX2BlendFunction.SRC_COLOR:
         case GX2BlendFunction.SRC1_COLOR:
-            return BlendFactor.SRC_COLOR;
+            return GfxBlendFactor.SRC_COLOR;
         case GX2BlendFunction.ONE_MINUS_SRC_COLOR:
         case GX2BlendFunction.ONE_MINUS_SRC1_COLOR:
-            return BlendFactor.ONE_MINUS_SRC_COLOR;
+            return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
 
         case GX2BlendFunction.DST_COLOR:
-            return BlendFactor.DST_COLOR;
+            return GfxBlendFactor.DST_COLOR;
         case GX2BlendFunction.ONE_MINUS_DST_COLOR:
-            return BlendFactor.ONE_MINUS_DST_COLOR;
+            return GfxBlendFactor.ONE_MINUS_DST_COLOR;
 
         default:
             throw "whoops";
@@ -592,13 +592,12 @@ class Command_Material {
     private translateRenderState(renderState: BFRES.RenderState): RenderFlags {
         const renderFlags = new RenderFlags();
         renderFlags.frontFace = this.translateFrontFaceMode(renderState.frontFaceMode);
-        renderFlags.depthTest = renderState.depthTest;
-        renderFlags.depthFunc = this.translateCompareFunction(renderState.depthCompareFunc);
+        renderFlags.depthCompare = renderState.depthTest ? this.translateCompareFunction(renderState.depthCompareFunc) : GfxCompareMode.NEVER;
         renderFlags.depthWrite = renderState.depthWrite;
         renderFlags.cullMode = this.translateCullMode(renderState.cullFront, renderState.cullBack);
         renderFlags.blendMode = this.translateBlendCombine(renderState.blendEnabled, renderState.blendColorCombine);
-        renderFlags.blendDst = this.translateBlendFunction(renderState.blendDstColorFunc);
-        renderFlags.blendSrc = this.translateBlendFunction(renderState.blendSrcColorFunc);
+        renderFlags.blendDstFactor = this.translateBlendFunction(renderState.blendDstColorFunc);
+        renderFlags.blendSrcFactor = this.translateBlendFunction(renderState.blendSrcColorFunc);
         return renderFlags;
     }
 }

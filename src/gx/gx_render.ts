@@ -418,34 +418,6 @@ export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.
     return { gfxTexture, viewerTexture };
 }
 
-export function translateTexFilter(gl: WebGL2RenderingContext, texFilter: GX.TexFilter): GLenum {
-    switch (texFilter) {
-    case GX.TexFilter.LIN_MIP_NEAR:
-        return gl.LINEAR_MIPMAP_NEAREST;
-    case GX.TexFilter.LIN_MIP_LIN:
-        return gl.LINEAR_MIPMAP_LINEAR;
-    case GX.TexFilter.LINEAR:
-        return gl.LINEAR;
-    case GX.TexFilter.NEAR_MIP_NEAR:
-        return gl.NEAREST_MIPMAP_NEAREST;
-    case GX.TexFilter.NEAR_MIP_LIN:
-        return gl.NEAREST_MIPMAP_LINEAR;
-    case GX.TexFilter.NEAR:
-        return gl.NEAREST;
-    }
-}
-
-export function translateWrapMode(gl: WebGL2RenderingContext, wrapMode: GX.WrapMode): GLenum {
-    switch (wrapMode) {
-    case GX.WrapMode.CLAMP:
-        return gl.CLAMP_TO_EDGE;
-    case GX.WrapMode.MIRROR:
-        return gl.MIRRORED_REPEAT;
-    case GX.WrapMode.REPEAT:
-        return gl.REPEAT;
-    }
-}
-
 export function translateWrapModeGfx(wrapMode: GX.WrapMode): GfxWrapMode {
     switch (wrapMode) {
     case GX.WrapMode.CLAMP:

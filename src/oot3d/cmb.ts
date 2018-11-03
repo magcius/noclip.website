@@ -1,9 +1,10 @@
 
 import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RenderFlags, CullMode, BlendFactor, BlendMode } from '../render';
+import { RenderFlags } from '../render';
 import { mat4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize } from './pica_texture';
+import { GfxCullMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 
 export interface VatrChunk {
     dataBuffer: ArrayBufferSlice;
@@ -162,12 +163,11 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const renderFlags = new RenderFlags();
         const blendEnable = !!view.getUint8(offs + 0x138);
-        renderFlags.blendSrc = view.getUint16(offs + 0x13C, true) as BlendFactor;
-        renderFlags.blendDst = view.getUint16(offs + 0x13E, true) as BlendFactor;
-        renderFlags.blendMode = blendEnable ? view.getUint16(offs + 0x140, true) as BlendMode : BlendMode.NONE;
-        renderFlags.depthTest = true;
+        renderFlags.blendSrcFactor = view.getUint16(offs + 0x13C, true) as GfxBlendFactor;
+        renderFlags.blendDstFactor = view.getUint16(offs + 0x13E, true) as GfxBlendFactor;
+        renderFlags.blendMode = blendEnable ? view.getUint16(offs + 0x140, true) as GfxBlendMode : GfxBlendMode.NONE;
         renderFlags.depthWrite = !blendEnable;
-        renderFlags.cullMode = CullMode.BACK;
+        renderFlags.cullMode = GfxCullMode.BACK;
 
         cmb.materials.push({ index: i, textureBindings, alphaTestReference, renderFlags });
 

@@ -3,12 +3,13 @@ import * as MDL0 from './mdl0';
 
 import * as Viewer from '../viewer';
 
-import { RenderFlags, RenderState, BlendMode, BlendFactor } from '../render';
+import { RenderFlags, RenderState } from '../render';
 import { SimpleProgram } from '../Program';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { OrbitCameraController } from '../Camera';
+import { GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 
 class FancyGrid_Program extends SimpleProgram {
     public positionLocation: number;
@@ -91,9 +92,9 @@ class FancyGrid {
         this._createBuffers(gl);
 
         this.renderFlags = new RenderFlags();
-        this.renderFlags.blendMode = BlendMode.ADD;
-        this.renderFlags.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
-        this.renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
+        this.renderFlags.blendMode = GfxBlendMode.ADD;
+        this.renderFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        this.renderFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
     }
 
     public render(state: RenderState) {
@@ -189,13 +190,11 @@ class Scene implements Viewer.MainScene {
     private renderFlags: RenderFlags;
 
     constructor(gl: WebGL2RenderingContext, mdl0: MDL0.MDL0) {
+        this.renderFlags = new RenderFlags();
         this.fancyGrid = new FancyGrid(gl);
         this.program = new MDL0_Program();
         this.mdl0 = mdl0;
         this._createBuffers(gl);
-
-        this.renderFlags = new RenderFlags();
-        this.renderFlags.depthTest = true;
     }
 
     public render(state: RenderState) {

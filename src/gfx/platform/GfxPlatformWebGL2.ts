@@ -7,7 +7,7 @@ import { DeviceProgram, ProgramCache, DeviceProgramReflection } from '../../Prog
 import { FullscreenCopyProgram, RenderState } from '../../render';
 import { assert } from '../../util';
 import { Color } from '../../Color';
-import { fullscreenFlags, defaultFlags } from '../helpers/RenderFlagsHelpers';
+import { fullscreenFlags, defaultFlags, RenderFlags } from '../helpers/RenderFlagsHelpers';
 
 interface GfxBufferP_GL extends GfxBuffer {
     gl_buffer: WebGLBuffer;
@@ -334,6 +334,72 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
         this.pu32(firstMipLevel);
         this.pu32(levelDatas.length);
         for (let i = 0; i < levelDatas.length; i++) this.pbufr(levelDatas[i]);
+    }
+}
+
+export function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaStateDescriptor, newMegaState: GfxMegaStateDescriptor): void {
+    if (currentMegaState.depthWrite !== newMegaState.depthWrite) {
+        gl.depthMask(newMegaState.depthWrite);
+        currentMegaState.depthWrite = newMegaState.depthWrite;
+    }
+
+    if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
+        if (currentMegaState.depthCompare === GfxCompareMode.NEVER)
+            gl.enable(gl.DEPTH_TEST);
+        else if (newMegaState.depthCompare === GfxCompareMode.NEVER)
+            gl.disable(gl.DEPTH_TEST);
+
+        if (newMegaState.depthCompare !== GfxCompareMode.NEVER)
+            gl.depthFunc(newMegaState.depthCompare);
+        currentMegaState.depthCompare = newMegaState.depthCompare;
+    }
+
+    if (currentMegaState.blendMode !== newMegaState.blendMode) {
+        if (currentMegaState.blendMode === GfxBlendMode.NONE)
+            gl.enable(gl.BLEND);
+        else if (newMegaState.blendMode === GfxBlendMode.NONE)
+            gl.disable(gl.BLEND);
+
+        if (newMegaState.blendMode !== GfxBlendMode.NONE)
+            gl.blendEquation(newMegaState.blendMode);
+        currentMegaState.blendMode = newMegaState.blendMode;
+    }
+
+    if (currentMegaState.blendSrcFactor !== newMegaState.blendSrcFactor ||
+        currentMegaState.blendDstFactor !== newMegaState.blendDstFactor) {
+        gl.blendFunc(newMegaState.blendSrcFactor, newMegaState.blendDstFactor);
+        currentMegaState.blendSrcFactor = newMegaState.blendSrcFactor;
+        currentMegaState.blendDstFactor = newMegaState.blendDstFactor;
+    }
+
+    if (currentMegaState.cullMode !== newMegaState.cullMode) {
+        if (currentMegaState.cullMode === GfxCullMode.NONE)
+            gl.enable(gl.CULL_FACE);
+        else if (newMegaState.cullMode === GfxCullMode.NONE)
+            gl.disable(gl.CULL_FACE);
+
+        if (newMegaState.cullMode === GfxCullMode.BACK)
+            gl.cullFace(gl.BACK);
+        else if (newMegaState.cullMode === GfxCullMode.FRONT)
+            gl.cullFace(gl.FRONT);
+        else if (newMegaState.cullMode === GfxCullMode.FRONT_AND_BACK)
+            gl.cullFace(gl.FRONT_AND_BACK);
+        currentMegaState.cullMode = newMegaState.cullMode;
+    }
+
+    if (currentMegaState.frontFace !== newMegaState.frontFace) {
+        gl.frontFace(newMegaState.frontFace);
+        currentMegaState.frontFace = newMegaState.frontFace;
+    }
+
+    if (currentMegaState.polygonOffset !== newMegaState.polygonOffset) {
+        if (newMegaState.polygonOffset) {
+            gl.polygonOffset(-0.5, -0.5);
+            gl.enable(gl.POLYGON_OFFSET_FILL);
+        } else {
+            gl.disable(gl.POLYGON_OFFSET_FILL);
+        }
+        currentMegaState.polygonOffset = newMegaState.polygonOffset;
     }
 }
 
@@ -898,7 +964,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private _currentPipeline: GfxRenderPipelineP_GL;
     private _currentInputState: GfxInputStateP_GL;
-    private _currentMegaState: GfxMegaStateDescriptor = defaultFlags.resolveMegaState();
+    private _currentMegaState: GfxMegaStateDescriptor = new RenderFlags(defaultFlags).resolveMegaState();
     private _currentSamplers: WebGLSampler[] = [];
     private _currentTextures: WebGLTexture[] = [];
 
@@ -952,71 +1018,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _setMegaState(newMegaState: GfxMegaStateDescriptor): void {
-        const gl = this.gl;
-
-        if (this._currentMegaState.depthWrite !== newMegaState.depthWrite) {
-            gl.depthMask(newMegaState.depthWrite);
-            this._currentMegaState.depthWrite = newMegaState.depthWrite;
-        }
-
-        if (this._currentMegaState.depthCompare !== newMegaState.depthCompare) {
-            if (this._currentMegaState.depthCompare === GfxCompareMode.NEVER)
-                gl.enable(gl.DEPTH_TEST);
-            else if (newMegaState.depthCompare === GfxCompareMode.NEVER)
-                gl.disable(gl.DEPTH_TEST);
-
-            if (newMegaState.depthCompare !== GfxCompareMode.NEVER)
-                gl.depthFunc(newMegaState.depthCompare);
-            this._currentMegaState.depthCompare = newMegaState.depthCompare;
-        }
-
-        if (this._currentMegaState.blendMode !== newMegaState.blendMode) {
-            if (this._currentMegaState.blendMode === GfxBlendMode.NONE)
-                gl.enable(gl.BLEND);
-            else if (newMegaState.blendMode === GfxBlendMode.NONE)
-                gl.disable(gl.BLEND);
-
-            if (newMegaState.blendMode !== GfxBlendMode.NONE)
-                gl.blendEquation(newMegaState.blendMode);
-            this._currentMegaState.blendMode = newMegaState.blendMode;
-        }
-
-        if (this._currentMegaState.blendSrcFactor !== newMegaState.blendSrcFactor ||
-            this._currentMegaState.blendDstFactor !== newMegaState.blendDstFactor) {
-            gl.blendFunc(newMegaState.blendSrcFactor, newMegaState.blendDstFactor);
-            this._currentMegaState.blendSrcFactor = newMegaState.blendSrcFactor;
-            this._currentMegaState.blendDstFactor = newMegaState.blendDstFactor;
-        }
-
-        if (this._currentMegaState.cullMode !== newMegaState.cullMode) {
-            if (this._currentMegaState.cullMode === GfxCullMode.NONE)
-                gl.enable(gl.CULL_FACE);
-            else if (newMegaState.cullMode === GfxCullMode.NONE)
-                gl.disable(gl.CULL_FACE);
-
-            if (newMegaState.cullMode === GfxCullMode.BACK)
-                gl.cullFace(gl.BACK);
-            else if (newMegaState.cullMode === GfxCullMode.FRONT)
-                gl.cullFace(gl.FRONT);
-            else if (newMegaState.cullMode === GfxCullMode.FRONT_AND_BACK)
-                gl.cullFace(gl.FRONT_AND_BACK);
-            this._currentMegaState.cullMode = newMegaState.cullMode;
-        }
-
-        if (this._currentMegaState.frontFace !== newMegaState.frontFace) {
-            gl.frontFace(newMegaState.frontFace);
-            this._currentMegaState.frontFace = newMegaState.frontFace;
-        }
-
-        if (this._currentMegaState.polygonOffset !== newMegaState.polygonOffset) {
-            if (newMegaState.polygonOffset) {
-                gl.polygonOffset(-0.5, -0.5);
-                gl.enable(gl.POLYGON_OFFSET_FILL);
-            } else {
-                gl.disable(gl.POLYGON_OFFSET_FILL);
-            }
-            this._currentMegaState.polygonOffset = newMegaState.polygonOffset;
-        }
+        applyMegaState(this.gl, this._currentMegaState, newMegaState);
     }
 
     private setPipeline(pipeline: GfxRenderPipeline): void {

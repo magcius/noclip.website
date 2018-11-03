@@ -5,10 +5,10 @@ import * as Viewer from '../viewer';
 import * as NSBMD from './nsbmd';
 import { TextureHolder, LoadedTexture, TextureBase } from '../TextureHolder';
 import { getTransitionDeviceForWebGL2 } from '../gfx/platform/GfxPlatformWebGL2';
-import { GfxFormat } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBlendFactor, GfxBlendMode } from '../gfx/platform/GfxPlatform';
 import { NITRO_Program } from '../sm64ds/render';
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { RenderFlags, BlendMode, BlendFactor, RenderState } from "../render";
+import { RenderFlags, RenderState } from "../render";
 
 export interface ResolvedTexture extends TextureBase {
     pixels: ArrayBufferView;
@@ -81,10 +81,9 @@ class MDL0Renderer {
 
     private translateMaterial(gl: WebGL2RenderingContext, material: NSBMD.MDL0Material) {
         const renderFlags = new RenderFlags();
-        renderFlags.blendMode = BlendMode.ADD;
-        renderFlags.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
-        renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
-        renderFlags.depthTest = true;
+        renderFlags.blendMode = GfxBlendMode.ADD;
+        renderFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        renderFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
         renderFlags.depthWrite = material.depthWrite;
         renderFlags.cullMode = material.cullMode;
 

@@ -372,7 +372,7 @@ export class Command_Material {
     ) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
         this.program.name = this.material.name;
-        this.renderFlags = GX_Material.translateRenderFlags(this.material.gxMaterial);
+        GX_Material.translateRenderFlagsGfx(this.renderFlags = new RenderFlags(), this.material.gxMaterial);
 
         const device = getTransitionDeviceForWebGL2(gl);
         this.translateSamplers(device);

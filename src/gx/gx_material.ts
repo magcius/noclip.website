@@ -1016,29 +1016,6 @@ function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
     }
 }
 
-export function translateRenderFlags(material: GXMaterial): RenderFlags {
-    const renderFlags = new RenderFlags();
-    renderFlags.cullMode = translateCullMode(material.cullMode);
-    renderFlags.depthWrite = material.ropInfo.depthWrite;
-    renderFlags.depthTest = material.ropInfo.depthTest;
-    renderFlags.depthFunc = translateCompareType(material.ropInfo.depthFunc);
-    renderFlags.frontFace = GfxFrontFaceMode.CW;
-    if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
-        renderFlags.blendMode = GfxBlendMode.NONE;
-    } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
-        renderFlags.blendMode = GfxBlendMode.ADD;
-        renderFlags.blendSrc = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
-        renderFlags.blendDst = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
-    } else if (material.ropInfo.blendMode.type === GX.BlendMode.SUBTRACT) {
-        renderFlags.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
-        renderFlags.blendSrc = GfxBlendFactor.ONE;
-        renderFlags.blendDst = GfxBlendFactor.ONE;
-    } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
-        throw new Error("whoops");
-    }
-    return renderFlags;
-}
-
 export function translateRenderFlagsGfx(renderFlags: GfxRenderFlags, material: GXMaterial) {
     renderFlags.cullMode = translateCullMode(material.cullMode);
     renderFlags.depthWrite = material.ropInfo.depthWrite;

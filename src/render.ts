@@ -5,113 +5,11 @@ import { mat4 } from 'gl-matrix';
 import { assert, assertExists } from './util';
 import { BaseProgram, FullscreenProgram, ProgramCache, SimpleProgram } from './Program';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from './Camera';
-import { createTransitionDeviceForWebGL2 } from './gfx/platform/GfxPlatformWebGL2';
-import { GfxCompareMode as CompareMode, GfxFrontFaceMode as FrontFaceMode, GfxCullMode as CullMode, GfxBlendFactor as BlendFactor, GfxBlendMode as BlendMode } from './gfx/platform/GfxPlatform';
+import { createTransitionDeviceForWebGL2, applyMegaState } from './gfx/platform/GfxPlatformWebGL2';
+import { GfxCompareMode as CompareMode, GfxFrontFaceMode as FrontFaceMode, GfxCullMode as CullMode, GfxBlendFactor as BlendFactor, GfxBlendMode as BlendMode, GfxMegaStateDescriptor } from './gfx/platform/GfxPlatform';
+import { defaultFlags, RenderFlags } from './gfx/helpers/RenderFlagsHelpers';
 
-export { CompareMode, FrontFaceMode, CullMode, BlendFactor, BlendMode };
-
-export class RenderFlagsTracker {
-    depthWrite: boolean;
-    depthTest: boolean;
-    depthFunc: CompareMode;
-    blendSrc: BlendFactor;
-    blendDst: BlendFactor;
-    blendMode: BlendMode;
-    cullMode: CullMode;
-    frontFace: FrontFaceMode;
-
-    constructor() {
-        Object.assign(this, RenderFlags.default);
-    }
-}
-
-interface RenderFlagHacks {
-    forceDisableCulling: boolean;
-}
-
-function flagChanged<T>(stateFlag: T, newFlag: T | undefined): boolean {
-    return newFlag !== undefined && stateFlag !== newFlag;
-}
-
-export function applyFlags(gl: WebGL2RenderingContext, stateFlags: RenderFlagsTracker, newFlags: RenderFlags, hacks: RenderFlagHacks): void {
-    if (flagChanged(stateFlags.depthWrite, newFlags.depthWrite)) {
-        gl.depthMask(newFlags.depthWrite);
-        stateFlags.depthWrite = newFlags.depthWrite;
-    }
-
-    if (flagChanged(stateFlags.depthTest, newFlags.depthTest)) {
-        if (newFlags.depthTest)
-            gl.enable(gl.DEPTH_TEST);
-        else
-            gl.disable(gl.DEPTH_TEST);
-        stateFlags.depthTest = newFlags.depthTest;
-    }
-
-    if (flagChanged(stateFlags.depthFunc, newFlags.depthFunc)) {
-        gl.depthFunc(newFlags.depthFunc);
-        stateFlags.depthFunc = newFlags.depthFunc;
-    }
-
-    if (flagChanged(stateFlags.blendMode, newFlags.blendMode)) {
-        if (newFlags.blendMode !== BlendMode.NONE) {
-            gl.enable(gl.BLEND);
-            gl.blendEquation(newFlags.blendMode);
-        } else {
-            gl.disable(gl.BLEND);
-        }
-        stateFlags.blendMode = newFlags.blendMode;
-    }
-
-    if (flagChanged(stateFlags.blendSrc, newFlags.blendSrc) || flagChanged(stateFlags.blendDst, newFlags.blendDst)) {
-        gl.blendFunc(newFlags.blendSrc, newFlags.blendDst);
-        stateFlags.blendSrc = newFlags.blendSrc;
-        stateFlags.blendDst = newFlags.blendDst;
-    }
-
-    const newCullMode = hacks.forceDisableCulling ? CullMode.NONE : newFlags.cullMode;
-    if (flagChanged(stateFlags.cullMode, newCullMode)) {
-        // Try to be smart about this.
-        if (stateFlags.cullMode === CullMode.NONE)
-            gl.enable(gl.CULL_FACE);
-        else if (newCullMode === CullMode.NONE)
-            gl.disable(gl.CULL_FACE);
-
-        if (newCullMode === CullMode.BACK)
-            gl.cullFace(gl.BACK);
-        else if (newCullMode === CullMode.FRONT)
-            gl.cullFace(gl.FRONT);
-        else if (newCullMode === CullMode.FRONT_AND_BACK)
-            gl.cullFace(gl.FRONT_AND_BACK);
-        stateFlags.cullMode = newCullMode;
-    }
-
-    if (flagChanged(stateFlags.frontFace, newFlags.frontFace)) {
-        gl.frontFace(newFlags.frontFace);
-        stateFlags.frontFace = newFlags.frontFace;
-    }
-}
-
-export class RenderFlags {
-    public depthWrite: boolean | undefined = undefined;
-    public depthTest: boolean | undefined = undefined;
-    public depthFunc: CompareMode | undefined = undefined;
-    public blendSrc: BlendFactor | undefined = undefined;
-    public blendDst: BlendFactor | undefined = undefined;
-    public blendMode: BlendMode | undefined = undefined;
-    public cullMode: CullMode | undefined = undefined;
-    public frontFace: FrontFaceMode | undefined = undefined;
-
-    public static default: RenderFlags = new RenderFlags();
-}
-
-RenderFlags.default.blendMode = BlendMode.NONE;
-RenderFlags.default.blendSrc = BlendFactor.ONE;
-RenderFlags.default.blendDst = BlendFactor.ZERO;
-RenderFlags.default.cullMode = CullMode.NONE;
-RenderFlags.default.depthTest = false;
-RenderFlags.default.depthWrite = true;
-RenderFlags.default.depthFunc = CompareMode.LEQUAL;
-RenderFlags.default.frontFace = FrontFaceMode.CCW;
+export { RenderFlags };
 
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
@@ -270,7 +168,7 @@ class RenderStatisticsTracker {
 }
 
 export const fullscreenFlags = new RenderFlags();
-fullscreenFlags.depthTest = false;
+fullscreenFlags.depthCompare = CompareMode.NEVER;
 fullscreenFlags.blendMode = BlendMode.NONE;
 fullscreenFlags.cullMode = CullMode.NONE;
 
@@ -281,7 +179,7 @@ export class RenderState {
 
     // State.
     public currentProgram: BaseProgram | null = null;
-    public currentFlags: RenderFlagsTracker = new RenderFlagsTracker();
+    private currentMegaState: GfxMegaStateDescriptor = new RenderFlags(defaultFlags).resolveMegaState();
 
     private currentColorTarget: ColorTarget | null = null;
     private currentDepthTarget: DepthTarget | null = null;
@@ -333,7 +231,7 @@ export class RenderState {
 
     public reset() {
         this.useRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
-        this.useFlags(RenderFlags.default);
+        this.useFlags(defaultFlags);
         this.camera.newFrame();
     }
 
@@ -457,6 +355,6 @@ export class RenderState {
 
     public useFlags(flags: RenderFlags) {
         const gl = this.gl;
-        applyFlags(gl, this.currentFlags, flags, this);
+        applyMegaState(gl, this.currentMegaState, flags.resolveMegaState());
     }
 }

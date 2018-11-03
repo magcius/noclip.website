@@ -4,7 +4,7 @@ import * as UI from '../ui';
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
 import * as GX_Texture from '../gx/gx_texture';
-import { MaterialParams, PacketParams, loadTextureFromMipChain, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, loadedDataCoalescerGfx, translateWrapMode, translateWrapModeGfx } from '../gx/gx_render';
+import { MaterialParams, PacketParams, loadTextureFromMipChain, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, loadedDataCoalescerGfx, translateWrapModeGfx } from '../gx/gx_render';
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
