@@ -79,3 +79,7 @@ export function hexdump(buffer: ArrayBufferSlice, offs: number = 0, length: numb
     }
     console.log(S);
 }
+
+export function wordCountFromByteCount(byteCount: number): number {
+    return align(byteCount, 4) / 4;
+}

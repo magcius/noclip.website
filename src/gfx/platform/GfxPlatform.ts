@@ -171,9 +171,6 @@ export interface GfxRenderPass {
     setBindings(bindingLayoutIndex: number, bindings: GfxBindings): void;
     setInputState(inputState: GfxInputState | null): void;
 
-    // Mid-commandbuffer binding updates.
-    updateBindings(bindings: GfxBindings, uniformBuffers: GfxBufferBinding[], samplers: GfxSamplerBinding[]): void;
-
     // Draw commands.
     draw(count: number, firstIndex: number): void;
     drawIndexed(count: number, firstIndex: number): void;

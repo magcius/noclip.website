@@ -32,6 +32,7 @@ export interface Scene_Device {
     render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass;
     destroy(device: GfxDevice): void;
     createPanels?(): UI.Panel[];
+    textureHolder?: TextureHolder<any>;
 }
 
 export class Viewer {

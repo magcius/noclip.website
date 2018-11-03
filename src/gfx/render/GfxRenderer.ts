@@ -27,10 +27,15 @@ export function makeSortKey(layer: number, depth: number, programKey: number): n
             ((programKey & 0xFF)));
 }
 
+export function setSortKeyDepth(sortKey: number, depth: number): number {
+    const depthKey = makeDepthKey(depth);
+    return (sortKey & 0xFF0000FF) | ((depthKey & 0xFFFF) << 16);
+}
+
 function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     dst.sortKey = src.sortKey;
     dst.gfxProgram = src.gfxProgram;
-    dst.samplerBindings = src.samplerBindings;
+    dst.samplerBindings = src.samplerBindings.slice();
     dst.inputState = src.inputState;
     dst.pipeline = src.pipeline;
     dst.uniformBufferOffsets = src.uniformBufferOffsets.slice();
@@ -89,19 +94,22 @@ export class GfxRenderInst {
         this._drawCount = indexCount;
     }
 
-    public fillBindingsFromTextureMappings(m: TextureMapping[]): void {
+    public setSamplerBindings(m: GfxSamplerBinding[]): void {
+        for (let i = 0; i < m.length; i++) {
+            if (!this.samplerBindings[i] || this.samplerBindings[i].texture !== m[i].texture || this.samplerBindings[i].sampler !== m[i].sampler) {
+                this.samplerBindings[i] = m[i];
+                this.samplerBindingsDirty = true;
+            }
+        }
+    }
+
+    public setSamplerBindingsFromTextureMappings(m: TextureMapping[]): void {
         for (let i = 0; i < m.length; i++) {
             if (!this.samplerBindings[i] || this.samplerBindings[i].texture !== m[i].gfxTexture || this.samplerBindings[i].sampler !== m[i].gfxSampler) {
                 this.samplerBindings[i] = { texture: m[i].gfxTexture, sampler: m[i].gfxSampler };
                 this.samplerBindingsDirty = true;
             }
         }
-    }
-
-    // Internal.
-    public destroy(device: GfxDevice): void {
-        if (this.pipeline !== null)
-            device.destroyRenderPipeline(this.pipeline);
     }
 }
 
@@ -110,12 +118,13 @@ export class GfxRenderInstViewRenderer {
     private viewportHeight: number;
     public renderInsts: GfxRenderInst[] = [];
     public gfxBindings: GfxBindings[] = []
+    public gfxPipelines: GfxRenderPipeline[] = [];
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.gfxBindings.length; i++)
             device.destroyBindings(this.gfxBindings[i]);
-        for (let i = 0; i < this.renderInsts.length; i++)
-            this.renderInsts[i].destroy(device);
+        for (let i = 0; i < this.gfxPipelines.length; i++)
+            device.destroyRenderPipeline(this.gfxPipelines[i]);
     }
 
     public setViewport(viewportWidth: number, viewportHeight: number): void {
@@ -202,7 +211,7 @@ export class GfxRenderInstBuilder {
         baseRenderInst.renderFlags = new RenderFlags();
     }
 
-    private newUniformBufferOffset(index: number): number {
+    public newUniformBufferOffset(index: number): number {
         const offset = this.uniformBufferOffsets[index];
         const incrSize = align(this.programReflection.uniformBufferLayouts[index].totalWordSize, this.uniformBufferWordAlignment);
         this.uniformBufferOffsets[index] += incrSize;
@@ -266,6 +275,7 @@ export class GfxRenderInstBuilder {
                     megaStateDescriptor: renderInst.renderFlags.resolveMegaState(),
                 });
                 renderInst.pipeline = pipeline;
+                viewRenderer.gfxPipelines.push(pipeline);
             }
 
             let firstUniformBuffer = 0;

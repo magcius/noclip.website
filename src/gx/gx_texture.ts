@@ -250,7 +250,7 @@ function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels
 }
 
 function decode_C4(texture: Texture): DecodedTexture {
-    assert(!!texture.paletteData);
+    if (!texture.paletteData) return decode_Dummy(texture);
     const view = texture.data.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
@@ -266,7 +266,7 @@ function decode_C4(texture: Texture): DecodedTexture {
 }
 
 function decode_C8(texture: Texture): DecodedTexture {
-    assert(!!texture.paletteData);
+    if (!texture.paletteData) return decode_Dummy(texture);
     const view = texture.data.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
@@ -281,7 +281,7 @@ function decode_C8(texture: Texture): DecodedTexture {
 }
 
 function decode_C14X2(texture: Texture): DecodedTexture {
-    assert(!!texture.paletteData);
+    if (!texture.paletteData) return decode_Dummy(texture);
     const view = texture.data.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;

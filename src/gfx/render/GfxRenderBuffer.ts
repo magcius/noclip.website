@@ -1,6 +1,6 @@
 
 import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass } from "../platform/GfxPlatform";
-import { align, assert } from "../../util";
+import { assert } from "../../util";
 
 // Implements a high-level resizable buffer that uses the platform GfxBuffer under the hood.
 
@@ -79,16 +79,15 @@ export class GfxRenderBuffer {
         assert(bigWordOffset <= this.wordCount);
         if (this.usesMultiplePages) {
             const pageIndex = (bigWordOffset / UBO_PAGE_WORD_LIMIT) | 0;
-            return { buffer: this.bufferPages[pageIndex], wordOffset: (bigWordOffset & (UBO_PAGE_WORD_LIMIT-1)) };
+            return { buffer: this.bufferPages[pageIndex], wordOffset: (bigWordOffset & (UBO_PAGE_WORD_LIMIT - 1)) };
         } else {
             return { buffer: this.bufferPages[0], wordOffset: bigWordOffset };
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.bufferPages.length; i++) {
+        for (let i = 0; i < this.bufferPages.length; i++)
             device.destroyBuffer(this.bufferPages[i]);
-        }
         this.bufferPages = [];
         this.wordCount = 0;
         this.shadowBufferF32 = null;

@@ -232,7 +232,7 @@ export class Scene implements Viewer.Scene_Device {
         const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.sceneUniformBuffer, this.colorUniformBuffer ]);
 
         const baseRenderInst = new GfxRenderInst();
-        baseRenderInst.pipeline = this.pipeline;
+        baseRenderInst.setPipelineDirect(this.pipeline);
 
         // Nab a scene buffer instance.
         const sceneParamsOffs = renderInstBuilder.newUniformBufferInstance(baseRenderInst, IVProgram.ub_SceneParams);

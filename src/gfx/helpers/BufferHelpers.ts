@@ -45,8 +45,8 @@ export function coalesceBuffer(device: GfxDevice, usage: GfxBufferUsage, datas: 
 
 export class GfxBufferCoalescer {
     public coalescedBuffers: GfxCoalescedBuffers[];
-    private vertexBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
+    private vertexBuffer: GfxBuffer | null = null;
+    private indexBuffer: GfxBuffer | null = null;
 
     constructor(device: GfxDevice, vertexDatas: ArrayBufferSlice[], indexDatas: ArrayBufferSlice[]) {
         assert(vertexDatas.length === indexDatas.length);
@@ -71,7 +71,9 @@ export class GfxBufferCoalescer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.vertexBuffer);
-        device.destroyBuffer(this.indexBuffer);
+        if (this.vertexBuffer !== null)
+            device.destroyBuffer(this.vertexBuffer);
+        if (this.indexBuffer !== null)
+            device.destroyBuffer(this.indexBuffer);
     }
 }
