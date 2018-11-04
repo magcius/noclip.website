@@ -1,6 +1,6 @@
 
 import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice, GfxSamplerBinding, GfxBindingLayoutDescriptor, GfxBufferBinding, GfxProgram, GfxPrimitiveTopology } from "../platform/GfxPlatform";
-import { align, assertExists } from "../../util";
+import { align, assertExists, assert } from "../../util";
 import { GfxRenderBuffer } from "./GfxRenderBuffer";
 import { RenderFlags } from "../helpers/RenderFlagsHelpers";
 import { TextureMapping } from "../../TextureHolder";
@@ -13,23 +13,35 @@ function clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(v, max));
 }
 
-function makeDepthKey(depth: number, maxDepth: number = 200) {
-    // Create a normalized depth key.
-    const normalizedDepth = clamp(depth, 0, maxDepth);
-    const depthKey = (normalizedDepth * ((1 << 16) - 1)) >>> 2;
-    return depthKey;
+const MAX_DEPTH = 500;
+
+const DEPTH_BITS = 16;
+const DEPTH_BUCKET_BITS = 2;
+
+export function makeDepthKey(depth: number, flipDepth: boolean, maxDepth: number = MAX_DEPTH) {
+    const depthBits = DEPTH_BITS + DEPTH_BUCKET_BITS;
+
+    // Input depth here is: 0 is the closest to the camera, positive values are further away. Negative values (behind camera) are clamped to 0.
+    // normalizedDepth: 0.0 is closest to camera, 1.0 is farthest from camera.
+    // These values are flipped if flipDepth is set.
+    let normalizedDepth = (clamp(depth, 0, maxDepth) / maxDepth);
+    if (flipDepth)
+        normalizedDepth = 1.0 - normalizedDepth;
+    const depthKey = (normalizedDepth * ((1 << depthBits) - 1)) >>> DEPTH_BUCKET_BITS;
+    return depthKey & ((1 << DEPTH_BITS) - 1);
 }
 
-export function makeSortKey(layer: number, depth: number, programKey: number): number {
-    const depthKey = makeDepthKey(depth);
-    return (((layer & 0xFF) << 24) |
-            ((depthKey & 0xFFFF) << 16) |
-            ((programKey & 0xFF)));
+export function makeSortKey(layer: number, depthKey: number, programKey: number): number {
+    assert(depthKey >= 0);
+    const key = (((layer & 0xFF) << 24) |
+        ((depthKey & 0xFFFF) << 8) |
+        ((programKey & 0xFF)));
+    return key;
 }
 
-export function setSortKeyDepth(sortKey: number, depth: number): number {
-    const depthKey = makeDepthKey(depth);
-    return (sortKey & 0xFF0000FF) | ((depthKey & 0xFFFF) << 16);
+export function setSortKeyDepth(sortKey: number, depthKey: number): number {
+    assert(depthKey >= 0);
+    return (sortKey & 0xFF0000FF) | (depthKey << 8);
 }
 
 function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
@@ -88,9 +100,9 @@ export class GfxRenderInst {
         this._drawCount = count;
     }
 
-    public drawIndexes(indexCount: number, startIndex: number = 0) {
+    public drawIndexes(indexCount: number, byteOffset: number = 0) {
         this._drawIndexed = true;
-        this._drawStart = startIndex;
+        this._drawStart = byteOffset;
         this._drawCount = indexCount;
     }
 
@@ -208,6 +220,7 @@ export class GfxRenderInstBuilder {
             this.uniformBufferOffsets[i] = 0;
 
         const baseRenderInst = this.pushTemplateRenderInst();
+        baseRenderInst.name = "base render inst";
         baseRenderInst.renderFlags = new RenderFlags();
     }
 
@@ -249,6 +262,9 @@ export class GfxRenderInstBuilder {
     }
 
     public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
+        assert(this.templateStack.length === 1);
+        this.templateStack.length = 0;
+
         // Once we're finished building our RenderInsts, go through and assign buffers and bindings for all.
         for (let i = 0; i < this.uniformBuffers.length; i++)
             this.uniformBuffers[i].setWordCount(device, this.uniformBufferOffsets[i]);

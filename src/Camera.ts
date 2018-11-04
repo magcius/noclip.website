@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import InputManager from './InputManager';
-import { Frustum } from './Geometry';
+import { Frustum, AABB } from './Geometry';
 
 export class Camera {
     public viewMatrix: mat4 = mat4.create();
@@ -91,6 +91,13 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     out[2] = camera.worldMatrix[2];
     out[6] = camera.worldMatrix[6];
     out[8] = camera.worldMatrix[8];
+}
+
+const scratchVec3 = vec3.create();
+export function computeViewSpaceDepth(camera: Camera, aabb: AABB, v: vec3 = scratchVec3): number {
+    aabb.centerPoint(v);
+    vec3.transformMat4(v, v, camera.viewMatrix);
+    return Math.max(-v[2], 0);
 }
 
 export interface CameraController {

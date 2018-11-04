@@ -13,6 +13,7 @@ export class GfxRenderBuffer {
     private wordCount: number = 0;
     private shadowBufferF32: Float32Array | null = null;
     private shadowBufferU8: Uint8Array | null = null;
+    private pageDirty: boolean[] = [];
 
     constructor(public usage: GfxBufferUsage, public frequencyHint: GfxBufferFrequencyHint, public resourceName: string = "Unnamed GfxResourceBuffer") {
     }
@@ -29,6 +30,7 @@ export class GfxRenderBuffer {
                     const buffer = device.createBuffer(UBO_PAGE_WORD_LIMIT, this.usage, this.frequencyHint)
                     device.setResourceName(buffer, `${this.resourceName} Page ${this.bufferPages.length}`);
                     this.bufferPages.push(buffer);
+                    this.pageDirty.push(false);
                 }
                 this.usesMultiplePages = true;
             } else {
@@ -36,18 +38,27 @@ export class GfxRenderBuffer {
                 const buffer = device.createBuffer(newWordCount, this.usage, this.frequencyHint);
                 device.setResourceName(buffer, `${this.resourceName} Full`);
                 this.bufferPages.push(buffer);
+                this.pageDirty.push(false);
                 this.usesMultiplePages = false;
             }
         }
     }
 
-    // For people who know what they're doing.
-    public getShadowBufferU8(): Uint8Array | null {
-        return this.shadowBufferU8;
+    public mapBufferF32(wordOffset: number, wordCount: number): Float32Array {
+        this.markDirty(wordOffset, wordCount);
+        return this.shadowBufferF32;
     }
 
-    public getShadowBufferF32(): Float32Array | null {
-        return this.shadowBufferF32;
+    private findPageIndex(wordOffset: number): number {
+        return (wordOffset / UBO_PAGE_WORD_LIMIT) | 0;
+    }
+
+    public markDirty(wordOffset: number, wordCount: number): void {
+        // Mark all pages that overlap [wordOffset,wordCount).
+        const startPage = this.findPageIndex(wordOffset);
+        const endPage = this.findPageIndex(wordOffset + wordCount - 1);
+        for (let i = startPage; i <= endPage; i++)
+            this.pageDirty[i] = true;
     }
 
     public uploadSubData(hostAccessPass: GfxHostAccessPass, dstWordOffset: number, data: Float32Array): void {
@@ -55,6 +66,7 @@ export class GfxRenderBuffer {
         // Otherwise, copy it into the backend directly.
         if (this.shadowBufferF32 !== null) {
             this.shadowBufferF32.set(data, dstWordOffset);
+            this.markDirty(dstWordOffset, data.length);
         } else {
             // If we don't have a shadow buffer, we should only have one page.
             assert(!this.usesMultiplePages && this.bufferPages.length === 1);
@@ -67,6 +79,8 @@ export class GfxRenderBuffer {
         if (this.shadowBufferU8 !== null) {
             assert(this.usesMultiplePages);
             for (let i = 0; i < this.bufferPages.length; i++) {
+                if (!this.pageDirty[i])
+                    continue;
                 const srcWordOffset = i * UBO_PAGE_WORD_LIMIT;
                 const wordCount = Math.min((this.wordCount - srcWordOffset), UBO_PAGE_WORD_LIMIT);
                 hostAccessPass.uploadBufferData(this.bufferPages[i], 0, this.shadowBufferU8, srcWordOffset, wordCount);
