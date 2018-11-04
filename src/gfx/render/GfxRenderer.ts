@@ -94,15 +94,15 @@ export class GfxRenderInst {
         this.pipeline = pipeline;
     }
 
-    public drawTriangles(count: number, startVertex: number = 0) {
+    public drawTriangles(vertexCount: number, firstVertex: number = 0) {
         this._drawIndexed = false;
-        this._drawStart = startVertex;
-        this._drawCount = count;
+        this._drawStart = firstVertex;
+        this._drawCount = vertexCount;
     }
 
-    public drawIndexes(indexCount: number, byteOffset: number = 0) {
+    public drawIndexes(indexCount: number, firstIndex: number = 0) {
         this._drawIndexed = true;
-        this._drawStart = byteOffset;
+        this._drawStart = firstIndex;
         this._drawCount = indexCount;
     }
 

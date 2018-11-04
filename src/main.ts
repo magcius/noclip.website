@@ -114,9 +114,6 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.szs'))
             return FRES.createSceneFromSARCBuffer(gl, buffer);
 
-        if (file.name.endsWith('.gar'))
-            return Promise.resolve(LM3D.createSceneFromGARBuffer(gl, buffer));
-
         // XXX(jstpierre): Figure out WTF to do here...
         const promise = J3D.createMultiSceneFromBuffer(gl, buffer);
         if (promise)

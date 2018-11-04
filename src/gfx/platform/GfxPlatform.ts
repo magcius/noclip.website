@@ -71,7 +71,7 @@ export const enum GfxBufferFrequencyHint {
 
 export interface GfxVertexBufferDescriptor {
     buffer: GfxBuffer;
-    wordOffset: number;
+    byteOffset: number;
     byteStride: number;
 }
 
@@ -86,6 +86,7 @@ export interface GfxVertexAttributeDescriptor {
     bufferIndex: number;
     bufferByteOffset: number;
     frequency: GfxVertexAttributeFrequency;
+    usesIntInShader?: boolean;
 }
 
 export interface GfxSamplerDescriptor {
@@ -178,8 +179,8 @@ export interface GfxRenderPass {
     setInputState(inputState: GfxInputState | null): void;
 
     // Draw commands.
-    draw(count: number, firstIndex: number): void;
-    drawIndexed(count: number, firstIndex: number): void;
+    draw(vertexCount: number, firstVertex: number): void;
+    drawIndexed(indexCount: number, firstIndex: number): void;
 
     // Pass resolution.
     endPass(resolveColorAttachmentTo: GfxTexture | null): void;
@@ -199,7 +200,7 @@ export interface GfxDevice {
     createProgram(program: DeviceProgram): GfxProgram;
     createBindings(bindingLayout: GfxBindingLayoutDescriptor, uniformBuffers: GfxBufferBinding[], samplers: (GfxSamplerBinding | null)[]): GfxBindings;
     createInputLayout(attributes: GfxVertexAttributeDescriptor[], indexBufferFormat: GfxFormat | null): GfxInputLayout;
-    createInputState(inputLayout: GfxInputLayout, buffers: GfxVertexBufferDescriptor[], indexBuffer: GfxBufferBinding | null): GfxInputState;
+    createInputState(inputLayout: GfxInputLayout, buffers: GfxVertexBufferDescriptor[], indexBuffer: GfxVertexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
 
     destroyBuffer(o: GfxBuffer): void;

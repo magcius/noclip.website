@@ -8,10 +8,10 @@ import { GfxCullMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPl
 
 export interface VatrChunk {
     dataBuffer: ArrayBufferSlice;
-    positionOffs: number;
-    colorOffs: number;
-    normalOffs: number;
-    textureCoordOffs: number;
+    positionByteOffset: number;
+    colorByteOffset: number;
+    normalByteOffset: number;
+    textureCoordByteOffset: number;
 }
 
 const enum Version {
@@ -128,6 +128,7 @@ export interface Material {
     textureBindings: TextureBinding[];
     alphaTestReference: number;
     renderFlags: RenderFlags;
+    isTransparent: boolean;
 }
 
 function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
@@ -163,13 +164,14 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const renderFlags = new RenderFlags();
         const blendEnable = !!view.getUint8(offs + 0x138);
+        const isTransparent = blendEnable;
         renderFlags.blendSrcFactor = view.getUint16(offs + 0x13C, true) as GfxBlendFactor;
         renderFlags.blendDstFactor = view.getUint16(offs + 0x13E, true) as GfxBlendFactor;
         renderFlags.blendMode = blendEnable ? view.getUint16(offs + 0x140, true) as GfxBlendMode : GfxBlendMode.NONE;
-        renderFlags.depthWrite = !blendEnable;
+        renderFlags.depthWrite = !isTransparent;
         renderFlags.cullMode = GfxCullMode.BACK;
 
-        cmb.materials.push({ index: i, textureBindings, alphaTestReference, renderFlags });
+        cmb.materials.push({ index: i, textureBindings, alphaTestReference, renderFlags, isTransparent });
 
         offs += 0x15C;
 
@@ -257,16 +259,16 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     const baseOffs = readSlice();
     const dataBuffer = buffer.slice(baseOffs, fullBufferSize);
 
-    const positionOffs = 0;
-    const normalOffs = readSlice(baseOffs);
+    const positionByteOffset = 0;
+    const normalByteOffset = readSlice(baseOffs);
 
     if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
         readSlice();
 
-    const colorOffs = readSlice(baseOffs);
-    const textureCoordOffs = readSlice(baseOffs);
+    const colorByteOffset = readSlice(baseOffs);
+    const textureCoordByteOffset = readSlice(baseOffs);
 
-    cmb.vatrChunk = { dataBuffer, positionOffs, normalOffs, colorOffs, textureCoordOffs };
+    cmb.vatrChunk = { dataBuffer, positionByteOffset, normalByteOffset, colorByteOffset, textureCoordByteOffset };
 }
 
 export class Mesh {
