@@ -23,7 +23,6 @@ import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer 
 import { Camera } from '../Camera';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { RenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -262,12 +261,14 @@ export class GXShapeHelperGfx {
             const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
             const attrib = this.loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
             const format = attribGenDef.format;
+            const usesIntInShader = getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32;
+
             if (attrib !== undefined) {
                 const bufferByteOffset = attrib.offset;
-                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 0, bufferByteOffset, frequency: GfxVertexAttributeFrequency.PER_VERTEX });
+                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 0, bufferByteOffset, frequency: GfxVertexAttributeFrequency.PER_VERTEX, usesIntInShader });
             } else {
                 usesZeroBuffer = true;
-                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE });
+                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader });
             }
         }
 
@@ -275,7 +276,7 @@ export class GXShapeHelperGfx {
         this.inputLayout = device.createInputLayout(vertexAttributeDescriptors, this.loadedVertexData.indexFormat);
         const buffers: GfxVertexBufferDescriptor[] = [{
             buffer: coalescedBuffers.vertexBuffer.buffer,
-            wordOffset: coalescedBuffers.vertexBuffer.wordOffset,
+            byteOffset: coalescedBuffers.vertexBuffer.wordOffset * 4,
             byteStride: loadedVertexLayout.dstVertexSize,
         }];
 
@@ -285,10 +286,15 @@ export class GXShapeHelperGfx {
             const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadBufferData(this.zeroBuffer, 0, new Uint8Array(16));
             device.submitPass(hostAccessPass);
-            buffers.push({ buffer: this.zeroBuffer, wordOffset: 0, byteStride: 0 });
+            buffers.push({ buffer: this.zeroBuffer, byteOffset: 0, byteStride: 0 });
         }
 
-        this.inputState = device.createInputState(this.inputLayout, buffers, coalescedBuffers.indexBuffer);
+        const indexBuffer: GfxVertexBufferDescriptor = {
+            buffer: coalescedBuffers.indexBuffer.buffer,
+            byteOffset: coalescedBuffers.indexBuffer.wordOffset * 4,
+            byteStride: 0,
+        }
+        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
     public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {

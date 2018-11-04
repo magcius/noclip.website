@@ -11,12 +11,13 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import Progressable from '../Progressable';
-import { CtrTextureHolder, CmbRenderer } from './render';
+import { CtrTextureHolder, CmbRenderer, BasicRendererHelper } from './render';
 import { SceneGroup } from '../viewer';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderState } from '../render';
 import { leftPad } from '../util';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 
 export class LM3DSTextureHolder extends CtrTextureHolder {
     public tryTextureNameVariants(name: string): string[] {
@@ -24,8 +25,8 @@ export class LM3DSTextureHolder extends CtrTextureHolder {
         return [name, `${basename}.ctxb`];
     }
 
-    public addCTXB(gl: WebGL2RenderingContext, ctxb: CTXB.CTXB): void {
-        this.addTextures(gl, ctxb.textures.map((texture) => {
+    public addCTXB(device: GfxDevice, ctxb: CTXB.CTXB): void {
+        this.addTexturesGfx(device, ctxb.textures.map((texture) => {
             const basename = texture.name.split('/')[2];
             const name = `${basename}.ctxb`;
             return { ...texture, name };
@@ -33,24 +34,26 @@ export class LM3DSTextureHolder extends CtrTextureHolder {
     }
 }
 
-class MultiScene implements Viewer.MainScene {
-    constructor(public scenes: CmbRenderer[], public textureHolder: CtrTextureHolder) {
+class MultiCmbScene extends BasicRendererHelper implements Viewer.Scene_Device {
+    constructor(device: GfxDevice, public scenes: CmbRenderer[], public textureHolder: CtrTextureHolder) {
+        super();
+        for (let i = 0; i < this.scenes.length; i++)
+            this.scenes[i].addToViewRenderer(device, this.viewRenderer);
+    }
+
+    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.scenes.length; i++)
+            this.scenes[i].prepareToRender(hostAccessPass, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        for (let i = 0; i < this.scenes.length; i++)
+            this.scenes[i].destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
-        const layerPanel = new UI.LayerPanel();
-        layerPanel.setLayers(this.scenes);
-        return [layerPanel];
-    }
-
-    public render(renderState: RenderState) {
-        this.scenes.forEach((scene) => {
-            scene.render(renderState);
-        });
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
+        return [new UI.LayerPanel(this.scenes)];
     }
 }
 
@@ -61,7 +64,7 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = `map${mapNumber}`;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         // Fetch the ZAR & info ZSI.
         const path_gar = `data/lm3d/map/map${leftPad(''+this.mapNumber, 2, '0')}.gar`;
         const models_path = `data/lm3d/mapmdl/map${this.mapNumber}`;
@@ -94,10 +97,10 @@ class SceneDesc implements Viewer.SceneDesc {
 
                     for (let i = 0; i < ctxbFiles.length; i++) {
                         const ctxb = CTXB.parse(ctxbFiles[i].buffer);
-                        textureHolder.addCTXB(gl, ctxb);
+                        textureHolder.addCTXB(device, ctxb);
                     }
 
-                    const cmbRenderer = new CmbRenderer(gl, textureHolder, cmb, cmb.name);
+                    const cmbRenderer = new CmbRenderer(device, textureHolder, cmb, cmb.name);
 
                     const cmbBasename = firstCMB.name.split('.')[0];
                     const cmabFile = roomGar.files.find((file) => file.name === `${cmbBasename}.cmab`);
@@ -112,13 +115,13 @@ class SceneDesc implements Viewer.SceneDesc {
 
             return Progressable.all(progressables).then((scenes) => {
                 scenes = scenes.filter(s => !!s);
-                return new MultiScene(scenes, textureHolder);
+                return new MultiCmbScene(device, scenes, textureHolder);
             });
         });
     }
 }
 
-export function createSceneFromGARBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Viewer.MainScene {
+export function createSceneFromGARBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Viewer.Scene_Device {
     const textureHolder = new LM3DSTextureHolder();
     const scenes: CmbRenderer[] = [];
 
@@ -130,16 +133,16 @@ export function createSceneFromGARBuffer(gl: WebGL2RenderingContext, buffer: Arr
                 addGARBuffer(file.buffer);
             } else if (file.name.endsWith('.cmb')) {
                 const cmb = CMB.parse(file.buffer);
-                scenes.push(new CmbRenderer(gl, textureHolder, cmb, cmb.name));
+                scenes.push(new CmbRenderer(device, textureHolder, cmb, cmb.name));
             } else if (file.name.endsWith('.ctxb')) {
                 const ctxb = CTXB.parse(file.buffer);
-                textureHolder.addCTXB(gl, ctxb);
+                textureHolder.addCTXB(device, ctxb);
             }
         }
     }
     addGARBuffer(buffer);
 
-    return new MultiScene(scenes, textureHolder);
+    return new MultiCmbScene(device, scenes, textureHolder);
 }
 
 const id = "lm3d";

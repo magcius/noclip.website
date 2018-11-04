@@ -123,8 +123,8 @@ class Chunk {
         device.submitPass(hostAccessPass);
 
         this.inputState = device.createInputState(inputLayout, [
-            { buffer: this.posBuffer, wordOffset: 0, byteStride: 0 },
-            { buffer: this.nrmBuffer, wordOffset: 0, byteStride: 0 },
+            { buffer: this.posBuffer, byteOffset: 0, byteStride: 0 },
+            { buffer: this.nrmBuffer, byteOffset: 0, byteStride: 0 },
         ], null);
 
         this.numVertices = chunk.indexData.length;

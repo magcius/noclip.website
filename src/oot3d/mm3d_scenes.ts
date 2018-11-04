@@ -10,11 +10,12 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer, CtrTextureHolder } from './render';
+import { RoomRenderer, CtrTextureHolder, BasicRendererHelper } from './render';
 import { SceneGroup } from '../viewer';
 import { RenderState } from '../render';
 import { assert, readString, leftPad } from '../util';
 import { fetchData, NamedArrayBufferSlice } from '../fetch';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 
 function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     if (readString(buffer, 0x00, 0x04) === 'LzS\x01')
@@ -23,24 +24,26 @@ function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
         return buffer;
 }
 
-class MultiScene implements Viewer.MainScene {
-    constructor(public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
+class MultiRoomScene extends BasicRendererHelper implements Viewer.Scene_Device {
+    constructor(device: GfxDevice, public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
+        super();
+        for (let i = 0; i < this.scenes.length; i++)
+            this.scenes[i].addToViewRenderer(device, this.viewRenderer);
+    }
+
+    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.scenes.length; i++)
+            this.scenes[i].prepareToRender(hostAccessPass, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        for (let i = 0; i < this.scenes.length; i++)
+            this.scenes[i].destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
-        const layerPanel = new UI.LayerPanel();
-        layerPanel.setLayers(this.scenes);
-        return [layerPanel];
-    }
-
-    public render(renderState: RenderState) {
-        this.scenes.forEach((scene) => {
-            scene.render(renderState);
-        });
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
+        return [new UI.LayerPanel(this.scenes)];
     }
 }
 
@@ -53,16 +56,16 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         // Fetch the GAR & ZSI.
         const path_zar = `data/mm3d/${this.id}_info.gar`;
         const path_info_zsi = `data/mm3d/${this.id}_info.zsi`;
         return Progressable.all([fetchData(path_zar), fetchData(path_info_zsi)]).then(([zar, zsi]) => {
-            return this._createSceneFromData(gl, zar, zsi);
+            return this._createSceneFromData(device, zar, zsi);
         });
     }
 
-    private _createSceneFromData(gl: WebGL2RenderingContext, zarBuffer: NamedArrayBufferSlice, zsiBuffer: NamedArrayBufferSlice): Progressable<Viewer.MainScene> {
+    private _createSceneFromData(device: GfxDevice, zarBuffer: NamedArrayBufferSlice, zsiBuffer: NamedArrayBufferSlice): Progressable<Viewer.Scene_Device> {
         const textureHolder = new CtrTextureHolder();
 
         const zar = ZAR.parse(maybeDecompress(zarBuffer));
@@ -85,7 +88,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     // wCmb = CMB.parse(wCmbFile.buffer);
                 }
 
-                const roomRenderer = new RoomRenderer(gl, textureHolder, zsi, filename, wCmb);
+                const roomRenderer = new RoomRenderer(device, textureHolder, zsi, filename, wCmb);
 
                 const cmabFile = ZAR.findFile(zar, `${roomNameBase}.cmab`);
                 if (cmabFile !== null) {
@@ -105,7 +108,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 return roomRenderer;
             });
         })).then((scenes: RoomRenderer[]) => {
-            return new MultiScene(scenes, textureHolder);
+            return new MultiRoomScene(device, scenes, textureHolder);
         });
     }
 }

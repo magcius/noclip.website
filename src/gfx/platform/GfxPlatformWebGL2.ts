@@ -68,7 +68,7 @@ interface GfxInputLayoutP_GL extends GfxInputLayout {
 
 interface GfxInputStateP_GL extends GfxInputState {
     vao: WebGLVertexArrayObject;
-    indexBufferWordOffset: number;
+    indexBufferByteOffset: number;
     indexBufferType: GLenum;
     indexBufferCompByteSize: number;
     inputLayout: GfxInputLayoutP_GL;
@@ -142,8 +142,12 @@ export function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLe
 
 function translateIndexFormat(format: GfxFormat): GLenum {
     switch (format) {
+    case GfxFormat.U8_R:
+        return WebGL2RenderingContext.UNSIGNED_BYTE;
     case GfxFormat.U16_R:
         return WebGL2RenderingContext.UNSIGNED_SHORT;
+    case GfxFormat.U32_R:
+        return WebGL2RenderingContext.UNSIGNED_INT;
     default:
         throw "whoops";
     }
@@ -665,7 +669,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return inputLayout;
     }
 
-    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: GfxVertexBufferDescriptor[], indexBufferBinding: GfxBufferBinding | null): GfxInputState {
+    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: GfxVertexBufferDescriptor[], indexBufferBinding: GfxVertexBufferDescriptor | null): GfxInputState {
         const inputLayout = inputLayout_ as GfxInputLayoutP_GL;
 
         const gl = this.gl;
@@ -681,13 +685,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             assert(buffer.usage === GfxBufferUsage.VERTEX);
             gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
 
-            const bufferOffset = vertexBuffer.wordOffset * 4 + attr.bufferByteOffset;
-            if (type === gl.FLOAT || normalized) {
-                gl.vertexAttribPointer(attr.location, size, type, normalized, vertexBuffer.byteStride, bufferOffset);
-                if (gl.getError() !== gl.NO_ERROR) throw new Error();
-            } else {
+            const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
+            // TODO(jstpierre): How do we support glVertexAttribIPointer without too much insanity?
+            if (attr.usesIntInShader) {
                 gl.vertexAttribIPointer(attr.location, size, type, vertexBuffer.byteStride, bufferOffset);
-                if (gl.getError() !== gl.NO_ERROR) throw new Error();
+            } else {
+                gl.vertexAttribPointer(attr.location, size, type, normalized, vertexBuffer.byteStride, bufferOffset);
             }
 
             if (attr.frequency === GfxVertexAttributeFrequency.PER_INSTANCE) {
@@ -699,19 +702,19 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         let indexBufferType: GLenum | null = null;
         let indexBufferCompByteSize: number | null = null;
-        let indexBufferWordOffset: number | null = null;
+        let indexBufferByteOffset: number | null = null;
         if (indexBufferBinding !== null) {
             const buffer = indexBufferBinding.buffer as GfxBufferP_GL;
             assert(buffer.usage === GfxBufferUsage.INDEX);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, getPlatformBuffer(indexBufferBinding.buffer));
             indexBufferType = translateIndexFormat(inputLayout.indexBufferFormat);
             indexBufferCompByteSize = getFormatCompByteSize(inputLayout.indexBufferFormat);
-            indexBufferWordOffset = indexBufferBinding.wordOffset;
+            indexBufferByteOffset = indexBufferBinding.byteOffset;
         }
 
         gl.bindVertexArray(null);
 
-        const inputState: GfxInputStateP_GL = { _T: _T.InputState, vao, indexBufferWordOffset, indexBufferType, indexBufferCompByteSize, inputLayout };
+        const inputState: GfxInputStateP_GL = { _T: _T.InputState, vao, indexBufferByteOffset, indexBufferType, indexBufferCompByteSize, inputLayout };
         return inputState;
     }
 
@@ -1048,9 +1051,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
         const inputState = this._currentInputState;
-        const baseOffset = inputState.indexBufferWordOffset * 4;
-        const fullOffset = baseOffset + firstIndex * inputState.indexBufferCompByteSize;
-        gl.drawElements(pipeline.drawMode, count, inputState.indexBufferType, fullOffset);
+        const byteOffset = inputState.indexBufferByteOffset + firstIndex * inputState.indexBufferCompByteSize;
+        gl.drawElements(pipeline.drawMode, count, inputState.indexBufferType, byteOffset);
     }
 
     private _passReadFramebuffer: WebGLFramebuffer | null = null;

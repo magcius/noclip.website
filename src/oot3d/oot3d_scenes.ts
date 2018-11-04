@@ -8,30 +8,32 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer, CtrTextureHolder } from './render';
+import { RoomRenderer, CtrTextureHolder, BasicRendererHelper } from './render';
 import { SceneGroup } from '../viewer';
-import { RenderState } from '../render';
 import { assert } from '../util';
 import { fetchData } from '../fetch';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 
-class MultiScene implements Viewer.MainScene {
-    constructor(public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
+class MultiRoomScene extends BasicRendererHelper implements Viewer.Scene_Device {
+    constructor(device: GfxDevice, public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
+        super();
+        for (let i = 0; i < this.scenes.length; i++)
+            this.scenes[i].addToViewRenderer(device, this.viewRenderer);
+    }
+
+    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.scenes.length; i++)
+            this.scenes[i].prepareToRender(hostAccessPass, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        for (let i = 0; i < this.scenes.length; i++)
+            this.scenes[i].destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
-        const layerPanel = new UI.LayerPanel();
-        layerPanel.setLayers(this.scenes);
-        return [layerPanel];
-    }
-
-    public render(renderState: RenderState) {
-        this.scenes.forEach((scene) => {
-            scene.render(renderState);
-        });
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        this.scenes.forEach((scene) => scene.destroy(gl));
+        return [new UI.LayerPanel(this.scenes)];
     }
 }
 
@@ -44,16 +46,16 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         // Fetch the ZAR & info ZSI.
         const path_zar = `data/oot3d/${this.id}.zar`;
         const path_info_zsi = `data/oot3d/${this.id}_info.zsi`;
         return Progressable.all([fetchData(path_zar), fetchData(path_info_zsi)]).then(([zar, zsi]) => {
-            return this._createSceneFromData(gl, zar, zsi);
+            return this._createSceneFromData(device, zar, zsi);
         });
     }
 
-    private _createSceneFromData(gl: WebGL2RenderingContext, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.MainScene> {
+    private _createSceneFromData(device: GfxDevice, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.Scene_Device> {
         const textureHolder = new CtrTextureHolder();
 
         const zar = zarBuffer.byteLength ? ZAR.parse(zarBuffer) : null;
@@ -69,7 +71,7 @@ class SceneDesc implements Viewer.SceneDesc {
             return fetchData(filename).then((roomResult) => {
                 const zsi = ZSI.parse(roomResult);
                 assert(zsi.mesh !== null);
-                const roomRenderer = new RoomRenderer(gl, textureHolder, zsi, filename, null);
+                const roomRenderer = new RoomRenderer(device, textureHolder, zsi, filename, null);
                 if (zar !== null) {
                     const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
                     if (cmabFile) {
@@ -80,7 +82,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 return new Progressable(Promise.resolve(roomRenderer));
             });
         })).then((scenes: RoomRenderer[]) => {
-            return new MultiScene(scenes, textureHolder);
+            return new MultiRoomScene(device, scenes, textureHolder);
         });
     }
 }
