@@ -25,7 +25,7 @@ export enum GfxFrontFaceMode {
     CW  = WebGLRenderingContext.CW,
 }
 
-export enum GfxCullMode {
+export const enum GfxCullMode {
     NONE,
     FRONT,
     BACK,
@@ -58,13 +58,13 @@ export const enum GfxTexFilterMode { POINT, BILINEAR }
 export const enum GfxMipFilterMode { NO_MIP, NEAREST, LINEAR }
 export const enum GfxPrimitiveTopology { TRIANGLES }
 
-export enum GfxBufferUsage {
+export const enum GfxBufferUsage {
     INDEX   = 0x01,
     VERTEX  = 0x02,
     UNIFORM = 0x03,
 }
 
-export enum GfxBufferFrequencyHint {
+export const enum GfxBufferFrequencyHint {
     STATIC = 0x01,
     DYNAMIC = 0x02,
 }
@@ -75,11 +75,17 @@ export interface GfxVertexBufferDescriptor {
     byteStride: number;
 }
 
+export const enum GfxVertexAttributeFrequency {
+    PER_VERTEX = 0x01,
+    PER_INSTANCE = 0x02,
+}
+
 export interface GfxVertexAttributeDescriptor {
     location: number;
     format: GfxFormat;
     bufferIndex: number;
-    bufferWordOffset: number;
+    bufferByteOffset: number;
+    frequency: GfxVertexAttributeFrequency;
 }
 
 export interface GfxSamplerDescriptor {

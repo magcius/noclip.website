@@ -52,7 +52,7 @@ class Command_Batch {
     private renderInst: GfxRenderInst;
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private sceneGraphNode: SceneGraphNode, batch: Batch, coalescedBuffers: GfxCoalescedBuffers) {
-        this.shapeHelper = new GXShapeHelperGfx(device, renderHelper.renderInstBuilder, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+        this.shapeHelper = new GXShapeHelperGfx(device, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
         this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder);
     }
 

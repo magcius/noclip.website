@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -677,30 +677,24 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const { size, type, normalized } = translateVertexFormat(attr.format);
             const vertexBuffer = vertexBuffers[attr.bufferIndex];
 
-            // TODO(jstpierre): Replace this hack with a proper ghost buffer.
-            if (attr.bufferIndex >= 0) {
-                const buffer = vertexBuffer.buffer as GfxBufferP_GL;
-                assert(buffer.usage === GfxBufferUsage.VERTEX);
-                gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
+            const buffer = vertexBuffer.buffer as GfxBufferP_GL;
+            assert(buffer.usage === GfxBufferUsage.VERTEX);
+            gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
 
-                const bufferWordOffset = vertexBuffer.wordOffset + attr.bufferWordOffset;
-                const bufferOffset = bufferWordOffset * 4;
-                if (type === gl.FLOAT) {
-                    gl.vertexAttribPointer(attr.location, size, type, normalized, vertexBuffer.byteStride, bufferOffset);
-                } else {
-                    gl.vertexAttribIPointer(attr.location, size, type, vertexBuffer.byteStride, bufferOffset);
-                }
-
-                gl.enableVertexAttribArray(attr.location);
+            const bufferOffset = vertexBuffer.wordOffset * 4 + attr.bufferByteOffset;
+            if (type === gl.FLOAT || normalized) {
+                gl.vertexAttribPointer(attr.location, size, type, normalized, vertexBuffer.byteStride, bufferOffset);
+                if (gl.getError() !== gl.NO_ERROR) throw new Error();
             } else {
-                if (type === gl.FLOAT) {
-                    // Nothing.
-                } else if (type === gl.UNSIGNED_BYTE || type === gl.UNSIGNED_SHORT || type === gl.UNSIGNED_INT) {
-                    gl.vertexAttribI4ui(attr.location, 0, 0, 0, 0);
-                } else if (type === gl.BYTE || type === gl.SHORT || type === gl.INT) {
-                    gl.vertexAttribI4i(attr.location, 0, 0, 0, 0);
-                }
+                gl.vertexAttribIPointer(attr.location, size, type, vertexBuffer.byteStride, bufferOffset);
+                if (gl.getError() !== gl.NO_ERROR) throw new Error();
             }
+
+            if (attr.frequency === GfxVertexAttributeFrequency.PER_INSTANCE) {
+                gl.vertexAttribDivisor(attr.location, 1);
+            }
+
+            gl.enableVertexAttribArray(attr.location);
         }
 
         let indexBufferType: GLenum | null = null;

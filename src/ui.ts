@@ -921,12 +921,14 @@ export class LayerPanel extends Panel {
     private multiSelect: MultiSelect;
     private layers: Layer[];
 
-    constructor() {
+    constructor(layers: Layer[] = null) {
         super();
         this.setTitle(LAYER_ICON, 'Layers');
         this.multiSelect = new MultiSelect();
         this.multiSelect.onitemchanged = this._onItemChanged.bind(this);
         this.contents.appendChild(this.multiSelect.elem);
+        if (layers)
+            this.setLayers(layers);
     }
 
     private _onItemChanged(index: number, visible: boolean): void {

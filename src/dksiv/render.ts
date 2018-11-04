@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxRenderPass, GfxCompareMode, GfxBindings, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxRenderPass, GfxCompareMode, GfxBindings, GfxHostAccessPass, GfxVertexAttributeFrequency } from '../gfx/platform/GfxPlatform';
 import { BufferFillerHelper, fillColor } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstViewRenderer, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
@@ -200,8 +200,8 @@ export class Scene implements Viewer.Scene_Device {
         this.program = device.createProgram(new IVProgram());
 
         this.inputLayout = device.createInputLayout([
-            { location: IVProgram.a_Position, bufferIndex: 0, bufferWordOffset: 0, format: GfxFormat.F32_RGB },
-            { location: IVProgram.a_Normal,   bufferIndex: 1, bufferWordOffset: 0, format: GfxFormat.F32_RGB },
+            { location: IVProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+            { location: IVProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
         ], null);
 
         // Two binding layouts: one scene level, one object level.

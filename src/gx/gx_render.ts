@@ -17,11 +17,11 @@ import { TextureMapping, TextureHolder, LoadedTexture, bindGLTextureMappings } f
 
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeFrequency } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 import { Camera } from '../Camera';
-import { GfxRenderInstBuilder, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { RenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
 
@@ -243,13 +243,15 @@ export class GXMaterialHelperGfx {
 export class GXShapeHelperGfx {
     public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
+    private zeroBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+    constructor(device: GfxDevice, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         assert(this.loadedVertexData.indexFormat === GfxFormat.U16_R);
 
         // First, build the inputLayout
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
+        let usesZeroBuffer = false;
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < GX.VertexAttribute.MAX; vtxAttrib++) {
             const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
 
@@ -261,12 +263,11 @@ export class GXShapeHelperGfx {
             const attrib = this.loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
             const format = attribGenDef.format;
             if (attrib !== undefined) {
-                assert((attrib.offset & 3) === 0);
-                const bufferWordOffset = attrib.offset / 4;
-                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 0, bufferWordOffset });
+                const bufferByteOffset = attrib.offset;
+                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 0, bufferByteOffset, frequency: GfxVertexAttributeFrequency.PER_VERTEX });
             } else {
-                // TODO(jstpierre): Emulate ghost buffer usage with divisor.
-                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: -1, bufferWordOffset: 0 });
+                usesZeroBuffer = true;
+                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE });
             }
         }
 
@@ -277,6 +278,16 @@ export class GXShapeHelperGfx {
             wordOffset: coalescedBuffers.vertexBuffer.wordOffset,
             byteStride: loadedVertexLayout.dstVertexSize,
         }];
+
+        if (usesZeroBuffer) {
+            // TODO(jstpierre): Move this to a global somewhere?
+            this.zeroBuffer = device.createBuffer(4, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
+            const hostAccessPass = device.createHostAccessPass();
+            hostAccessPass.uploadBufferData(this.zeroBuffer, 0, new Uint8Array(16));
+            device.submitPass(hostAccessPass);
+            buffers.push({ buffer: this.zeroBuffer, wordOffset: 0, byteStride: 0 });
+        }
+
         this.inputState = device.createInputState(this.inputLayout, buffers, coalescedBuffers.indexBuffer);
     }
 
@@ -299,6 +310,7 @@ export class GXShapeHelperGfx {
     public destroy(device: GfxDevice): void {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
+        device.destroyBuffer(this.zeroBuffer);
     }
 }
 
@@ -311,9 +323,9 @@ export class GXRenderHelperGfx {
     public renderInstBuilder: GfxRenderInstBuilder;
 
     constructor(device: GfxDevice) {
-        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
-        this.materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
-        this.packetParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
+        this.materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
+        this.packetParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_PacketParams`);
 
         // Standard GX binding model of three bind groups.
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -327,17 +339,22 @@ export class GXRenderHelperGfx {
         this.renderInstBuilder.newUniformBufferInstance(sceneRenderInst, ub_SceneParams);
     }
 
+    public finishBuilder(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
+        this.renderInstBuilder.popTemplateRenderInst();
+        this.renderInstBuilder.finish(device, viewRenderer);
+    }
+
     public fillSceneParams(viewerInput: Viewer.ViewerRenderInput): void {
         fillSceneParams(this.sceneParams, viewerInput.camera, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        fillSceneParamsData(this.sceneParamsBuffer.getShadowBufferF32(), this.sceneParams);
+        fillSceneParamsData(this.sceneParamsBuffer.mapBufferF32(0, u_SceneParamsBufferSize), this.sceneParams);
     }
 
     public fillMaterialParams(materialParams: MaterialParams, dstWordOffset: number): void {
-        fillMaterialParamsData(this.materialParamsBuffer.getShadowBufferF32(), materialParams, dstWordOffset);
+        fillMaterialParamsData(this.materialParamsBuffer.mapBufferF32(dstWordOffset, u_MaterialParamsBufferSize), materialParams, dstWordOffset);
     }
 
     public fillPacketParams(packetParams: PacketParams, dstWordOffset: number): void {
-        fillPacketParamsData(this.packetParamsBuffer.getShadowBufferF32(), packetParams, dstWordOffset);
+        fillPacketParamsData(this.packetParamsBuffer.mapBufferF32(dstWordOffset, u_PacketParamsBufferSize), packetParams, dstWordOffset);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass): void {
