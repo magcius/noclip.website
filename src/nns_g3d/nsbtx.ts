@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, hexdump } from "../util";
+import { assert, readString } from "../util";
 import { parseResDictGeneric } from "./nsbmd";
 import * as NITRO_TEX from "../sm64ds/nitro_tex";
 

@@ -4,17 +4,15 @@ import { GfxFormat, GfxDevice, GfxProgram, GfxBufferUsage, GfxBufferFrequencyHin
 import * as Viewer from '../viewer';
 import * as NSBMD from './nsbmd';
 import * as NITRO_GX from '../sm64ds/nitro_gx';
-import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from "../sm64ds/nitro_tex";
+import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../sm64ds/nitro_tex";
 import { NITRO_Program, Command_VertexData } from '../sm64ds/render';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
-import { BasicRendererHelper } from "../oot3d/render";
 import { TEX0, TEX0Texture } from "./nsbtx";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { MaterialLayer } from "../ttyd/world";
-import { White } from "../Color";
 import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
@@ -34,6 +32,7 @@ function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string):
 }
 
 class Command_Material {
+    private texture: TEX0Texture | null = null;
     private gfxTexture: GfxTexture | null = null;
     private gfxSampler: GfxSampler | null = null;
     public templateRenderInst: GfxRenderInst;
@@ -50,16 +49,16 @@ class Command_Material {
         const textureName = this.material.textureName;
         const paletteName = this.material.paletteName;
 
-        const texture = tex0.textures.find((t) => t.name === textureName);
+        this.texture = tex0.textures.find((t) => t.name === textureName);
         const palette = paletteName !== null ? tex0.palettes.find((t) => t.name === paletteName) : null;
-        const finalTextureName = `${texture.name}${palette !== null ? `/${palette.name}` : ''}`;
+        const finalTextureName = `${this.texture.name}${palette !== null ? `/${palette.name}` : ''}`;
 
-        const inTexture: Texture = { ...texture, palData: palette !== null ? palette.data : null } as Texture;
+        const inTexture: Texture = { ...this.texture, palData: palette !== null ? palette.data : null } as Texture;
         const pixels = readTexture(inTexture);
-        this.gfxTexture = device.createTexture(GfxFormat.U8_RGBA, texture.width, texture.height, 1);;
+        this.gfxTexture = device.createTexture(GfxFormat.U8_RGBA, this.texture.width, this.texture.height, 1);;
         hostAccessPass.uploadTextureData(this.gfxTexture, 0, [pixels]);
 
-        this.viewerTexture = textureToCanvas(texture, pixels, finalTextureName);
+        this.viewerTexture = textureToCanvas(this.texture, pixels, finalTextureName);
     }
 
     public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
@@ -91,14 +90,21 @@ class Command_Material {
             this.templateRenderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
         }
 
-        const layer = this.material.isTranslucent ? MaterialLayer.BLEND : MaterialLayer.OPAQUE;
+        // NITRO's Rendering Engine uses two passes. Opaque, then Transparent.
+        // A transparent polygon is one that has an alpha of < 0xFF, or uses
+        // A5I3 / A3I5 textures.
+        const isTranslucent = (this.material.alpha < 0xFF) || (this.texture && textureFormatIsTranslucent(this.texture.format));
+        const xl = !!((this.material.polyAttribs >>> 11) & 0x01);
+        const depthWrite = xl || !isTranslucent;
+
+        const layer = isTranslucent ? MaterialLayer.BLEND : MaterialLayer.OPAQUE;
         this.templateRenderInst.sortKey = makeSortKey(layer, 0, 0);
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_MaterialParams);
         this.templateRenderInst.renderFlags.set({
             blendMode: GfxBlendMode.ADD,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            depthWrite: this.material.depthWrite,
+            depthWrite: depthWrite,
             cullMode: this.material.cullMode,
         });
     }

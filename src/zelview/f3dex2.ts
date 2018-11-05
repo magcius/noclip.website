@@ -4,8 +4,9 @@ import { mat4, vec3, vec4 } from 'gl-matrix';
 import * as Render from './render';
 import * as ZELVIEW0 from './zelview0';
 
-import { CullMode, RenderState, RenderFlags, BlendMode, BlendFactor } from '../render';
+import { RenderState, RenderFlags } from '../render';
 import * as Viewer from '../viewer';
+import { GfxCompareMode, GfxCullMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 
 function extractBits(value: number, offset: number, bits: number) {
     return (value >> offset) & ((1 << bits) - 1);
@@ -303,13 +304,13 @@ function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
     const cullBack = newMode & GeometryMode.CULL_BACK;
 
     if (cullFront && cullBack)
-        renderFlags.cullMode = CullMode.FRONT_AND_BACK;
+        renderFlags.cullMode = GfxCullMode.FRONT_AND_BACK;
     else if (cullFront)
-        renderFlags.cullMode = CullMode.FRONT;
+        renderFlags.cullMode = GfxCullMode.FRONT;
     else if (cullBack)
-        renderFlags.cullMode = CullMode.BACK;
+        renderFlags.cullMode = GfxCullMode.BACK;
     else
-        renderFlags.cullMode = CullMode.NONE;
+        renderFlags.cullMode = GfxCullMode.NONE;
 
     state.cmds.push((renderState: RenderState) => {
         renderState.useFlags(renderFlags);
@@ -337,15 +338,15 @@ function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
     const renderFlags = new RenderFlags();
     const newMode = state.otherModeL;
 
-    renderFlags.depthTest = !!(newMode & OtherModeL.Z_CMP);
+    renderFlags.depthCompare = (newMode & OtherModeL.Z_CMP) ? GfxCompareMode.LESS : GfxCompareMode.NEVER;
     renderFlags.depthWrite = !!(newMode & OtherModeL.Z_UPD);
 
     if (newMode & OtherModeL.FORCE_BL) {
-        renderFlags.blendMode = BlendMode.ADD;
-        renderFlags.blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
-        renderFlags.blendSrc = BlendFactor.SRC_ALPHA;
+        renderFlags.blendMode = GfxBlendMode.ADD;
+        renderFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        renderFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
     } else {
-        renderFlags.blendMode = BlendMode.NONE;
+        renderFlags.blendMode = GfxBlendMode.NONE;
     }
 
     state.cmds.push((renderState: RenderState) => {
