@@ -1,4 +1,6 @@
 
+// NITRO System Binary MoDel
+
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert } from "../util";
 import { mat4, mat2d } from "gl-matrix";
@@ -19,6 +21,8 @@ export interface MDL0Material {
     polyAttribs: number;
     texParams: number;
     texMatrix: mat2d;
+    texScaleS: number;
+    texScaleT: number;
 }
 
 export interface MDL0Shape {
@@ -40,11 +44,11 @@ export interface BMD0 {
     tex0: TEX0;
 }
 
-function fx16(n: number): number {
+export function fx16(n: number): number {
     return n / (1 << 12);
 }
 
-function fx32(n: number): number {
+export function fx32(n: number): number {
     return n / (1 << 12);
 }
 
@@ -78,7 +82,7 @@ export function parseResDictGeneric<T>(buffer: ArrayBufferSlice, tableOffs: numb
     return entries;
 }
 
-function parseResDict(buffer: ArrayBufferSlice, tableOffs: number): ResDictEntry<number>[] {
+export function parseResDict(buffer: ArrayBufferSlice, tableOffs: number): ResDictEntry<number>[] {
     return parseResDictGeneric(buffer, tableOffs, (view, entryTableIdx) => {
         return view.getUint32(entryTableIdx + 0x00, true);
     });
@@ -158,12 +162,12 @@ function translateCullMode(renderWhichFaces: number): GfxCullMode {
     }
 }
 
-function calcTexMtx_Maya(dst: mat2d, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
-    dst[0] = scaleS *  cosR;
-    dst[2] = scaleS *  sinR;
+export function calcTexMtx_Maya(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
+    dst[0] = texScaleS * scaleS *  cosR;
+    dst[2] = texScaleS * scaleS *  sinR;
     dst[4] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
-    dst[1] = scaleT * -sinR;
-    dst[3] = scaleT *  cosR;
+    dst[1] = texScaleT * scaleT * -sinR;
+    dst[3] = texScaleT * scaleT *  cosR;
     dst[5] = scaleT * (((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1);
 }
 
@@ -186,6 +190,9 @@ function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
     const origHeight = view.getUint16(0x22, true);
     const magW = fx32(view.getInt32(0x24, true));
     const magH = fx32(view.getInt32(0x28, true));
+
+    const texScaleS = 1 / origWidth;
+    const texScaleT = 1 / origHeight;
 
     const enum MaterialFlags {
         USE = 0x0001,
@@ -215,7 +222,7 @@ function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
         translationT = fx32(view.getUint32(idx + 0x04, true));
         idx += 0x08;
     }
-    calcTexMtx_Maya(texMatrix, scaleS / origWidth, scaleT / origHeight, sinR, cosR, translationS, translationT);
+    calcTexMtx_Maya(texMatrix, texScaleS, texScaleT, scaleS, scaleT, sinR, cosR, translationS, translationT);
 
     // To be filled in later.
     const textureName: string | null = null;
@@ -226,7 +233,7 @@ function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
 
     const alpha = expand5to8((polyAttribs >> 16) & 0x1F);
 
-    return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix };
+    return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
 }
 
 function parseShape(buffer: ArrayBufferSlice, name: string): MDL0Shape {
