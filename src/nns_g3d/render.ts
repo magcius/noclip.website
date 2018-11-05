@@ -1,19 +1,20 @@
 
-import { mat4 } from "gl-matrix";
+import { mat4, mat2d } from "gl-matrix";
 import { GfxFormat, GfxDevice, GfxProgram, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
 import * as NSBMD from './nsbmd';
+import * as NSBTA from "./nsbta";
 import * as NITRO_GX from '../sm64ds/nitro_gx';
 import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../sm64ds/nitro_tex";
 import { NITRO_Program, Command_VertexData } from '../sm64ds/render';
-import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { TEX0, TEX0Texture } from "./nsbtx";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
-import { MaterialLayer } from "../ttyd/world";
 import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import AnimationController from "../AnimationController";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -31,6 +32,7 @@ function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string):
     return { name, surfaces, extraInfo };
 }
 
+const scratchTexMatrix = mat2d.create();
 class Command_Material {
     private texture: TEX0Texture | null = null;
     private gfxTexture: GfxTexture | null = null;
@@ -38,11 +40,16 @@ class Command_Material {
     public templateRenderInst: GfxRenderInst;
     public viewerTexture: Viewer.Texture;
     public baseCtx: NITRO_GX.Context;
+    public srt0Animator: NSBTA.SRT0TexMtxAnimator | null = null;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, hostAccessPass: GfxHostAccessPass, tex0: TEX0, public material: NSBMD.MDL0Material) {
         this.translateTexture(device, hostAccessPass, tex0);
         this.translateRenderInst(device, renderInstBuilder);
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: this.material.alpha };
+    }
+
+    public bindSRT0(animationController: AnimationController, srt0: NSBTA.SRT0): void {
+        this.srt0Animator = NSBTA.bindSRT0(animationController, srt0, this.material.name);
     }
 
     private translateTexture(device: GfxDevice, hostAccessPass: GfxHostAccessPass, tex0: TEX0): void {
@@ -62,11 +69,15 @@ class Command_Material {
     }
 
     public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.gfxTexture !== null) {
-            const materialParamsMapped = materialParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams], 8);
-            let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams];
-            offs += fillMatrix3x2(materialParamsMapped, offs, this.material.texMatrix);
+        if (this.srt0Animator !== null) {
+            this.srt0Animator.calcTexMtx(scratchTexMatrix, this.material.texScaleS, this.material.texScaleT);
+        } else {
+            mat2d.copy(scratchTexMatrix, this.material.texMatrix);
         }
+
+        const materialParamsMapped = materialParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams], 8);
+        let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams];
+        offs += fillMatrix3x2(materialParamsMapped, offs, scratchTexMatrix);
     }
 
     private translateRenderInst(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder): void {
@@ -97,7 +108,7 @@ class Command_Material {
         const xl = !!((this.material.polyAttribs >>> 11) & 0x01);
         const depthWrite = xl || !isTranslucent;
 
-        const layer = isTranslucent ? MaterialLayer.BLEND : MaterialLayer.OPAQUE;
+        const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.templateRenderInst.sortKey = makeSortKey(layer, 0, 0);
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_MaterialParams);
         this.templateRenderInst.renderFlags.set({
@@ -156,6 +167,10 @@ class Command_Shape {
         let offs = this.vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams];
         offs += fillMatrix4x3(packetParamsMapped, offs, this.computeModelView(viewerInput, isSkybox));
     }
+
+    public destroy(device: GfxDevice): void {
+        this.vertexDataCommand.destroy(device);
+    }
 }
 
 export enum MKDSPass {
@@ -167,6 +182,7 @@ export class MDL0Renderer {
     public modelMatrix = mat4.create();
     public isSkybox: boolean = false;
     public pass: MKDSPass = MKDSPass.MAIN;
+    public animationController = new AnimationController();
 
     private gfxProgram: GfxProgram;
     private templateRenderInst: GfxRenderInst;
@@ -212,6 +228,11 @@ export class MDL0Renderer {
         device.submitPass(hostAccessPass);
         renderInstBuilder.popTemplateRenderInst();
         renderInstBuilder.finish(device, viewRenderer);
+    }
+
+    public bindSRT0(srt0: NSBTA.SRT0): void {
+        for (let i = 0; i < this.materialCommands.length; i++)
+            this.materialCommands[i].bindSRT0(this.animationController, srt0);
     }
 
     private execSBC(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder) {
@@ -266,6 +287,8 @@ export class MDL0Renderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.animationController.updateTime(viewerInput.time);
+
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams], 16);
         let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams];
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);

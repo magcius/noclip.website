@@ -5,6 +5,7 @@ import * as Viewer from '../viewer';
 import * as CX from '../compression/CX';
 import * as NARC from './narc';
 import * as NSBMD from './nsbmd';
+import * as NSBTA from './nsbta';
 import * as NSBTX from './nsbtx';
 
 import { fetchData } from '../fetch';
@@ -13,7 +14,6 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { CourseRenderer, MDL0Renderer, MKDSPass } from './render';
 import { assert } from '../util';
-import { mat4 } from 'gl-matrix';
 
 class MarioKartDSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
@@ -49,7 +49,20 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
                 skyboxRenderer.pass = MKDSPass.SKYBOX;
             }
 
-            return new CourseRenderer(device, courseRenderer, skyboxRenderer);
+            const c = new CourseRenderer(device, courseRenderer, skyboxRenderer);
+
+            const courseBtaFile = courseNARC.files.find((file) => file.path === '/course_model.nsbta');
+            const courseBta = courseBtaFile !== undefined ? NSBTA.parse(courseBtaFile.buffer) : null;
+            if (courseBta !== null)
+                courseRenderer.bindSRT0(courseBta.srt0);
+
+            if (skyboxRenderer !== null) {
+                const skyboxBtaFile = courseNARC.files.find((file) => file.path === '/course_model_V.nsbta');
+                const skyboxBta = skyboxBtaFile !== undefined ? NSBTA.parse(skyboxBtaFile.buffer) : null;
+                if (skyboxBta !== null)
+                    skyboxRenderer.bindSRT0(skyboxBta.srt0);
+            }
+            return c;
         });
     }
 }

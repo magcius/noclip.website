@@ -1694,7 +1694,7 @@ export class SRT0TexMtxAnimator {
         const scaleT = texData.scaleT ? sampleFloatAnimationTrack(texData.scaleT, animFrame) : 1;
         const rotation = texData.rotation ? sampleFloatAnimationTrack(texData.rotation, animFrame) : 0;
         const translationS = texData.translationS ? sampleFloatAnimationTrack(texData.translationS, animFrame) : 0;
-        const translationT = texData.translationS ? sampleFloatAnimationTrack(texData.translationT, animFrame) : 0;
+        const translationT = texData.translationT ? sampleFloatAnimationTrack(texData.translationT, animFrame) : 0;
         calcTexMtx(dst, texMtxMode, scaleS, scaleT, rotation, translationS, translationT);
     }
 

@@ -1,4 +1,6 @@
 
+// Nitro System Binary TeXture
+
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import { parseResDictGeneric } from "./nsbmd";
