@@ -46,6 +46,7 @@ import { hexdump } from './util';
 import { downloadBlob } from './fetch';
 
 const sceneGroups = [
+    MKDS.sceneGroup,
     SMS.sceneGroup,
     MKDD.sceneGroup,
     MKWII.sceneGroup,
@@ -68,7 +69,6 @@ const sceneGroups = [
     MM3D.sceneGroup,
     ZELVIEW.sceneGroup,
     LM3D.sceneGroup,
-    // MKDS.sceneGroup,
 ];
 
 class DroppedFileSceneDesc implements SceneDesc {

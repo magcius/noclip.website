@@ -310,7 +310,6 @@ class ContextInternal {
         this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord });
     }
 
-
     public makePackedVertexBuffer(): Float32Array {
         const vtxBuffer = new Float32Array(this.vtxs.length * VERTEX_SIZE);
 

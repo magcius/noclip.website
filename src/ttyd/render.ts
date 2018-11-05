@@ -14,11 +14,11 @@ import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPas
 import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderInst, GfxRenderInstBuilder, makeSortKey, GfxRenderInstViewRenderer, setSortKeyDepth, makeDepthKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstBuilder, makeSortKey, GfxRenderInstViewRenderer, setSortKeyDepth, makeDepthKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fullscreenFlags } from '../gfx/helpers/RenderFlagsHelpers';
 import { Camera, computeViewMatrix, computeViewSpaceDepth } from '../Camera';
-import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { AABB } from '../Geometry';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
@@ -79,7 +79,7 @@ class BackgroundBillboardRenderer {
         this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.name = 'BackgroundBillboardRenderer';
         this.renderInst.drawTriangles(3);
-        this.renderInst.sortKey = makeSortKey(0, 0, programReflection.uniqueKey);
+        this.renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND, 0, programReflection.uniqueKey);
         // No input state, we don't use any vertex buffers for full-screen passes.
         this.renderInst.inputState = null;
         this.renderInst.gfxProgram = gfxProgram;
@@ -131,6 +131,7 @@ class Command_Material {
         this.templateRenderInst = renderHelper.renderInstBuilder.newRenderInst();
         this.templateRenderInst.gfxProgram = this.gfxProgram;
         this.templateRenderInst.samplerBindings = nArray(8, () => null);
+        const layer = this.getRendererLayer(material.materialLayer);
         this.templateRenderInst.sortKey = makeSortKey(10 + material.materialLayer, 0, device.queryProgram(this.gfxProgram).uniqueKey);
         assert(this.templateRenderInst.sortKey > 0);
         GX_Material.translateRenderFlagsGfx(this.templateRenderInst.renderFlags, this.material.gxMaterial);
@@ -138,6 +139,21 @@ class Command_Material {
         this.templateRenderInst.renderFlags.polygonOffset = material.materialLayer === MaterialLayer.ALPHA_TEST;
         // Allocate our material buffer slot.
         this.materialParamsBufferOffset = renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
+    }
+
+    private getRendererLayer(materialLayer: MaterialLayer): GfxRendererLayer {
+        switch (materialLayer) {
+        case MaterialLayer.OPAQUE:
+            return GfxRendererLayer.OPAQUE;
+        case MaterialLayer.OPAQUE_PUNCHTHROUGH:
+            return GfxRendererLayer.OPAQUE + 1;
+        case MaterialLayer.ALPHA_TEST:
+            return GfxRendererLayer.ALPHA_TEST;
+        case MaterialLayer.ALPHA_TEST_PUNCHTHROUGH:
+            return GfxRendererLayer.ALPHA_TEST + 1;
+        case MaterialLayer.BLEND:
+            return GfxRendererLayer.TRANSLUCENT;
+        }
     }
 
     private static translateSampler(device: GfxDevice, sampler: Sampler): GfxSampler {
@@ -389,7 +405,7 @@ export class WorldRenderer implements Viewer.Scene_Device {
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget);
+        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, passRenderer);
         return passRenderer;

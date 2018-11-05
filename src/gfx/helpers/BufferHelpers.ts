@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { assert, align } from "../../util";
-import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
+import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass } from "../platform/GfxPlatform";
 
 export interface GfxCoalescedBuffer {
     buffer: GfxBuffer;
@@ -76,4 +76,12 @@ export class GfxBufferCoalescer {
         if (this.indexBuffer !== null)
             device.destroyBuffer(this.indexBuffer);
     }
+}
+
+export function makeStaticDataBuffer(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBuffer): GfxBuffer {
+    const gfxBuffer = device.createBuffer(align(data.byteLength, 4) / 4, usage, GfxBufferFrequencyHint.STATIC);
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadBufferData(gfxBuffer, 0, new Uint8Array(data));
+    device.submitPass(hostAccessPass);
+    return gfxBuffer;
 }

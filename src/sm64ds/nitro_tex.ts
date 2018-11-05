@@ -2,6 +2,8 @@
 // Read DS texture formats.
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { hexdump } from "../util";
 
 export enum Format {
     Tex_None =       0x00,
@@ -52,8 +54,29 @@ function readTexture_A3I5(width: number, height: number, texData: ArrayBufferSli
     return pixels;
 }
 
-function readTexture_Palette16(width: number, height: number, texData: ArrayBufferSlice,
-                               palData: ArrayBufferSlice, color0: boolean) {
+function readTexture_Palette4(width: number, height: number, texData: ArrayBufferSlice, palData: ArrayBufferSlice, color0: boolean) {
+    const pixels = new Uint8Array(width * height * 4);
+    const texView = texData.createDataView();
+    const palView = palData.createDataView();
+    let srcOffs = 0;
+    for (let y = 0; y < height; y++) {
+        for (let xx = 0; xx < width; xx += 4) {
+            let texBlock = texView.getUint16(srcOffs, true);
+            srcOffs += 2;
+            for (let x = 0; x < 8; x++) {
+                const palIdx = texBlock & 0x03;
+                const p = palView.getUint16(palIdx * 2, true);
+                const dstOffs = 4 * ((y * width) + xx + x);
+                bgr5(pixels, dstOffs, p);
+                pixels[dstOffs + 3] = palIdx === 0 ? (color0 ? 0x00 : 0xFF) : 0xFF;
+                texBlock >>= 2;
+            }
+        }
+    }
+    return pixels;
+}
+
+function readTexture_Palette16(width: number, height: number, texData: ArrayBufferSlice, palData: ArrayBufferSlice, color0: boolean) {
     const pixels = new Uint8Array(width * height * 4);
     const texView = texData.createDataView();
     const palView = palData.createDataView();
@@ -75,8 +98,7 @@ function readTexture_Palette16(width: number, height: number, texData: ArrayBuff
     return pixels;
 }
 
-function readTexture_Palette256(width: number, height: number, texData: ArrayBufferSlice,
-                                palData: ArrayBufferSlice, color0: boolean) {
+function readTexture_Palette256(width: number, height: number, texData: ArrayBufferSlice, palData: ArrayBufferSlice, color0: boolean) {
     const pixels = new Uint8Array(width * height * 4);
     const texView = texData.createDataView();
     const palView = palData.createDataView();
@@ -93,7 +115,7 @@ function readTexture_Palette256(width: number, height: number, texData: ArrayBuf
     return pixels;
 }
 
-function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBufferSlice, palData: ArrayBufferSlice) {
+function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBufferSlice, palIdxData: ArrayBufferSlice, palData: ArrayBufferSlice): Uint8Array {
     function getPal16(offs: number) {
         return offs < palView.byteLength ? palView.getUint16(offs, true) : 0;
     }
@@ -152,15 +174,14 @@ function readTexture_CMPR_4x4(width: number, height: number, texData: ArrayBuffe
 
     const pixels = new Uint8Array(width * height * 4);
     const texView = texData.createDataView();
+    const palIdxView = palIdxData.createDataView();
     const palView = palData.createDataView();
-
-    const palIdxStart = (width * height) / 4;
 
     let srcOffs = 0;
     for (let yy = 0; yy < height; yy += 4) {
         for (let xx = 0; xx < width; xx += 4) {
             let texBlock = texView.getUint32((srcOffs * 0x04), true);
-            const palBlock = texView.getUint16(palIdxStart + (srcOffs * 0x02), true);
+            const palBlock = palIdxView.getUint16((srcOffs * 0x02), true);
             const colorTable = buildColorTable(palBlock);
 
             for (let y = 0; y < 4; y++) {
@@ -216,23 +237,52 @@ function readTexture_Direct(width: number, height: number, texData: ArrayBufferS
     return pixels;
 }
 
-export function readTexture(format: Format, width: number, height: number, texData: ArrayBufferSlice,
-                            palData: ArrayBufferSlice, color0: boolean) {
-    switch (format) {
+export interface TextureDirect {
+    format: Format.Tex_Direct;
+    width: number;
+    height: number;
+    texData: ArrayBufferSlice;
+}
+
+export interface TexturePalette {
+    format: Format.Tex_Palette4 | Format.Tex_Palette16 | Format.Tex_Palette256 | Format.Tex_A3I5 | Format.Tex_A5I3;
+    width: number;
+    height: number;
+    texData: ArrayBufferSlice;
+    palData: ArrayBufferSlice;
+    color0: boolean;
+}
+
+export interface TextureCMPR {
+    format: Format.Tex_CMPR_4x4;
+    width: number;
+    height: number;
+    texData: ArrayBufferSlice;
+    palData: ArrayBufferSlice;
+    palIdxData: ArrayBufferSlice;
+}
+
+export type Texture = TextureDirect | TexturePalette | TextureCMPR;
+
+export function readTexture(texture: Texture) {
+    switch (texture.format) {
     case Format.Tex_A3I5:
-        return readTexture_A3I5(width, height, texData, palData);
+        return readTexture_A3I5(texture.width, texture.height, texture.texData, texture.palData);
+    case Format.Tex_Palette4:
+        return readTexture_Palette4(texture.width, texture.height, texture.texData, texture.palData, texture.color0);
     case Format.Tex_Palette16:
-        return readTexture_Palette16(width, height, texData, palData, color0);
+        return readTexture_Palette16(texture.width, texture.height, texture.texData, texture.palData, texture.color0);
     case Format.Tex_Palette256:
-        return readTexture_Palette256(width, height, texData, palData, color0);
+        return readTexture_Palette256(texture.width, texture.height, texture.texData, texture.palData, texture.color0);
     case Format.Tex_CMPR_4x4:
-        return readTexture_CMPR_4x4(width, height, texData, palData);
+        return readTexture_CMPR_4x4(texture.width, texture.height, texture.texData, texture.palIdxData, texture.palData);
     case Format.Tex_A5I3:
-        return readTexture_A5I3(width, height, texData, palData);
+        return readTexture_A5I3(texture.width, texture.height, texture.texData, texture.palData);
     case Format.Tex_Direct:
-        return readTexture_Direct(width, height, texData);
+        return readTexture_Direct(texture.width, texture.height, texture.texData);
     default:
-        throw new Error(`Unsupported texture type! ${format}`);
+        const m_ = (texture as any).format as Format;
+        throw new Error(`Unsupported texture type! ${m_}`);
     }
 }
 
@@ -249,4 +299,48 @@ export function parseTexImageParam(w0: number): TexImageParam {
     const height = 8 << ((w0 >> 23) & 0x07);
     const color0 = !!((w0 >> 29) & 0x01);
     return { format, width, height, color0 };
+}
+
+export function getFormatName(format: Format): string {
+    switch (format) {
+    case Format.Tex_None:
+        return "Tex_None";
+    case Format.Tex_A3I5:
+        return "Tex_A3I5";
+    case Format.Tex_Palette4:
+        return "Tex_Palette4";
+    case Format.Tex_Palette16:
+        return "Tex_Palette16";
+    case Format.Tex_Palette256:
+        return "Tex_Palette256";
+    case Format.Tex_CMPR_4x4:
+        return "Tex_CMPR_4x4";
+    case Format.Tex_A5I3:
+        return "Tex_A5I3";
+    case Format.Tex_Direct:
+        return "Tex_Direct";
+    default:
+        throw new Error();
+    }
+}
+
+function translateWrapMode(repeat: boolean, flip: boolean): GfxWrapMode {
+    if (repeat && flip)
+        return GfxWrapMode.MIRROR;
+    else if (repeat)
+        return GfxWrapMode.REPEAT;
+    else
+        return GfxWrapMode.CLAMP;
+}
+
+export function parseTexImageParamWrapModeS(w0: number): GfxWrapMode {
+    const repeatS = !!((w0 >> 16) & 0x01);
+    const flipS = !!((w0 >> 18) & 0x01);
+    return translateWrapMode(repeatS, flipS);
+}
+
+export function parseTexImageParamWrapModeT(w0: number): GfxWrapMode {
+    const repeatT = !!((w0 >> 17) & 0x01);
+    const flipT = !!((w0 >> 19) & 0x01);
+    return translateWrapMode(repeatT, flipT);
 }

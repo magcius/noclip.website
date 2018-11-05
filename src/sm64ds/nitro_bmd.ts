@@ -6,7 +6,7 @@ import * as NITRO_Tex from './nitro_tex';
 
 import { readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { CullMode } from '../render';
+import { GfxCullMode } from '../gfx/platform/GfxPlatform';
 
 // Super Mario 64 DS .bmd format
 
@@ -14,7 +14,7 @@ export class Material {
     public name: string;
     public isTranslucent: boolean;
     public depthWrite: boolean;
-    public cullMode: CullMode;
+    public cullMode: GfxCullMode;
     public diffuse: NITRO_GX.Color;
     public alpha: number;
     public texCoordMat: mat2d;
@@ -95,16 +95,16 @@ function expand5to8(n: number): number {
     return (n << (8 - 5)) | (n >>> (10 - 8));
 }
 
-function translateCullMode(renderWhichFaces: number): CullMode {
+function translateCullMode(renderWhichFaces: number): GfxCullMode {
     switch (renderWhichFaces) {
     case 0x00: // Render Nothing
-        return CullMode.FRONT_AND_BACK;
+        return GfxCullMode.FRONT_AND_BACK;
     case 0x01: // Render Back
-        return CullMode.FRONT;
+        return GfxCullMode.FRONT;
     case 0x02: // Render Front
-        return CullMode.BACK;
+        return GfxCullMode.BACK;
     case 0x03: // Render Front and Back
-        return CullMode.NONE;
+        return GfxCullMode.NONE;
     default:
         throw new Error("Unknown renderWhichFaces");
     }
@@ -219,7 +219,7 @@ function parseTexture(bmd: BMD, buffer: ArrayBufferSlice, key: TextureKey): Text
     texture.height = texImageParams.height;
     const color0 = texImageParams.color0;
 
-    let palData = null;
+    let palData: ArrayBufferSlice | null = null;
     if (key.palIdx !== 0xFFFFFFFF) {
         const palOffs = bmd.paletteOffsBase + key.palIdx * 0x10;
         texture.paletteName = readString(buffer, view.getUint32(palOffs + 0x00, true), 0xFF);
@@ -228,7 +228,16 @@ function parseTexture(bmd: BMD, buffer: ArrayBufferSlice, key: TextureKey): Text
         palData = buffer.slice(palDataOffs, palDataOffs + palDataSize);
     }
 
-    texture.pixels = NITRO_Tex.readTexture(texture.format, texture.width, texture.height, texData, palData, color0);
+    let palIdxData: ArrayBufferSlice | null = null;
+    if (texture.format === NITRO_Tex.Format.Tex_CMPR_4x4) {
+        palIdxData = texData.slice((texture.width * texture.height) / 4);
+    }
+
+    const inTexture = {
+        format: texture.format, width: texture.width, height: texture.height,
+        texData, palData, palIdxData, color0,
+    };
+    texture.pixels = NITRO_Tex.readTexture(inTexture as NITRO_Tex.Texture);
 
     texture.isTranslucent = (texture.format === NITRO_Tex.Format.Tex_A5I3 ||
                              texture.format === NITRO_Tex.Format.Tex_A3I5);

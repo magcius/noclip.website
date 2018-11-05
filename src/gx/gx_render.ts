@@ -478,8 +478,4 @@ export class GXTextureHolder<TextureType extends GX_Texture.Texture = GX_Texture
         const mipChain = GX_Texture.calcMipChain(texture, texture.mipCount);
         return loadTextureFromMipChain(device, mipChain);
     }
-
-    protected addTexture(gl: WebGL2RenderingContext, texture: TextureType): LoadedTexture | null {
-        return this.addTextureGfx(getTransitionDeviceForWebGL2(gl), texture);
-    }
 }

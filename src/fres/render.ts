@@ -343,8 +343,7 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
             return GfxFormat.U8_RGBA;
     }
 
-    protected addTexture(gl: WebGL2RenderingContext, textureEntry: BFRES.FTEXEntry): LoadedTexture | null {
-        const device = getTransitionDeviceForWebGL2(gl);
+    protected addTextureGfx(device: GfxDevice, textureEntry: BFRES.FTEXEntry): LoadedTexture | null {
         const texture = textureEntry.ftex;
         const surface = texture.surface;
 

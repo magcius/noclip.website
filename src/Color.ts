@@ -72,3 +72,7 @@ export function colorToARGB8(src: Color): number {
 export function colorToCSS(src: Color): string {
     return `rgba(${src.r * 255}, ${src.g * 255}, ${src.b * 255}, ${src.a})`;
 }
+
+export const TransparentBlack = colorNew(0, 0, 0, 0);
+export const OpaqueBlack = colorNew(0, 0, 0, 1);
+export const White = colorNew(1, 1, 1, 1);

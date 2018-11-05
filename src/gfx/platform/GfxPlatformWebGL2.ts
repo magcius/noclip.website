@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -55,10 +55,6 @@ interface GfxRenderTargetP_GL extends GfxRenderTarget {
     gl_framebuffer: WebGLFramebuffer;
     colorAttachment: GfxColorAttachmentP_GL;
     depthAttachment: GfxDepthStencilAttachmentP_GL;
-    clearBits: GLenum;
-    colorClearColor: Color;
-    depthClearValue: number;
-    stencilClearValue: number;
 }
 
 interface GfxInputLayoutP_GL extends GfxInputLayout {
@@ -283,7 +279,7 @@ class Growable<T extends ArrayBufferView2> {
     }
 }
 
-const enum RenderPassCmd { setRenderTarget = 471, setViewport, setBindings, setPipeline, setInputState, draw, drawIndexed, endPass, invalid = 0x1234 };
+const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setBindings, setPipeline, setInputState, draw, drawIndexed, endPass, invalid = 0x1234 };
 class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
@@ -297,7 +293,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public po(r: object | null) { this.o.push(r); }
 
     public end() { this.pcmd(RenderPassCmd.invalid); }
-    public setRenderTarget(r: GfxRenderTarget)    { this.pcmd(RenderPassCmd.setRenderTarget); this.po(r); }
+    public setRenderPassParameters(t: GfxRenderTarget, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.po(t); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
     public setViewport(w: number, h: number)      { this.pcmd(RenderPassCmd.setViewport); this.pf32(w); this.pf32(h); }
     public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
     public setBindings(n: number, r: GfxBindings) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); }
@@ -631,20 +627,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, getPlatformDepthStencilAttachment(descriptor.depthStencilAttachment));
         const colorAttachment = descriptor.colorAttachment as GfxColorAttachmentP_GL;
         const depthAttachment = descriptor.depthStencilAttachment as GfxDepthStencilAttachmentP_GL;
-        const shouldClearColor = descriptor.colorLoadDisposition === GfxLoadDisposition.CLEAR;
-        const shouldClearDepth = descriptor.depthLoadDisposition === GfxLoadDisposition.CLEAR;
-        const shouldClearStencil = descriptor.stencilLoadDisposition === GfxLoadDisposition.CLEAR;
-
-        let clearBits = 0;
-        if (shouldClearColor)
-            clearBits |= WebGL2RenderingContext.COLOR_BUFFER_BIT;
-        if (shouldClearDepth)
-            clearBits |= WebGL2RenderingContext.DEPTH_BUFFER_BIT;
-        if (shouldClearStencil)
-            clearBits |= WebGL2RenderingContext.STENCIL_BUFFER_BIT;
-
-        const { colorClearColor, depthClearValue, stencilClearValue } = descriptor;
-        const renderTarget: GfxRenderTargetP_GL = { _T: _T.RenderTarget, gl_framebuffer, colorAttachment, depthAttachment, clearBits, colorClearColor, depthClearValue, stencilClearValue };
+        const renderTarget: GfxRenderTargetP_GL = { _T: _T.RenderTarget, gl_framebuffer, colorAttachment, depthAttachment };
         return renderTarget;
     }
 
@@ -781,12 +764,27 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _renderPassPool: GfxRenderPassP_GL[] = [];
-    public createRenderPass(renderTarget: GfxRenderTarget): GfxRenderPassP_GL {
+    public createRenderPass(renderTarget: GfxRenderTarget, descriptor: GfxRenderPassDescriptor): GfxRenderPassP_GL {
         if (this.isTransitionDevice)
             throw "whoops";
 
         const pass = this._renderPassPool.length > 0 ? this._renderPassPool.pop() : new GfxRenderPassP_GL();
-        pass.setRenderTarget(renderTarget);
+
+        const shouldClearColor = descriptor.colorLoadDisposition === GfxLoadDisposition.CLEAR;
+        const shouldClearDepth = descriptor.depthLoadDisposition === GfxLoadDisposition.CLEAR;
+        const shouldClearStencil = descriptor.stencilLoadDisposition === GfxLoadDisposition.CLEAR;
+        
+        let clearBits = 0;
+        if (shouldClearColor)
+            clearBits |= WebGL2RenderingContext.COLOR_BUFFER_BIT;
+        if (shouldClearDepth)
+            clearBits |= WebGL2RenderingContext.DEPTH_BUFFER_BIT;
+        if (shouldClearStencil)
+            clearBits |= WebGL2RenderingContext.STENCIL_BUFFER_BIT;
+        
+        const { colorClearColor, depthClearValue, stencilClearValue } = descriptor;
+
+        pass.setRenderPassParameters(renderTarget, clearBits, colorClearColor.r, colorClearColor.g, colorClearColor.b, colorClearColor.a, depthClearValue, stencilClearValue);
         return pass;
     }
 
@@ -871,8 +869,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         while (true) {
             const cmd = u32[iu32++] as RenderPassCmd;
 
-            if (cmd === RenderPassCmd.setRenderTarget) {
-                this.setRenderTarget(gfxr[igfxr++] as GfxRenderTarget);
+            if (cmd === RenderPassCmd.setRenderPassParameters) {
+                this.setRenderPassParameters(gfxr[igfxr++] as GfxRenderTarget, u32[iu32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setViewport) {
                 this.setViewport(f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setBindings) {
@@ -940,22 +938,20 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _currentRenderTarget: GfxRenderTargetP_GL;
-    private setRenderTarget(renderTarget: GfxRenderTarget): void {
+    private setRenderPassParameters(renderTarget: GfxRenderTarget, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
         const gl = this.gl;
         this._currentRenderTarget = renderTarget as GfxRenderTargetP_GL;
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._currentRenderTarget.gl_framebuffer);
-        const clearBits = this._currentRenderTarget.clearBits;
         if (clearBits & WebGL2RenderingContext.COLOR_BUFFER_BIT) {
-            const c = this._currentRenderTarget.colorClearColor;
-            gl.clearColor(c.r, c.b, c.g, c.a);
+            gl.clearColor(clearColorR, clearColorG, clearColorB, clearColorA);
         }
         if (clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT) {
             // GL clears obey the masks... bad API or worst API?
             gl.depthMask(true);
-            gl.clearDepth(this._currentRenderTarget.depthClearValue);
+            gl.clearDepth(depthClearValue);
         }
         if (clearBits & WebGL2RenderingContext.STENCIL_BUFFER_BIT)
-            gl.clearStencil(this._currentRenderTarget.stencilClearValue);
+            gl.clearStencil(stencilClearValue);
         gl.clear(clearBits);
     }
 

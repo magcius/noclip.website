@@ -6,13 +6,14 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxRenderPass, GfxCompareMode, GfxBindings, GfxHostAccessPass, GfxVertexAttributeFrequency } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBuffer, GfxPrimitiveTopology, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPipeline, GfxRenderPass, GfxBindings, GfxHostAccessPass, GfxVertexAttributeFrequency } from '../gfx/platform/GfxPlatform';
 import { BufferFillerHelper, fillColor } from '../gfx/helpers/UniformBufferHelpers';
-import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstViewRenderer, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { RenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
 import { assert } from '../util';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -112,15 +113,8 @@ class Chunk {
             nrmData[(i + 2) * 3 + 2] = t[2];
         }
 
-        const hostAccessPass = device.createHostAccessPass();
-
-        this.posBuffer = device.createBuffer(posData.length, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
-        this.nrmBuffer = device.createBuffer(nrmData.length, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
-
-        hostAccessPass.uploadBufferData(this.posBuffer, 0, new Uint8Array(posData.buffer));
-        hostAccessPass.uploadBufferData(this.nrmBuffer, 0, new Uint8Array(nrmData.buffer));
-
-        device.submitPass(hostAccessPass);
+        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, posData.buffer);
+        this.nrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, nrmData.buffer);
 
         this.inputState = device.createInputState(inputLayout, [
             { buffer: this.posBuffer, byteOffset: 0, byteStride: 0 },
@@ -265,7 +259,7 @@ export class Scene implements Viewer.Scene_Device {
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget);
+        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, passRenderer);
         return passRenderer;
