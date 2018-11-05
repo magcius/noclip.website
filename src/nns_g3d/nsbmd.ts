@@ -166,7 +166,7 @@ function calcTexMtx_Maya(dst: mat2d, scaleS: number, scaleT: number, sinR: numbe
     dst[4] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
     dst[1] = scaleT * -sinR;
     dst[3] = scaleT *  cosR;
-    dst[5] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT);
+    dst[5] = scaleT * (((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1);
 }
 
 function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
