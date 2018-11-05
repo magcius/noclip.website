@@ -20,6 +20,7 @@ import { Camera } from '../Camera';
 import { SimpleProgram } from '../Program';
 import { colorToCSS } from '../Color';
 import { ColorKind } from '../gx/gx_render';
+import { defaultFlags } from '../gfx/helpers/RenderFlagsHelpers';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
@@ -455,7 +456,7 @@ class WindWakerRenderer implements Viewer.MainScene {
             gl.clear(gl.DEPTH_BUFFER_BIT);
         }
 
-        state.useFlags(RenderFlags.default);
+        state.useFlags(defaultFlags);
 
         if (this.seaPlane) {
             // Render sea plane.
