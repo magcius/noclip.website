@@ -56,7 +56,7 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
 
     dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT + 1);
 }
 
 function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
