@@ -1,8 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexdump } from "../util";
+import { readString, assert } from "../util";
 import { mat4, mat2d } from "gl-matrix";
-import * as NITRO_GX from '../sm64ds/nitro_gx';
 import { GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { TEX0, parseTex0Block } from "./nsbtx";
 
@@ -16,9 +15,8 @@ export interface MDL0Material {
     textureName: string | null;
     paletteName: string | null;
     cullMode: GfxCullMode;
-    depthWrite: boolean;
     alpha: number;
-    isTranslucent: boolean;
+    polyAttribs: number;
     texParams: number;
     texMatrix: mat2d;
 }
@@ -228,18 +226,7 @@ function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
 
     const alpha = expand5to8((polyAttribs >> 16) & 0x1F);
 
-    // NITRO's Rendering Engine uses two passes. Opaque, then Transparent.
-    // A transparent polygon is one that has an alpha of < 0xFF, or uses
-    // A5I3 / A3I5 textures.
-
-    // TODO(jstpierre): Fix on re-bind?
-    const isTranslucent = (alpha < 0xFF) // || (material.texture && material.texture.isTranslucent);
-
-    // Do transparent polys write to the depth buffer?
-    const xl = !!((polyAttribs >>> 11) & 0x01);
-    let depthWrite = xl || !isTranslucent;
-
-    return { name, textureName, paletteName, cullMode, alpha, isTranslucent, depthWrite, texParams, texMatrix };
+    return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix };
 }
 
 function parseShape(buffer: ArrayBufferSlice, name: string): MDL0Shape {

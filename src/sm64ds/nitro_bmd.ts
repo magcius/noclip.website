@@ -239,8 +239,7 @@ function parseTexture(bmd: BMD, buffer: ArrayBufferSlice, key: TextureKey): Text
     };
     texture.pixels = NITRO_Tex.readTexture(inTexture as NITRO_Tex.Texture);
 
-    texture.isTranslucent = (texture.format === NITRO_Tex.Format.Tex_A5I3 ||
-                             texture.format === NITRO_Tex.Format.Tex_A3I5);
+    texture.isTranslucent = NITRO_Tex.textureFormatIsTranslucent(texture.format);
 
     bmd.textures.push(texture);
     bmd.textureCache.set(key.toString(), texture);

@@ -3,7 +3,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxWrapMode } from "../gfx/platform/GfxPlatform";
-import { hexdump } from "../util";
 
 export enum Format {
     Tex_None =       0x00,
@@ -343,4 +342,8 @@ export function parseTexImageParamWrapModeT(w0: number): GfxWrapMode {
     const repeatT = !!((w0 >> 17) & 0x01);
     const flipT = !!((w0 >> 19) & 0x01);
     return translateWrapMode(repeatT, flipT);
+}
+
+export function textureFormatIsTranslucent(format: Format): boolean {
+    return format === Format.Tex_A3I5 || format === Format.Tex_A5I3;
 }
