@@ -143,8 +143,11 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         this.textureOverrides.set(name, textureOverride);
     }
 
-    protected abstract addTexture(gl: WebGL2RenderingContext, textureEntry: TextureType): LoadedTexture | null;
-    protected addTextureGfx(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null { return null; }
+    protected abstract addTextureGfx(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null;
+
+    protected addTexture(gl: WebGL2RenderingContext, textureEntry: TextureType): LoadedTexture | null {
+        return this.addTextureGfx(getTransitionDeviceForWebGL2(gl), textureEntry);
+    }
 
     public addTextures(gl: WebGL2RenderingContext, textureEntries: TextureType[]): void {
         for (const texture of textureEntries) {

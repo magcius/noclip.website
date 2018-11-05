@@ -128,14 +128,7 @@ export interface GfxMegaStateDescriptor {
 
 export interface GfxRenderTargetDescriptor {
     colorAttachment: GfxColorAttachment;
-    colorLoadDisposition: GfxLoadDisposition;
-    colorClearColor: Color;
-
     depthStencilAttachment: GfxDepthStencilAttachment;
-    depthLoadDisposition: GfxLoadDisposition;
-    depthClearValue: number;
-    stencilLoadDisposition: GfxLoadDisposition;
-    stencilClearValue: number;
 }
 
 export interface GfxRenderPipelineDescriptor {
@@ -144,6 +137,15 @@ export interface GfxRenderPipelineDescriptor {
     program: GfxProgram;
     topology: GfxPrimitiveTopology;
     megaStateDescriptor: GfxMegaStateDescriptor;
+}
+
+export interface GfxRenderPassDescriptor {
+    colorLoadDisposition: GfxLoadDisposition;
+    colorClearColor: Color;
+    depthLoadDisposition: GfxLoadDisposition;
+    depthClearValue: number;
+    stencilLoadDisposition: GfxLoadDisposition;
+    stencilClearValue: number;
 }
 
 export interface GfxDeviceLimits {
@@ -217,7 +219,7 @@ export interface GfxDevice {
 
     // Command submission.
     createHostAccessPass(): GfxHostAccessPass;
-    createRenderPass(renderTarget: GfxRenderTarget): GfxRenderPass;
+    createRenderPass(renderTarget: GfxRenderTarget, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass;
     // Consumes and destroys the pass.
     submitPass(o: GfxPass): void;
 

@@ -1,6 +1,6 @@
 
-import { GfxRenderTarget, GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition } from "../platform/GfxPlatform";
-import { colorNew } from "../../Color";
+import { GfxRenderTarget, GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor } from "../platform/GfxPlatform";
+import { colorNew, TransparentBlack, Color } from "../../Color";
 
 const DEFAULT_NUM_SAMPLES = 4;
 
@@ -74,13 +74,7 @@ export class BasicRenderTarget {
             this.destroy(device);
             this.gfxRenderTarget = device.createRenderTarget({
                 colorAttachment: this.colorAttachment.gfxColorAttachment,
-                colorLoadDisposition: GfxLoadDisposition.CLEAR,
-                colorClearColor: this.colorClearColor,
                 depthStencilAttachment: this.depthStencilAttachment.gfxDepthStencilAttachment,
-                depthLoadDisposition: GfxLoadDisposition.CLEAR,
-                depthClearValue: this.depthClearValue,
-                stencilLoadDisposition: GfxLoadDisposition.CLEAR,
-                stencilClearValue: this.stencilClearValue,
             });
         }
     }
@@ -92,3 +86,17 @@ export class BasicRenderTarget {
         }
     }
 }
+
+export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearColor: Color): GfxRenderPassDescriptor {
+    return {
+        colorLoadDisposition: shouldClearColor ? GfxLoadDisposition.CLEAR : GfxLoadDisposition.LOAD,
+        colorClearColor: clearColor,
+        depthClearValue: 1.0,
+        depthLoadDisposition: GfxLoadDisposition.CLEAR,
+        stencilClearValue: 0.0,
+        stencilLoadDisposition: GfxLoadDisposition.CLEAR,
+    }
+}
+
+export const standardFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(true, colorNew(0.88, 0.88, 0.88, 0.0));
+export const depthClearRenderPassDescriptor = makeClearRenderPassDescriptor(false, TransparentBlack);

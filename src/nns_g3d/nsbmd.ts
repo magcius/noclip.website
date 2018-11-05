@@ -1,9 +1,10 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
-import { mat4 } from "gl-matrix";
+import { readString, assert, hexdump } from "../util";
+import { mat4, mat2d } from "gl-matrix";
 import * as NITRO_GX from '../sm64ds/nitro_gx';
-import { CullMode } from "../render";
+import { GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { TEX0, parseTex0Block } from "./nsbtx";
 
 export interface MDL0Node {
     name: string;
@@ -14,15 +15,17 @@ export interface MDL0Material {
     name: string;
     textureName: string | null;
     paletteName: string | null;
-    cullMode: CullMode;
+    cullMode: GfxCullMode;
     depthWrite: boolean;
     alpha: number;
     isTranslucent: boolean;
+    texParams: number;
+    texMatrix: mat2d;
 }
 
 export interface MDL0Shape {
     name: string;
-    vertexData: NITRO_GX.VertexData;
+    dlBuffer: ArrayBufferSlice;
 }
 
 export interface MDL0Model {
@@ -31,10 +34,12 @@ export interface MDL0Model {
     materials: MDL0Material[];
     shapes: MDL0Shape[];
     sbcBuffer: ArrayBufferSlice;
+    posScale: number;
 }
 
 export interface BMD0 {
     models: MDL0Model[];
+    tex0: TEX0;
 }
 
 function fx16(n: number): number {
@@ -140,19 +145,28 @@ function expand5to8(n: number): number {
     return (n << (8 - 5)) | (n >>> (10 - 8));
 }
 
-function translateCullMode(renderWhichFaces: number): CullMode {
+function translateCullMode(renderWhichFaces: number): GfxCullMode {
     switch (renderWhichFaces) {
     case 0x00: // Render Nothing
-        return CullMode.FRONT_AND_BACK;
+        return GfxCullMode.FRONT_AND_BACK;
     case 0x01: // Render Back
-        return CullMode.FRONT;
+        return GfxCullMode.FRONT;
     case 0x02: // Render Front
-        return CullMode.BACK;
+        return GfxCullMode.BACK;
     case 0x03: // Render Front and Back
-        return CullMode.NONE;
+        return GfxCullMode.NONE;
     default:
         throw new Error("Unknown renderWhichFaces");
     }
+}
+
+function calcTexMtx_Maya(dst: mat2d, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
+    dst[0] = scaleS *  cosR;
+    dst[2] = scaleS *  sinR;
+    dst[4] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
+    dst[1] = scaleT * -sinR;
+    dst[3] = scaleT *  cosR;
+    dst[5] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT);
 }
 
 function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
@@ -166,14 +180,44 @@ function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
     const specEmi = view.getUint32(0x08, true);
     const polyAttribs = view.getUint32(0x0C, true);
     const polyAttribsMask = view.getUint32(0x10, true);
-    const texImageParam = view.getUint32(0x14, true);
-    const texImageParamMask = view.getUint32(0x18, true);
+    const texParams = view.getUint32(0x14, true);
+    const texParamsMask = view.getUint32(0x18, true);
     const texPlttBase = view.getUint16(0x1C, true);
     const flag = view.getUint16(0x1E, true);
     const origWidth = view.getUint16(0x20, true);
     const origHeight = view.getUint16(0x22, true);
     const magW = fx32(view.getInt32(0x24, true));
     const magH = fx32(view.getInt32(0x28, true));
+
+    const enum MaterialFlags {
+        USE = 0x0001,
+        SCALE_ONE = 0x0002,
+        ROT_ZERO = 0x0004,
+        TRANS_ZERO = 0x0008,
+    }
+
+    const texMatrix = mat2d.create();
+
+    let scaleS = 1.0, scaleT = 1.0;
+    let cosR = 1.0, sinR = 0.0;
+    let translationS = 0.0, translationT = 0.0;
+    let idx = 0x2C;
+    if (!(flag & MaterialFlags.SCALE_ONE)) {
+        scaleS = fx32(view.getInt32(idx + 0x00, true));
+        scaleT = fx32(view.getInt32(idx + 0x04, true));
+        idx += 0x08;
+    }
+    if (!(flag & MaterialFlags.ROT_ZERO)) {
+        sinR = fx32(view.getUint32(idx + 0x00, true));
+        cosR = fx32(view.getUint32(idx + 0x04, true));
+        idx += 0x08;
+    }
+    if (!(flag & MaterialFlags.TRANS_ZERO)) {
+        translationS = fx32(view.getUint32(idx + 0x00, true));
+        translationT = fx32(view.getUint32(idx + 0x04, true));
+        idx += 0x08;
+    }
+    calcTexMtx_Maya(texMatrix, scaleS / origWidth, scaleT / origHeight, sinR, cosR, translationS, translationT);
 
     // To be filled in later.
     const textureName: string | null = null;
@@ -195,7 +239,7 @@ function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
     const xl = !!((polyAttribs >>> 11) & 0x01);
     let depthWrite = xl || !isTranslucent;
 
-    return { name, textureName, paletteName, cullMode, alpha, isTranslucent, depthWrite };
+    return { name, textureName, paletteName, cullMode, alpha, isTranslucent, depthWrite, texParams, texMatrix };
 }
 
 function parseShape(buffer: ArrayBufferSlice, name: string): MDL0Shape {
@@ -208,9 +252,8 @@ function parseShape(buffer: ArrayBufferSlice, name: string): MDL0Shape {
     const dlOffs = view.getUint32(0x08, true);
     const dlSize = view.getUint32(0x0C, true);
 
-    const baseCtx: NITRO_GX.Context = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: 0xFF };
-    const vertexData = NITRO_GX.readCmds(buffer.subarray(dlOffs, dlSize), baseCtx);
-    return { name, vertexData };
+    const dlBuffer = buffer.subarray(dlOffs, dlSize);
+    return { name, dlBuffer };
 }
 
 function parseModel(buffer: ArrayBufferSlice, name: string): MDL0Model {
@@ -231,8 +274,8 @@ function parseModel(buffer: ArrayBufferSlice, name: string): MDL0Model {
     const shapeTableCount = view.getUint8(0x19);
     const firstUnusedMtxStackID = view.getUint8(0x1A);
     // Unused.
-    const posScale = view.getInt32(0x1C, true);
-    const invPosScale = view.getInt32(0x20, true);
+    const posScale = fx32(view.getInt32(0x1C, true));
+    const invPosScale = fx32(view.getInt32(0x20, true));
     const numVertices = view.getUint16(0x24, true);
     const numPolygons = view.getUint16(0x26, true);
     const numTriangles = view.getUint16(0x28, true);
@@ -245,8 +288,8 @@ function parseModel(buffer: ArrayBufferSlice, name: string): MDL0Model {
     const bboxMaxY = bboxMinY + view.getInt16(0x34, true);
     const bboxMaxZ = bboxMinZ + view.getInt16(0x36, true);
 
-    const bboxPosScale = view.getInt32(0x38, true);
-    const bboxInvPosScale = view.getInt32(0x3C, true);
+    const bboxPosScale = fx32(view.getInt32(0x38, true));
+    const bboxInvPosScale = fx32(view.getInt32(0x3C, true));
 
     // Node table
     const nodeSectionOffs = 0x40;
@@ -298,7 +341,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string): MDL0Model {
     // SBC
     const sbcBuffer = buffer.slice(sbcOffs, materialSectionOffs);
 
-    return { name, nodes, materials, shapes, sbcBuffer };
+    return { name, nodes, materials, shapes, sbcBuffer, posScale };
 }
 
 export function parse(buffer: ArrayBufferSlice): BMD0 {
@@ -321,10 +364,13 @@ export function parse(buffer: ArrayBufferSlice): BMD0 {
     for (let i = 0; i < modelEntries.length; i++)
         models.push(parseModel(buffer.slice(modelSetOffs + modelEntries[i].value), modelEntries[i].name));
 
+    let tex0: TEX0 | null = null;
     if (dataBlocks > 1) {
         // Textures.
         // TODO(jstpierre): Finish
+        const tex0Offs = view.getUint32(0x14, true);
+        tex0 = parseTex0Block(buffer.slice(tex0Offs));
     }
 
-    return { models };
+    return { models, tex0 };
 }

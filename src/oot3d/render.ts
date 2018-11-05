@@ -15,15 +15,16 @@ import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, wordCountFromByteCount, assert } from '../util';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, makeSortKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
 import { ub_MaterialParams } from '../gx/gx_render';
-import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 // @ts-ignore
 // This feature is provided by Parcel.
 import { readFileSync } from 'fs';
 import { Camera } from '../Camera';
+import GfxArena from '../gfx/helpers/GfxArena';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
@@ -60,10 +61,6 @@ export class CtrTextureHolder extends TextureHolder<CMB.Texture> {
         device.submitPass(hostAccessPass);
         const viewerTexture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };
-    }
-
-    public addTexture(gl: WebGL2RenderingContext, texture: CMB.Texture): LoadedTexture {
-        throw new Error();
     }
 }
 
@@ -109,6 +106,7 @@ export class CmbRenderer {
 
     private textureMapping = nArray(1, () => new TextureMapping());
     private templateRenderInst: GfxRenderInst;
+    private arena = new GfxArena();
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
         this.textureHolder.addTexturesGfx(device, cmb.textures.filter((texture) => texture.levels.length > 0));
@@ -146,8 +144,8 @@ export class CmbRenderer {
         });
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
-        this.prmParamsBuffer.prepareToRender(hostAccessPass);
         this.materialParamsBuffer.prepareToRender(hostAccessPass);
+        this.prmParamsBuffer.prepareToRender(hostAccessPass);
     }
 
     public setVisible(visible: boolean): void {
@@ -156,6 +154,9 @@ export class CmbRenderer {
 
     public destroy(device: GfxDevice): void {
         device.destroyProgram(this.gfxProgram);
+        this.sceneParamsBuffer.destroy(device);
+        this.materialParamsBuffer.destroy(device);
+        this.prmParamsBuffer.destroy(device);
     }
 
     public bindCMAB(cmab: CMAB.CMAB, channelIndex: number = 0): void {
@@ -315,8 +316,9 @@ export class CmbRenderer {
 
         const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         renderInstBuilder.newUniformBufferInstance(templateRenderInst, OoT3D_Program.ub_MaterialParams);
+        const layer = material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         const programKey = device.queryProgram(templateRenderInst.gfxProgram).uniqueKey;
-        templateRenderInst.sortKey = makeSortKey(material.isTransparent ? 1 : 0, 0, programKey);
+        templateRenderInst.sortKey = makeSortKey(layer, 0, programKey);
         templateRenderInst.renderFlags.set(material.renderFlags);
 
         this.textureMapping[0].reset();
@@ -334,7 +336,7 @@ export class CmbRenderer {
             const texture = this.cmb.textures[binding.textureIdx];
             this.textureHolder.fillTextureMapping(this.textureMapping[0], texture.name);
 
-            const gfxSampler = device.createSampler({
+            const gfxSampler = this.arena.trackSampler(device.createSampler({
                 wrapS: translateWrapMode(binding.wrapS),
                 wrapT: translateWrapMode(binding.wrapT),
                 magFilter,
@@ -342,7 +344,7 @@ export class CmbRenderer {
                 mipFilter,
                 minLOD: 0,
                 maxLOD: 100,
-            });
+            }));
             gfxSamplers.push(gfxSampler);
             this.textureMapping[0].gfxSampler = gfxSampler;
         }
@@ -420,10 +422,10 @@ export abstract class BasicRendererHelper {
         this.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget);
+        const finalPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.executeOnPass(device, passRenderer);
-        return passRenderer;
+        this.viewRenderer.executeOnPass(device, finalPassRenderer);
+        return finalPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
@@ -456,7 +458,7 @@ export class RoomRenderer {
             this.transparentMesh.addToViewRenderer(device, viewRenderer);
         if (this.wCmb !== null)
             this.wMesh.addToViewRenderer(device, viewRenderer);
-}
+    }
 
     public bindCMAB(cmab: CMAB.CMAB): void {
         if (this.opaqueMesh !== null)

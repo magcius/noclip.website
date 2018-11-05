@@ -9,7 +9,7 @@ export interface RenderFlagsPossibilities {
     depthWrite?: boolean;
     cullMode?: GfxCullMode;
     frontFace?: GfxFrontFaceMode;
-    polygonOffset: boolean;
+    polygonOffset?: boolean;
 }
 
 export class RenderFlags {

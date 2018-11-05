@@ -9,6 +9,14 @@ import { DeviceProgramReflection } from "../../Program";
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // Similar to bgfx and T3, it implements a bare minimum set of features for high performance graphics.
 
+// Suggested values for the "layer" of makeSortKey.
+export const enum GfxRendererLayer {
+    BACKGROUND = 0,
+    ALPHA_TEST = 10,
+    OPAQUE = 20,
+    TRANSLUCENT = 30,
+}
+
 function clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(v, max));
 }
@@ -46,6 +54,7 @@ export function setSortKeyDepth(sortKey: number, depthKey: number): number {
 
 function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     dst.sortKey = src.sortKey;
+    dst.passMask = src.passMask;
     dst.gfxProgram = src.gfxProgram;
     dst.samplerBindings = src.samplerBindings.slice();
     dst.inputState = src.inputState;
@@ -67,6 +76,7 @@ export class GfxRenderInst {
     public _drawIndexed: boolean;
     public _drawStart: number = 0;
     public _drawCount: number = 0;
+    public passMask: number = 1;
 
     // Pipeline building.
     public inputState: GfxInputState | null = null;
@@ -163,7 +173,7 @@ export class GfxRenderInstViewRenderer {
         renderInst.samplerBindingsDirty = false;
     }
 
-    public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass): void {
+    public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass, passMask: number = 1): void {
         // Sort our instances.
         this.renderInsts.sort((a, b) => a.sortKey - b.sortKey);
 
@@ -175,6 +185,9 @@ export class GfxRenderInstViewRenderer {
 
         for (let i = 0; i < this.renderInsts.length; i++) {
             const renderInst = this.renderInsts[i];
+
+            if ((renderInst.passMask & passMask) === 0)
+                continue;
 
             if (!renderInst.visible)
                 continue;
