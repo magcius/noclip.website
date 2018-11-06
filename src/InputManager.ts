@@ -1,4 +1,14 @@
 
+declare global {
+    interface HTMLElement {
+        requestPointerLock(): void;
+    }
+
+    interface Document {
+        exitPointerLock(): void;
+    }
+}
+
 export default class InputManager {
     public toplevel: HTMLElement;
     // tristate. non-existent = not pressed, false = pressed but not this frame, true = pressed this frame.
@@ -82,16 +92,24 @@ export default class InputManager {
     private _onMouseMove = (e: MouseEvent) => {
         if (!this.grabbing)
             return;
-        const dx = e.pageX - this.lastX;
-        const dy = e.pageY - this.lastY;
-        this.lastX = e.pageX;
-        this.lastY = e.pageY;
+        let dx: number, dy: number;
+        if (e.movementX !== undefined) {
+            dx = e.movementX;
+            dy = e.movementY;
+        } else {
+            dx = e.pageX - this.lastX;
+            dy = e.pageY - this.lastY;
+            this.lastX = e.pageX;
+            this.lastY = e.pageY;
+        }
         this.dx += dx;
         this.dy += dy;
     };
     private _onMouseUp = (e: MouseEvent) => {
         this._setGrabbing(false);
         this.button = 0;
+        if (document.exitPointerLock !== undefined)
+            document.exitPointerLock();
     };
     private _onMouseDown = (e: MouseEvent) => {
         this.button = e.button;
@@ -102,5 +120,7 @@ export default class InputManager {
         // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
         this.toplevel.focus();
         e.preventDefault();
+        if (this.toplevel.requestPointerLock !== undefined)
+            this.toplevel.requestPointerLock();
     };
 }
