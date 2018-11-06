@@ -4,7 +4,7 @@ import Progressable from '../Progressable';
 import { assert } from '../util';
 import { fetchData } from '../fetch';
 
-import { RenderState, ColorTarget, RenderFlags, BlendMode, BlendFactor } from '../render';
+import { RenderState, ColorTarget, RenderFlags } from '../render';
 import { FullscreenProgram } from '../Program';
 import * as Viewer from '../viewer';
 
@@ -18,6 +18,7 @@ import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK } from './j3d';
+import { GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 
 const materialHacks: GXMaterialHacks = {
     alphaLightingFudge: (p) => p.matSource,
@@ -194,9 +195,9 @@ class SMGRenderer implements Viewer.MainScene {
     ) {
         this.bloomCombineFlags = new RenderFlags();
 
-        this.bloomCombineFlags.blendMode = BlendMode.ADD;
-        this.bloomCombineFlags.blendSrc = BlendFactor.ONE;
-        this.bloomCombineFlags.blendDst = BlendFactor.ONE;
+        this.bloomCombineFlags.blendMode = GfxBlendMode.ADD;
+        this.bloomCombineFlags.blendSrcFactor = GfxBlendFactor.ONE;
+        this.bloomCombineFlags.blendDstFactor = GfxBlendFactor.ONE;
     }
 
     public setZoneLayersVisible(zoneName: string, layerMask: number): void {

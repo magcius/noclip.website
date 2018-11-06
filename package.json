@@ -18,6 +18,7 @@
   },
   "scripts": {
     "start": "parcel src/index.html",
+    "typecheck": "tsc -w --noEmit .",
     "embed": "parcel src/embed.html"
   }
 }

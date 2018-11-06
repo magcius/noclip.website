@@ -12,7 +12,7 @@ import { GfxTexture, GfxDevice, GfxRenderPass, GfxSampler, GfxTexFilterMode, Gfx
 import { GfxCoalescedBuffers, GfxBufferCoalescer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
 import { Camera, computeViewMatrix } from "../Camera";
-import { BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 
 const materialParamsScratch = new MaterialParams();
 class Command_Material {
@@ -204,7 +204,7 @@ export class LuigisMansionRenderer implements Viewer.Scene_Device {
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget);
+        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, passRenderer);
         return passRenderer;
