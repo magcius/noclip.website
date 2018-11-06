@@ -125,7 +125,6 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         }
 
         throw new Error(`Cannot find texture ${name}`);
-        return false;
     }
 
     public findTexture(name: string): TextureType | null {

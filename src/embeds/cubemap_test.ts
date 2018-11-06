@@ -1,9 +1,10 @@
 
 import Progressable from '../Progressable';
 
-import { RenderState, RenderFlags, BlendMode } from '../render';
+import { RenderState, RenderFlags } from '../render';
 import { MainScene } from '../viewer';
 import { SimpleProgram } from '../Program';
+import { GfxBlendMode } from '../gfx/platform/GfxPlatform';
 
 class InteriorProgram extends SimpleProgram {
     public static a_Position = 0;
@@ -68,7 +69,7 @@ class Scene {
         this._createBuffers(gl);
 
         this.renderFlags = new RenderFlags();
-        this.renderFlags.blendMode = BlendMode.ADD;
+        this.renderFlags.blendMode = GfxBlendMode.ADD;
     }
 
     public render(state: RenderState) {
