@@ -112,17 +112,26 @@ export interface CameraControllerClass {
     new(): CameraController;
 }
 
+function clamp(v: number, min: number, max: number): number {
+    return Math.max(min, Math.min(v, max));
+}
+
+function clampRange(v: number, lim: number): number {
+    return clamp(v, -lim, lim);
+}
+
 const vec3Zero = [0, 0, 0];
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
 
+    private keyMovement = vec3.create();
     private tmp1: vec3 = vec3.create();
     private tmp2: vec3 = vec3.create();
     private speed: number;
 
     constructor() {
-        this.speed = 10;
+        this.speed = 60;
     }
 
     public serialize(): string {
@@ -161,56 +170,47 @@ export class FPSCameraController implements CameraController {
         this.speed += inputManager.dz;
         this.speed = Math.max(this.speed, 1);
 
-        let mult = this.speed;
+        let speedCap = this.speed;
         if (inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight'))
-            mult *= 5;
-        mult *= (dt / 16.0);
+            speedCap *= 5;
 
-        const movement = this.tmp1;
-        vec3.set(movement, 0, 0, 0);
-
+        const movement = this.keyMovement;
         const tmp = this.tmp2;
 
-        let amt;
-        amt = 0;
+        const velocity = speedCap / 5;
+        const drag = 0.8;
+        const lowSpeedCap = 0.01;
+
         if (inputManager.isKeyDown('KeyW')) {
-            amt = -mult;
+            movement[2] = clampRange(movement[2] - velocity, speedCap);
         } else if (inputManager.isKeyDown('KeyS')) {
-            amt = mult;
-        }
-        if (amt !== 0) {
-            movement[2] = amt;
+            movement[2] = clampRange(movement[2] + velocity, speedCap);
+        } else {
+            movement[2] *= drag;
+            if (Math.abs(movement[2]) < lowSpeedCap) movement[2] = 0.0;
         }
 
-        amt = 0;
         if (inputManager.isKeyDown('KeyA')) {
-            amt = -mult;
+            movement[0] = clampRange(movement[0] - velocity, speedCap);
         } else if (inputManager.isKeyDown('KeyD')) {
-            amt = mult;
-        }
-        if (amt !== 0) {
-            movement[0] = amt;
+            movement[0] = clampRange(movement[0] + velocity, speedCap);
+        } else {
+            movement[0] *= drag;
+            if (Math.abs(movement[0]) < lowSpeedCap) movement[0] = 0.0;
         }
 
-        amt = 0;
         if (inputManager.isKeyDown('KeyQ')) {
-            amt = -mult;
+            movement[1] = clampRange(movement[1] - velocity, speedCap);
         } else if (inputManager.isKeyDown('KeyE')) {
-            amt = mult;
-        }
-        if (amt !== 0) {
-            // Instead of getting the camera up, instead use world up. Feels more natural.
-            camera.getWorldUp(tmp);
-            vec3.scaleAndAdd(movement, movement, tmp, amt);
-            updated = true;
+            movement[1] = clampRange(movement[1] + velocity, speedCap);
+        } else {
+            movement[1] *= drag;
+            if (Math.abs(movement[1]) < lowSpeedCap) movement[1] = 0.0;
         }
 
         if (inputManager.isKeyDown('KeyB')) {
             mat4.identity(camera.worldMatrix);
             updated = true;
-        }
-        if (inputManager.isKeyDown('KeyC')) {
-            console.log(camera);
         }
 
         // Rotate view.
@@ -224,8 +224,15 @@ export class FPSCameraController implements CameraController {
             updated = true;
         }
 
+        // Apply movement.
         if (!vec3.exactEquals(movement, vec3Zero)) {
-            mat4.translate(camera.worldMatrix, camera.worldMatrix, movement);
+            const finalMovement = this.tmp1;
+            vec3.set(finalMovement, movement[0], 0, movement[2]);
+
+            // Instead of getting the camera up, instead use world up. Feels more natural.
+            camera.getWorldUp(tmp);
+            vec3.scaleAndAdd(finalMovement, finalMovement, tmp, movement[1]);
+            mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
             updated = true;
         }
 
@@ -238,14 +245,6 @@ export class FPSCameraController implements CameraController {
 
         return updated;
     }
-}
-
-function clamp(v: number, min: number, max: number): number {
-    return Math.max(min, Math.min(v, max));
-}
-
-function clampRange(v: number, lim: number): number {
-    return clamp(v, -lim, lim);
 }
 
 export class OrbitCameraController implements CameraController {
