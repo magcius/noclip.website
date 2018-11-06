@@ -164,6 +164,15 @@ function translateCullMode(renderWhichFaces: number): GfxCullMode {
 
 export function calcTexMtx_Maya(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
     dst[0] = texScaleS * scaleS *  cosR;
+    dst[1] = texScaleS * scaleS * -sinR;
+    dst[2] = texScaleT * scaleT *  sinR;
+    dst[3] = texScaleT * scaleT *  cosR;
+    // TODO(jstpierre): Bring back rotation.
+    dst[4] = (scaleS * translationS) * -1;
+    dst[5] = (scaleT + 1) + (scaleT * translationT);
+    return;
+
+    dst[0] = texScaleS * scaleS *  cosR;
     dst[2] = texScaleS * scaleS *  sinR;
     dst[4] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
     dst[1] = texScaleT * scaleT * -sinR;
@@ -263,6 +272,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string): MDL0Model {
     const sbcType = view.getUint8(0x14);
     const scalingRule = view.getUint8(0x15);
     const texMtxMode = view.getUint8(0x16);
+    assert(texMtxMode === 0);
     const nodeTableCount = view.getUint8(0x17);
     const materialTableCount = view.getUint8(0x18);
     const shapeTableCount = view.getUint8(0x19);

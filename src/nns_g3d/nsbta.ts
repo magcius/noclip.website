@@ -164,11 +164,10 @@ function sampleFloatAnimationTrack(track: AnimationTrack, frame: number): number
 
     if (idx1 === 0)
         return frames[0].value;
-    else if (idx1 === frames.length)
-        return frames[frames.length - 1].value;
 
     const idx0 = idx1 - 1;
-
+    idx1 = idx1 % frames.length;
+    
     const k0 = frames[idx0];
     const k1 = frames[idx1];
 
@@ -198,15 +197,14 @@ function sampleRotAnimationTrack(dst: vec2, track: AnimationTrack, frame: number
 
     if (idx1 === 0)
         return rotationFromValue(dst, frames[0].value);
-    else if (idx1 === frames.length)
-        return rotationFromValue(dst, frames[frames.length - 1].value);
 
     const idx0 = idx1 - 1;
+    idx1 = idx1 % frames.length;
 
     const k0 = frames[idx0];
     const k1 = frames[idx1];
 
-    const t = (frame - idx0);
+    const t = (frame - idx0) / (k1.frame - k0.frame);
     rotationFromValue(scratchK0, k0.value);
     rotationFromValue(scratchK1, k1.value);
     dst[0] = lerp(scratchK0[0], scratchK1[0], t);
