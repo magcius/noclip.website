@@ -170,14 +170,12 @@ export function calcTexMtx_Maya(dst: mat2d, texScaleS: number, texScaleT: number
     // TODO(jstpierre): Bring back rotation.
     dst[4] = (scaleS * translationS) * -1;
     dst[5] = (scaleT + 1) + (scaleT * translationT);
-    return;
 
-    dst[0] = texScaleS * scaleS *  cosR;
-    dst[2] = texScaleS * scaleS *  sinR;
-    dst[4] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
-    dst[1] = texScaleT * scaleT * -sinR;
-    dst[3] = texScaleT * scaleT *  cosR;
-    dst[5] = scaleT * (((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1);
+    /*
+    dst[4] = (-sinR*scaleS - cosR*scaleS + scaleS)     - (scaleS * translationS);
+    dst[5] = ( sinR*scaleT + cosR*scaleT + 1) + (scaleT * translationT);
+    dst[5] = ( sinR*scaleT - cosR*scaleT - scaleT + 2) + (scaleT * translationT);
+    */
 }
 
 function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
