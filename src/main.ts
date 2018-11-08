@@ -44,6 +44,7 @@ import { CameraControllerClass, FPSCameraController, Camera } from './Camera';
 import { RenderStatistics } from './render';
 import { hexdump } from './util';
 import { downloadBlob } from './fetch';
+import { GfxDevice } from './gfx/platform/GfxPlatform';
 
 const sceneGroups = [
     MKDS.sceneGroup,
@@ -71,6 +72,28 @@ const sceneGroups = [
     LM3D.sceneGroup,
 ];
 
+function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {
+    const request = new FileReader();
+    request.readAsArrayBuffer(file);
+
+    const p = new Promise<ArrayBufferSlice>((resolve, reject) => {
+        request.onload = () => {
+            const buffer: ArrayBuffer = request.result as ArrayBuffer;
+            const slice = new ArrayBufferSlice(buffer);
+            resolve(slice);
+        };
+        request.onerror = () => {
+            reject();
+        };
+        request.onprogress = (e) => {
+            if (e.lengthComputable)
+                pr.setProgress(e.loaded / e.total);
+        };
+    });
+    const pr = new Progressable<ArrayBufferSlice>(p);
+    return pr;
+}
+
 class DroppedFileSceneDesc implements SceneDesc {
     public id: string;
     public name: string;
@@ -82,50 +105,28 @@ class DroppedFileSceneDesc implements SceneDesc {
         this.name = file.name;
     }
 
-    private _loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {
-        const request = new FileReader();
-        request.readAsArrayBuffer(file);
+    public createScene_Device(device: GfxDevice): Progressable<Scene_Device> {
+        const file = this.file;
 
-        const p = new Promise<ArrayBufferSlice>((resolve, reject) => {
-            request.onload = () => {
-                const buffer: ArrayBuffer = request.result as ArrayBuffer;
-                const slice = new ArrayBufferSlice(buffer);
-                resolve(slice);
-            };
-            request.onerror = () => {
-                reject();
-            };
-            request.onprogress = (e) => {
-                if (e.lengthComputable)
-                    pr.setProgress(e.loaded / e.total);
-            };
-        });
-        const pr = new Progressable<ArrayBufferSlice>(p);
-        return pr;
-    }
-
-    private createSceneFromFile(gl: WebGL2RenderingContext, file: File, buffer: ArrayBufferSlice): Promise<MainScene> {
-        if (file.name.endsWith('.brres'))
-            return Promise.resolve(ELB.createBasicRRESSceneFromBuffer(gl, buffer));
-
-        if (file.name.endsWith('.bfres'))
-            return Promise.resolve(FRES.createSceneFromFRESBuffer(gl, buffer));
-
-        if (file.name.endsWith('.szs'))
-            return FRES.createSceneFromSARCBuffer(gl, buffer);
-
-        // XXX(jstpierre): Figure out WTF to do here...
-        const promise = J3D.createMultiSceneFromBuffer(gl, buffer);
-        if (promise)
-            return promise;
+        if (file.name.endsWith('.gar'))
+            return loadFileAsPromise(file).then((buffer) => LM3D.createSceneFromGARBuffer(device, buffer));
 
         return null;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<MainScene> {
-        return this._loadFileAsPromise(this.file).then((result: ArrayBufferSlice) => {
-            return this.createSceneFromFile(gl, this.file, result);
-        });
+        const file = this.file;
+
+        if (file.name.endsWith('.brres'))
+            return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESSceneFromBuffer(gl, buffer));
+
+        if (file.name.endsWith('.bfres'))
+            return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(gl, buffer));
+
+        if (file.name.endsWith('.szs') || file.name.endsWith('.rarc'))
+            return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(gl, buffer));
+
+        return null;
     }
 }
 
@@ -160,36 +161,42 @@ class SceneLoader {
 
         const gl = this.viewer.renderState.gl;
 
+        if (sceneDesc.createScene_Device !== undefined) {
+            const progressable = sceneDesc.createScene_Device(this.viewer.gfxDevice);
+            if (progressable !== null) {
+                progressable.then((scene: Scene_Device) => {
+                    if (this.loadingSceneDesc === sceneDesc) {
+                        this.loadingSceneDesc = null;
+                        this.setCameraState(sceneDesc, cameraState, (camera) => camera.identity());
+                        this.viewer.setSceneDevice(scene);
+                        this.onscenechanged();
+                    }
+                });
+                return progressable;
+            }
+        }
+
         if (sceneDesc.createScene !== undefined) {
             const progressable = sceneDesc.createScene(gl);
-            progressable.then((scene: MainScene) => {
-                if (this.loadingSceneDesc === sceneDesc) {
-                    this.loadingSceneDesc = null;
-                    this.setCameraState(sceneDesc, cameraState, (camera) => {
-                        if (scene.resetCamera)
-                            scene.resetCamera(camera);
-                        else
-                            camera.identity();
-                    });
-                    this.viewer.setScene(scene);
-                    this.onscenechanged();
-                }
-            });
-            return progressable;
-        } else if (sceneDesc.createScene_Device !== undefined) {
-            const progressable = sceneDesc.createScene_Device(this.viewer.gfxDevice);
-            progressable.then((scene: Scene_Device) => {
-                if (this.loadingSceneDesc === sceneDesc) {
-                    this.loadingSceneDesc = null;
-                    this.setCameraState(sceneDesc, cameraState, (camera) => camera.identity());
-                    this.viewer.setSceneDevice(scene);
-                    this.onscenechanged();
-                }
-            });
-            return progressable;
-        } else {
-            throw "whoops";
+            if (progressable !== null) {
+                progressable.then((scene: MainScene) => {
+                    if (this.loadingSceneDesc === sceneDesc) {
+                        this.loadingSceneDesc = null;
+                        this.setCameraState(sceneDesc, cameraState, (camera) => {
+                            if (scene.resetCamera)
+                                scene.resetCamera(camera);
+                            else
+                                camera.identity();
+                        });
+                        this.viewer.setScene(scene);
+                        this.onscenechanged();
+                    }
+                });
+                return progressable;
+            }
         }
+
+        throw "whoops";
     }
 }
 
