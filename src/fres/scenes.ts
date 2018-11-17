@@ -12,22 +12,20 @@ import { readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 class FRESRenderer implements Viewer.MainScene {
-    constructor(public textureHolder: GX2TextureHolder, public mainScene: Viewer.Scene) {
+    constructor(public textureHolder: GX2TextureHolder, public scenes: ModelRenderer[]) {
     }
 
     public render(state: RenderState) {
-        const gl = state.gl;
         state.setClipPlanes(0.2, 500000);
-        if (this.mainScene) {
-            this.mainScene.render(state);
-        }
+        this.scenes.forEach((s) => {
+            s.render(state);
+        });
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         GX2Texture.deswizzler.terminate();
 
-        if (this.mainScene)
-            this.mainScene.destroy(gl);
+        this.scenes.forEach((s) => s.destroy(gl));
     }
 }
 
@@ -35,7 +33,8 @@ export function createSceneFromFRESBuffer(gl: WebGL2RenderingContext, buffer: Ar
     const fres = BFRES.parse(buffer);
     const textureHolder = new GX2TextureHolder();
     textureHolder.addFRESTextures(gl, fres);
-    return new FRESRenderer(textureHolder, new ModelRenderer(gl, textureHolder, fres, fres.fmdl[0].fmdl));
+    let scenes = fres.fmdl.map((s) => new ModelRenderer(gl, textureHolder, fres, s.fmdl));
+    return new FRESRenderer(textureHolder, scenes);
 }
 
 export function createSceneFromSARCBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): Promise<Viewer.MainScene> {

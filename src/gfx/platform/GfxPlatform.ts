@@ -89,6 +89,24 @@ export interface GfxVertexAttributeDescriptor {
     usesIntInShader?: boolean;
 }
 
+export const enum GfxTextureDimension {
+    n2D, n2D_ARRAY
+}
+
+export interface GfxTextureDescriptor {
+    dimension: GfxTextureDimension;
+    pixelFormat: GfxFormat;
+    width: number;
+    height: number;
+    depth: number;
+    numLevels: number;
+}
+
+export function makeTextureDescriptor2D(pixelFormat: GfxFormat, width: number, height: number, numLevels: number): GfxTextureDescriptor {
+    const dimension = GfxTextureDimension.n2D, depth = 1;
+    return { dimension, pixelFormat, width, height, depth, numLevels };
+}
+
 export interface GfxSamplerDescriptor {
     wrapS: GfxWrapMode;
     wrapT: GfxWrapMode;
@@ -194,7 +212,9 @@ export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
     // TODO(jstpierre): The number of mipmaps is not explicitly choosable on Metal. I assume WebGPU
     // will not allow this either. At some point, I will have to move this into the sampler.
+    // TODO(jstpierre): Remove non-descriptor version?
     createTexture(format: GfxFormat, width: number, height: number, numLevels: number): GfxTexture;
+    createTexture_(descriptor: GfxTextureDescriptor): GfxTexture;
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createColorAttachment(width: number, height: number, numSamples: number): GfxColorAttachment;
     createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;

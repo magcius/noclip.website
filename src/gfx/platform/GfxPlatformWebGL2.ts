@@ -1,12 +1,11 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
 import { DeviceProgram, ProgramCache, DeviceProgramReflection } from '../../Program';
 import { FullscreenCopyProgram, RenderState } from '../../render';
 import { assert } from '../../util';
-import { Color } from '../../Color';
 import { fullscreenFlags, defaultFlags, RenderFlags } from '../helpers/RenderFlagsHelpers';
 
 interface GfxBufferP_GL extends GfxBuffer {
@@ -19,9 +18,10 @@ interface GfxBufferP_GL extends GfxBuffer {
 interface GfxTextureP_GL extends GfxTexture {
     gl_texture: WebGLTexture;
     gl_target: GLenum;
-    format: GfxFormat;
+    pixelFormat: GfxFormat;
     width: number;
     height: number;
+    depth: number;
 }
 
 interface GfxColorAttachmentP_GL extends GfxColorAttachment {
@@ -577,16 +577,34 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return buffer;
     }
 
-    public createTexture(format: GfxFormat, width: number, height: number, numLevels: number): GfxTexture {
+    public createTexture_(descriptor: GfxTextureDescriptor): GfxTexture {
         const gl = this.gl;
         const gl_texture = gl.createTexture();
-        const gl_target = gl.TEXTURE_2D;
-        gl.bindTexture(gl_target, gl_texture);
-        const internalformat = this.translateTextureInternalFormat(format);
-        gl.texParameteri(gl_target, gl.TEXTURE_MAX_LEVEL, numLevels - 1);
-        gl.texStorage2D(gl_target, numLevels, internalformat, width, height);
-        const texture: GfxTextureP_GL = { _T: _T.Texture, gl_texture, gl_target, format, width, height };
+        let gl_target: GLenum;
+        const internalformat = this.translateTextureInternalFormat(descriptor.pixelFormat);
+        this._setActiveTexture(gl.TEXTURE0);
+        this._currentTextures[0] = null;
+        if (descriptor.dimension === GfxTextureDimension.n2D) {
+            gl_target = WebGL2RenderingContext.TEXTURE_2D;
+            gl.bindTexture(gl_target, gl_texture);
+            gl.texStorage2D(gl_target, descriptor.numLevels, internalformat, descriptor.width, descriptor.height);
+            assert(descriptor.depth === 1);
+        } else if (descriptor.dimension === GfxTextureDimension.n2D_ARRAY) {
+            gl_target = WebGL2RenderingContext.TEXTURE_2D_ARRAY;
+            gl.bindTexture(gl_target, gl_texture);
+            gl.texStorage3D(gl_target, descriptor.numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
+        }
+        const texture: GfxTextureP_GL = { _T: _T.Texture, gl_texture, gl_target,
+            pixelFormat: descriptor.pixelFormat,
+            width: descriptor.width,
+            height: descriptor.height,
+            depth: descriptor.depth,
+        };
         return texture;
+    }
+
+    public createTexture(format: GfxFormat, width: number, height: number, numLevels: number): GfxTexture {
+        return this.createTexture_(makeTextureDescriptor2D(format, width, height, numLevels));
     }
 
     public createSampler(descriptor: GfxSamplerDescriptor): GfxSampler {
@@ -907,23 +925,35 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 const numMipLevels = u32[iu32++];
 
                 const gl = this.gl;
-                const { gl_texture, gl_target, format, width, height } = texture as GfxTextureP_GL;
+                const { gl_texture, gl_target, pixelFormat, width, height, depth } = texture as GfxTextureP_GL;
+                this._setActiveTexture(gl.TEXTURE0);
+                this._currentTextures[0] = null;
                 gl.bindTexture(gl_target, gl_texture);
-                let w = width, h = height;
+                let w = width, h = height, d = depth;
                 const maxMipLevel = firstMipLevel + numMipLevels;
 
-                const isCompressed = this.isTextureFormatCompressed(format);
-                const gl_format = this.translateTextureFormat(format);
+                const isCompressed = this.isTextureFormatCompressed(pixelFormat);
+                const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
+                const gl_format = this.translateTextureFormat(pixelFormat);
 
                 for (let i = 0; i < maxMipLevel; i++) {
                     if (i >= firstMipLevel) {
                         const levelData = bufr[ibufr++] as ArrayBufferView;
 
-                        if (isCompressed) {
-                            gl.compressedTexSubImage2D(gl_target, i, 0, 0, w, h, gl_format, levelData);
+                        if (is3D) {
+                            if (isCompressed) {
+                                gl.compressedTexSubImage3D(gl_target, i, 0, 0, 0, w, h, d, gl_format, levelData);
+                            } else {
+                                const gl_type = this.translateTextureType(pixelFormat);
+                                gl.texSubImage3D(gl_target, i, 0, 0, 0, w, h, d, gl_format, gl_type, levelData);
+                            }
                         } else {
-                            const gl_type = this.translateTextureType(format);
-                            gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
+                            if (isCompressed) {
+                                gl.compressedTexSubImage2D(gl_target, i, 0, 0, w, h, gl_format, levelData);
+                            } else {
+                                const gl_type = this.translateTextureType(pixelFormat);
+                                gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
+                            }
                         }
                     }
         

@@ -4,7 +4,7 @@ import { GX2Surface, DeswizzledSurface } from './gx2_surface';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import WorkerPool from '../WorkerPool';
-import { DeswizzleRequest } from './gx2_swizzle';
+import { DeswizzleRequest, deswizzle } from './gx2_swizzle';
 
 class Deswizzler {
     private pool: WorkerPool<DeswizzleRequest, DeswizzledSurface>;
@@ -14,6 +14,7 @@ class Deswizzler {
     }
 
     public deswizzle(surface: GX2Surface, buffer: ArrayBuffer, mipLevel: number): Promise<DeswizzledSurface> {
+        // return Promise.resolve<DeswizzledSurface>(deswizzle(surface, buffer, mipLevel));
         const req: DeswizzleRequest = { surface, buffer, mipLevel, priority: mipLevel };
         return this.pool.execute(req);
     }
@@ -32,6 +33,7 @@ export const deswizzler: Deswizzler = new Deswizzler();
 interface DecodedSurfaceBase {
     width: number;
     height: number;
+    depth: number;
 }
 
 interface DecodedSurfaceUN {
@@ -93,12 +95,14 @@ function decompressBC1Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBA
     const bytesPerPixel = 4;
     const width = surface.width;
     const height = surface.height;
-    const dst = new Uint8Array(width * height * bytesPerPixel);
+    const depth = surface.depth;
+    const dst = new Uint8Array(width * height * depth * bytesPerPixel);
     const view = new DataView(surface.pixels.buffer);
     const colorTable = new Uint8Array(16);
 
     let srcOffs = 0;
-    for (let yy = 0; yy < height; yy += 4) {
+    const tall = height * depth;
+    for (let yy = 0; yy < tall; yy += 4) {
         for (let xx = 0; xx < width; xx += 4) {
             const color1 = view.getUint16(srcOffs + 0x00, true);
             const color2 = view.getUint16(srcOffs + 0x02, true);
@@ -157,7 +161,7 @@ function decompressBC1Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBA
     }
 
     const pixels = dst;
-    return { type: 'RGBA', flag: surface.flag, width, height, pixels };
+    return { type: 'RGBA', flag: surface.flag, width, height, depth, pixels };
 }
 
 // Software decompresses from standard BC3 (DXT5) to RGBA.
@@ -165,13 +169,15 @@ function decompressBC3Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBA
     const bytesPerPixel = 4;
     const width = surface.width;
     const height = surface.height;
-    const dst = new Uint8Array(width * height * bytesPerPixel);
+    const depth = surface.depth;
+    const dst = new Uint8Array(width * height * depth * bytesPerPixel);
     const view = new DataView(surface.pixels.buffer);
     const colorTable = new Uint8Array(16);
     const alphaTable = new Uint8Array(8);
 
     let srcOffs = 0;
-    for (let yy = 0; yy < height; yy += 4) {
+    const tall = height * depth;
+    for (let yy = 0; yy < tall; yy += 4) {
         for (let xx = 0; xx < width; xx += 4) {
 
             const alpha1 = view.getUint8(srcOffs + 0x00);
@@ -267,7 +273,7 @@ function decompressBC3Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBA
     }
 
     const pixels = dst;
-    return { type: 'RGBA', flag: surface.flag, width, height, pixels };
+    return { type: 'RGBA', flag: surface.flag, width, height, depth, pixels };
 }
 
 // Software decompresses from standard BC4/BC5 to RGBA.
@@ -275,6 +281,7 @@ function decompressBC45Surface(surface: DecodedSurfaceBC45): DecodedSurfaceRGBA 
     let bytesPerPixel = 4;
     const width = surface.width;
     const height = surface.height;
+    const depth = surface.depth;
 
     const signed = surface.flag === 'SNORM';
     const view = new DataView(surface.pixels.buffer);
@@ -288,15 +295,16 @@ function decompressBC45Surface(surface: DecodedSurfaceBC45): DecodedSurfaceRGBA 
         srcBytesPerPixel = 2;
 
     if (signed) {
-        dst = new Int8Array(width * height * bytesPerPixel);
+        dst = new Int8Array(width * height * depth * bytesPerPixel);
         colorTable = new Int8Array(8);
     } else {
-        dst = new Uint8Array(width * height * bytesPerPixel);
+        dst = new Uint8Array(width * height * depth * bytesPerPixel);
         colorTable = new Uint8Array(8);
     }
 
     let srcOffs = 0;
-    for (let yy = 0; yy < height; yy += 4) {
+    const tall = height * depth;
+    for (let yy = 0; yy < tall; yy += 4) {
         for (let xx = 0; xx < width; xx += 4) {
             for (let ch = 0; ch < srcBytesPerPixel; ch++) {
                 let red0;
@@ -361,10 +369,10 @@ function decompressBC45Surface(surface: DecodedSurfaceBC45): DecodedSurfaceRGBA 
 
     if (surface.flag === 'SNORM') {
         const pixels: Int8Array = dst as Int8Array;
-        return { type: 'RGBA', flag: surface.flag, width, height, pixels };
+        return { type: 'RGBA', flag: surface.flag, width, height, depth, pixels };
     } else {
         const pixels: Uint8Array = dst as Uint8Array;
-        return { type: 'RGBA', flag: surface.flag, width, height, pixels };
+        return { type: 'RGBA', flag: surface.flag, width, height, depth, pixels };
     }
 }
 
@@ -387,12 +395,11 @@ export function deswizzleSurface(surface: GX2Surface, texData: ArrayBufferSlice,
 export function decodeSurface(surface: GX2Surface, texData: ArrayBufferSlice, mipData: ArrayBufferSlice, mipLevel: number): Promise<DecodedSurface> {
     let levelData;
     if (mipLevel === 0) {
-        levelData = texData;
+        levelData = texData.slice(0, surface.texDataSize);
     } else if (mipLevel === 1) {
-        levelData = mipData;
+        levelData = mipData.slice(0, surface.mipDataOffsets[0]);
     } else {
-        const offset = surface.mipDataOffsets[mipLevel - 1];
-        levelData = mipData.slice(offset);
+        levelData = mipData.slice(surface.mipDataOffsets[mipLevel - 1], surface.mipDataOffsets[mipLevel]);
     }
 
     return deswizzleSurface(surface, levelData, mipLevel).then((deswizzledSurface: DeswizzledSurface): DecodedSurface => {
@@ -423,24 +430,26 @@ export function decodeSurface(surface: GX2Surface, texData: ArrayBufferSlice, mi
     });
 }
 
-export function surfaceToCanvas(canvas: HTMLCanvasElement, surface: DecodedSurfaceSW) {
+export function surfaceToCanvas(canvas: HTMLCanvasElement, surface: DecodedSurfaceSW, slice: number) {
     const ctx = canvas.getContext('2d');
     const width = surface.width;
     const height = surface.height;
+    const pitch = surface.width * surface.height * 4;
+    const offset = pitch * slice;
     const imageData = new ImageData(width, height);
 
     switch (surface.type) {
     case 'RGBA':
         if (surface.flag === 'UNORM') {
-            imageData.data.set(surface.pixels);
+            imageData.data.set(surface.pixels.subarray(offset, offset + pitch));
         } else if (surface.flag === 'SRGB') {
             // XXX(jstpierre): SRGB
-            imageData.data.set(surface.pixels);
+            imageData.data.set(surface.pixels.subarray(offset, offset + pitch));
         } else if (surface.flag === 'SNORM') {
             const src = surface.pixels;
-            const data = new Uint8Array(surface.pixels.byteLength);
+            const data = new Uint8Array(pitch);
             for (let i = 0; i < src.length; i++) {
-                data[i] = src[i] + 128;
+                data[i] = src[offset + i] + 128;
             }
             imageData.data.set(data);
         }

@@ -19,12 +19,12 @@ import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, makeSor
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
 import { ub_MaterialParams } from '../gx/gx_render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { Camera } from '../Camera';
+import GfxArena from '../gfx/helpers/GfxArena';
 
 // @ts-ignore
 // This feature is provided by Parcel.
 import { readFileSync } from 'fs';
-import { Camera } from '../Camera';
-import GfxArena from '../gfx/helpers/GfxArena';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = document.createElement("canvas");

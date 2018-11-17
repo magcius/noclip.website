@@ -1,5 +1,5 @@
 
-import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat, GX2SurfaceFormat, GX2BlendCombine, GX2BlendFunction } from './gx2_enum';
+import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat, GX2SurfaceFormat, GX2BlendCombine, GX2BlendFunction, GX2Dimension } from './gx2_enum';
 import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 
@@ -11,7 +11,8 @@ import { Endianness } from '../endian';
 import { CoalescedBuffer, coalesceBuffer } from '../BufferCoalescer';
 import { TextureHolder, LoadedTexture, TextureMapping, getGLTextureFromMapping } from '../TextureHolder';
 import { getTransitionDeviceForWebGL2, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
-import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxFrontFaceMode, GfxCullMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxFrontFaceMode, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxTextureDescriptor, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
+import { GX2Surface } from './gx2_surface';
 
 class ProgramGambit_UBER extends SimpleProgram {
     public s_a0: WebGLUniformLocation;
@@ -333,31 +334,53 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
         this.addTextures(gl, fres.ftex);
     }
 
-    private translateSurfaceFormat(device: GfxDevice, format: GX2SurfaceFormat): GfxFormat {
-        // We always decode to software rn.
-        if (format & GX2SurfaceFormat.FLAG_SNORM)
-            return GfxFormat.S8_RGBA_NORM;
-        else if (format & GX2SurfaceFormat.FLAG_SRGB)
-            return GfxFormat.U8_RGBA_SRGB;
-        else
-            return GfxFormat.U8_RGBA;
+    public static translateTextureDescriptor(device: GfxDevice, surface: GX2Surface): GfxTextureDescriptor {
+        function translateSurfaceFormat(device: GfxDevice, format: GX2SurfaceFormat): GfxFormat {
+            // We always decode to software rn.
+            if (format & GX2SurfaceFormat.FLAG_SNORM)
+                return GfxFormat.S8_RGBA_NORM;
+            else if (format & GX2SurfaceFormat.FLAG_SRGB)
+                return GfxFormat.U8_RGBA_SRGB;
+            else
+                return GfxFormat.U8_RGBA;
+        }
+
+        function translateSurfaceDimension(dimension: GX2Dimension): GfxTextureDimension {
+            switch (dimension) {
+            case GX2Dimension._2D:
+            case GX2Dimension._2D_MSAA:
+                return GfxTextureDimension.n2D;
+            case GX2Dimension._2D_ARRAY:
+                return GfxTextureDimension.n2D_ARRAY;
+            }
+        }
+
+        return {
+            dimension: translateSurfaceDimension(surface.dimension),
+            pixelFormat: translateSurfaceFormat(device, surface.format),
+            width: surface.width,
+            height: surface.height,
+            depth: surface.depth,
+            numLevels: surface.numMips,
+        };
     }
 
     protected addTextureGfx(device: GfxDevice, textureEntry: BFRES.FTEXEntry): LoadedTexture | null {
         const texture = textureEntry.ftex;
         const surface = texture.surface;
 
-        const gfxTexture = device.createTexture(this.translateSurfaceFormat(device, surface.format), surface.width, surface.height, surface.numMips);
-
+        const gfxTexture = device.createTexture_(GX2TextureHolder.translateTextureDescriptor(device, surface));
         const canvases: HTMLCanvasElement[] = [];
 
         for (let i = 0; i < surface.numMips; i++) {
             const mipLevel = i;
 
-            const canvas = document.createElement('canvas');
-            canvas.width = 0;
-            canvas.height = 0;
-            canvases.push(canvas);
+            for (let j = 0; j < surface.depth; j++) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 0;
+                canvas.height = 0;
+                canvases.push(canvas);
+            }
 
             GX2Texture.decodeSurface(surface, texture.texData, texture.mipData, mipLevel).then((decodedSurface: GX2Texture.DecodedSurface) => {
                 // Sometimes the surfaces appear to have garbage sizes.
@@ -371,10 +394,12 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
                 hostAccessPass.uploadTextureData(gfxTexture, mipLevel, [decompressedSurface.pixels]);
                 device.submitPass(hostAccessPass);
 
-                const canvas = canvases[mipLevel];
-                canvas.width = decompressedSurface.width;
-                canvas.height = decompressedSurface.height;
-                GX2Texture.surfaceToCanvas(canvas, decompressedSurface);
+                for (let j = 0; j < surface.depth; j++) {
+                    const canvas = canvases[mipLevel + j];
+                    canvas.width = decompressedSurface.width;
+                    canvas.height = decompressedSurface.height;
+                    GX2Texture.surfaceToCanvas(canvas, decompressedSurface, j);
+                }
             });
         }
 
