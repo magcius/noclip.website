@@ -44,10 +44,84 @@ function parseResDic(buffer: ArrayBufferSlice, tableOffs: number, littleEndian: 
     return entries;
 }
 
+export const enum ResUserDataEntryKind {
+    Int32 = 0, Float = 1, UTF8 = 2, UCS2 = 3, Byte = 4,
+}
+
+interface ResUserDataEntryNumber {
+    name: string;
+    kind: ResUserDataEntryKind.Int32 | ResUserDataEntryKind.Float | ResUserDataEntryKind.Byte;
+    values: number[];
+}
+
+interface ResUserDataEntryString {
+    name: string;
+    kind: ResUserDataEntryKind.UTF8 | ResUserDataEntryKind.UCS2;
+    values: string[];
+}
+
+type ResUserDataEntry = ResUserDataEntryNumber | ResUserDataEntryString;
+
+export interface ResUserData {
+    entries: ResUserDataEntry[];
+}
+
+const utf8Decoder = new TextDecoder('utf8');
+const ucs2Decoder = new TextDecoder('utf-16be');
+
+function readStringDecode(buffer: ArrayBufferSlice, offs: number, decoder: TextDecoder, byteLength: number = 0xFF): string {
+    const arr = buffer.createTypedArray(Uint8Array, offs, byteLength);
+    const raw = decoder.decode(arr);
+    const nul = raw.indexOf('\u0000');
+    let str: string;
+    if (nul >= 0)
+        str = raw.slice(0, nul);
+    else
+        str = raw;
+    return str;
+}
+
+function parseResUserData(buffer: ArrayBufferSlice, userDataOffs: number, littleEndian: boolean): ResUserData {
+    const view = buffer.createDataView();
+
+    const resDic = parseResDic(buffer, userDataOffs, littleEndian);
+    const entries: ResUserDataEntry[] = [];
+    for (let i = 0; i < resDic.length; i++) {
+        const name = resDic[i].name;
+        const valuesCount = view.getUint16(resDic[i].offs + 0x04, littleEndian);
+        const kind = view.getUint8(resDic[i].offs + 0x06);
+        if (kind === ResUserDataEntryKind.Int32) {
+            const values: number[] = [];
+            let idx = resDic[i].offs + 0x08;
+            for (let i = 0; i < valuesCount; i++) {
+                values.push(view.getInt32(idx, littleEndian));
+                idx += 0x04;
+            }
+            entries.push({ name, kind, values });
+        } else if (kind === ResUserDataEntryKind.UTF8 || kind === ResUserDataEntryKind.UCS2) {
+            const values: string[] = [];
+            let idx = resDic[i].offs + 0x08;
+            for (let i = 0; i < valuesCount; i++) {
+                const stringOffset = view.getUint32(idx, littleEndian);
+                const decoder = kind === ResUserDataEntryKind.UTF8 ? utf8Decoder : ucs2Decoder;
+                const string = readStringDecode(buffer, idx + stringOffset, decoder);
+                values.push(string);
+                idx += 0x04;
+            }
+            entries.push({ name, kind, values });
+        } else {
+            throw "whoops";
+        }
+    }
+
+    return { entries };
+}
+
 export interface DecodableTexture {
     surface: GX2Surface;
     mipData: ArrayBufferSlice;
     texData: ArrayBufferSlice;
+    userData: ResUserData;
 }
 
 function parseFTEX(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: boolean): DecodableTexture {
@@ -64,9 +138,17 @@ function parseFTEX(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
     const texDataOffs = readBinPtrT(view, offs + 0xB0, littleEndian);
     const mipDataOffs = readBinPtrT(view, offs + 0xB4, littleEndian);
 
-    const texData = buffer.subarray(texDataOffs, surface.texDataSize);
-    const mipData = buffer.subarray(mipDataOffs, surface.mipDataSize);
-    return { surface, texData, mipData };
+    const userDataOffs = readBinPtrT(view, offs + 0xB8, littleEndian);
+    const userDataCount = view.getUint16(offs + 0xBC, littleEndian);
+    let userData: ResUserData | null = null;
+    if (userDataOffs > 0) {
+        userData = parseResUserData(buffer, userDataOffs, littleEndian);
+        assert(userDataCount === userData.entries.length);
+    }
+
+    const texData = buffer.subarray(texDataOffs);
+    const mipData = buffer.subarray(mipDataOffs);
+    return { surface, texData, mipData, userData };
 }
 
 interface SubMesh {
@@ -547,6 +629,7 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         0x03040002, // v3.4.0.2 - Super Mario 3D World
         0x03040004, // v3.4.0.4 - Mario Kart 8
         0x03050003, // v3.5.0.3 - Splatoon
+        0x04050003, // v4.5.0.3 - Breath of the Wild
     ];
     assert(supportedVersions.includes(version));
 
@@ -565,9 +648,9 @@ export function parse(buffer: ArrayBufferSlice): FRES {
     const fskaTable = parseResDicIdx(0x02);
 
     const ftex: FTEXEntry[] = [];
-    for (const entry of ftexTable) {
-        const ftex_ = parseFTEX(buffer, entry, littleEndian);
-        ftex.push({ name: entry.name, width: ftex_.surface.width, height: ftex_.surface.height, entry, ftex: ftex_ });
+    for (let i = 0; i < ftexTable.length; i++) {
+        const ftex_ = parseFTEX(buffer, ftexTable[i], littleEndian);
+        ftex.push({ name: ftexTable[i].name, width: ftex_.surface.width, height: ftex_.surface.height, entry: ftexTable[i], ftex: ftex_ });
     }
 
     const fmdl: FMDLEntry[] = [];

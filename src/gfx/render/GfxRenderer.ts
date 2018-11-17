@@ -116,10 +116,11 @@ export class GfxRenderInst {
         this._drawCount = indexCount;
     }
 
-    public setSamplerBindings(m: GfxSamplerBinding[]): void {
+    public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
         for (let i = 0; i < m.length; i++) {
-            if (!this.samplerBindings[i] || this.samplerBindings[i].texture !== m[i].texture || this.samplerBindings[i].sampler !== m[i].sampler) {
-                this.samplerBindings[i] = m[i];
+            const j = firstSampler + i;
+            if (!this.samplerBindings[j] || this.samplerBindings[j].texture !== m[i].texture || this.samplerBindings[j].sampler !== m[i].sampler) {
+                this.samplerBindings[j] = m[i];
                 this.samplerBindingsDirty = true;
             }
         }

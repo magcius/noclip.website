@@ -3,6 +3,7 @@ import { GX2SurfaceFormat, GX2TileMode, GX2AAMode, GX2Dimension } from './gx2_en
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export interface GX2Surface {
+    dimension: GX2Dimension;
     format: GX2SurfaceFormat;
     tileMode: GX2TileMode;
     aaMode: GX2AAMode;
@@ -43,12 +44,13 @@ export function parseGX2Surface(buffer: ArrayBufferSlice, gx2SurfaceOffs: number
         mipDataOffsetTableIdx += 0x04;
     }
 
-    const surface = { format, tileMode, swizzle, width, height, depth, pitch, numMips, aaMode, texDataSize, mipDataSize, mipDataOffsets };
+    const surface = { dimension, format, tileMode, swizzle, width, height, depth, pitch, numMips, aaMode, texDataSize, mipDataSize, mipDataOffsets };
     return surface;
 }
 
 export interface DeswizzledSurface {
     width: number;
     height: number;
+    depth: number;
     pixels: Uint8Array;
 }

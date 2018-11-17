@@ -152,7 +152,9 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
     }
 
     public addTextures(gl: WebGL2RenderingContext, textureEntries: TextureType[]): void {
-        for (const texture of textureEntries) {
+        for (let i = 0; i < textureEntries.length; i++) {
+            const texture = textureEntries[i];
+
             // Don't add dupes for the same name.
             if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
                 continue;
@@ -172,7 +174,9 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
     }
 
     public addTexturesGfx(device: GfxDevice, textureEntries: TextureType[]): void {
-        for (const texture of textureEntries) {
+        for (let i = 0; i < textureEntries.length; i++) {
+            const texture = textureEntries[i];
+
             // Don't add dupes for the same name.
             if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
                 continue;

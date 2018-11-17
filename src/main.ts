@@ -37,6 +37,7 @@ import * as MKWII from './rres/mkwii_scenes';
 import * as TTYD from './ttyd/scenes';
 import * as SPM from './ttyd/spm_scenes';
 import * as MKDS from './nns_g3d/mkds_scenes';
+import * as Z_BOTW from './z_botw/scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI, createDOMFromString } from './ui';
@@ -70,6 +71,7 @@ const sceneGroups = [
     MM3D.sceneGroup,
     ZELVIEW.sceneGroup,
     LM3D.sceneGroup,
+    Z_BOTW.sceneGroup,
 ];
 
 function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {
@@ -111,9 +113,6 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.gar'))
             return loadFileAsPromise(file).then((buffer) => LM3D.createSceneFromGARBuffer(device, buffer));
 
-        if (file.name.endsWith('.szs') || file.name.endsWith('.rarc'))
-            return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(device, buffer));
-
         return null;
     }
 
@@ -125,6 +124,9 @@ class DroppedFileSceneDesc implements SceneDesc {
 
         if (file.name.endsWith('.bfres'))
             return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(gl, buffer));
+
+        if (file.name.endsWith('.szs') || file.name.endsWith('.rarc'))
+            return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(gl, buffer));
 
         return null;
     }

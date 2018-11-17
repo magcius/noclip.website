@@ -3,6 +3,7 @@ import MemoizeCache from "./MemoizeCache";
 import CodeEditor from "./CodeEditor";
 import { assertExists, leftPad, assert } from "./util";
 import { BufferLayout, parseBufferLayout } from "./gfx/helpers/UniformBufferHelpers";
+import { GfxSamplerBinding } from "./gfx/platform/GfxPlatform";
 
 const DEBUG = true;
 
@@ -176,23 +177,26 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
     return results;
 }
 
-function range(stop: number): number[] {
+function range(start: number, num: number): number[] {
     const L: number[] = [];
-    for (let i = 0; i < stop; i++)
-        L.push(i);
+    for (let i = 0; i < num; i++)
+        L.push(start + i);
     return L;
 }
 
 export interface DeviceProgramReflection {
     uniformBufferLayouts: BufferLayout[];
-    numSamplers: number;
-    samplerBindingName: string;
+    samplerBindings: SamplerBindingReflection[];
+}
+
+export interface SamplerBindingReflection {
+    name: string;
+    arraySize: number;
 }
 
 export class DeviceProgram extends BaseProgram {
     public uniformBufferLayouts: BufferLayout[];
-    public numSamplers: number = 0;
-    public samplerBindingName: string = '';
+    public samplerBindings: SamplerBindingReflection[];
 
     public preprocessProgram(): void {
         super.preprocessProgram();
@@ -208,18 +212,12 @@ export class DeviceProgram extends BaseProgram {
             refl.uniformBufferLayouts[i] = parseBufferLayout(blockName, contents);
         }
 
-        const samplers = findall(vert, /^uniform sampler2D (\w+)(?:\[(\d+)\])?;$/gm);
-        // We support at most one sampler binding name: either you use the array
-        // style to put multiple in one binding name, or you have a single sampler.
-        assert(samplers.length <= 1);
-        if (samplers.length === 1) {
-            const [m, samplerName, arraySizeStr] = samplers[0];
-            refl.samplerBindingName = samplerName;
-            if (arraySizeStr) {
-                refl.numSamplers = parseInt(arraySizeStr);
-            } else {
-                refl.numSamplers = 1;
-            }
+        const samplers = findall(vert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
+        refl.samplerBindings = [];
+        for (let i = 0; i < samplers.length; i++) {
+            const [m, name, arraySizeStr] = samplers[i];
+            let arraySize: number = arraySizeStr ? parseInt(arraySizeStr) : 1;
+            refl.samplerBindings.push({ name, arraySize });
         }
     }
 
@@ -235,13 +233,15 @@ export class DeviceProgram extends BaseProgram {
             gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, uniformBufferLayout.blockName), i);
         }
 
-        if (this.numSamplers > 0) {
+        let samplerIndex = 0;
+        for (let i = 0; i < this.samplerBindings.length; i++) {
             // Assign identities in order.
             // XXX(jstpierre): This will cause a warning in Chrome, but I don't care rn.
             // It's more expensive to bind this every frame than respect Chrome's validation wishes...
-            const samplerUniformLocation = gl.getUniformLocation(prog, this.samplerBindingName);
+            const samplerUniformLocation = gl.getUniformLocation(prog, this.samplerBindings[i].name);
             gl.useProgram(prog);
-            gl.uniform1iv(samplerUniformLocation, range(this.numSamplers));
+            gl.uniform1iv(samplerUniformLocation, range(samplerIndex, this.samplerBindings[i].arraySize));
+            samplerIndex += this.samplerBindings[i].arraySize;
         }
     }
 }

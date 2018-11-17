@@ -114,13 +114,16 @@ export function deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLeve
         }
     }
 
-    function computePixelIndexWithinMicroTile(x: number, y: number, bytesPerBlock: number) {
+    function computePixelIndexWithinMicroTile(x: number, y: number, z: number, bytesPerBlock: number, microTileThickness: number) {
         const x0 = (x >>> 0) & 1;
         const x1 = (x >>> 1) & 1;
         const x2 = (x >>> 2) & 1;
         const y0 = (y >>> 0) & 1;
         const y1 = (y >>> 1) & 1;
         const y2 = (y >>> 2) & 1;
+        const z0 = (z >>> 0) & 1;
+        const z1 = (z >>> 1) & 1;
+        const z2 = (z >>> 2) & 1;
 
         let pixelBits;
         if (bytesPerBlock === 8) {
@@ -168,32 +171,27 @@ export function deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLeve
         return macroTileHeight / computeTileModeAspectRatio(tileMode);
     }
 
-    function computeSurfaceAddrFromCoordMicroTiled(x: number, y: number, surface: GX2Surface) {
-        // XXX(jstpierre): 3D Textures
-        const slice = 0;
-
+    function computeSurfaceAddrFromCoordMicroTiled(x: number, y: number, z: number, surface: GX2Surface) {
         const bytesPerBlock = computeSurfaceBytesPerBlock(surface.format);
         const microTileThickness = computeSurfaceThickness(surface.tileMode);
         const microTileBytes = bytesPerBlock * microTileThickness * microTilePixels;
         const microTilesPerRow = surface.pitch / microTileWidth;
         const microTileIndexX = (x / microTileWidth) | 0;
         const microTileIndexY = (y / microTileHeight) | 0;
-        const microTileIndexZ = (slice / microTileThickness) | 0;
+        const microTileIndexZ = (z / microTileThickness) | 0;
 
         const microTileOffset = microTileBytes * (microTileIndexX + microTileIndexY * microTilesPerRow);
         const sliceBytes = surface.pitch * surface.height * microTileThickness * bytesPerBlock;
         const sliceOffset = microTileIndexZ * sliceBytes;
-        const pixelIndex = computePixelIndexWithinMicroTile(x, y, bytesPerBlock);
+        const pixelIndex = computePixelIndexWithinMicroTile(x, y, z, bytesPerBlock, microTileThickness);
         const pixelOffset = bytesPerBlock * pixelIndex;
 
         return pixelOffset + microTileOffset + sliceOffset;
     }
 
-    function computeSurfaceAddrFromCoordMacroTiled(x: number, y: number, surface: GX2Surface) {
+    function computeSurfaceAddrFromCoordMacroTiled(x: number, y: number, z: number, surface: GX2Surface) {
         // XXX(jstpierre): AA textures
         const sample = 0;
-        // XXX(jstpierre): 3D Textures
-        const slice = 0;
 
         const numSamples = 1 << surface.aaMode;
         const pipeSwizzle = (surface.swizzle >> 8) & 0x01;
@@ -212,7 +210,7 @@ export function deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLeve
         const macroTileHeight = computeMacroTileHeight(surface.tileMode);
         const groupMask = (1 << numGroupBits) - 1;
 
-        const pixelIndex = computePixelIndexWithinMicroTile(x, y, bytesPerBlock);
+        const pixelIndex = computePixelIndexWithinMicroTile(x, y, z, bytesPerBlock, microTileThickness);
         const pixelOffset = pixelIndex * bytesPerBlock;
         const sampleOffset = sample * (microTileBytes / numSamples);
 
@@ -229,7 +227,7 @@ export function deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLeve
         const pipe1 = computePipeFromCoordWoRotation(x, y);
         const bank1 = computeBankFromCoordWoRotation(x, y);
         let bankPipe = pipe1 + numPipes * bank1;
-        const sliceIn = slice / (microTileThickness > 1 ? 4 : 1);
+        const sliceIn = z / (microTileThickness > 1 ? 4 : 1);
         const swizzle = pipeSwizzle + numPipes * bankSwizzle;
         bankPipe = bankPipe ^ (numPipes * sampleSlice * ((numBanks >> 1) + 1) ^ (swizzle + sliceIn * rotation));
         bankPipe = bankPipe % (numPipes * numBanks);
@@ -237,7 +235,7 @@ export function deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLeve
         const bank = (bankPipe / numPipes) | 0;
 
         const sliceBytes = surface.height * surface.pitch * microTileThickness * bytesPerBlock * numSamples;
-        const sliceOffset = sliceBytes * ((sampleSlice / microTileThickness) | 0);
+        const sliceOffset = sliceBytes * (((sampleSlice + numSampleSplits * z) / microTileThickness) | 0);
 
         const numSwizzleBits = numBankBits + numPipeBits;
 
@@ -267,34 +265,41 @@ export function deswizzle(inSurface: GX2Surface, srcBuffer: ArrayBuffer, mipLeve
 
     const dstWidth = inSurface.width >>> mipLevel;
     const dstHeight = inSurface.height >>> mipLevel;
-    let dstWidthBlocks = ((dstWidth + blockSize - 1) / blockSize) | 0;
-    let dstHeightBlocks = ((dstHeight + blockSize - 1) / blockSize) | 0;
+    // TODO(jstpierre): mipmaps of 3D textures? mipmaps of BC 3D TEXTURES??
+    const dstDepth = inSurface.depth;
+    const dstWidthBlocks = ((dstWidth + blockSize - 1) / blockSize) | 0;
+    const dstHeightBlocks = ((dstHeight + blockSize - 1) / blockSize) | 0;
+    surface.pitch = dstWidthBlocks;
+    surface.height = dstHeightBlocks;
 
     const bytesPerBlock = computeSurfaceBytesPerBlock(surface.format);
-    const dst = new Uint8Array(dstWidthBlocks * dstHeightBlocks * bytesPerBlock);
+    const dst = new Uint8Array(dstDepth * dstWidthBlocks * dstHeightBlocks * bytesPerBlock);
 
-    for (let y = 0; y < dstHeightBlocks; y++) {
-        for (let x = 0; x < dstWidthBlocks; x++) {
-            let srcIdx;
-            switch (surface.tileMode) {
-            case GX2TileMode._1D_TILED_THIN1:
-                srcIdx = computeSurfaceAddrFromCoordMicroTiled(x, y, surface);
-                break;
-            case GX2TileMode._2D_TILED_THIN1:
-                srcIdx = computeSurfaceAddrFromCoordMacroTiled(x, y, surface);
-                break;
-            default:
-                const tileMode_: GX2TileMode = (<GX2TileMode> surface.tileMode);
-                throw new Error(`Unsupported tile mode ${tileMode_.toString(16)}`);
+    for (let z = 0; z < dstDepth; z++) {
+        for (let y = 0; y < dstHeightBlocks; y++) {
+            for (let x = 0; x < dstWidthBlocks; x++) {
+                let srcIdx;
+                switch (surface.tileMode) {
+                case GX2TileMode._1D_TILED_THIN1:
+                    srcIdx = computeSurfaceAddrFromCoordMicroTiled(x, y, z, surface);
+                    break;
+                case GX2TileMode._2D_TILED_THIN1:
+                    srcIdx = computeSurfaceAddrFromCoordMacroTiled(x, y, z, surface);
+                    break;
+                default:
+                    const tileMode_: GX2TileMode = (<GX2TileMode> surface.tileMode);
+                    throw new Error(`Unsupported tile mode ${tileMode_.toString(16)}`);
+                }
+
+                const dstIdx = ((z * dstHeightBlocks + y) * dstWidthBlocks + x) * bytesPerBlock;
+                memcpy(dst, dstIdx, srcBuffer, srcIdx, bytesPerBlock);
             }
-
-            const dstIdx = (y * dstWidthBlocks + x) * bytesPerBlock;
-            memcpy(dst, dstIdx, srcBuffer, srcIdx, bytesPerBlock);
         }
     }
 
     const pixels = dst;
     const width = dstWidth;
     const height = dstHeight;
-    return { width, height, pixels };
+    const depth = dstDepth;
+    return { width, height, depth, pixels };
 }
