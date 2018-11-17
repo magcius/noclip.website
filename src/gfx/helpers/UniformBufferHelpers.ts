@@ -109,6 +109,10 @@ export class BufferFillerHelper {
     public fillMatrix4x4(m: mat4): void {
         this.offs += fillMatrix4x4(this.d, this.offs, m);
     }
+
+    public fillMatrix4x3(m: mat4): void {
+        this.offs += fillMatrix4x3(this.d, this.offs, m);
+    }
 }
 
 export function fillVec4(d: Float32Array, offs: number, v0: number, v1: number = 0, v2: number = 0, v3: number = 0): number {

@@ -8,7 +8,7 @@ import { CameraController, Camera, CameraControllerClass } from './Camera';
 import { TextureHolder } from './TextureHolder';
 import { GfxDevice, GfxSwapChain, GfxRenderPass } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl } from './gfx/platform/GfxPlatformWebGL2';
-import { downloadTextureToCanvas, downloadRenderbufferToCanvas } from './Screenshot';
+import { downloadTextureToCanvas } from './Screenshot';
 
 export interface Texture {
     name: string;

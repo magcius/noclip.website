@@ -65,9 +65,12 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
     public textureOverrides = new Map<string, TextureOverride>();
     public onnewtextures: (() => void) | null = null;
 
-    public destroy(gl: WebGL2RenderingContext): void {
-        const device = getTransitionDeviceForWebGL2(gl);
+    public destroyGfx(device: GfxDevice): void {
         this.gfxTextures.forEach((texture) => device.destroyTexture(texture));
+    }
+
+    public destroy(gl: WebGL2RenderingContext): void {
+        this.destroyGfx(getTransitionDeviceForWebGL2(gl));
     }
 
     // TODO(jstpierre): Optimize interface to not require an array construct every frame...

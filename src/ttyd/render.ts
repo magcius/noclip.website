@@ -6,7 +6,7 @@ import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';
 
 import * as Viewer from '../viewer';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
@@ -132,7 +132,7 @@ class Command_Material {
         this.templateRenderInst.gfxProgram = this.gfxProgram;
         this.templateRenderInst.samplerBindings = nArray(8, () => null);
         const layer = this.getRendererLayer(material.materialLayer);
-        this.templateRenderInst.sortKey = makeSortKey(10 + material.materialLayer, 0, device.queryProgram(this.gfxProgram).uniqueKey);
+        this.templateRenderInst.sortKey = makeSortKey(layer, 0, device.queryProgram(this.gfxProgram).uniqueKey);
         assert(this.templateRenderInst.sortKey > 0);
         GX_Material.translateRenderFlagsGfx(this.templateRenderInst.renderFlags, this.material.gxMaterial);
         this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
