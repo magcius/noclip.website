@@ -466,6 +466,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._setActiveTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
+        this._currentTextures[0] = null;
         this._useProgram(this._fullscreenCopyProgram.gl_program);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }

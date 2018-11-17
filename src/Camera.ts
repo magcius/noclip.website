@@ -8,6 +8,8 @@ export class Camera {
     public worldMatrix: mat4 = mat4.create();
     public projectionMatrix: mat4 = mat4.create();
     public frustum: Frustum = new Frustum();
+    public fovY: number;
+    public aspect: number;
 
     public identity(): void {
         mat4.identity(this.worldMatrix);
@@ -20,12 +22,19 @@ export class Camera {
     }
 
     public setPerspective(fovY: number, aspect: number, n: number, f: number): void {
+        this.fovY = fovY;
+        this.aspect = aspect;
+
         const nearY = Math.tan(fovY * 0.5) * n;
         const nearX = nearY * aspect;
         this.setFrustum(-nearX, nearX, -nearY, nearY, n, f);
     }
 
-    public setFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {
+    public setClipPlanes(n: number, f: number): void {
+        this.setPerspective(this.fovY, this.aspect, n, f);
+    }
+
+    private setFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {
         this.frustum.setViewFrustum(left, right, bottom, top, n, f);
         this.frustum.updateWorldFrustum(this.worldMatrix);
         mat4.frustum(this.projectionMatrix, left, right, bottom, top, n, f);

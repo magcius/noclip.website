@@ -4,9 +4,11 @@ import { assert } from "../../util";
 
 // Implements a high-level resizable buffer that uses the platform GfxBuffer under the hood.
 
-// D3D11 UBOs are capped to 64KiB in size (16k words). ANGLE appears to have a bug if you go over that limit.
+// D3D11 UBOs are capped to 64KiB in size (16k words). ANGLE appears to have a bug
+// and starts copying everywhere if you go over that limit.
 const UBO_PAGE_WORD_LIMIT = 0x4000;
 
+// TODO(jstpierre): Need to make sure we don't split UBOs across multiple pages.
 export class GfxRenderBuffer {
     private usesMultiplePages: boolean;
     private bufferPages: GfxBuffer[] = [];
@@ -25,13 +27,25 @@ export class GfxRenderBuffer {
             if (this.usage === GfxBufferUsage.UNIFORM) {
                 this.shadowBufferF32 = new Float32Array(this.wordCount);
                 this.shadowBufferU8 = new Uint8Array(this.shadowBufferF32.buffer);
-                const numPages = ((this.wordCount + (UBO_PAGE_WORD_LIMIT - 1)) / UBO_PAGE_WORD_LIMIT) | 0;
-                while (this.bufferPages.length < numPages) {
-                    const buffer = device.createBuffer(UBO_PAGE_WORD_LIMIT, this.usage, this.frequencyHint)
+
+                // Drop the last page, since it might not have the right amount of data in it.
+                if (this.bufferPages.length)
+                    device.destroyBuffer(this.bufferPages.pop());
+
+                const existingWordCount = this.bufferPages.length * UBO_PAGE_WORD_LIMIT;
+                let remaining = this.wordCount - existingWordCount;
+                while (remaining > 0) {
+                    const bufferSize = Math.min(remaining, UBO_PAGE_WORD_LIMIT);
+                    const buffer = device.createBuffer(bufferSize, this.usage, this.frequencyHint)
                     device.setResourceName(buffer, `${this.resourceName} Page ${this.bufferPages.length}`);
                     this.bufferPages.push(buffer);
-                    this.pageDirty.push(false);
+                    remaining -= bufferSize;
                 }
+
+                this.pageDirty.length = this.bufferPages.length;
+                for (let i = 0; i < this.pageDirty.length; i++)
+                    this.pageDirty[i] = false;
+
                 this.usesMultiplePages = true;
             } else {
                 this.destroy(device);
