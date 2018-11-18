@@ -6,7 +6,7 @@ import { readString, assert } from "../util";
 
 export interface AreaInfo {
     x: number;
-    y: number;
+    z: number;
     areaSize: number;
     filename: string;
 }
@@ -43,14 +43,14 @@ export function parse(buffer: ArrayBufferSlice): TSCB {
         areaTableIdx += 0x04;
 
         const x = view.getFloat32(areaInfoOffs + 0x00, false);
-        const y = view.getFloat32(areaInfoOffs + 0x04, false);
+        const z = view.getFloat32(areaInfoOffs + 0x04, false);
         const areaSize = view.getFloat32(areaInfoOffs + 0x08, false);
         const filenameOffs = view.getUint32(areaInfoOffs + 0x20, false);
         const filename = readString(buffer, areaInfoOffs + 0x20 + filenameOffs, 0xFF, true);
 
         // const hasExtraInfo = view.getUint32(areaInfoOffs + 0x2C, false);
 
-        areaInfos.push({ x, y, areaSize, filename });
+        areaInfos.push({ x, z, areaSize, filename });
     }
 
     return { worldScale, tileSize, altitude, areaInfos };

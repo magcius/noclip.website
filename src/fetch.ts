@@ -25,7 +25,7 @@ export function fetchData(url: string): Progressable<NamedArrayBufferSlice> {
             }
             slice.name = url;
             resolve(slice);
-    };
+        };
         request.onerror = () => {
             reject();
         };

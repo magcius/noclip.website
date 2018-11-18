@@ -64,7 +64,9 @@ function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
 }
 
 // The finished, low-level instance of a draw call. This is what's sorted and executed.
+// TODO(jstpierre): Is this class too big?
 export class GfxRenderInst {
+    public destroyed: boolean = false;
     public visible: boolean = true;
     public sortKey: number = 0;
 
@@ -98,6 +100,10 @@ export class GfxRenderInst {
     constructor(other: GfxRenderInst = null) {
         if (other)
             assignRenderInst(this, other);
+    }
+
+    public destroy(): void {
+        this.destroyed = true;
     }
 
     public setPipelineDirect(pipeline: GfxRenderPipeline): void {
@@ -175,6 +181,12 @@ export class GfxRenderInstViewRenderer {
     }
 
     public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass, passMask: number = 1): void {
+        // Kill any destroyed instances.
+        for (let i = this.renderInsts.length - 1; i >= 0; i--) {
+            if (this.renderInsts[i].destroyed)
+                this.renderInsts.splice(i, 1);
+        }
+
         // Sort our instances.
         this.renderInsts.sort((a, b) => a.sortKey - b.sortKey);
 
@@ -277,7 +289,6 @@ export class GfxRenderInstBuilder {
 
     public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
         assert(this.templateStack.length === 1);
-        this.templateStack.length = 0;
 
         // Once we're finished building our RenderInsts, go through and assign buffers and bindings for all.
         for (let i = 0; i < this.uniformBuffers.length; i++)
@@ -361,5 +372,7 @@ export class GfxRenderInstBuilder {
             renderInst.uniformBufferBindings = currentUniformBufferBindings.slice();
             viewRenderer.renderInsts.push(renderInst);
         }
+
+        this.renderInsts.length = 0;
     }
 }

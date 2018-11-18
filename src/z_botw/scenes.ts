@@ -6,8 +6,8 @@ import Progressable from "../Progressable";
 import { fetchData } from "../fetch";
 import * as TSCB from "./tscb";
 import * as BFRES from "../fres/bfres";
-import { fetchAreaData, TerrainManager } from "./tera";
-import { TerrainScene, LoadedTerrainArea } from "./render";
+import { TerrainManager } from "./tera";
+import { TerrainScene } from "./render";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GX2TextureHolder } from "../fres/render";
 
@@ -22,33 +22,32 @@ export class TerrainSceneDesc implements Viewer.SceneDesc {
 
     public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         const teraPath = `${pathBase}/Terrain/A/${this.id}`;
-        return Progressable.all([fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`), fetchData(`${teraPath}.tscb`)]).then(([terrainTexBuffer, tscbBuffer]) => {
+        return Progressable.all([fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`), fetchData(`${pathBase}/Model/Terrain.Tex2.sbfres`), fetchData(`${teraPath}.tscb`)]).then(([terrainTex1Buffer, terrainTex2Buffer, tscbBuffer]) => {
             const tscb = TSCB.parse(tscbBuffer);
 
-            return decodeFRES(terrainTexBuffer).then((terrainFRES) => {
-                const terrainManager = new TerrainManager(tscb, terrainFRES, teraPath);
-                console.log(terrainManager);
-
+            return Progressable.all([decodeFRES(terrainTex1Buffer), decodeFRES(terrainTex2Buffer)]).then(([tex1, tex2]) => {
+                const terrainManager = new TerrainManager(device, tscb, tex1, teraPath);
+                console.log(tex1, tex2);
                 const textureHolder = new GX2TextureHolder();
                 // Mangle things a bit.
-                const textureEntries = terrainFRES.ftex.filter((e) => e.name.startsWith('Material'));
-                for (let i = 0; i < textureEntries.length; i++) {
-                    textureEntries[i].ftex.surface.numMips = 1;
+                const textureEntries1 = tex1.ftex.filter((e) => e.name.startsWith('Material'));
+                const textureEntries2 = tex2.ftex.filter((e) => e.name.startsWith('Material'));
+                for (let i = 0; i < textureEntries1.length; i++) {
+                    const ftex = textureEntries1[i].ftex;
+                    ftex.mipData = textureEntries2[i].ftex.texData;
+                    // TODO(jstpierre): Turn back on once we can parse mips better.
+                    ftex.surface.numMips = 5;
                 }
-                textureHolder.addTexturesGfx(device, textureEntries);
+                textureHolder.addTexturesGfx(device, textureEntries1);
 
-                return fetchAreaData(teraPath, tscb.areaInfos[0]).then((area) => {
-                    const loadedArea = terrainManager.loadArea(device, area);
-                    const terrainScene = new TerrainScene(device, textureHolder, loadedArea);
-                    return terrainScene;
-                });
+                return new TerrainScene(device, textureHolder, terrainManager);
             });
         });
     }
 }
 
 const id = "z_botw";
-const name = "Breath of the Wild";
+const name = "Breath of the Wild (Experimental)";
 const sceneDescs = [
     new TerrainSceneDesc("MainField", "MainField"),
 ];

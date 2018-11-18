@@ -40,9 +40,9 @@ export default class ArrayBufferSlice {
         assert(byteOffset >= 0 && byteLength >= 0 && (byteOffset + byteLength) <= this.arrayBuffer.byteLength);
     }
 
-    public slice(begin: number, end?: number): ArrayBufferSlice {
+    public slice(begin: number, end: number = 0): ArrayBufferSlice {
         const absBegin = this.byteOffset + begin;
-        const absEnd = this.byteOffset + (end !== undefined ? end : this.byteLength);
+        const absEnd = this.byteOffset + (end !== 0 ? end : this.byteLength);
         return new ArrayBufferSlice(this.arrayBuffer, absBegin, absEnd - absBegin);
     }
 
