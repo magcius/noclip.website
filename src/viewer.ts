@@ -113,6 +113,7 @@ export class Viewer {
 
     private renderGfxPlatform(): void {
         // Hack in projection for now until we have that unfolded from RenderState.
+        this.viewerRenderInput.camera.newFrame();
         const aspect = this.canvas.width / this.canvas.height;
         this.viewerRenderInput.camera.setPerspective(this.renderState.fov, aspect, 10, 50000);
 

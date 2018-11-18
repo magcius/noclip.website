@@ -397,7 +397,7 @@ export function decodeSurface(surface: GX2Surface, texData: ArrayBufferSlice, mi
     if (mipLevel === 0) {
         levelData = texData.slice(0, surface.texDataSize);
     } else if (mipLevel === 1) {
-        levelData = mipData.slice(0, surface.mipDataOffsets[0]);
+        levelData = mipData; // .slice(0, surface.mipDataOffsets[0]);
     } else {
         levelData = mipData.slice(surface.mipDataOffsets[mipLevel - 1], surface.mipDataOffsets[mipLevel]);
     }

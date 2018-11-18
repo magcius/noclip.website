@@ -119,8 +119,8 @@ function parseResUserData(buffer: ArrayBufferSlice, userDataOffs: number, little
 
 export interface DecodableTexture {
     surface: GX2Surface;
-    mipData: ArrayBufferSlice;
     texData: ArrayBufferSlice;
+    mipData: ArrayBufferSlice | null;
     userData: ResUserData;
 }
 
@@ -147,7 +147,7 @@ function parseFTEX(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
     }
 
     const texData = buffer.subarray(texDataOffs);
-    const mipData = buffer.subarray(mipDataOffs);
+    const mipData = mipDataOffs > 0 && mipDataOffs < buffer.byteLength ? buffer.subarray(mipDataOffs) : null;
     return { surface, texData, mipData, userData };
 }
 

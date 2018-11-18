@@ -374,11 +374,12 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
 
         for (let i = 0; i < surface.numMips; i++) {
             const mipLevel = i;
+            const firstCanvas = canvases.length;
 
             for (let j = 0; j < surface.depth; j++) {
                 const canvas = document.createElement('canvas');
-                canvas.width = 0;
-                canvas.height = 0;
+                canvas.width = 1;
+                canvas.height = 1;
                 canvases.push(canvas);
             }
 
@@ -395,7 +396,7 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
                 device.submitPass(hostAccessPass);
 
                 for (let j = 0; j < surface.depth; j++) {
-                    const canvas = canvases[mipLevel + j];
+                    const canvas = canvases[firstCanvas + j];
                     canvas.width = decompressedSurface.width;
                     canvas.height = decompressedSurface.height;
                     GX2Texture.surfaceToCanvas(canvas, decompressedSurface, j);
