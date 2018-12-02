@@ -58,6 +58,4 @@ defaultFlags.frontFace = GfxFrontFaceMode.CCW;
 defaultFlags.polygonOffset = false;
 
 export const fullscreenFlags = new RenderFlags();
-fullscreenFlags.depthCompare = GfxCompareMode.NEVER;
-fullscreenFlags.blendMode = GfxBlendMode.NONE;
-fullscreenFlags.cullMode = GfxCullMode.NONE;
+fullscreenFlags.set({ depthCompare: GfxCompareMode.ALWAYS, depthWrite: false });
