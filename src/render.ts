@@ -6,7 +6,7 @@ import { assert, assertExists } from './util';
 import { BaseProgram, FullscreenProgram, ProgramCache, SimpleProgram } from './Program';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from './Camera';
 import { createTransitionDeviceForWebGL2, applyMegaState } from './gfx/platform/GfxPlatformWebGL2';
-import { GfxCompareMode as CompareMode, GfxFrontFaceMode as FrontFaceMode, GfxCullMode as CullMode, GfxBlendFactor as BlendFactor, GfxBlendMode as BlendMode, GfxMegaStateDescriptor } from './gfx/platform/GfxPlatform';
+import { GfxCompareMode, GfxCullMode, GfxBlendMode, GfxMegaStateDescriptor } from './gfx/platform/GfxPlatform';
 import { defaultFlags, RenderFlags } from './gfx/helpers/RenderFlagsHelpers';
 
 export { RenderFlags };
@@ -168,9 +168,7 @@ class RenderStatisticsTracker {
 }
 
 export const fullscreenFlags = new RenderFlags();
-fullscreenFlags.depthCompare = CompareMode.NEVER;
-fullscreenFlags.blendMode = BlendMode.NONE;
-fullscreenFlags.cullMode = CullMode.NONE;
+fullscreenFlags.set({ depthCompare: GfxCompareMode.ALWAYS, depthWrite: false });
 
 // XXX(jstpierre): This is becoming a lot more than just some render state.
 // Rename to "SceneRenderer" at some point?
@@ -204,6 +202,8 @@ export class RenderState {
     private scratchMatrix = mat4.create();
 
     constructor(public gl: WebGL2RenderingContext) {
+        this.currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
+
         this.programCache = new ProgramCache(this.gl);
 
         // Create the program cache immediately.

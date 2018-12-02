@@ -344,12 +344,12 @@ export function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: Gfx
     }
 
     if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
-        if (currentMegaState.depthCompare === GfxCompareMode.NEVER)
+        if (currentMegaState.depthCompare === GfxCompareMode.ALWAYS)
             gl.enable(gl.DEPTH_TEST);
-        else if (newMegaState.depthCompare === GfxCompareMode.NEVER)
+        else if (newMegaState.depthCompare === GfxCompareMode.ALWAYS)
             gl.disable(gl.DEPTH_TEST);
 
-        if (newMegaState.depthCompare !== GfxCompareMode.NEVER)
+        if (newMegaState.depthCompare !== GfxCompareMode.ALWAYS)
             gl.depthFunc(newMegaState.depthCompare);
         currentMegaState.depthCompare = newMegaState.depthCompare;
     }
@@ -410,6 +410,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null;
 
+    private _currentRenderTarget: GfxRenderTargetP_GL;
+    private _currentPipeline: GfxRenderPipelineP_GL;
+    private _currentInputState: GfxInputStateP_GL;
+    private _currentMegaState: GfxMegaStateDescriptor = new RenderFlags(defaultFlags).resolveMegaState();
+    private _currentSamplers: WebGLSampler[] = [];
+    private _currentTextures: WebGLTexture[] = [];
+
     constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null, private isTransitionDevice: boolean = false) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
@@ -423,6 +430,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (!this.isTransitionDevice) {
             this._fullscreenCopyProgram = this.createProgram(new FullscreenCopyProgram()) as GfxProgramP_GL;
         }
+
+        this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
     }
 
     //#region GfxSwapChain
@@ -968,7 +977,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _currentRenderTarget: GfxRenderTargetP_GL;
     private setRenderPassParameters(renderTarget: GfxRenderTarget, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
         const gl = this.gl;
         this._currentRenderTarget = renderTarget as GfxRenderTargetP_GL;
@@ -985,12 +993,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.clearStencil(stencilClearValue);
         gl.clear(clearBits);
     }
-
-    private _currentPipeline: GfxRenderPipelineP_GL;
-    private _currentInputState: GfxInputStateP_GL;
-    private _currentMegaState: GfxMegaStateDescriptor = new RenderFlags(defaultFlags).resolveMegaState();
-    private _currentSamplers: WebGLSampler[] = [];
-    private _currentTextures: WebGLTexture[] = [];
 
     private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings): void {
         const gl = this.gl;
