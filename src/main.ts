@@ -44,8 +44,10 @@ import { UI, createDOMFromString } from './ui';
 import { CameraControllerClass, FPSCameraController, Camera } from './Camera';
 import { RenderStatistics } from './render';
 import { hexdump } from './util';
-import { downloadBlob } from './fetch';
+import { downloadBlob, downloadBuffer } from './fetch';
 import { GfxDevice } from './gfx/platform/GfxPlatform';
+import { ZipFileEntry, makeZipFile } from './ZipFile';
+import { TextureHolder } from './TextureHolder';
 
 const sceneGroups = [
     MKDS.sceneGroup,
@@ -96,6 +98,10 @@ function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {
     return pr;
 }
 
+function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+    return new Response(blob).arrayBuffer();
+}
+
 class DroppedFileSceneDesc implements SceneDesc {
     public id: string;
     public name: string;
@@ -113,6 +119,9 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.gar'))
             return loadFileAsPromise(file).then((buffer) => LM3D.createSceneFromGARBuffer(device, buffer));
 
+        if (file.name.endsWith('.szs') || file.name.endsWith('.rarc'))
+            return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(device, buffer));
+
         return null;
     }
 
@@ -124,9 +133,6 @@ class DroppedFileSceneDesc implements SceneDesc {
 
         if (file.name.endsWith('.bfres'))
             return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(gl, buffer));
-
-        if (file.name.endsWith('.szs') || file.name.endsWith('.rarc'))
-            return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(gl, buffer));
 
         return null;
     }
@@ -200,6 +206,10 @@ class SceneLoader {
 
         throw "whoops";
     }
+}
+
+function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
 
 class Main {
@@ -290,6 +300,9 @@ class Main {
             this._toggleUI();
 
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
+
+        if (this.viewer.inputManager.isKeyDownEventTriggered('Numpad9'))
+            this._downloadTextures();
 
         this.viewer.update(time);
 
@@ -460,16 +473,44 @@ ${message}
         this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? '' : 'none';
     }
 
-    private _takeScreenshot() {
-        const canvas = this.viewer.takeScreenshotToCanvas();
-
+    private _getSceneDownloadPrefix() {
         const groupId = this.currentSceneGroup.id;
         const sceneId = this.currentSceneDesc.id;
         const date = new Date();
-        const filename = `${groupId}_${sceneId}_${date.toISOString()}.png`;
-        canvas.toBlob((blob) => {
-            downloadBlob(filename, blob);
-        }, 'image/png');
+        return `${groupId}_${sceneId}_${date.toISOString()}`;
+    }
+
+    private _takeScreenshot() {
+        const canvas = this.viewer.takeScreenshotToCanvas();
+        const filename = `${this._getSceneDownloadPrefix()}.png`;
+        convertCanvasToPNG(canvas).then((blob) => downloadBlob(filename, blob));
+    }
+
+    private _makeZipFileFromTextureHolder(textureHolder: TextureHolder<any>): Promise<ZipFileEntry[]> {
+        const zipFileEntries: ZipFileEntry[] = [];
+        const promises: Promise<void>[] = [];
+        for (let i = 0; i < textureHolder.viewerTextures.length; i++) {
+            const tex = textureHolder.viewerTextures[i];
+            for (let j = 0; j < tex.surfaces.length; j++) {
+                const filename = `${tex.name}_${j}.png`;
+                promises.push(convertCanvasToPNG(tex.surfaces[j]).then((blob) => blobToArrayBuffer(blob)).then((data) => {
+                    zipFileEntries.push({ filename, data });
+                }));
+            }
+        }
+
+        return Promise.all(promises).then(() => zipFileEntries);
+    }
+
+    private _downloadTextures() {
+        const textureHolder = this.viewer.getCurrentTextureHolder();
+        if (textureHolder) {
+            this._makeZipFileFromTextureHolder(textureHolder).then((zipFileEntries) => {
+                const zipBuffer = makeZipFile(zipFileEntries);
+                const filename = `${this._getSceneDownloadPrefix()}_Textures.zip`;
+                downloadBuffer(filename, new ArrayBufferSlice(zipBuffer), 'application/zip');
+            });
+        }
     }
 }
 

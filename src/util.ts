@@ -56,17 +56,22 @@ export function hexzero(n: number, spaces: number): string {
     return leftPad(S, spaces);
 }
 
-export function hexdump(buffer: ArrayBufferSlice, offs: number = 0, length: number = 0x100): void {
-    const groupSize = 16;
+export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, length: number = 0x100): void {
+    const buffer: ArrayBufferSlice = b_ instanceof ArrayBufferSlice ? b_ : new ArrayBufferSlice(b_);
+    const groupSize_ = 16;
     let S = '';
-    const arr = buffer.createTypedArray(Uint8Array, offs, length);
-    for (let i = 0; i < length; i += groupSize) {
+    const arr = buffer.createTypedArray(Uint8Array, offs);
+    length = Math.min(length, arr.byteLength);
+    for (let i = 0; i < length; i += groupSize_) {
+        let groupSize = Math.min(length - i, groupSize_);
         const addr = offs + i;
         S += `${hexzero(addr, 8)}    `;
         for (let j = 0; j < groupSize; j++) {
             const b = arr[i + j];
             S += ` ${hexzero(b, 2)}`;
         }
+        for (let j = groupSize; j < groupSize_; j++)
+            S += `   `;
 
         S += '  ';
         for (let j = 0; j < groupSize; j++) {
@@ -74,6 +79,8 @@ export function hexdump(buffer: ArrayBufferSlice, offs: number = 0, length: numb
             const c = (b >= 0x20 && b < 0x7F) ? String.fromCharCode(b) : '.';
             S += `${c}`;
         }
+        for (let j = groupSize; j < groupSize_; j++)
+            S += ` `;
 
         S += '\n';
     }
