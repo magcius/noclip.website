@@ -1019,7 +1019,7 @@ function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
 export function translateRenderFlagsGfx(renderFlags: GfxRenderFlags, material: GXMaterial) {
     renderFlags.cullMode = translateCullMode(material.cullMode);
     renderFlags.depthWrite = material.ropInfo.depthWrite;
-    renderFlags.depthCompare = material.ropInfo.depthTest ? translateCompareType(material.ropInfo.depthFunc) : GfxCompareMode.NEVER;
+    renderFlags.depthCompare = material.ropInfo.depthTest ? translateCompareType(material.ropInfo.depthFunc) : GfxCompareMode.ALWAYS;
     renderFlags.frontFace = GfxFrontFaceMode.CW;
     if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
         renderFlags.blendMode = GfxBlendMode.NONE;
