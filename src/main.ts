@@ -120,9 +120,6 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.zar') || file.name.endsWith('.gar'))
             return loadFileAsPromise(file).then((buffer) => Grezzo3DS.createSceneFromZARBuffer(device, buffer));
 
-        if (file.name.endsWith('.szs') || file.name.endsWith('.rarc'))
-            return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(device, buffer));
-
         return null;
     }
 
@@ -134,6 +131,9 @@ class DroppedFileSceneDesc implements SceneDesc {
 
         if (file.name.endsWith('.bfres'))
             return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(gl, buffer));
+
+            if (file.name.endsWith('.szs') || file.name.endsWith('.rarc'))
+            return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(gl, buffer));
 
         return null;
     }
