@@ -145,8 +145,8 @@ export interface GfxMegaStateDescriptor {
 }
 
 export interface GfxRenderTargetDescriptor {
-    colorAttachment: GfxColorAttachment;
-    depthStencilAttachment: GfxDepthStencilAttachment;
+    colorAttachment: GfxColorAttachment | null;
+    depthStencilAttachment: GfxDepthStencilAttachment | null;
 }
 
 export interface GfxRenderPipelineDescriptor {
