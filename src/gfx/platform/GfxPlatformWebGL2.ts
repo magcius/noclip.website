@@ -558,6 +558,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
+    private _currentBoundVAO: WebGLVertexArrayObject = null;
+    private _bindVAO(vao: WebGLVertexArrayObject | null): void {
+        if (this._currentBoundVAO !== vao) {
+            this.gl.bindVertexArray(vao);
+            this._currentBoundVAO = vao;
+        }
+    }
+
     private _currentBoundBuffers: WebGLBuffer[] = [];
     private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer, force: boolean = false): void {
         if (this._currentBoundBuffers[gl_target] !== gl_buffer || force) {
@@ -1065,10 +1073,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._currentInputState = inputState;
         if (this._currentInputState !== null) {
             assert(this._currentPipeline.inputLayout === this._currentInputState.inputLayout);
-            gl.bindVertexArray(this._currentInputState.vao);
+            this._bindVAO(this._currentInputState.vao);
         } else {
-            assert(this._currentPipeline.inputLayout === null)
-            gl.bindVertexArray(null);
+            assert(this._currentPipeline.inputLayout === null);
+            this._bindVAO(null);
         }
     }
 
