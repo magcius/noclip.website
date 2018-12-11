@@ -1,9 +1,8 @@
 
 import MemoizeCache from "./MemoizeCache";
 import CodeEditor from "./CodeEditor";
-import { assertExists, leftPad, assert } from "./util";
+import { assertExists, leftPad } from "./util";
 import { BufferLayout, parseBufferLayout } from "./gfx/helpers/UniformBufferHelpers";
-import { GfxSamplerBinding } from "./gfx/platform/GfxPlatform";
 
 const DEBUG = true;
 
@@ -42,6 +41,7 @@ export abstract class BaseProgram {
 
     public preprocessedVert: string = '';
     public preprocessedFrag: string = '';
+    public defines = new Map<string, string>();
 
     private glProg: WebGLProgram;
     public forceRecompile: boolean = false;
@@ -81,6 +81,7 @@ export abstract class BaseProgram {
             return !isEmpty;
         });
 
+        const defines = [... this.defines.entries()].map((k, v) => `#define ${k} ${v}`);
         const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
         const extensionLines = lines.filter((line) => line.startsWith('#extension'));
         const extensions = extensionLines.filter((line) =>
@@ -96,6 +97,7 @@ export abstract class BaseProgram {
 #define main${type === 'vert' ? 'VS' : 'PS'} main
 #define gl_FragColor o_color
 #define texture2D texture
+${defines}
 ${extensions}
 ${precision}
 out vec4 o_color;
@@ -187,6 +189,7 @@ function range(start: number, num: number): number[] {
 export interface DeviceProgramReflection {
     uniformBufferLayouts: BufferLayout[];
     samplerBindings: SamplerBindingReflection[];
+    totalSamplerBindingsCount: number;
 }
 
 export interface SamplerBindingReflection {
@@ -197,6 +200,7 @@ export interface SamplerBindingReflection {
 export class DeviceProgram extends BaseProgram {
     public uniformBufferLayouts: BufferLayout[];
     public samplerBindings: SamplerBindingReflection[];
+    public totalSamplerBindingsCount: number;
 
     public preprocessProgram(): void {
         super.preprocessProgram();
@@ -214,10 +218,12 @@ export class DeviceProgram extends BaseProgram {
 
         const samplers = findall(vert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
         refl.samplerBindings = [];
+        refl.totalSamplerBindingsCount = 0;
         for (let i = 0; i < samplers.length; i++) {
             const [m, name, arraySizeStr] = samplers[i];
             let arraySize: number = arraySizeStr ? parseInt(arraySizeStr) : 1;
             refl.samplerBindings.push({ name, arraySize });
+            refl.totalSamplerBindingsCount += arraySize;
         }
     }
 
