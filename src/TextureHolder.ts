@@ -6,7 +6,8 @@ import { RenderState } from './render';
 
 // Used mostly by indirect texture FB installations...
 export interface TextureOverride {
-    glTexture: WebGLTexture;
+    glTexture?: WebGLTexture;
+    gfxTexture?: GfxTexture;
     width: number;
     height: number;
     flipY: boolean;
@@ -114,6 +115,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
     public fillTextureMapping(textureMapping: TextureMapping, name: string): boolean {
         const textureOverride = this.textureOverrides.get(name);
         if (textureOverride) {
+            textureMapping.gfxTexture = textureOverride.gfxTexture;
             textureMapping.glTexture = textureOverride.glTexture;
             textureMapping.width = textureOverride.width;
             textureMapping.height = textureOverride.height;
@@ -197,10 +199,10 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 }
 
 export function getGLTextureFromMapping(m: TextureMapping): WebGLTexture | null {
-    if (m.glTexture !== null)
-        return m.glTexture;
-    else if (m.gfxTexture !== null)
+    if (m.gfxTexture !== null)
         return getPlatformTexture(m.gfxTexture);
+    else if (m.glTexture !== null)
+        return m.glTexture;
     else
         return null;
 }
