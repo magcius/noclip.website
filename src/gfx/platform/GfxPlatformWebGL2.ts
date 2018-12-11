@@ -53,8 +53,8 @@ interface GfxBindingsP_GL extends GfxBindings {
 
 interface GfxRenderTargetP_GL extends GfxRenderTarget {
     gl_framebuffer: WebGLFramebuffer;
-    colorAttachment: GfxColorAttachmentP_GL;
-    depthAttachment: GfxDepthStencilAttachmentP_GL;
+    colorAttachment: GfxColorAttachmentP_GL | null;
+    depthAttachment: GfxDepthStencilAttachmentP_GL | null;
 }
 
 interface GfxInputLayoutP_GL extends GfxInputLayout {
@@ -569,6 +569,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentBoundBuffers: WebGLBuffer[] = [];
     private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer, force: boolean = false): void {
         if (this._currentBoundBuffers[gl_target] !== gl_buffer || force) {
+            this._bindVAO(null);
             this.gl.bindBuffer(gl_target, gl_buffer);
             this._currentBoundBuffers[gl_target] = gl_buffer;
         }
@@ -660,9 +661,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl_framebuffer = gl.createFramebuffer();
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, gl_framebuffer);
         if (descriptor.colorAttachment !== null)
-        gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, getPlatformColorAttachment(descriptor.colorAttachment));
+            gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, getPlatformColorAttachment(descriptor.colorAttachment));
         if (descriptor.depthStencilAttachment !== null)
-        gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, getPlatformDepthStencilAttachment(descriptor.depthStencilAttachment));
+            gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, getPlatformDepthStencilAttachment(descriptor.depthStencilAttachment));
         const colorAttachment = descriptor.colorAttachment as GfxColorAttachmentP_GL;
         const depthAttachment = descriptor.depthStencilAttachment as GfxDepthStencilAttachmentP_GL;
         const renderTarget: GfxRenderTargetP_GL = { _T: _T.RenderTarget, gl_framebuffer, colorAttachment, depthAttachment };
@@ -997,11 +998,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT) {
             // GL clears obey the masks... bad API or worst API?
             gl.depthMask(true);
+            this._currentMegaState.depthWrite = true;
             gl.clearDepth(depthClearValue);
         }
         if (clearBits & WebGL2RenderingContext.STENCIL_BUFFER_BIT)
             gl.clearStencil(stencilClearValue);
-        gl.clear(clearBits);
+        if (clearBits !== 0)
+            gl.clear(clearBits);
     }
 
     private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings): void {
@@ -1068,7 +1071,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private setInputState(inputState_: GfxInputState | null): void {
-        const gl = this.gl;
         const inputState = inputState_ as GfxInputStateP_GL;
         this._currentInputState = inputState;
         if (this._currentInputState !== null) {
