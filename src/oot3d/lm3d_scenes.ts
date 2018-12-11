@@ -8,54 +8,14 @@ import * as BCSV from '../luigis_mansion/bcsv';
 import * as CTXB from './ctxb';
 
 import * as Viewer from '../viewer';
-import * as UI from '../ui';
 
 import Progressable from '../Progressable';
-import { CtrTextureHolder, CmbRenderer, BasicRendererHelper } from './render';
+import { CmbRenderer } from './render';
 import { SceneGroup } from '../viewer';
 import { fetchData } from '../fetch';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RenderState } from '../render';
 import { leftPad } from '../util';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-
-export class LM3DSTextureHolder extends CtrTextureHolder {
-    public tryTextureNameVariants(name: string): string[] {
-        const basename = name.split('/')[2];
-        return [name, `${basename}.ctxb`];
-    }
-
-    public addCTXB(device: GfxDevice, ctxb: CTXB.CTXB): void {
-        this.addTexturesGfx(device, ctxb.textures.map((texture) => {
-            const basename = texture.name.split('/')[2];
-            const name = `${basename}.ctxb`;
-            return { ...texture, name };
-        }));
-    }
-}
-
-class MultiCmbScene extends BasicRendererHelper implements Viewer.Scene_Device {
-    constructor(device: GfxDevice, public scenes: CmbRenderer[], public textureHolder: CtrTextureHolder) {
-        super();
-        for (let i = 0; i < this.scenes.length; i++)
-            this.scenes[i].addToViewRenderer(device, this.viewRenderer);
-    }
-
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.scenes.length; i++)
-            this.scenes[i].prepareToRender(hostAccessPass, viewerInput);
-    }
-
-    public destroy(device: GfxDevice): void {
-        super.destroy(device);
-        for (let i = 0; i < this.scenes.length; i++)
-            this.scenes[i].destroy(device);
-    }
-
-    public createPanels(): UI.Panel[] {
-        return [new UI.LayerPanel(this.scenes)];
-    }
-}
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GrezzoTextureHolder, MultiCmbScene } from './scenes';
 
 class SceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -69,7 +29,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const path_gar = `data/lm3d/map/map${leftPad(''+this.mapNumber, 2, '0')}.gar`;
         const models_path = `data/lm3d/mapmdl/map${this.mapNumber}`;
 
-        const textureHolder = new LM3DSTextureHolder();
+        const textureHolder = new GrezzoTextureHolder();
 
         return fetchData(path_gar).then((garBuffer) => {
             const gar = ZAR.parse(garBuffer);
@@ -105,7 +65,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     const cmbBasename = firstCMB.name.split('.')[0];
                     const cmabFile = roomGar.files.find((file) => file.name === `${cmbBasename}.cmab`);
                     if (cmabFile) {
-                        const cmab = CMAB.parse(CMAB.Version.LuigisMansion, cmabFile.buffer);
+                        const cmab = CMAB.parse(CMB.Version.LuigisMansion, cmabFile.buffer);
+                        textureHolder.addTexturesGfx(device, cmab.textures);
                         cmbRenderer.bindCMAB(cmab, 1);
                     }
 
@@ -119,30 +80,6 @@ class SceneDesc implements Viewer.SceneDesc {
             });
         });
     }
-}
-
-export function createSceneFromGARBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Viewer.Scene_Device {
-    const textureHolder = new LM3DSTextureHolder();
-    const scenes: CmbRenderer[] = [];
-
-    function addGARBuffer(buffer: ArrayBufferSlice): void {
-        const gar = ZAR.parse(buffer);
-        for (let i = 0; i < gar.files.length; i++) {
-            const file = gar.files[i];
-            if (file.name.endsWith('.gar')) {
-                addGARBuffer(file.buffer);
-            } else if (file.name.endsWith('.cmb')) {
-                const cmb = CMB.parse(file.buffer);
-                scenes.push(new CmbRenderer(device, textureHolder, cmb, cmb.name));
-            } else if (file.name.endsWith('.ctxb')) {
-                const ctxb = CTXB.parse(file.buffer);
-                textureHolder.addCTXB(device, ctxb);
-            }
-        }
-    }
-    addGARBuffer(buffer);
-
-    return new MultiCmbScene(device, scenes, textureHolder);
 }
 
 const id = "lm3d";

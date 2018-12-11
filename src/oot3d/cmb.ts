@@ -14,7 +14,7 @@ export interface VatrChunk {
     textureCoordByteOffset: number;
 }
 
-const enum Version {
+export const enum Version {
     Ocarina, Majora, LuigisMansion
 }
 

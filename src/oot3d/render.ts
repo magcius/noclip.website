@@ -165,7 +165,7 @@ export class CmbRenderer {
             if (animEntry.channelIndex === channelIndex) {
                 if (animEntry.animationType === CMAB.AnimationType.TRANSLATION || animEntry.animationType === CMAB.AnimationType.ROTATION) {
                     this.srtAnimators[animEntry.materialIndex] = new CMAB.TextureAnimator(this.animationController, cmab, animEntry);
-                } else if (animEntry.animationType === CMAB.AnimationType.UNK_04) {
+                } else if (animEntry.animationType === CMAB.AnimationType.COLOR) {
                     this.colorAnimators[animEntry.materialIndex] = new CMAB.ColorAnimator(this.animationController, cmab, animEntry);
                 }
             }

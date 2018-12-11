@@ -12,7 +12,6 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
 import { RoomRenderer, CtrTextureHolder, BasicRendererHelper } from './render';
 import { SceneGroup } from '../viewer';
-import { RenderState } from '../render';
 import { assert, readString, leftPad } from '../util';
 import { fetchData, NamedArrayBufferSlice } from '../fetch';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
@@ -92,13 +91,15 @@ class SceneDesc implements Viewer.SceneDesc {
 
                 const cmabFile = ZAR.findFile(zar, `${roomNameBase}.cmab`);
                 if (cmabFile !== null) {
-                    const cmab = CMAB.parse(CMAB.Version.Majora, cmabFile.buffer);
+                    const cmab = CMAB.parse(CMB.Version.Majora, cmabFile.buffer);
+                    textureHolder.addTexturesGfx(device, cmab.textures);
                     roomRenderer.bindCMAB(cmab);
                 }
 
                 const wcmabFile = ZAR.findFile(zar, `${roomNameBase}_w.cmab`);
                 if (wcmabFile !== null) {
-                    const wcmab = CMAB.parse(CMAB.Version.Majora, wcmabFile.buffer);
+                    const wcmab = CMAB.parse(CMB.Version.Majora, wcmabFile.buffer);
+                    textureHolder.addTexturesGfx(device, wcmab.textures);
                     roomRenderer.bindWCMAB(wcmab);
                 }
 
