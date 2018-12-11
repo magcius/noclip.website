@@ -651,7 +651,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         const gl_framebuffer = gl.createFramebuffer();
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, gl_framebuffer);
+        if (descriptor.colorAttachment !== null)
         gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, getPlatformColorAttachment(descriptor.colorAttachment));
+        if (descriptor.depthStencilAttachment !== null)
         gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, getPlatformDepthStencilAttachment(descriptor.depthStencilAttachment));
         const colorAttachment = descriptor.colorAttachment as GfxColorAttachmentP_GL;
         const depthAttachment = descriptor.depthStencilAttachment as GfxDepthStencilAttachmentP_GL;
