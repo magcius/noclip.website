@@ -8,6 +8,7 @@ import { CameraControllerClass, OrbitCameraController, FPSCameraController } fro
 import { RenderStatistics } from './render';
 import { Color, colorToCSS } from './Color';
 import { TextureHolder } from './TextureHolder';
+import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
 
 const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 
@@ -864,6 +865,10 @@ class About extends Panel {
     text-align: center;
     margin: 0px;
 }
+#About .BuildVersion a {
+    color: #666;
+    font-size: smaller;
+}
 </style>
 
 <p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>
@@ -889,7 +894,7 @@ class About extends Panel {
 <a href="https://twitter.com/__Aruki">Aruki</a>
 </p>
 
-<p><strong>OPEN SOURCE</strong> at <a href="https://github.com/magcius/model-viewer">GitHub</a></p>
+<p><strong>OPEN SOURCE</strong> at <a href="${GITHUB_URL}">GitHub</a></p>
 
 <p>Feature requests and bugs welcome!</p>
 
@@ -904,6 +909,8 @@ class About extends Panel {
 <li> Sand Clock <span>by</span> James
 <li> Line Chart <span>by</span> Shastry
 </ul>
+
+<p class="BuildVersion"><a href="${GITHUB_REVISION_URL}">build ${GIT_SHORT_REVISION}</a></p>
 </div>
 `;
     }
