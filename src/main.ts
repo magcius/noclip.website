@@ -25,6 +25,7 @@ import * as ZELVIEW from './zelview/scenes';
 import * as OOT3D from './oot3d/oot3d_scenes';
 import * as MM3D from './oot3d/mm3d_scenes';
 import * as LM3D from './oot3d/lm3d_scenes';
+import * as Grezzo3DS from './oot3d/scenes';
 import * as FRES from './fres/scenes';
 import * as SPL from './fres/splatoon_scenes';
 import * as DKSIV from './dksiv/scenes';
@@ -116,8 +117,8 @@ class DroppedFileSceneDesc implements SceneDesc {
     public createScene_Device(device: GfxDevice): Progressable<Scene_Device> {
         const file = this.file;
 
-        if (file.name.endsWith('.gar'))
-            return loadFileAsPromise(file).then((buffer) => LM3D.createSceneFromGARBuffer(device, buffer));
+        if (file.name.endsWith('.zar') || file.name.endsWith('.gar'))
+            return loadFileAsPromise(file).then((buffer) => Grezzo3DS.createSceneFromZARBuffer(device, buffer));
 
         if (file.name.endsWith('.szs') || file.name.endsWith('.rarc'))
             return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(device, buffer));

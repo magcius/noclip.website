@@ -1,4 +1,5 @@
 
+import * as CMB from './cmb';
 import * as CMAB from './cmab';
 import * as ZAR from './zar';
 import * as ZSI from './zsi';
@@ -75,7 +76,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 if (zar !== null) {
                     const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
                     if (cmabFile) {
-                        const cmab = CMAB.parse(CMAB.Version.Ocarina, cmabFile.buffer);
+                        const cmab = CMAB.parse(CMB.Version.Ocarina, cmabFile.buffer);
+                        textureHolder.addTexturesGfx(device, cmab.textures);
                         roomRenderer.bindCMAB(cmab);
                     }
                 }

@@ -3,6 +3,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
+import * as CMB from './cmb';
 
 const enum Magic {
     ZAR1 = 'ZAR\x01', // OoT3D
@@ -17,6 +18,7 @@ export interface ZARFile {
 
 export interface ZAR {
     files: ZARFile[];
+    version: CMB.Version;
 }
 
 export function findFile(zar: ZAR, filePath: string): ZARFile | null {
@@ -32,6 +34,7 @@ function parseZelda(buffer: ArrayBufferSlice): ZAR {
 
     const magic: Magic = readString(buffer, 0x00, 0x04, false) as Magic;
     assert([Magic.ZAR1, Magic.GAR2].includes(magic));
+    const version = magic == Magic.ZAR1 ? CMB.Version.Ocarina : CMB.Version.Majora;
 
     const size = view.getUint32(0x04, true);
     const numFileTypes = view.getUint16(0x08, true);
@@ -60,7 +63,7 @@ function parseZelda(buffer: ArrayBufferSlice): ZAR {
         dataOffsTableIdx += 0x04;
     }
 
-    return { files };
+    return { files, version };
 }
 
 function parseLM3DS(buffer: ArrayBufferSlice): ZAR {
@@ -68,6 +71,7 @@ function parseLM3DS(buffer: ArrayBufferSlice): ZAR {
 
     const magic: Magic = readString(buffer, 0x00, 0x04, false) as Magic;
     assert([Magic.GAR5].includes(magic));
+    const version = CMB.Version.LuigisMansion;
 
     const size = view.getUint32(0x04, true);
     const numFileTypes = view.getUint16(0x08, true);
@@ -111,7 +115,7 @@ function parseLM3DS(buffer: ArrayBufferSlice): ZAR {
         }
     }
 
-    return { files };
+    return { files, version };
 }
 
 export function parse(buffer: ArrayBufferSlice): ZAR {

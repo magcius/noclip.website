@@ -16,6 +16,6 @@ export function parse(buffer: ArrayBufferSlice): CTXB {
 
     const texChunkOffs = view.getUint32(0x10, true);
     const texDataOffs = view.getUint32(0x14, true);
-    const textures = parseTexChunk(buffer.slice(texChunkOffs), buffer.slice(texDataOffs));
+    const textures = parseTexChunk(buffer.slice(texChunkOffs), buffer.slice(texDataOffs), 'ctxb');
     return { textures };
 }
