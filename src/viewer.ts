@@ -21,6 +21,13 @@ export interface Scene {
     destroy(gl: WebGL2RenderingContext): void;
 }
 
+export interface MainScene extends Scene {
+    textures?: Texture[];
+    textureHolder?: TextureHolder<any>;
+    resetCamera?(camera: Camera): void;
+    createPanels?(): UI.Panel[];
+}
+
 export interface ViewerRenderInput {
     camera: Camera;
     time: number;
@@ -211,13 +218,14 @@ export class Viewer {
 
         return canvas;
     }
-}
 
-export interface MainScene extends Scene {
-    textures?: Texture[];
-    textureHolder?: TextureHolder<any>;
-    resetCamera?(camera: Camera): void;
-    createPanels?(): UI.Panel[];
+    public getCurrentTextureHolder(): TextureHolder<any> | null {
+        if (this.scene_device !== null)
+            return this.scene_device.textureHolder;
+        if (this.scene !== null)
+            return this.scene.textureHolder;
+        return null;
+    }
 }
 
 export interface SceneDesc {
