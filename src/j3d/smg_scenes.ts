@@ -18,7 +18,7 @@ import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK } from './j3d';
-import { GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
+import { GfxBlendMode, GfxBlendFactor, GfxCompareMode } from '../gfx/platform/GfxPlatform';
 
 const materialHacks: GXMaterialHacks = {
     alphaLightingFudge: (p) => p.matSource,
@@ -195,6 +195,7 @@ class SMGRenderer implements Viewer.MainScene {
     ) {
         this.bloomCombineFlags = new RenderFlags();
 
+        this.bloomCombineFlags.depthCompare = GfxCompareMode.ALWAYS;
         this.bloomCombineFlags.blendMode = GfxBlendMode.ADD;
         this.bloomCombineFlags.blendSrcFactor = GfxBlendFactor.ONE;
         this.bloomCombineFlags.blendDstFactor = GfxBlendFactor.ONE;
