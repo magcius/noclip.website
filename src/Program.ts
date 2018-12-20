@@ -139,7 +139,7 @@ ${source}
             editor.onvaluechanged = function() {
                 if (timeout > 0)
                     clearTimeout(timeout);
-                timeout = setTimeout(tryCompile, 500);
+                timeout = window.setTimeout(tryCompile, 500);
             };
             const onresize = win.onresize = () => {
                 editor.setSize(document.body.offsetWidth, window.innerHeight);
