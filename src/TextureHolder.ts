@@ -199,9 +199,9 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 }
 
 export function getGLTextureFromMapping(m: TextureMapping): WebGLTexture | null {
-    if (m.gfxTexture !== null)
+    if (m.gfxTexture)
         return getPlatformTexture(m.gfxTexture);
-    else if (m.glTexture !== null)
+    else if (m.glTexture)
         return m.glTexture;
     else
         return null;
