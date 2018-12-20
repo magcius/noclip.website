@@ -478,8 +478,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             const skewT = view.getFloat32(xformTableIdx + 0x18);
             texMtx[backwardsIndex] = mat4.create();
             calcTexMtx(texMtx[backwardsIndex], translationS, translationT, scaleS, scaleT, rotation, skewS, skewT);
-            if (i == 0 && materialName === 'lambert36_v')
-                console.log(translationS, translationT, scaleS, scaleT, rotation, skewS, skewT, texMtx[backwardsIndex]);
 
             samplerEntryTableIdx += 0x04;
             xformTableIdx += 0x1C;
