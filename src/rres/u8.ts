@@ -28,7 +28,7 @@ export class U8Archive {
     public findDirParts(parts: string[]): U8Dir {
         let dir = this.root;
         for (const part of parts) {
-            dir = dir.subdirs.find((subdir) => subdir.name === part);
+            dir = dir.subdirs.find((subdir) => subdir.name === part || (part === '*' && dir.subdirs.length === 1));
             if (dir === undefined)
                 return null;
         }

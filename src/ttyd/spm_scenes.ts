@@ -20,18 +20,24 @@ class SPMSceneDesc implements Viewer.SceneDesc {
         return fetchData(`data/spm/${this.id}.bin`).then((buffer: ArrayBufferSlice) => {
             const decompressed = CX.decompress(buffer);
             const arc = U8.parse(decompressed);
-            const dFile = arc.findFile(`./dvd/map/${this.id}/map.dat`);
-            const tFile = arc.findFile(`./dvd/map/${this.id}/texture.tpl`);
-            const bDir = arc.findDir(`./dvd/bg`);
-            // TODO(jstpierre): Figure out how these BG files fit together.
-            const bFile = bDir.files[0];
+            const dFile = arc.findFile(`./dvd/map/*/map.dat`);
             const d = World.parse(dFile.buffer);
+
             const textureHolder = new TPLTextureHolder();
+            const tFile = arc.findFile(`./dvd/map/*/texture.tpl`);
             const tpl = TPL.parse(tFile.buffer, d.textureNameTable);
             textureHolder.addTPLTextures(device, tpl);
-            const backgroundTextureName = `bg_${this.id}`;
-            const bgTpl = TPL.parse(bFile.buffer, [backgroundTextureName]);
-            textureHolder.addTPLTextures(device, bgTpl);
+
+            const bDir = arc.findDir(`./dvd/bg`);
+            let backgroundTextureName: string | null = null;
+            if (bDir !== null) {
+                // TODO(jstpierre): Figure out how these BG files fit together.
+                const bFile = bDir.files[0];
+                backgroundTextureName = `bg_${this.id}`;
+                const bgTpl = TPL.parse(bFile.buffer, [backgroundTextureName]);
+                textureHolder.addTPLTextures(device, bgTpl);
+            }
+
             return new WorldRenderer(device, d, textureHolder, backgroundTextureName);
         });
     }
@@ -199,6 +205,17 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SPMSceneDesc('he4_10'),
     new SPMSceneDesc('he4_11'),
     new SPMSceneDesc('he4_12'),
+    new SPMSceneDesc('kri_00'),
+    new SPMSceneDesc('kri_01'),
+    new SPMSceneDesc('kri_02'),
+    new SPMSceneDesc('kri_03'),
+    new SPMSceneDesc('kri_04'),
+    new SPMSceneDesc('kri_05'),
+    new SPMSceneDesc('kri_06'),
+    new SPMSceneDesc('kri_07'),
+    new SPMSceneDesc('kri_08'),
+    new SPMSceneDesc('kri_09'),
+    new SPMSceneDesc('kri_10'),
     new SPMSceneDesc('ls1_01'),
     new SPMSceneDesc('ls1_02'),
     new SPMSceneDesc('ls1_03'),
