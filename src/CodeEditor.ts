@@ -228,7 +228,7 @@ class NumberDragger {
 
         this._document.documentElement.addEventListener('mouseup', this._onMouseUp);
         // Delay the show a tiny bit...
-        this._showTimeout = setTimeout(this._show.bind(this), 100);
+        this._showTimeout = window.setTimeout(this._show.bind(this), 100);
         this._cursorOverride.setCursor(this, 'e-resize');
     }
 }

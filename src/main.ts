@@ -372,7 +372,7 @@ class Main {
         if (this.saveTimeout !== 0)
             clearTimeout(this.saveTimeout);
 
-        this.saveTimeout = setTimeout(() => {
+        this.saveTimeout = window.setTimeout(() => {
             this._saveState();
             this.saveTimeout = 0;
         }, 100);
