@@ -176,9 +176,9 @@ const trans1 = mat4.create(), trans2 = mat4.create(), rot = mat4.create(), scale
 const _t: number[] = [0, 0, 0];
 function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, skewS: number, skewT: number): void {
     function t(x: number, y: number, z: number = 0): number[] { _t[0] = x; _t[1] = y; _t[2] = z; return _t; }
-    mat4.fromTranslation(dst, t(0.5 * skewS * scaleS, ( 0.5 * skewT - 1.0) * scaleT, 0.0));
+    mat4.fromTranslation(dst, t(0.5 * skewS * scaleS, (0.5 * skewT - 1.0) * scaleT, 0.0));
     mat4.fromZRotation(rot, (Math.PI / 180) * -rotation);
-    mat4.fromTranslation(trans1, t(-0.5 * skewS * scaleS, (-0.5 * skewT - 1.0) * scaleT, 0.0));
+    mat4.fromTranslation(trans1, t(-0.5 * skewS * scaleS, -(0.5 * skewT - 1.0) * scaleT, 0.0));
     mat4.mul(rot, rot, dst);
     mat4.mul(rot, trans1, rot);
     mat4.fromScaling(scale, t(scaleS, scaleT, 1.0));
@@ -478,6 +478,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             const skewT = view.getFloat32(xformTableIdx + 0x18);
             texMtx[backwardsIndex] = mat4.create();
             calcTexMtx(texMtx[backwardsIndex], translationS, translationT, scaleS, scaleT, rotation, skewS, skewT);
+            if (i == 0 && materialName === 'lambert36_v')
+                console.log(translationS, translationT, scaleS, scaleT, rotation, skewS, skewT, texMtx[backwardsIndex]);
 
             samplerEntryTableIdx += 0x04;
             xformTableIdx += 0x1C;
