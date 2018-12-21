@@ -324,7 +324,7 @@ export class WorldRenderer implements Viewer.Scene_Device {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.translateModel(device, d);
 
-        const rootScale = 10;
+        const rootScale = 75;
         mat4.fromScaling(this.rootMatrix, [rootScale, rootScale, rootScale]);
 
         this.animationNames = this.d.animations.map((a) => a.name);
