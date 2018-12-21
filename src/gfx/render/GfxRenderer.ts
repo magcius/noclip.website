@@ -7,14 +7,35 @@ import { TextureMapping } from "../../TextureHolder";
 import { DeviceProgramReflection } from "../../Program";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
-// Similar to bgfx and T3, it implements a bare minimum set of features for high performance graphics.
+// A rough overview of the design:
+//
+// A GfxRenderInst is basically equivalent to one draw call, and should be retained with the correct scene
+// graph object that has the power to update and rebind it every frame. GfxRenderer is designed for as little
+// per-frame GC garbage and pressure as possible, so this object should be retained in client code.
+//
+// Currently, GfxRenderInst is pretty expensive in terms of GC pressure. A future goal should be able to
+// remove as much as the bookkeeping and state on GfxRenderInst as possible, or compress the fields into a
+// cheaper form.
+//
+// GfxRenderInstBuilder is a way to create many GfxRenderInsts at once. It is not required to use, but is
+// very helpful and convenient for setting up the correct fields. It works best when the scene can be built
+// in one giant chunk. For cases where different parts of the scene are loaded at different times, it's a bit
+// clunky and doesn't cache the correct GfxBindings values. A planned future change is to change this so that
+// it can better support building a scene a piece at a time.
+//
+// GfxRenderInstViewRenderer is in charge of wrangling all of the GfxRenderInsts, sorting them, and then
+// executing the draws on the platform layer.
 
-// Suggested values for the "layer" of makeSortKey.
+
+// Suggested values for the "layer" of makeSortKey. These are rough groups, and you can define your
+// orders within the rough groups (e.g. you might use BACKGROUND + 1, or BACKGROUND + 2).
+// TRANSLUCENT is meant to be used as a bitflag, and changes the behavior of the generic sort key
+// functions like makeSortKey and setSortKeyDepth.
 export const enum GfxRendererLayer {
-    BACKGROUND = 0,
-    ALPHA_TEST = 10,
-    OPAQUE = 20,
-    TRANSLUCENT = 30,
+    BACKGROUND = 0x00,
+    ALPHA_TEST = 0x10,
+    OPAQUE = 0x20,
+    TRANSLUCENT = 0x40,
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -24,32 +45,52 @@ function clamp(v: number, min: number, max: number): number {
 const MAX_DEPTH = 500;
 
 const DEPTH_BITS = 16;
-const DEPTH_BUCKET_BITS = 2;
 
 export function makeDepthKey(depth: number, flipDepth: boolean, maxDepth: number = MAX_DEPTH) {
-    const depthBits = DEPTH_BITS + DEPTH_BUCKET_BITS;
-
     // Input depth here is: 0 is the closest to the camera, positive values are further away. Negative values (behind camera) are clamped to 0.
     // normalizedDepth: 0.0 is closest to camera, 1.0 is farthest from camera.
     // These values are flipped if flipDepth is set.
     let normalizedDepth = (clamp(depth, 0, maxDepth) / maxDepth);
     if (flipDepth)
         normalizedDepth = 1.0 - normalizedDepth;
-    const depthKey = (normalizedDepth * ((1 << depthBits) - 1)) >>> DEPTH_BUCKET_BITS;
-    return depthKey & ((1 << DEPTH_BITS) - 1);
+    const depthKey = (normalizedDepth * ((1 << DEPTH_BITS) - 1));
+    return depthKey & 0xFFFF;
 }
 
-export function makeSortKey(layer: number, depthKey: number, programKey: number): number {
+
+// Common sort key kinds.
+// Indexed:     0TLLLLLL IIIIIIII IIIIIIII IIIIIIII
+// Opaque:      00LLLLLL DDDDDDDD DDDDDDPP PPPPPPDD
+// Translucent: 01LLLLLL DDDDDDDD DDDDDDDD PPPPPPPP
+
+export function makeSortKeyOpaque(layer: number, programKey: number): number {
+    return ((layer & 0xFF) << 24) | ((programKey & 0xFF) << 2);
+}
+
+export function setSortKeyOpaqueDepth(sortKey: number, depthKey: number): number {
     assert(depthKey >= 0);
-    const key = (((layer & 0xFF) << 24) |
-        ((depthKey & 0xFFFF) << 8) |
-        ((programKey & 0xFF)));
-    return key;
+    return (sortKey & 0xFF0003FC) | ((depthKey & 0xFFFC) << 8) | (depthKey & 0x0003);
+}
+
+export function makeSortKeyTranslucent(layer: number, programKey: number): number {
+    return ((layer & 0xFF) << 24) | (programKey & 0xFF);
+}
+
+export function setSortKeyTranslucentDepth(sortKey: number, depthKey: number): number {
+    assert(depthKey >= 0);
+    return (sortKey & 0xFF0000FF) | (depthKey);
+}
+
+export function makeSortKey(layer: GfxRendererLayer, programKey: number): number {
+    if (layer & GfxRendererLayer.TRANSLUCENT)
+        return makeSortKeyTranslucent(layer, programKey);
+    else
+        return makeSortKeyOpaque(layer, programKey);
 }
 
 export function setSortKeyDepth(sortKey: number, depthKey: number): number {
-    assert(depthKey >= 0);
-    return (sortKey & 0xFF0000FF) | (depthKey << 8);
+    const isTranslucent = (sortKey >>> 31) & 1;
+    return isTranslucent ? setSortKeyTranslucentDepth(sortKey, depthKey) : setSortKeyOpaqueDepth(sortKey, depthKey);
 }
 
 function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
@@ -348,6 +389,7 @@ export class GfxRenderInstBuilder {
                 }
 
                 renderInst.uniformBufferOffsetGroups = currentUniformBufferOffsetGroups.slice();
+                renderInst.uniformBufferBindings = currentUniformBufferBindings.slice();
 
                 for (let k = firstSamplerBinding; k < lastSamplerBinding; k++) {
                     // TODO(jstpierre): I know this comparison will always fail.

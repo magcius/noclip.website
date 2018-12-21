@@ -7,7 +7,7 @@ import * as NSBTA from "./nsbta";
 import * as NITRO_GX from '../sm64ds/nitro_gx';
 import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../sm64ds/nitro_tex";
 import { NITRO_Program, Command_VertexData } from '../sm64ds/render';
-import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { TEX0, TEX0Texture } from "./nsbtx";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
@@ -109,7 +109,7 @@ class Command_Material {
         const depthWrite = xl || !isTranslucent;
 
         const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        this.templateRenderInst.sortKey = makeSortKey(layer, 0, 0);
+        this.templateRenderInst.sortKey = makeSortKeyOpaque(layer, 0);
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_MaterialParams);
         this.templateRenderInst.renderFlags.set({
             blendMode: GfxBlendMode.ADD,

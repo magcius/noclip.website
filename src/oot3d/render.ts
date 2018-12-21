@@ -15,7 +15,7 @@ import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, wordCountFromByteCount, assert } from '../util';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
 import { ub_MaterialParams } from '../gx/gx_render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -104,7 +104,7 @@ class MaterialInstance {
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, OoT3D_Program.ub_MaterialParams);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         const programKey = device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey;
-        this.templateRenderInst.sortKey = makeSortKey(layer, 0, programKey);
+        this.templateRenderInst.sortKey = makeSortKeyOpaque(layer, programKey);
         this.templateRenderInst.renderFlags.set(this.material.renderFlags);
 
         for (let i = 0; i < material.textureBindings.length; i++) {

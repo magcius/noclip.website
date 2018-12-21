@@ -14,7 +14,7 @@ import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPas
 import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderInst, GfxRenderInstBuilder, makeSortKey, GfxRenderInstViewRenderer, setSortKeyDepth, makeDepthKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, makeDepthKey, GfxRendererLayer, makeSortKey, setSortKeyDepth, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fullscreenFlags } from '../gfx/helpers/RenderFlagsHelpers';
 import { Camera, computeViewMatrix, computeViewSpaceDepth } from '../Camera';
@@ -79,7 +79,7 @@ class BackgroundBillboardRenderer {
         this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.name = 'BackgroundBillboardRenderer';
         this.renderInst.drawTriangles(3);
-        this.renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND, 0, programReflection.uniqueKey);
+        this.renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, programReflection.uniqueKey);
         // No input state, we don't use any vertex buffers for full-screen passes.
         this.renderInst.inputState = null;
         this.renderInst.gfxProgram = gfxProgram;
@@ -132,7 +132,7 @@ class Command_Material {
         this.templateRenderInst.gfxProgram = this.gfxProgram;
         this.templateRenderInst.samplerBindings = nArray(8, () => null);
         const layer = this.getRendererLayer(material.materialLayer);
-        this.templateRenderInst.sortKey = makeSortKey(layer, 0, device.queryProgram(this.gfxProgram).uniqueKey);
+        this.templateRenderInst.sortKey = makeSortKey(layer, device.queryProgram(this.gfxProgram).uniqueKey);
         assert(this.templateRenderInst.sortKey > 0);
         GX_Material.translateRenderFlagsGfx(this.templateRenderInst.renderFlags, this.material.gxMaterial);
         this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
@@ -223,7 +223,7 @@ class Command_Batch {
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private materialCommand: Command_Material, private nodeCommand: Command_Node, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffers) {
         this.shapeHelper = new GXShapeHelperGfx(device, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
         this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder, materialCommand.templateRenderInst);
-        this.renderInst.name = nodeCommand.node.nameStr;
+        this.renderInst.name = nodeCommand.namePath;
         // Pull in the node's cull mode.
         this.renderInst.renderFlags.cullMode = nodeCommand.node.renderFlags.cullMode;
     }
@@ -254,13 +254,15 @@ class Command_Batch {
 
 class Command_Node {
     private bbox = new AABB();
+    public visible: boolean = true;
     public children: Command_Node[] = [];
     public modelMatrix: mat4 = mat4.create();
     public meshAnimator: MeshAnimator | null = null;
-    public visible: boolean = true;
     public depth: number = 0;
+    public namePath: string;
 
-    constructor(public node: SceneGraphNode) {
+    constructor(public node: SceneGraphNode, parentNamePath: string) {
+        this.namePath = `${parentNamePath}/${node.nameStr}`;
     }
 
     public updateModelMatrix(parentMatrix: mat4): void {
@@ -275,11 +277,6 @@ class Command_Node {
 
     public prepareForRender(camera: Camera, visible: boolean): void {
         this.visible = visible;
-
-        if (this.visible) {
-            this.bbox.transform(this.node.bbox, this.modelMatrix);
-            this.visible = camera.frustum.contains(this.bbox);
-        }
 
         // Compute depth from camera.
         if (this.visible) {
@@ -431,12 +428,12 @@ export class WorldRenderer implements Viewer.Scene_Device {
         this.batchCommands.push(batchCommand);
     }
 
-    private translateSceneGraph(device: GfxDevice, node: SceneGraphNode): Command_Node {
-        const nodeCommand = new Command_Node(node);
+    private translateSceneGraph(device: GfxDevice, node: SceneGraphNode, parentPath: string = ''): Command_Node {
+        const nodeCommand = new Command_Node(node, parentPath);
         for (const part of node.parts)
             this.translatePart(device, nodeCommand, part);
         for (const child of node.children)
-            nodeCommand.children.push(this.translateSceneGraph(device, child));
+            nodeCommand.children.push(this.translateSceneGraph(device, child, nodeCommand.namePath));
         return nodeCommand;
     }
 

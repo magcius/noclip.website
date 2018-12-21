@@ -16,7 +16,7 @@ import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybo
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, makeSortKey, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -266,7 +266,7 @@ class BMDRenderer {
 
         const layer = material.isTranslucent ? 1 : 0;
         const programKey = device.queryProgram(this.gfxProgram).uniqueKey;
-        templateRenderInst.sortKey = makeSortKey(layer, 0, programKey);
+        templateRenderInst.sortKey = makeSortKeyOpaque(layer, programKey);
 
         return (hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => {
             function selectArray(arr: Float32Array, time: number): number {
