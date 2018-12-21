@@ -195,7 +195,7 @@ export interface GfxRenderPass {
     // State management.
     setViewport(width: number, height: number): void;
     setPipeline(pipeline: GfxRenderPipeline): void;
-    setBindings(bindingLayoutIndex: number, bindings: GfxBindings): void;
+    setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicWordOffsets: number[]): void;
     setInputState(inputState: GfxInputState | null): void;
 
     // Draw commands.
