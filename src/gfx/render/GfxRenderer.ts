@@ -1,6 +1,6 @@
 
 import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice, GfxSamplerBinding, GfxBindingLayoutDescriptor, GfxBufferBinding, GfxProgram, GfxPrimitiveTopology } from "../platform/GfxPlatform";
-import { align, assertExists, assert } from "../../util";
+import { align, assertExists, assert, nArray } from "../../util";
 import { GfxRenderBuffer } from "./GfxRenderBuffer";
 import { RenderFlags } from "../helpers/RenderFlagsHelpers";
 import { TextureMapping } from "../../TextureHolder";
@@ -93,6 +93,7 @@ export class GfxRenderInst {
     public bindings: GfxBindings[] = [];
     public bindingLayouts: GfxBindingLayoutDescriptor[] = [];
     public uniformBufferOffsets: number[] = [];
+    public uniformBufferOffsetGroups: number[][] = [];
     public uniformBufferBindings: GfxBufferBinding[] = [];
     public samplerBindingsDirty: boolean = false;
     public samplerBindings: GfxSamplerBinding[] = [];
@@ -194,7 +195,6 @@ export class GfxRenderInstViewRenderer {
 
         let currentPipeline: GfxRenderPipeline | null = null;
         let currentInputState: GfxInputState | null = null;
-        let currentBindings: GfxBindings[] = [];
 
         for (let i = 0; i < this.renderInsts.length; i++) {
             const renderInst = this.renderInsts[i];
@@ -218,12 +218,8 @@ export class GfxRenderInstViewRenderer {
                 currentInputState = renderInst.inputState;
             }
 
-            for (let j = 0; j < renderInst.bindings.length; j++) {
-                if (currentBindings[j] !== renderInst.bindings[j]) {
-                    passRenderer.setBindings(j, renderInst.bindings[j]);
-                    currentBindings[j] = renderInst.bindings[j];
-                }
-            }
+            for (let j = 0; j < renderInst.bindings.length; j++)
+                passRenderer.setBindings(j, renderInst.bindings[j], renderInst.uniformBufferOffsetGroups[j]);
 
             if (renderInst._drawIndexed)
                 passRenderer.drawIndexed(renderInst._drawCount, renderInst._drawStart);
@@ -296,10 +292,13 @@ export class GfxRenderInstBuilder {
 
         // Now assign bindings. This tries to be as conservative as it can in making sure it can create
         // as few bindings as possible, while obeying the layout.
-        let currentBindings: GfxBindings[] = [];
-        let currentUniformBufferOffsets: number[] = [];
-        let currentUniformBufferBindings: GfxBufferBinding[] = [];
-        let currentSamplerBindings: GfxSamplerBinding[] = [];
+        const currentBindings: GfxBindings[] = [];
+        const currentSamplerBindings: GfxSamplerBinding[] = [];
+        const currentUniformBufferOffsetGroups: number[][] = [];
+        const currentUniformBufferBindings: GfxBufferBinding[] = [];
+
+        for (let i = 0; i < this.bindingLayouts.length; i++)
+            currentUniformBufferOffsetGroups[i] = nArray(this.bindingLayouts[i].numUniformBuffers, () => 0);
 
         for (let i = 0; i < this.renderInsts.length; i++) {
             const renderInst = this.renderInsts[i];
@@ -331,17 +330,24 @@ export class GfxRenderInstBuilder {
                 let isCachedBindingValid = true;
 
                 for (let k = firstUniformBuffer; k < lastUniformBuffer; k++) {
-                    if (currentUniformBufferOffsets[k] !== renderInst.uniformBufferOffsets[k]) {
-                        currentUniformBufferOffsets[k] = renderInst.uniformBufferOffsets[k];
-                        isCachedBindingValid = false;
+                    const k0 = k - firstUniformBuffer;
 
-                        // Recreate binding and assign.
-                        const { buffer, wordOffset } = this.uniformBuffers[k].getGfxBuffer(currentUniformBufferOffsets[k]);
-                        assertExists(buffer);
+                    const { buffer, wordOffset } = this.uniformBuffers[k].getGfxBuffer(renderInst.uniformBufferOffsets[k]);
+                    assertExists(buffer);
+
+                    if (!currentUniformBufferBindings[k] || buffer !== currentUniformBufferBindings[k].buffer) {
+                        isCachedBindingValid = false;
                         const wordCount = this.programReflection.uniformBufferLayouts[k].totalWordSize;
-                        currentUniformBufferBindings[k] = { buffer, wordOffset, wordCount };
+                        currentUniformBufferBindings[k] = { buffer, wordOffset: 0, wordCount };
+                    }
+
+                    if (wordOffset !== currentUniformBufferOffsetGroups[j][k0]) {
+                        currentUniformBufferOffsetGroups[j] = currentUniformBufferOffsetGroups[j].slice();
+                        currentUniformBufferOffsetGroups[j][k0] = wordOffset;
                     }
                 }
+
+                renderInst.uniformBufferOffsetGroups = currentUniformBufferOffsetGroups.slice();
 
                 for (let k = firstSamplerBinding; k < lastSamplerBinding; k++) {
                     // TODO(jstpierre): I know this comparison will always fail.
@@ -369,7 +375,6 @@ export class GfxRenderInstBuilder {
 
             // Save off our uniform buffer bindings in case we need to rebind in the future.
             renderInst.bindingLayouts = this.bindingLayouts;
-            renderInst.uniformBufferBindings = currentUniformBufferBindings.slice();
             viewRenderer.renderInsts.push(renderInst);
         }
 

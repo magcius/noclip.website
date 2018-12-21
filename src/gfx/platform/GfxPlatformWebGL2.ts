@@ -296,7 +296,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public setRenderPassParameters(t: GfxRenderTarget, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.po(t); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
     public setViewport(w: number, h: number)      { this.pcmd(RenderPassCmd.setViewport); this.pf32(w); this.pf32(h); }
     public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
-    public setBindings(n: number, r: GfxBindings) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); }
+    public setBindings(n: number, r: GfxBindings, o: number[]) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); this.pu32(o.length); for (let i = 0; i < o.length; i++) this.pu32(o[i]); }
     public setInputState(r: GfxInputState | null) { this.pcmd(RenderPassCmd.setInputState); this.po(r); }
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
@@ -913,7 +913,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             } else if (cmd === RenderPassCmd.setViewport) {
                 this.setViewport(f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setBindings) {
-                this.setBindings(u32[iu32++], gfxr[igfxr++] as GfxBindings);
+                const index = u32[iu32++], numOffsets = u32[iu32++];
+                this.setBindings(index, gfxr[igfxr++] as GfxBindings, numOffsets, u32, iu32);
+                iu32 += numOffsets;
             } else if (cmd === RenderPassCmd.setPipeline) {
                 this.setPipeline(gfxr[igfxr++] as GfxRenderPipeline);
             } else if (cmd === RenderPassCmd.setInputState) {
@@ -1007,7 +1009,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.clear(clearBits);
     }
 
-    private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings): void {
+    private _currentUniformBuffers: GfxBuffer[] = [];
+    private _currentUniformBufferOffsets: number[] = [];
+    private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicWordOffsetsCount: number, dynamicWordOffsets: Uint32Array, dynamicWordOffsetsStart: number): void {
         const gl = this.gl;
 
         assert(bindingLayoutIndex < this._currentPipeline.bindingLayouts.bindingLayoutTables.length);
@@ -1016,15 +1020,23 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const { uniformBuffers, samplers } = bindings_ as GfxBindingsP_GL;
         assert(uniformBuffers.length === bindingLayoutTable.numUniformBuffers);
         assert(samplers.length === bindingLayoutTable.numSamplers);
+        assert(dynamicWordOffsetsCount === uniformBuffers.length);
 
         for (let i = 0; i < uniformBuffers.length; i++) {
             const binding = uniformBuffers[i];
+            const index = bindingLayoutTable.firstUniformBuffer + i;
             const buffer = binding.buffer as GfxBufferP_GL;
             assert(buffer.usage === GfxBufferUsage.UNIFORM);
-            const byteOffset = binding.wordOffset * 4;
+            const wordOffset = (binding.wordOffset + dynamicWordOffsets[dynamicWordOffsetsStart + i]);
+            const byteOffset = wordOffset * 4;
             const byteSize = binding.wordCount * 4;
-            gl.bindBufferRange(gl.UNIFORM_BUFFER, bindingLayoutTable.firstUniformBuffer + i, getPlatformBuffer(binding.buffer), byteOffset, byteSize);
-            this._currentBoundBuffers[gl.UNIFORM_BUFFER] = getPlatformBuffer(binding.buffer);
+            if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferOffsets[index]) {
+                const platformBuffer = getPlatformBuffer(buffer);
+                gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, byteOffset, byteSize);
+                this._currentUniformBuffers[index] = buffer;
+                this._currentUniformBufferOffsets[index] = byteOffset;
+                this._currentBoundBuffers[gl.UNIFORM_BUFFER] = platformBuffer;
+            }
         }
 
         for (let i = 0; i < samplers.length; i++) {
