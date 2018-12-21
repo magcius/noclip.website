@@ -4,7 +4,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { Color, colorFromRGBA } from "../Color";
-import { Texture, TextureLevel, Version } from "./cmb";
+import { Texture, TextureLevel, Version, calcTexMtx } from "./cmb";
 import { decodeTexture, computeTextureByteSize } from "./pica_texture";
 
 // CMAB (CTR Material Animation Binary)
@@ -385,11 +385,10 @@ export class TextureAnimator {
         if (this.animEntry.animationType === AnimationType.TRANSLATION) {
             const tx = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 0;
             const ty = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 0;
-            dst[12] = -tx;
-            dst[13] = -ty;
+            calcTexMtx(dst, 0, 0, 0, tx, ty);
         } else if (this.animEntry.animationType === AnimationType.ROTATION) {
             const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 0;
-            mat4.rotateZ(dst, dst, r);
+            calcTexMtx(dst, 0, 0, r, 0, 0);
         } else {
             throw "whoops";
         }
