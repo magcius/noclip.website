@@ -20,7 +20,6 @@ import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gf
 import { ub_MaterialParams } from '../gx/gx_render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { Camera } from '../Camera';
-import GfxArena from '../gfx/helpers/GfxArena';
 
 // @ts-ignore
 // This feature is provided by Parcel.
@@ -90,23 +89,137 @@ interface CmbContext {
 const scratchMatrix = mat4.create();
 const scratchColor = colorNew(0, 0, 0, 1);
 
+class MaterialInstance {
+    private textureMappings: TextureMapping[] = nArray(1, () => new TextureMapping());
+    private gfxSamplers: GfxSampler[] = [];
+    private colorAnimators: CMAB.ColorAnimator[] = [];
+    private srtAnimators: CMAB.TextureAnimator[] = [];
+    public templateRenderInst: GfxRenderInst;
+    public visible: boolean = true;
+
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public material: CMB.Material) {
+        this.textureMappings[0].reset();
+
+        this.templateRenderInst = renderInstBuilder.newRenderInst();
+        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, OoT3D_Program.ub_MaterialParams);
+        const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        const programKey = device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey;
+        this.templateRenderInst.sortKey = makeSortKey(layer, 0, programKey);
+        this.templateRenderInst.renderFlags.set(this.material.renderFlags);
+
+        for (let i = 0; i < material.textureBindings.length; i++) {
+            if (i >= 1) break;
+            const binding = material.textureBindings[i];
+            if (binding.textureIdx < 0)
+                continue;
+
+            const [minFilter, mipFilter] = this.translateTextureFilter(binding.minFilter);
+            const [magFilter] = this.translateTextureFilter(binding.magFilter);
+
+            const texture = this.cmb.textures[binding.textureIdx];
+            textureHolder.fillTextureMapping(this.textureMappings[i], texture.name);
+
+            const gfxSampler = device.createSampler({
+                wrapS: this.translateWrapMode(binding.wrapS),
+                wrapT: this.translateWrapMode(binding.wrapT),
+                magFilter,
+                minFilter,
+                mipFilter,
+                minLOD: 0,
+                maxLOD: 100,
+            });
+            this.gfxSamplers.push(gfxSampler);
+            this.textureMappings[i].gfxSampler = gfxSampler;
+        }
+
+        this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+    }
+
+    public bindCMAB(cmab: CMAB.CMAB, animationController: AnimationController, channelIndex: number): void {
+        for (let i = 0; i < cmab.animEntries.length; i++) {
+            const animEntry = cmab.animEntries[i];
+            if (animEntry.materialIndex !== this.material.index)
+                continue;
+            if (animEntry.channelIndex !== channelIndex)
+                continue;
+
+            if (animEntry.animationType === CMAB.AnimationType.TRANSLATION || animEntry.animationType === CMAB.AnimationType.ROTATION) {
+                this.srtAnimators[animEntry.channelIndex] = new CMAB.TextureAnimator(animationController, cmab, animEntry);
+            } else if (animEntry.animationType === CMAB.AnimationType.COLOR) {
+                this.colorAnimators[animEntry.channelIndex] = new CMAB.ColorAnimator(animationController, cmab, animEntry);
+            }
+        }
+    }
+
+    public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
+        let offs = this.templateRenderInst.uniformBufferOffsets[ub_MaterialParams];
+        const mapped = materialParamsBuffer.mapBufferF32(offs, 20);
+        if (this.colorAnimators[0]) {
+            this.colorAnimators[0].calcMaterialColor(scratchColor);
+        } else {
+            colorFromRGBA(scratchColor, 1, 1, 1, 1);
+        }
+        offs += fillColor(mapped, offs, scratchColor);
+
+        if (this.srtAnimators[0]) {
+            this.srtAnimators[0].calcTexMtx(scratchMatrix);
+        } else {
+            mat4.identity(scratchMatrix);
+        }
+        mat4.mul(scratchMatrix, this.material.textureMatrices[0], scratchMatrix);
+
+        offs += fillMatrix4x3(mapped, offs, scratchMatrix);
+        offs += fillVec4(mapped, offs, this.material.alphaTestReference);
+    }
+
+    private translateWrapMode(wrapMode: CMB.TextureWrapMode): GfxWrapMode {
+        switch (wrapMode) {
+        case CMB.TextureWrapMode.CLAMP: return GfxWrapMode.CLAMP;
+        case CMB.TextureWrapMode.CLAMP_TO_EDGE: return GfxWrapMode.CLAMP;
+        case CMB.TextureWrapMode.REPEAT: return GfxWrapMode.REPEAT;
+        case CMB.TextureWrapMode.MIRRORED_REPEAT: return GfxWrapMode.MIRROR;
+        default: throw new Error();
+        }
+    }
+
+    private translateTextureFilter(filter: CMB.TextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
+        switch (filter) {
+        case CMB.TextureFilter.LINEAR:
+            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+        case CMB.TextureFilter.NEAREST:
+            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+        case CMB.TextureFilter.LINEAR_MIPMAP_LINEAR:
+            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
+        case CMB.TextureFilter.LINEAR_MIPMAP_NEAREST:
+            return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
+        case CMB.TextureFilter.NEAREST_MIPMIP_LINEAR:
+            return [GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR];
+        case CMB.TextureFilter.NEAREST_MIPMAP_NEAREST:
+            return [GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST];
+        default: throw new Error();
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.gfxSamplers.length; i++)
+            device.destroySampler(this.gfxSamplers[i]);
+    }
+}
+
 export class CmbRenderer {
     private gfxProgram: GfxProgram;
 
     public animationController = new AnimationController();
-    public srtAnimators: CMAB.TextureAnimator[] = [];
-    public colorAnimators: CMAB.ColorAnimator[] = [];
     public visible: boolean = true;
     public boneMatrices: mat4[] = [];
     public prepareToRenderFuncs: ((viewerInput: Viewer.ViewerRenderInput) => void)[] = [];
+    public materialInstances: MaterialInstance[] = [];
 
     private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
     private prmParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_PrmParams`);
 
-    private textureMapping = nArray(1, () => new TextureMapping());
     private templateRenderInst: GfxRenderInst;
-    private arena = new GfxArena();
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
         this.textureHolder.addTexturesGfx(device, cmb.textures.filter((texture) => texture.levels.length > 0));
@@ -139,6 +252,9 @@ export class CmbRenderer {
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[OoT3D_Program.ub_SceneParams], 16);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, this.templateRenderInst.uniformBufferOffsets[OoT3D_Program.ub_SceneParams]);
 
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput);
+
         this.prepareToRenderFuncs.forEach((updateFunc) => {
             updateFunc(viewerInput);
         });
@@ -157,19 +273,12 @@ export class CmbRenderer {
         this.sceneParamsBuffer.destroy(device);
         this.materialParamsBuffer.destroy(device);
         this.prmParamsBuffer.destroy(device);
+        this.materialInstances.forEach((m) => m.destroy(device));
     }
 
     public bindCMAB(cmab: CMAB.CMAB, channelIndex: number = 0): void {
-        for (let i = 0; i < cmab.animEntries.length; i++) {
-            const animEntry = cmab.animEntries[i];
-            if (animEntry.channelIndex === channelIndex) {
-                if (animEntry.animationType === CMAB.AnimationType.TRANSLATION || animEntry.animationType === CMAB.AnimationType.ROTATION) {
-                    this.srtAnimators[animEntry.materialIndex] = new CMAB.TextureAnimator(this.animationController, cmab, animEntry);
-                } else if (animEntry.animationType === CMAB.AnimationType.COLOR) {
-                    this.colorAnimators[animEntry.materialIndex] = new CMAB.ColorAnimator(this.animationController, cmab, animEntry);
-                }
-            }
-        }
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].bindCMAB(cmab, this.animationController, channelIndex);
     }
 
     private translateDataType(dataType: CMB.DataType, size: number, normalized: boolean): GfxFormat {
@@ -191,7 +300,7 @@ export class CmbRenderer {
         return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
     }
 
-    private translateSepd(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, cmbContext: CmbContext, sepd: CMB.Sepd) {
+    private translateSepd(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, cmbContext: CmbContext, sepd: CMB.Sepd, materialInstance: MaterialInstance) {
         const hostAccessPass = device.createHostAccessPass();
 
         const vertexAttributes: GfxVertexAttributeDescriptor[] = [];
@@ -267,7 +376,7 @@ export class CmbRenderer {
         return (viewerInput: Viewer.ViewerRenderInput) => {
             for (let i = 0; i < sepd.prms.length; i++) {
                 const renderInst = renderInsts[i];
-                renderInst.visible = this.visible;
+                renderInst.visible = this.visible && materialInstance.visible;
 
                 if (this.visible) {
                     const prms = sepd.prms[i];
@@ -282,92 +391,6 @@ export class CmbRenderer {
                     offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.textureCoord.scale);
                 }
             }
-        };
-    }
-
-    private translateMaterial(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, material: CMB.Material) {
-        function translateWrapMode(wrapMode: CMB.TextureWrapMode): GfxWrapMode {
-            switch (wrapMode) {
-            case CMB.TextureWrapMode.CLAMP: return GfxWrapMode.CLAMP;
-            case CMB.TextureWrapMode.CLAMP_TO_EDGE: return GfxWrapMode.CLAMP;
-            case CMB.TextureWrapMode.REPEAT: return GfxWrapMode.REPEAT;
-            case CMB.TextureWrapMode.MIRRORED_REPEAT: return GfxWrapMode.MIRROR;
-            default: throw new Error();
-            }
-        }
-
-        function translateTextureFilter(filter: CMB.TextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
-            switch (filter) {
-            case CMB.TextureFilter.LINEAR:
-                return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
-            case CMB.TextureFilter.NEAREST:
-                return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
-            case CMB.TextureFilter.LINEAR_MIPMAP_LINEAR:
-                return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
-            case CMB.TextureFilter.LINEAR_MIPMAP_NEAREST:
-                return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
-            case CMB.TextureFilter.NEAREST_MIPMIP_LINEAR:
-                return [GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR];
-            case CMB.TextureFilter.NEAREST_MIPMAP_NEAREST:
-                return [GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST];
-            default: throw new Error();
-            }
-        }
-
-        const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        renderInstBuilder.newUniformBufferInstance(templateRenderInst, OoT3D_Program.ub_MaterialParams);
-        const layer = material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        const programKey = device.queryProgram(templateRenderInst.gfxProgram).uniqueKey;
-        templateRenderInst.sortKey = makeSortKey(layer, 0, programKey);
-        templateRenderInst.renderFlags.set(material.renderFlags);
-
-        this.textureMapping[0].reset();
-
-        const gfxSamplers: GfxSampler[] = [];
-        for (let i = 0; i < material.textureBindings.length; i++) {
-            if (i >= 1) break;
-            const binding = material.textureBindings[i];
-            if (binding.textureIdx < 0)
-                continue;
-
-            const [minFilter, mipFilter] = translateTextureFilter(binding.minFilter);
-            const [magFilter] = translateTextureFilter(binding.magFilter);
-
-            const texture = this.cmb.textures[binding.textureIdx];
-            this.textureHolder.fillTextureMapping(this.textureMapping[0], texture.name);
-
-            const gfxSampler = this.arena.trackSampler(device.createSampler({
-                wrapS: translateWrapMode(binding.wrapS),
-                wrapT: translateWrapMode(binding.wrapT),
-                magFilter,
-                minFilter,
-                mipFilter,
-                minLOD: 0,
-                maxLOD: 100,
-            }));
-            gfxSamplers.push(gfxSampler);
-            this.textureMapping[0].gfxSampler = gfxSampler;
-        }
-
-        templateRenderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-
-        return (viewerInput: Viewer.ViewerRenderInput): void => {
-            let offs = templateRenderInst.uniformBufferOffsets[ub_MaterialParams];
-            const mapped = this.materialParamsBuffer.mapBufferF32(offs, 20);
-            if (this.colorAnimators[material.index]) {
-                this.colorAnimators[material.index].calcMaterialColor(scratchColor);
-            } else {
-                colorFromRGBA(scratchColor, 1, 1, 1, 1);
-            }
-            offs += fillColor(mapped, offs, scratchColor);
-
-            if (this.srtAnimators[material.index]) {
-                this.srtAnimators[material.index].calcTexMtx(scratchMatrix);
-            } else {
-                mat4.identity(scratchMatrix);
-            }
-            offs += fillMatrix4x3(mapped, offs, scratchMatrix);
-            offs += fillVec4(mapped, offs, material.alphaTestReference);
         };
     }
 
@@ -401,10 +424,11 @@ export class CmbRenderer {
         for (let i = 0; i < cmb.meshs.length; i++) {
             const mesh = cmb.meshs[i];
 
-            // Pushes a template render inst.
-            const materialPrepareToRenderFunc = this.translateMaterial(device, renderInstBuilder, cmb.materials[mesh.matsIdx]);
-            const sepdPrepareToRenderFunc = this.translateSepd(device, renderInstBuilder, cmbContext, cmb.sepds[mesh.sepdIdx]);
-            this.prepareToRenderFuncs.push(materialPrepareToRenderFunc);
+            const materialInstance = new MaterialInstance(device, renderInstBuilder, this.textureHolder, this.cmb, cmb.materials[mesh.matsIdx]);
+            this.materialInstances.push(materialInstance);
+
+            renderInstBuilder.pushTemplateRenderInst(materialInstance.templateRenderInst);
+            const sepdPrepareToRenderFunc = this.translateSepd(device, renderInstBuilder, cmbContext, cmb.sepds[mesh.sepdIdx], materialInstance);
             this.prepareToRenderFuncs.push(sepdPrepareToRenderFunc);
             renderInstBuilder.popTemplateRenderInst();
         }

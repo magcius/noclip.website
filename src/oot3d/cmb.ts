@@ -1,5 +1,5 @@
 
-import { assert, readString } from '../util';
+import { assert, readString, hexdump } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RenderFlags } from '../render';
 import { mat4, vec4 } from 'gl-matrix';
@@ -126,9 +126,25 @@ interface TextureBinding {
 export interface Material {
     index: number;
     textureBindings: TextureBinding[];
+    textureMatrices: mat4[];
     alphaTestReference: number;
     renderFlags: RenderFlags;
     isTransparent: boolean;
+}
+
+export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const sinR = Math.sin(rotation);
+    const cosR = Math.cos(rotation);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleT * -sinR;
+    dst[12] = translationS;
+
+    dst[1]  = scaleS *  sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = translationT;
 }
 
 function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
@@ -139,9 +155,11 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
     let offs = 0x0C;
     for (let i = 0; i < count; i++) {
+        const numTextureBindings = view.getUint16(offs + 0x0C, true);
+        const numTextureMatrices = view.getUint16(offs + 0x0E, true);
+
         let bindingOffs = offs + 0x10;
         const textureBindings: TextureBinding[] = [];
-
         for (let j = 0; j < 3; j++) {
             const textureIdx = view.getInt16(bindingOffs + 0x00, true);
             let minFilter = view.getUint16(bindingOffs + 0x04, true);
@@ -155,9 +173,27 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             bindingOffs += 0x18;
         }
 
+        let matricesOffs = offs + 0x58;
+        const textureMatrices: mat4[] = [];
+        for (let j = 0; j < 3; j++) {
+            const flags = view.getUint32(matricesOffs + 0x00, true);
+            const scaleS = view.getFloat32(matricesOffs + 0x04, true);
+            const scaleT = view.getFloat32(matricesOffs + 0x08, true);
+            const translationS = view.getFloat32(matricesOffs + 0x0C, true);
+            const translationT = view.getFloat32(matricesOffs + 0x10, true);
+            const rotation = view.getFloat32(matricesOffs + 0x14, true);
+            const texMtx = mat4.create();
+            calcTexMtx(texMtx, scaleS, scaleT, translationS, translationT, rotation);
+            textureMatrices.push(texMtx);
+            matricesOffs += 0x18;
+        }
+
         // Hack for Luigi's Mansion: use second texture binding
-        if (cmb.version === Version.LuigisMansion)
+        // TODO(jstpierre): Figure out how to blend these
+        if (cmb.version === Version.LuigisMansion) {
             textureBindings[0] = textureBindings[1];
+            textureMatrices[0] = textureMatrices[1];
+        }
 
         const alphaTestEnable = !!view.getUint8(offs + 0x130);
         const alphaTestReference = alphaTestEnable ? (view.getUint8(offs + 0x131) / 0xFF) : -1;
@@ -171,7 +207,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         renderFlags.depthWrite = !isTransparent;
         renderFlags.cullMode = GfxCullMode.BACK;
 
-        cmb.materials.push({ index: i, textureBindings, alphaTestReference, renderFlags, isTransparent });
+        cmb.materials.push({ index: i, textureBindings, textureMatrices, alphaTestReference, renderFlags, isTransparent });
 
         offs += 0x15C;
 
