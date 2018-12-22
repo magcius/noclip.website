@@ -14,9 +14,16 @@ import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { TextureOverride } from '../TextureHolder';
 
 class ZTPTextureHolder extends J3DTextureHolder {
-    protected tryTextureNameVariants(name: string): string[] {
-        const extraTextureName = `ExtraTex/${name.toLowerCase().replace('.tga', '')}`;
-        return [name, extraTextureName];
+    protected findTextureEntryIndex(name: string): number {
+        let i: number = -1;
+
+        i = this.searchTextureEntryIndex(name);
+        if (i >= 0) return i;
+
+        i = this.searchTextureEntryIndex(`ExtraTex/${name.toLowerCase().replace('.tga', '')}`);
+        if (i >= 0) return i;
+
+        return i;
     }
 
     public addExtraTextures(gl: WebGL2RenderingContext, extraTextures: TEX1_TextureData[]): void {
@@ -122,7 +129,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
         state.blitColorTarget(this.mainColorTarget);
 
         // IndTex.
-        if (this.indTexScenes.length) {
+        if (this.indTexScenes.length && this.textureHolder.hasTexture('fbtex_dummy')) {
             const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
         }
