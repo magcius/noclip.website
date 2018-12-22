@@ -12,9 +12,16 @@ import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
-    public tryTextureNameVariants(name: string): string[] {
-        const basename = name.split('/')[2];
-        return [name, `${basename}.ctxb`];
+    protected findTextureEntryIndex(name: string): number {
+        let i: number = -1;
+
+        i = this.searchTextureEntryIndex(name);
+        if (i >= 0) return i;
+
+        i = this.searchTextureEntryIndex(`${name.split('/')[2]}.ctxb`);
+        if (i >= 0) return i;
+
+        return i;
     }
 
     public addCTXB(device: GfxDevice, ctxb: CTXB.CTXB): void {

@@ -74,30 +74,17 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         this.destroyGfx(getTransitionDeviceForWebGL2(gl));
     }
 
-    // TODO(jstpierre): Optimize interface to not require an array construct every frame...
-    protected tryTextureNameVariants(name: string): string[] {
-        // Default implementation.
-        return null;
-    }
-
-    private findTextureEntryIndex(name: string): number {
-        const nameVariants = this.tryTextureNameVariants(name);
-
-        if (nameVariants !== null) {
-            for (let j = 0; j < nameVariants.length; j++) {
-                for (let i = 0; i < this.textureEntries.length; i++) {
-                    if (this.textureEntries[i].name === nameVariants[j])
-                        return i;
-                }
-            }
-        } else {
-            for (let i = 0; i < this.textureEntries.length; i++) {
-                if (this.textureEntries[i].name === name)
-                    return i;
-            }
+    protected searchTextureEntryIndex(name: string): number {
+        for (let i = 0; i < this.textureEntries.length; i++) {
+            if (this.textureEntries[i].name === name)
+                return i;
         }
 
         return -1;
+    }
+
+    protected findTextureEntryIndex(name: string): number {
+        return this.searchTextureEntryIndex(name);
     }
 
     public hasTexture(name: string): boolean {
