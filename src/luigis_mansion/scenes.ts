@@ -6,8 +6,6 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as RARC from '../j3d/rarc';
 import * as BIN from './bin';
 import { LuigisMansionRenderer } from './render';
-import { RenderState } from '../render';
-import * as UI from '../ui';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 function fetchBin(path: string): Progressable<BIN.BIN> {
