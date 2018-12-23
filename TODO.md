@@ -7,7 +7,3 @@
 * Archive / file explorer UI?
 * Collapsable left pane?
 * Maya camera mode
-* NNG3D
-
-Gfx:
-* samplerBindings
