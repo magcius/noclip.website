@@ -43,6 +43,10 @@ class Command_Material {
     public prepareToRender(renderHelper: GXRenderHelperGfx): void {
         this.materialHelper.fillMaterialParams(materialParamsScratch, renderHelper);
     }
+
+    public destroy(device: GfxDevice): void {
+        this.materialHelper.destroy(device);
+    }
 }
 
 const bboxScratch = new AABB();
@@ -110,6 +114,8 @@ class Command_Bin {
     public destroy(device: GfxDevice): void {
         this.gfxTextures.forEach((t) => device.destroyTexture(t));
         this.gfxSamplers.forEach((t) => device.destroySampler(t));
+        this.batchCommands.forEach((t) => t.destroy(device));
+        this.materialCommands.forEach((t) => t.destroy(device));
         this.bufferCoalescer.destroy(device);
     }
 
