@@ -1,6 +1,6 @@
 
 import * as GX_Material from '../gx/gx_material';
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, translateWrapModeGfx } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, translateWrapModeGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';
@@ -89,7 +89,7 @@ class BackgroundBillboardRenderer {
         renderInstBuilder.finish(device, viewRenderer);
     }
 
-    public prepareForRender(hostAccessPass: GfxHostAccessPass, renderInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, renderInput: Viewer.ViewerRenderInput): void {
         // Set our texture bindings.
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
         this.renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
@@ -112,33 +112,25 @@ class BackgroundBillboardRenderer {
 }
 
 class Command_Material {
-    private gfxProgram: GfxProgram;
     private materialParams = new MaterialParams();
-    private gfxSamplers: GfxSampler[] = [];
+    private materialHelper: GXMaterialHelperGfx;
     private materialAnimators: MaterialAnimator[] = [];
-    private materialParamsBufferOffset: number;
+    private gfxSamplers: GfxSampler[] = [];
     public templateRenderInst: GfxRenderInst;
     public isTranslucent: boolean;
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public material: Material) {
-        const program = new GX_Material.GX_Program(this.material.gxMaterial);
-        this.gfxProgram = device.createProgram(program);
+        this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.material.gxMaterial);
 
         this.gfxSamplers = this.material.samplers.map((sampler) => {
             return Command_Material.translateSampler(device, sampler);
         });
 
-        this.templateRenderInst = renderHelper.renderInstBuilder.newRenderInst();
-        this.templateRenderInst.gfxProgram = this.gfxProgram;
-        this.templateRenderInst.samplerBindings = nArray(8, () => null);
+        this.templateRenderInst = this.materialHelper.templateRenderInst;
         const layer = this.getRendererLayer(material.materialLayer);
-        this.templateRenderInst.sortKey = makeSortKey(layer, device.queryProgram(this.gfxProgram).uniqueKey);
-        assert(this.templateRenderInst.sortKey > 0);
-        GX_Material.translateRenderFlagsGfx(this.templateRenderInst.renderFlags, this.material.gxMaterial);
+        this.templateRenderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
         this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
         this.templateRenderInst.renderFlags.polygonOffset = material.materialLayer === MaterialLayer.ALPHA_TEST;
-        // Allocate our material buffer slot.
-        this.materialParamsBufferOffset = renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
     }
 
     private getRendererLayer(materialLayer: MaterialLayer): GfxRendererLayer {
@@ -205,12 +197,11 @@ class Command_Material {
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, textureHolder: TPLTextureHolder): void {
         this.fillMaterialParams(this.materialParams, textureHolder);
-        renderHelper.fillMaterialParams(this.materialParams, this.materialParamsBufferOffset);
-        this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
+        this.materialHelper.fillMaterialParams(this.materialParams, renderHelper);
     }
 
     public destroy(device: GfxDevice) {
-        device.destroyProgram(this.gfxProgram);
+        this.materialHelper.destroy(device);
         this.gfxSamplers.forEach((sampler) => device.destroySampler(sampler));
     }
 }
@@ -233,7 +224,7 @@ class Command_Batch {
         mat4.mul(dst, dst, this.nodeCommand.modelMatrix);
     }
 
-    public prepareForRender(renderHelper: GXRenderHelperGfx, renderInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderHelper: GXRenderHelperGfx, renderInput: Viewer.ViewerRenderInput): void {
         this.renderInst.visible = this.nodeCommand.visible;
 
         if (this.renderInst.visible) {
@@ -275,7 +266,7 @@ class Command_Node {
         }
     }
 
-    public prepareForRender(camera: Camera, visible: boolean): void {
+    public prepareToRender(camera: Camera, visible: boolean): void {
         this.visible = visible;
 
         // Compute depth from camera.
@@ -369,13 +360,9 @@ export class WorldRenderer implements Viewer.Scene_Device {
         this.rootNode.stopAnimation();
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        this.animationController.updateTime(viewerInput.time);
-
-        const hostAccessPass = device.createHostAccessPass();
-
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.backgroundRenderer !== null)
-            this.backgroundRenderer.prepareForRender(hostAccessPass, viewerInput);
+            this.backgroundRenderer.prepareToRender(hostAccessPass, viewerInput);
 
         this.renderHelper.fillSceneParams(viewerInput);
 
@@ -387,7 +374,7 @@ export class WorldRenderer implements Viewer.Scene_Device {
         const updateNode = (nodeCommand: Command_Node, parentMatrix: mat4, parentVisible: boolean | undefined) => {
             const visible = parentVisible === false ? false : !(nodeCommand.node.visible === false);
             nodeCommand.updateModelMatrix(parentMatrix);
-            nodeCommand.prepareForRender(viewerInput.camera, visible);
+            nodeCommand.prepareToRender(viewerInput.camera, visible);
             for (let i = 0; i < nodeCommand.children.length; i++)
                 updateNode(nodeCommand.children[i], nodeCommand.modelMatrix, visible);
         };
@@ -396,9 +383,16 @@ export class WorldRenderer implements Viewer.Scene_Device {
 
         // Update shapes
         for (let i = 0; i < this.batchCommands.length; i++)
-            this.batchCommands[i].prepareForRender(this.renderHelper, viewerInput);
+            this.batchCommands[i].prepareToRender(this.renderHelper, viewerInput);
 
         this.renderHelper.prepareToRender(hostAccessPass);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.animationController.updateTime(viewerInput.time);
+
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
