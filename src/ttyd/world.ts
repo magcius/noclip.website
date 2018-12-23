@@ -12,6 +12,7 @@ import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import AnimationController from '../AnimationController';
 import { RenderFlags } from '../render';
+import { RenderFlagsPossibilities } from '../gfx/helpers/RenderFlagsHelpers';
 
 export interface TTYDWorld {
     information: Information;
@@ -71,7 +72,7 @@ export interface SceneGraphNode {
     children: SceneGraphNode[];
     parts: SceneGraphPart[];
     isTranslucent: boolean;
-    renderFlags: RenderFlags;
+    renderFlags: RenderFlagsPossibilities;
     visible?: boolean;
 }
 
@@ -1189,9 +1190,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         if (nextSiblingOffs !== 0)
             nextSibling = readSceneGraph(mainDataOffs + nextSiblingOffs);
 
-        const renderFlags = new RenderFlags();
-        renderFlags.cullMode = GX_Material.translateCullMode(cullMode);
-
+        const renderFlags: RenderFlagsPossibilities = { cullMode: GX_Material.translateCullMode(cullMode) };
         return { nameStr, typeStr, modelMatrix, bbox, children, parts, isTranslucent, renderFlags, nextSibling };
     }
 
