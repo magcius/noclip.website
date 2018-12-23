@@ -270,6 +270,12 @@ export class GfxRenderInstViewRenderer {
     }
 }
 
+function samplerBindingsEqual(a: GfxSamplerBinding, b: GfxSamplerBinding): boolean {
+    if (a === undefined) return b === undefined;
+    if (b === undefined) return false;
+    return a.sampler === b.sampler && a.texture === b.texture;
+}
+
 export class GfxRenderInstBuilder {
     private uniformBufferOffsets: number[] = [];
     private uniformBufferWordAlignment: number;
@@ -392,8 +398,7 @@ export class GfxRenderInstBuilder {
                 renderInst.uniformBufferBindings = currentUniformBufferBindings.slice();
 
                 for (let k = firstSamplerBinding; k < lastSamplerBinding; k++) {
-                    // TODO(jstpierre): I know this comparison will always fail.
-                    if (currentSamplerBindings[k] !== renderInst.samplerBindings[k]) {
+                    if (!samplerBindingsEqual(currentSamplerBindings[k], renderInst.samplerBindings[k])) {
                         currentSamplerBindings[k] = renderInst.samplerBindings[k];
                         isCachedBindingValid = false;
                     }
