@@ -9,10 +9,11 @@ import { assert } from '../../util';
 import { fullscreenFlags, defaultFlags, RenderFlags } from '../helpers/RenderFlagsHelpers';
 
 interface GfxBufferP_GL extends GfxBuffer {
-    gl_buffer: WebGLBuffer;
+    gl_buffer_pages: WebGLBuffer[];
     gl_target: GLenum;
     usage: GfxBufferUsage;
     byteSize: number;
+    pageByteSize: number;
 }
 
 interface GfxTextureP_GL extends GfxTexture {
@@ -205,9 +206,9 @@ function translatePrimitiveTopology(topology: GfxPrimitiveTopology): GLenum {
     }
 }
 
-export function getPlatformBuffer(buffer_: GfxBuffer): WebGLBuffer {
+export function getPlatformBuffer(buffer_: GfxBuffer, byteOffset: number = 0): WebGLBuffer {
     const buffer = buffer_ as GfxBufferP_GL;
-    return buffer.gl_buffer;
+    return buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
 }
 
 export function getPlatformTexture(texture_: GfxTexture): WebGLTexture {
@@ -583,15 +584,40 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
-        const byteSize = wordCount * 4;
+    private _createBufferPage(byteSize: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): WebGLBuffer {
         const gl = this.gl;
         const gl_buffer = gl.createBuffer();
         const gl_target = translateBufferUsageToTarget(usage);
         const gl_hint = translateBufferHint(hint);
         this._bindBuffer(gl_target, gl_buffer);
         gl.bufferData(gl_target, byteSize, gl_hint);
-        const buffer: GfxBufferP_GL = { _T: _T.Buffer, gl_buffer, gl_target, usage, byteSize };
+        return gl_buffer;
+    }
+
+    public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
+        const byteSize = wordCount * 4;
+        const gl_buffer_pages: WebGLBuffer[] = [];
+
+        let pageByteSize: number;
+        if (usage === GfxBufferUsage.UNIFORM) {
+            // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
+            // It seems like this is a bug because there is supposed to be code to handle it, but it doesn't appear to work.
+            const UBO_PAGE_BYTE_SIZE = 0x10000;
+
+            let byteSizeLeft = byteSize;
+            while (byteSizeLeft > 0) {
+                gl_buffer_pages.push(this._createBufferPage(Math.min(byteSizeLeft, UBO_PAGE_BYTE_SIZE), usage, hint));
+                byteSizeLeft -= UBO_PAGE_BYTE_SIZE;
+            }
+
+            pageByteSize = UBO_PAGE_BYTE_SIZE;
+        } else {
+            gl_buffer_pages.push(this._createBufferPage(byteSize, usage, hint));
+            pageByteSize = byteSize;
+        }
+
+        const gl_target = translateBufferUsageToTarget(usage);
+        const buffer: GfxBufferP_GL = { _T: _T.Buffer, gl_buffer_pages, gl_target, usage, byteSize, pageByteSize };
         return buffer;
     }
 
@@ -752,7 +778,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public destroyBuffer(o: GfxBuffer): void {
-        this.gl.deleteBuffer(getPlatformBuffer(o));
+        const { gl_buffer_pages } = o as GfxBufferP_GL;
+        for (let i = 0; i < gl_buffer_pages.length; i++)
+            this.gl.deleteBuffer(gl_buffer_pages[i]);
     }
 
     public destroyTexture(o: GfxTexture): void {
@@ -877,9 +905,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public setResourceName(o: GfxResource, name: string): void {
         o.ResourceName = name;
 
-        if (o._T === _T.Buffer)
-            assignPlatformName(getPlatformBuffer(o), name);
-        else if (o._T === _T.Texture)
+        if (o._T === _T.Buffer) {
+            const { gl_buffer_pages } = o as GfxBufferP_GL;
+            for (let i = 0; i < gl_buffer_pages.length; i++)
+                assignPlatformName(gl_buffer_pages[i], `${name} Page ${i}`);
+        } else if (o._T === _T.Texture)
             assignPlatformName(getPlatformTexture(o), name);
         else if (o._T === _T.Sampler)
             assignPlatformName(getPlatformSampler(o), name);
@@ -897,8 +927,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // Debugging.
     public getBufferData(buffer: GfxBuffer, dstBuffer: ArrayBufferView, wordOffset: number = 0): void {
         const gl = this.gl;
-        const { gl_buffer, gl_target } = buffer as GfxBufferP_GL;
-        this._bindBuffer(gl_target, gl_buffer);
+        const { gl_target } = buffer as GfxBufferP_GL;
+        this._bindBuffer(gl_target, getPlatformBuffer(buffer, wordOffset * 4));
         gl.getBufferSubData(gl_target, wordOffset * 4, dstBuffer);
     }
 
@@ -1031,8 +1061,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const byteOffset = wordOffset * 4;
             const byteSize = binding.wordCount * 4;
             if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferOffsets[index]) {
-                const platformBuffer = getPlatformBuffer(buffer);
-                gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, byteOffset, byteSize);
+                const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
+                const platformBuffer = buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
+                assert(byteOffset + byteSize < buffer.pageByteSize);
+                gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, platformBufferByteOffset, byteSize);
                 this._currentUniformBuffers[index] = buffer;
                 this._currentUniformBufferOffsets[index] = byteOffset;
                 this._currentBoundBuffers[gl.UNIFORM_BUFFER] = platformBuffer;
@@ -1138,12 +1170,21 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number, byteSize: number): void {
         const gl = this.gl;
-        const { gl_buffer, gl_target, byteSize: dstByteSize } = buffer as GfxBufferP_GL;
-        if (gl_target === gl.UNIFORM_BUFFER && dstByteOffset !== 0)
-            throw new Error("Updating uniform buffers at non-zero offsets is not allowed. Trust me, I'm doing this for your own sake.");
+        const { gl_target, byteSize: dstByteSize, pageByteSize: dstPageByteSize } = buffer as GfxBufferP_GL;
+        if (gl_target === gl.UNIFORM_BUFFER)
+            assert((dstByteOffset % dstPageByteSize) === 0);
         assert((dstByteOffset + byteSize) <= dstByteSize);
-        this._bindBuffer(gl_target, gl_buffer);
-        gl.bufferSubData(gl_target, dstByteOffset, data, srcByteOffset, byteSize);
+
+        const virtBufferByteOffsetEnd = dstByteOffset + byteSize;
+        let virtBufferByteOffset = dstByteOffset;
+        let physBufferByteOffset = dstByteOffset % dstPageByteSize;
+        while (virtBufferByteOffset < virtBufferByteOffsetEnd) {
+            this._bindBuffer(gl_target, getPlatformBuffer(buffer, virtBufferByteOffset));
+            gl.bufferSubData(gl_target, physBufferByteOffset, data, srcByteOffset, Math.min(virtBufferByteOffsetEnd - virtBufferByteOffset, dstPageByteSize));
+            virtBufferByteOffset += dstPageByteSize;
+            physBufferByteOffset = 0;
+            srcByteOffset += dstPageByteSize;
+        }
     }
     //#endregion
 }
