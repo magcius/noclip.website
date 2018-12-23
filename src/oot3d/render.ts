@@ -97,9 +97,10 @@ class MaterialInstance {
     public templateRenderInst: GfxRenderInst;
     public visible: boolean = true;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public material: CMB.Material) {
-        this.textureMappings[0].reset();
+    constructor(public cmb: CMB.CMB, public material: CMB.Material) {
+    }
 
+    public buildTemplateRenderInst(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: CtrTextureHolder): void {
         this.templateRenderInst = renderInstBuilder.newRenderInst();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, OoT3D_Program.ub_MaterialParams);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
@@ -107,9 +108,9 @@ class MaterialInstance {
         this.templateRenderInst.sortKey = makeSortKeyOpaque(layer, programKey);
         this.templateRenderInst.renderFlags.set(this.material.renderFlags);
 
-        for (let i = 0; i < material.textureBindings.length; i++) {
+        for (let i = 0; i < this.material.textureBindings.length; i++) {
             if (i >= 1) break;
-            const binding = material.textureBindings[i];
+            const binding = this.material.textureBindings[i];
             if (binding.textureIdx < 0)
                 continue;
 
@@ -223,8 +224,10 @@ export class CmbRenderer {
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
         this.textureHolder.addTexturesGfx(device, cmb.textures.filter((texture) => texture.levels.length > 0));
-
         this.gfxProgram = device.createProgram(new OoT3D_Program());
+
+        for (let i = 0; i < cmb.materials.length; i++)
+            this.materialInstances.push(new MaterialInstance(this.cmb, cmb.materials[i]));
     }
 
     public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
@@ -378,7 +381,7 @@ export class CmbRenderer {
                 const renderInst = renderInsts[i];
                 renderInst.visible = this.visible && materialInstance.visible;
 
-                if (this.visible) {
+                if (renderInst.visible) {
                     const prms = sepd.prms[i];
 
                     const localMatrixId = prms.boneTable[0];
@@ -421,12 +424,12 @@ export class CmbRenderer {
             vatrChunk,
         };
 
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].buildTemplateRenderInst(device, renderInstBuilder, this.textureHolder);
+
         for (let i = 0; i < cmb.meshs.length; i++) {
             const mesh = cmb.meshs[i];
-
-            const materialInstance = new MaterialInstance(device, renderInstBuilder, this.textureHolder, this.cmb, cmb.materials[mesh.matsIdx]);
-            this.materialInstances.push(materialInstance);
-
+            const materialInstance = this.materialInstances[mesh.matsIdx];
             renderInstBuilder.pushTemplateRenderInst(materialInstance.templateRenderInst);
             const sepdPrepareToRenderFunc = this.translateSepd(device, renderInstBuilder, cmbContext, cmb.sepds[mesh.sepdIdx], materialInstance);
             this.prepareToRenderFuncs.push(sepdPrepareToRenderFunc);
