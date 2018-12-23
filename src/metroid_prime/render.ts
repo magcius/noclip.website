@@ -40,17 +40,17 @@ class Command_Surface {
     public packetParams = new PacketParams();
     public isTranslucent = false;
 
-    constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, public surface: Surface, coalescedBuffers: GfxCoalescedBuffers, public modelIndex: number = 0) {
-        this.shapeHelper = new GXShapeHelperGfx(device, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public surface: Surface, coalescedBuffers: GfxCoalescedBuffers, public modelIndex: number = 0) {
+        this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
         this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder);
     }
 
-    public prepareToRender(viewerInput: Viewer.ViewerRenderInput, depth: number): boolean {
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, depth: number): boolean {
         this.renderInst.visible = Number.isFinite(depth);
 
         if (this.renderInst.visible) {
             mat4.mul(this.packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, posMtx);
-            this.shapeHelper.fillPacketParams(this.packetParams, this.renderInst, this.renderHelper);
+            this.shapeHelper.fillPacketParams(this.packetParams, this.renderInst, renderHelper);
             this.renderInst.sortKey = setSortKeyDepth(this.renderInst.sortKey, makeDepthKey(depth, this.isTranslucent));
         }
 
@@ -305,7 +305,7 @@ export class MREARenderer {
         // Update our surfaces.
         for (let i = 0; i < this.surfaceCommands.length; i++) {
             const surfaceCommand = this.surfaceCommands[i];
-            const surfaceVisible = surfaceCommand.prepareToRender(viewerInput, this.modelViewSpaceDepth[surfaceCommand.modelIndex]);
+            const surfaceVisible = surfaceCommand.prepareToRender(this.renderHelper, viewerInput, this.modelViewSpaceDepth[surfaceCommand.modelIndex]);
 
             if (surfaceVisible) {
                 const materialGroupCommand = this.materialGroupCommands[this.materialCommands[surfaceCommand.surface.materialIndex].material.groupIndex];

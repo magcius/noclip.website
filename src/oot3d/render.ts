@@ -306,16 +306,16 @@ export class CmbRenderer {
     private translateSepd(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, cmbContext: CmbContext, sepd: CMB.Sepd, materialInstance: MaterialInstance) {
         const hostAccessPass = device.createHostAccessPass();
 
-        const vertexAttributes: GfxVertexAttributeDescriptor[] = [];
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
         const perInstanceBufferData = new Float32Array(16);
         let perInstanceBufferWordOffset = 0;
         const bindVertexAttrib = (location: number, size: number, normalized: boolean, vertexAttrib: CMB.SepdVertexAttrib) => {
             const format = this.translateDataType(vertexAttrib.dataType, size, normalized);
             if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY) {
-                vertexAttributes.push({ location, format, bufferIndex: 1 + location, bufferByteOffset: vertexAttrib.start, frequency: GfxVertexAttributeFrequency.PER_VERTEX });
+                vertexAttributeDescriptors.push({ location, format, bufferIndex: 1 + location, bufferByteOffset: vertexAttrib.start, frequency: GfxVertexAttributeFrequency.PER_VERTEX });
             } else {
-                vertexAttributes.push({ location, format, bufferIndex: 0, bufferByteOffset: perInstanceBufferWordOffset, frequency: GfxVertexAttributeFrequency.PER_INSTANCE });
+                vertexAttributeDescriptors.push({ location, format, bufferIndex: 0, bufferByteOffset: perInstanceBufferWordOffset, frequency: GfxVertexAttributeFrequency.PER_INSTANCE });
                 perInstanceBufferData.set(vertexAttrib.constant, perInstanceBufferWordOffset);
                 perInstanceBufferWordOffset += 0x04;
             }
@@ -334,8 +334,8 @@ export class CmbRenderer {
         }
 
         const indexType = sepd.prms[0].prm.indexType;
-        const indexFormat = this.translateDataType(indexType, 1, false);
-        const inputLayout = device.createInputLayout(vertexAttributes, indexFormat);
+        const indexBufferFormat = this.translateDataType(indexType, 1, false);
+        const inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
         const inputState = device.createInputState(inputLayout, [
             perInstanceBufferBinding,
             { buffer: cmbContext.vertexBuffer, byteOffset: cmbContext.vatrChunk.positionByteOffset, byteStride: 0 },
