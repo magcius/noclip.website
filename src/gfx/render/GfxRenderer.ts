@@ -190,12 +190,9 @@ export class GfxRenderInstViewRenderer {
     private viewportHeight: number;
     public renderInsts: GfxRenderInst[] = [];
     public gfxRenderCache = new GfxRenderCache();
-    public gfxPipelines: GfxRenderPipeline[] = [];
 
     public destroy(device: GfxDevice): void {
         this.gfxRenderCache.destroy(device);
-        for (let i = 0; i < this.gfxPipelines.length; i++)
-            device.destroyRenderPipeline(this.gfxPipelines[i]);
     }
 
     public setViewport(viewportWidth: number, viewportHeight: number): void {
@@ -333,18 +330,15 @@ export class GfxRenderInstBuilder {
             const renderInst = this.renderInsts[i];
 
             // Construct a pipeline if we need one.
-            // TODO(jstpierre): Cache similar pipelines.
             if (renderInst.pipeline === null) {
                 const inputLayout = renderInst.inputState !== null ? device.queryInputState(renderInst.inputState).inputLayout : null;
-                const pipeline = device.createRenderPipeline({
+                renderInst.pipeline = viewRenderer.gfxRenderCache.createRenderPipeline(device, {
                     topology: GfxPrimitiveTopology.TRIANGLES,
                     program: renderInst.gfxProgram,
                     bindingLayouts: this.bindingLayouts,
                     inputLayout,
                     megaStateDescriptor: renderInst.renderFlags.resolveMegaState(),
                 });
-                renderInst.pipeline = pipeline;
-                viewRenderer.gfxPipelines.push(pipeline);
             }
 
             // Uniform buffer bindings.
@@ -386,6 +380,5 @@ export class GfxRenderInstBuilder {
         }
 
         this.renderInsts.length = 0;
-        console.log(`Stats: ${viewRenderer.gfxRenderCache.numBindings()} Bindings`);
     }
 }

@@ -1,4 +1,8 @@
 
+// Quick and dirty HashMap for basic lookups.
+// ECMAScript WeakMap
+// separate objects. Not optimized at all.
+
 import { nArray } from "./util";
 
 // Jenkins One-at-a-Time hash from http://www.burtleburtle.net/bob/hash/doobs.html
@@ -24,6 +28,10 @@ export function hashCodeString(key: string): number {
     return hashCodeNumbers(numbers);
 }
 
+// Pass this as a hash function to use a one-bucket HashMap (equivalent to linear search in an array),
+// which can be efficient for small numbers of items.
+export function nullHashFunc<T>(k: T): number { return 0; }
+
 export type EqualFunc<K> = (a: K, b: K) => boolean;
 export type HashFunc<K> = (a: K) => number;
 
@@ -32,11 +40,9 @@ class HashBucket<K, V> {
     public values: V[] = [];
 }
 
-export function nullHashFunc<T>(k: T): number { return 0; }
-
 const NUM_BUCKETS = 16;
 export class HashMap<K, V> {
-    public buckets: HashBucket<K, V>[] = nArray(NUM_BUCKETS, () => new HashBucket<K, V>());
+    public buckets: HashBucket<K, V>[] = nArray(NUM_BUCKETS, () => null);
 
     constructor(private keyEqualFunc: EqualFunc<K>, private keyHashFunc: HashFunc<K>) {
     }
@@ -54,13 +60,16 @@ export class HashMap<K, V> {
 
     public get(k: K): V | null {
         const bucket = this.findBucket(k);
+        if (bucket === null) return null;
         const bi = this.findBucketIndex(bucket, k);
         if (bi < 0) return null;
         return bucket.values[bi];
     }
 
     public insert(k: K, v: V) {
-        const bucket = this.findBucket(k);
+        const bw = this.keyHashFunc(k) % NUM_BUCKETS;
+        if (this.buckets[bw] === null) this.buckets[bw] = new HashBucket<K, V>();
+        const bucket = this.buckets[bw];
         let bi = this.findBucketIndex(bucket, k);
         if (bi === -1) bi = bucket.keys.length;
         bucket.keys[bi] = k;
@@ -69,22 +78,36 @@ export class HashMap<K, V> {
 
     public delete(k: K): void {
         const bucket = this.findBucket(k);
+        if (bucket === null) return;
         const bi = this.findBucketIndex(bucket, k);
         if (bi === -1) return;
         bucket.keys.splice(bi, 1);
         bucket.values.splice(bi, 1);
     }
 
+    public clear(): void {
+        for (let i = 0; i < this.buckets.length; i++) {
+            const bucket = this.buckets[i];
+            if (bucket === null) continue;
+            bucket.keys = [];
+            bucket.values = [];
+        }
+    }
+
     public size(): number {
         let acc = 0;
-        for (let i = 0; i < this.buckets.length; i++)
+        for (let i = 0; i < this.buckets.length; i++) {
+            const bucket = this.buckets[i];
+            if (bucket === null) continue;
             acc += this.buckets[i].keys.length;
+        }
         return acc;
     }
 
     public* entries(): IterableIterator<[K, V]> {
         for (let i = 0; i < this.buckets.length; i++) {
             const bucket = this.buckets[i];
+            if (bucket === null) continue;
             for (let j = bucket.keys.length; j >= 0; j--)
                 yield [bucket.keys[j], bucket.values[j]];
         }
