@@ -129,7 +129,7 @@ class Chunk {
         renderInstBuilder.pushRenderInst(this.renderInst);
     }
 
-    public prepareForRender(hostAccessPass: GfxHostAccessPass, visible: boolean): void {
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, visible: boolean): void {
         this.renderInst.visible = visible;
     }
 
@@ -168,9 +168,9 @@ export class IVRenderer {
         this.visible = v;
     }
 
-    public prepareForRender(hostAccessPass: GfxHostAccessPass): void {
+    public prepareToRender(hostAccessPass: GfxHostAccessPass): void {
         for (let i = 0; i < this.chunks.length; i++)
-            this.chunks[i].prepareForRender(hostAccessPass, this.visible);
+            this.chunks[i].prepareToRender(hostAccessPass, this.visible);
     }
 
     public destroy(device: GfxDevice): void {
@@ -253,7 +253,7 @@ export class Scene implements Viewer.Scene_Device {
         this.sceneUniformBufferFiller.endAndUpload(hostAccessPass, this.sceneUniformBuffer);
 
         for (let i = 0; i < this.ivRenderers.length; i++)
-            this.ivRenderers[i].prepareForRender(hostAccessPass);
+            this.ivRenderers[i].prepareToRender(hostAccessPass);
 
         this.sceneUniformBuffer.prepareToRender(hostAccessPass);
         device.submitPass(hostAccessPass);
