@@ -193,10 +193,12 @@ export class Scene implements Viewer.Scene_Device {
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
         this.program = device.createProgram(new IVProgram());
 
-        this.inputLayout = device.createInputLayout([
+        const vertexAttributeDescriptors = [
             { location: IVProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
             { location: IVProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
-        ], null);
+        ];
+        const indexBufferFormat: GfxFormat = null;
+        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
 
         // Two binding layouts: one scene level, one object level.
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [

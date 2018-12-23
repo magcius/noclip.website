@@ -136,7 +136,12 @@ export interface GfxBindingLayoutDescriptor {
 export interface GfxBindingsDescriptor {
     bindingLayout: GfxBindingLayoutDescriptor;
     uniformBufferBindings: GfxBufferBinding[];
-    samplerBindings: GfxSamplerBinding[];
+    samplerBindings: (GfxSamplerBinding | null)[];
+}
+
+export interface GfxInputLayoutDescriptor {
+    vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
+    indexBufferFormat: GfxFormat | null;
 }
 
 export interface GfxMegaStateDescriptor {
@@ -234,7 +239,7 @@ export interface GfxDevice {
     createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget;
     createProgram(program: DeviceProgram): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
-    createInputLayout(attributes: GfxVertexAttributeDescriptor[], indexBufferFormat: GfxFormat | null): GfxInputLayout;
+    createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: GfxVertexBufferDescriptor[], indexBuffer: GfxVertexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
 

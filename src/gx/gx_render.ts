@@ -23,6 +23,7 @@ import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer 
 import { Camera } from '../Camera';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -249,7 +250,7 @@ export class GXShapeHelperGfx {
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         assert(this.loadedVertexData.indexFormat === GfxFormat.U16_R);
 
         // First, build the inputLayout
@@ -277,8 +278,11 @@ export class GXShapeHelperGfx {
             }
         }
 
-        // TODO(jstpierre): Cache off input layouts? For a *lot* of shapes we're probably going to be 99% the same...
-        this.inputLayout = device.createInputLayout(vertexAttributeDescriptors, this.loadedVertexData.indexFormat);
+        const indexBufferFormat = this.loadedVertexData.indexFormat;
+        this.inputLayout = renderHelper.gfxRenderCache.createInputLayout(device, {
+            vertexAttributeDescriptors,
+            indexBufferFormat,
+        });
         const buffers: GfxVertexBufferDescriptor[] = [{
             buffer: coalescedBuffers.vertexBuffer.buffer,
             byteOffset: coalescedBuffers.vertexBuffer.wordOffset * 4,
@@ -327,6 +331,7 @@ export class GXShapeHelperGfx {
 
 export class GXRenderHelperGfx {
     private sceneParams = new SceneParams();
+    public gfxRenderCache = new GfxRenderCache();
 
     public sceneParamsBuffer: GfxRenderBuffer;
     public materialParamsBuffer: GfxRenderBuffer;
@@ -378,6 +383,7 @@ export class GXRenderHelperGfx {
         this.sceneParamsBuffer.destroy(device);
         this.materialParamsBuffer.destroy(device);
         this.packetParamsBuffer.destroy(device);
+        this.gfxRenderCache.destroy(device);
     }
 }
 

@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxInputState, GfxVertexBufferDescriptor, GfxCompareMode, GfxRenderPass, GfxHostAccessPass, GfxBufferFrequencyHint, GfxTexture } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxProgram, GfxInputState, GfxVertexBufferDescriptor, GfxCompareMode, GfxRenderPass, GfxHostAccessPass, GfxBufferFrequencyHint, GfxTexture, GfxVertexAttributeDescriptor } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { assert, nArray } from "../util";
@@ -107,13 +107,15 @@ class TerrainAreaRendererStatic {
 
         this.areaLocalPositionBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, areaLocalPositionData.buffer);
 
-        this.inputLayout = device.createInputLayout([
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: TerrainProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
             { location: TerrainProgram.a_Normal, format: GfxFormat.S16_RGB_NORM, bufferByteOffset: 0, bufferIndex: 1, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
             { location: TerrainProgram.a_Bitangent, format: GfxFormat.S16_RGB_NORM, bufferByteOffset: 4*3, bufferIndex: 1, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
             { location: TerrainProgram.a_AreaLocalPosition, format: GfxFormat.U8_RG_NORM, bufferByteOffset: 0, bufferIndex: 2, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
             { location: TerrainProgram.a_GridAttributes, format: GfxFormat.F32_RGBA, bufferByteOffset: 0, bufferIndex: 3, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, },
-        ], GfxFormat.U16_R);
+        ];
+        const indexBufferFormat = GfxFormat.U16_R;
+        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
     }
 
     public drawRenderInst(renderInst: GfxRenderInst, sub: number) {

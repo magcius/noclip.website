@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -59,7 +59,7 @@ interface GfxRenderTargetP_GL extends GfxRenderTarget {
 }
 
 interface GfxInputLayoutP_GL extends GfxInputLayout {
-    attributes: GfxVertexAttributeDescriptor[];
+    vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
     indexBufferFormat: GfxFormat | null;
 }
 
@@ -714,8 +714,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return bindings;
     }
 
-    public createInputLayout(attributes: GfxVertexAttributeDescriptor[], indexBufferFormat: GfxFormat | null): GfxInputLayout {
-        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, attributes, indexBufferFormat };
+    public createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout {
+        const { vertexAttributeDescriptors, indexBufferFormat } = inputLayoutDescriptor;
+        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, vertexAttributeDescriptors, indexBufferFormat };
         return inputLayout;
     }
 
@@ -726,8 +727,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const vao = gl.createVertexArray();
         gl.bindVertexArray(vao);
 
-        for (let i = 0; i < inputLayout.attributes.length; i++) {
-            const attr = inputLayout.attributes[i];
+        for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
+            const attr = inputLayout.vertexAttributeDescriptors[i];
             const { size, type, normalized } = translateVertexFormat(attr.format);
             const vertexBuffer = vertexBuffers[attr.bufferIndex];
 
