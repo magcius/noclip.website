@@ -6,6 +6,7 @@ import { RenderFlags } from "../helpers/RenderFlagsHelpers";
 import { TextureMapping } from "../../TextureHolder";
 import { HashMap, EqualFunc, nullHashFunc } from "../../HashMap";
 import { DeviceProgramReflection } from "../../Program";
+import { GfxRenderCache } from "./GfxRenderCache";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
@@ -188,12 +189,11 @@ export class GfxRenderInstViewRenderer {
     private viewportWidth: number;
     private viewportHeight: number;
     public renderInsts: GfxRenderInst[] = [];
-    public gfxBindings: GfxBindings[] = []
+    public gfxRenderCache = new GfxRenderCache();
     public gfxPipelines: GfxRenderPipeline[] = [];
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.gfxBindings.length; i++)
-            device.destroyBindings(this.gfxBindings[i]);
+        this.gfxRenderCache.destroy(device);
         for (let i = 0; i < this.gfxPipelines.length; i++)
             device.destroyRenderPipeline(this.gfxPipelines[i]);
     }
@@ -212,9 +212,8 @@ export class GfxRenderInstViewRenderer {
                 // Rebuild. TODO(jstpierre): Cache.
                 const uniformBufferBindings = renderInst.uniformBufferBindings.slice(firstUniformBufferBinding, firstUniformBufferBinding + bindingLayout.numUniformBuffers);
                 const samplerBindings = renderInst.samplerBindings.slice(firstSamplerBinding, firstSamplerBinding + bindingLayout.numSamplers);
-                const bindings = device.createBindings({ bindingLayout, uniformBufferBindings, samplerBindings });
+                const bindings = this.gfxRenderCache.createBindings(device, { bindingLayout, uniformBufferBindings, samplerBindings });
                 renderInst.bindings[i] = bindings;
-                this.gfxBindings.push(bindings);
             }
             firstUniformBufferBinding += bindingLayout.numUniformBuffers;
             firstSamplerBinding += bindingLayout.numSamplers;
@@ -270,37 +269,11 @@ export class GfxRenderInstViewRenderer {
     }
 }
 
-function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
-    if (a.length !== b.length) return false;
-    for (let i = a.length - 1; i >= 0; i--)
-        if (!e(a[i], b[i]))
-            return false;
-    return true;
-}
-
-function bufferBindingEquals(a: GfxBufferBinding, b: GfxBufferBinding): boolean {
-    return a.buffer === b.buffer && a.wordCount === b.wordCount && a.wordOffset === b.wordOffset;
-}
-
-function samplerBindingEquals(a: GfxSamplerBinding, b: GfxSamplerBinding): boolean {
-    if (a === undefined) return b === undefined;
-    if (b === undefined) return false;
-    return a.sampler === b.sampler && a.texture === b.texture;
-}
-
-function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBindingsDescriptor): boolean {
-    if (a.bindingLayout !== b.bindingLayout) return false;
-    if (!arrayEqual(a.uniformBufferBindings, b.uniformBufferBindings, bufferBindingEquals)) return false;
-    if (!arrayEqual(a.samplerBindings, b.samplerBindings, samplerBindingEquals)) return false;
-    return true;
-}
-
 export class GfxRenderInstBuilder {
     private uniformBufferOffsets: number[] = [];
     private uniformBufferWordAlignment: number;
     private renderInsts: GfxRenderInst[] = [];
     private templateStack: GfxRenderInst[] = [];
-    private bindingCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, nullHashFunc);
 
     constructor(device: GfxDevice, public programReflection: DeviceProgramReflection, public bindingLayouts: GfxBindingLayoutDescriptor[], public uniformBuffers: GfxRenderBuffer[]) {
         this.uniformBufferWordAlignment = device.queryLimits().uniformBufferWordAlignment;
@@ -350,17 +323,6 @@ export class GfxRenderInstBuilder {
         return renderInst;
     }
 
-    private createBindings(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer, bindingLayout: GfxBindingLayoutDescriptor, uniformBufferBindings: GfxBufferBinding[], samplerBindings: GfxSamplerBinding[]): GfxBindings {
-        const descriptor: GfxBindingsDescriptor = { bindingLayout, uniformBufferBindings, samplerBindings, };
-        let bindings: GfxBindings = this.bindingCache.get(descriptor);
-        if (bindings === null) {
-            bindings = device.createBindings(descriptor);
-            viewRenderer.gfxBindings.push(bindings);
-            this.bindingCache.insert(descriptor, bindings);
-        }
-        return bindings;
-    }
-
     public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
         assert(this.templateStack.length === 1);
 
@@ -405,8 +367,7 @@ export class GfxRenderInstBuilder {
 
                 const samplerBindings = renderInst.samplerBindings.slice(firstSamplerBinding, lastSamplerBinding);
                 const uniformBufferBindings = renderInst.uniformBufferBindings.slice(firstUniformBuffer, lastUniformBuffer);
-                const bindings = this.createBindings(device, viewRenderer, this.bindingLayouts[j], uniformBufferBindings, samplerBindings);
-                renderInst.bindings[j] = bindings;
+                renderInst.bindings[j] = viewRenderer.gfxRenderCache.createBindings(device, { bindingLayout, samplerBindings, uniformBufferBindings });
 
                 // Uniform buffer offset groups.
                 renderInst.uniformBufferOffsetGroups[j] = Array(bindingLayout.numUniformBuffers);
@@ -426,6 +387,6 @@ export class GfxRenderInstBuilder {
         }
 
         this.renderInsts.length = 0;
-        console.log(`Stats: ${viewRenderer.gfxBindings.length} Bindings`);
+        console.log(`Stats: ${viewRenderer.gfxRenderCache.numBindings()} Bindings`);
     }
 }
