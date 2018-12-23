@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -417,6 +417,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentMegaState: GfxMegaStateDescriptor = new RenderFlags(defaultFlags).resolveMegaState();
     private _currentSamplers: WebGLSampler[] = [];
     private _currentTextures: WebGLTexture[] = [];
+    private _debugGroupStack: GfxDebugGroup[] = [];
 
     constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null, private isTransitionDevice: boolean = false) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
@@ -923,6 +924,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         else if (o._T === _T.InputState)
             assignPlatformName((o as GfxInputStateP_GL).vao, name);
     }
+
+    public pushDebugGroup(debugGroup: GfxDebugGroup): void {
+        this._debugGroupStack.push(debugGroup);
+    }
+
+    public popDebugGroup(): GfxDebugGroup {
+        return this._debugGroupStack.pop();
+    }
     //#endregion
 
     // Debugging.
@@ -1021,6 +1030,21 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
+    private _debugGroupStatisticsDrawCall(): void {
+        for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
+            ++this._debugGroupStack[i].drawCallCount;
+    }
+
+    private _debugGroupStatisticsBufferUpload(): void {
+        for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
+            ++this._debugGroupStack[i].bufferUploadCount;
+    }
+
+    private _debugGroupStatisticsTextureBind(): void {
+        for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
+            ++this._debugGroupStack[i].textureBindCount;
+    }
+
     private setRenderPassParameters(renderTarget: GfxRenderTarget, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
         const gl = this.gl;
         this._currentRenderTarget = renderTarget as GfxRenderTargetP_GL;
@@ -1088,6 +1112,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 if (gl_texture !== null) {
                     const { gl_target } = (binding.texture as GfxTextureP_GL);
                     gl.bindTexture(gl_target, gl_texture);
+                    this._debugGroupStatisticsTextureBind();
                 } else {
                     // XXX(jstpierre): wtf do I do here? Maybe do nothing?
                 }
@@ -1131,6 +1156,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         const pipeline = this._currentPipeline;
         gl.drawArrays(pipeline.drawMode, firstVertex, count);
+        this._debugGroupStatisticsDrawCall();
     }
 
     private drawIndexed(count: number, firstIndex: number): void {
@@ -1139,6 +1165,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const inputState = this._currentInputState;
         const byteOffset = inputState.indexBufferByteOffset + firstIndex * inputState.indexBufferCompByteSize;
         gl.drawElements(pipeline.drawMode, count, inputState.indexBufferType, byteOffset);
+        this._debugGroupStatisticsDrawCall();
     }
 
     private _passReadFramebuffer: WebGLFramebuffer | null = null;
@@ -1186,6 +1213,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             physBufferByteOffset = 0;
             srcByteOffset += dstPageByteSize;
         }
+        this._debugGroupStatisticsBufferUpload();
     }
     //#endregion
 }

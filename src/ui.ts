@@ -814,7 +814,10 @@ class StatisticsPanel extends Panel {
     }
 
     public addRenderStatistics(renderStatistics: RenderStatistics): void {
-        this.history.unshift(renderStatistics);
+        if (!this.expanded)
+            return;
+
+        this.history.unshift({ ...renderStatistics });
 
         while (this.history.length > 100) {
             this.history.pop();

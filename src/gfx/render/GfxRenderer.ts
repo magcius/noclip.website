@@ -209,7 +209,6 @@ export class GfxRenderInstViewRenderer {
         for (let i = 0; i < renderInst.bindingLayouts.length; i++) {
             const bindingLayout = renderInst.bindingLayouts[i];
             if (bindingLayout.numSamplers > 0) {
-                // Rebuild. TODO(jstpierre): Cache.
                 const uniformBufferBindings = renderInst.uniformBufferBindings.slice(firstUniformBufferBinding, firstUniformBufferBinding + bindingLayout.numUniformBuffers);
                 const samplerBindings = renderInst.samplerBindings.slice(firstSamplerBinding, firstSamplerBinding + bindingLayout.numSamplers);
                 const bindings = this.gfxRenderCache.createBindings(device, { bindingLayout, uniformBufferBindings, samplerBindings });

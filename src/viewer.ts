@@ -6,7 +6,7 @@ import Progressable from './Progressable';
 import InputManager from './InputManager';
 import { CameraController, Camera, CameraControllerClass } from './Camera';
 import { TextureHolder } from './TextureHolder';
-import { GfxDevice, GfxSwapChain, GfxRenderPass } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl } from './gfx/platform/GfxPlatformWebGL2';
 import { downloadTextureToCanvas } from './Screenshot';
 
@@ -98,7 +98,7 @@ export class Viewer {
     private renderGL() {
         const gl = this.renderState.gl;
 
-        this.renderState.renderStatisticsTracker.beginFrame(gl);
+        this.renderState.renderStatisticsTracker.beginFrame();
 
         this.onscreenColorTarget.setParameters(gl, this.canvas.width, this.canvas.height);
         this.onscreenDepthTarget.setParameters(gl, this.canvas.width, this.canvas.height);
@@ -114,8 +114,8 @@ export class Viewer {
         // Blit to the screen.
         this.renderState.blitOnscreenToGL();
 
-        const renderStatistics = this.renderState.renderStatisticsTracker.endFrame(gl);
-        this.onstatistics(renderStatistics);
+        this.renderState.renderStatisticsTracker.endFrame();
+        this.onstatistics(this.renderState.renderStatisticsTracker);
     }
 
     private renderGfxPlatform(): void {
@@ -128,11 +128,25 @@ export class Viewer {
         this.viewerRenderInput.viewportWidth = this.canvas.width;
         this.viewerRenderInput.viewportHeight = this.canvas.height;
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
+
+        // TODO(jstpierre): Move RenderStatisticsTracker outside of RenderSTate
+        this.renderState.renderStatisticsTracker.beginFrame();
+
+        // TODO(jstpierre): Allocations.
+        const debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0 };
+        this.gfxDevice.pushDebugGroup(debugGroup);
+
         const renderPass = this.scene_device.render(this.gfxDevice, this.viewerRenderInput);
         const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
         renderPass.endPass(onscreenTexture);
         this.gfxDevice.submitPass(renderPass);
         this.gfxSwapChain.present();
+
+        this.gfxDevice.popDebugGroup();
+        this.renderState.renderStatisticsTracker.endFrame();
+
+        this.renderState.renderStatisticsTracker.applyDebugGroup(debugGroup);
+        this.onstatistics(this.renderState.renderStatisticsTracker);
     }
 
     private render(): void {
