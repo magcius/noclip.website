@@ -6,7 +6,7 @@ import { assert, assertExists } from './util';
 import { BaseProgram, FullscreenProgram, ProgramCache, SimpleProgram } from './Program';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from './Camera';
 import { createTransitionDeviceForWebGL2, applyMegaState } from './gfx/platform/GfxPlatformWebGL2';
-import { GfxCompareMode, GfxCullMode, GfxBlendMode, GfxMegaStateDescriptor } from './gfx/platform/GfxPlatform';
+import { GfxCompareMode, GfxMegaStateDescriptor, GfxDebugGroup } from './gfx/platform/GfxPlatform';
 import { defaultFlags, RenderFlags } from './gfx/helpers/RenderFlagsHelpers';
 
 export { RenderFlags };
@@ -148,30 +148,36 @@ class RenderStatisticsTracker {
     public textureBindCount: number = 0;
     public bufferUploadCount: number = 0;
     public frameStartCPUTime: number = 0;
+    public frameCPUTime: number = 0;
+    public fps: number = 0;
 
-    public beginFrame(gl: WebGL2RenderingContext): void {
+    public beginFrame(): void {
+        this.frameStartCPUTime = window.performance.now();
         this.drawCallCount = 0;
         this.textureBindCount = 0;
         this.bufferUploadCount = 0;
-        this.frameStartCPUTime = window.performance.now();
+        this.frameCPUTime = 0;
+        this.fps = 0;
     }
 
-    public endFrame(gl: WebGL2RenderingContext): RenderStatistics {
-        const drawCallCount = this.drawCallCount;
-        const textureBindCount = this.textureBindCount;
-        const bufferUploadCount = this.bufferUploadCount;
-        const frameStartCPUTime = this.frameStartCPUTime;
-        const frameCPUTime = window.performance.now() - frameStartCPUTime;
-        const fps = 1000 / frameCPUTime;
-        return { frameStartCPUTime, drawCallCount, textureBindCount, bufferUploadCount, frameCPUTime, fps };
+    public endFrame(): RenderStatistics {
+        this.frameCPUTime = window.performance.now() - this.frameStartCPUTime;
+        this.fps = 1000 / this.frameCPUTime;
+        return this;
+    }
+
+    public applyDebugGroup(debugGroup: GfxDebugGroup): void {
+        this.drawCallCount += debugGroup.drawCallCount;
+        this.textureBindCount += debugGroup.textureBindCount;
+        this.bufferUploadCount += debugGroup.bufferUploadCount;
     }
 }
 
 export const fullscreenFlags = new RenderFlags();
 fullscreenFlags.set({ depthCompare: GfxCompareMode.ALWAYS, depthWrite: false });
 
-// XXX(jstpierre): This is becoming a lot more than just some render state.
-// Rename to "SceneRenderer" at some point?
+// The legacy render system. Mostly replaced by Gfx.
+// TODO(jstpierre): Remove.
 export class RenderState {
     public programCache: ProgramCache;
 

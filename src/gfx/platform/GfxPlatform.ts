@@ -184,6 +184,13 @@ export interface GfxInputStateReflection {
     inputLayout: GfxInputLayout;
 }
 
+export interface GfxDebugGroup {
+    name: string;
+    drawCallCount: number;
+    textureBindCount: number;
+    bufferUploadCount: number;
+}
+
 export interface GfxSwapChain {
     configureSwapChain(width: number, height: number): void;
     getDevice(): GfxDevice;
@@ -254,7 +261,10 @@ export interface GfxDevice {
     queryInputState(o: GfxInputState): GfxInputStateReflection;
     queryTextureFormatSupported(format: GfxFormat): boolean;
 
+    // Debugging and high-level queries.
     setResourceName(o: GfxResource, s: string): void;
+    pushDebugGroup(debugGroup: GfxDebugGroup): void;
+    popDebugGroup(): GfxDebugGroup;
 }
 
 export { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
