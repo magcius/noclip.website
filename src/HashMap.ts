@@ -75,6 +75,13 @@ export class HashMap<K, V> {
         bucket.values.splice(bi, 1);
     }
 
+    public size(): number {
+        let acc = 0;
+        for (let i = 0; i < this.buckets.length; i++)
+            acc += this.buckets[i].keys.length;
+        return acc;
+    }
+
     public* entries(): IterableIterator<[K, V]> {
         for (let i = 0; i < this.buckets.length; i++) {
             const bucket = this.buckets[i];
