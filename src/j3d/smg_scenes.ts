@@ -194,11 +194,12 @@ class SMGRenderer implements Viewer.MainScene {
         private zoneNames: string[],
     ) {
         this.bloomCombineFlags = new RenderFlags();
-
-        this.bloomCombineFlags.depthCompare = GfxCompareMode.ALWAYS;
-        this.bloomCombineFlags.blendMode = GfxBlendMode.ADD;
-        this.bloomCombineFlags.blendSrcFactor = GfxBlendFactor.ONE;
-        this.bloomCombineFlags.blendDstFactor = GfxBlendFactor.ONE;
+        this.bloomCombineFlags.set({
+            depthCompare: GfxCompareMode.ALWAYS,
+            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: GfxBlendFactor.ONE,
+            blendDstFactor: GfxBlendFactor.ONE,
+        });
     }
 
     public setZoneLayersVisible(zoneName: string, layerMask: number): void {
