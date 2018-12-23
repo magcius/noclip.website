@@ -1,7 +1,6 @@
 
-import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxBufferBinding, GfxSamplerBinding } from "../platform/GfxPlatform";
+import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxBufferBinding, GfxSamplerBinding, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxMegaStateDescriptor, GfxBindingLayoutDescriptor, GfxProgram } from "../platform/GfxPlatform";
 import { HashMap, EqualFunc, nullHashFunc } from "../../HashMap";
-import { threadId } from "worker_threads";
 
 function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
     if (a.length !== b.length) return false;
@@ -16,8 +15,6 @@ function bufferBindingEquals(a: GfxBufferBinding, b: GfxBufferBinding): boolean 
 }
 
 function samplerBindingEquals(a: GfxSamplerBinding, b: GfxSamplerBinding): boolean {
-    if (a === undefined) return b === undefined;
-    if (b === undefined) return false;
     return a.sampler === b.sampler && a.texture === b.texture;
 }
 
@@ -28,8 +25,42 @@ function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBindingsDes
     return true;
 }
 
+function megaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
+    return (
+        a.blendDstFactor === b.blendDstFactor &&
+        a.blendSrcFactor === b.blendSrcFactor &&
+        a.blendMode === b.blendMode &&
+        a.cullMode === b.cullMode &&
+        a.depthCompare === b.depthCompare &&
+        a.depthWrite === b.depthWrite &&
+        a.frontFace === b.frontFace &&
+        a.polygonOffset === b.polygonOffset
+    );
+}
+
+function bindingLayoutEquals(a: GfxBindingLayoutDescriptor, b: GfxBindingLayoutDescriptor): boolean {
+    return a.numSamplers === b.numSamplers && a.numUniformBuffers === b.numSamplers;
+}
+
+// XXX(jstpierre): giant hack!!!
+// We need to cache programs at a higher level so we won't have to query program keys here.
+let _device: GfxDevice;
+function programEquals(a: GfxProgram, b: GfxProgram): boolean {
+    return _device.queryProgram(a).uniqueKey === _device.queryProgram(b).uniqueKey;
+}
+
+function gfxRenderPipelineDescriptorEquals(a: GfxRenderPipelineDescriptor, b: GfxRenderPipelineDescriptor): boolean {
+    if (a.topology !== b.topology) return false;
+    if (a.inputLayout !== b.inputLayout) return false;
+    if (!megaStateDescriptorEquals(a.megaStateDescriptor, b.megaStateDescriptor)) return false;
+    if (!programEquals(a.program, b.program)) return false;
+    if (!arrayEqual(a.bindingLayouts, b.bindingLayouts, bindingLayoutEquals)) return false;
+    return true;
+}
+
 export class GfxRenderCache {
     private bindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, nullHashFunc);
+    private renderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, nullHashFunc);
 
     public createBindings(device: GfxDevice, descriptor: GfxBindingsDescriptor): GfxBindings {
         let bindings = this.bindingsCache.get(descriptor);
@@ -40,6 +71,17 @@ export class GfxRenderCache {
         return bindings;
     }
 
+    public createRenderPipeline(device: GfxDevice, descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
+        _device = device;
+
+        let renderPipeline = this.renderPipelinesCache.get(descriptor);
+        if (renderPipeline === null) {
+            renderPipeline = device.createRenderPipeline(descriptor);
+            this.renderPipelinesCache.insert(descriptor, renderPipeline);
+        }
+        return renderPipeline;
+    }
+
     public numBindings(): number {
         return this.bindingsCache.size();
     }
@@ -47,5 +89,9 @@ export class GfxRenderCache {
     public destroy(device: GfxDevice): void {
         for (const [descriptor, bindings] of this.bindingsCache.entries())
             device.destroyBindings(bindings);
+        for (const [descriptor, renderPipeline] of this.renderPipelinesCache.entries())
+            device.destroyRenderPipeline(renderPipeline);
+        this.bindingsCache.clear();
+        this.renderPipelinesCache.clear();
     }
 }
