@@ -385,10 +385,10 @@ export class TextureAnimator {
         if (this.animEntry.animationType === AnimationType.TRANSLATION) {
             const tx = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 0;
             const ty = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 0;
-            calcTexMtx(dst, 0, 0, 0, tx, ty);
+            calcTexMtx(dst, 1, 1, 0, tx, ty);
         } else if (this.animEntry.animationType === AnimationType.ROTATION) {
             const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 0;
-            calcTexMtx(dst, 0, 0, r, 0, 0);
+            calcTexMtx(dst, 1, 1, r, 0, 0);
         } else {
             throw "whoops";
         }
