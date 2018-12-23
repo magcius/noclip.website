@@ -221,7 +221,7 @@ export class GXShapeHelper {
 
 export class GXMaterialHelperGfx {
     public templateRenderInst: GfxRenderInst;
-    public gfxProgram: GfxProgram;
+    public programKey: number;
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, material: GX_Material.GXMaterial, materialHacks?: GX_Material.GXMaterialHacks) {
         this.templateRenderInst = renderHelper.renderInstBuilder.newRenderInst();
@@ -230,12 +230,17 @@ export class GXMaterialHelperGfx {
         this.templateRenderInst.gfxProgram = device.createProgram(program);
         GX_Material.translateRenderFlagsGfx(this.templateRenderInst.renderFlags, material);
         this.templateRenderInst.samplerBindings = nArray(8, () => null);
+        this.programKey = device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey;
         renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
     }
 
     public fillMaterialParams(materialParams: MaterialParams, renderHelper: GXRenderHelperGfx): void {
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         renderHelper.fillMaterialParams(materialParams, this.templateRenderInst.uniformBufferOffsets[ub_MaterialParams]);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyProgram(this.templateRenderInst.gfxProgram);
     }
 }
 
