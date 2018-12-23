@@ -10,6 +10,8 @@ import { assert } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { RetroSceneRenderer } from './scenes';
 
 class DKCRSceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -17,7 +19,7 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
         this.id = filename;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         return fetchData(`data/dkcr/${this.filename}`).then((buffer: ArrayBufferSlice) => {
             const levelPak = PAK.parse(buffer);
             const resourceSystem = new ResourceSystem([levelPak], null);
@@ -27,7 +29,8 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
                 const area: MLVL.Area = mlvl.areaTable[0];
                 const mrea: MREA.MREA = resourceSystem.loadAssetByID(area.areaMREAID, 'MREA');
                 const textureHolder = new RetroTextureHolder();
-                return new MREARenderer(gl, textureHolder, this.name, mrea);
+                const mreaRenderer = new MREARenderer(device, textureHolder, this.name, mrea);
+                return new RetroSceneRenderer(device, mlvl, textureHolder, [mreaRenderer]);
             }
             return null;
         });
