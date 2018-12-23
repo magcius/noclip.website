@@ -133,6 +133,12 @@ export interface GfxBindingLayoutDescriptor {
     numSamplers: number;
 }
 
+export interface GfxBindingsDescriptor {
+    bindingLayout: GfxBindingLayoutDescriptor;
+    uniformBufferBindings: GfxBufferBinding[];
+    samplerBindings: GfxSamplerBinding[];
+}
+
 export interface GfxMegaStateDescriptor {
     blendMode: GfxBlendMode;
     blendSrcFactor: GfxBlendFactor;
@@ -220,7 +226,7 @@ export interface GfxDevice {
     createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;
     createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget;
     createProgram(program: DeviceProgram): GfxProgram;
-    createBindings(bindingLayout: GfxBindingLayoutDescriptor, uniformBuffers: GfxBufferBinding[], samplers: (GfxSamplerBinding | null)[]): GfxBindings;
+    createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(attributes: GfxVertexAttributeDescriptor[], indexBufferFormat: GfxFormat | null): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: GfxVertexBufferDescriptor[], indexBuffer: GfxVertexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
