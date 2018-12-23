@@ -1,5 +1,4 @@
 
-import * as GX_Material from '../gx/gx_material';
 import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, translateWrapModeGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 
 import * as TPL from './tpl';
@@ -10,7 +9,7 @@ import { mat4 } from 'gl-matrix';
 import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
@@ -215,8 +214,8 @@ class Command_Batch {
         this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
         this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder, materialCommand.templateRenderInst);
         this.renderInst.name = nodeCommand.namePath;
-        // Pull in the node's cull mode.
-        this.renderInst.renderFlags.cullMode = nodeCommand.node.renderFlags.cullMode;
+        // Pull in render flags on the node itself.
+        this.renderInst.renderFlags.set(nodeCommand.node.renderFlags);
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {

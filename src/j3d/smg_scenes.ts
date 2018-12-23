@@ -466,6 +466,9 @@ class SMGSpawner {
         if (bckFile !== null) {
             const bck = BCK.parse(bckFile.buffer);
             modelInstance.bindANK1(bck.ank1);
+
+            // Apply a random phase to the animation.
+            modelInstance.animationController.phaseFrames += Math.random() * bck.ank1.duration;
         }
     }
 

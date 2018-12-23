@@ -533,7 +533,7 @@ export class BMDModelInstance {
     private sceneParams = new SceneParams();
 
     // Animations.
-    private animationController: AnimationController = new AnimationController();
+    public animationController = new AnimationController();
     public ank1Animator: ANK1Animator | null = null;
 
     public currentMaterialCommand: Command_Material;
