@@ -3,19 +3,26 @@ import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import { ResourceSystem, NameData } from './resource';
-import { MREARenderer, RetroTextureHolder, CMDLRenderer } from './render';
+import { MREARenderer, RetroTextureHolder } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { assert } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
-import { RenderState, depthClearFlags } from '../render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BYML from '../byml';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
-export class MetroidPrimeWorldScene implements Viewer.MainScene {
-    constructor(public mlvl: MLVL.MLVL, public textureHolder: RetroTextureHolder, public skyboxRenderer: CMDLRenderer, public areaRenderers: MREARenderer[]) {
+export class RetroSceneRenderer implements Viewer.Scene_Device {
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
+
+    constructor(device: GfxDevice, mlvl: MLVL.MLVL, public textureHolder: RetroTextureHolder, public areaRenderers: MREARenderer[]) {
+        for (let i = 0; i < this.areaRenderers.length; i++)
+            this.areaRenderers[i].addToViewRenderer(device, this.viewRenderer);
     }
 
     public createPanels(): UI.Panel[] {
@@ -24,25 +31,28 @@ export class MetroidPrimeWorldScene implements Viewer.MainScene {
         return [layersPanel];
     }
 
-    public render(state: RenderState) {
-        const gl = state.gl;
-
-        if (this.skyboxRenderer)
-            this.skyboxRenderer.render(state);
-
-        state.useFlags(depthClearFlags);
-        gl.clear(gl.DEPTH_BUFFER_BIT);
-
-        this.areaRenderers.forEach((areaRenderer) => {
-            areaRenderer.render(state);
-        });
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.areaRenderers.length; i++)
+            this.areaRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
 
-    public destroy(gl: WebGL2RenderingContext) {
-        this.textureHolder.destroy(gl);
-        if (this.skyboxRenderer)
-            this.skyboxRenderer.destroy(gl);
-        this.areaRenderers.forEach((areaRenderer) => areaRenderer.destroy(gl));
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer);
+        return mainPassRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
+        for (let i = 0; i < this.areaRenderers.length; i++)
+            this.areaRenderers[i].destroy(device);
     }
 }
 
@@ -52,7 +62,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         this.id = filename;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         const stringsPakP = fetchData(`data/metroid_prime/mp1/Strings.pak`);
         const levelPakP = fetchData(`data/metroid_prime/mp1/${this.filename}`);
         const nameDataP = fetchData(`data/metroid_prime/mp1/MP1_NameData.crg1`);
@@ -69,14 +79,16 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 const textureHolder = new RetroTextureHolder();
                 let skyboxRenderer = null;
                 const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
+                /*
                 if (skyboxCMDL) {
                     const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
                     skyboxRenderer = new CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
                     skyboxRenderer.isSkybox = true;
                 }
+                */
                 const areaRenderers = areas.map((mreaEntry) => {
                     const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
-                    return new MREARenderer(gl, textureHolder, mreaEntry.areaName, mrea);
+                    return new MREARenderer(device, textureHolder, mreaEntry.areaName, mrea);
                 });
 
                 // By default, set only the first 10 area renderers to visible, so as to not "crash my browser please".
@@ -84,7 +96,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                     areaRenderer.visible = false;
                 });
 
-                return new MetroidPrimeWorldScene(mlvl, textureHolder, skyboxRenderer, areaRenderers);
+                return new RetroSceneRenderer(device, mlvl, textureHolder, areaRenderers);
             }
 
             return null;
