@@ -98,6 +98,7 @@ export class GfxRenderBuffer {
                 const srcWordOffset = i * UBO_PAGE_WORD_LIMIT;
                 const wordCount = Math.min((this.wordCount - srcWordOffset), UBO_PAGE_WORD_LIMIT);
                 hostAccessPass.uploadBufferData(this.bufferPages[i], 0, this.shadowBufferU8, srcWordOffset, wordCount);
+                this.pageDirty[i] = false;
             }
         }
     }
