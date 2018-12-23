@@ -1,6 +1,7 @@
 {
   "name": "@jstpierre/model-viewer",
   "private": true,
+  "license": "MIT",
   "devDependencies": {
     "assemblyscript": "github:AssemblyScript/assemblyscript",
     "crc-32": "^1.2.0",
