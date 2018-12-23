@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -48,8 +48,8 @@ interface GfxProgramP_GL extends GfxProgram {
 }
 
 interface GfxBindingsP_GL extends GfxBindings {
-    uniformBuffers: GfxBufferBinding[];
-    samplers: (GfxSamplerBinding | null)[];
+    uniformBufferBindings: GfxBufferBinding[];
+    samplerBindings: (GfxSamplerBinding | null)[];
 }
 
 interface GfxRenderTargetP_GL extends GfxRenderTarget {
@@ -705,10 +705,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return program;
     }
 
-    public createBindings(bindingLayout: GfxBindingLayoutDescriptor, uniformBuffers: GfxBufferBinding[], samplers: (GfxSamplerBinding | null)[]): GfxBindings {
-        assert(bindingLayout.numUniformBuffers === uniformBuffers.length);
-        assert(bindingLayout.numSamplers === samplers.length);
-        const bindings: GfxBindingsP_GL = { _T: _T.Bindings, uniformBuffers, samplers };
+    public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {
+        const { bindingLayout, uniformBufferBindings, samplerBindings } = descriptor;
+        assert(bindingLayout.numUniformBuffers === uniformBufferBindings.length);
+        assert(bindingLayout.numSamplers === samplerBindings.length);
+        const bindings: GfxBindingsP_GL = { _T: _T.Bindings, uniformBufferBindings, samplerBindings };
         return bindings;
     }
 
@@ -1047,13 +1048,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         assert(bindingLayoutIndex < this._currentPipeline.bindingLayouts.bindingLayoutTables.length);
         const bindingLayoutTable = this._currentPipeline.bindingLayouts.bindingLayoutTables[bindingLayoutIndex];
 
-        const { uniformBuffers, samplers } = bindings_ as GfxBindingsP_GL;
-        assert(uniformBuffers.length === bindingLayoutTable.numUniformBuffers);
-        assert(samplers.length === bindingLayoutTable.numSamplers);
-        assert(dynamicWordOffsetsCount === uniformBuffers.length);
+        const { uniformBufferBindings, samplerBindings } = bindings_ as GfxBindingsP_GL;
+        assert(uniformBufferBindings.length === bindingLayoutTable.numUniformBuffers);
+        assert(samplerBindings.length === bindingLayoutTable.numSamplers);
+        assert(dynamicWordOffsetsCount === uniformBufferBindings.length);
 
-        for (let i = 0; i < uniformBuffers.length; i++) {
-            const binding = uniformBuffers[i];
+        for (let i = 0; i < uniformBufferBindings.length; i++) {
+            const binding = uniformBufferBindings[i];
             const index = bindingLayoutTable.firstUniformBuffer + i;
             const buffer = binding.buffer as GfxBufferP_GL;
             assert(buffer.usage === GfxBufferUsage.UNIFORM);
@@ -1071,8 +1072,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             }
         }
 
-        for (let i = 0; i < samplers.length; i++) {
-            const binding = samplers[i];
+        for (let i = 0; i < samplerBindings.length; i++) {
+            const binding = samplerBindings[i];
             const samplerIndex = bindingLayoutTable.firstSampler + i;
             const gl_sampler = binding !== null && binding.sampler !== null ? getPlatformSampler(binding.sampler) : null;
             const gl_texture = binding !== null && binding.texture !== null ? getPlatformTexture(binding.texture) : null;
