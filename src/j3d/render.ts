@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx } from '../gx/gx_render';
 
 import { RenderFlags, RenderState } from '../render';
-import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx } from '../Camera';
+import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
@@ -73,7 +73,7 @@ class Command_Shape {
         })
     }
 
-    public shouldDraw(state: RenderState, shapeInstanceState: ShapeInstanceState): boolean {
+    public shouldDraw(shapeInstanceState: ShapeInstanceState): boolean {
         for (let p = 0; p < this.shape.packets.length; p++) {
             const packet = this.shape.packets[p];
             for (let i = 0; i < packet.matrixTable.length; i++) {
@@ -91,7 +91,7 @@ class Command_Shape {
     }
 
     public draw(state: RenderState, renderHelper: GXRenderHelper, shapeInstanceState: ShapeInstanceState): void {
-        const modelView = this.computeModelView(state, shapeInstanceState);
+        const modelView = this.computeModelView(state.camera, shapeInstanceState);
 
         let needsUpload = false;
 
@@ -140,7 +140,7 @@ class Command_Shape {
         this.shapeHelpers.forEach((shapeHelper) => shapeHelper.destroy(gl));
     }
 
-    private computeModelView(state: RenderState, shapeInstanceState: ShapeInstanceState): mat4 {
+    private computeModelView(camera: Camera, shapeInstanceState: ShapeInstanceState): mat4 {
         switch (this.shape.displayFlags) {
         case ShapeDisplayFlags.USE_PNMTXIDX:
         case ShapeDisplayFlags.NORMAL:
@@ -149,11 +149,11 @@ class Command_Shape {
             break;
 
         case ShapeDisplayFlags.BILLBOARD:
-            computeModelMatrixBillboard(scratchModelMatrix, state.camera);
+            computeModelMatrixBillboard(scratchModelMatrix, camera);
             mat4.mul(scratchModelMatrix, shapeInstanceState.modelMatrix, scratchModelMatrix);
             break;
         case ShapeDisplayFlags.Y_BILLBOARD:
-            computeModelMatrixYBillboard(scratchModelMatrix, state.camera);
+            computeModelMatrixYBillboard(scratchModelMatrix, camera);
             mat4.mul(scratchModelMatrix, shapeInstanceState.modelMatrix, scratchModelMatrix);
             break;
         default:
@@ -161,9 +161,9 @@ class Command_Shape {
         }
 
         if (shapeInstanceState.isSkybox) {
-            computeViewMatrixSkybox(scratchViewMatrix, state.camera);
+            computeViewMatrixSkybox(scratchViewMatrix, camera);
         } else {
-            computeViewMatrix(scratchViewMatrix, state.camera);
+            computeViewMatrix(scratchViewMatrix, camera);
         }
 
         mat4.mul(scratchViewMatrix, scratchViewMatrix, scratchModelMatrix);
@@ -202,6 +202,8 @@ export class Command_Material {
     }
 
     private fillMaterialParams(materialParams: MaterialParams, state: RenderState, textureHolder: GXTextureHolder, materialInstance: MaterialInstance): void {
+        const camera = state.camera;
+
         // Bind color parameters.
         materialInstance.fillMaterialParams(materialParams);
 
@@ -239,14 +241,14 @@ export class Command_Material {
             case 0x07: // Rainbow Road
                 // Environment mapping. Uses the normal matrix.
                 // Normal matrix. Emulated here by the view matrix with the translation lopped off...
-                mat4.copy(dst, state.view);
+                mat4.copy(dst, camera.viewMatrix);
                 dst[12] = 0;
                 dst[13] = 0;
                 dst[14] = 0;
                 break;
             case 0x09:
                 // Projection. Used for indtexwater, mostly.
-                mat4.copy(dst, state.view);
+                mat4.copy(dst, camera.viewMatrix);
                 break;
             default:
                 throw "whoops";
@@ -267,7 +269,7 @@ export class Command_Material {
             case 0x07: // Rainbow Road
             case 0x08: // Peach Beach
                 mat4.mul(dst, texMtx.effectMatrix, dst);
-                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                texProjPerspMtx(scratch, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
                 mat4.mul(dst, scratch, dst);
                 break;
             case 0x09: // Rainbow Road
@@ -275,7 +277,7 @@ export class Command_Material {
                 // Don't apply effectMatrix to perspective. It appears to be
                 // a projection matrix preconfigured for GC.
                 // mat4.mul(dst, texMtx.effectMatrix, dst);
-                texProjPerspMtx(scratch, state.fov, state.getAspect(), 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                texProjPerspMtx(scratch, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
                 mat4.mul(dst, scratch, dst);
                 break;
             default:
@@ -623,10 +625,9 @@ export class BMDModelInstance {
         if (!this.visible)
             return false;
 
-        // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
         this.animationController.updateTime(state.time);
 
-        // Billboards shouldn't have their root bone modified, given that we have to compute a new model
+        // Billboards shouldn't have their root joint modified, given that we have to compute a new model
         // matrix that faces the camera view.
         const rootJointMatrix = matrixScratch;
 
@@ -653,7 +654,7 @@ export class BMDModelInstance {
         const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
 
         this.shapeInstanceState.isSkybox = this.isSkybox;
-        this.updateMatrixArray(state, rootJointMatrix, disableCulling);
+        this.updateMatrixArray(state.camera, rootJointMatrix, disableCulling);
 
         // If entire model is culled away, then we don't need to render anything.
         if (!this.shapeInstanceState.matrixVisibility.some((visible) => visible))
@@ -671,7 +672,7 @@ export class BMDModelInstance {
         for (let i = 0; i < drawList.length; i++) {
             const drawListItem = drawList[i];
             const shouldDraw = drawListItem.shapeCommands.some((shapeCommand) => {
-                return shapeCommand.shouldDraw(state, this.shapeInstanceState);
+                return shapeCommand.shouldDraw(this.shapeInstanceState);
             });
 
             if (!shouldDraw)
@@ -705,7 +706,7 @@ export class BMDModelInstance {
         this.renderTransparent(state);
     }
 
-    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {
+    private updateJointMatrixHierarchy(camera: Camera, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {
         // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
         const jnt1 = this.bmdModel.bmd.jnt1;
         const bbox = this.bboxScratch;
@@ -731,26 +732,26 @@ export class BMDModelInstance {
                 // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
                 // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
                 bbox.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
-                this.jointVisibility[jointIndex] = state.camera.frustum.contains(bbox);
+                this.jointVisibility[jointIndex] = camera.frustum.contains(bbox);
             }
 
             for (let i = 0; i < node.children.length; i++)
-                this.updateJointMatrixHierarchy(state, node.children[i], dstJointMatrix, disableCulling);
+                this.updateJointMatrixHierarchy(camera, node.children[i], dstJointMatrix, disableCulling);
             break;
         default:
             // Pass through.
             for (let i = 0; i < node.children.length; i++)
-                this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix, disableCulling);
+                this.updateJointMatrixHierarchy(camera, node.children[i], parentJointMatrix, disableCulling);
             break;
         }
     }
 
-    private updateMatrixArray(state: RenderState, modelMatrix: mat4, disableCulling: boolean): void {
+    private updateMatrixArray(camera: Camera, rootJointMatrix: mat4, disableCulling: boolean): void {
         const inf1 = this.bmdModel.bmd.inf1;
         const drw1 = this.bmdModel.bmd.drw1;
         const evp1 = this.bmdModel.bmd.evp1;
 
-        this.updateJointMatrixHierarchy(state, inf1.sceneGraph, modelMatrix, disableCulling);
+        this.updateJointMatrixHierarchy(camera, inf1.sceneGraph, rootJointMatrix, disableCulling);
 
         // Now update our matrix definition array.
         for (let i = 0; i < drw1.matrixDefinitions.length; i++) {
