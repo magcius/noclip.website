@@ -56,7 +56,7 @@ const nameTable = [
     'SceneNo', 'MarioNo',
     'PlanetName', 'LowFlag', 'MiddleFlag', 'BloomFlag', 'WaterFlag', 'WaterFlag', 'IndirectFlag',
     'Obj_arg0', 'Obj_arg1', 'Obj_arg2', 'Obj_arg3', 'Obj_arg4', 'Obj_arg5', 'Obj_arg6', 'Obj_arg7',
-    'RotateSpeed', 'RotateAngle', 'RotateAxis', 'RotateStopTime', 'RotateType',
+    'RotateSpeed', 'RotateAngle', 'RotateAxis', 'RotateAccelType', 'RotateStopTime', 'RotateType',
 ];
 
 const hashLookup = new Map<number, string>();

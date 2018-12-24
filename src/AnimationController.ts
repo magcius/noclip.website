@@ -10,6 +10,10 @@ export default class AnimationController {
         return (ms / 1000) * this.fps + this.phaseFrames;
     }
 
+    public getTimeInSeconds(): number {
+        return this.getTimeInFrames() / this.fps;
+    }
+
     public updateTime(newTime: number): void {
         this.timeMilliseconds = newTime;
     }

@@ -13,7 +13,7 @@ import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray } from '../util';
-import { AABB, IntersectionState } from '../Geometry';
+import { AABB } from '../Geometry';
 import { GfxDevice, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { getTransitionDeviceForWebGL2 } from '../gfx/platform/GfxPlatformWebGL2';
 
@@ -510,13 +510,8 @@ export class BMDModel {
     }
 }
 
-const enum MatrixCalcFlags {
-    // No special transformation.
-    NORMAL = 0,
-    // View translation modified.
-    VIEW_TRANSLATION_CHANGED = 1 << 0,
-    // View rotation modified.
-    VIEW_ROTATION_CHANGED = 1 << 1,
+interface ModelMatrixAnimator {
+    calcModelMtx(dst: mat4, src: mat4): void;
 }
 
 export class BMDModelInstance {
@@ -535,6 +530,7 @@ export class BMDModelInstance {
     // Animations.
     public animationController = new AnimationController();
     public ank1Animator: ANK1Animator | null = null;
+    public modelMatrixAnimator: ModelMatrixAnimator | null = null;
 
     public currentMaterialCommand: Command_Material;
 
@@ -615,6 +611,10 @@ export class BMDModelInstance {
         this.ank1Animator = bindANK1Animator(this.animationController, ank1);
     }
 
+    public bindModelMatrixAnimator(m: ModelMatrixAnimator) {
+        this.modelMatrixAnimator = m;
+    }
+
     public getTimeInFrames(milliseconds: number) {
         return (milliseconds / 1000) * this.fps;
     }
@@ -626,34 +626,34 @@ export class BMDModelInstance {
         // XXX(jstpierre): Is this the right place to do this? Need an explicit update call...
         this.animationController.updateTime(state.time);
 
+        // Billboards shouldn't have their root bone modified, given that we have to compute a new model
+        // matrix that faces the camera view.
+        const rootJointMatrix = matrixScratch;
+
+        if (this.bmdModel.hasBillboard) {
+            mat4.identity(rootJointMatrix);
+            mat4.copy(this.shapeInstanceState.modelMatrix, this.modelMatrix);
+        } else {
+            mat4.copy(rootJointMatrix, this.modelMatrix);
+            mat4.identity(this.shapeInstanceState.modelMatrix);
+        }
+
+        if (this.modelMatrixAnimator !== null)
+            this.modelMatrixAnimator.calcModelMtx(rootJointMatrix, rootJointMatrix);
+
         // Skyboxes implicitly center themselves around the view matrix (their view translation is removed).
         // While we could represent this, a skybox is always visible in theory so it's probably not worth it
         // to cull. If we ever have a fancy skybox model, then it might be worth it to represent it in world-space.
         //
-        // Billboards have their view matrix modified to face the camera, so their world space position doesn't
+        // Billboards have their model matrix modified to face the camera, so their world space position doesn't
         // quite match what they kind of do.
         //
         // For now, we simply don't cull both of these special cases, hoping they'll be simple enough to just always
         // render. In theory, we could cull billboards using the bounding sphere.
-        const matrixCalcFlags: MatrixCalcFlags = (
-            (this.isSkybox ? MatrixCalcFlags.VIEW_TRANSLATION_CHANGED : 0) |
-            (this.bmdModel.hasBillboard ? MatrixCalcFlags.VIEW_TRANSLATION_CHANGED : 0)
-        );
-
-        // First, update joint matrices from hierarchy.
-        //
-        // then the root bone is taken from the model matrix. Otherwise, we apply it
-        // to the shape for use there.
-        if (matrixCalcFlags === MatrixCalcFlags.NORMAL) {
-            mat4.copy(matrixScratch, this.modelMatrix);
-            mat4.identity(this.shapeInstanceState.modelMatrix);
-        } else {
-            mat4.identity(matrixScratch);
-            mat4.copy(this.shapeInstanceState.modelMatrix, this.modelMatrix);
-        }
+        const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
 
         this.shapeInstanceState.isSkybox = this.isSkybox;
-        this.updateMatrixArray(state, matrixScratch, matrixCalcFlags);
+        this.updateMatrixArray(state, rootJointMatrix, disableCulling);
 
         // If entire model is culled away, then we don't need to render anything.
         if (!this.shapeInstanceState.matrixVisibility.some((visible) => visible))
@@ -705,7 +705,7 @@ export class BMDModelInstance {
         this.renderTransparent(state);
     }
 
-    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4, matrixCalcFlags: MatrixCalcFlags): void {
+    private updateJointMatrixHierarchy(state: RenderState, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {
         // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
         const jnt1 = this.bmdModel.bmd.jnt1;
         const bbox = this.bboxScratch;
@@ -724,34 +724,33 @@ export class BMDModelInstance {
             const dstJointMatrix = this.jointMatrices[jointIndex];
             mat4.mul(dstJointMatrix, parentJointMatrix, jointMatrix);
 
-            if (matrixCalcFlags === MatrixCalcFlags.NORMAL) {
+            if (disableCulling) {
+                this.jointVisibility[jointIndex] = true;
+            } else {
                 // Frustum cull.
                 // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
                 // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
                 bbox.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
-                const intersectionState = state.camera.frustum.intersect(bbox);
-                this.jointVisibility[jointIndex] = intersectionState !== IntersectionState.FULLY_OUTSIDE;
-            } else {
-                this.jointVisibility[jointIndex] = true;
+                this.jointVisibility[jointIndex] = state.camera.frustum.contains(bbox);
             }
 
             for (let i = 0; i < node.children.length; i++)
-                this.updateJointMatrixHierarchy(state, node.children[i], dstJointMatrix, matrixCalcFlags);
+                this.updateJointMatrixHierarchy(state, node.children[i], dstJointMatrix, disableCulling);
             break;
         default:
             // Pass through.
             for (let i = 0; i < node.children.length; i++)
-                this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix, matrixCalcFlags);
+                this.updateJointMatrixHierarchy(state, node.children[i], parentJointMatrix, disableCulling);
             break;
         }
     }
 
-    private updateMatrixArray(state: RenderState, modelMatrix: mat4, matrixCalcFlags: MatrixCalcFlags): void {
+    private updateMatrixArray(state: RenderState, modelMatrix: mat4, disableCulling: boolean): void {
         const inf1 = this.bmdModel.bmd.inf1;
         const drw1 = this.bmdModel.bmd.drw1;
         const evp1 = this.bmdModel.bmd.evp1;
 
-        this.updateJointMatrixHierarchy(state, inf1.sceneGraph, modelMatrix, matrixCalcFlags);
+        this.updateJointMatrixHierarchy(state, inf1.sceneGraph, modelMatrix, disableCulling);
 
         // Now update our matrix definition array.
         for (let i = 0; i < drw1.matrixDefinitions.length; i++) {
