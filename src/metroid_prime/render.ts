@@ -34,6 +34,11 @@ export class RetroTextureHolder extends GXTextureHolder<TXTR> {
     }
 }
 
+export const enum RetroPass {
+    MAIN = 0x01,
+    SKYBOX = 0x02,
+}
+
 const matrixScratch = mat4.create();
 class Command_Surface {
     private shapeHelper: GXShapeHelperGfx;
@@ -41,10 +46,11 @@ class Command_Surface {
     public packetParams = new PacketParams();
     public isTranslucent = false;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public surface: Surface, materialCommand: Command_Material, coalescedBuffers: GfxCoalescedBuffers, public modelIndex: number = 0) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public surface: Surface, materialCommand: Command_Material, coalescedBuffers: GfxCoalescedBuffers, passMask: RetroPass, public modelIndex: number = 0) {
         this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
 
         this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder, materialCommand.templateRenderInst);
+        this.renderInst.passMask = passMask;
         this.isTranslucent = materialCommand.material.isTransparent;
     }
 
@@ -272,7 +278,7 @@ export class MREARenderer {
                 if (materialCommand.material.isOccluder)
                     return;
 
-                this.surfaceCommands.push(new Command_Surface(device, this.renderHelper, surface, materialCommand, coalescedBuffers, modelIndex));
+                this.surfaceCommands.push(new Command_Surface(device, this.renderHelper, surface, materialCommand, coalescedBuffers, RetroPass.MAIN, modelIndex));
             });
         });
     }
@@ -345,9 +351,8 @@ export class CMDLRenderer {
     private renderHelper: GXRenderHelperGfx;
     private bboxScratch: AABB = new AABB();
     public visible: boolean = true;
-    public isSkybox: boolean = false;
 
-    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public name: string, public cmdl: CMDL) {
+    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public name: string, public cmdl: CMDL, public isSkybox: boolean) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.translateModel(device);
     }
@@ -383,6 +388,7 @@ export class CMDLRenderer {
         this.bufferCoalescer = new GfxBufferCoalescer(device, vertexDatas, indexDatas);
 
         let bufferIndex = 0;
+        const passMask = this.isSkybox ? RetroPass.SKYBOX : RetroPass.MAIN;
         this.cmdl.geometry.surfaces.forEach((surface) => {
             const materialCommand = this.materialCommands[surface.materialIndex];
             const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[bufferIndex++];
@@ -391,7 +397,7 @@ export class CMDLRenderer {
             if (materialCommand.material.isOccluder)
                 return;
 
-            this.surfaceCommands.push(new Command_Surface(device, this.renderHelper, surface, materialCommand, coalescedBuffers, 0));
+            this.surfaceCommands.push(new Command_Surface(device, this.renderHelper, surface, materialCommand, coalescedBuffers, passMask));
         });
     }
 
@@ -404,6 +410,7 @@ export class CMDLRenderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(2, 7500);
         this.renderHelper.fillSceneParams(viewerInput);
 
         // Frustum cull.

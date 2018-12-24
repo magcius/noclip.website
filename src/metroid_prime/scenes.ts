@@ -3,7 +3,7 @@ import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import { ResourceSystem, NameData } from './resource';
-import { MREARenderer, RetroTextureHolder, CMDLRenderer } from './render';
+import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -14,7 +14,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 export class RetroSceneRenderer implements Viewer.Scene_Device {
     public viewRenderer = new GfxRenderInstViewRenderer();
@@ -41,8 +41,14 @@ export class RetroSceneRenderer implements Viewer.Scene_Device {
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer);
+        // First, render the skybox.
+        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, RetroPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, RetroPass.MAIN);
         return mainPassRenderer;
     }
 
@@ -85,8 +91,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
                 if (skyboxCMDL) {
                     const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                    skyboxRenderer = new CMDLRenderer(device, textureHolder, skyboxName, skyboxCMDL);
-                    skyboxRenderer.isSkybox = true;
+                    skyboxRenderer = new CMDLRenderer(device, textureHolder, skyboxName, skyboxCMDL, true);
                 }
                 const areaRenderers = areas.map((mreaEntry) => {
                     const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
@@ -94,7 +99,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 });
 
                 // By default, set only the first 10 area renderers to visible, so as to not "crash my browser please".
-                areaRenderers.forEach((areaRenderer) => {
+                areaRenderers.slice(10).forEach((areaRenderer) => {
                     areaRenderer.visible = false;
                 });
 
