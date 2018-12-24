@@ -527,7 +527,6 @@ class SMGSpawner {
                     this.sceneGraph.addNode(modelInstance, [tag, zoneLayerFilterTag]);
 
                     if (objinfo.rotateSpeed !== 0) {
-                        console.log(objinfo, modelInstance);
                         // Set up a rotator animation to spin it around.
                         modelInstance.bindModelMatrixAnimator(new YSpinAnimator(modelInstance.animationController, objinfo));
                     }
@@ -542,6 +541,10 @@ class SMGSpawner {
         case 'FlagPeachCastleC':
             // Archives just contain the textures. Mesh geometry appears to be generated at runtime by the game.
             return;
+        case 'PeachCastleTownBeforeAttack':
+            spawnGraph('PeachCastleTownBeforeAttack', SceneGraphTag.Normal);
+            spawnGraph('PeachCastleTownBeforeAttackBloom', SceneGraphTag.Bloom);
+            break;
         case 'FlowerGroup':
         case 'FlowerBlueGroup':
         case 'ShootingStar':
