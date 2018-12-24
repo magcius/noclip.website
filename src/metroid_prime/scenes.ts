@@ -3,7 +3,7 @@ import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import { ResourceSystem, NameData } from './resource';
-import { MREARenderer, RetroTextureHolder } from './render';
+import { MREARenderer, RetroTextureHolder, CMDLRenderer } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -20,18 +20,16 @@ export class RetroSceneRenderer implements Viewer.Scene_Device {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
 
-    constructor(device: GfxDevice, mlvl: MLVL.MLVL, public textureHolder: RetroTextureHolder, public areaRenderers: MREARenderer[]) {
+    constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder: RetroTextureHolder, public skyboxRenderer: CMDLRenderer | null, public areaRenderers: MREARenderer[]) {
+        if (this.skyboxRenderer !== null)
+            this.skyboxRenderer.addToViewRenderer(device, this.viewRenderer);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].addToViewRenderer(device, this.viewRenderer);
     }
 
-    public createPanels(): UI.Panel[] {
-        const layersPanel = new UI.LayerPanel();
-        layersPanel.setLayers(this.areaRenderers);
-        return [layersPanel];
-    }
-
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.skyboxRenderer !== null)
+            this.skyboxRenderer.prepareToRender(hostAccessPass, viewerInput);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
@@ -53,6 +51,12 @@ export class RetroSceneRenderer implements Viewer.Scene_Device {
         this.renderTarget.destroy(device);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].destroy(device);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const layersPanel = new UI.LayerPanel();
+        layersPanel.setLayers(this.areaRenderers);
+        return [layersPanel];
     }
 }
 
@@ -77,26 +81,24 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
                 const areas = mlvl.areaTable;
                 const textureHolder = new RetroTextureHolder();
-                let skyboxRenderer = null;
+                let skyboxRenderer: CMDLRenderer = null;
                 const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
-                /*
                 if (skyboxCMDL) {
                     const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                    skyboxRenderer = new CMDLRenderer(gl, textureHolder, skyboxName, skyboxCMDL);
+                    skyboxRenderer = new CMDLRenderer(device, textureHolder, skyboxName, skyboxCMDL);
                     skyboxRenderer.isSkybox = true;
                 }
-                */
                 const areaRenderers = areas.map((mreaEntry) => {
                     const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
                     return new MREARenderer(device, textureHolder, mreaEntry.areaName, mrea);
                 });
 
                 // By default, set only the first 10 area renderers to visible, so as to not "crash my browser please".
-                areaRenderers.slice(10).forEach((areaRenderer) => {
+                areaRenderers.forEach((areaRenderer) => {
                     areaRenderer.visible = false;
                 });
 
-                return new RetroSceneRenderer(device, mlvl, textureHolder, areaRenderers);
+                return new RetroSceneRenderer(device, mlvl, textureHolder, skyboxRenderer, areaRenderers);
             }
 
             return null;
