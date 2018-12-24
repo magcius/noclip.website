@@ -322,6 +322,8 @@ class Main {
         this.dragHighlight.style.display = 'none';
         e.preventDefault();
         const transfer = e.dataTransfer;
+        if (transfer.files.length === 0)
+            return;
         const file = transfer.files[0];
         const sceneDesc = new DroppedFileSceneDesc(file);
         this.droppedFileGroup.sceneDescs.push(sceneDesc);

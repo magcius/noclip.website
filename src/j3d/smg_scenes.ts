@@ -19,6 +19,7 @@ import * as UI from '../ui';
 import { mat4, quat } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK } from './j3d';
 import { GfxBlendMode, GfxBlendFactor, GfxCompareMode } from '../gfx/platform/GfxPlatform';
+import AnimationController from '../AnimationController';
 
 const materialHacks: GXMaterialHacks = {
     alphaLightingFudge: (p) => p.matSource,
@@ -364,6 +365,8 @@ interface ObjInfo {
     objId: number;
     objName: string;
     objArg0: number;
+    rotateSpeed: number;
+    rotateAccelType: number;
     modelMatrix: mat4;
 }
 
@@ -401,6 +404,19 @@ interface AnimOptions {
 }
 
 const pathBase = `data/j3d/smg`;
+
+class YSpinAnimator {
+    constructor(public animationController: AnimationController, public objinfo: ObjInfo) {
+    }
+
+    public calcModelMtx(dst: mat4, src: mat4): void {
+        const time = this.animationController.getTimeInSeconds();
+        // RotateSpeed appears to be deg/sec?
+        const rotateSpeed = this.objinfo.rotateSpeed / (this.objinfo.rotateAccelType > 0 ? this.objinfo.rotateAccelType : 1);
+        const speed = rotateSpeed * Math.PI / 180;
+        mat4.rotateY(dst, src, time * speed);
+    }
+}
 
 class ModelCache {
     public promiseCache = new Map<string, Progressable<BMDModel>>();
@@ -509,6 +525,12 @@ class SMGSpawner {
                     if (tag === SceneGraphTag.Skybox)
                         modelInstance.setIsSkybox(true);
                     this.sceneGraph.addNode(modelInstance, [tag, zoneLayerFilterTag]);
+
+                    if (objinfo.rotateSpeed !== 0) {
+                        console.log(objinfo, modelInstance);
+                        // Set up a rotator animation to spin it around.
+                        modelInstance.bindModelMatrixAnimator(new YSpinAnimator(modelInstance.animationController, objinfo));
+                    }
                 }
             });
         };
@@ -567,6 +589,7 @@ class SMGSpawner {
         case 'Rosetta':
             spawnGraph(name, SceneGraphTag.Normal);
             break;
+        case 'HalfGalaxySky':
         case 'GalaxySky':
         case 'RockPlanetOrbitSky':
         case 'VROrbit':
@@ -631,9 +654,11 @@ class SMGSceneDesc implements Viewer.SceneDesc {
             const objId = BCSV.getField<number>(bcsv, record, 'l_id', -1);
             const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
             const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
+            const rotateSpeed = BCSV.getField<number>(bcsv, record, 'RotateSpeed', 0);
+            const rotateAccelType = BCSV.getField<number>(bcsv, record, 'RotateAccelType', 0);
             const modelMatrix = mat4.create();
             computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-            return { objId, objName, objArg0, modelMatrix };
+            return { objId, objName, objArg0, rotateSpeed, rotateAccelType, modelMatrix };
         });
     }
 
