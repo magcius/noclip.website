@@ -13,8 +13,11 @@ function readPixelsCommon(gl: WebGL2RenderingContext, width: number, height: num
     ctx.putImageData(img, 0, 0);
 
     // Flip upside-down.
+    ctx.save();
+    ctx.globalCompositeOperation = 'copy';
     ctx.setTransform(1, 0, 0, -1, 0, height);
     ctx.drawImage(canvas, 0, 0);
+    ctx.restore();
 }
 
 export function downloadRenderbufferToCanvas(gl: WebGL2RenderingContext, renderbuffer: WebGLTexture, canvas: HTMLCanvasElement): void {
