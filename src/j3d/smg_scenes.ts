@@ -139,6 +139,7 @@ const enum SceneGraphTag {
 class SceneGraph {
     public nodes: BMDModelInstance[] = [];
     public nodeTags: string[][] = [];
+    public onnodeadded: (node: BMDModelInstance, i: number) => void | null = null;
 
     public hasTag(tag: string): boolean {
         return this.nodeTags.some((tags) => tags.includes(tag));
@@ -161,6 +162,9 @@ class SceneGraph {
             return;
         this.nodes.push(node);
         this.nodeTags.push(tags);
+        const i = this.nodes.length - 1;
+        if (this.onnodeadded !== null)
+            this.onnodeadded(node, i);
     }
 
     public destroy(gl: WebGL2RenderingContext): void {
@@ -185,9 +189,9 @@ class SMGRenderer implements Viewer.MainScene {
     private bloomPassBlurProgram: BloomPassBlurProgram = new BloomPassBlurProgram();
     private bloomPassBokehProgram: BloomPassBokehProgram = new BloomPassBokehProgram();
     private bloomCombineFlags: RenderFlags;
+    private currentScenarioIndex: number = 0;
 
     constructor(
-        gl: WebGL2RenderingContext,
         public textureHolder: J3DTextureHolder,
         private sceneGraph: SceneGraph,
         private scenarioData: BCSV.Bcsv,
@@ -200,9 +204,13 @@ class SMGRenderer implements Viewer.MainScene {
             blendSrcFactor: GfxBlendFactor.ONE,
             blendDstFactor: GfxBlendFactor.ONE,
         });
+
+        this.sceneGraph.onnodeadded = (node: BMDModelInstance, i: number) => {
+            this.applyCurrentScenario();
+        };
     }
 
-    public setZoneLayersVisible(zoneName: string, layerMask: number): void {
+    private setZoneLayersVisible(zoneName: string, layerMask: number): void {
         for (let i = 0; i < 10; i++) {
             const visible = !!(layerMask & (1 << i));
             this.sceneGraph.forTag(getZoneLayerFilterTag(zoneName, i), (node) => {
@@ -211,12 +219,17 @@ class SMGRenderer implements Viewer.MainScene {
         }
     }
 
-    public setCurrentScenario(index: number): void {
-        const scenarioRecord = this.scenarioData.records[index];
+    private applyCurrentScenario(): void {
+        const scenarioRecord = this.scenarioData.records[this.currentScenarioIndex];
         for (const zoneName of this.zoneNames) {
             const layerMask = BCSV.getField<number>(this.scenarioData, scenarioRecord, zoneName, 0);
             this.setZoneLayersVisible(zoneName, layerMask);
         }
+    }
+
+    public setCurrentScenario(index: number): void {
+        this.currentScenarioIndex = index;
+        this.applyCurrentScenario();
     }
 
     public createPanels(): UI.Panel[] {
@@ -676,7 +689,7 @@ class SMGSceneDesc implements Viewer.SceneDesc {
                 const spawner = new SMGSpawner(planetTable);
                 const modelMatrixBase = mat4.create();
                 spawner.spawnZone(gl, zones[0], zones, modelMatrixBase);
-                return new SMGRenderer(gl, spawner.textureHolder, spawner.sceneGraph, scenariodata, zoneNames);
+                return new SMGRenderer(spawner.textureHolder, spawner.sceneGraph, scenariodata, zoneNames);
             });
         });
     }
@@ -688,7 +701,8 @@ const name = "Super Mario Galaxy";
 const sceneDescs: Viewer.SceneDesc[] = [
     new SMGSceneDesc("Peach's Castle Garden", "PeachCastleGardenGalaxy"),
     new SMGSceneDesc("Comet Observatory", "AstroGalaxy"),
-    new SMGSceneDesc("BattleShipGalaxy", "BattleShipGalaxy"),
+    new SMGSceneDesc("Battlerock Galaxy", "BattleShipGalaxy"),
+    new SMGSceneDesc("Honeyhive Galaxy", "HoneyBeeKingdomGalaxy"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
