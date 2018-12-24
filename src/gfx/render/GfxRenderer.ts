@@ -4,7 +4,6 @@ import { align, assertExists, assert } from "../../util";
 import { GfxRenderBuffer } from "./GfxRenderBuffer";
 import { RenderFlags } from "../helpers/RenderFlagsHelpers";
 import { TextureMapping } from "../../TextureHolder";
-import { HashMap, EqualFunc, nullHashFunc } from "../../HashMap";
 import { DeviceProgramReflection } from "../../Program";
 import { GfxRenderCache } from "./GfxRenderCache";
 
