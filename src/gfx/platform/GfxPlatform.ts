@@ -182,7 +182,6 @@ export interface GfxDeviceLimits {
 }
 
 export interface GfxProgramReflection extends DeviceProgramReflection {
-    uniqueKey: number;
 }
 
 export interface GfxInputStateReflection {

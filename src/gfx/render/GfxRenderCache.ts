@@ -41,7 +41,7 @@ function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaState
 }
 
 function gfxBindingLayoutEquals(a: GfxBindingLayoutDescriptor, b: GfxBindingLayoutDescriptor): boolean {
-    return a.numSamplers === b.numSamplers && a.numUniformBuffers === b.numSamplers;
+    return a.numSamplers === b.numSamplers && a.numUniformBuffers === b.numUniformBuffers;
 }
 
 // XXX(jstpierre): giant hack!!!

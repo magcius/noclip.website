@@ -4,6 +4,10 @@ import CodeEditor from "./CodeEditor";
 import { assertExists, leftPad } from "./util";
 import { BufferLayout, parseBufferLayout } from "./gfx/helpers/UniformBufferHelpers";
 
+interface ProgramWithKey extends WebGLProgram {
+    uniqueKey: number;
+}
+
 const DEBUG = true;
 
 function prependLineNo(str: string, lineStart: number = 1) {
@@ -43,7 +47,7 @@ export abstract class BaseProgram {
     public preprocessedFrag: string = '';
     public defines = new Map<string, string>();
 
-    private glProg: WebGLProgram;
+    private glProg: ProgramWithKey;
     public forceRecompile: boolean = false;
 
     public preprocessProgram(): void {
@@ -117,7 +121,7 @@ ${source}
 `.trim();
     }
 
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
+    public bind(gl: WebGL2RenderingContext, prog: ProgramWithKey): void {
     }
 
     public destroy(gl: WebGL2RenderingContext) {
@@ -190,6 +194,7 @@ export interface DeviceProgramReflection {
     uniformBufferLayouts: BufferLayout[];
     samplerBindings: SamplerBindingReflection[];
     totalSamplerBindingsCount: number;
+    uniqueKey: number;
 }
 
 export interface SamplerBindingReflection {
@@ -201,6 +206,7 @@ export class DeviceProgram extends BaseProgram {
     public uniformBufferLayouts: BufferLayout[];
     public samplerBindings: SamplerBindingReflection[];
     public totalSamplerBindingsCount: number;
+    public uniqueKey: number;
 
     public preprocessProgram(): void {
         super.preprocessProgram();
@@ -233,7 +239,9 @@ export class DeviceProgram extends BaseProgram {
         return refl;
     }
 
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
+    public bind(gl: WebGL2RenderingContext, prog: ProgramWithKey): void {
+        this.uniqueKey = prog.uniqueKey;
+
         for (let i = 0; i < this.uniformBufferLayouts.length; i++) {
             const uniformBufferLayout = this.uniformBufferLayouts[i];
             gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, uniformBufferLayout.blockName), i);
@@ -281,20 +289,20 @@ interface ProgramKey {
     frag: string;
 }
 
-export class ProgramCache extends MemoizeCache<ProgramKey, WebGLProgram> {
-    private _uniqueKey = 0;
+export class ProgramCache extends MemoizeCache<ProgramKey, ProgramWithKey> {
+    private _uniqueKey: number = 0;
 
     constructor(private gl: WebGL2RenderingContext) {
         super();
     }
 
-    protected make(key: ProgramKey): WebGLProgram {
+    protected make(key: ProgramKey): ProgramWithKey {
         const gl = this.gl;
         const vertShader = compileShader(gl, key.vert, gl.VERTEX_SHADER);
         const fragShader = compileShader(gl, key.frag, gl.FRAGMENT_SHADER);
         if (!vertShader || !fragShader)
             return null;
-        const prog = gl.createProgram();
+        const prog = gl.createProgram() as ProgramWithKey;
         gl.attachShader(prog, vertShader);
         gl.attachShader(prog, fragShader);
         gl.linkProgram(prog);
@@ -307,11 +315,11 @@ export class ProgramCache extends MemoizeCache<ProgramKey, WebGLProgram> {
             gl.deleteProgram(prog);
             return null;
         }
-        (prog as any).uniqueKey = this._uniqueKey++;
+        prog.uniqueKey = ++this._uniqueKey;
         return prog;
     }
 
-    protected destroy(obj: WebGLProgram) {
+    protected destroy(obj: ProgramWithKey) {
         const gl = this.gl;
         gl.deleteProgram(obj);
     }

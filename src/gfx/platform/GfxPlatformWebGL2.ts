@@ -43,7 +43,6 @@ interface GfxSamplerP_GL extends GfxSampler {
 
 interface GfxProgramP_GL extends GfxProgram {
     gl_program: WebGLProgram;
-    uniqueKey: number;
     deviceProgram: DeviceProgram;
 }
 
@@ -701,8 +700,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public createProgram(deviceProgram: DeviceProgram): GfxProgram {
         const gl = this.gl;
         const gl_program = deviceProgram.compile(gl, this._programCache);
-        const uniqueKey = (gl_program as any).uniqueKey;
-        const program: GfxProgramP_GL = { _T: _T.Program, gl_program, uniqueKey, deviceProgram };
+        const program: GfxProgramP_GL = { _T: _T.Program, gl_program, deviceProgram };
         return program;
     }
 
@@ -881,9 +879,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public queryProgram(program_: GfxProgram): GfxProgramReflection {
         const program = program_ as GfxProgramP_GL;
-        const uniqueKey = program.uniqueKey;
-        const deviceProgram = program.deviceProgram as DeviceProgramReflection;
-        return { ...deviceProgram, uniqueKey };
+        return program.deviceProgram;
     }
 
     public queryInputState(inputState_: GfxInputState): GfxInputStateReflection {
