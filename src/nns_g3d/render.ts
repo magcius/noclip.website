@@ -197,7 +197,7 @@ export class MDL0Renderer {
 
     constructor(device: GfxDevice, private tex0: TEX0, public model: NSBMD.MDL0Model) {
         this.gfxProgram = device.createProgram(new NITRO_Program());
-        const posScale = model.posScale * 10;
+        const posScale = model.posScale * 50;
         mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
     }
 
