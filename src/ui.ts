@@ -107,8 +107,12 @@ export abstract class ScrollSelect implements Widget {
             textSpan.textContent = strings[i];
             selector.appendChild(textSpan);
             const index = i;
-            selector.onclick = () => {
-                this.itemClicked(index);
+            selector.onmousedown = () => {
+                this.itemClicked(index, true);
+            };
+            selector.onmouseover = (e) => {
+                if (e.buttons !== 0)
+                    this.itemClicked(index, false);
             };
             this.scrollContainer.appendChild(selector);
         }
@@ -152,13 +156,13 @@ export abstract class ScrollSelect implements Widget {
         }
     }
 
-    protected abstract itemClicked(index: number): void;
+    protected abstract itemClicked(index: number, first: boolean): void;
 }
 
 export class SingleSelect extends ScrollSelect {
     public onselectionchange: (index: number) => void;
 
-    public itemClicked(index: number) {
+    public itemClicked(index: number, first: boolean) {
         this.selectItem(index);
     }
 
@@ -181,6 +185,7 @@ export class SimpleSingleSelect extends SingleSelect {
 export class MultiSelect extends ScrollSelect {
     public itemIsOn: boolean[] = [];
     public onitemchanged: (index: number, v: boolean) => void;
+    private itemShouldBeOn: boolean;
 
     constructor() {
         super();
@@ -220,8 +225,11 @@ export class MultiSelect extends ScrollSelect {
         this.onitemchanged(index, this.itemIsOn[index]);
     }
 
-    public itemClicked(index: number) {
-        this.setItemIsOn(index, !this.itemIsOn[index]);
+    public itemClicked(index: number, first: boolean) {
+        if (first)
+            this.itemShouldBeOn = !this.itemIsOn[index];
+        console.log(index, this.itemIsOn[index], this.itemShouldBeOn);
+        this.setItemIsOn(index, this.itemShouldBeOn);
         this.syncInternalFlairs();
     }
 
