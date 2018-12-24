@@ -1,4 +1,6 @@
 
+/* @preserve The source code to this website is under the MIT license and can be found at https://github.com/magcius/model-viewer */
+
 // Parcel HMR workaround.
 // https://github.com/parcel-bundler/parcel/issues/289
 declare var module: any;
