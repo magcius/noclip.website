@@ -169,7 +169,7 @@ export function calcTexMtx_Maya(dst: mat2d, texScaleS: number, texScaleT: number
     dst[3] = texScaleT * scaleT *  cosR;
     // TODO(jstpierre): Bring back rotation.
     dst[4] = (scaleS * translationS) * -1;
-    dst[5] = (scaleT + 1) + (scaleT * translationT);
+    dst[5] = (scaleT * translationT);
 
     /*
     dst[4] = (-sinR*scaleS - cosR*scaleS + scaleS)     - (scaleS * translationS);
