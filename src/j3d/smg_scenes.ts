@@ -590,7 +590,7 @@ class SMGSpawner {
             spawnGraph(name, SceneGraphTag.Normal, null);
             break;
         case 'Rosetta':
-            spawnGraph(name, SceneGraphTag.Normal);
+            spawnGraph(name, SceneGraphTag.Normal, { bck: 'waita.bck' });
             break;
         case 'HalfGalaxySky':
         case 'GalaxySky':
