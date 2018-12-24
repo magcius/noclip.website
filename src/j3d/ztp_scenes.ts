@@ -83,7 +83,7 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
     private transparentScenes: BMDModelInstance[] = [];
     private windowScenes: BMDModelInstance[] = [];
 
-    constructor(public textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: BMDModelInstance[], public roomScenes: BMDModelInstance[]) {
+    constructor(public textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: BMDModelInstance[], public roomScenes: BMDModelInstance[], public roomNames: string[]) {
         this.roomScenes.forEach((scene) => {
             if (scene.name.endsWith('model')) {
                 this.opaqueScenes.push(scene);
@@ -93,7 +93,8 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
                 this.transparentScenes.push(scene);
             } else if (scene.name.endsWith('model3')) {
                 this.windowScenes.push(scene);
-            } else if (scene.name.endsWith('model4')) {
+            } else if (scene.name.endsWith('model4') || scene.name.endsWith('model5')) {
+                // Not sure what these are, so just throw them in the transparent bucket.
                 this.transparentScenes.push(scene);
              } else {
                 throw "whoops";
@@ -101,10 +102,22 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
         });
     }
 
+    private setRoomVisible(name: string, v: boolean): void {
+        for (let i = 0; i < this.roomScenes.length; i++)
+            if (this.roomScenes[i].name.startsWith(name))
+                this.roomScenes[i].setVisible(v);
+    }
+
     public createPanels(): UI.Panel[] {
-        const layers = new UI.LayerPanel();
-        layers.setLayers(this.roomScenes);
-        return [layers];
+        const rooms = new UI.LayerPanel();
+        rooms.setLayers(this.roomNames.map((name) => {
+            const room = { name, visible: true, setVisible: (v: boolean): void => {
+                room.visible = v;
+                this.setRoomVisible(name, v);
+            } };
+            return room;
+        }));
+        return [rooms];
     }
 
     public render(state: RenderState) {
@@ -224,17 +237,17 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
 
             // TODO(jstpierre): This room list isn't quite right. How does the original game work?
             const roomList = getRoomListFromDZS(dzsBuffer);
-            const roomPaths = roomList.map((i) => `${basePath}/R${leftPad(''+i, 2)}_00.arc`);
+            const roomNames = roomList.map((i) => `R${leftPad(''+i, 2)}_00`);
 
-            return Progressable.all(roomPaths.map(path => this.fetchRarc(path))).then((roomRarcs: (RARC.RARC | null)[]) => {
-                const roomScenes_: BMDModelInstance[][] = roomRarcs.filter(r => !!r).map((rarc: RARC.RARC, i: number) => {
-                    const rarcBasename = roomPaths[i].split('.')[0];
-                    return createScenesFromRARC(gl, textureHolder, rarcBasename, rarc);
+            return Progressable.all(roomNames.map(name => this.fetchRarc(`${basePath}/${name}.arc`))).then((roomRarcs: (RARC.RARC | null)[]) => {
+                const roomScenes_: BMDModelInstance[][] = roomRarcs.map((rarc: RARC.RARC | null, i: number) => {
+                    if (rarc === null) return null;
+                    return createScenesFromRARC(gl, textureHolder, roomNames[i], rarc);
                 });
                 const roomScenes: BMDModelInstance[] = [];
                 roomScenes_.forEach((scenes: BMDModelInstance[]) => roomScenes.push.apply(roomScenes, scenes));
 
-                return new TwilightPrincessRenderer(textureHolder, stageRarc, roomRarcs, skyboxScenes, roomScenes);
+                return new TwilightPrincessRenderer(textureHolder, stageRarc, roomRarcs, skyboxScenes, roomScenes, roomNames);
             });
         });
     }
