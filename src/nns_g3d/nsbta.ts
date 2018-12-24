@@ -36,9 +36,10 @@ interface AnimationTrack {
 
 function parseSRT0(buffer: ArrayBufferSlice): SRT0 {
     const view = buffer.createDataView();
-    assert(readString(buffer, 0x00, 0x04, false) === 'M\x00\AT');
+    assert(readString(buffer, 0x00, 0x04, false) === 'M\x00AT');
     const duration = view.getUint16(0x04, true);
     const flag = view.getUint8(0x06);
+    // Seems to be completely junk.
     const texMtxMode = view.getUint8(0x07);
 
     const enum ComponentFlag {
@@ -129,7 +130,11 @@ export const enum LoopMode {
     ONCE, REPEAT
 }
 
-function getAnimFrame(anim: SRT0, frame: number, loopMode: LoopMode): number {
+export interface AnimationBase {
+    duration: number;
+}
+
+export function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopMode): number {
     // Be careful of floating point precision.
     const lastFrame = anim.duration;
     if (loopMode === LoopMode.ONCE) {

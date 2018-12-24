@@ -6,6 +6,7 @@ import * as CX from '../compression/CX';
 import * as NARC from './narc';
 import * as NSBMD from './nsbmd';
 import * as NSBTA from './nsbta';
+import * as NSBTP from './nsbtp';
 import * as NSBTX from './nsbtx';
 
 import { fetchData } from '../fetch';
@@ -55,6 +56,11 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const courseBta = courseBtaFile !== undefined ? NSBTA.parse(courseBtaFile.buffer) : null;
             if (courseBta !== null)
                 courseRenderer.bindSRT0(courseBta.srt0);
+
+            const courseBtpFile = courseNARC.files.find((file) => file.path === '/course_model.nsbtp');
+            const courseBtp = courseBtpFile !== undefined ? NSBTP.parse(courseBtpFile.buffer) : null;
+            if (courseBtp !== null)
+                courseRenderer.bindPAT0(device, courseBtp.pat0);
 
             if (skyboxRenderer !== null) {
                 const skyboxBtaFile = courseNARC.files.find((file) => file.path === '/course_model_V.nsbta');

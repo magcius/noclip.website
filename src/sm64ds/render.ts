@@ -123,6 +123,7 @@ export class Command_VertexData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public templateRenderInst: GfxRenderInst;
+    public renderInsts: GfxRenderInst[] = [];
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
 
@@ -143,7 +144,7 @@ export class Command_VertexData {
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, byteStride: NITRO_GX.VERTEX_BYTES },
         ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 });
-        
+
         this.templateRenderInst.inputState = this.inputState;
         this.templateRenderInst.name = name;
 
@@ -152,6 +153,7 @@ export class Command_VertexData {
         for (let i = 0; i < this.vertexData.drawCalls.length; i++) {
             const renderInst = renderInstBuilder.pushRenderInst();
             renderInst.drawIndexes(this.vertexData.drawCalls[i].numIndices, this.vertexData.drawCalls[i].startIndex);
+            this.renderInsts.push(renderInst);
         }
 
         renderInstBuilder.popTemplateRenderInst();
