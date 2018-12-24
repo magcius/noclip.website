@@ -132,7 +132,7 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.bfres'))
             return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(gl, buffer));
 
-            if (file.name.endsWith('.szs') || file.name.endsWith('.rarc'))
+        if (file.name.endsWith('.szs') || file.name.endsWith('.rarc') || file.name.endsWith('.bmd'))
             return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(gl, buffer));
 
         return null;
@@ -205,6 +205,7 @@ class SceneLoader {
             }
         }
 
+        console.error(`Cannot create scene. Probably an unsupported file extension.`);
         throw "whoops";
     }
 }
