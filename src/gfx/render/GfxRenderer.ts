@@ -28,15 +28,15 @@ import { GfxRenderCache } from "./GfxRenderCache";
 // GfxRenderInstViewRenderer is in charge of wrangling all of the GfxRenderInsts, sorting them, and then
 // executing the draws on the platform layer.
 
-
-// Suggested values for the "layer" of makeSortKey. These are rough groups, and you can define your
-// orders within the rough groups (e.g. you might use BACKGROUND + 1, or BACKGROUND + 2).
-// TRANSLUCENT is meant to be used as a bitflag, and changes the behavior of the generic sort key
+// Suggested values for the "layer" of makeSortKey. These are rough groups, and you can define your own
+// ordering within the rough groups (e.g. you might use BACKGROUND + 1, or BACKGROUND + 2).
+// TRANSLUCENT is meant to be used as a bitflag. It's special as it changes the behavior of the generic sort key
 // functions like makeSortKey and setSortKeyDepth.
 export const enum GfxRendererLayer {
-    BACKGROUND = 0x00,
-    ALPHA_TEST = 0x10,
-    OPAQUE = 0x20,
+    BACKGROUND  = 0x00,
+    ALPHA_TEST  = 0x10,
+    OPAQUE      = 0x20,
+    // We can't use 0x80 unfortunately because the high bit can't be set, as it'll be treated as a sign bit :(
     TRANSLUCENT = 0x40,
 }
 
@@ -185,6 +185,13 @@ export class GfxRenderInst {
     }
 }
 
+function compareRenderInsts(a: GfxRenderInst, b: GfxRenderInst): number {
+    // Put invisible items to the end of the list.
+    if (a.visible !== b.visible) return a.visible ? -1 : 1;
+    if (a.passMask !== b.passMask) return a.passMask - b.passMask;
+    return a.sortKey - b.sortKey;
+}
+
 export class GfxRenderInstViewRenderer {
     private viewportWidth: number;
     private viewportHeight: number;
@@ -225,7 +232,7 @@ export class GfxRenderInstViewRenderer {
         }
 
         // Sort our instances.
-        this.renderInsts.sort((a, b) => a.sortKey - b.sortKey);
+        this.renderInsts.sort(compareRenderInsts);
 
         passRenderer.setViewport(this.viewportWidth, this.viewportHeight);
 
@@ -235,10 +242,12 @@ export class GfxRenderInstViewRenderer {
         for (let i = 0; i < this.renderInsts.length; i++) {
             const renderInst = this.renderInsts[i];
 
-            if ((renderInst.passMask & passMask) === 0)
-                continue;
-
+            // Invisible items should *always* be grouped up at the end of the list.
+            // Once we hit an invisible item, we can stop.
             if (!renderInst.visible)
+                break;
+
+            if ((renderInst.passMask & passMask) === 0)
                 continue;
 
             if (renderInst.samplerBindingsDirty)
