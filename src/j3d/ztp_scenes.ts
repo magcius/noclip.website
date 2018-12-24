@@ -12,6 +12,7 @@ import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
 import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { TextureOverride } from '../TextureHolder';
+import { readString, leftPad } from '../util';
 
 class ZTPTextureHolder extends J3DTextureHolder {
     protected findTextureEntryIndex(name: string): number {
@@ -157,21 +158,46 @@ class TwilightPrincessRenderer implements Viewer.MainScene {
     }
 }
 
+function getRoomListFromDZS(buffer: ArrayBufferSlice): number[] {
+    const view = buffer.createDataView();
+    const chunkCount = view.getUint32(0x00);
+
+    const chunkOffsets = new Map<string, { offs: number, count: number }>();
+    let chunkTableIdx = 0x04;
+    for (let i = 0; i < chunkCount; i++) {
+        const type = readString(buffer, chunkTableIdx + 0x00, 0x04);
+        const count = view.getUint32(chunkTableIdx + 0x04);
+        const offs = view.getUint32(chunkTableIdx + 0x08);
+        chunkOffsets.set(type, { offs, count });
+        chunkTableIdx += 0x0C;
+    }
+
+    const { offs: rtblOffs, count: rtblCount } = chunkOffsets.get('RTBL');
+    let roomList = new Set<number>();
+    for (let i = 0; i < rtblCount; i++) {
+        const rtblEntryOffs = view.getUint32(rtblOffs + i * 0x04);
+        const roomTableCount = view.getUint8(rtblEntryOffs + 0x00);
+        if (roomTableCount === 0)
+            continue;
+        const roomTableOffs = view.getUint32(rtblEntryOffs + 0x04);
+        roomList.add(view.getUint8(roomTableOffs + 0x00) & 0x3F);
+    }
+    return [... roomList.values()];
+}
+
 class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
-    constructor(public name: string, public folder: string, public roomPaths: string[]) {
+    constructor(public name: string, public folder: string) {
         this.id = this.folder;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
         const basePath = `data/j3d/ztp/${this.folder}`;
-        const paths = [`STG_00.arc`, ...this.roomPaths].map((path) => `${basePath}/${path}`);
-
         const textureHolder = new ZTPTextureHolder();
 
-        return Progressable.all(paths.map(path => this.fetchRarc(path))).then((rarcs: RARC.RARC[]): Viewer.MainScene => {
-            const stageRarc = rarcs.shift();
+        return this.fetchRarc(`${basePath}/STG_00.arc`).then((stageRarc: RARC.RARC) => {
+            // Load stage shared textures.
             const texcFolder = stageRarc.findDir(`texc`);
             const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
             const extraTextures = extraTextureFiles.map((file) => {
@@ -193,23 +219,30 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 return scene;
             }).filter((s) => !!s);
 
-            const roomRarcs: RARC.RARC[] = rarcs;
-            const roomScenes_: BMDModelInstance[][] = roomRarcs.map((rarc: RARC.RARC, i: number) => {
-                const rarcBasename = this.roomPaths[i].split('.')[0];
-                return createScenesFromRARC(gl, textureHolder, rarcBasename, rarc);
-            });
-            const roomScenes: BMDModelInstance[] = [];
-            roomScenes_.forEach((scenes: BMDModelInstance[]) => roomScenes.push.apply(roomScenes, scenes));
+            // Pull out the dzs, get the scene definition.
+            const dzsBuffer = stageRarc.findFile(`dzs/stage.dzs`).buffer;
 
-            return new TwilightPrincessRenderer(textureHolder, stageRarc, roomRarcs, skyboxScenes, roomScenes);
+            // TODO(jstpierre): This room list isn't quite right. How does the original game work?
+            const roomList = getRoomListFromDZS(dzsBuffer);
+            const roomPaths = roomList.map((i) => `${basePath}/R${leftPad(''+i, 2)}_00.arc`);
+
+            return Progressable.all(roomPaths.map(path => this.fetchRarc(path))).then((roomRarcs: (RARC.RARC | null)[]) => {
+                const roomScenes_: BMDModelInstance[][] = roomRarcs.filter(r => !!r).map((rarc: RARC.RARC, i: number) => {
+                    const rarcBasename = roomPaths[i].split('.')[0];
+                    return createScenesFromRARC(gl, textureHolder, rarcBasename, rarc);
+                });
+                const roomScenes: BMDModelInstance[] = [];
+                roomScenes_.forEach((scenes: BMDModelInstance[]) => roomScenes.push.apply(roomScenes, scenes));
+
+                return new TwilightPrincessRenderer(textureHolder, stageRarc, roomRarcs, skyboxScenes, roomScenes);
+            });
         });
     }
 
-    private fetchRarc(path: string): Progressable<RARC.RARC> {
+    private fetchRarc(path: string): Progressable<RARC.RARC | null> {
         return fetchData(path).then((buffer: ArrayBufferSlice) => {
-            return Yaz0.decompress(buffer);
-        }).then((buffer: ArrayBufferSlice) => {
-            return RARC.parse(buffer);
+            if (buffer.byteLength === 0) return null;
+            return Yaz0.decompress(buffer).then((buffer: ArrayBufferSlice) => RARC.parse(buffer));
         });
     }
 }
@@ -218,17 +251,85 @@ const id = "ztp";
 const name = "The Legend of Zelda: Twilight Princess";
 
 const sceneDescs: Viewer.SceneDesc[] = [
-    new TwilightPrincessSceneDesc("Forest Temple", "D_MN05", ["R02_00.arc", "R03_00.arc", "R04_00.arc", "R05_00.arc", "R07_00.arc", "R09_00.arc", "R10_00.arc", "R11_00.arc", "R12_00.arc", "R19_00.arc", "R22_00.arc", "R00_00.arc", "R01_00.arc"]),
-    new TwilightPrincessSceneDesc("Goron Mines", "D_MN04", ["R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R16_00.arc", "R17_00.arc", "R01_00.arc", "R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R07_00.arc", "R09_00.arc"]),
-    new TwilightPrincessSceneDesc("Lakebed Temple", "D_MN01", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R03_00.arc", "R05_00.arc", "R06_00.arc", "R07_00.arc", "R08_00.arc", "R09_00.arc", "R10_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc"]),
-    new TwilightPrincessSceneDesc("Arbiter's Grounds", "D_MN10", ["R01_00.arc", "R02_00.arc", "R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R07_00.arc", "R08_00.arc", "R09_00.arc", "R10_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R15_00.arc", "R16_00.arc", "R00_00.arc"]),
-    new TwilightPrincessSceneDesc("Snowpeak Ruins", "D_MN11", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R07_00.arc", "R08_00.arc", "R09_00.arc", "R11_00.arc", "R13_00.arc"]),
-    new TwilightPrincessSceneDesc("Temple of Time", "D_MN06", ["R08_00.arc", "R00_00.arc", "R01_00.arc", "R02_00.arc", "R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R07_00.arc"]),
-    new TwilightPrincessSceneDesc("City in the Sky", "D_MN07", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R07_00.arc", "R08_00.arc", "R10_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R15_00.arc", "R16_00.arc"]),
-    new TwilightPrincessSceneDesc("Palace of Twilight", "D_MN08", ["R00_00.arc", "R01_00.arc", "R02_00.arc", "R04_00.arc", "R05_00.arc", "R07_00.arc", "R08_00.arc", "R09_00.arc", "R10_00.arc", "R11_00.arc"]),
-    new TwilightPrincessSceneDesc("Hyrule Castle", "D_MN09", ["R03_00.arc", "R04_00.arc", "R05_00.arc", "R06_00.arc", "R08_00.arc", "R09_00.arc", "R11_00.arc", "R12_00.arc", "R13_00.arc", "R14_00.arc", "R15_00.arc", "R01_00.arc", "R02_00.arc"]),
-    new TwilightPrincessSceneDesc("Hyrule Field", "F_SP102", ["R00_00.arc"]),
-    new TwilightPrincessSceneDesc("Fishing Pond", "F_SP127", ["R00_00.arc"]),
+    new TwilightPrincessSceneDesc("Forest Temple", "D_MN05"),
+    new TwilightPrincessSceneDesc("Goron Mines", "D_MN04"),
+    new TwilightPrincessSceneDesc("Lakebed Temple", "D_MN01"),
+    new TwilightPrincessSceneDesc("Arbiter's Grounds", "D_MN10"),
+    new TwilightPrincessSceneDesc("Snowpeak Ruins", "D_MN11"),
+    new TwilightPrincessSceneDesc("Temple of Time", "D_MN06"),
+    new TwilightPrincessSceneDesc("City in the Sky", "D_MN07"),
+    new TwilightPrincessSceneDesc("Palace of Twilight", "D_MN08"),
+    new TwilightPrincessSceneDesc("Hyrule Castle", "D_MN09"),
+    new TwilightPrincessSceneDesc("Hyrule Field", "F_SP102"),
+    new TwilightPrincessSceneDesc("Fishing Pond", "F_SP127"),
+
+    new TwilightPrincessSceneDesc("D_MN01A", "D_MN01A"),
+    new TwilightPrincessSceneDesc("D_MN01B", "D_MN01B"),
+    new TwilightPrincessSceneDesc("D_MN04A", "D_MN04A"),
+    new TwilightPrincessSceneDesc("D_MN04B", "D_MN04B"),
+    new TwilightPrincessSceneDesc("D_MN05A", "D_MN05A"),
+    new TwilightPrincessSceneDesc("D_MN05B", "D_MN05B"),
+    new TwilightPrincessSceneDesc("D_MN06A", "D_MN06A"),
+    new TwilightPrincessSceneDesc("D_MN06B", "D_MN06B"),
+    new TwilightPrincessSceneDesc("D_MN07A", "D_MN07A"),
+    new TwilightPrincessSceneDesc("D_MN07B", "D_MN07B"),
+    new TwilightPrincessSceneDesc("D_MN08A", "D_MN08A"),
+    new TwilightPrincessSceneDesc("D_MN08B", "D_MN08B"),
+    new TwilightPrincessSceneDesc("D_MN08C", "D_MN08C"),
+    new TwilightPrincessSceneDesc("D_MN08D", "D_MN08D"),
+    new TwilightPrincessSceneDesc("D_MN09A", "D_MN09A"),
+    new TwilightPrincessSceneDesc("D_MN09B", "D_MN09B"),
+    new TwilightPrincessSceneDesc("D_MN09C", "D_MN09C"),
+    new TwilightPrincessSceneDesc("D_MN10A", "D_MN10A"),
+    new TwilightPrincessSceneDesc("D_MN10B", "D_MN10B"),
+    new TwilightPrincessSceneDesc("D_MN11A", "D_MN11A"),
+    new TwilightPrincessSceneDesc("D_MN11B", "D_MN11B"),
+    new TwilightPrincessSceneDesc("D_SB00", "D_SB00"),
+    new TwilightPrincessSceneDesc("D_SB01", "D_SB01"),
+    new TwilightPrincessSceneDesc("D_SB02", "D_SB02"),
+    new TwilightPrincessSceneDesc("D_SB03", "D_SB03"),
+    new TwilightPrincessSceneDesc("D_SB04", "D_SB04"),
+    new TwilightPrincessSceneDesc("D_SB05", "D_SB05"),
+    new TwilightPrincessSceneDesc("D_SB06", "D_SB06"),
+    new TwilightPrincessSceneDesc("D_SB07", "D_SB07"),
+    new TwilightPrincessSceneDesc("D_SB08", "D_SB08"),
+    new TwilightPrincessSceneDesc("D_SB09", "D_SB09"),
+    new TwilightPrincessSceneDesc("D_SB10", "D_SB10"),
+    new TwilightPrincessSceneDesc("F_SP00", "F_SP00"),
+    new TwilightPrincessSceneDesc("F_SP103", "F_SP103"),
+    new TwilightPrincessSceneDesc("F_SP104", "F_SP104"),
+    new TwilightPrincessSceneDesc("F_SP108", "F_SP108"),
+    new TwilightPrincessSceneDesc("F_SP109", "F_SP109"),
+    new TwilightPrincessSceneDesc("F_SP110", "F_SP110"),
+    new TwilightPrincessSceneDesc("F_SP111", "F_SP111"),
+    new TwilightPrincessSceneDesc("F_SP112", "F_SP112"),
+    new TwilightPrincessSceneDesc("F_SP113", "F_SP113"),
+    new TwilightPrincessSceneDesc("F_SP114", "F_SP114"),
+    new TwilightPrincessSceneDesc("F_SP115", "F_SP115"),
+    new TwilightPrincessSceneDesc("F_SP116", "F_SP116"),
+    new TwilightPrincessSceneDesc("F_SP117", "F_SP117"),
+    new TwilightPrincessSceneDesc("F_SP118", "F_SP118"),
+    new TwilightPrincessSceneDesc("F_SP121", "F_SP121"),
+    new TwilightPrincessSceneDesc("F_SP122", "F_SP122"),
+    new TwilightPrincessSceneDesc("F_SP123", "F_SP123"),
+    new TwilightPrincessSceneDesc("F_SP124", "F_SP124"),
+    new TwilightPrincessSceneDesc("F_SP125", "F_SP125"),
+    new TwilightPrincessSceneDesc("F_SP126", "F_SP126"),
+    new TwilightPrincessSceneDesc("F_SP128", "F_SP128"),
+    new TwilightPrincessSceneDesc("F_SP200", "F_SP200"),
+    new TwilightPrincessSceneDesc("R_SP01", "R_SP01"),
+    new TwilightPrincessSceneDesc("R_SP107", "R_SP107"),
+    new TwilightPrincessSceneDesc("R_SP108", "R_SP108"),
+    new TwilightPrincessSceneDesc("R_SP109", "R_SP109"),
+    new TwilightPrincessSceneDesc("R_SP110", "R_SP110"),
+    new TwilightPrincessSceneDesc("R_SP116", "R_SP116"),
+    new TwilightPrincessSceneDesc("R_SP127", "R_SP127"),
+    new TwilightPrincessSceneDesc("R_SP128", "R_SP128"),
+    new TwilightPrincessSceneDesc("R_SP160", "R_SP160"),
+    new TwilightPrincessSceneDesc("R_SP161", "R_SP161"),
+    new TwilightPrincessSceneDesc("R_SP209", "R_SP209"),
+    new TwilightPrincessSceneDesc("R_SP300", "R_SP300"),
+    new TwilightPrincessSceneDesc("R_SP301", "R_SP301"),    
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
