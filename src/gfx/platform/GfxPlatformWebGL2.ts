@@ -279,7 +279,7 @@ class Growable<T extends ArrayBufferView2> {
     }
 }
 
-const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setBindings, setPipeline, setInputState, draw, drawIndexed, endPass, invalid = 0x1234 };
+const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setBindings, setPipeline, setInputState, setStencilRef, draw, drawIndexed, endPass, invalid = 0x1234 };
 class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
@@ -298,6 +298,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
     public setBindings(n: number, r: GfxBindings, o: number[]) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); this.pu32(o.length); for (let i = 0; i < o.length; i++) this.pu32(o[i]); }
     public setInputState(r: GfxInputState | null) { this.pcmd(RenderPassCmd.setInputState); this.po(r); }
+    public setStencilRef(v: number)               { this.pcmd(RenderPassCmd.setStencilRef); this.pf32(v); }
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
     public endPass(r: GfxTexture | null)          { this.pcmd(RenderPassCmd.endPass); this.po(r); }
@@ -338,22 +339,6 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
 }
 
 export function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaStateDescriptor, newMegaState: GfxMegaStateDescriptor): void {
-    if (currentMegaState.depthWrite !== newMegaState.depthWrite) {
-        gl.depthMask(newMegaState.depthWrite);
-        currentMegaState.depthWrite = newMegaState.depthWrite;
-    }
-
-    if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
-        if (currentMegaState.depthCompare === GfxCompareMode.ALWAYS)
-            gl.enable(gl.DEPTH_TEST);
-        else if (newMegaState.depthCompare === GfxCompareMode.ALWAYS)
-            gl.disable(gl.DEPTH_TEST);
-
-        if (newMegaState.depthCompare !== GfxCompareMode.ALWAYS)
-            gl.depthFunc(newMegaState.depthCompare);
-        currentMegaState.depthCompare = newMegaState.depthCompare;
-    }
-
     if (currentMegaState.blendMode !== newMegaState.blendMode) {
         if (currentMegaState.blendMode === GfxBlendMode.NONE)
             gl.enable(gl.BLEND);
@@ -370,6 +355,42 @@ export function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: Gfx
         gl.blendFunc(newMegaState.blendSrcFactor, newMegaState.blendDstFactor);
         currentMegaState.blendSrcFactor = newMegaState.blendSrcFactor;
         currentMegaState.blendDstFactor = newMegaState.blendDstFactor;
+    }
+
+    if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
+        if (currentMegaState.depthCompare === GfxCompareMode.ALWAYS)
+            gl.enable(gl.DEPTH_TEST);
+        else if (newMegaState.depthCompare === GfxCompareMode.ALWAYS)
+            gl.disable(gl.DEPTH_TEST);
+
+        if (newMegaState.depthCompare !== GfxCompareMode.ALWAYS)
+            gl.depthFunc(newMegaState.depthCompare);
+        currentMegaState.depthCompare = newMegaState.depthCompare;
+    }
+
+    if (currentMegaState.depthWrite !== newMegaState.depthWrite) {
+        gl.depthMask(newMegaState.depthWrite);
+        currentMegaState.depthWrite = newMegaState.depthWrite;
+    }
+
+    if (currentMegaState.stencilCompare !== newMegaState.stencilCompare) {
+        // TODO(jstpierre): Store the stencil ref somewhere.
+        const stencilRef = gl.getParameter(gl.STENCIL_REF);
+        gl.stencilFunc(newMegaState.stencilCompare, stencilRef, 0xFF);
+        currentMegaState.stencilCompare = newMegaState.stencilCompare;
+    }
+
+    if (currentMegaState.stencilWrite !== newMegaState.stencilWrite) {
+        gl.stencilMask(newMegaState.stencilWrite ? 0xFF : 0x00);
+        currentMegaState.stencilWrite = newMegaState.stencilWrite;
+    }
+
+    if (currentMegaState.stencilWrite) {
+        if (currentMegaState.stencilFailOp !== newMegaState.stencilFailOp || currentMegaState.stencilPassOp !== newMegaState.stencilPassOp) {
+            gl.stencilOp(newMegaState.stencilFailOp, gl.KEEP, newMegaState.stencilPassOp);
+            currentMegaState.stencilFailOp = newMegaState.stencilFailOp;
+            currentMegaState.stencilPassOp = newMegaState.stencilPassOp;
+        }
     }
 
     if (currentMegaState.cullMode !== newMegaState.cullMode) {
@@ -957,6 +978,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 this.setPipeline(gfxr[igfxr++] as GfxRenderPipeline);
             } else if (cmd === RenderPassCmd.setInputState) {
                 this.setInputState(gfxr[igfxr++] as GfxInputState | null);
+            } else if (cmd === RenderPassCmd.setStencilRef) {
+                this.setStencilRef(f32[if32++]);
             } else if (cmd === RenderPassCmd.draw) {
                 this.draw(u32[iu32++], u32[iu32++]);
             } else if (cmd === RenderPassCmd.drawIndexed) {
@@ -1147,6 +1170,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             assert(this._currentPipeline.inputLayout === null);
             this._bindVAO(null);
         }
+    }
+
+    private setStencilRef(value: number): void {
+        const gl = this.gl;
+        gl.stencilFunc(this._currentMegaState.stencilCompare, value, 0xFF);
     }
 
     private draw(count: number, firstVertex: number): void {

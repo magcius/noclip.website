@@ -3,7 +3,6 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-// TODO(jstpierre): Remove the RenderFlags system.
 import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 import { DeviceProgram, DeviceProgramReflection } from "../../Program";
@@ -144,12 +143,28 @@ export interface GfxInputLayoutDescriptor {
     indexBufferFormat: GfxFormat | null;
 }
 
+export enum GfxStencilOp {
+    KEEP            = WebGL2RenderingContext.KEEP,
+    ZERO            = WebGL2RenderingContext.ZERO,
+    REPLACE         = WebGL2RenderingContext.REPLACE,
+    INVERT          = WebGL2RenderingContext.INVERT,
+    INCREMENT_CLAMP = WebGL2RenderingContext.INCR,
+    DECREMENT_CLAMP = WebGL2RenderingContext.DECR,
+    INCREMENT_WRAP  = WebGL2RenderingContext.INCR_WRAP,
+    DECREMENT_WRAP  = WebGL2RenderingContext.DECR_WRAP,
+}
+
 export interface GfxMegaStateDescriptor {
+    // TODO(jstpierre): Separate color/alpha, MRT support, write mask.
     blendMode: GfxBlendMode;
     blendSrcFactor: GfxBlendFactor;
     blendDstFactor: GfxBlendFactor;
     depthCompare: GfxCompareMode;
     depthWrite: boolean;
+    stencilCompare: GfxCompareMode;
+    stencilWrite: boolean;
+    stencilFailOp: GfxStencilOp;
+    stencilPassOp: GfxStencilOp;
     cullMode: GfxCullMode;
     frontFace: GfxFrontFaceMode;
     polygonOffset: boolean;
@@ -214,6 +229,7 @@ export interface GfxRenderPass {
     setPipeline(pipeline: GfxRenderPipeline): void;
     setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicWordOffsets: number[]): void;
     setInputState(inputState: GfxInputState | null): void;
+    setStencilRef(value: number): void;
 
     // Draw commands.
     draw(vertexCount: number, firstVertex: number): void;
