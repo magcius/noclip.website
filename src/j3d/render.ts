@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx } from '../gx/gx_render';
 
 import { RenderFlags, RenderState } from '../render';
-import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera } from '../Camera';
+import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
@@ -23,32 +23,6 @@ export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
         if (bmt)
             this.addTextures(gl, bmt.tex1.textureDatas);
     }
-}
-
-function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    const cot = 1 / Math.tan(fov / 2);
-
-    dst[0] = (cot / aspect) * scaleS;
-    dst[4] = 0.0;
-    dst[8] = -transS;
-    dst[12] = 0.0;
-
-    dst[1] = 0.0;
-    dst[5] = cot * scaleT;
-    dst[9] = -transT;
-    dst[13] = 0.0;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = -1.0;
-    dst[14] = 0.0;
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
 }
 
 class ShapeInstanceState {
@@ -232,8 +206,8 @@ export class Command_Material {
             switch (texMtx.type) {
             case 0x00:
             case 0x01: // Delfino Plaza
-            case 0x0B: // Luigi Circuit
             case 0x08: // Peach Beach.
+            case 0x0B: // Luigi Circuit
                 // No mapping.
                 mat4.identity(dst);
                 break;
@@ -272,8 +246,7 @@ export class Command_Material {
                 texProjPerspMtx(scratch, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
                 mat4.mul(dst, scratch, dst);
                 break;
-            case 0x09: // Rainbow Road
-                // Perspective.
+            case 0x09: // Peach's Castle Garden.
                 // Don't apply effectMatrix to perspective. It appears to be
                 // a projection matrix preconfigured for GC.
                 // mat4.mul(dst, texMtx.effectMatrix, dst);
