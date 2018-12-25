@@ -339,6 +339,11 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
 }
 
 export function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaStateDescriptor, newMegaState: GfxMegaStateDescriptor): void {
+    if (currentMegaState.colorWrite !== newMegaState.colorWrite) {
+        gl.colorMask(newMegaState.colorWrite, newMegaState.colorWrite, newMegaState.colorWrite, newMegaState.colorWrite);
+        currentMegaState.colorWrite = newMegaState.colorWrite;
+    }
+
     if (currentMegaState.blendMode !== newMegaState.blendMode) {
         if (currentMegaState.blendMode === GfxBlendMode.NONE)
             gl.enable(gl.BLEND);
@@ -386,9 +391,8 @@ export function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: Gfx
     }
 
     if (currentMegaState.stencilWrite) {
-        if (currentMegaState.stencilFailOp !== newMegaState.stencilFailOp || currentMegaState.stencilPassOp !== newMegaState.stencilPassOp) {
-            gl.stencilOp(newMegaState.stencilFailOp, gl.KEEP, newMegaState.stencilPassOp);
-            currentMegaState.stencilFailOp = newMegaState.stencilFailOp;
+        if (currentMegaState.stencilPassOp !== newMegaState.stencilPassOp) {
+            gl.stencilOp(gl.KEEP, gl.KEEP, newMegaState.stencilPassOp);
             currentMegaState.stencilPassOp = newMegaState.stencilPassOp;
         }
     }

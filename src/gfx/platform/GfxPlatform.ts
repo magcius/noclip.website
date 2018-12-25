@@ -155,7 +155,8 @@ export enum GfxStencilOp {
 }
 
 export interface GfxMegaStateDescriptor {
-    // TODO(jstpierre): Separate color/alpha, MRT support, write mask.
+    // TODO(jstpierre): Separate color/alpha, MRT support.
+    colorWrite: boolean;
     blendMode: GfxBlendMode;
     blendSrcFactor: GfxBlendFactor;
     blendDstFactor: GfxBlendFactor;
@@ -163,7 +164,6 @@ export interface GfxMegaStateDescriptor {
     depthWrite: boolean;
     stencilCompare: GfxCompareMode;
     stencilWrite: boolean;
-    stencilFailOp: GfxStencilOp;
     stencilPassOp: GfxStencilOp;
     cullMode: GfxCullMode;
     frontFace: GfxFrontFaceMode;
