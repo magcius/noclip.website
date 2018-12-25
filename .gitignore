@@ -47,6 +47,7 @@ Temporary Items
 .apdisk
 
 node_modules
+yarn-error.log
 
 assemblyscript/
 parcel/
