@@ -2,6 +2,7 @@
 import { GfxMegaStateDescriptor, GfxBlendMode, GfxCompareMode, GfxCullMode, GfxFrontFaceMode, GfxBlendFactor, GfxStencilOp } from "../platform/GfxPlatform";
 
 export interface RenderFlagsPossibilities {
+    colorWrite?: boolean;
     blendMode?: GfxBlendMode;
     blendSrcFactor?: GfxBlendFactor;
     blendDstFactor?: GfxBlendFactor;
@@ -17,6 +18,7 @@ export interface RenderFlagsPossibilities {
 }
 
 export class RenderFlags {
+    public colorWrite: boolean;
     public blendMode: GfxBlendMode;
     public blendSrcFactor: GfxBlendFactor;
     public blendDstFactor: GfxBlendFactor;
@@ -24,7 +26,6 @@ export class RenderFlags {
     public depthWrite: boolean;
     public stencilCompare: GfxCompareMode;
     public stencilWrite: boolean;
-    public stencilFailOp: GfxStencilOp;
     public stencilPassOp: GfxStencilOp;
     public cullMode: GfxCullMode;
     public frontFace: GfxFrontFaceMode;
@@ -40,6 +41,7 @@ export class RenderFlags {
     }
 
     public set(other: RenderFlagsPossibilities): void {
+        this.colorWrite = this.resolveField(other.colorWrite, this.colorWrite);
         this.blendMode = this.resolveField(other.blendMode, this.blendMode);
         this.blendSrcFactor = this.resolveField(other.blendSrcFactor, this.blendSrcFactor);
         this.blendDstFactor = this.resolveField(other.blendDstFactor, this.blendDstFactor);
@@ -47,7 +49,6 @@ export class RenderFlags {
         this.depthWrite = this.resolveField(other.depthWrite, this.depthWrite);
         this.stencilCompare = this.resolveField(other.stencilCompare, this.stencilCompare);
         this.stencilWrite = this.resolveField(other.stencilWrite, this.stencilWrite);
-        this.stencilFailOp = this.resolveField(other.stencilFailOp, this.stencilFailOp);
         this.stencilPassOp = this.resolveField(other.stencilPassOp, this.stencilPassOp);
         this.cullMode = this.resolveField(other.cullMode, this.cullMode);
         this.frontFace = this.resolveField(other.frontFace, this.frontFace);
@@ -60,6 +61,7 @@ export class RenderFlags {
 }
 
 export const defaultFlags = new RenderFlags(null);
+defaultFlags.colorWrite = true;
 defaultFlags.blendMode = GfxBlendMode.NONE;
 defaultFlags.blendSrcFactor = GfxBlendFactor.ONE;
 defaultFlags.blendDstFactor = GfxBlendFactor.ZERO;
@@ -67,7 +69,6 @@ defaultFlags.depthWrite = true;
 defaultFlags.depthCompare = GfxCompareMode.LEQUAL;
 defaultFlags.stencilCompare = GfxCompareMode.NEVER;
 defaultFlags.stencilWrite = false;
-defaultFlags.stencilFailOp = GfxStencilOp.KEEP;
 defaultFlags.stencilPassOp = GfxStencilOp.KEEP;
 defaultFlags.cullMode = GfxCullMode.NONE;
 defaultFlags.frontFace = GfxFrontFaceMode.CCW;
