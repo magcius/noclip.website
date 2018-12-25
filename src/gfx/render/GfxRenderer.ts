@@ -95,19 +95,22 @@ export function setSortKeyDepth(sortKey: number, depthKey: number): number {
 
 function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     dst.sortKey = src.sortKey;
-    dst.passMask = src.passMask;
     dst.gfxProgram = src.gfxProgram;
-    dst.samplerBindings = src.samplerBindings.slice();
     dst.inputState = src.inputState;
     dst._pipeline = src._pipeline;
+    dst.samplerBindings = src.samplerBindings.slice();
     dst.uniformBufferOffsets = src.uniformBufferOffsets.slice();
     dst.renderFlags = new RenderFlags(src.renderFlags);
+    if (src._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_LATE)
+        dst.setSamplerBindingsLate();
 }
 
 const enum GfxRenderInstFlags {
-    DESTROYED    = 1 << 0,
-    VISIBLE      = 1 << 1,
-    DRAW_INDEXED = 1 << 2,
+    DESTROYED              = 1 << 0,
+    VISIBLE                = 1 << 1,
+    DRAW_INDEXED           = 1 << 2,
+    SAMPLER_BINDINGS_LATE  = 1 << 3,
+    SAMPLER_BINDINGS_DIRTY = 1 << 4,
 }
 
 function setBitValue(bucket: number, bit: number, v: boolean): number {
@@ -127,12 +130,14 @@ export class GfxRenderInst {
     public sortKey: number = 0;
 
     // The pass mask. Used in conjunction with GfxRenderInstViewer.executeOnPass.
-    public passMask: number = 1;
+    public passMask: number | null = null;
 
     // Pipeline building.
     public inputState: GfxInputState | null = null;
     public gfxProgram: GfxProgram | null = null;
     public renderFlags: RenderFlags;
+
+    // Bindings.
     public uniformBufferOffsets: number[] = [];
     public samplerBindings: GfxSamplerBinding[] = [];
 
@@ -149,24 +154,23 @@ export class GfxRenderInst {
     // The pipeline to use for this RenderInst.
     public _pipeline: GfxRenderPipeline | null = null;
 
-    // Pipeline building.
+    // Bindings state.
     public _bindings: GfxBindings[] = [];
     public _bindingLayouts: GfxBindingLayoutDescriptor[] = [];
     public _uniformBufferOffsetGroups: number[][] = [];
     public _uniformBufferBindings: GfxBufferBinding[] = [];
-    public _samplerBindingsDirty: boolean = false;
 
-    constructor(other: GfxRenderInst = null) {
-        if (other)
-            assignRenderInst(this, other);
+    constructor(public parentRenderInst: GfxRenderInst = null) {
+        if (parentRenderInst !== null)
+            assignRenderInst(this, parentRenderInst);
     }
 
-    private setFlag(flag: GfxRenderInstFlags, v: boolean): void {
+    public _setFlag(flag: GfxRenderInstFlags, v: boolean): void {
         this._flags = setBitValue(this._flags, flag, v);
     }
 
     public set visible(v: boolean) {
-        this.setFlag(GfxRenderInstFlags.VISIBLE, v);
+        this._setFlag(GfxRenderInstFlags.VISIBLE, v);
     }
 
     public get visible(): boolean {
@@ -174,23 +178,47 @@ export class GfxRenderInst {
     }
 
     public destroy(): void {
-        this.setFlag(GfxRenderInstFlags.DESTROYED, true);
+        this._setFlag(GfxRenderInstFlags.DESTROYED, true);
+    }
+
+    public _destroyPipelineBuildStuff(): void {
+        this.gfxProgram = null;
+        this.renderFlags = null;
     }
 
     public setPipelineDirect(pipeline: GfxRenderPipeline): void {
+        this._destroyPipelineBuildStuff();
         this._pipeline = pipeline;
     }
 
     public drawTriangles(vertexCount: number, firstVertex: number = 0) {
-        this.setFlag(GfxRenderInstFlags.DRAW_INDEXED, false);
+        this._setFlag(GfxRenderInstFlags.DRAW_INDEXED, false);
         this._drawStart = firstVertex;
         this._drawCount = vertexCount;
     }
 
     public drawIndexes(indexCount: number, firstIndex: number = 0) {
-        this.setFlag(GfxRenderInstFlags.DRAW_INDEXED, true);
+        this._setFlag(GfxRenderInstFlags.DRAW_INDEXED, true);
         this._drawStart = firstIndex;
         this._drawCount = indexCount;
+    }
+
+    public getUniformBufferOffset(i: number): number {
+        if (this.uniformBufferOffsets === null)
+            return this.parentRenderInst.getUniformBufferOffset(i);
+        else
+            return this.uniformBufferOffsets[i];
+    }
+
+    public getPassMask(): number {
+        if (this.passMask === null)
+            return this.parentRenderInst.getPassMask();
+        else
+            return this.passMask;
+    }
+
+    public setSamplerBindingsLate(): void {
+        this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_LATE, true);
     }
 
     public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
@@ -198,7 +226,7 @@ export class GfxRenderInst {
             const j = firstSampler + i;
             if (!this.samplerBindings[j] || this.samplerBindings[j].texture !== m[i].texture || this.samplerBindings[j].sampler !== m[i].sampler) {
                 this.samplerBindings[j] = m[i];
-                this._samplerBindingsDirty = true;
+                this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, true);
             }
         }
     }
@@ -207,7 +235,7 @@ export class GfxRenderInst {
         for (let i = 0; i < m.length; i++) {
             if (!this.samplerBindings[i] || this.samplerBindings[i].texture !== m[i].gfxTexture || this.samplerBindings[i].sampler !== m[i].gfxSampler) {
                 this.samplerBindings[i] = { texture: m[i].gfxTexture, sampler: m[i].gfxSampler };
-                this._samplerBindingsDirty = true;
+                this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, true);
             }
         }
     }
@@ -216,7 +244,6 @@ export class GfxRenderInst {
 function compareRenderInsts(a: GfxRenderInst, b: GfxRenderInst): number {
     // Put invisible items to the end of the list.
     if (a.visible !== b.visible) return a.visible ? -1 : 1;
-    if (a.passMask !== b.passMask) return a.passMask - b.passMask;
     return a.sortKey - b.sortKey;
 }
 
@@ -236,6 +263,9 @@ export class GfxRenderInstViewRenderer {
     }
 
     private rebuildBindingsForNewSampler(device: GfxDevice, renderInst: GfxRenderInst): void {
+        if (!(renderInst._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY))
+            return;
+
         let firstUniformBufferBinding = 0;
         let firstSamplerBinding = 0;
         for (let i = 0; i < renderInst._bindingLayouts.length; i++) {
@@ -249,7 +279,7 @@ export class GfxRenderInstViewRenderer {
             firstUniformBufferBinding += bindingLayout.numUniformBuffers;
             firstSamplerBinding += bindingLayout.numSamplers;
         }
-        renderInst._samplerBindingsDirty = false;
+        renderInst._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, false);
     }
 
     public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass, passMask: number = 1): void {
@@ -275,12 +305,12 @@ export class GfxRenderInstViewRenderer {
             if (!renderInst.visible)
                 break;
 
-            if ((renderInst.passMask & passMask) === 0)
+            if ((renderInst.getPassMask() & passMask) === 0)
                 continue;
 
-            if (renderInst._samplerBindingsDirty)
-                this.rebuildBindingsForNewSampler(device, renderInst);
+            this.rebuildBindingsForNewSampler(device, renderInst);
 
+            assert(renderInst._pipeline !== null);
             if (currentPipeline !== renderInst._pipeline) {
                 passRenderer.setPipeline(renderInst._pipeline);
                 currentPipeline = renderInst._pipeline;
@@ -317,9 +347,10 @@ export class GfxRenderInstBuilder {
         const baseRenderInst = this.pushTemplateRenderInst();
         baseRenderInst.name = "base render inst";
         baseRenderInst.renderFlags = new RenderFlags();
+        baseRenderInst.passMask = 1;
     }
 
-    public newUniformBufferOffset(index: number): number {
+    private newUniformBufferOffset(index: number): number {
         const offset = this.uniformBufferOffsets[index];
         const incrSize = align(this.programReflection.uniformBufferLayouts[index].totalWordSize, this.uniformBufferWordAlignment);
         this.uniformBufferOffsets[index] += incrSize;
@@ -376,11 +407,17 @@ export class GfxRenderInstBuilder {
                     inputLayout,
                     megaStateDescriptor: renderInst.renderFlags.resolveMegaState(),
                 });
+                renderInst._destroyPipelineBuildStuff();
+            } else {
+                assert(renderInst.inputState === null);
+                assert(renderInst.gfxProgram === null);
+                assert(renderInst.renderFlags === null);
             }
 
             // Uniform buffer bindings.
+            
             for (let j = 0; j < this.uniformBuffers.length; j++) {
-                const { buffer } = this.uniformBuffers[j].getGfxBuffer(renderInst.uniformBufferOffsets[j]);
+                const { buffer } = this.uniformBuffers[j].getGfxBuffer(renderInst.getUniformBufferOffset(j));
                 assertExists(buffer);
 
                 const wordCount = this.programReflection.uniformBufferLayouts[j].totalWordSize;

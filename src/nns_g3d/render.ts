@@ -222,7 +222,6 @@ export enum MKDSPass {
 export class MDL0Renderer {
     public modelMatrix = mat4.create();
     public isSkybox: boolean = false;
-    public pass: MKDSPass = MKDSPass.MAIN;
     public animationController = new AnimationController();
 
     private gfxProgram: GfxProgram;
@@ -252,7 +251,6 @@ export class MDL0Renderer {
         bindingLayouts[NITRO_Program.ub_PacketParams]   = { numUniformBuffers: 1, numSamplers: 0 };
         const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer]);
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.templateRenderInst.passMask = this.pass;
         this.templateRenderInst.gfxProgram = this.gfxProgram;
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_SceneParams);
 
@@ -338,6 +336,8 @@ export class MDL0Renderer {
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.updateTime(viewerInput.time);
+
+        this.templateRenderInst.passMask = this.isSkybox ? MKDSPass.SKYBOX : MKDSPass.MAIN;
 
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams], 16);
         let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams];
