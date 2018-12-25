@@ -1,7 +1,7 @@
 
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
 
-import { mat4, quat } from 'gl-matrix';
+import { mat4, quat, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
@@ -545,13 +545,12 @@ export interface MAT3 {
 }
 
 // temp, center, center inverse
-const t = mat4.create(), c = mat4.create(), ci = mat4.create();
-function createTexMtx(m: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
-    // TODO(jstpierre): Remove these.
-    mat4.fromTranslation(c, [centerS, centerT, centerQ]);
-    mat4.fromTranslation(ci, [-centerS, -centerT, -centerQ]);
-    mat4.fromTranslation(m, [translationS, translationT, 0]);
-    mat4.fromScaling(t, [scaleS, scaleT, 1]);
+const t = mat4.create(), c = mat4.create(), ci = mat4.create(), tt = vec3.create();
+function calcTexMtx(m: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
+    mat4.fromTranslation(c, vec3.set(tt, centerS, centerT, centerQ));
+    mat4.fromTranslation(ci, vec3.set(tt, -centerS, -centerT, -centerQ));
+    mat4.fromTranslation(m, vec3.set(tt, translationS, translationT, 0));
+    mat4.fromScaling(t, vec3.set(tt, scaleS, scaleT, 1));
     mat4.rotateZ(t, t, rotation * Math.PI);
     mat4.mul(t, t, ci);
     mat4.mul(t, c, t);
@@ -950,7 +949,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         );
 
         const matrix = mat4.create();
-        createTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+        calcTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
 
         const texMtx: TexMtx = { type, projection, effectMatrix, matrix };
         return texMtx;
@@ -1376,7 +1375,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
     const rTableOffs = view.getUint32(0x2C);
     const tTableOffs = view.getUint32(0x30);
 
-    const rotationScale = Math.pow(2, rotationDecimal) / 32767;
+    const rotationScale = Math.pow(2, rotationDecimal) / 0x7FFF;
 
     const sTable = buffer.createTypedArray(Float32Array, sTableOffs, sCount, Endianness.BIG_ENDIAN);
     const rTable = buffer.createTypedArray(Int16Array, rTableOffs, rCount, Endianness.BIG_ENDIAN);
@@ -1438,7 +1437,7 @@ export class TTK1Animator {
         const rotation = sampleAnimationData(this.animationEntry.rotationQ, animFrame);
         const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
         const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
-        createTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+        calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
     }
 }
 
