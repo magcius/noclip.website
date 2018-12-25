@@ -180,7 +180,6 @@ class BMDRenderer {
     public isSkybox: boolean;
     public localMatrix: mat4;
     public animation: Animation = null;
-    public passMask: SM64DSPass = SM64DSPass.MAIN;
 
     private gfxProgram: GfxProgram;
     private templateRenderInst: GfxRenderInst;
@@ -211,6 +210,8 @@ class BMDRenderer {
         let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams];
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
+        this.templateRenderInst.passMask = this.isSkybox ? SM64DSPass.SKYBOX : SM64DSPass.MAIN;
+
         for (let i = 0; i < this.prepareToRenderFuncs.length; i++)
             this.prepareToRenderFuncs[i](hostAccessPass, viewerInput);
 
@@ -227,7 +228,6 @@ class BMDRenderer {
         bindingLayouts[NITRO_Program.ub_PacketParams]   = { numUniformBuffers: 1, numSamplers: 0 };
         const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer]);
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.templateRenderInst.passMask = this.passMask;
         this.templateRenderInst.gfxProgram = this.gfxProgram;
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_SceneParams);
         this.translateBMD(device, renderInstBuilder, this.bmd);
@@ -462,7 +462,6 @@ export class SceneDesc implements Viewer.SceneDesc {
             const bmd = NITRO_BMD.parse(result);
             const renderer = new BMDRenderer(device, textureHolder, bmd, level);
             mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
-            renderer.passMask = isSkybox ? SM64DSPass.SKYBOX : SM64DSPass.MAIN;
             renderer.isSkybox = isSkybox;
             return renderer;
         });

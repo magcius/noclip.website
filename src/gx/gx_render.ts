@@ -337,6 +337,7 @@ export class GXRenderHelperGfx {
     public materialParamsBuffer: GfxRenderBuffer;
     public packetParamsBuffer: GfxRenderBuffer;
     public renderInstBuilder: GfxRenderInstBuilder;
+    public templateRenderInst: GfxRenderInst;
 
     constructor(device: GfxDevice) {
         this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
@@ -351,8 +352,8 @@ export class GXRenderHelperGfx {
         ]
         this.renderInstBuilder = new GfxRenderInstBuilder(device, GX_Material.GX_Program.programReflection, bindingLayouts, [ this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer ]);
         // Create our scene buffer slot.
-        const sceneRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
-        this.renderInstBuilder.newUniformBufferInstance(sceneRenderInst, ub_SceneParams);
+        this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
+        this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_SceneParams);
     }
 
     public finishBuilder(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
