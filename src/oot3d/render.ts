@@ -366,8 +366,6 @@ export class CmbRenderer {
             const prms = sepd.prms[i];
             assert(prms.prm.indexType === indexType);
             const renderInst = renderInstBuilder.pushRenderInst();
-            if (renderInst.samplerBindings.length === 0)
-                throw new Error();
             renderInstBuilder.newUniformBufferInstance(renderInst, OoT3D_Program.ub_PrmParams);
             const firstIndex = getFirstIndex(prms.prm);
             renderInst.drawIndexes(prms.prm.count, firstIndex);
