@@ -13,6 +13,7 @@ import { TextureHolder, LoadedTexture, TextureMapping, getGLTextureFromMapping }
 import { getTransitionDeviceForWebGL2, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
 import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxFrontFaceMode, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxTextureDescriptor, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { GX2Surface } from './gx2_surface';
+import { DecodedSurface, surfaceToCanvas } from './bc_texture';
 
 class ProgramGambit_UBER extends SimpleProgram {
     public s_a0: WebGLUniformLocation;
@@ -383,7 +384,7 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
                 canvases.push(canvas);
             }
 
-            GX2Texture.decodeSurface(surface, texture.texData, texture.mipData, mipLevel).then((decodedSurface: GX2Texture.DecodedSurface) => {
+            GX2Texture.decodeSurface(surface, texture.texData, texture.mipData, mipLevel).then((decodedSurface: DecodedSurface) => {
                 // Sometimes the surfaces appear to have garbage sizes.
                 if (decodedSurface.width === 0 || decodedSurface.height === 0)
                     return;
@@ -397,9 +398,7 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
 
                 for (let j = 0; j < surface.depth; j++) {
                     const canvas = canvases[firstCanvas + j];
-                    canvas.width = decompressedSurface.width;
-                    canvas.height = decompressedSurface.height;
-                    GX2Texture.surfaceToCanvas(canvas, decompressedSurface, j);
+                    surfaceToCanvas(canvas, decompressedSurface, j);
                 }
             });
         }

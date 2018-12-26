@@ -26,7 +26,6 @@ function parseResDic(buffer: ArrayBufferSlice, tableOffs: number, littleEndian: 
     const view = buffer.createDataView();
     const tableSize = view.getUint32(tableOffs + 0x00, littleEndian);
     const tableCount = view.getUint32(tableOffs + 0x04, littleEndian);
-    assert(tableCount === tableCount);
 
     const entries: ResDicEntry[] = [];
 

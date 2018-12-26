@@ -106,6 +106,8 @@ export function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLe
             return WebGL2RenderingContext.SHORT;
         case FormatTypeFlags.S32:
             return WebGL2RenderingContext.INT;
+        case FormatTypeFlags.F16:
+            return WebGL2RenderingContext.HALF_FLOAT;
         case FormatTypeFlags.F32:
             return WebGL2RenderingContext.FLOAT;
         default:
@@ -1193,7 +1195,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const pipeline = this._currentPipeline;
         const inputState = this._currentInputState;
         const byteOffset = inputState.indexBufferByteOffset + firstIndex * inputState.indexBufferCompByteSize;
+        gl.getError();
         gl.drawElements(pipeline.drawMode, count, inputState.indexBufferType, byteOffset);
+        const err = gl.getError();
+        if (err !== gl.NO_ERROR)
+            debugger;
         this._debugGroupStatisticsDrawCall();
     }
 

@@ -8,6 +8,7 @@ export const enum FormatTypeFlags {
     S8,
     S16,
     S32,
+    F16,
     F32,
 
     // Special texture formats.
@@ -38,6 +39,7 @@ export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: 
 }
 
 export enum GfxFormat {
+    F16_RG       = makeFormat(FormatTypeFlags.F16, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
     F32_R        = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
     F32_RG       = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
     F32_RGB      = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RGB,  FormatFlags.NONE),
@@ -55,6 +57,7 @@ export enum GfxFormat {
     S8_R         = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NONE),
     S8_RGBA_NORM = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
     S16_R        = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_R,    FormatFlags.NONE),
+    S16_RG_NORM  = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_RG,   FormatFlags.NORMALIZED),
     S16_RGB_NORM = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_RGB,  FormatFlags.NORMALIZED),
     S32_R        = makeFormat(FormatTypeFlags.S32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
     BC1          = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),

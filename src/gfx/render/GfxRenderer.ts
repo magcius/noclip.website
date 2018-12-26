@@ -137,7 +137,6 @@ export class GfxRenderInst {
     // Pipeline building.
     public inputState: GfxInputState | null = null;
     public gfxProgram: GfxProgram | null = null;
-    public _renderFlags: RenderFlags;
 
     // Bindings.
     public uniformBufferOffsets: number[] = [];
@@ -150,11 +149,13 @@ export class GfxRenderInst {
     public _drawStart: number = 0;
     public _drawCount: number = 0;
 
-    // Render flags. Tracks visibility.
     public _flags: GfxRenderInstFlags = GfxRenderInstFlags.VISIBLE;
 
     // The pipeline to use for this RenderInst.
     public _pipeline: GfxRenderPipeline | null = null;
+
+    // Pipeline building. The public API to access this is setRenderFlags().
+    public _renderFlags: RenderFlags;
 
     // Bindings state.
     public _bindings: GfxBindings[] = [];

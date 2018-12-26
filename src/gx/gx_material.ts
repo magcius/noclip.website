@@ -818,28 +818,28 @@ export class GX_Program extends DeviceProgram {
     public static UBODefinition = `
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
-mat4 u_Projection;
-vec4 u_Misc0;
+    mat4 u_Projection;
+    vec4 u_Misc0;
 };
 
 #define u_SceneTextureLODBias u_Misc0[0]
 
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
-vec4 u_ColorMatReg[2];
-vec4 u_ColorAmbReg[2];
-vec4 u_KonstColor[4];
-vec4 u_Color[4];
-mat4x3 u_TexMtx[10];
-mat4x3 u_PostTexMtx[20];
-mat4x2 u_IndTexMtx[3];
-// SizeX, SizeY, 0, Bias
-vec4 u_TextureParams[8];
+    vec4 u_ColorMatReg[2];
+    vec4 u_ColorAmbReg[2];
+    vec4 u_KonstColor[4];
+    vec4 u_Color[4];
+    mat4x3 u_TexMtx[10];
+    mat4x3 u_PostTexMtx[20];
+    mat4x2 u_IndTexMtx[3];
+    // SizeX, SizeY, 0, Bias
+    vec4 u_TextureParams[8];
 };
 
 // Expected to change with each shape packet.
 layout(row_major, std140) uniform ub_PacketParams {
-mat4x3 u_PosMtx[10];
+    mat4x3 u_PosMtx[10];
 };
 `;
 
