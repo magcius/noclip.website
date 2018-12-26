@@ -7,8 +7,8 @@ import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMo
 import * as BNTX from './bntx';
 import { surfaceToCanvas } from '../fres/bc_texture';
 import { translateImageFormat, deswizzle, decompress, getImageFormatString } from './tegra_texture';
-import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh } from './bfres';
-import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES } from './bfres';
+import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from './nngfx_enum';
 import { nArray, assert } from '../util';
 import { DeviceProgram } from '../Program';
@@ -16,10 +16,21 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4 } from 'gl-matrix';
-import { computeViewMatrix } from '../Camera';
+import { computeViewMatrix, computeViewSpaceDepth } from '../Camera';
 import { BasicRendererHelper } from '../oot3d/render';
+import { AABB } from '../Geometry';
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
+    public addFRESTextures(device: GfxDevice, fres: FRES): void {
+        const bntxFile = fres.externalFiles.find((f) => f.name === 'textures.bntx');
+        for (let i = 0; i < fres.externalFiles.length; i++) {
+            if (fres.externalFiles[i].name !== 'textures.bntx') continue;
+            const bntx = BNTX.parse(bntxFile.buffer);
+            this.addTexturesGfx(device, bntx.textures);
+            break;
+        }
+    }
+
     public addTextureGfx(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
         const gfxTexture = device.createTexture_({
             dimension: GfxTextureDimension.n2D,
@@ -57,11 +68,6 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
 
         const viewerTexture: Viewer.Texture = { name: textureEntry.name, surfaces: canvases, extraInfo };
         return { viewerTexture, gfxTexture };
-    }
-}
-
-class ShapeInstance {
-    constructor(device: GfxDevice, fmdl: FMDL, public fshp: FSHP) {
     }
 }
 
@@ -111,7 +117,8 @@ class AglProgram extends DeviceProgram {
     public static _u0: number = 4;
     public static _u1: number = 5;
     public static _u2: number = 6;
-    public static a_Orders = ['_p0', '_n0', '_t0', '_c0', '_u0', '_u1', '_u2'];
+    public static _b0: number = 7;
+    public static a_Orders = ['_p0', '_n0', '_t0', '_c0', '_u0', '_u1', '_u2', '_b0'];
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -141,10 +148,12 @@ layout(location = ${AglProgram._u1}) in vec2 _u1;
 layout(location = ${AglProgram._u2}) in vec2 _u2;
 
 out vec2 v_u0;
+out vec4 v_c0;
 
 void main() {
     gl_Position = u_Projection * mat4(u_ModelView) * vec4(_p0, 1.0);
     v_u0 = _u0;
+    v_c0 = _c0;
 }
 `;
 
@@ -152,10 +161,14 @@ void main() {
 precision mediump float;
 
 in vec2 v_u0;
+in vec4 v_c0;
 uniform sampler2D _a0;
 
 void main() {
-    gl_FragColor = texture(_a0, v_u0);
+    o_color = texture(_a0, v_u0) * v_c0;
+
+    // Gamma correction.
+    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));
 }
 `;
 }
@@ -179,6 +192,8 @@ function translateCullMode(fmat: FMAT): GfxCullMode {
     const display_face = translateRenderInfoSingleString(fmat.renderInfo.get('display_face'));
     if (display_face === 'front')
         return GfxCullMode.BACK;
+    else if (display_face === 'both')
+        return GfxCullMode.NONE;
     else
         throw "whoops";
 }
@@ -199,25 +214,16 @@ function translateDepthCompare(fmat: FMAT): GfxCompareMode {
     }
 }
 
-function translateBlendMode(fmat: FMAT): GfxBlendMode {
-    const enable_blend0: string = fmat.shaderAssign.shaderOption.get('enable_blend0');
-    if (enable_blend0 === '1') {
-        const color_blend_rgb_op: string = translateRenderInfoSingleString(fmat.renderInfo.get('color_blend_rgb_op'));
-        if (color_blend_rgb_op === 'add')
-            return GfxBlendMode.ADD;
-        else
-            throw "whoops";
-    } else {
-        return GfxBlendMode.NONE;
-    }
-}
-
 function translateRenderInfoBlendFactor(renderInfo: FMAT_RenderInfo): GfxBlendFactor {
     const value = translateRenderInfoSingleString(renderInfo);
     if (value === 'src_alpha')
         return GfxBlendFactor.SRC_ALPHA;
     else if (value === 'one_minus_src_alpha')
         return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+    else if (value === 'one')
+        return GfxBlendFactor.ONE;
+    else if (value === 'zero')
+        return GfxBlendFactor.ZERO;
     else
         throw "whoops";
 }
@@ -278,14 +284,19 @@ class FMATInstance {
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         // Render flags.
+        // TODO(jstpierre): When do we enable blend?
+        const isTranslucent = false;
         this.templateRenderInst.setRenderFlags({
             cullMode:       translateCullMode(fmat),
             depthCompare:   translateDepthCompare(fmat),
             depthWrite:     translateDepthWrite(fmat),
-            blendMode:      translateBlendMode(fmat),
+            blendMode:      GfxBlendMode.NONE,
             blendSrcFactor: translateBlendSrcFactor(fmat),
             blendDstFactor: translateBlendDstFactor(fmat),
         });
+
+        const materialLayer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.templateRenderInst.sortKey = makeSortKey(materialLayer, 0);
     }
 
     public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
@@ -299,6 +310,8 @@ class FMATInstance {
 
 function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
     switch (attributeFormat) {
+    case AttributeFormat._8_8_Unorm:
+        return GfxFormat.U8_RG_NORM;
     case AttributeFormat._8_8_8_8_Unorm:
         return GfxFormat.U8_RGBA_NORM;
     case AttributeFormat._8_8_8_8_Snorm:
@@ -307,6 +320,8 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
         // TODO(jstpierre): Get this right. We probably need to convert again like we did for Wii U.
         return GfxFormat.S8_RGBA_NORM;
     case AttributeFormat._16_16_Unorm:
+        return GfxFormat.U16_RG_NORM;
+    case AttributeFormat._16_16_Snorm:
         return GfxFormat.S16_RG_NORM;
     case AttributeFormat._16_16_Float:
         return GfxFormat.F16_RG;
@@ -362,15 +377,6 @@ function translateIndexFormat(indexFormat: IndexFormat): GfxFormat {
     }
 }
 
-function getIndexFormatByteSize(indexFormat: IndexFormat): number {
-    switch (indexFormat) {
-    case IndexFormat.Uint8:  return 1;
-    case IndexFormat.Uint16: return 2;
-    case IndexFormat.Uint32: return 4;
-    default: throw "whoops";
-    }
-}
-
 class FSHPMeshInstance {
     public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
@@ -396,6 +402,16 @@ class FSHPMeshInstance {
         this.renderInsts.push(renderInst);
     }
 
+    public prepareToRender(visible: boolean, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.renderInsts.length; i++) {
+            this.renderInsts[i].visible = visible;
+            if (visible) {
+                const depth = computeViewSpaceDepth(viewerInput.camera, this.mesh.bbox);
+                this.renderInsts[i].sortKey = setSortKeyDepth(this.renderInsts[i].sortKey, depth);
+            }
+        }
+    }
+
     public destroy(device: GfxDevice): void {
         device.destroyInputState(this.inputState);
         device.destroyInputLayout(this.inputLayout);
@@ -404,9 +420,11 @@ class FSHPMeshInstance {
 }
 
 const scratchMatrix = mat4.create();
+const bboxScratch = new AABB();
 class FSHPInstance {
-    private meshInstances: FSHPMeshInstance[] = [];
+    private lodMeshInstances: FSHPMeshInstance[] = [];
     public templateRenderInst: GfxRenderInst;
+    public visible = true;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, fvtxInstance: FVTXInstance, public fshp: FSHP) {
         // TODO(jstpierre): Joints.
@@ -415,27 +433,39 @@ class FSHPInstance {
 
         // Only construct the first LOD mesh for now.
         for (let i = 0; i < 1; i++)
-            this.meshInstances.push(new FSHPMeshInstance(device, renderInstBuilder, fvtxInstance, fshp.mesh[i]));
+            this.lodMeshInstances.push(new FSHPMeshInstance(device, renderInstBuilder, fvtxInstance, fshp.mesh[i]));
 
         renderInstBuilder.popTemplateRenderInst();
     }
 
-    public computeModelView(viewerInput: Viewer.ViewerRenderInput): mat4 {
+    public computeModelView(modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): mat4 {
         // Build view matrix
         const viewMatrix = scratchMatrix;
         computeViewMatrix(viewMatrix, viewerInput.camera);
+        mat4.mul(viewMatrix, viewMatrix, modelMatrix);
         return viewMatrix;
     }
 
-    public prepareToRender(shapeParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(shapeParamsBuffer: GfxRenderBuffer, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
         const shapeParamsMapped = shapeParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[AglProgram.ub_ShapeParams], 12);
         let offs = this.templateRenderInst.uniformBufferOffsets[AglProgram.ub_ShapeParams];
-        offs += fillMatrix4x3(shapeParamsMapped, offs, this.computeModelView(viewerInput));
+        offs += fillMatrix4x3(shapeParamsMapped, offs, this.computeModelView(modelMatrix, viewerInput));
+
+        for (let i = 0; i < this.lodMeshInstances.length; i++) {
+            let visible = this.visible;
+
+            if (visible) {
+                bboxScratch.transform(this.lodMeshInstances[i].mesh.bbox, modelMatrix);
+                visible = viewerInput.camera.frustum.contains(bboxScratch);
+            }
+
+            this.lodMeshInstances[i].prepareToRender(visible, viewerInput);
+        }
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.meshInstances.length; i++)
-            this.meshInstances[i].destroy(device);
+        for (let i = 0; i < this.lodMeshInstances.length; i++)
+            this.lodMeshInstances[i].destroy(device);
     }
 }
 
@@ -449,6 +479,7 @@ export class FMDLRenderer {
     public materialParamsBuffer: GfxRenderBuffer;
     public shapeParamsBuffer: GfxRenderBuffer;
     public templateRenderInst: GfxRenderInst;
+    public modelMatrix = mat4.create();
 
     constructor(device: GfxDevice, public textureHolder: BRTITextureHolder, public fmdl: FMDL) {
         this.gfxProgram = device.createProgram(new AglProgram());
@@ -485,7 +516,7 @@ export class FMDLRenderer {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.fshpInst.length; i++)
-            this.fshpInst[i].prepareToRender(this.shapeParamsBuffer, viewerInput);
+            this.fshpInst[i].prepareToRender(this.shapeParamsBuffer, this.modelMatrix, viewerInput);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.materialParamsBuffer.prepareToRender(hostAccessPass);

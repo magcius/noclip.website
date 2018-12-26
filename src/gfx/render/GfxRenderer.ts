@@ -47,7 +47,7 @@ const MAX_DEPTH = 500;
 
 const DEPTH_BITS = 16;
 
-export function makeDepthKey(depth: number, flipDepth: boolean, maxDepth: number = MAX_DEPTH) {
+export function makeDepthKeyEx(depth: number, flipDepth: boolean, maxDepth: number = MAX_DEPTH) {
     // Input depth here is: 0 is the closest to the camera, positive values are further away. Negative values (behind camera) are clamped to 0.
     // normalizedDepth: 0.0 is closest to camera, 1.0 is farthest from camera.
     // These values are flipped if flipDepth is set.
@@ -56,6 +56,11 @@ export function makeDepthKey(depth: number, flipDepth: boolean, maxDepth: number
         normalizedDepth = 1.0 - normalizedDepth;
     const depthKey = (normalizedDepth * ((1 << DEPTH_BITS) - 1));
     return depthKey & 0xFFFF;
+}
+
+export function makeDepthKey(sortKey: number, depth: number, maxDepth: number = MAX_DEPTH) {
+    const isTranslucent = ((sortKey >>> 30) & 1) !== 0;
+    return makeDepthKeyEx(depth, isTranslucent, maxDepth);
 }
 
 // Common sort key kinds.
@@ -88,8 +93,14 @@ export function makeSortKey(layer: GfxRendererLayer, programKey: number): number
         return makeSortKeyOpaque(layer, programKey);
 }
 
-export function setSortKeyDepth(sortKey: number, depthKey: number): number {
+export function setSortKeyDepthKey(sortKey: number, depthKey: number): number {
     const isTranslucent = (sortKey >>> 30) & 1;
+    return isTranslucent ? setSortKeyTranslucentDepth(sortKey, depthKey) : setSortKeyOpaqueDepth(sortKey, depthKey);
+}
+
+export function setSortKeyDepth(sortKey: number, depth: number, maxDepth: number = MAX_DEPTH): number {
+    const isTranslucent = (sortKey >>> 30) & 1;
+    const depthKey = makeDepthKey(isTranslucent, depth, maxDepth);
     return isTranslucent ? setSortKeyTranslucentDepth(sortKey, depthKey) : setSortKeyOpaqueDepth(sortKey, depthKey);
 }
 

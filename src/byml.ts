@@ -38,6 +38,18 @@ const fileDescriptions: { [key: number]: FileDescription } = {
     },
 }
 
+const utf8Decoder = new TextDecoder('utf8');
+function readStringUTF8(buffer: ArrayBufferSlice, offs: number): string {
+    const buf = buffer.createTypedArray(Uint8Array, offs);
+    let i = 0;
+    while (true) {
+        if (buf[i] === 0)
+            break;
+        i++;
+    }
+    return utf8Decoder.decode(buffer.createTypedArray(Uint8Array, offs, i));
+}
+
 export type StringTable = string[];
 export type ComplexNode = NodeDict | NodeArray | StringTable | ArrayBufferSlice | Float32Array;
 export type SimpleNode = number | string | boolean | null;
@@ -53,25 +65,18 @@ class ParseContext {
     public strValueTable: StringTable = null;
 }
 
-function getUint24(view: DataView, offs: number, littleEndian: boolean): number {
-    if (littleEndian)
-        return view.getUint32(offs - 1, true) >>> 8;
-    else
-        return view.getUint32(offs - 1, false) & 0x00FFFFFF;
-}
-
 function parseStringTable(context: ParseContext, buffer: ArrayBufferSlice, offs: number): StringTable {
     const view = buffer.createDataView();
     const header = view.getUint32(offs + 0x00, context.littleEndian);
-    const nodeType: NodeType = header >>> 24;
-    const numValues: number = header & 0x00FFFFFF;
+    const nodeType: NodeType = header & 0x000000FF;
+    const numValues: number = header >>> 8;
     assert(nodeType === NodeType.STRING_TABLE);
 
     let stringTableIdx: number = offs + 0x04;
     const strings: StringTable = [];
     for (let i = 0; i < numValues; i++) {
         const strOffs = offs + view.getUint32(stringTableIdx, context.littleEndian);
-        strings.push(readString(buffer, strOffs, -1, true));
+        strings.push(readStringUTF8(buffer, strOffs));
         stringTableIdx += 0x04;
     }
     return strings;
@@ -79,16 +84,18 @@ function parseStringTable(context: ParseContext, buffer: ArrayBufferSlice, offs:
 
 function parseDict(context: ParseContext, buffer: ArrayBufferSlice, offs: number): NodeDict {
     const view = buffer.createDataView();
-    const nodeType: NodeType = view.getUint8(offs + 0x00);
-    const numValues: number = getUint24(view, offs + 0x01, context.littleEndian);
+    const header = view.getUint32(offs + 0x00, context.littleEndian);
+    const nodeType: NodeType = header & 0x000000FF;
+    const numValues: number = header >>> 8;
     assert(nodeType === NodeType.DICT);
 
     const result: NodeDict = {};
     let dictIdx = offs + 0x04;
     for (let i = 0; i < numValues; i++) {
-        const entryStrKeyIdx: number = getUint24(view, dictIdx + 0x00, context.littleEndian);
+        const entryHeader = view.getUint32(dictIdx + 0x00, context.littleEndian);
+        const entryStrKeyIdx = entryHeader & 0x00FFFFFF;
+        const entryNodeType: NodeType = entryHeader >>> 24;
         const entryKey = context.strKeyTable[entryStrKeyIdx];
-        const entryNodeType: NodeType = view.getUint8(dictIdx + 0x03);
         const entryValue = parseNode(context, buffer, entryNodeType, dictIdx + 0x04);
         result[entryKey] = entryValue;
         dictIdx += 0x08;
@@ -98,8 +105,9 @@ function parseDict(context: ParseContext, buffer: ArrayBufferSlice, offs: number
 
 function parseArray(context: ParseContext, buffer: ArrayBufferSlice, offs: number): NodeArray {
     const view = buffer.createDataView();
-    const nodeType: NodeType = view.getUint8(offs + 0x00);
-    const numValues: number = getUint24(view, offs + 0x01, context.littleEndian);
+    const header = view.getUint32(offs + 0x00, context.littleEndian);
+    const nodeType: NodeType = header & 0x000000FF;
+    const numValues: number = header >>> 8;
     assert(nodeType === NodeType.ARRAY);
 
     const result: NodeArray = [];
@@ -116,8 +124,9 @@ function parseArray(context: ParseContext, buffer: ArrayBufferSlice, offs: numbe
 
 function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, offs: number, expectedNodeType?: NodeType): ComplexNode {
     const view = buffer.createDataView();
-    const nodeType: NodeType = view.getUint8(offs + 0x00);
-    const numValues: number = getUint24(view, offs + 0x01, context.littleEndian);
+    const header = view.getUint32(offs + 0x00, context.littleEndian);
+    const nodeType: NodeType = header & 0x000000FF;
+    const numValues: number = header >>> 8;
     if (expectedNodeType !== undefined)
         assert(expectedNodeType === nodeType);
     switch(nodeType) {
@@ -150,25 +159,25 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
     case NodeType.STRING_TABLE:
     case NodeType.BINARY_DATA:
     case NodeType.FLOAT_ARRAY: {
-        const complexOffs = view.getUint32(offs);
+        const complexOffs = view.getUint32(offs, context.littleEndian);
         return parseComplexNode(context, buffer, complexOffs, nodeType);
     }
     case NodeType.STRING: {
-        const idx = view.getUint32(offs);
+        const idx = view.getUint32(offs, context.littleEndian);
         return context.strValueTable[idx];
     }
     case NodeType.BOOL: {
-        const value = view.getUint32(offs);
+        const value = view.getUint32(offs, context.littleEndian);
         assert(value === 0 || value === 1);
         return !!value;
     }
     case NodeType.INT:
     case NodeType.SHORT: {
-        const value = view.getUint32(offs);
+        const value = view.getUint32(offs, context.littleEndian);
         return value;
     }
     case NodeType.FLOAT: {
-        const value = view.getFloat32(offs);
+        const value = view.getFloat32(offs, context.littleEndian);
         return value;
     }
     case NodeType.NULL: {
@@ -178,7 +187,7 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
 }
 
 export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType.BYML): T {
-    const magic = readString(buffer, 0x00, 0x04);
+    const magic = readString(buffer, 0x00, 0x04, false);
     const magics = fileDescriptions[fileType].magics;
     assert(magics.includes(magic));
     const view = buffer.createDataView();

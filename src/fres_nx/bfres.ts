@@ -2,6 +2,15 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, align } from "../util";
 import { AttributeFormat, IndexFormat, PrimitiveTopology, TextureAddressMode, FilterMode } from "./nngfx_enum";
+import { AABB } from "../Geometry";
+
+export interface FSKL_Bone {
+    name: string;
+}
+
+export interface FSKL {
+    bones: FSKL_Bone[];
+}
 
 export interface FVTX_VertexAttribute {
     name: string;
@@ -24,6 +33,7 @@ export interface FVTX {
 export interface FSHP_SubMesh {
     offset: number;
     count: number;
+    bbox: AABB;
 }
 
 export interface FSHP_Mesh {
@@ -33,6 +43,7 @@ export interface FSHP_Mesh {
     offset: number;
     subMeshes: FSHP_SubMesh[];
     indexBufferData: ArrayBufferSlice;
+    bbox: AABB;
 }
 
 export interface FSHP {
@@ -109,6 +120,7 @@ export interface FMAT {
 
 export interface FMDL {
     name: string;
+    fskl: FSKL;
     fvtx: FVTX[];
     fshp: FSHP[];
     fmat: FMAT[];
@@ -129,13 +141,54 @@ export function readBinStr(buffer: ArrayBufferSlice, offs: number, littleEndian:
     return readString(buffer, offs + 0x02, 0xFF, true);
 }
 
-export function isMarkerLittleEndian(marker: number): boolean {
-    if (marker === 0xFFFE)
-        return true;
-    else if (marker === 0xFEFF)
-        return false;
-    else
-        throw "whoops";
+function parseFSKL(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean): FSKL {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, offs + 0x00, 0x04) === 'FSKL');
+    const boneArrayOffs = view.getUint32(offs + 0x18, littleEndian);
+
+    const enum BoneFlag {
+        RotationMode_Quat     = 0x00 << 12,
+        RotationMode_EulerXyz = 0x01 << 12,
+    }
+
+    const flag = view.getUint32(offs + 0x48, littleEndian);
+    const boneCount = view.getUint16(offs + 0x4C, littleEndian);
+    const smoothMtxCount = view.getUint16(offs + 0x4E, littleEndian);
+    const rigidMtxCount = view.getUint16(offs + 0x50, littleEndian);
+
+    let boneArrayIdx = boneArrayOffs;
+    const bones: FSKL_Bone[] = [];
+    for (let i = 0; i < boneCount; i++) {
+        const name = readBinStr(buffer, view.getUint32(boneArrayIdx + 0x00, littleEndian), littleEndian);
+        const index = view.getUint16(boneArrayIdx + 0x28, littleEndian);
+        const parentIndex = view.getUint16(boneArrayIdx + 0x2A, littleEndian);
+        const smoothMtxIndex = view.getInt16(boneArrayIdx + 0x2C, littleEndian);
+        const rigidMtxIndex = view.getInt16(boneArrayIdx + 0x2E, littleEndian);
+        const billboardIndex = view.getUint16(boneArrayIdx + 0x30, littleEndian);
+        const boneFlag: BoneFlag = view.getUint32(boneArrayIdx + 0x34, littleEndian);
+
+        const scaleX = view.getFloat32(boneArrayIdx + 0x38, littleEndian);
+        const scaleY = view.getFloat32(boneArrayIdx + 0x3C, littleEndian);
+        const scaleZ = view.getFloat32(boneArrayIdx + 0x40, littleEndian);
+        if ((boneFlag & BoneFlag.RotationMode_EulerXyz)) {
+            const rotationEulerX = view.getFloat32(boneArrayIdx + 0x44, littleEndian);
+            const rotationEulerY = view.getFloat32(boneArrayIdx + 0x48, littleEndian);
+            const rotationEulerZ = view.getFloat32(boneArrayIdx + 0x4C, littleEndian);
+        } else {
+            const rotationQuatX = view.getFloat32(boneArrayIdx + 0x44, littleEndian);
+            const rotationQuatY = view.getFloat32(boneArrayIdx + 0x48, littleEndian);
+            const rotationQuatZ = view.getFloat32(boneArrayIdx + 0x4C, littleEndian);
+            const rotationQuatW = view.getFloat32(boneArrayIdx + 0x50, littleEndian);
+        }
+        const translationX = view.getFloat32(boneArrayIdx + 0x54, littleEndian);
+        const translationY = view.getFloat32(boneArrayIdx + 0x58, littleEndian);
+        const translationZ = view.getFloat32(boneArrayIdx + 0x5C, littleEndian);
+
+        bones.push({ name });
+        boneArrayIdx += 0x60;
+    }
+    return { bones };
 }
 
 function parseFVTX(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice, offs: number, littleEndian: boolean): FVTX {
@@ -186,7 +239,7 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
     // 0x28 skin bone index array
     // 0x30 key shape array
     // 0x38 key shape dict
-    // 0x40 bounding box array
+    const boundingBoxArrayOffs = view.getUint32(offs + 0x40, littleEndian);
     // 0x48 bounding sphere array
     // 0x50 user ptr
     // 0x58 flag
@@ -201,7 +254,24 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
     // 0x69 target attr count
 
     let meshArrayIdx = meshArrayOffs;
+    let boundingBoxArrayIdx = boundingBoxArrayOffs;
     const mesh: FSHP_Mesh[] = [];
+
+    const readBBox = () => {
+        const centerX = view.getFloat32(boundingBoxArrayIdx + 0x00, littleEndian);
+        const centerY = view.getFloat32(boundingBoxArrayIdx + 0x04, littleEndian);
+        const centerZ = view.getFloat32(boundingBoxArrayIdx + 0x08, littleEndian);
+        const extentX = view.getFloat32(boundingBoxArrayIdx + 0x0C, littleEndian);
+        const extentY = view.getFloat32(boundingBoxArrayIdx + 0x10, littleEndian);
+        const extentZ = view.getFloat32(boundingBoxArrayIdx + 0x14, littleEndian);
+        boundingBoxArrayIdx += 0x18;
+
+        const minX = centerX - extentX, minY = centerY - extentY, minZ = centerZ - extentZ;
+        const maxX = centerX + extentX, maxY = centerY + extentY, maxZ = centerZ + extentZ;
+
+        return new AABB(minX, minY, minZ, maxX, maxY, maxZ);
+    };
+
     for (let i = 0; i < meshCount; i++) {
         const subMeshArrayOffs = view.getUint32(meshArrayIdx + 0x00, littleEndian);
         const indexBufferInfo = view.getUint32(meshArrayIdx + 0x18, littleEndian);
@@ -221,12 +291,14 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
         for (let j = 0; j < subMeshCount; j++) {
             const offset = view.getUint32(subMeshArrayIdx + 0x00, littleEndian);
             const count = view.getUint32(subMeshArrayIdx + 0x04, littleEndian);
-            subMeshes.push({ offset, count });
+            const bbox = readBBox();
+            subMeshes.push({ offset, count, bbox });
             subMeshArrayIdx += 0x08;
         }
+        const bbox = readBBox();
 
         meshArrayIdx += 0x38;
-        mesh.push({ primType, format, count, offset, subMeshes, indexBufferData });
+        mesh.push({ primType, format, count, offset, subMeshes, indexBufferData, bbox });
     }
 
     return { name, mesh, vertexIndex, boneIndex, materialIndex };
@@ -401,6 +473,8 @@ function parseFMDL(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
     const totalProcessVertex = view.getUint32(offs + 0x70, littleEndian);
     // Reserved.
 
+    const fskl: FSKL = parseFSKL(buffer, skeletonOffs, littleEndian);
+
     let vertexArrayIdx = vertexArrayOffs;
     const fvtx: FVTX[] = [];
     for (let i = 0; i < vertexCount; i++) {
@@ -428,7 +502,16 @@ function parseFMDL(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
         materialArrayIdx += 0xB8;
     }
 
-    return { name, fvtx, fshp, fmat };
+    return { name, fskl, fvtx, fshp, fmat };
+}
+
+export function isMarkerLittleEndian(marker: number): boolean {
+    if (marker === 0xFFFE)
+        return true;
+    else if (marker === 0xFEFF)
+        return false;
+    else
+        throw "whoops";
 }
 
 export function parse(buffer: ArrayBufferSlice): FRES {
