@@ -259,7 +259,7 @@ class BMDRenderer {
         const crg1mat = this.crg1Level ? this.crg1Level.TextureAnimations.find((c) => c.MaterialName === material.name) : undefined;
         const texAnimMat = mat2d.clone(material.texCoordMat);
 
-        templateRenderInst.renderFlags.set({
+        templateRenderInst.setRenderFlags({
             blendMode: GfxBlendMode.ADD,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,

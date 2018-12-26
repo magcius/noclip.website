@@ -148,7 +148,7 @@ class Command_Material {
         const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.templateRenderInst.sortKey = makeSortKeyOpaque(layer, 0);
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_MaterialParams);
-        this.templateRenderInst.renderFlags.set({
+        this.templateRenderInst.setRenderFlags({
             blendMode: GfxBlendMode.ADD,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,

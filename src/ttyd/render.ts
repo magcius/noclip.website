@@ -82,7 +82,7 @@ class BackgroundBillboardRenderer {
         // No input state, we don't use any vertex buffers for full-screen passes.
         this.renderInst.inputState = null;
         this.renderInst.gfxProgram = gfxProgram;
-        this.renderInst.renderFlags = fullscreenFlags;
+        this.renderInst.setRenderFlags(fullscreenFlags);
         this.renderInst.samplerBindings = [null];
         this.paramsBufferOffset = renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
         renderInstBuilder.finish(device, viewRenderer);
@@ -129,7 +129,7 @@ class Command_Material {
         const layer = this.getRendererLayer(material.materialLayer);
         this.templateRenderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
         this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
-        this.templateRenderInst.renderFlags.polygonOffset = material.materialLayer === MaterialLayer.ALPHA_TEST;
+        this.templateRenderInst.setRenderFlags({ polygonOffset: material.materialLayer === MaterialLayer.ALPHA_TEST });
     }
 
     private getRendererLayer(materialLayer: MaterialLayer): GfxRendererLayer {
@@ -215,7 +215,7 @@ class Command_Batch {
         this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder, materialCommand.templateRenderInst);
         this.renderInst.name = nodeCommand.namePath;
         // Pull in render flags on the node itself.
-        this.renderInst.renderFlags.set(nodeCommand.node.renderFlags);
+        this.renderInst.setRenderFlags(nodeCommand.node.renderFlags);
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {
