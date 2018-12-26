@@ -94,10 +94,12 @@ export type ImageFormat = number;
 
 export const enum AttributeFormat {
     Undefined,
+    _8_8_Unorm = ((ChannelFormat.R8_G8 << TypeFormat.$Bits) | TypeFormat.Unorm),
     _8_8_8_8_Unorm = ((ChannelFormat.R8_G8_B8_A8 << TypeFormat.$Bits) | TypeFormat.Unorm),
     _8_8_8_8_Snorm = ((ChannelFormat.R8_G8_B8_A8 << TypeFormat.$Bits) | TypeFormat.Snorm),
     _10_10_10_2_Snorm = ((ChannelFormat.R10_G10_B10_A2 << TypeFormat.$Bits) | TypeFormat.Snorm),
     _16_16_Unorm = ((ChannelFormat.R16_G16 << TypeFormat.$Bits) | TypeFormat.Unorm),
+    _16_16_Snorm = ((ChannelFormat.R16_G16 << TypeFormat.$Bits) | TypeFormat.Snorm),
     _16_16_Float = ((ChannelFormat.R16_G16 << TypeFormat.$Bits) | TypeFormat.Float),
     _32_32_Float = ((ChannelFormat.R32_G32 << TypeFormat.$Bits) | TypeFormat.Float),
     _32_32_32_Float = ((ChannelFormat.R32_G32_B32 << TypeFormat.$Bits) | TypeFormat.Float),

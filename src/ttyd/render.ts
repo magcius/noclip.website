@@ -1,5 +1,5 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, translateWrapModeGfx, GXMaterialHelperGfx } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, translateWrapModeGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';
@@ -9,11 +9,11 @@ import { mat4 } from 'gl-matrix';
 import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, makeDepthKey, GfxRendererLayer, makeSortKey, setSortKeyDepth, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fullscreenFlags } from '../gfx/helpers/RenderFlagsHelpers';
 import { Camera, computeViewMatrix, computeViewSpaceDepth } from '../Camera';
@@ -232,8 +232,7 @@ class Command_Batch {
 
             this.computeModelView(this.packetParams.u_PosMtx[0], renderInput.camera);
             this.shapeHelper.fillPacketParams(this.packetParams, this.renderInst, renderHelper);
-            const depthKey = makeDepthKey(this.nodeCommand.depth, this.materialCommand.isTranslucent);
-            this.renderInst.sortKey = setSortKeyDepth(this.renderInst.sortKey, depthKey);
+            this.renderInst.sortKey = setSortKeyDepth(this.renderInst.sortKey, this.nodeCommand.depth);
         }
     }
 

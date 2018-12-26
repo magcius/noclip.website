@@ -13,7 +13,7 @@ import { CMDL } from './cmdl';
 import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffers, GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderInst, GfxRenderInstViewRenderer, setSortKeyDepth, makeDepthKey, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstViewRenderer, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { computeViewSpaceDepth, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
@@ -67,7 +67,7 @@ class Command_Surface {
 
             mat4.mul(this.packetParams.u_PosMtx[0], viewMatrix, modelMatrix);
             this.shapeHelper.fillPacketParams(this.packetParams, this.renderInst, renderHelper);
-            this.renderInst.sortKey = setSortKeyDepth(this.renderInst.sortKey, makeDepthKey(depth, this.isTranslucent));
+            this.renderInst.sortKey = setSortKeyDepth(this.renderInst.sortKey, depth);
         }
 
         return this.renderInst.visible;
