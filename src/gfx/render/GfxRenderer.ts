@@ -2,7 +2,7 @@
 import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice, GfxSamplerBinding, GfxBindingLayoutDescriptor, GfxBufferBinding, GfxProgram, GfxPrimitiveTopology, GfxSampler, GfxBindingsDescriptor } from "../platform/GfxPlatform";
 import { align, assertExists, assert } from "../../util";
 import { GfxRenderBuffer } from "./GfxRenderBuffer";
-import { RenderFlags } from "../helpers/RenderFlagsHelpers";
+import { RenderFlags, RenderFlagsPossibilities } from "../helpers/RenderFlagsHelpers";
 import { TextureMapping } from "../../TextureHolder";
 import { DeviceProgramReflection } from "../../Program";
 import { GfxRenderCache } from "./GfxRenderCache";
@@ -96,7 +96,7 @@ export function setSortKeyDepth(sortKey: number, depthKey: number): number {
 function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     dst.sortKey = src.sortKey;
     // TODO(jstpierre): Immutable render flags.
-    dst.renderFlags = new RenderFlags(src.renderFlags);
+    dst._renderFlags = src._renderFlags;
     dst.gfxProgram = src.gfxProgram;
     dst.inputState = src.inputState;
     dst._pipeline = src._pipeline;
@@ -137,7 +137,7 @@ export class GfxRenderInst {
     // Pipeline building.
     public inputState: GfxInputState | null = null;
     public gfxProgram: GfxProgram | null = null;
-    public renderFlags: RenderFlags;
+    public _renderFlags: RenderFlags;
 
     // Bindings.
     public uniformBufferOffsets: number[] = [];
@@ -195,6 +195,37 @@ export class GfxRenderInst {
         this._pipeline = pipeline;
     }
 
+    public setSamplerBindingsLate(): void {
+        this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_LATE, true);
+    }
+
+    public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
+        for (let i = 0; i < m.length; i++) {
+            const j = firstSampler + i;
+            if (!this.samplerBindings[j] || this.samplerBindings[j].texture !== m[i].texture || this.samplerBindings[j].sampler !== m[i].sampler) {
+                this.samplerBindings[j] = m[i];
+                this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, true);
+            }
+        }
+    }
+
+    public setSamplerBindingsFromTextureMappings(m: TextureMapping[]): void {
+        for (let i = 0; i < m.length; i++) {
+            if (!this.samplerBindings[i] || this.samplerBindings[i].texture !== m[i].gfxTexture || this.samplerBindings[i].sampler !== m[i].gfxSampler) {
+                this.samplerBindings[i] = { texture: m[i].gfxTexture, sampler: m[i].gfxSampler };
+                this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, true);
+            }
+        }
+    }
+
+    public setRenderFlags(r: RenderFlagsPossibilities | null = null): RenderFlags {
+        if (this._renderFlags === this.parentRenderInst._renderFlags)
+            this._renderFlags = new RenderFlags(this.parentRenderInst._renderFlags);
+        if (r !== null)
+            this._renderFlags.set(r);
+        return this._renderFlags;
+    }
+
     public drawTriangles(vertexCount: number, firstVertex: number = 0) {
         this._setFlag(GfxRenderInstFlags.DRAW_INDEXED, false);
         this._drawStart = firstVertex;
@@ -221,29 +252,6 @@ export class GfxRenderInst {
             return this.passMask;
     }
 
-    public setSamplerBindingsLate(): void {
-        this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_LATE, true);
-    }
-
-    public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
-        for (let i = 0; i < m.length; i++) {
-            const j = firstSampler + i;
-            if (!this.samplerBindings[j] || this.samplerBindings[j].texture !== m[i].texture || this.samplerBindings[j].sampler !== m[i].sampler) {
-                this.samplerBindings[j] = m[i];
-                this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, true);
-            }
-        }
-    }
-
-    public setSamplerBindingsFromTextureMappings(m: TextureMapping[]): void {
-        for (let i = 0; i < m.length; i++) {
-            if (!this.samplerBindings[i] || this.samplerBindings[i].texture !== m[i].gfxTexture || this.samplerBindings[i].sampler !== m[i].gfxSampler) {
-                this.samplerBindings[i] = { texture: m[i].gfxTexture, sampler: m[i].gfxSampler };
-                this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, true);
-            }
-        }
-    }
-
     public buildPipeline(device: GfxDevice, cache: GfxRenderCache): void {
         assert(this._pipeline === null);
 
@@ -253,7 +261,7 @@ export class GfxRenderInst {
             program: this.gfxProgram,
             bindingLayouts: this._bindingLayouts,
             inputLayout,
-            megaStateDescriptor: this.renderFlags.resolveMegaState(),
+            megaStateDescriptor: this._renderFlags.resolveMegaState(),
         });
     }
 
@@ -357,8 +365,8 @@ export class GfxRenderInstBuilder {
 
         const baseRenderInst = this.pushTemplateRenderInst();
         baseRenderInst.name = "base render inst";
-        baseRenderInst.renderFlags = new RenderFlags();
         baseRenderInst.passMask = 1;
+        baseRenderInst._renderFlags = new RenderFlags();
         baseRenderInst._bindingLayouts = this.bindingLayouts;
     }
 
@@ -414,7 +422,7 @@ export class GfxRenderInstBuilder {
                 // If we have a directly set pipeline, ensure that all of this is set correctly.
                 assert(renderInst.inputState === null);
                 assert(renderInst.gfxProgram === null);
-                assert(renderInst.renderFlags === null);
+                assert(renderInst._renderFlags === null);
             } else {
                 renderInst.buildPipeline(device, viewRenderer.gfxRenderCache);
             }

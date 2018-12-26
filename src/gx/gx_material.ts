@@ -1021,6 +1021,7 @@ export function translateRenderFlagsGfx(renderFlags: GfxRenderFlags, material: G
     renderFlags.depthWrite = material.ropInfo.depthWrite;
     renderFlags.depthCompare = material.ropInfo.depthTest ? translateCompareType(material.ropInfo.depthFunc) : GfxCompareMode.ALWAYS;
     renderFlags.frontFace = GfxFrontFaceMode.CW;
+
     if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
         renderFlags.blendMode = GfxBlendMode.NONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
