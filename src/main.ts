@@ -41,6 +41,7 @@ import * as TTYD from './ttyd/scenes';
 import * as SPM from './ttyd/spm_scenes';
 import * as MKDS from './nns_g3d/mkds_scenes';
 import * as Z_BOTW from './z_botw/scenes';
+import * as SMO from './fres_nx/smo_scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI, createDOMFromString } from './ui';
@@ -77,6 +78,7 @@ const sceneGroups = [
     ZELVIEW.sceneGroup,
     LM3D.sceneGroup,
     Z_BOTW.sceneGroup,
+    SMO.sceneGroup,
 ];
 
 function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {

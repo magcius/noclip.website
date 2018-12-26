@@ -52,13 +52,13 @@ export function parse(buffer: ArrayBufferSlice) {
     let fileTableIdx = 0x20;
     for (let i = 0; i < fileCount; i++) {
         const nameHash = view.getUint32(fileTableIdx + 0x00, littleEndian);
-        const flags = view.getUint16(fileTableIdx + 0x04, littleEndian);
+        const flags = view.getUint32(fileTableIdx + 0x04, littleEndian);
         let name;
-        if (flags & 0x0100) {
-            const nameOffs = (view.getUint16(fileTableIdx + 0x06, littleEndian) * 4);
+        if (!!(flags >>> 24)) {
+            const nameOffs = ((flags & 0x00FFFFFF) * 4);
             name = readString(buffer, sfntStringTableOffs + nameOffs, 0xFF);
         } else {
-            name = null;
+            name = nameHash.toString(16);
         }
         const fileStart = view.getUint32(fileTableIdx + 0x08, littleEndian);
         const fileEnd = view.getUint32(fileTableIdx + 0x0C, littleEndian);
