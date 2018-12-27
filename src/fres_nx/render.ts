@@ -115,10 +115,7 @@ class AglProgram extends DeviceProgram {
     public static _t0: number = 2;
     public static _c0: number = 3;
     public static _u0: number = 4;
-    public static _u1: number = 5;
-    public static _u2: number = 6;
-    public static _b0: number = 7;
-    public static a_Orders = ['_p0', '_n0', '_t0', '_c0', '_u0', '_u1', '_u2', '_b0'];
+    public static a_Orders = ['_p0', '_n0', '_t0', '_c0', '_u0', '_u1', '_u2', '_b0', '_i0', '_w0'];
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -144,8 +141,6 @@ layout(location = ${AglProgram._n0}) in vec3 _n0;
 layout(location = ${AglProgram._t0}) in vec3 _t0;
 layout(location = ${AglProgram._c0}) in vec4 _c0;
 layout(location = ${AglProgram._u0}) in vec2 _u0;
-layout(location = ${AglProgram._u1}) in vec2 _u1;
-layout(location = ${AglProgram._u2}) in vec2 _u2;
 
 out vec2 v_u0;
 out vec4 v_c0;
@@ -312,6 +307,10 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
     switch (attributeFormat) {
     case AttributeFormat._8_8_Unorm:
         return GfxFormat.U8_RG_NORM;
+    case AttributeFormat._8_8_Snorm:
+        return GfxFormat.S8_RG_NORM;
+    case AttributeFormat._8_8_Uint:
+        return GfxFormat.U32_RG;
     case AttributeFormat._8_8_8_8_Unorm:
         return GfxFormat.U8_RGBA_NORM;
     case AttributeFormat._8_8_8_8_Snorm:
@@ -335,7 +334,7 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
     }
 }
 
-class FVTXInstance {
+class FVTXData {
     public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
@@ -368,6 +367,57 @@ class FVTXInstance {
     }
 }
 
+export class FSHPMeshData {
+    public inputState: GfxInputState;
+    public inputLayout: GfxInputLayout;
+    public indexBuffer: GfxBuffer;
+
+    constructor(device: GfxDevice, public mesh: FSHP_Mesh, fvtxData: FVTXData) {
+        const indexBufferFormat = translateIndexFormat(mesh.format);
+        this.inputLayout = device.createInputLayout({
+            vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors, indexBufferFormat,
+        });
+    
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, mesh.indexBufferData.castToBuffer());
+        const indexBufferDescriptor: GfxVertexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 };
+        this.inputState = device.createInputState(this.inputLayout, fvtxData.vertexBufferDescriptors, indexBufferDescriptor);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputState);
+        device.destroyBuffer(this.indexBuffer);
+    }
+}
+
+export class FSHPData {
+    public meshData: FSHPMeshData[] = [];
+
+    constructor(device: GfxDevice, public fshp: FSHP, fvtxData: FVTXData) {
+        for (let i = 0; i < fshp.mesh.length; i++)
+            this.meshData.push(new FSHPMeshData(device, fshp.mesh[i], fvtxData));
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.meshData.length; i++)
+            this.meshData[i].destroy(device);
+    }
+}
+
+export class FMDLData {
+    public fvtxData: FVTXData[] = [];
+    public fshpData: FSHPData[] = [];
+
+    constructor(device: GfxDevice, public fmdl: FMDL) {
+        for (let i = 0; i < fmdl.fvtx.length; i++)
+            this.fvtxData.push(new FVTXData(device, fmdl.fvtx[i]));
+        for (let i = 0; i < fmdl.fshp.length; i++) {
+            const fshp = fmdl.fshp[i];
+            this.fshpData.push(new FSHPData(device, fshp, this.fvtxData[fshp.vertexIndex]));
+        }
+    }
+}
+
 function translateIndexFormat(indexFormat: IndexFormat): GfxFormat {
     switch (indexFormat) {
     case IndexFormat.Uint8:  return GfxFormat.U8_R;
@@ -378,27 +428,17 @@ function translateIndexFormat(indexFormat: IndexFormat): GfxFormat {
 }
 
 class FSHPMeshInstance {
-    public inputState: GfxInputState;
-    public inputLayout: GfxInputLayout;
-    public indexBuffer: GfxBuffer;
     public renderInsts: GfxRenderInst[] = [];
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, fvtxInstance: FVTXInstance, public mesh: FSHP_Mesh) {
-        const indexBufferFormat = translateIndexFormat(mesh.format);
-        this.inputLayout = device.createInputLayout({
-            vertexAttributeDescriptors: fvtxInstance.vertexAttributeDescriptors, indexBufferFormat,
-        });
-
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, mesh.indexBufferData.castToBuffer());
-        const indexBufferDescriptor: GfxVertexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 };
-        this.inputState = device.createInputState(this.inputLayout, fvtxInstance.vertexBufferDescriptors, indexBufferDescriptor);
+    constructor(renderInstBuilder: GfxRenderInstBuilder, public meshData: FSHPMeshData) {
+        const mesh = meshData.mesh;
 
         assert(mesh.offset === 0);
 
         // TODO(jstpierre): Do we have to care about submeshes?
         const renderInst = renderInstBuilder.pushRenderInst();
         renderInst.drawIndexes(mesh.count);
-        renderInst.inputState = this.inputState;
+        renderInst.inputState = meshData.inputState;
         this.renderInsts.push(renderInst);
     }
 
@@ -406,16 +446,15 @@ class FSHPMeshInstance {
         for (let i = 0; i < this.renderInsts.length; i++) {
             this.renderInsts[i].visible = visible;
             if (visible) {
-                const depth = computeViewSpaceDepth(viewerInput.camera, this.mesh.bbox);
+                const depth = computeViewSpaceDepth(viewerInput.camera, this.meshData.mesh.bbox);
                 this.renderInsts[i].sortKey = setSortKeyDepth(this.renderInsts[i].sortKey, depth);
             }
         }
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputState(this.inputState);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyBuffer(this.indexBuffer);
+        for (let i = 0; i < this.renderInsts.length; i++)
+            this.renderInsts[i].destroy();
     }
 }
 
@@ -426,14 +465,14 @@ class FSHPInstance {
     public templateRenderInst: GfxRenderInst;
     public visible = true;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, fvtxInstance: FVTXInstance, public fshp: FSHP) {
+    constructor(renderInstBuilder: GfxRenderInstBuilder, fshpData: FSHPData) {
         // TODO(jstpierre): Joints.
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, AglProgram.ub_ShapeParams);
 
         // Only construct the first LOD mesh for now.
         for (let i = 0; i < 1; i++)
-            this.lodMeshInstances.push(new FSHPMeshInstance(device, renderInstBuilder, fvtxInstance, fshp.mesh[i]));
+            this.lodMeshInstances.push(new FSHPMeshInstance(renderInstBuilder, fshpData.meshData[i]));
 
         renderInstBuilder.popTemplateRenderInst();
     }
@@ -455,7 +494,7 @@ class FSHPInstance {
             let visible = this.visible;
 
             if (visible) {
-                bboxScratch.transform(this.lodMeshInstances[i].mesh.bbox, modelMatrix);
+                bboxScratch.transform(this.lodMeshInstances[i].meshData.mesh.bbox, modelMatrix);
                 visible = viewerInput.camera.frustum.contains(bboxScratch);
             }
 
@@ -470,7 +509,6 @@ class FSHPInstance {
 }
 
 export class FMDLRenderer {
-    public fvtxInst: FVTXInstance[] = [];
     public fmatInst: FMATInstance[] = [];
     public fshpInst: FSHPInstance[] = [];
     public gfxProgram: GfxProgram;
@@ -481,7 +519,7 @@ export class FMDLRenderer {
     public templateRenderInst: GfxRenderInst;
     public modelMatrix = mat4.create();
 
-    constructor(device: GfxDevice, public textureHolder: BRTITextureHolder, public fmdl: FMDL) {
+    constructor(device: GfxDevice, public textureHolder: BRTITextureHolder, public fmdlData: FMDLData) {
         this.gfxProgram = device.createProgram(new AglProgram());
         const programReflection = device.queryProgram(this.gfxProgram);
 
@@ -524,23 +562,18 @@ export class FMDLRenderer {
     }
 
     public translateModel(device: GfxDevice): void {
-        for (let i = 0; i < this.fmdl.fvtx.length; i++)
-            this.fvtxInst.push(new FVTXInstance(device, this.fmdl.fvtx[i]));
-        for (let i = 0; i < this.fmdl.fmat.length; i++)
-            this.fmatInst.push(new FMATInstance(device, this.textureHolder, this.renderInstBuilder, this.fmdl.fmat[i]));
-        for (let i = 0; i < this.fmdl.fshp.length; i++) {
-            const fshp = this.fmdl.fshp[i];
-            const fvtxInstance = this.fvtxInst[fshp.vertexIndex];
-            const fmatInstance = this.fmatInst[fshp.materialIndex];
+        for (let i = 0; i < this.fmdlData.fmdl.fmat.length; i++)
+            this.fmatInst.push(new FMATInstance(device, this.textureHolder, this.renderInstBuilder, this.fmdlData.fmdl.fmat[i]));
+        for (let i = 0; i < this.fmdlData.fshpData.length; i++) {
+            const fshpData = this.fmdlData.fshpData[i];
+            const fmatInstance = this.fmatInst[fshpData.fshp.materialIndex];
             this.renderInstBuilder.pushTemplateRenderInst(fmatInstance.templateRenderInst);
-            this.fshpInst.push(new FSHPInstance(device, this.renderInstBuilder, fvtxInstance, fshp));
+            this.fshpInst.push(new FSHPInstance(this.renderInstBuilder, fshpData));
             this.renderInstBuilder.popTemplateRenderInst();
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.fvtxInst.length; i++)
-            this.fvtxInst[i].destroy(device);
         for (let i = 0; i < this.fmatInst.length; i++)
             this.fmatInst[i].destroy(device);
         for (let i = 0; i < this.fshpInst.length; i++)
@@ -561,6 +594,7 @@ export class BasicFRESRenderer extends BasicRendererHelper {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(10, 500000);
         for (let i = 0; i < this.fmdlRenderers.length; i++)
             this.fmdlRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
