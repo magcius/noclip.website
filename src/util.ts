@@ -6,7 +6,7 @@ export function assert(b: boolean): void {
 }
 
 export function assertExists<T>(v: T | null | undefined): T {
-    if (v)
+    if (v !== undefined && v !== null)
         return v;
     else
         throw new Error("Missing object");

@@ -75,15 +75,6 @@ in vec4 v_TangentWorld;
 in vec3 v_CameraWorld;
 
 vec4 textureSRGB(sampler2D s, vec2 uv) {
-    vec4 srgba = texture(s, uv);
-    vec3 srgb = srgba.rgb;
-    // XXX(jstpierre): Turn sRGB texturing back on at some point...
-#ifndef NOPE_HAS_WEBGL_compressed_texture_s3tc_srgb
-    vec3 rgb = srgb;
-#else
-    // http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html
-    vec3 rgb = srgb * (srgb * (srgb * 0.305306011 + 0.682171111) + 0.012522878);
-#endif
     return vec4(rgb, srgba.a);
 }
 

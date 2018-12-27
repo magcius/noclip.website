@@ -40,6 +40,7 @@ export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: 
 
 export enum GfxFormat {
     F16_RG       = makeFormat(FormatTypeFlags.F16, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
+    F16_RGBA     = makeFormat(FormatTypeFlags.F16, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     F32_R        = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
     F32_RG       = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
     F32_RGB      = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RGB,  FormatFlags.NONE),

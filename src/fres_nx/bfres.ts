@@ -389,6 +389,7 @@ function parseFMAT(buffer: ArrayBufferSlice, offs: number, littleEndian: boolean
         for (let i = 0; i < samplerAssignCount; i++) {
             const name = readBinStr(buffer, view.getUint32(samplerAssignDictIdx + 0x08, littleEndian), littleEndian);
             const value = readBinStr(buffer, view.getUint32(samplerAssignArrayIdx + 0x00, littleEndian), littleEndian);
+            assert(!samplerAssign.has(name));
             samplerAssign.set(name, value);
             samplerAssignDictIdx += 0x10;
             samplerAssignArrayIdx += 0x08;

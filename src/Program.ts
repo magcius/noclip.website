@@ -85,7 +85,7 @@ export abstract class BaseProgram {
             return !isEmpty;
         });
 
-        const defines = [... this.defines.entries()].map((k, v) => `#define ${k} ${v}`);
+        const defines = [... this.defines.entries()].map((k, v) => `#define ${k} ${v}`).join('\n');
         const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
         const extensionLines = lines.filter((line) => line.startsWith('#extension'));
         const extensions = extensionLines.filter((line) =>

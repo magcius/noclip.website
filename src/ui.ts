@@ -228,7 +228,6 @@ export class MultiSelect extends ScrollSelect {
     public itemClicked(index: number, first: boolean) {
         if (first)
             this.itemShouldBeOn = !this.itemIsOn[index];
-        console.log(index, this.itemIsOn[index], this.itemShouldBeOn);
         this.setItemIsOn(index, this.itemShouldBeOn);
         this.syncInternalFlairs();
     }

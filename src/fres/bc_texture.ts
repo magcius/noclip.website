@@ -318,7 +318,7 @@ function decompressBC45Surface(surface: DecodedSurfaceBC45): DecodedSurfaceRGBA 
                             dst[dstOffs + 0] = colorTable[index];
                             dst[dstOffs + 1] = colorTable[index];
                             dst[dstOffs + 2] = colorTable[index];
-                            dst[dstOffs + 3] = signed ? 127 : 255;
+                            dst[dstOffs + 3] = colorTable[index];
                         } else {
                             if (ch === 0) {
                                 dst[dstOffs + 0] = colorTable[index];
