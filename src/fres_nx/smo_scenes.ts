@@ -107,7 +107,11 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
 
     private _shouldFetchWorldResource(r: string): boolean {
         // Don't bother fetching stuff we know won't exist.
-        if (r.startsWith('SoundData/') || r.startsWith('SystemData/'))
+        if (r.startsWith('EffectData/') ||
+            r.startsWith('EventData/') ||
+            r.startsWith('LayoutData/') ||
+            r.startsWith('SoundData/') ||
+            r.startsWith('SystemData/'))
             return false;
 
         // TODO(jstpierre): Maybe have a manifest so we don't need to make so many garbage HTTP requests?
@@ -137,12 +141,13 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
             const worldHomeStageMap: StageMap = BYML.parse(resourceSystem.findBuffer(`StageData/${worldHomeStageMapName}`, `${worldHomeStageMapName}.byml`));
             console.log(worldHomeStageMap);
 
-            // Construct scenario 0.
-            const scenario = worldHomeStageMap[0];
+            // Construct entry 1. My guess is that this is a sort of scenario list,
+            // but how it interacts with the layer system, I don't know.
+            const entry = worldHomeStageMap[1];
 
             const sceneRenderer = new BasicFRESRenderer(resourceSystem.textureHolder);
-            for (let i = 0; i < scenario.ObjectList.length; i++) {
-                const stageObject = scenario.ObjectList[i];
+            for (let i = 0; i < entry.ObjectList.length; i++) {
+                const stageObject = entry.ObjectList[i];
                 const fmdlData = resourceSystem.getFMDLData(device, `ObjectData/${stageObject.UnitConfigName}`);
                 if (fmdlData === null) continue;
                 const renderer = new FMDLRenderer(device, resourceSystem.textureHolder, fmdlData);
@@ -159,6 +164,8 @@ const name = "Super Mario Odyssey (Experimental)";
 const id = "smo";
 const sceneDescs: OdysseySceneDesc[] = [
     new OdysseySceneDesc('Cap'),
+    new OdysseySceneDesc('Waterfall'),
+    new OdysseySceneDesc('City'),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
