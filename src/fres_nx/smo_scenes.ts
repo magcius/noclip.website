@@ -9,7 +9,7 @@ import { fetchData } from '../fetch';
 import * as SARC from '../fres/sarc';
 import * as BFRES from './bfres';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { BRTITextureHolder, BasicFRESRenderer, FMDLRenderer } from './render';
+import { BRTITextureHolder, BasicFRESRenderer, FMDLRenderer, FMDLData } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
 import { mat4, quat, vec3 } from 'gl-matrix';
@@ -19,7 +19,8 @@ const basePath = `data/smo`;
 class ResourceSystem {
     public textureHolder = new BRTITextureHolder();
     public mounts = new Map<string, SARC.SARC>();
-    public bfresCache = new Map<string, BFRES.FRES>();
+    public bfresCache = new Map<string, BFRES.FRES | null>();
+    public fmdlDataCache = new Map<string, FMDLData | null>();
 
     public loadResource(device: GfxDevice, mountName: string, sarc: SARC.SARC): void {
         assert(!this.mounts.has(mountName));
@@ -38,7 +39,7 @@ class ResourceSystem {
         }
     }
 
-    public findBFRES(mountName: string): BFRES.FRES | null {
+    public findFRES(mountName: string): BFRES.FRES | null {
         if (!this.bfresCache.has(mountName)) {
             console.log(`No FRES for ${mountName}`);
             this.bfresCache.set(mountName, null);
@@ -47,13 +48,34 @@ class ResourceSystem {
         return this.bfresCache.get(mountName);
     }
 
+    public getFMDLData(device: GfxDevice, mountName: string): FMDLData | null {
+        if (!this.fmdlDataCache.has(mountName)) {
+            const fres = this.findFRES(mountName);
+            let fmdlData: FMDLData = null;
+            if (fres !== null) {
+                assert(fres.fmdl.length === 1);
+                fmdlData = new FMDLData(device, fres.fmdl[0])
+            }
+            this.fmdlDataCache.set(mountName, fmdlData);
+        }
+        return this.fmdlDataCache.get(mountName);
+    }
+
     public findBuffer(mountName: string, fileName: string): ArrayBufferSlice {
         const sarc = assertExists(this.mounts.get(mountName));
         return sarc.files.find((n) => n.name === fileName).buffer;
     }
 }
 
+type StageMap = { ObjectList: StageObject[] }[];
 type Vector = { X: number, Y: number, Z: number };
+type StageObject = {
+    UnitConfigName: string,
+    UnitConfig: UnitConfig,
+    Rotate: Vector,
+    Scale: Vector,
+    Translate: Vector,
+};
 type UnitConfig = {
     DisplayName: string,
     DisplayRotate: Vector,
@@ -65,11 +87,10 @@ type UnitConfig = {
 };
 
 const q = quat.create(), v = vec3.create(), s = vec3.create();
-function calcModelMtxFromUnitConfig(dst: mat4, unitConfig: UnitConfig): void {
-    const { DisplayScale, DisplayRotate, DisplayTranslate } = unitConfig;
-    quat.fromEuler(q, DisplayRotate.X, DisplayRotate.Y, DisplayRotate.Z);
-    vec3.set(v, DisplayTranslate.X, DisplayTranslate.Y, DisplayTranslate.Z);
-    vec3.set(s, DisplayScale.X, DisplayScale.Y, DisplayScale.Z);
+function calcModelMtxFromTRSVectors(dst: mat4, tv: Vector, rv: Vector, sv: Vector): void {
+    quat.fromEuler(q, rv.X, rv.Y, rv.Z);
+    vec3.set(v, tv.X, tv.Y, tv.Z);
+    vec3.set(s, sv.X, sv.Y, sv.Z);
     mat4.fromRotationTranslationScale(dst, q, v, s);
 }
 
@@ -82,10 +103,6 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
             if (buffer.byteLength === 0) return null;
             return Yaz0.decompress(buffer).then((buffer) => SARC.parse(buffer));
         });
-    }
-
-    public setUnitConfig(renderer: FMDLRenderer, unitConfig: UnitConfig): void {
-        calcModelMtxFromUnitConfig(renderer.modelMatrix, unitConfig);
     }
 
     private _shouldFetchWorldResource(r: string): boolean {
@@ -114,13 +131,6 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
                 });
             }));
         }).then(() => {
-            type StageMap = [
-                { ObjectList: {
-                    UnitConfigName: string,
-                    UnitConfig: UnitConfig,
-                }[] }
-            ];
-
             // I believe this name is normally pulled from StageList.byml
             const worldHomeStageMapName = `${this.id}WorldHomeStageMap`;
 
@@ -128,19 +138,17 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
             console.log(worldHomeStageMap);
 
             // Construct scenario 0.
-            const sceneRenderer = new BasicFRESRenderer(resourceSystem.textureHolder);
-
             const scenario = worldHomeStageMap[0];
-            for (let i = 0; i < scenario.ObjectList.length; i++) {
-                const { UnitConfig, UnitConfigName } = scenario.ObjectList[i];
-                const fres = resourceSystem.findBFRES(`ObjectData/${UnitConfigName}`);
-                if (fres === null) continue;
 
-                const renderer = new FMDLRenderer(device, resourceSystem.textureHolder, fres.fmdl[0]);
-                this.setUnitConfig(renderer, UnitConfig);
+            const sceneRenderer = new BasicFRESRenderer(resourceSystem.textureHolder);
+            for (let i = 0; i < scenario.ObjectList.length; i++) {
+                const stageObject = scenario.ObjectList[i];
+                const fmdlData = resourceSystem.getFMDLData(device, `ObjectData/${stageObject.UnitConfigName}`);
+                if (fmdlData === null) continue;
+                const renderer = new FMDLRenderer(device, resourceSystem.textureHolder, fmdlData);
+                calcModelMtxFromTRSVectors(renderer.modelMatrix, stageObject.Translate, stageObject.Rotate, stageObject.Scale);
                 sceneRenderer.addFMDLRenderer(device, renderer);
             }
-
             return sceneRenderer;
         });
     }
