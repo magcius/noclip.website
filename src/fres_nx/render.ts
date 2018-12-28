@@ -8,7 +8,7 @@ import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMo
 import * as BNTX from './bntx';
 import { surfaceToCanvas } from '../fres/bc_texture';
 import { translateImageFormat, deswizzle, decompress, getImageFormatString } from './tegra_texture';
-import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FMAT_ShaderAssign } from './bfres';
+import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FMAT_ShaderAssign, FVTX_VertexAttribute, FVTX_VertexBuffer } from './bfres';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from './nngfx_enum';
 import { nArray, assert, assertExists } from '../util';
@@ -39,20 +39,21 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
             width: textureEntry.width,
             height: textureEntry.height,
             depth: 1,
-            numLevels: 1,
+            numLevels: textureEntry.mipBuffers.length,
         });
         const canvases: HTMLCanvasElement[] = [];
 
         const channelFormat = getChannelFormat(textureEntry.imageFormat);
 
-        for (let i = 0; i < 1; i++) {
+        for (let i = 0; i < textureEntry.mipBuffers.length; i++) {
             const mipLevel = i;
 
             const buffer = textureEntry.mipBuffers[i];
-            const width = textureEntry.width;
-            const height = textureEntry.height;
+            const width = Math.max(textureEntry.width >>> mipLevel, 1);
+            const height = Math.max(textureEntry.height >>> mipLevel, 1);
+            const depth = 1;
             const deswizzled = deswizzle({ buffer, width, height, channelFormat });
-            const rgbaTexture = decompress(textureEntry, deswizzled);
+            const rgbaTexture = decompress({ ...textureEntry, width, height, depth }, deswizzled);
             const rgbaPixels = rgbaTexture.pixels;
 
             const hostAccessPass = device.createHostAccessPass();
@@ -114,7 +115,9 @@ class AglProgram extends DeviceProgram {
     public static _p0: number = 0;
     public static _c0: number = 1;
     public static _u0: number = 2;
-    public static a_Orders = [ '_p0', '_c0', '_u0' ];
+    public static _n0: number = 3;
+    public static _t0: number = 4;
+    public static a_Orders = [ '_p0', '_c0', '_u0', '_n0', '_t0' ];
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -163,21 +166,6 @@ uniform sampler2D u_Samplers[8];
 
     public both = AglProgram.globalDefinitions;
 
-    public vert = `
-layout(location = ${AglProgram._p0}) in vec3 _p0;
-layout(location = ${AglProgram._c0}) in vec4 _c0;
-layout(location = ${AglProgram._u0}) in vec2 _u0;
-
-out vec2 v_u0;
-out vec4 v_c0;
-
-void main() {
-    gl_Position = u_Projection * mat4(u_ModelView) * vec4(_p0, 1.0);
-    v_u0 = _u0;
-    v_c0 = _c0;
-}
-`;
-
     public lookupSamplerIndex(shadingModelSamplerBindingName: string) {
         // Translate to a local sampler by looking in the sampler map, and then that's the index we use.
         const samplerName = assertExists(this.fmat.shaderAssign.samplerAssign.get(shadingModelSamplerBindingName));
@@ -219,7 +207,7 @@ void main() {
     public genSample(shadingModelSamplerBindingName: string): string {
         try {
             const samplerIndex = this.lookupSamplerIndex(shadingModelSamplerBindingName);
-            const uv = 'v_u0';
+            const uv = 'v_TexCoord0';
             return `texture(u_Samplers[${samplerIndex}], ${uv})`;
         } catch(e) {
             // TODO(jstpierre): Figure out wtf is going on.
@@ -252,7 +240,7 @@ void main() {
     
         if (kind === 1)
             return this.genSample(`_a${instance}`);
-        else if (kind === 2)
+        else if (kind === 2 || kind === 3)
             return this.genSample(`_n${instance}`);
         else if (kind === 5)
             return this.genSample(`_u${instance}`);
@@ -262,7 +250,7 @@ void main() {
             return this.genBlend(instance);
         else if (kind === 11) {
             // TODO(jstpierre): Is this right?
-            if (instance === 0 || instance === 5)
+            if (instance === 0 || instance === 2 || instance === 5)
                 return `vec4(0.0)`;
             else if (instance === 6)
                 return `vec4(1.0)`;
@@ -292,18 +280,46 @@ void main() {
             return true;
     }
 
+    public vert = `
+layout(location = ${AglProgram._p0}) in vec3 _p0;
+layout(location = ${AglProgram._c0}) in vec4 _c0;
+layout(location = ${AglProgram._u0}) in vec2 _u0;
+layout(location = ${AglProgram._n0}) in vec4 _n0;
+layout(location = ${AglProgram._t0}) in vec4 _t0;
+
+out vec3 v_PositionWorld;
+out vec2 v_TexCoord0;
+out vec4 v_VtxColor;
+
+out vec4 v_NormalWorld;
+out vec4 v_TangentWorld;
+
+void main() {
+    gl_Position = u_Projection * mat4(u_ModelView) * vec4(_p0, 1.0);
+    v_PositionWorld = _p0.xyz;
+    v_TexCoord0 = _u0;
+    v_VtxColor = _c0;
+    v_NormalWorld = _n0;
+    v_TangentWorld = _t0;
+}
+`;
+
     public generateFrag() {
         return `
 precision mediump float;
 
-in vec2 v_u0;
-in vec4 v_c0;
+in vec3 v_PositionWorld;
+in vec2 v_TexCoord0;
+in vec4 v_VtxColor;
+in vec4 v_NormalWorld;
+in vec4 v_TangentWorld;
 
 void main() {
     o_color = vec4(0.0);
 
 ${this.condShaderOption(`enable_base_color`, () => `
-    o_color = ${this.genOutput(`o_base_color`)};
+    vec4 o_base_color = ${this.genOutput(`o_base_color`)};
+    o_color += o_base_color;
 `)}
 
     // TODO(jstpierre): When should o_alpha be used?
@@ -311,13 +327,36 @@ ${this.condShaderOption(`enable_base_color`, () => `
 
 // TODO(jstpierre): How does this interact with enable_base_color_mul_color
 #ifdef OPT_vtxcolor
-    o_color *= v_c0;
+    o_color.rgb *= v_VtxColor.rgb;
 #endif
+
+${this.condShaderOption(`enable_normal`, () => `
+    vec3 t_Normal = v_NormalWorld.xyz;
+    vec3 t_Tangent = normalize(v_TangentWorld.xyz);
+    vec3 t_Bitangent = cross(t_Normal, t_Tangent) * v_TangentWorld.w;
+
+    // Perturb normal with map.
+    vec3 t_LocalNormal = vec3(${this.genOutput(`o_normal`)}.rg, 0);
+    float t_Len2 = 1.0 - t_LocalNormal.x*t_LocalNormal.x - t_LocalNormal.y*t_LocalNormal.y;
+    t_LocalNormal.z = sqrt(clamp(t_Len2, 0.0, 1.0));
+    vec3 t_NormalDir = (t_LocalNormal.x * t_Tangent + t_LocalNormal.y * t_Bitangent + t_LocalNormal.z * t_Normal);
+
+    vec3 t_LightDir = normalize(vec3(-0.5, -0.5, -1));
+    float t_LightIntensity = clamp(dot(t_LightDir, -t_NormalDir), 0.0, 1.0);
+    // Don't perturb that much.
+    t_LightIntensity = mix(0.5, 1.0, t_LightIntensity);
+
+    o_color.rgb *= t_LightIntensity;
+`)}
 
 ${this.condShaderOption(`enable_alphamask`, () => `
     // TODO(jstpierre): Dynamic alpha reference value (it should be in the shader params)
     if (o_color.a <= 0.5)
         discard;
+`)}
+
+${this.condShaderOption(`enable_emission`, () => `
+    vec4 o_emission = ${this.genOutput(`o_emission`)};
 `)}
 
     // Gamma correction.
@@ -487,31 +526,91 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
     }
 }
 
+interface ConvertedBuffer {
+    format: GfxFormat;
+    data: ArrayBuffer;
+    stride: number;
+}
+
 class FVTXData {
     public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
     public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
     constructor(device: GfxDevice, public fvtx: FVTX) {
+        let nextBufferIndex = fvtx.vertexBuffers.length;
+
         for (let i = 0; i < fvtx.vertexAttributes.length; i++) {
             const vertexAttribute = fvtx.vertexAttributes[i];
             const attribLocation = AglProgram.a_Orders.indexOf(vertexAttribute.name);
             if (attribLocation < 0)
                 continue;
 
-            this.vertexAttributeDescriptors.push({
-                location: attribLocation,
-                format: translateAttributeFormat(vertexAttribute.format),
-                bufferIndex: vertexAttribute.bufferIndex,
-                bufferByteOffset: vertexAttribute.offset,
-                frequency: GfxVertexAttributeFrequency.PER_VERTEX,
-            });
+            const bufferIndex = vertexAttribute.bufferIndex;
+            const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
+            const convertedBuffer = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
+            if (convertedBuffer !== null) {
+                const attribBufferIndex = nextBufferIndex++;
+
+                this.vertexAttributeDescriptors.push({
+                    location: attribLocation,
+                    format: convertedBuffer.format,
+                    bufferIndex: attribBufferIndex,
+                    // When we convert the buffer we remove the byte offset.
+                    bufferByteOffset: 0,
+                    frequency: GfxVertexAttributeFrequency.PER_VERTEX,
+                });
+
+                const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, convertedBuffer.data);
+                this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer, byteOffset: 0, byteStride: convertedBuffer.stride };
+            } else {
+                // Can use buffer data directly.
+                this.vertexAttributeDescriptors.push({
+                    location: attribLocation,
+                    format: translateAttributeFormat(vertexAttribute.format),
+                    bufferIndex: bufferIndex,
+                    bufferByteOffset: vertexAttribute.offset,
+                    frequency: GfxVertexAttributeFrequency.PER_VERTEX,
+                });
+
+                if (!this.vertexBufferDescriptors[bufferIndex]) {
+                    const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexBuffer.data.castToBuffer());
+                    this.vertexBufferDescriptors[bufferIndex] = { buffer: gfxBuffer, byteOffset: 0, byteStride: vertexBuffer.stride };
+                }
+            }
+        }
+    }
+
+    public convertVertexAttribute(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedBuffer {
+        switch (vertexAttribute.format) {
+        case AttributeFormat._10_10_10_2_Snorm:
+            return this.convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute, vertexBuffer);
+        default:
+            return null;
+        }
+    }
+
+    public convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedBuffer {
+        function signExtend10(n: number): number {
+            return (n << 22) >> 22;
         }
 
-        for (let i = 0; i < fvtx.vertexBuffers.length; i++) {
-            const vertexBuffer = fvtx.vertexBuffers[i];
-            const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexBuffer.data.castToBuffer());
-            this.vertexBufferDescriptors.push({ buffer: gfxBuffer, byteOffset: 0, byteStride: vertexBuffer.stride });
+        const numElements = vertexBuffer.data.byteLength / vertexBuffer.stride;
+        const format = GfxFormat.S16_RGBA_NORM;
+        const out = new Int16Array(numElements * 4);
+        const stride = out.BYTES_PER_ELEMENT * 4;
+        let dst = 0;
+        let offs = vertexAttribute.offset;
+        const view = vertexBuffer.data.createDataView();
+        for (let i = 0; i < numElements; i++) {
+            const n = view.getUint32(offs, true);
+            out[dst++] = signExtend10((n >>>  0) & 0x3FF) << 4;
+            out[dst++] = signExtend10((n >>> 10) & 0x3FF) << 4;
+            out[dst++] = signExtend10((n >>> 20) & 0x3FF) << 4;
+            out[dst++] = ((n >>> 30) & 0x03) << 14;
+            offs += vertexBuffer.stride;
         }
+
+        return { format, data: out.buffer, stride };
     }
 
     public destroy(device: GfxDevice): void {
