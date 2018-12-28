@@ -308,10 +308,15 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new TTYDSceneDesc('yuu_02', "Pianta Parlor: Tube Game"),
     new TTYDSceneDesc('yuu_03', "Pianta Parlor: Paper Game"),
 
-    new TTYDSceneDesc('stg_01', "Battle Stage - Red"),
-    new TTYDSceneDesc('stg_02', "Battle Stage - Green"),
-    new TTYDSceneDesc('stg_03', "Battle Stage - Blue"),
-    new TTYDSceneDesc('stg_04', "Battle Stage - White"),
+    new TTYDSceneDesc('bti_01', "Battle Stage - Rising Star"),
+    new TTYDSceneDesc('bti_02', "Battle Stage - B-List Star"),
+    new TTYDSceneDesc('bti_03', "Battle Stage - A-List Star"),
+    new TTYDSceneDesc('bti_04', "Battle Stage - Superstar"),
+
+    new TTYDSceneDesc('stg_01', "Battle Stage - Red (Unused)"),
+    new TTYDSceneDesc('stg_02', "Battle Stage - Green (Unused)"),
+    new TTYDSceneDesc('stg_03', "Battle Stage - Blue (Unused)"),
+    new TTYDSceneDesc('stg_04', "Battle Stage - White (Unused)"),
 
     new TTYDSceneDesc('stg_00_0'),
     new TTYDSceneDesc('stg_00_1'),
