@@ -4,7 +4,7 @@ import { GX2Surface, DeswizzledSurface } from './gx2_surface';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import WorkerPool from '../WorkerPool';
-import { DeswizzleRequest } from './gx2_swizzle';
+import { DeswizzleRequest, deswizzle } from './gx2_swizzle';
 import { DecodedSurface, DecodedSurfaceSW, decompressBC } from './bc_texture';
 
 class Deswizzler {
@@ -15,9 +15,10 @@ class Deswizzler {
     }
 
     public deswizzle(surface: GX2Surface, buffer: ArrayBuffer, mipLevel: number): Promise<DeswizzledSurface> {
-        // return Promise.resolve<DeswizzledSurface>(deswizzle(surface, buffer, mipLevel));
-        const req: DeswizzleRequest = { surface, buffer, mipLevel, priority: mipLevel };
-        return this.pool.execute(req);
+        return Promise.resolve<DeswizzledSurface>(deswizzle(surface, buffer, mipLevel));
+        // TODO(jstpierre): For some reason the worker version seems to crash now? Not sure what's going on...
+        // const req: DeswizzleRequest = { surface, buffer, mipLevel, priority: mipLevel };
+        // return this.pool.execute(req);
     }
 
     public terminate() {

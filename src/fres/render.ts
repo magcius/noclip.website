@@ -75,7 +75,7 @@ in vec4 v_TangentWorld;
 in vec3 v_CameraWorld;
 
 vec4 textureSRGB(sampler2D s, vec2 uv) {
-    return vec4(rgb, srgba.a);
+    return texture(s, uv);
 }
 
 void main() {
