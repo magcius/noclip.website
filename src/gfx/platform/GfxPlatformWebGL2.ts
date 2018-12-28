@@ -68,6 +68,7 @@ interface GfxInputStateP_GL extends GfxInputState {
     indexBufferType: GLenum;
     indexBufferCompByteSize: number;
     inputLayout: GfxInputLayoutP_GL;
+    vertexBuffers: GfxVertexBufferDescriptor[];
 }
 
 interface GfxBindingLayoutTableP_GL {
@@ -790,7 +791,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         gl.bindVertexArray(null);
 
-        const inputState: GfxInputStateP_GL = { _T: _T.InputState, vao, indexBufferByteOffset, indexBufferType, indexBufferCompByteSize, inputLayout };
+        const inputState: GfxInputStateP_GL = { _T: _T.InputState, vao, indexBufferByteOffset, indexBufferType, indexBufferCompByteSize, inputLayout, vertexBuffers };
         return inputState;
     }
 
