@@ -43,7 +43,7 @@ export default class WorkerPool<TReq extends WorkerRequest, TRes> {
     private outstandingRequests: WorkerManagerRequest<TReq, TRes>[] = [];
     private workers: WorkerManager<TReq, TRes>[] = [];
 
-    constructor(private workerConstructor: () => Worker, private numWorkers: number = 8) {
+    constructor(private workerConstructor: () => Worker, private numWorkers: number = 1) {
     }
 
     public terminate(): void {
