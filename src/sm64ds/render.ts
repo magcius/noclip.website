@@ -55,7 +55,7 @@ layout(row_major, std140) uniform ub_PacketParams {
 layout(location = ${NITRO_Program.a_Position}) in vec3 a_Position;
 layout(location = ${NITRO_Program.a_UV}) in vec2 a_UV;
 layout(location = ${NITRO_Program.a_Color}) in vec4 a_Color;
-layout(location = ${NITRO_Program.a_Normal}) in vec4 a_Normal;
+layout(location = ${NITRO_Program.a_Normal}) in vec3 a_Normal;
 out vec4 v_Color;
 out vec2 v_UV;
 
