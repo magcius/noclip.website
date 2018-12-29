@@ -15,7 +15,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -27,6 +27,7 @@ export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
     public static a_UV = 1;
     public static a_Color = 2;
+	public static a_Normal = 3;
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -43,7 +44,9 @@ layout(row_major, std140) uniform ub_SceneParams {
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
     mat4x2 u_TexMtx[1];
+	vec4 u_Misc0;
 };
+#define u_TexCoordMode (u_Misc0.x)
 
 layout(row_major, std140) uniform ub_PacketParams {
     mat4x3 u_ModelView;
@@ -52,13 +55,18 @@ layout(row_major, std140) uniform ub_PacketParams {
 layout(location = ${NITRO_Program.a_Position}) in vec3 a_Position;
 layout(location = ${NITRO_Program.a_UV}) in vec2 a_UV;
 layout(location = ${NITRO_Program.a_Color}) in vec4 a_Color;
+layout(location = ${NITRO_Program.a_Normal}) in vec4 a_Normal;
 out vec4 v_Color;
 out vec2 v_UV;
 
 void main() {
     gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
     v_Color = a_Color;
-    v_UV = (u_TexMtx[0] * vec4(a_UV, 1.0, 1.0)).st;
+	if(u_TexCoordMode == 2.0){
+		v_UV = (a_Normal.xy+vec2(1,1))/4.0;
+	}else{
+		v_UV = (u_TexMtx[0] * vec4(a_UV, 1.0, 1.0)).st;
+	}
 }
 `;
     public frag = `
@@ -137,6 +145,7 @@ export class Command_VertexData {
             { location: NITRO_Program.a_Position, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: NITRO_Program.a_Color, format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 3*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: NITRO_Program.a_UV, format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 7*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+			{ location: NITRO_Program.a_Normal, format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 9*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
         ];
 
         const indexBufferFormat = GfxFormat.U16_R;
@@ -239,12 +248,18 @@ class BMDRenderer {
         const texture = material.texture;
         const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         const textureMapping = new TextureMapping();
+        
+        const texCoordMode = material.texParams >>> 30;
 
+        console.log(texCoordMode);
+
+        const normalMode = texCoordMode==NITRO_BMD.TexCoordMode.NORMAL;
+        console.log(texCoordMode);
         if (texture !== null) {
             this.textureHolder.fillTextureMapping(textureMapping, texture.name);
             textureMapping.gfxSampler = this.arena.trackSampler(device.createSampler({
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
+                minFilter: normalMode?GfxTexFilterMode.BILINEAR:GfxTexFilterMode.POINT,
+                magFilter: normalMode?GfxTexFilterMode.BILINEAR:GfxTexFilterMode.POINT,
                 mipFilter: GfxMipFilterMode.NO_MIP,
                 wrapS: parseTexImageParamWrapModeS(material.texParams),
                 wrapT: parseTexImageParamWrapModeT(material.texParams),
@@ -292,9 +307,10 @@ class BMDRenderer {
             }
 
             if (texture !== null) {
-                const materialParamsMapped = this.materialParamsBuffer.mapBufferF32(templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams], 8);
+                const materialParamsMapped = this.materialParamsBuffer.mapBufferF32(templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams], 12);
                 let offs = templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams];
                 offs += fillMatrix3x2(materialParamsMapped, offs, texAnimMat);
+				offs += fillVec4(materialParamsMapped, offs, texCoordMode);
             }
         };
     }
@@ -467,19 +483,36 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
+    private _createBMDPaintingRenderer(device: GfxDevice, textureHolder: NITROTextureHolder, filename: string, translation: vec3, scaleX: number, scaleY: number, rotationX: number, rotationY: number, isMirrored: boolean): PromiseLike<BMDRenderer> {
+        return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
+            result = LZ77.maybeDecompress(result);
+            const bmd = NITRO_BMD.parse(result);
+            const renderer = new BMDRenderer(device, textureHolder, bmd, null);
+            mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
+            mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
+            mat4.rotateX(renderer.localMatrix, renderer.localMatrix, rotationX);
+            mat4.scale(renderer.localMatrix, renderer.localMatrix, [scaleX*0.8, scaleY*0.8, 0.8]);
+            mat4.translate(renderer.localMatrix, renderer.localMatrix, [0, 6.25, 0]);
+            if(isMirrored)
+                mat2d.scale(bmd.models[0].batches[0].material.texCoordMat, bmd.models[0].batches[0].material.texCoordMat, [-1, 1]);
+            return renderer;
+        });
+    }
+
     private _createBMDObjRenderer(device: GfxDevice, textureHolder: NITROTextureHolder, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): PromiseLike<BMDRenderer> {
         return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
             const renderer = new BMDRenderer(device, textureHolder, bmd, null);
-            vec3.scale(translation, translation, 16 / bmd.scaleFactor);
+            vec3.scale(translation, translation, 1/bmd.scaleFactor);
             mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
             mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
             mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
+            
+            
 
             if (spinSpeed > 0) {
-                const spinPhase = Math.random() * Math.PI * 2;
-                renderer.animation = new YSpinAnimation(spinSpeed, spinPhase);
+                renderer.animation = new YSpinAnimation(spinSpeed, 0);
             }
 
             return renderer;
@@ -488,9 +521,7 @@ export class SceneDesc implements Viewer.SceneDesc {
 
     private _createBMDRendererForObject(device: GfxDevice, textureHolder: NITROTextureHolder, object: CRG1Object): PromiseLike<BMDRenderer> {
         const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
-        // WTF is with the Tau? And the object scales?
-        vec3.scale(translation, translation, Math.PI * 2);
-
+        vec3.scale(translation, translation, 100);
         const rotationY = object.Rotation.Y / 180 * Math.PI;
 
         switch (object.ObjectId) {
@@ -533,9 +564,11 @@ export class SceneDesc implements Viewer.SceneDesc {
                 'for_hm', 'for_hs', 'for_td_tt', 'for_ct', 'for_ex_mario', 'for_ex_luigi', 'for_ex_wario', 'for_vs_cross', 'for_vs_island',
             ];
             const filename = `picture/${filenames[painting]}.bmd`;
-            const scale = ((object.Parameters[0] & 0xF) + 1);
-            translation[1] += scale * 0.3;
-            return this._createBMDObjRenderer(device, textureHolder, filename, translation, rotationY, scale);
+            const scaleX = (object.Parameters[0] & 0xF)+1;
+            const scaleY = ((object.Parameters[0] >> 4) & 0xF)+1;
+            const rotationX = object.Parameters[1]/65536*(Math.PI*2);
+            const isMirrored = ((object.Parameters[0] >> 13) & 0x3) == 3;
+            return this._createBMDPaintingRenderer(device, textureHolder, filename, translation, scaleX, scaleY, rotationX, rotationY, isMirrored);
         }
         case 43: // Switch
         case 44: // Switch-powered Star
