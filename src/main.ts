@@ -145,6 +145,7 @@ class DroppedFileSceneDesc implements SceneDesc {
 
 class SceneLoader {
     public loadingSceneDesc: SceneDesc = null;
+    public abortController: AbortController | null = null;
     public onscenechanged: () => void;
 
     constructor(public viewer: Viewer) {
@@ -170,12 +171,16 @@ class SceneLoader {
     public loadSceneDesc(sceneDesc: SceneDesc, cameraState: string): Progressable<MainScene> | Progressable<Scene_Device> {
         this.viewer.setScene(null);
 
+        if (this.abortController !== null)
+            this.abortController.abort();
+        this.abortController = new AbortController();
+
         this.loadingSceneDesc = sceneDesc;
 
         const gl = this.viewer.renderState.gl;
 
         if (sceneDesc.createScene_Device !== undefined) {
-            const progressable = sceneDesc.createScene_Device(this.viewer.gfxDevice);
+            const progressable = sceneDesc.createScene_Device(this.viewer.gfxDevice, this.abortController.signal);
             if (progressable !== null) {
                 progressable.then((scene: Scene_Device) => {
                     if (this.loadingSceneDesc === sceneDesc) {
@@ -421,7 +426,10 @@ class Main {
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
         const progressable = this.sceneLoader.loadSceneDesc(sceneDesc, cameraState);
-        this.ui.sceneSelect.setProgressable(progressable);
+        this.ui.sceneSelect.setLoadProgress(progressable.progress);
+        progressable.onProgress = () => {
+            this.ui.sceneSelect.setLoadProgress(progressable.progress);
+        };
 
         // Set window title.
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;

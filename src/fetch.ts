@@ -8,11 +8,16 @@ export interface NamedArrayBufferSlice extends ArrayBufferSlice {
     name: string;
 }
 
-export function fetchData(url: string): Progressable<NamedArrayBufferSlice> {
+export function fetchData(url: string, abortSignal: AbortSignal | null = null): Progressable<NamedArrayBufferSlice> {
     const request = new XMLHttpRequest();
     request.open("GET", url, true);
     request.responseType = "arraybuffer";
     request.send();
+    if (abortSignal !== null) {
+        abortSignal.addEventListener('abort', () => {
+            request.abort();
+        });
+    }
     const p = new Promise<NamedArrayBufferSlice>((resolve, reject) => {
         request.onload = () => {
             pr.setProgress(1);
@@ -25,6 +30,9 @@ export function fetchData(url: string): Progressable<NamedArrayBufferSlice> {
             }
             slice.name = url;
             resolve(slice);
+        };
+        request.onabort = () => {
+            reject(400);
         };
         request.onerror = () => {
             reject();

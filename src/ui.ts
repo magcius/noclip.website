@@ -404,13 +404,6 @@ class SceneSelect extends Panel {
         };
     }
 
-    public setProgressable(p: Progressable<any>) {
-        this.setLoadProgress(p.progress);
-        p.onProgress = () => {
-            this.setLoadProgress(p.progress);
-        };
-    }
-
     public setCurrentDesc(sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) {
         this.selectedSceneGroup = sceneGroup;
         this.currentSceneGroup = sceneGroup;
