@@ -17,7 +17,10 @@ const enum NodeType {
     BOOL         = 0xD0,
     INT          = 0xD1,
     FLOAT        = 0xD2,
-    SHORT        = 0xD3,
+    UINT         = 0xD3,
+    INT64        = 0xE4,
+    UINT64       = 0xE5,
+    FLOAT64      = 0xE6,
     FLOAT_ARRAY  = 0xE2, // CRG1 extension.
     NULL         = 0xFF,
 }
@@ -30,11 +33,11 @@ interface FileDescription {
 const fileDescriptions: { [key: number]: FileDescription } = {
     [FileType.BYML]: {
         magics: ['BY\0\x01', 'BY\0\x02', 'YB\x03\0'],
-        allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.SHORT, NodeType.FLOAT, NodeType.NULL ],
+        allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.UINT, NodeType.FLOAT, NodeType.NULL ],
     },
     [FileType.CRG1]: {
         magics: ['CRG1'],
-        allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.SHORT, NodeType.FLOAT, NodeType.NULL, NodeType.FLOAT_ARRAY, NodeType.BINARY_DATA ],
+        allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.UINT, NodeType.FLOAT, NodeType.NULL, NodeType.FLOAT_ARRAY, NodeType.BINARY_DATA ],
     },
 }
 
@@ -178,17 +181,22 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
         return !!value;
     }
     case NodeType.INT:
-    case NodeType.SHORT: {
-        const value = view.getUint32(offs, context.littleEndian);
-        return value;
-    }
-    case NodeType.FLOAT: {
-        const value = view.getFloat32(offs, context.littleEndian);
-        return value;
-    }
-    case NodeType.NULL: {
+        return view.getInt32(offs, context.littleEndian);
+    case NodeType.UINT:
+        return view.getUint32(offs, context.littleEndian);
+    case NodeType.FLOAT:
+        return view.getFloat32(offs, context.littleEndian);
+    // TODO(jstpierre): we need a BigInt?
+    case NodeType.INT64:
+        return view.getInt32(offs, context.littleEndian);
+    case NodeType.UINT64:
+        return view.getUint32(offs, context.littleEndian);
+    case NodeType.FLOAT64:
+        return view.getFloat64(offs, context.littleEndian);
+    case NodeType.NULL:
         return null;
-    }
+    default:
+        throw new Error();
     }
 }
 
