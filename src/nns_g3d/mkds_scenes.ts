@@ -19,16 +19,16 @@ import { assert } from '../util';
 class MarioKartDSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    private fetchCARC(path: string): Progressable<NARC.NitroFS> {
-        return fetchData(path).then((buffer: ArrayBufferSlice) => {
+    private fetchCARC(path: string, abortSignal: AbortSignal): Progressable<NARC.NitroFS> {
+        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
             return NARC.parse(CX.decompress(buffer));
         });
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
         return Progressable.all([
-            this.fetchCARC(`data/mkds/Course/${this.id}.carc`),
-            this.fetchCARC(`data/mkds/Course/${this.id}Tex.carc`),
+            this.fetchCARC(`data/mkds/Course/${this.id}.carc`, abortSignal),
+            this.fetchCARC(`data/mkds/Course/${this.id}Tex.carc`, abortSignal),
         ]).then(([courseNARC, textureNARC]) => {
             const courseBmdFile = courseNARC.files.find((file) => file.path === '/course_model.nsbmd');
             const courseBmd = NSBMD.parse(courseBmdFile.buffer);
@@ -47,7 +47,6 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
                 skyboxRenderer = new MDL0Renderer(device, skyboxBtx !== null ? skyboxBtx.tex0 : skyboxBmd.tex0, skyboxBmd.models[0]);
                 skyboxRenderer.modelMatrix[13] -= 1500;
                 skyboxRenderer.isSkybox = true;
-                skyboxRenderer.pass = MKDSPass.SKYBOX;
             }
 
             const c = new CourseRenderer(device, courseRenderer, skyboxRenderer);

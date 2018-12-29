@@ -247,7 +247,7 @@ export interface SceneDesc {
     id: string;
     name: string;
     createScene?(gl: WebGL2RenderingContext): Progressable<MainScene> | null;
-    createScene_Device?(device: GfxDevice): Progressable<Scene_Device> | null;
+    createScene_Device?(device: GfxDevice, abortSignal: AbortSignal): Progressable<Scene_Device> | null;
     defaultCameraController?: CameraControllerClass;
 }
 
