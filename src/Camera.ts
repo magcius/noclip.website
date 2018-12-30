@@ -424,8 +424,7 @@ export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: num
     dst[15] = 9999.0;
 }
 
-export function serializeCamera(dst: Float32Array, offs: number, camera: Camera): number {
-    const m = camera.worldMatrix;
+export function serializeMat4(dst: Float32Array, offs: number, m: mat4): number {
     dst[offs++] = m[0];
     dst[offs++] = m[4];
     dst[offs++] = m[8];
@@ -439,6 +438,10 @@ export function serializeCamera(dst: Float32Array, offs: number, camera: Camera)
     dst[offs++] = m[10];
     dst[offs++] = m[14];
     return 4*3;
+}
+
+export function serializeCamera(dst: Float32Array, offs: number, camera: Camera): number {
+    return serializeMat4(dst, offs, camera.worldMatrix);
 }
 
 export function deserializeCamera(camera: Camera, src: Float32Array, offs: number): number {
