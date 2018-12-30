@@ -165,8 +165,6 @@ class SceneLoader {
 
         this.loadingSceneDesc = sceneDesc;
 
-        const gl = this.viewer.renderState.gl;
-
         if (sceneDesc.createScene_Device !== undefined) {
             const progressable = sceneDesc.createScene_Device(this.viewer.gfxDevice, this.abortController.signal);
             if (progressable !== null) {
@@ -183,6 +181,7 @@ class SceneLoader {
         }
 
         if (sceneDesc.createScene !== undefined) {
+            const gl = this.viewer.renderState.gl;
             const progressable = sceneDesc.createScene(gl);
             if (progressable !== null) {
                 progressable.then((scene: MainScene) => {
@@ -207,36 +206,43 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 class SaveManager {
-    private _saveStates: { [k: string]: string };
-
-    constructor() {
-        const saveStatesStr = window.localStorage.getItem('SaveStates');
-        if (saveStatesStr)
-            this._saveStates = JSON.parse(saveStatesStr);
-        else
-            this._saveStates = {};
+    public getCurrentSceneDescId(): string | null {
+        return window.sessionStorage.getItem('CurrentSceneDescId') || null;
     }
 
-    private saveStates() {
-        window.localStorage.setItem('SaveStates', JSON.stringify(this._saveStates, null, 0))
+    public setCurrentSceneDescId(id: string) {
+        window.sessionStorage.setItem('CurrentSceneDescId', id);
     }
 
     public saveState(key: string, serializedState: string): void {
-        this._saveStates[key] = serializedState;
-        this.saveStates();
+        window.localStorage.setItem(`SaveState_${key}`, serializedState);
     }
 
     public loadState(key: string): string | null {
-        return this._saveStates[key] || null;
+        return window.localStorage.getItem(`SaveState_${key}`) || null;
     }
 
     public export(): string {
-        return JSON.stringify({
-            'SaveStates': this._saveStates,
-        });
+        return JSON.stringify(Object.assign({}, window.localStorage));
     }
 }
 
+function writeString(d: Uint8Array, offs: number, m: string): number {
+    const n = m.length;
+    for (let i = 0; i < n; i++)
+        d[offs++] = m.charCodeAt(i);
+    return n;
+}
+
+function matchString(d: Uint8Array, offs: number, m: string): boolean {
+    const n = m.length;
+    for (let i = 0; i < n; i++)
+        if (d[offs++] !== m.charCodeAt(i))
+            return false;
+    return true;
+}
+
+const SAVE_STATE_MAGIC = 'NC\0\0';
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
@@ -293,7 +299,7 @@ class Main {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
         };
         this.viewer.oncamerachanged = () => {
-            this._queueSaveState();
+            this._saveState();
         };
         this.viewer.inputManager.onisdraggingchanged = () => {
             this.ui.setIsDragging(this.viewer.inputManager.isDragging());
@@ -312,12 +318,26 @@ class Main {
 
         this._loadSceneGroups();
 
-        // Load the state from the hash
-        this._loadState(window.location.hash.slice(1));
+        if (this.currentSceneDesc === undefined) {
+            // Load the state from the hash
+            const hash = window.location.hash.slice(1);
+            if (hash)
+                this._loadState(hash);
+            // Wipe out the hash from the URL.
+            window.history.replaceState('', '', '');
+        }
 
-        // Make the user choose a scene if there's nothing loaded by default...
-        if (this.currentSceneDesc === undefined)
+        if (this.currentSceneDesc === undefined) {
+            // Load the state from session storage.
+            const currentDescId = this.saveManager.getCurrentSceneDescId();
+            if (currentDescId !== null)
+                this._loadSceneDescById(currentDescId);
+        }
+
+        if (this.currentSceneDesc === undefined) {
+            // Make the user choose a scene if there's nothing loaded by default...
             this.ui.sceneSelect.setExpanded(true);
+        }
 
         this._updateLoop(0);
     }
@@ -334,10 +354,10 @@ class Main {
             this._toggleUI();
         if (inputManager.isKeyDownEventTriggered('Numpad9'))
             this._downloadTextures();
-        for (let i = 0; i <= 9; i++) {
+        for (let i = 1; i <= 9; i++) {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
                 if (this.currentSceneDesc) {
-                    const key = `${this._getCurrentSceneDescId()}/${i}`;
+                    const key = this._getSaveStateSlotKey(i);
                     const shouldSave = inputManager.isKeyDown('ShiftLeft');
                     if (shouldSave) {
                         this.saveManager.saveState(key, this._getSceneSaveState());
@@ -395,39 +415,67 @@ class Main {
 
     private _saveStateTmp = new Uint8Array(512);
     private _saveStateF32 = new Float32Array(this._saveStateTmp.buffer);
-    private _loadSceneSaveState(state: string): void {
-        const byteLength = btoa(this._saveStateTmp, 0, state);
-        if (byteLength < 4*3*3)
-            return;
+    private _getSceneSaveState() {
+        writeString(this._saveStateTmp, 0, SAVE_STATE_MAGIC);
 
-        let offs = 0;
-
-        if (this.viewer.cameraController !== null) {
-            offs += deserializeCamera(this.viewer.cameraController.camera, this._saveStateF32, offs);
-            this.viewer.cameraController.cameraUpdateForced();
-        }
+        let wordOffs = 1;
+        this._saveStateF32[wordOffs++] = this.viewer.renderState.time;
+        wordOffs += serializeCamera(this._saveStateF32, wordOffs, this.viewer.renderState.camera);
+        let offs = wordOffs * 4;
+        if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
+            offs += this.viewer.scene.serializeSaveState(this._saveStateTmp, offs);
+        if (this.viewer.scene_device !== null && this.viewer.scene_device.serializeSaveState)
+            offs += this.viewer.scene_device.serializeSaveState(this._saveStateTmp, offs);
+        return atob(this._saveStateTmp, offs);
     }
 
-    private _loadState(state: string) {
-        let sceneSelector: string = '', sceneSaveState: string = '';
-        const firstSemicolon = state.indexOf(';');
-        if (firstSemicolon >= 0) {
-            sceneSelector = state.slice(0, firstSemicolon);
-            sceneSaveState = state.slice(firstSemicolon + 1);
-        } else {
-            sceneSelector = state;
-        }
+    private _loadSceneSaveState(state: string): void {
+        const byteLength = btoa(this._saveStateTmp, 0, state);
+        if (byteLength < 4)
+            return;
 
-        const [groupId, ...sceneRest] = sceneSelector.split('/');
+        if (!matchString(this._saveStateTmp, 0, SAVE_STATE_MAGIC))
+            return;
+
+        let wordOffs = 1;
+        this.viewer.renderState.time = this._saveStateF32[wordOffs++];
+        wordOffs += deserializeCamera(this.viewer.renderState.camera, this._saveStateF32, wordOffs);
+        let offs = wordOffs * 4;
+        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
+            offs += this.viewer.scene.deserializeSaveState(this._saveStateTmp, offs);
+        if (this.viewer.scene_device !== null && this.viewer.scene_device.deserializeSaveState)
+            offs += this.viewer.scene_device.deserializeSaveState(this._saveStateTmp, offs);
+
+        if (this.viewer.cameraController !== null)
+            this.viewer.cameraController.cameraUpdateForced();
+    }
+
+    private _loadSceneDescById(id: string): Progressable<any> | null {
+        const [groupId, ...sceneRest] = id.split('/');
         const sceneId = decodeURIComponent(sceneRest.join('/'));
 
         const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
         if (!group)
-            return;
+            return null;
 
         const desc = getSceneDescs(group).find((d) => d.id === sceneId);
-        this.lastSavedState = state;
-        this._loadSceneDesc(group, desc).then(() => {
+        return this._loadSceneDesc(group, desc);
+    }
+
+    private _loadState(state: string) {
+        let sceneDescId: string = '', sceneSaveState: string = '';
+        const firstSemicolon = state.indexOf(';');
+        if (firstSemicolon >= 0) {
+            sceneDescId = state.slice(0, firstSemicolon);
+            sceneSaveState = state.slice(firstSemicolon + 1);
+        } else {
+            sceneDescId = state;
+        }
+
+        const p = this._loadSceneDescById(sceneDescId);
+        if (p === null) return;
+
+        p.then(() => {
             this._loadSceneSaveState(sceneSaveState);
         });
     }
@@ -438,36 +486,21 @@ class Main {
         return `${groupId}/${sceneId}`;
     }
 
-    private _getSceneSaveState() {
-        let offs = 0;
-
-        if (this.viewer.cameraController !== null)
-            offs += serializeCamera(this._saveStateF32, offs, this.viewer.cameraController.camera);
-
-        const state = atob(this._saveStateTmp, offs * 4);
-        return state;
-    }
-
     private _saveState() {
         if (this.currentSceneDesc === null)
             return;
 
         const sceneStateStr = this._getSceneSaveState();
-        const newState = `${this._getCurrentSceneDescId()};${sceneStateStr}`;
-        if (this.lastSavedState !== newState) {
-            window.history.replaceState('', '', '#' + newState);
-            this.lastSavedState = newState;
-        }
+        const currentDescId = this._getCurrentSceneDescId();
+        const key = this._getSaveStateSlotKey(0);
+        this.saveManager.saveState(key, sceneStateStr);
+
+        const saveState = `${currentDescId};${sceneStateStr}`;
+        this.ui.saveStatesPanel.setSaveState(saveState);
     }
 
-    private _queueSaveState() {
-        if (this.saveTimeout !== 0)
-            clearTimeout(this.saveTimeout);
-
-        this.saveTimeout = window.setTimeout(() => {
-            this._saveState();
-            this.saveTimeout = 0;
-        }, 100);
+    private _getSaveStateSlotKey(slotIndex: number): string {
+        return `${this._getCurrentSceneDescId()}/${slotIndex}`;
     }
 
     private _onSceneChanged(): void {
@@ -506,6 +539,14 @@ class Main {
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
         const progressable = this.sceneLoader.loadSceneDesc(sceneDesc);
+        (progressable as Progressable<any>).then(() => {
+            this.saveManager.setCurrentSceneDescId(this._getCurrentSceneDescId());
+            const key = this._getSaveStateSlotKey(0);
+            const sceneState = this.saveManager.loadState(key);
+            console.log(key, sceneState);
+            if (sceneState !== null)
+                this._loadSceneSaveState(sceneState);
+        });
         this.ui.sceneSelect.setLoadProgress(progressable.progress);
         progressable.onProgress = () => {
             this.ui.sceneSelect.setLoadProgress(progressable.progress);
@@ -515,7 +556,6 @@ class Main {
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
 
         this._deselectUI();
-        this._saveState();
         this._sendAnalytics();
         return progressable;
     }
