@@ -34,7 +34,7 @@ enum PolyType {
 }
 
 // 3 pos + 4 color + 2 uv
-export const VERTEX_SIZE = 9;
+export const VERTEX_SIZE = 12;
 export const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
 const tmp = new Uint8Array(3);
@@ -56,6 +56,20 @@ function cmd_COLOR(ctx: ContextInternal) {
 
 function cmd_NORMAL(ctx: ContextInternal) {
     const param = ctx.readParam();
+    let x = (param & 0x03FF);
+    let y = (param >> 10) & 0x03FF;
+    let z = (param >> 20) & 0x03FF;
+
+    // Sign extend.
+    x = (x << 22 >> 22);
+    y = (y << 22 >> 22);
+    z = (z << 22 >> 22);
+
+    // Fixed point.
+    x = x / 1024.0;
+    y = y / 1024.0;
+    z = z / 1024.0;
+    ctx.s_nrm = {x, y, z};
 }
 
 function cmd_TEXCOORD(ctx: ContextInternal) {
@@ -299,6 +313,7 @@ class ContextInternal {
         this.s_color = baseCtx.color;
         this.view = buffer.createDataView();
         this.s_texCoord = { s: 0, t: 0 };
+        this.s_nrm = { x: 0, y: 0, z: 0 };
     }
 
     public readParam(): number {
@@ -324,6 +339,10 @@ class ContextInternal {
             vtxBuffer[i * VERTEX_SIZE + 6] = this.alpha / 0xFF;
             vtxBuffer[i * VERTEX_SIZE + 7] = v.uv.s;
             vtxBuffer[i * VERTEX_SIZE + 8] = v.uv.t;
+            vtxBuffer[i * VERTEX_SIZE + 9] = v.nrm.x;
+            vtxBuffer[i * VERTEX_SIZE + 10] = v.nrm.y;
+            vtxBuffer[i * VERTEX_SIZE + 11] = v.nrm.z;
+            
         }
 
         return vtxBuffer;
