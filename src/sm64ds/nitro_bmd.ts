@@ -35,6 +35,8 @@ export class Model {
     public billboard: boolean;
 }
 
+export const enum TexCoordMode { NONE, TEXCOORD, NORMAL, POSITION }
+
 function parseModel(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
     const offs = bmd.modelOffsBase + idx * 0x40;
     const view = buffer.createDataView();
@@ -124,15 +126,13 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
         const textureKey = new TextureKey(textureIdx, paletteIdx);
         material.texture = parseTexture(bmd, buffer, textureKey);
         material.texParams = material.texture.params | view.getUint32(offs + 0x20, true);
-
-        if (material.texParams >> 30) {
-            const scaleS = view.getInt32(offs + 0x0C, true) / 4096.0;
-            const scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
-            const transS = view.getInt32(offs + 0x18, true) / 4096.0;
-            const transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-            mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-            mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
-        }
+        
+        const scaleS = view.getInt32(offs + 0x0C, true) / 4096.0;
+        const scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
+        const transS = view.getInt32(offs + 0x18, true) / 4096.0;
+        const transT = view.getInt32(offs + 0x1C, true) / 4096.0;
+        mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
+        mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
         const texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
         mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
     } else {
