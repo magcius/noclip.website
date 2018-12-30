@@ -160,7 +160,7 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
 }
 
 // Splatoon Models
-const name = "Super Mario Odyssey (Experimental)";
+const name = "Super Mario Odyssey";
 const id = "smo";
 const sceneDescs: OdysseySceneDesc[] = [
     new OdysseySceneDesc('Cap'),

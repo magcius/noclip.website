@@ -54,31 +54,36 @@ import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
 
 const sceneGroups = [
-    MKDS.sceneGroup,
-    SMS.sceneGroup,
-    MKDD.sceneGroup,
+    "Wii",
     MKWII.sceneGroup,
+    SMG.sceneGroup,
+    SPM.sceneGroup,
+    ZSS.sceneGroup,
+    "GameCube",
+    DKCR.sceneGroup,
+    LM.sceneGroup,
+    MKDD.sceneGroup,
+    MP1.sceneGroup,
+    TTYD.sceneGroup,
+    SMS.sceneGroup,
+    ZTP.sceneGroup,
     ZWW.sceneGroup,
     ZWW.sceneGroupDev,
-    ZTP.sceneGroup,
-    ZSS.sceneGroup,
-    SMG.sceneGroup,
-    LM.sceneGroup,
-    TTYD.sceneGroup,
-    SPM.sceneGroup,
+    "Nintendo DS",
+    MKDS.sceneGroup,
     SM64DS.sceneGroup,
-    DKSIV.sceneGroup,
-    ELB.sceneGroup,
-    MP1.sceneGroup,
-    DKCR.sceneGroup,
-    SPL.sceneGroup,
-    MDL0.sceneGroup,
-    OOT3D.sceneGroup,
-    MM3D.sceneGroup,
-    ZELVIEW.sceneGroup,
+    "Nintendo 3DS",
     LM3D.sceneGroup,
-    Z_BOTW.sceneGroup,
+    MM3D.sceneGroup,
+    OOT3D.sceneGroup,
+    "Other",
+    DKSIV.sceneGroup,
+    MDL0.sceneGroup,
+    ZELVIEW.sceneGroup,
+    "Experimental",
     SMO.sceneGroup,
+    SPL.sceneGroup,
+    Z_BOTW.sceneGroup,
 ];
 
 function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {
@@ -227,7 +232,7 @@ class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
-    public groups: SceneGroup[];
+    public groups: (string | SceneGroup)[];
     public ui: UI;
 
     private droppedFileGroup: SceneGroup;
@@ -292,6 +297,7 @@ class Main {
         this.groups = sceneGroups;
 
         this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
+        this.groups.push('Other');
         this.groups.push(this.droppedFileGroup);
 
         this._loadSceneGroups();
@@ -353,7 +359,7 @@ class Main {
         const [groupId, ...sceneRest] = sceneState.split('/');
         const sceneId = decodeURIComponent(sceneRest.join('/'));
 
-        const group = this.groups.find((g) => g.id === groupId);
+        const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
         if (!group)
             return;
 
