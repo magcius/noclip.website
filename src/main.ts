@@ -247,8 +247,8 @@ class SaveManager {
         this._saveCameraStates();
     }
 
-    public loadCameraState(key: string): string {
-        return this._cameraStates[key];
+    public loadCameraState(key: string): string | null {
+        return this._cameraStates[key] || null;
     }
 
     public export(): string {
@@ -346,7 +346,7 @@ class Main {
     private _exportSaveData() {
         const saveData = this.saveManager.export();
         const date = new Date();
-        downloadBlob(`noclip_export_${date.toISOString()}`, new Blob([saveData]));
+        downloadBlob(`noclip_export_${date.toISOString()}.nclsp`, new Blob([saveData]));
     }
 
     private checkKeyShortcuts() {
@@ -360,10 +360,13 @@ class Main {
                 if (this.currentSceneDesc) {
                     const key = `${this._getCurrentSceneDescId()}/${i}`;
                     const shouldSave = inputManager.isKeyDown('ShiftLeft');
-                    if (shouldSave)
+                    if (shouldSave) {
                         this.saveManager.saveCameraState(key, this.viewer.cameraController.serialize());
-                    else
-                        this.viewer.cameraController.deserialize(this.saveManager.loadCameraState(key));
+                    } else {
+                        const saved = this.saveManager.loadCameraState(key);
+                        if (saved !== null)
+                            this.viewer.cameraController.deserialize(saved);
+                    }
                 }
             }
         }
