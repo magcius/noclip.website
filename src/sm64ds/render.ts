@@ -619,17 +619,14 @@ export class SceneDesc implements Viewer.SceneDesc {
             const scaleY = ((object.Parameters[0] >> 4) & 0xF)+1;
             const rotationX = object.Parameters[1]/65536*(Math.PI*2);
             const isMirrored = ((object.Parameters[0] >> 13) & 0x3) == 3;
-            return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
-                result = LZ77.maybeDecompress(result);
-                const bmd = NITRO_BMD.parse(result);
-                const renderer = new BMDRenderer(device, textureHolder, bmd, null);
-                mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
-                mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
+            return this._createBMDObjRenderer(device, textureHolder, filename, translation, rotationY, 0.8).then((renderer) => {
                 mat4.rotateX(renderer.localMatrix, renderer.localMatrix, rotationX);
-                mat4.scale(renderer.localMatrix, renderer.localMatrix, [scaleX*0.8, scaleY*0.8, 0.8]);
-                mat4.translate(renderer.localMatrix, renderer.localMatrix, [0, 6.25, 0]);
-                if(isMirrored)
-                    mat2d.scale(bmd.models[0].batches[0].material.texCoordMat, bmd.models[0].batches[0].material.texCoordMat, [-1, 1]);
+                mat4.scale(renderer.localMatrix, renderer.localMatrix, [scaleX, scaleY, 1]);
+                mat4.translate(renderer.localMatrix, renderer.localMatrix, [0, 100/16, 0]);
+                if (isMirrored) {
+                    const texCoordMat = renderer.bmd.models[0].batches[0].material.texCoordMat;
+                    texCoordMat[0] *= -1;
+                }
                 return renderer;
             });
         }
