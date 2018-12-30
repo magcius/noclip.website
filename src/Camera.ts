@@ -114,6 +114,7 @@ export interface CameraController {
     forceUpdate: boolean;
     serialize(): string;
     deserialize(state: string): void;
+    cameraUpdateForced(): void;
     update(inputManager: InputManager, dt: number): boolean;
 }
 
@@ -171,6 +172,10 @@ export class FPSCameraController implements CameraController {
         this.camera.worldMatrix[5] = u[1];
         this.camera.worldMatrix[9] = u[2];
         this.camera.worldMatrixUpdated();
+    }
+
+    public cameraUpdateForced(): void {
+        vec3.set(this.keyMovement, 0, 0, 0);
     }
 
     public update(inputManager: InputManager, dt: number): boolean {
@@ -275,6 +280,9 @@ export class OrbitCameraController implements CameraController {
     public shouldOrbit: boolean = true;
 
     constructor() {
+    }
+
+    public cameraUpdateForced(): void {
     }
 
     public serialize(): string {
@@ -414,4 +422,43 @@ export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: num
     dst[7] = 9999.0;
     dst[11] = 9999.0;
     dst[15] = 9999.0;
+}
+
+export function serializeCamera(dst: Float32Array, offs: number, camera: Camera): number {
+    const m = camera.worldMatrix;
+    dst[offs++] = m[0];
+    dst[offs++] = m[4];
+    dst[offs++] = m[8];
+    dst[offs++] = m[12];
+    dst[offs++] = m[1];
+    dst[offs++] = m[5];
+    dst[offs++] = m[9];
+    dst[offs++] = m[13];
+    dst[offs++] = m[2];
+    dst[offs++] = m[6];
+    dst[offs++] = m[10];
+    dst[offs++] = m[14];
+    return 4*3;
+}
+
+export function deserializeCamera(camera: Camera, src: Float32Array, offs: number): number {
+    const m = camera.worldMatrix;
+    m[0]  = src[offs++];
+    m[4]  = src[offs++];
+    m[8]  = src[offs++];
+    m[12] = src[offs++];
+    m[1]  = src[offs++];
+    m[5]  = src[offs++];
+    m[9]  = src[offs++];
+    m[13] = src[offs++];
+    m[2]  = src[offs++];
+    m[6]  = src[offs++];
+    m[10] = src[offs++];
+    m[14] = src[offs++];
+    m[3]  = 0;
+    m[7]  = 0;
+    m[11] = 0;
+    m[15] = 1;
+    camera.worldMatrixUpdated();
+    return 4*3;
 }

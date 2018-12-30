@@ -35,8 +35,7 @@ export const enum GfxRendererLayer {
     BACKGROUND  = 0x00,
     ALPHA_TEST  = 0x10,
     OPAQUE      = 0x20,
-    // We can't use 0x80 unfortunately because the high bit can't be set, as it'll be treated as a sign bit :(
-    TRANSLUCENT = 0x40,
+    TRANSLUCENT = 0x80,
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -69,21 +68,21 @@ export function makeDepthKey(sortKey: number, depth: number, maxDepth: number = 
 // Translucent: 01LLLLLL DDDDDDDD DDDDDDDD PPPPPPPP
 
 export function makeSortKeyOpaque(layer: number, programKey: number): number {
-    return ((layer & 0xFF) << 24) | ((programKey & 0xFF) << 2);
+    return (((layer & 0xFF) << 24) | ((programKey & 0xFF) << 2)) >>> 0;
 }
 
 export function setSortKeyOpaqueDepth(sortKey: number, depthKey: number): number {
     assert(depthKey >= 0);
-    return (sortKey & 0xFF0003FC) | ((depthKey & 0xFFFC) << 8) | (depthKey & 0x0003);
+    return ((sortKey & 0xFF0003FC) | ((depthKey & 0xFFFC) << 8) | (depthKey & 0x0003)) >>> 0;
 }
 
 export function makeSortKeyTranslucent(layer: number, programKey: number): number {
-    return ((layer & 0xFF) << 24) | (programKey & 0xFF);
+    return (((layer & 0xFF) << 24) | (programKey & 0xFF)) >>> 0;
 }
 
 export function setSortKeyTranslucentDepth(sortKey: number, depthKey: number): number {
     assert(depthKey >= 0);
-    return (sortKey & 0xFF0000FF) | (depthKey);
+    return ((sortKey & 0xFF0000FF) | (depthKey)) >>> 0;
 }
 
 export function makeSortKey(layer: GfxRendererLayer, programKey: number): number {
