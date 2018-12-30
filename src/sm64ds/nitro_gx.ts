@@ -69,7 +69,7 @@ function cmd_NORMAL(ctx: ContextInternal) {
     x = x / 1024.0;
     y = y / 1024.0;
     z = z / 1024.0;
-	ctx.s_nrm = {x, y, z};
+    ctx.s_nrm = {x, y, z};
 }
 
 function cmd_TEXCOORD(ctx: ContextInternal) {
@@ -313,7 +313,7 @@ class ContextInternal {
         this.s_color = baseCtx.color;
         this.view = buffer.createDataView();
         this.s_texCoord = { s: 0, t: 0 };
-		this.s_nrm = { x: 0, y: 0, z: 0 };
+        this.s_nrm = { x: 0, y: 0, z: 0 };
     }
 
     public readParam(): number {
@@ -339,10 +339,10 @@ class ContextInternal {
             vtxBuffer[i * VERTEX_SIZE + 6] = this.alpha / 0xFF;
             vtxBuffer[i * VERTEX_SIZE + 7] = v.uv.s;
             vtxBuffer[i * VERTEX_SIZE + 8] = v.uv.t;
-			vtxBuffer[i * VERTEX_SIZE + 9] = v.nrm.x;
+            vtxBuffer[i * VERTEX_SIZE + 9] = v.nrm.x;
             vtxBuffer[i * VERTEX_SIZE + 10] = v.nrm.y;
-			vtxBuffer[i * VERTEX_SIZE + 11] = v.nrm.z;
-			
+            vtxBuffer[i * VERTEX_SIZE + 11] = v.nrm.z;
+            
         }
 
         return vtxBuffer;

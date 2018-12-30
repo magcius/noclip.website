@@ -126,7 +126,7 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
         const textureKey = new TextureKey(textureIdx, paletteIdx);
         material.texture = parseTexture(bmd, buffer, textureKey);
         material.texParams = material.texture.params | view.getUint32(offs + 0x20, true);
-		
+        
         const scaleS = view.getInt32(offs + 0x0C, true) / 4096.0;
         const scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
         const transS = view.getInt32(offs + 0x18, true) / 4096.0;

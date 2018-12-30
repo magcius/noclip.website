@@ -27,7 +27,7 @@ export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
     public static a_UV = 1;
     public static a_Color = 2;
-	public static a_Normal = 3;
+    public static a_Normal = 3;
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -44,7 +44,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
     mat4x2 u_TexMtx[1];
-	vec4 u_Misc0;
+    vec4 u_Misc0;
 };
 #define u_TexCoordMode (u_Misc0.x)
 
@@ -62,11 +62,11 @@ out vec2 v_UV;
 void main() {
     gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
     v_Color = a_Color;
-	if(u_TexCoordMode == 2.0){
-		v_UV = (a_Normal.xy+vec2(1,1))/4.0;
-	}else{
-		v_UV = (u_TexMtx[0] * vec4(a_UV, 1.0, 1.0)).st;
-	}
+    if(u_TexCoordMode == 2.0){
+        v_UV = (a_Normal.xy+vec2(1,1))/4.0;
+    }else{
+        v_UV = (u_TexMtx[0] * vec4(a_UV, 1.0, 1.0)).st;
+    }
 }
 `;
     public frag = `
@@ -145,7 +145,7 @@ export class Command_VertexData {
             { location: NITRO_Program.a_Position, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: NITRO_Program.a_Color, format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 3*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: NITRO_Program.a_UV, format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 7*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-			{ location: NITRO_Program.a_Normal, format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 9*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+            { location: NITRO_Program.a_Normal, format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 9*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
         ];
 
         const indexBufferFormat = GfxFormat.U16_R;
@@ -310,7 +310,7 @@ class BMDRenderer {
                 const materialParamsMapped = this.materialParamsBuffer.mapBufferF32(templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams], 12);
                 let offs = templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams];
                 offs += fillMatrix3x2(materialParamsMapped, offs, texAnimMat);
-				offs += fillVec4(materialParamsMapped, offs, texCoordMode);
+                offs += fillVec4(materialParamsMapped, offs, texCoordMode);
             }
         };
     }
