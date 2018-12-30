@@ -250,11 +250,8 @@ class BMDRenderer {
         const textureMapping = new TextureMapping();
         
         const texCoordMode = material.texParams >>> 30;
-
-        console.log(texCoordMode);
-
+        
         const normalMode = texCoordMode==NITRO_BMD.TexCoordMode.NORMAL;
-        console.log(texCoordMode);
         if (texture !== null) {
             this.textureHolder.fillTextureMapping(textureMapping, texture.name);
             textureMapping.gfxSampler = this.arena.trackSampler(device.createSampler({
