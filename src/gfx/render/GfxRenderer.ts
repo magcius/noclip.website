@@ -431,10 +431,7 @@ export class GfxRenderInstBuilder {
 
             // Construct a pipeline if we need one.
             if (renderInst._pipeline !== null) {
-                // If we have a directly set pipeline, ensure that all of this is set correctly.
-                assert(renderInst.inputState === null);
                 assert(renderInst.gfxProgram === null);
-                assert(renderInst._renderFlags === null);
             } else {
                 renderInst.buildPipeline(device, viewRenderer.gfxRenderCache);
             }
