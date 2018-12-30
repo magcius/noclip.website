@@ -59,12 +59,114 @@ export interface Flair {
     color?: string;
     bulletColor?: string;
     extraHTML?: string;
-    header?: string;
 }
 
 export interface Widget {
     elem: HTMLElement;
 }
+
+function svgStringToCSSBackgroundImage(svgString: string) {
+    return `url(data:image/svg+xml,${encodeURI(svgString)})`;
+}
+
+export class TextEntry implements Widget {
+    public elem: HTMLElement;
+    public ontext: (string: string) => void | null = null;
+
+    protected toplevel: HTMLElement;
+    protected textarea: HTMLInputElement;
+    protected clearButton: HTMLElement;
+    protected svgIcon: SVGSVGElement;
+
+    constructor() {
+        this.toplevel = document.createElement('div');
+        this.toplevel.style.position = 'relative';
+
+        this.textarea = document.createElement('input');
+        this.textarea.style.color = 'white';
+        this.textarea.style.gridColumn = '1';
+        this.textarea.style.backgroundColor = 'transparent';
+        this.textarea.style.font = '16px monospace';
+        this.textarea.style.border = 'none';
+        this.textarea.style.width = '100%';
+        this.textarea.style.boxSizing = 'border-box';
+        this.textarea.style.padding = '12px';
+        this.textarea.style.paddingLeft = '32px';
+        this.textarea.style.backgroundRepeat = 'no-repeat';
+        this.textarea.style.backgroundPosition = '10px 14px';
+        this.textarea.style.lineHeight = '20px';
+        (this.textarea.style as any).caretColor = 'white';
+        this.textarea.onkeydown = (e) => {
+            if (e.code === 'Escape')
+                this.clear();
+        };
+        this.textarea.oninput = () => {
+            this.textChanged();
+            this.syncClearButtonVisible();
+        };
+        this.toplevel.appendChild(this.textarea);
+
+        this.clearButton = document.createElement('div');
+        this.clearButton.textContent = '🗙';
+        this.clearButton.style.color = 'white';
+        this.clearButton.style.position = 'absolute';
+        this.clearButton.style.width = '24px';
+        this.clearButton.style.height = '24px';
+        this.clearButton.style.right = '4px';
+        this.clearButton.style.top = '12px';
+        this.clearButton.style.bottom = '12px';
+        this.clearButton.style.lineHeight = '20px';
+        this.clearButton.style.cursor = 'pointer';
+        this.clearButton.onclick = () => {
+            this.clear();
+        };
+        this.syncClearButtonVisible();
+        this.toplevel.appendChild(this.clearButton);
+
+        this.elem = this.toplevel;
+    }
+
+    private syncClearButtonVisible(): void {
+        this.clearButton.style.display = this.textarea.value.length > 0 ? '' : 'none';
+    }
+
+    public textChanged(): void {
+        if (this.ontext !== null)
+            this.ontext(this.textarea.value);
+        this.syncClearButtonVisible();
+    }
+
+    public clear(): void {
+        this.textarea.value = '';
+        this.textChanged();
+    }
+
+    public setIcon(icon: string): void {
+        this.textarea.style.backgroundImage = svgStringToCSSBackgroundImage(icon);
+    }
+
+    public setPlaceholder(placeholder: string): void {
+        this.textarea.placeholder = placeholder;
+    }
+}
+
+export const enum ScrollSelectItemType {
+    Selectable, Header,
+}
+
+interface ScrollSelectItemHeader {
+    type: ScrollSelectItemType.Header;
+    visible?: boolean;
+    html: string;
+}
+
+interface ScrollSelectItemSelectable {
+    type: ScrollSelectItemType.Selectable;
+    visible?: boolean;
+    name: string;
+}
+
+export type ScrollSelectItem = ScrollSelectItemHeader | ScrollSelectItemSelectable;
 
 export abstract class ScrollSelect implements Widget {
     public elem: HTMLElement;
@@ -91,36 +193,111 @@ export abstract class ScrollSelect implements Widget {
         this.scrollContainer.style.height = height;
     }
 
-    public setStrings(strings: string[]): void {
-        this.scrollContainer.style.display = (strings.length > 0) ? '' : 'none';
+    public setItems(items: ScrollSelectItem[]): void {
+        this.scrollContainer.style.display = (items.length > 0) ? '' : 'none';
         this.scrollContainer.innerHTML = '';
-        for (let i = 0; i < strings.length; i++) {
+        let hasHeader = false;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+
             const outer = document.createElement('div');
-            const headerSlot = document.createElement('div');
-            headerSlot.classList.add('header');
-            outer.appendChild(headerSlot);
-            const selector = document.createElement('div');
-            selector.classList.add('selector');
-            selector.style.display = 'list-item';
-            selector.style.cursor = 'pointer';
-            outer.appendChild(selector);
-            const textSpan = document.createElement('span');
-            textSpan.classList.add('text');
-            textSpan.textContent = strings[i];
-            selector.appendChild(textSpan);
+            outer.style.display = 'grid';
+            outer.style.gridAutoFlow = 'column';
+
+            if (item.type === ScrollSelectItemType.Selectable) {
+                outer.style.paddingLeft = hasHeader ? '20px' : '';
+
+                const selector = document.createElement('div');
+                selector.classList.add('selector');
+                selector.style.display = 'list-item';
+                selector.style.cursor = 'pointer';
+                outer.appendChild(selector);
+                const textSpan = document.createElement('span');
+                textSpan.classList.add('text');
+                textSpan.textContent = item.name;
+                selector.appendChild(textSpan);
+
+                const index = i;
+                selector.onmousedown = () => {
+                    selector.focus();
+                    this.itemClicked(index, true);
+                };
+                selector.onmouseover = (e) => {
+                    if (e.buttons !== 0) {
+                        selector.focus();
+                        this.itemClicked(index, false);
+                    }
+                };
+            } else if (item.type === ScrollSelectItemType.Header) {
+                const textSpan = document.createElement('span');
+                textSpan.classList.add('header');
+                textSpan.style.fontWeight = 'bold';
+                textSpan.innerHTML = item.html;
+                outer.appendChild(textSpan);
+                hasHeader = true;
+            }
+
             const extraSlot = document.createElement('span');
             extraSlot.classList.add('extra');
-            selector.appendChild(extraSlot);
-            const index = i;
-            selector.onmousedown = () => {
-                this.itemClicked(index, true);
-            };
-            selector.onmouseover = (e) => {
-                if (e.buttons !== 0)
-                    this.itemClicked(index, false);
-            };
+            extraSlot.style.justifySelf = 'end';
+            outer.appendChild(extraSlot);
+
+            if (item.visible !== undefined)
+                this._setItemVisible(outer, item.visible);
+
             this.scrollContainer.appendChild(outer);
         }
+
+        this.computeHeaderVisibility();
+    }
+
+    public setStrings(strings: string[]): void {
+        this.setItems(strings.map((string): ScrollSelectItem => {
+            return { type: ScrollSelectItemType.Selectable, name: string };
+        }));
+    }
+
+    private itemIsHeader(outer: HTMLElement): boolean {
+        const header = outer.querySelector('span.header');
+        return !!header;
+    }
+
+    private itemIsVisible(outer: HTMLElement): boolean {
+        return outer.style.display !== 'none';
+    }
+
+    public computeHeaderVisibility(): void {
+        const n = this.getNumItems();
+        for (let i = 0; i < n;) {
+            const outer = this.scrollContainer.children.item(i) as HTMLElement;
+
+            if (this.itemIsHeader(outer)) {
+                // Find next header.
+                let j = i + 1;
+                let shouldBeVisible = false;
+                for (; j < n; j++) {
+                    const outer = this.scrollContainer.children.item(j) as HTMLElement;
+                    if (this.itemIsHeader(outer))
+                        break;
+                    if (this.itemIsVisible(outer)) {
+                        shouldBeVisible = true;
+                        break;
+                    }
+                }
+                this._setItemVisible(outer, shouldBeVisible);
+                i = j;
+            } else
+                i++;
+        }
+    }
+
+    private _setItemVisible(outer: HTMLElement, v: boolean) {
+        outer.style.display = v ? 'grid' : 'none';
+    }
+
+    public setItemVisible(i: number, v: boolean): void {
+        const outer = this.scrollContainer.children.item(i) as HTMLElement;
+        this._setItemVisible(outer, v);
     }
 
     public getNumItems() {
@@ -141,46 +318,33 @@ export abstract class ScrollSelect implements Widget {
 
     private syncFlairDisplay(): void {
         const flairs = this.internalFlairs;
-        let hasHeader = false;
         for (let i = 0; i < this.getNumItems(); i++) {
             const outer = this.scrollContainer.children.item(i) as HTMLElement;
-            const selector = assertExists(outer.querySelector('div.selector') as HTMLElement);
+
+            const selector = outer.querySelector('div.selector') as HTMLElement;
+            if (!selector)
+                continue;
+
             const flair = flairs.find((flair) => flair.index === i);
 
-            const headerSlot = assertExists(outer.querySelector('div.header') as HTMLElement);
-            if (flair !== undefined && flair.header !== undefined) {
-                headerSlot.style.display = 'block';
-                headerSlot.style.color = 'white';
-                headerSlot.style.fontWeight = 'bold';
-                headerSlot.innerHTML = flair.header;
-                hasHeader = true;
-            } else {
-                headerSlot.style.display = 'none';
-            }
-
             const background = (flair !== undefined && flair.background !== undefined) ? flair.background : '';
-            selector.style.background = background;
-            const textSpan = assertExists(selector.querySelector('span.text') as HTMLElement);
+            outer.style.background = background;
+            const textSpan = assertExists(outer.querySelector('span.text') as HTMLElement);
             const color = (flair !== undefined && flair.color !== undefined) ? flair.color : '';
             textSpan.style.color = color;
-
-            let paddingLeft = 0;
-            if (hasHeader)
-                paddingLeft += 20;
 
             if (flair !== undefined && flair.bulletColor !== undefined) {
                 selector.style.listStyleType = 'disc';
                 selector.style.listStylePosition = 'inside';
-                paddingLeft += 4;
+                selector.style.paddingLeft = `4px`;
                 selector.style.color = flair.bulletColor;
             } else {
-                selector.style.listStyleType = '';
+                selector.style.listStyleType = 'none';
                 selector.style.color = '';
             }
-            selector.style.paddingLeft = `${paddingLeft}px`;
 
             const extraHTML = (flair !== undefined && flair.extraHTML) ? flair.extraHTML : '';
-            const extraSpan = assertExists(selector.querySelector('span.extra') as HTMLElement);
+            const extraSpan = assertExists(outer.querySelector('span.extra') as HTMLElement);
             extraSpan.innerHTML = extraHTML;
         }
     }
@@ -201,7 +365,7 @@ function ensureFlairIndex(flairs: Flair[], index: number): Flair {
 }
 
 export class SingleSelect extends ScrollSelect {
-    public highlightedIndex: number;
+    public highlightedIndex: number = -1;
     public onselectionchange: (index: number) => void;
 
     public itemClicked(index: number, first: boolean) {
@@ -221,9 +385,11 @@ export class SingleSelect extends ScrollSelect {
 
     protected syncInternalFlairs(): void {
         const flairs = [...this.flairs];
-        const flair = ensureFlairIndex(flairs, this.highlightedIndex);
-        flair.background = HIGHLIGHT_COLOR;
-        flair.color = 'black';
+        if (this.highlightedIndex >= 0) {
+            const flair = ensureFlairIndex(flairs, this.highlightedIndex);
+            flair.background = HIGHLIGHT_COLOR;
+            flair.color = 'black';
+        }
         this.setInternalFlairs(flairs);
     }
 }
@@ -402,8 +568,7 @@ export class Panel implements Widget {
     }
 
     public setTitle(icon: string, title: string) {
-        const svgIcon = createDOMFromString(icon).querySelector('svg');
-        this.svgIcon = svgIcon;
+        this.svgIcon = createDOMFromString(icon).querySelector('svg');
         this.svgIcon.style.gridColumn = '1';
         this.header.textContent = title;
         this.header.appendChild(this.svgIcon);
@@ -430,6 +595,8 @@ export class Panel implements Widget {
         this.expanded = newExpanded;
         this.syncHeaderStyle();
         this.syncSize();
+        if (!this.expanded)
+            document.body.focus();
         return true;
     }
 
@@ -457,13 +624,31 @@ export class Panel implements Widget {
 }
 
 const OPEN_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M84.3765045,45.2316481 L77.2336539,75.2316205 L77.2336539,75.2316205 C77.1263996,75.6820886 76.7239081,76 76.2608477,76 L17.8061496,76 C17.2538649,76 16.8061496,75.5522847 16.8061496,75 C16.8061496,74.9118841 16.817796,74.8241548 16.8407862,74.739091 L24.7487983,45.4794461 C24.9845522,44.607157 25.7758952,44.0012839 26.6794815,44.0012642 L83.4036764,44.0000276 L83.4036764,44.0000276 C83.9559612,44.0000156 84.4036862,44.4477211 84.4036982,45.0000058 C84.4036999,45.0780163 84.3945733,45.155759 84.3765045,45.2316481 L84.3765045,45.2316481 Z M15,24 L26.8277004,24 L26.8277004,24 C27.0616369,24 27.2881698,24.0820162 27.4678848,24.2317787 L31.799078,27.8411064 L31.799078,27.8411064 C32.697653,28.5899189 33.8303175,29 35,29 L75,29 C75.5522847,29 76,29.4477153 76,30 L76,38 L76,38 C76,38.5522847 75.5522847,39 75,39 L25.3280454,39 L25.3280454,39 C23.0690391,39 21.0906235,40.5146929 20.5012284,42.6954549 L14.7844016,63.8477139 L14.7844016,63.8477139 C14.7267632,64.0609761 14.5071549,64.1871341 14.2938927,64.1294957 C14.1194254,64.0823423 13.9982484,63.9240598 13.9982563,63.7433327 L13.9999561,25 L14,25 C14.0000242,24.4477324 14.4477324,24.0000439 15,24.0000439 L15,24 Z"/></svg>`;
+const SEARCH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 26.25" height="20" fill="white"><path d="M8.6953,14.3916 C5.5543,14.3916 3.0003,11.8356 3.0003,8.6956 C3.0003,5.5546 5.5543,2.9996 8.6953,2.9996 C11.8363,2.9996 14.3913,5.5546 14.3913,8.6956 C14.3913,11.8356 11.8363,14.3916 8.6953,14.3916 L8.6953,14.3916 Z M15.8423,13.7216 L15.6073,13.9566 C16.7213,12.4956 17.3913,10.6756 17.3913,8.6956 C17.3913,3.8936 13.4983,-0.0004 8.6953,-0.0004 C3.8933,-0.0004 0.0003,3.8936 0.0003,8.6956 C0.0003,13.4976 3.8933,17.3916 8.6953,17.3916 C10.6753,17.3916 12.4953,16.7216 13.9573,15.6076 L13.7213,15.8426 L18.3343,20.4546 L20.4553,18.3336 L15.8423,13.7216 Z"/></svg>`;
+
+// https://stackoverflow.com/questions/3446170/escape-string-for-use-in-javascript-regex
+function escapeRegExp(S: string): string {
+    return S.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function searchRegExps(S: string): RegExp[] {
+    return S.split(/\s+/).filter((n) => n.length).map((str) => new RegExp(`(\\b${escapeRegExp(str)})`, 'i'));
+}
+
+function matchRegExps(n: RegExp[], S: string): boolean {
+    // Empty list matches everything.
+    if (n.length === 0)
+        return true;
+    return n.every((re) => {
+        return re.test(S);
+    })
+}
 
 class SceneSelect extends Panel {
-    private sceneGroupsFull: (string | Viewer.SceneGroup)[] = [];
-    private sceneGroups: Viewer.SceneGroup[] = [];
-    private sceneDescsFull: (string | Viewer.SceneDesc)[] = [];
-    private sceneDescs: Viewer.SceneDesc[] = [];
+    private sceneGroups: (string | Viewer.SceneGroup)[] = [];
+    private sceneDescs: (string | Viewer.SceneDesc)[] = [];
 
+    private searchEntry: TextEntry;
     private sceneGroupList: SingleSelect;
     private sceneDescList: SingleSelect;
 
@@ -472,11 +657,21 @@ class SceneSelect extends Panel {
     private currentSceneDesc: Viewer.SceneDesc;
     private loadProgress: number;
 
+    private currentSearchTokens: RegExp[] = [];
+
     public onscenedescselected: (sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) => void;
 
     constructor(public viewer: Viewer.Viewer) {
         super();
         this.setTitle(OPEN_ICON, 'Games');
+
+        this.searchEntry = new TextEntry();
+        this.searchEntry.setIcon(SEARCH_ICON);
+        this.searchEntry.setPlaceholder('Search...');
+        this.searchEntry.ontext = (searchString: string) => {
+            this._setSearchString(searchString);
+        };
+        this.contents.appendChild(this.searchEntry.elem);
 
         this.sceneGroupList = new SingleSelect();
         this.sceneGroupList.setHeight('300px');
@@ -485,7 +680,7 @@ class SceneSelect extends Panel {
         this.sceneDescList = new SingleSelect();
         this.sceneDescList.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
         this.sceneDescList.elem.style.width = '500px';
-        this.sceneDescList.setHeight('328px');
+        this.sceneDescList.setHeight('372px');
         this.extraRack.appendChild(this.sceneDescList.elem);
 
         this.sceneGroupList.onselectionchange = (i: number) => {
@@ -497,6 +692,77 @@ class SceneSelect extends Panel {
         };
     }
 
+    private _setSearchString(str: string): void {
+        this.currentSearchTokens = searchRegExps(str);
+        this.syncVisibility();
+    }
+
+    private syncVisibility(): void {
+        // Start searching!
+        const n = this.currentSearchTokens;
+
+        let lastDescHeaderVisible = false;
+        function matchSceneDesc(item: (string | Viewer.SceneDesc)): boolean | null {
+            if (typeof item === 'string') {
+                // If this is a header, then all items under the header should match.
+                lastDescHeaderVisible = matchRegExps(n, item);
+            } else {
+                // If header matches, then so do we.
+                if (lastDescHeaderVisible)
+                    return true;
+                return matchRegExps(n, item.name);
+            }
+        }
+
+        let lastGroupHeaderVisible = false;
+        let currentGroupExplicitlyVisible = false;
+        for (let i = 0; i < this.sceneGroups.length; i++) {
+            const item = this.sceneGroups[i];
+            if (typeof item === 'string') {
+                // If this is a header, then all items under the header should match.
+                lastGroupHeaderVisible = matchRegExps(n, item);
+            } else {
+                let visible = false;
+                let explicitlyInvisible = false;
+
+                explicitlyInvisible = item.sceneDescs.length <= 0;
+                if (!explicitlyInvisible) {
+                    // If header matches, then we are explicitly visible.
+                    if (!visible == lastGroupHeaderVisible)
+                        visible = true;
+
+                    // If name matches, then we are explicitly visible.
+                    if (!visible && matchRegExps(n, item.name))
+                        visible = true;
+
+                    if (item === this.currentSceneGroup)
+                        currentGroupExplicitlyVisible = visible;
+
+                    // Now check for any children.
+                    if (!visible) {
+                        lastDescHeaderVisible = false;
+                        visible = item.sceneDescs.some((g) => matchSceneDesc(g));
+                    }
+                }
+
+                this.sceneGroupList.setItemVisible(i, visible);
+            }
+        }
+
+        lastDescHeaderVisible = false;
+        for (let i = 0; i < this.sceneDescs.length; i++) {
+            let visible;
+            if (!visible && currentGroupExplicitlyVisible)
+                visible = true;
+            if (!visible)
+                visible = matchSceneDesc(this.sceneDescs[i]);
+            this.sceneDescList.setItemVisible(i, visible);
+        }
+
+        this.sceneGroupList.computeHeaderVisibility();
+        this.sceneDescList.computeHeaderVisibility();
+    }
+
     public setCurrentDesc(sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) {
         this.selectedSceneGroup = sceneGroup;
         this.currentSceneGroup = sceneGroup;
@@ -504,11 +770,15 @@ class SceneSelect extends Panel {
         this.syncSceneDescs();
     }
 
-    public setSceneGroups(sceneGroupsFull: (string | Viewer.SceneGroup)[]) {
-        this.sceneGroupsFull = sceneGroupsFull;
-        this.sceneGroups = sceneGroupsFull.filter((n) => typeof n !== 'string') as Viewer.SceneGroup[];
-        const strings = this.sceneGroups.filter((g) => g.sceneDescs.length > 0).map((g) => g.name);
-        this.sceneGroupList.setStrings(strings);
+    public setSceneGroups(sceneGroups: (string | Viewer.SceneGroup)[]) {
+        this.sceneGroups = sceneGroups;
+        this.sceneGroupList.setItems(sceneGroups.map((g): ScrollSelectItem => {
+            if (typeof g === 'string') {
+                return { type: ScrollSelectItemType.Header, html: g };
+            } else {
+                return { type: ScrollSelectItemType.Selectable, name: g.name };
+            }
+        }));
         this.syncSceneDescs();
     }
 
@@ -519,7 +789,7 @@ class SceneSelect extends Panel {
     }
 
     private selectSceneDesc(i: number) {
-        this.onscenedescselected(this.selectedSceneGroup, this.sceneDescs[i]);
+        this.onscenedescselected(this.selectedSceneGroup, this.sceneDescs[i] as Viewer.SceneDesc);
     }
 
     private getLoadingGradient() {
@@ -541,17 +811,6 @@ class SceneSelect extends Panel {
     private syncFlairs() {
         const sceneGroupFlairs: Flair[] = [];
 
-        let sgi = 0;
-        for (let i = 0; i < this.sceneGroupsFull.length; i++) {
-            const elem = this.sceneGroupsFull[i];
-            if (typeof elem === 'string') {
-                const flair = ensureFlairIndex(sceneGroupFlairs, sgi);
-                flair.header = elem;
-            } else {
-                sgi++;
-            }
-        }
-
         const currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
         if (currentGroupIndex >= 0) {
             const flair = ensureFlairIndex(sceneGroupFlairs, currentGroupIndex);
@@ -568,31 +827,20 @@ class SceneSelect extends Panel {
         this.sceneGroupList.setFlairs(sceneGroupFlairs);
 
         const sceneDescFlairs: Flair[] = [];
-        let sdi = 0;
-        for (let i = 0; i < this.sceneDescsFull.length; i++) {
-            const elem = this.sceneDescsFull[i];
-            if (typeof elem === 'string') {
-                const flair = ensureFlairIndex(sceneDescFlairs, sdi);
-                flair.header = elem;
-            } else {
-                sdi++;
-            }
-        }
-
         const selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
         if (selectedDescIndex >= 0) {
             const flair = ensureFlairIndex(sceneDescFlairs, selectedDescIndex);
             flair.background = this.getLoadingGradient();
             flair.color = this.loadProgress > 0.5 ? 'black' : undefined;
             const pct = `${Math.round(this.loadProgress * 100)}%`;
-            flair.extraHTML = this.loadProgress < 1.0 ? `<span style="float: right; font-weight: bold; color: #aaa">${pct}</span>` : ``;
+            flair.extraHTML = this.loadProgress < 1.0 ? `<span style="font-weight: bold; color: #aaa">${pct}</span>` : ``;
         }
         this.sceneDescList.setFlairs(sceneDescFlairs);
     }
 
     private selectSceneGroup(i: number) {
         const sceneGroup = this.sceneGroups[i];
-        this.selectedSceneGroup = sceneGroup;
+        this.selectedSceneGroup = sceneGroup as Viewer.SceneGroup;
         this.syncSceneDescs();
     }
 
@@ -606,11 +854,15 @@ class SceneSelect extends Panel {
     }
 
     private setSceneDescs(sceneDescs: (string | Viewer.SceneDesc)[]) {
-        this.sceneDescsFull = sceneDescs;
-        this.sceneDescs = sceneDescs.filter((g) => typeof g !== 'string') as Viewer.SceneDesc[];
-        const strings = this.sceneDescs.map((desc) => desc.name);
-        this.sceneDescList.setStrings(strings);
+        this.sceneDescs = sceneDescs;
+        this.sceneDescList.setItems(sceneDescs.map((g): ScrollSelectItem => {
+            if (typeof g === 'string')
+                return { type: ScrollSelectItemType.Header, html: g };
+            else
+                return { type: ScrollSelectItemType.Selectable, name: g.name };
+        }));
         this.syncFlairs();
+        this.syncVisibility();
     }
 }
 
@@ -1020,6 +1272,7 @@ class About extends Panel {
 <li> Layer <span>by</span> Chameleon Design
 <li> Sand Clock <span>by</span> James
 <li> Line Chart <span>by</span> Shastry
+<li> Search <span>by</span> Alain W.
 </ul>
 
 <p class="BuildVersion"><a href="${GITHUB_REVISION_URL}">build ${GIT_SHORT_REVISION}</a></p>

@@ -57,10 +57,16 @@ export default class InputManager {
         });
     }
 
+    private _hasFocus() {
+        return document.activeElement === document.body || document.activeElement === this.toplevel;
+    }
+
     private _onKeyDown = (e: KeyboardEvent) => {
+        if (!this._hasFocus()) return;
         this.keysDown.set(e.code, !e.repeat);
     };
     private _onKeyUp = (e: KeyboardEvent) => {
+        if (!this._hasFocus()) return;
         this.keysDown.delete(e.code);
     };
 
