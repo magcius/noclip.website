@@ -156,7 +156,7 @@ export class TerrainManager {
 
     public terrainRenderer: TerrainRenderer;
 
-    constructor(public device: GfxDevice, public tscb: TSCB, public terrainFRES: BFRES.FRES, public teraPath: string) {
+    constructor(public device: GfxDevice, public abortSignal: AbortSignal, public tscb: TSCB, public terrainFRES: BFRES.FRES, public teraPath: string) {
         this.quadTreeRoot = this.buildQuadTree(0);
 
         const materialAlb = terrainFRES.ftex.find((e) => e.name === 'MaterialAlb');
@@ -269,8 +269,8 @@ export class TerrainManager {
         if (this.archiveCache.has(archiveName))
             return this.archiveCache.get(archiveName);
 
-        const hght = fetchData(`${this.teraPath}/${archiveName}.hght.sstera`).then(decodeSSTERA);
-        const mate = fetchData(`${this.teraPath}/${archiveName}.mate.sstera`).then(decodeSSTERA);
+        const hght = fetchData(`${this.teraPath}/${archiveName}.hght.sstera`, this.abortSignal).then(decodeSSTERA);
+        const mate = fetchData(`${this.teraPath}/${archiveName}.mate.sstera`, this.abortSignal).then(decodeSSTERA);
         const p = Progressable.all([hght, mate]).then(([hghtArc, mateArc]) => {
             return { hghtArc, mateArc };
         });

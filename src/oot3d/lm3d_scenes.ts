@@ -24,14 +24,14 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = `map${mapNumber}`;
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
         // Fetch the ZAR & info ZSI.
         const path_gar = `data/lm3d/map/map${leftPad(''+this.mapNumber, 2, '0')}.gar`;
         const models_path = `data/lm3d/mapmdl/map${this.mapNumber}`;
 
         const textureHolder = new GrezzoTextureHolder();
 
-        return fetchData(path_gar).then((garBuffer) => {
+        return fetchData(path_gar, abortSignal).then((garBuffer) => {
             const gar = ZAR.parse(garBuffer);
 
             const jmpGarFile = gar.files.find((file) => file.name === 'JMP.gar');
@@ -41,7 +41,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const progressables: Progressable<CmbRenderer>[] = [];
             for (let i = 0; i < roomInfo.records.length; i++) {
-                progressables.push(fetchData(`${models_path}/room_${leftPad(''+i, 2, '0')}.gar`).then((outerRoomGarBuf) => {
+                progressables.push(fetchData(`${models_path}/room_${leftPad(''+i, 2, '0')}.gar`, abortSignal).then((outerRoomGarBuf) => {
                     const outerRoomGar = ZAR.parse(outerRoomGarBuf);
                     const roomGarFile = outerRoomGar.files.find((file) => file.name === 'room.gar');
                     if (roomGarFile === undefined)

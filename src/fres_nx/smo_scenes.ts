@@ -98,8 +98,8 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    private _fetchSARC(arcPath: string): Progressable<SARC.SARC | null> {
-        return fetchData(`${basePath}/${arcPath}`).then((buffer) => {
+    private _fetchSARC(arcPath: string, abortSignal: AbortSignal): Progressable<SARC.SARC | null> {
+        return fetchData(`${basePath}/${arcPath}`, abortSignal).then((buffer) => {
             if (buffer.byteLength === 0) return null;
             return Yaz0.decompress(buffer).then((buffer) => SARC.parse(buffer));
         });
@@ -118,10 +118,10 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
         return true;
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
         const resourceSystem = new ResourceSystem();
 
-        return this._fetchSARC(`SystemData/WorldList.szs`).then((worldListSARC) => {
+        return this._fetchSARC(`SystemData/WorldList.szs`, abortSignal).then((worldListSARC) => {
             type WorldResource = { WorldName: string, WorldResource: { Ext: string, Name: string }[] };
             const worldResource: WorldResource[] = BYML.parse(worldListSARC.files.find((f) => f.name === 'WorldResource.byml').buffer);
 
@@ -129,7 +129,7 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
             resources = resources.filter((r) => this._shouldFetchWorldResource(r.Name));
 
             return Progressable.all(resources.map((r) => {
-                return this._fetchSARC(`${r.Name}.${r.Ext}`).then((sarc: SARC.SARC | null) => {
+                return this._fetchSARC(`${r.Name}.${r.Ext}`, abortSignal).then((sarc: SARC.SARC | null) => {
                     if (sarc === null) return;
                     resourceSystem.loadResource(device, r.Name, sarc);
                 });

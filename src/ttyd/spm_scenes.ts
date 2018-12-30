@@ -16,8 +16,8 @@ class SPMSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
-        return fetchData(`data/spm/${this.id}.bin`).then((buffer: ArrayBufferSlice) => {
+    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+        return fetchData(`data/spm/${this.id}.bin`, abortSignal).then((buffer: ArrayBufferSlice) => {
             const decompressed = CX.decompress(buffer);
             const arc = U8.parse(decompressed);
             const dFile = arc.findFile(`./dvd/map/*/map.dat`);
