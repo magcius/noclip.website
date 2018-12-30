@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { MainScene, SceneDesc, SceneGroup, Viewer, Scene_Device } from './viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer, Scene_Device, getSceneDescs } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -60,7 +60,6 @@ const sceneGroups = [
     SPM.sceneGroup,
     ZSS.sceneGroup,
     "GameCube",
-    DKCR.sceneGroup,
     LM.sceneGroup,
     MKDD.sceneGroup,
     MP1.sceneGroup,
@@ -81,6 +80,7 @@ const sceneGroups = [
     MDL0.sceneGroup,
     ZELVIEW.sceneGroup,
     "Experimental",
+    DKCR.sceneGroup,
     SMO.sceneGroup,
     SPL.sceneGroup,
     Z_BOTW.sceneGroup,
@@ -363,7 +363,7 @@ class Main {
         if (!group)
             return;
 
-        const desc = group.sceneDescs.find((d) => d.id === sceneId);
+        const desc = getSceneDescs(group).find((d) => d.id === sceneId);
         this.lastSavedState = state;
         this._loadSceneDesc(group, desc, cameraState);
     }

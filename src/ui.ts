@@ -151,7 +151,7 @@ export abstract class ScrollSelect implements Widget {
                 headerSlot.style.display = 'block';
                 headerSlot.style.color = 'white';
                 headerSlot.style.fontWeight = 'bold';
-                headerSlot.textContent = flair.header;
+                headerSlot.innerHTML = flair.header;
                 hasHeader = true;
             } else {
                 headerSlot.style.display = 'none';
@@ -297,7 +297,9 @@ export class MultiSelect extends ScrollSelect {
 export class Panel implements Widget {
     public elem: HTMLElement;
 
-    protected expanded: boolean;
+    protected expanded: boolean = false;
+    protected manuallyExpanded: boolean = false;
+    protected autoClosed: boolean = false;
     protected header: HTMLElement;
     protected svgIcon: SVGSVGElement;
 
@@ -396,14 +398,24 @@ export class Panel implements Widget {
         setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
     }
 
-    public setExpanded(expanded: boolean) {
-        this.expanded = expanded;
+    public syncExpanded() {
+        this.expanded = this.manuallyExpanded && !this.autoClosed;
         this.syncHeaderStyle();
         this.syncSize();
     }
 
+    public setExpanded(v: boolean) {
+        this.manuallyExpanded = v;
+        this.syncExpanded();
+    }
+
     private toggleExpanded() {
         this.setExpanded(!this.expanded);
+    }
+
+    public setAutoClosed(v: boolean) {
+        this.autoClosed = v;
+        this.syncExpanded();
     }
 }
 
@@ -412,6 +424,7 @@ const OPEN_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="
 class SceneSelect extends Panel {
     private sceneGroupsFull: (string | Viewer.SceneGroup)[] = [];
     private sceneGroups: Viewer.SceneGroup[] = [];
+    private sceneDescsFull: (string | Viewer.SceneDesc)[] = [];
     private sceneDescs: Viewer.SceneDesc[] = [];
 
     private sceneGroupList: SingleSelect;
@@ -489,13 +502,13 @@ class SceneSelect extends Panel {
     }
 
     private syncFlairs() {
-        const flairs: Flair[] = [];
+        const sceneGroupFlairs: Flair[] = [];
 
         let sgi = 0;
         for (let i = 0; i < this.sceneGroupsFull.length; i++) {
             const elem = this.sceneGroupsFull[i];
             if (typeof elem === 'string') {
-                const flair = ensureFlairIndex(flairs, sgi);
+                const flair = ensureFlairIndex(sceneGroupFlairs, sgi);
                 flair.header = elem;
             } else {
                 sgi++;
@@ -504,31 +517,40 @@ class SceneSelect extends Panel {
 
         const currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
         if (currentGroupIndex >= 0) {
-            const flair = ensureFlairIndex(flairs, currentGroupIndex);
+            const flair = ensureFlairIndex(sceneGroupFlairs, currentGroupIndex);
             flair.background = '#666';
         }
 
         const selectedGroupIndex = this.sceneGroups.indexOf(this.selectedSceneGroup);
         if (selectedGroupIndex >= 0) {
-            const flair = ensureFlairIndex(flairs, selectedGroupIndex);
+            const flair = ensureFlairIndex(sceneGroupFlairs, selectedGroupIndex);
             flair.background = HIGHLIGHT_COLOR;
             flair.color = 'white';
         }
 
-        this.sceneGroupList.setFlairs(flairs);
+        this.sceneGroupList.setFlairs(sceneGroupFlairs);
+
+        const sceneDescFlairs: Flair[] = [];
+        let sdi = 0;
+        for (let i = 0; i < this.sceneDescsFull.length; i++) {
+            const elem = this.sceneDescsFull[i];
+            if (typeof elem === 'string') {
+                const flair = ensureFlairIndex(sceneDescFlairs, sdi);
+                flair.header = elem;
+            } else {
+                sdi++;
+            }
+        }
 
         const selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
         if (selectedDescIndex >= 0) {
-            const loadingGradient = this.getLoadingGradient();
-            const textColor = this.loadProgress > 0.5 ? 'black' : undefined;
-
+            const flair = ensureFlairIndex(sceneDescFlairs, selectedDescIndex);
+            flair.background = this.getLoadingGradient();
+            flair.color = this.loadProgress > 0.5 ? 'black' : undefined;
             const pct = `${Math.round(this.loadProgress * 100)}%`;
-            const selectedFlair: Flair = {
-                index: selectedDescIndex, background: loadingGradient, color: textColor,
-                extraHTML: this.loadProgress < 1.0 ? `<span style="float: right; font-weight: bold; color: #aaa">${pct}</span>` : ``,
-            };
-            this.sceneDescList.setFlairs([selectedFlair]);
+            flair.extraHTML = this.loadProgress < 1.0 ? `<span style="float: right; font-weight: bold; color: #aaa">${pct}</span>` : ``;
         }
+        this.sceneDescList.setFlairs(sceneDescFlairs);
     }
 
     private selectSceneGroup(i: number) {
@@ -546,9 +568,10 @@ class SceneSelect extends Panel {
             this.setSceneDescs([]);
     }
 
-    private setSceneDescs(sceneDescs: Viewer.SceneDesc[]) {
-        this.sceneDescs = sceneDescs;
-        const strings = sceneDescs.map((desc) => desc.name);
+    private setSceneDescs(sceneDescs: (string | Viewer.SceneDesc)[]) {
+        this.sceneDescsFull = sceneDescs;
+        this.sceneDescs = sceneDescs.filter((g) => typeof g !== 'string') as Viewer.SceneDesc[];
+        const strings = this.sceneDescs.map((desc) => desc.name);
         this.sceneDescList.setStrings(strings);
         this.syncFlairs();
     }
@@ -1017,6 +1040,7 @@ export class UI {
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
     public statisticsPanel: StatisticsPanel;
+    public panels: Panel[];
     private about: About;
 
     constructor(public viewer: Viewer.Viewer) {
@@ -1030,6 +1054,7 @@ export class UI {
         this.toplevel.onmouseover = () => {
             this.toplevel.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
             this.toplevel.style.overflow = 'auto';
+            this.setPanelsAutoClosed(false);
         };
         this.toplevel.onmouseout = () => {
             this.toplevel.style.backgroundColor = 'rgba(0, 0, 0, 0)';
@@ -1075,6 +1100,7 @@ export class UI {
     }
 
     private setPanels(panels: Panel[]): void {
+        this.panels = panels;
         setChildren(this.panelContainer, panels.map((panel) => panel.elem));
     }
 
@@ -1082,7 +1108,14 @@ export class UI {
         this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
     }
 
+    public setPanelsAutoClosed(v: boolean): void {
+        for (let i = 0; i < this.panels.length; i++)
+            this.panels[i].setAutoClosed(v);
+    }
+
     public setIsDragging(isDragging: boolean): void {
         this.elem.style.pointerEvents = isDragging ? 'none' : '';
+        if (isDragging)
+            this.setPanelsAutoClosed(true);
     }
 }
