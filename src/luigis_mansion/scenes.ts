@@ -8,8 +8,8 @@ import * as BIN from './bin';
 import { LuigisMansionRenderer } from './render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
-function fetchBin(path: string): Progressable<BIN.BIN> {
-    return fetchData(`data/luigis_mansion/${path}`).then((buffer: ArrayBufferSlice) => {
+function fetchBin(path: string, abortSignal: AbortSignal): Progressable<BIN.BIN> {
+    return fetchData(`data/luigis_mansion/${path}`, abortSignal).then((buffer: ArrayBufferSlice) => {
         let binBuffer;
         if (path.endsWith('.bin')) {
             binBuffer = buffer;
@@ -27,8 +27,8 @@ function fetchBin(path: string): Progressable<BIN.BIN> {
 class LuigisMansionBinSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public paths: string[]) {}
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
-        const promises: Progressable<BIN.BIN>[] = this.paths.map((path) => fetchBin(path));
+    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+        const promises: Progressable<BIN.BIN>[] = this.paths.map((path) => fetchBin(path, abortSignal));
 
         // TODO(jstpierre): J3D format in VRB has a different version with a different MAT3 chunk.
         // promises.unshift(fetchVRBScene(gl, `vrball_B.szp`));

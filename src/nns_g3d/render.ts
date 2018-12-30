@@ -12,7 +12,7 @@ import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, GfxRend
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { TEX0, TEX0Texture } from "./nsbtx";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import AnimationController from "../AnimationController";
@@ -82,7 +82,7 @@ class Command_Material {
     private translateTexture(device: GfxDevice, hostAccessPass: GfxHostAccessPass, tex0: TEX0, textureName: string, paletteName: string) {
         const texture = tex0.textures.find((t) => t.name === textureName);
         const palette = paletteName !== null ? tex0.palettes.find((t) => t.name === paletteName) : null;
-        const fullTextureName = `${texture.name}/${palette.name}`;
+        const fullTextureName = `${textureName}/${paletteName}`;
         if (this.textureNames.indexOf(fullTextureName) >= 0)
             return;
         this.textureNames.push(fullTextureName);
@@ -115,6 +115,7 @@ class Command_Material {
         const materialParamsMapped = materialParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams], 8);
         let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams];
         offs += fillMatrix3x2(materialParamsMapped, offs, scratchTexMatrix);
+        offs += fillVec4(materialParamsMapped, offs, 0);
     }
 
     private translateRenderInst(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder): void {
@@ -176,7 +177,7 @@ class Command_Node {
     }
 }
 
-const scratchViewMatrix = mat4.create();
+const scratchMat4 = mat4.create();
 class Command_Shape {
     public vertexDataCommand: Command_VertexData;
 
@@ -186,17 +187,14 @@ class Command_Shape {
         this.vertexDataCommand = new Command_VertexData(device, renderInstBuilder, vertexData, shape.name);
     }
 
-    private computeModelView(viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): mat4 {
-        const viewMatrix = scratchViewMatrix;
-
+    private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
         if (isSkybox) {
-            computeViewMatrixSkybox(viewMatrix, viewerInput.camera);
+            computeViewMatrixSkybox(dst, viewerInput.camera);
         } else {
-            computeViewMatrix(viewMatrix, viewerInput.camera);
+            computeViewMatrix(dst, viewerInput.camera);
         }
 
-        mat4.mul(viewMatrix, viewMatrix, this.nodeCommand.modelMatrix);
-        return viewMatrix;
+        mat4.mul(dst, dst, this.nodeCommand.modelMatrix);
     }
 
     public prepareToRender(packetParamsBuffer: GfxRenderBuffer, isSkybox: boolean, viewerInput: Viewer.ViewerRenderInput): void {
@@ -206,7 +204,9 @@ class Command_Shape {
 
         const packetParamsMapped = packetParamsBuffer.mapBufferF32(this.vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams], 12);
         let offs = this.vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams];
-        offs += fillMatrix4x3(packetParamsMapped, offs, this.computeModelView(viewerInput, isSkybox));
+
+        this.computeModelView(scratchMat4, viewerInput, isSkybox);
+        offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
     }
 
     public destroy(device: GfxDevice): void {

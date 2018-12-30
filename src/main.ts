@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { MainScene, SceneDesc, SceneGroup, Viewer, Scene_Device } from './viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer, Scene_Device, getSceneDescs } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -54,31 +54,35 @@ import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
 
 const sceneGroups = [
-    MKDS.sceneGroup,
-    SMS.sceneGroup,
-    MKDD.sceneGroup,
+    "Wii",
     MKWII.sceneGroup,
-    ZWW.sceneGroup,
-    ZWW.sceneGroupDev,
-    ZTP.sceneGroup,
-    ZSS.sceneGroup,
     SMG.sceneGroup,
-    LM.sceneGroup,
-    TTYD.sceneGroup,
     SPM.sceneGroup,
-    SM64DS.sceneGroup,
-    DKSIV.sceneGroup,
-    ELB.sceneGroup,
+    ZSS.sceneGroup,
+    "GameCube",
+    LM.sceneGroup,
+    MKDD.sceneGroup,
     MP1.sceneGroup,
-    DKCR.sceneGroup,
-    SPL.sceneGroup,
-    MDL0.sceneGroup,
-    OOT3D.sceneGroup,
-    MM3D.sceneGroup,
-    ZELVIEW.sceneGroup,
+    TTYD.sceneGroup,
+    SMS.sceneGroup,
+    ZTP.sceneGroup,
+    ZWW.sceneGroup,
+    "Nintendo DS",
+    MKDS.sceneGroup,
+    SM64DS.sceneGroup,
+    "Nintendo 3DS",
     LM3D.sceneGroup,
-    Z_BOTW.sceneGroup,
+    MM3D.sceneGroup,
+    OOT3D.sceneGroup,
+    "Other",
+    DKSIV.sceneGroup,
+    MDL0.sceneGroup,
+    ZELVIEW.sceneGroup,
+    "Experimental",
+    DKCR.sceneGroup,
     SMO.sceneGroup,
+    SPL.sceneGroup,
+    Z_BOTW.sceneGroup,
 ];
 
 function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {
@@ -145,6 +149,7 @@ class DroppedFileSceneDesc implements SceneDesc {
 
 class SceneLoader {
     public loadingSceneDesc: SceneDesc = null;
+    public abortController: AbortController | null = null;
     public onscenechanged: () => void;
 
     constructor(public viewer: Viewer) {
@@ -170,12 +175,16 @@ class SceneLoader {
     public loadSceneDesc(sceneDesc: SceneDesc, cameraState: string): Progressable<MainScene> | Progressable<Scene_Device> {
         this.viewer.setScene(null);
 
+        if (this.abortController !== null)
+            this.abortController.abort();
+        this.abortController = new AbortController();
+
         this.loadingSceneDesc = sceneDesc;
 
         const gl = this.viewer.renderState.gl;
 
         if (sceneDesc.createScene_Device !== undefined) {
-            const progressable = sceneDesc.createScene_Device(this.viewer.gfxDevice);
+            const progressable = sceneDesc.createScene_Device(this.viewer.gfxDevice, this.abortController.signal);
             if (progressable !== null) {
                 progressable.then((scene: Scene_Device) => {
                     if (this.loadingSceneDesc === sceneDesc) {
@@ -218,12 +227,44 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
 
+class SaveManager {
+    private _cameraStates: { [k: string]: string };
+
+    constructor() {
+        const cameraStatesStr = window.localStorage.getItem('CameraStates');
+        if (cameraStatesStr)
+            this._cameraStates = JSON.parse(cameraStatesStr);
+        else
+            this._cameraStates = {};
+    }
+
+    private _saveCameraStates() {
+        window.localStorage.setItem('CameraStates', JSON.stringify(this._cameraStates, null, 0))
+    }
+
+    public saveCameraState(key: string, serializedCameraState: string): void {
+        this._cameraStates[key] = serializedCameraState;
+        this._saveCameraStates();
+    }
+
+    public loadCameraState(key: string): string | null {
+        return this._cameraStates[key] || null;
+    }
+
+    public export(): string {
+        return JSON.stringify({
+            'CameraStates': this._cameraStates,
+        });
+    }
+}
+
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
-    public groups: SceneGroup[];
+    public groups: (string | SceneGroup)[];
     public ui: UI;
+    public saveManager = new SaveManager();
 
     private droppedFileGroup: SceneGroup;
 
@@ -287,6 +328,7 @@ class Main {
         this.groups = sceneGroups;
 
         this.droppedFileGroup = { id: "drops", name: "Dropped Files", sceneDescs: [] };
+        this.groups.push('Other');
         this.groups.push(this.droppedFileGroup);
 
         this._loadSceneGroups();
@@ -301,14 +343,44 @@ class Main {
         this._updateLoop(0);
     }
 
-    private _updateLoop = (time: number) => {
-        if (this.viewer.inputManager.isKeyDownEventTriggered('KeyZ'))
+    private _exportSaveData() {
+        const saveData = this.saveManager.export();
+        const date = new Date();
+        downloadBlob(`noclip_export_${date.toISOString()}.nclsp`, new Blob([saveData]));
+    }
+
+    private checkKeyShortcuts() {
+        const inputManager = this.viewer.inputManager;
+        if (inputManager.isKeyDownEventTriggered('KeyZ'))
             this._toggleUI();
-
-        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
-
-        if (this.viewer.inputManager.isKeyDownEventTriggered('Numpad9'))
+        if (inputManager.isKeyDownEventTriggered('Numpad9'))
             this._downloadTextures();
+        for (let i = 0; i <= 9; i++) {
+            if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
+                if (this.currentSceneDesc) {
+                    const key = `${this._getCurrentSceneDescId()}/${i}`;
+                    const shouldSave = inputManager.isKeyDown('ShiftLeft');
+                    if (shouldSave) {
+                        this.saveManager.saveCameraState(key, this.viewer.cameraController.serialize());
+                    } else {
+                        const saved = this.saveManager.loadCameraState(key);
+                        if (saved !== null)
+                            this.viewer.cameraController.deserialize(saved);
+                    }
+                }
+            }
+        }
+        if (inputManager.isKeyDownEventTriggered('Numpad3'))
+            this._exportSaveData();
+        if (inputManager.isKeyDownEventTriggered('Period'))
+            this.viewer.isTimeRunning = !this.viewer.isTimeRunning;
+    }
+
+    private _updateLoop = (time: number) => {
+        this.checkKeyShortcuts();
+
+        // Needs to be called before this.viewer.update
+        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
 
         this.viewer.update(time);
 
@@ -348,20 +420,24 @@ class Main {
         const [groupId, ...sceneRest] = sceneState.split('/');
         const sceneId = decodeURIComponent(sceneRest.join('/'));
 
-        const group = this.groups.find((g) => g.id === groupId);
+        const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
         if (!group)
             return;
 
-        const desc = group.sceneDescs.find((d) => d.id === sceneId);
+        const desc = getSceneDescs(group).find((d) => d.id === sceneId);
         this.lastSavedState = state;
         this._loadSceneDesc(group, desc, cameraState);
     }
 
-    private _getState() {
+    private _getCurrentSceneDescId() {
         const groupId = this.currentSceneGroup.id;
         const sceneId = this.currentSceneDesc.id;
+        return `${groupId}/${sceneId}`;
+    }
+
+    private _getState() {
         const camera = this.viewer.cameraController ? this.viewer.cameraController.serialize() : '';
-        return `${groupId}/${sceneId};${camera}`;
+        return `${this._getCurrentSceneDescId()};${camera}`;
     }
 
     private _saveState() {
@@ -421,7 +497,10 @@ class Main {
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
         const progressable = this.sceneLoader.loadSceneDesc(sceneDesc, cameraState);
-        this.ui.sceneSelect.setProgressable(progressable);
+        this.ui.sceneSelect.setLoadProgress(progressable.progress);
+        progressable.onProgress = () => {
+            this.ui.sceneSelect.setLoadProgress(progressable.progress);
+        };
 
         // Set window title.
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;

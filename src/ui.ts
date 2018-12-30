@@ -2,7 +2,6 @@
 // New UI system
 
 import * as Viewer from './viewer';
-import Progressable from './Progressable';
 import { assertExists, assert } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController } from './Camera';
 import { RenderStatistics } from './render';
@@ -10,7 +9,8 @@ import { Color, colorToCSS } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
 
-const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
+export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
+export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
 
 export function createDOMFromString(s: string): DocumentFragment {
     return document.createRange().createContextualFragment(s);
@@ -44,8 +44,6 @@ function setChildren(parent: Element, children: Element[]): void {
 }
 
 function setElementHighlighted(elem: HTMLElement, highlighted: boolean, normalTextColor: string = '') {
-    elem.classList.toggle('Highlighted', highlighted);
-
     if (highlighted) {
         elem.style.backgroundColor = HIGHLIGHT_COLOR;
         elem.style.color = 'black';
@@ -60,10 +58,8 @@ export interface Flair {
     background?: string;
     color?: string;
     bulletColor?: string;
-}
-
-function highlightFlair(i: number): Flair {
-    return { index: i, background: HIGHLIGHT_COLOR, color: 'black' };
+    extraHTML?: string;
+    header?: string;
 }
 
 export interface Widget {
@@ -99,13 +95,22 @@ export abstract class ScrollSelect implements Widget {
         this.scrollContainer.style.display = (strings.length > 0) ? '' : 'none';
         this.scrollContainer.innerHTML = '';
         for (let i = 0; i < strings.length; i++) {
+            const outer = document.createElement('div');
+            const headerSlot = document.createElement('div');
+            headerSlot.classList.add('header');
+            outer.appendChild(headerSlot);
             const selector = document.createElement('div');
+            selector.classList.add('selector');
             selector.style.display = 'list-item';
             selector.style.cursor = 'pointer';
+            outer.appendChild(selector);
             const textSpan = document.createElement('span');
-            textSpan.style.fontWeight = 'bold';
+            textSpan.classList.add('text');
             textSpan.textContent = strings[i];
             selector.appendChild(textSpan);
+            const extraSlot = document.createElement('span');
+            extraSlot.classList.add('extra');
+            selector.appendChild(extraSlot);
             const index = i;
             selector.onmousedown = () => {
                 this.itemClicked(index, true);
@@ -114,7 +119,7 @@ export abstract class ScrollSelect implements Widget {
                 if (e.buttons !== 0)
                     this.itemClicked(index, false);
             };
-            this.scrollContainer.appendChild(selector);
+            this.scrollContainer.appendChild(outer);
         }
     }
 
@@ -124,42 +129,79 @@ export abstract class ScrollSelect implements Widget {
 
     public setFlairs(flairs: Flair[]) {
         this.flairs = flairs;
-        this.syncFlairs();
+        this.syncInternalFlairs();
     }
 
-    protected setInternalFlairs(flairs: Flair[]): void {
+    protected abstract syncInternalFlairs(): void;
+
+    protected setInternalFlairs(flairs: Flair[]) {
         this.internalFlairs = flairs;
-        this.syncFlairs();
+        this.syncFlairDisplay();
     }
 
-    private syncFlairs(): void {
-        const flairs = [...this.internalFlairs, ...this.flairs];
+    private syncFlairDisplay(): void {
+        const flairs = this.internalFlairs;
+        let hasHeader = false;
         for (let i = 0; i < this.getNumItems(); i++) {
-            const selector = this.scrollContainer.children.item(i) as HTMLElement;
+            const outer = this.scrollContainer.children.item(i) as HTMLElement;
+            const selector = assertExists(outer.querySelector('div.selector') as HTMLElement);
             const flair = flairs.find((flair) => flair.index === i);
+
+            const headerSlot = assertExists(outer.querySelector('div.header') as HTMLElement);
+            if (flair !== undefined && flair.header !== undefined) {
+                headerSlot.style.display = 'block';
+                headerSlot.style.color = 'white';
+                headerSlot.style.fontWeight = 'bold';
+                headerSlot.innerHTML = flair.header;
+                hasHeader = true;
+            } else {
+                headerSlot.style.display = 'none';
+            }
 
             const background = (flair !== undefined && flair.background !== undefined) ? flair.background : '';
             selector.style.background = background;
-            const textSpan = assertExists(selector.querySelector('span'));
+            const textSpan = assertExists(selector.querySelector('span.text') as HTMLElement);
             const color = (flair !== undefined && flair.color !== undefined) ? flair.color : '';
             textSpan.style.color = color;
+
+            let paddingLeft = 0;
+            if (hasHeader)
+                paddingLeft += 20;
+
             if (flair !== undefined && flair.bulletColor !== undefined) {
                 selector.style.listStyleType = 'disc';
                 selector.style.listStylePosition = 'inside';
-                selector.style.marginLeft = '4px';
+                paddingLeft += 4;
                 selector.style.color = flair.bulletColor;
             } else {
                 selector.style.listStyleType = '';
                 selector.style.color = '';
-                selector.style.marginLeft = '';
             }
+            selector.style.paddingLeft = `${paddingLeft}px`;
+
+            const extraHTML = (flair !== undefined && flair.extraHTML) ? flair.extraHTML : '';
+            const extraSpan = assertExists(selector.querySelector('span.extra') as HTMLElement);
+            extraSpan.innerHTML = extraHTML;
         }
     }
 
     protected abstract itemClicked(index: number, first: boolean): void;
 }
 
+function ensureFlairIndex(flairs: Flair[], index: number): Flair {
+    const flairIndex = flairs.findIndex((f) => f.index === index);
+    if (flairIndex >= 0) {
+        flairs[flairIndex] = Object.assign({}, flairs[flairIndex]);
+        return flairs[flairIndex];
+    } else {
+        const flair = { index };
+        flairs.push(flair);
+        return flair;
+    }
+}
+
 export class SingleSelect extends ScrollSelect {
+    public highlightedIndex: number;
     public onselectionchange: (index: number) => void;
 
     public itemClicked(index: number, first: boolean) {
@@ -171,7 +213,18 @@ export class SingleSelect extends ScrollSelect {
     }
 
     public setHighlighted(highlightedIndex: number) {
-        this.setInternalFlairs([highlightFlair(highlightedIndex)]);
+        if (this.highlightedIndex === highlightedIndex)
+            return;
+        this.highlightedIndex = highlightedIndex;
+        this.syncInternalFlairs();
+    }
+
+    protected syncInternalFlairs(): void {
+        const flairs = [...this.flairs];
+        const flair = ensureFlairIndex(flairs, this.highlightedIndex);
+        flair.background = HIGHLIGHT_COLOR;
+        flair.color = 'black';
+        this.setInternalFlairs(flairs);
     }
 }
 
@@ -232,12 +285,12 @@ export class MultiSelect extends ScrollSelect {
         this.syncInternalFlairs();
     }
 
-    private syncInternalFlairs() {
+    protected syncInternalFlairs() {
         const flairs: Flair[] = [...this.flairs];
         for (let i = 0; i < this.getNumItems(); i++) {
-            const bulletColor = !!this.itemIsOn[i] ? HIGHLIGHT_COLOR : '#aaa';
-            const color = !!this.itemIsOn[i] ? 'white' : '#aaa';
-            flairs.push({ index: i, bulletColor, color });
+            const flair = ensureFlairIndex(flairs, i);
+            flair.bulletColor = !!this.itemIsOn[i] ? HIGHLIGHT_COLOR : '#aaa';
+            flair.color = !!this.itemIsOn[i] ? 'white' : '#aaa';
         }
         this.setInternalFlairs(flairs);
     }
@@ -256,11 +309,15 @@ export class MultiSelect extends ScrollSelect {
 export class Panel implements Widget {
     public elem: HTMLElement;
 
-    protected expanded: boolean;
+    public expanded: boolean | null = null;
+    public manuallyExpanded: boolean = false;
+    public autoClosed: boolean = false;
+    public customHeaderBackgroundColor: string = '';
     protected header: HTMLElement;
     protected svgIcon: SVGSVGElement;
 
     private toplevel: HTMLElement;
+    private ignoreAutoCloseTimeout: number = 0;
     public extraRack: HTMLElement;
     public mainPanel: HTMLElement;
     public contents: HTMLElement;
@@ -306,6 +363,11 @@ export class Panel implements Widget {
         this.toplevel.onmouseover = this.syncSize.bind(this);
         this.toplevel.onmouseout = this.syncSize.bind(this);
         this.header.onclick = () => {
+            if (this.ignoreAutoCloseTimeout > 0) {
+                this.ignoreAutoCloseTimeout = 0;
+                return;
+            }
+
             this.toggleExpanded();
         };
         this.mainPanel.appendChild(this.header);
@@ -351,25 +413,55 @@ export class Panel implements Widget {
     }
 
     protected syncHeaderStyle() {
-        this.svgIcon.style.fill = this.expanded ? 'black' : '';
-        setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
+        if (this.customHeaderBackgroundColor) {
+            this.svgIcon.style.fill = '';
+            this.header.style.backgroundColor = this.customHeaderBackgroundColor;
+            this.header.style.color = 'white';
+        } else {
+            this.svgIcon.style.fill = this.expanded ? 'black' : '';
+            setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
+        }
     }
 
-    public setExpanded(expanded: boolean) {
-        this.expanded = expanded;
+    public syncExpanded(): boolean {
+        const newExpanded = this.manuallyExpanded && !this.autoClosed;
+        if (this.expanded === newExpanded)
+            return false;
+        this.expanded = newExpanded;
         this.syncHeaderStyle();
         this.syncSize();
+        return true;
+    }
+
+    public setExpanded(v: boolean) {
+        this.manuallyExpanded = v;
+        this.syncExpanded();
     }
 
     private toggleExpanded() {
         this.setExpanded(!this.expanded);
+    }
+
+    public setAutoClosed(v: boolean) {
+        if (this.autoClosed === v)
+            return;
+        this.autoClosed = v;
+        const changed = this.syncExpanded();
+        if (changed && this.expanded) {
+            // If we're coming back from auto-closing, then start a timeout to ignore clicks during this time.
+            this.ignoreAutoCloseTimeout = window.setTimeout(() => {
+                this.ignoreAutoCloseTimeout = 0;
+            }, 1000);
+        }
     }
 }
 
 const OPEN_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M84.3765045,45.2316481 L77.2336539,75.2316205 L77.2336539,75.2316205 C77.1263996,75.6820886 76.7239081,76 76.2608477,76 L17.8061496,76 C17.2538649,76 16.8061496,75.5522847 16.8061496,75 C16.8061496,74.9118841 16.817796,74.8241548 16.8407862,74.739091 L24.7487983,45.4794461 C24.9845522,44.607157 25.7758952,44.0012839 26.6794815,44.0012642 L83.4036764,44.0000276 L83.4036764,44.0000276 C83.9559612,44.0000156 84.4036862,44.4477211 84.4036982,45.0000058 C84.4036999,45.0780163 84.3945733,45.155759 84.3765045,45.2316481 L84.3765045,45.2316481 Z M15,24 L26.8277004,24 L26.8277004,24 C27.0616369,24 27.2881698,24.0820162 27.4678848,24.2317787 L31.799078,27.8411064 L31.799078,27.8411064 C32.697653,28.5899189 33.8303175,29 35,29 L75,29 C75.5522847,29 76,29.4477153 76,30 L76,38 L76,38 C76,38.5522847 75.5522847,39 75,39 L25.3280454,39 L25.3280454,39 C23.0690391,39 21.0906235,40.5146929 20.5012284,42.6954549 L14.7844016,63.8477139 L14.7844016,63.8477139 C14.7267632,64.0609761 14.5071549,64.1871341 14.2938927,64.1294957 C14.1194254,64.0823423 13.9982484,63.9240598 13.9982563,63.7433327 L13.9999561,25 L14,25 C14.0000242,24.4477324 14.4477324,24.0000439 15,24.0000439 L15,24 Z"/></svg>`;
 
 class SceneSelect extends Panel {
+    private sceneGroupsFull: (string | Viewer.SceneGroup)[] = [];
     private sceneGroups: Viewer.SceneGroup[] = [];
+    private sceneDescsFull: (string | Viewer.SceneDesc)[] = [];
     private sceneDescs: Viewer.SceneDesc[] = [];
 
     private sceneGroupList: SingleSelect;
@@ -382,17 +474,18 @@ class SceneSelect extends Panel {
 
     public onscenedescselected: (sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) => void;
 
-    constructor(private viewer: Viewer.Viewer) {
+    constructor(public viewer: Viewer.Viewer) {
         super();
-        this.setTitle(OPEN_ICON, 'Scenes');
+        this.setTitle(OPEN_ICON, 'Games');
 
         this.sceneGroupList = new SingleSelect();
+        this.sceneGroupList.setHeight('300px');
         this.contents.appendChild(this.sceneGroupList.elem);
 
         this.sceneDescList = new SingleSelect();
         this.sceneDescList.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
         this.sceneDescList.elem.style.width = '500px';
-        this.sceneDescList.setHeight('250px');
+        this.sceneDescList.setHeight('328px');
         this.extraRack.appendChild(this.sceneDescList.elem);
 
         this.sceneGroupList.onselectionchange = (i: number) => {
@@ -404,13 +497,6 @@ class SceneSelect extends Panel {
         };
     }
 
-    public setProgressable(p: Progressable<any>) {
-        this.setLoadProgress(p.progress);
-        p.onProgress = () => {
-            this.setLoadProgress(p.progress);
-        };
-    }
-
     public setCurrentDesc(sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) {
         this.selectedSceneGroup = sceneGroup;
         this.currentSceneGroup = sceneGroup;
@@ -418,8 +504,9 @@ class SceneSelect extends Panel {
         this.syncSceneDescs();
     }
 
-    public setSceneGroups(sceneGroups: Viewer.SceneGroup[]) {
-        this.sceneGroups = sceneGroups;
+    public setSceneGroups(sceneGroupsFull: (string | Viewer.SceneGroup)[]) {
+        this.sceneGroupsFull = sceneGroupsFull;
+        this.sceneGroups = sceneGroupsFull.filter((n) => typeof n !== 'string') as Viewer.SceneGroup[];
         const strings = this.sceneGroups.filter((g) => g.sceneDescs.length > 0).map((g) => g.name);
         this.sceneGroupList.setStrings(strings);
         this.syncSceneDescs();
@@ -452,20 +539,55 @@ class SceneSelect extends Panel {
     }
 
     private syncFlairs() {
-        const selectedGroupIndex = this.sceneGroups.indexOf(this.selectedSceneGroup);
-        const flairs: Flair[] = [ { index: selectedGroupIndex, background: HIGHLIGHT_COLOR, color: 'black' } ];
+        const sceneGroupFlairs: Flair[] = [];
+
+        let sgi = 0;
+        for (let i = 0; i < this.sceneGroupsFull.length; i++) {
+            const elem = this.sceneGroupsFull[i];
+            if (typeof elem === 'string') {
+                const flair = ensureFlairIndex(sceneGroupFlairs, sgi);
+                flair.header = elem;
+            } else {
+                sgi++;
+            }
+        }
 
         const currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
-        if (currentGroupIndex >= 0)
-            flairs.push({ index: currentGroupIndex, background: '#666' });
-        this.sceneGroupList.setFlairs(flairs);
+        if (currentGroupIndex >= 0) {
+            const flair = ensureFlairIndex(sceneGroupFlairs, currentGroupIndex);
+            flair.background = '#666';
+        }
+
+        const selectedGroupIndex = this.sceneGroups.indexOf(this.selectedSceneGroup);
+        if (selectedGroupIndex >= 0) {
+            const flair = ensureFlairIndex(sceneGroupFlairs, selectedGroupIndex);
+            flair.background = HIGHLIGHT_COLOR;
+            flair.color = 'white';
+        }
+
+        this.sceneGroupList.setFlairs(sceneGroupFlairs);
+
+        const sceneDescFlairs: Flair[] = [];
+        let sdi = 0;
+        for (let i = 0; i < this.sceneDescsFull.length; i++) {
+            const elem = this.sceneDescsFull[i];
+            if (typeof elem === 'string') {
+                const flair = ensureFlairIndex(sceneDescFlairs, sdi);
+                flair.header = elem;
+            } else {
+                sdi++;
+            }
+        }
 
         const selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
         if (selectedDescIndex >= 0) {
-            const loadingGradient = this.getLoadingGradient();
-            const textColor = this.loadProgress > 0.5 ? 'black' : undefined;
-            this.sceneDescList.setFlairs([ { index: selectedDescIndex, background: loadingGradient, color: textColor } ]);
+            const flair = ensureFlairIndex(sceneDescFlairs, selectedDescIndex);
+            flair.background = this.getLoadingGradient();
+            flair.color = this.loadProgress > 0.5 ? 'black' : undefined;
+            const pct = `${Math.round(this.loadProgress * 100)}%`;
+            flair.extraHTML = this.loadProgress < 1.0 ? `<span style="float: right; font-weight: bold; color: #aaa">${pct}</span>` : ``;
         }
+        this.sceneDescList.setFlairs(sceneDescFlairs);
     }
 
     private selectSceneGroup(i: number) {
@@ -483,9 +605,10 @@ class SceneSelect extends Panel {
             this.setSceneDescs([]);
     }
 
-    private setSceneDescs(sceneDescs: Viewer.SceneDesc[]) {
-        this.sceneDescs = sceneDescs;
-        const strings = sceneDescs.map((desc) => desc.name);
+    private setSceneDescs(sceneDescs: (string | Viewer.SceneDesc)[]) {
+        this.sceneDescsFull = sceneDescs;
+        this.sceneDescs = sceneDescs.filter((g) => typeof g !== 'string') as Viewer.SceneDesc[];
+        const strings = this.sceneDescs.map((desc) => desc.name);
         this.sceneDescList.setStrings(strings);
         this.syncFlairs();
     }
@@ -627,8 +750,6 @@ class ViewerSettings extends Panel {
     private fovSlider: HTMLElement;
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
-    private cullingOn: HTMLElement;
-    private cullingOff: HTMLElement;
 
     constructor(private viewer: Viewer.Viewer) {
         super();
@@ -692,10 +813,6 @@ class ViewerSettings extends Panel {
 <div style="display: grid; grid-template-columns: 1fr 1fr;">
 <div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div>
 </div>
-<div class="SettingsHeader">Culling?</div>
-<div style="display: grid; grid-template-columns: 1fr 1fr;">
-<div class="SettingsButton CullingOn">On</div><div class="SettingsButton CullingOff">Off</div>
-</div>
 `;
         this.fovSlider = this.contents.querySelector('.FoVSlider');
         this.fovSlider.oninput = this.onFovSliderChange.bind(this);
@@ -708,16 +825,6 @@ class ViewerSettings extends Panel {
         this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit');
         this.cameraControllerOrbit.onclick = () => {
             this.setCameraControllerClass(OrbitCameraController);
-        };
-
-        this.cullingOn = this.contents.querySelector('.CullingOn');
-        this.cullingOn.onclick = () => {
-            this.setCulling(true);
-        };
-
-        this.cullingOff = this.contents.querySelector('.CullingOff');
-        this.cullingOff.onclick = () => {
-            this.setCulling(false);
         };
     }
 
@@ -739,12 +846,6 @@ class ViewerSettings extends Panel {
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
         setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
         setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
-    }
-
-    public setCulling(value: boolean) {
-        this.viewer.renderState.forceDisableCulling = !value;
-        setElementHighlighted(this.cullingOn, value);
-        setElementHighlighted(this.cullingOff, !value);
     }
 }
 
@@ -902,7 +1003,7 @@ class About extends Panel {
 <a href="https://github.com/vlad001">vlad001</a>,
 <a href="https://twitter.com/Jewelots_">Jewel</a>,
 <a href="https://twitter.com/instant_grat">Instant Grat</a>,
-<a href="https://twitter.com/__Aruki">Aruki</a>
+<a href="https://twitter.com/pupperuki">Aruki</a>
 </p>
 
 <p><strong>OPEN SOURCE</strong> at <a href="${GITHUB_URL}">GitHub</a></p>
@@ -941,6 +1042,7 @@ export class LayerPanel extends Panel {
 
     constructor(layers: Layer[] = null) {
         super();
+        this.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         this.setTitle(LAYER_ICON, 'Layers');
         this.multiSelect = new MultiSelect();
         this.multiSelect.onitemchanged = this._onItemChanged.bind(this);
@@ -976,6 +1078,7 @@ export class UI {
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
     public statisticsPanel: StatisticsPanel;
+    public panels: Panel[];
     private about: About;
 
     constructor(public viewer: Viewer.Viewer) {
@@ -989,6 +1092,7 @@ export class UI {
         this.toplevel.onmouseover = () => {
             this.toplevel.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
             this.toplevel.style.overflow = 'auto';
+            this.setPanelsAutoClosed(false);
         };
         this.toplevel.onmouseout = () => {
             this.toplevel.style.backgroundColor = 'rgba(0, 0, 0, 0)';
@@ -1034,6 +1138,7 @@ export class UI {
     }
 
     private setPanels(panels: Panel[]): void {
+        this.panels = panels;
         setChildren(this.panelContainer, panels.map((panel) => panel.elem));
     }
 
@@ -1041,7 +1146,21 @@ export class UI {
         this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
     }
 
+    public setPanelsAutoClosed(v: boolean): void {
+        for (let i = 0; i < this.panels.length; i++)
+            this.panels[i].setAutoClosed(v);
+    }
+
+    private shouldPanelsAutoClose(): boolean {
+        // TODO(jstpierre): Lock icon?
+        if (this.statisticsPanel.manuallyExpanded)
+            return false;
+        return true;
+    }
+
     public setIsDragging(isDragging: boolean): void {
         this.elem.style.pointerEvents = isDragging ? 'none' : '';
+        if (isDragging && this.shouldPanelsAutoClose())
+            this.setPanelsAutoClosed(true);
     }
 }

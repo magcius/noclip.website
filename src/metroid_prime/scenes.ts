@@ -72,10 +72,10 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         this.id = filename;
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
-        const stringsPakP = fetchData(`data/metroid_prime/mp1/Strings.pak`);
-        const levelPakP = fetchData(`data/metroid_prime/mp1/${this.filename}`);
-        const nameDataP = fetchData(`data/metroid_prime/mp1/MP1_NameData.crg1`);
+    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+        const stringsPakP = fetchData(`data/metroid_prime/mp1/Strings.pak`, abortSignal);
+        const levelPakP = fetchData(`data/metroid_prime/mp1/${this.filename}`, abortSignal);
+        const nameDataP = fetchData(`data/metroid_prime/mp1/MP1_NameData.crg1`, abortSignal);
         return Progressable.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
             const levelPak = PAK.parse(datas[0]);
             const stringsPak = PAK.parse(datas[1]);

@@ -16,12 +16,26 @@ export default class Progressable<T> {
             this.onProgress();
     }
 
-    public then<TResult>(onfulfilled?: ((value: T) => TResult | PromiseLike<TResult>)): Progressable<TResult> {
-        // The rough idea is that any then-able is implicitly at the same progress as this one.
-        const pr = new Progressable(this.promise.then(onfulfilled), this.progress);
+    public then<TResult>(onfulfilled?: ((value: T) => TResult | PromiseLike<TResult> | Progressable<TResult>)): Progressable<TResult> {
+        const pr = new Progressable<TResult>(this.promise.then((b) => {
+            const result = onfulfilled(b);
+
+            if (result instanceof Progressable) {
+                // If a callback returns a Progressable, then bubble that progress up to us.
+                result.onProgress = () => {
+                    this.setProgress(result.progress)
+                };
+                return result.promise;
+            } else {
+                return result;
+            }
+        }), this.progress);
+
+        // Any then-able chain is the same progress as this one (however it can also report progress which will replace this).
         this.onProgress = () => {
             pr.setProgress(this.progress);
         };
+
         return pr;
     }
 

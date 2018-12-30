@@ -20,13 +20,13 @@ export class TerrainSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
         const teraPath = `${pathBase}/Terrain/A/${this.id}`;
-        return Progressable.all([fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`), fetchData(`${pathBase}/Model/Terrain.Tex2.sbfres`), fetchData(`${teraPath}.tscb`)]).then(([terrainTex1Buffer, terrainTex2Buffer, tscbBuffer]) => {
+        return Progressable.all([fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`, abortSignal), fetchData(`${pathBase}/Model/Terrain.Tex2.sbfres`), fetchData(`${teraPath}.tscb`, abortSignal)]).then(([terrainTex1Buffer, terrainTex2Buffer, tscbBuffer]) => {
             const tscb = TSCB.parse(tscbBuffer);
 
             return Progressable.all([decodeFRES(terrainTex1Buffer), decodeFRES(terrainTex2Buffer)]).then(([tex1, tex2]) => {
-                const terrainManager = new TerrainManager(device, tscb, tex1, teraPath);
+                const terrainManager = new TerrainManager(device, abortSignal, tscb, tex1, teraPath);
                 console.log(tex1, tex2);
                 const textureHolder = new GX2TextureHolder();
                 // Mangle things a bit.
@@ -47,7 +47,7 @@ export class TerrainSceneDesc implements Viewer.SceneDesc {
 }
 
 const id = "z_botw";
-const name = "Breath of the Wild (Experimental)";
+const name = "Breath of the Wild";
 const sceneDescs = [
     new TerrainSceneDesc("MainField", "MainField"),
 ];

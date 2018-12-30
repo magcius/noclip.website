@@ -1,5 +1,5 @@
 
-import { mat2d, mat4, vec3 } from 'gl-matrix';
+import { mat2d, mat4, vec3, mat3 } from 'gl-matrix';
 
 import * as BYML from '../byml';
 import * as LZ77 from './lz77';
@@ -12,16 +12,17 @@ import { DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
+import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox, Camera } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import GfxArena from '../gfx/helpers/GfxArena';
 import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
+import { assert } from '../util';
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -33,7 +34,7 @@ export class NITRO_Program extends DeviceProgram {
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
 
-    public vert = `
+    public both = `
 precision mediump float;
 
 // Expected to be constant across the entire scene.
@@ -52,31 +53,36 @@ layout(row_major, std140) uniform ub_PacketParams {
     mat4x3 u_ModelView;
 };
 
+uniform sampler2D u_Texture;
+`;
+
+    public vert = `
 layout(location = ${NITRO_Program.a_Position}) in vec3 a_Position;
 layout(location = ${NITRO_Program.a_UV}) in vec2 a_UV;
 layout(location = ${NITRO_Program.a_Color}) in vec4 a_Color;
 layout(location = ${NITRO_Program.a_Normal}) in vec3 a_Normal;
 out vec4 v_Color;
-out vec2 v_UV;
+out vec2 v_TexCoord;
 
 void main() {
     gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
     v_Color = a_Color;
-    if(u_TexCoordMode == 2.0){ //TexCoordMode == Normal
-        v_UV = (a_Normal.xy+vec2(1,1))/4.0;
-    }else{
-        v_UV = (u_TexMtx[0] * vec4(a_UV, 1.0, 1.0)).st;
+
+    vec2 t_TexSpaceCoord;
+    if (u_TexCoordMode == 2.0) { // TexCoordMode.NORMAL
+        v_TexCoord = (u_TexMtx[0] * vec4(a_Normal, 1.0)).st;
+    } else {
+        v_TexCoord = (u_TexMtx[0] * vec4(a_UV, 1.0, 1.0)).st;
     }
 }
 `;
     public frag = `
 precision mediump float;
-in vec2 v_UV;
+in vec2 v_TexCoord;
 in vec4 v_Color;
-uniform sampler2D u_Texture;
 
 void main() {
-    gl_FragColor = texture2D(u_Texture, v_UV);
+    gl_FragColor = texture2D(u_Texture, v_TexCoord);
     gl_FragColor *= v_Color;
     if (gl_FragColor.a == 0.0)
         discard;
@@ -102,14 +108,19 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
 
 interface Animation {
     updateModelMatrix(time: number, modelMatrix: mat4): void;
+    updateNormalMatrix(time: number, normalMatrix: mat4): void;
 }
 
 class YSpinAnimation {
     constructor(public speed: number, public phase: number) {}
 
-    public updateModelMatrix(time: number, modelMatrix: mat4) {
+    public updateNormalMatrix(time: number, normalMatrix: mat4) {
         const theta = this.phase + (time / 30 * this.speed);
-        mat4.rotateY(modelMatrix, modelMatrix, theta);
+        mat4.rotateY(normalMatrix, normalMatrix, theta);
+    }
+
+    public updateModelMatrix(time: number, modelMatrix: mat4) {
+        this.updateNormalMatrix(time, modelMatrix);
     }
 }
 
@@ -176,18 +187,42 @@ export class Command_VertexData {
     }
 }
 
+function mat4_from_mat2d(dst: mat4, m: mat2d): void {
+    const ma = m[0], mb = m[1];
+    const mc = m[2], md = m[3];
+    const mx = m[4], my = m[5];
+    dst[0] = ma;
+    dst[1] = mc;
+    dst[2] = 0;
+    dst[3] = 0;
+    dst[4] = mb;
+    dst[5] = md;
+    dst[6] = 0;
+    dst[7] = 0;
+    dst[8] = 0;
+    dst[9] = 0;
+    dst[10] = 1;
+    dst[11] = 0;
+    dst[12] = mx;
+    dst[13] = my;
+    dst[14] = 0;
+    dst[15] = 1;
+}
+
 const enum SM64DSPass {
     MAIN = 0x01,
     SKYBOX = 0x02,
 }
 
 const scratchModelMatrix = mat4.create();
-const scratchViewMatrix = mat4.create();
+const scratchMat4 = mat4.create();
 class BMDRenderer {
+    public name: string = '';
     public bmd: NITRO_BMD.BMD;
     public crg1Level: CRG1Level;
     public isSkybox: boolean;
-    public localMatrix: mat4;
+    public localMatrix: mat4 = mat4.create();
+    public normalMatrix: mat4 = mat4.create();
     public animation: Animation = null;
 
     private gfxProgram: GfxProgram;
@@ -210,7 +245,6 @@ class BMDRenderer {
         this.gfxProgram = device.createProgram(new NITRO_Program());
 
         const scaleFactor = this.bmd.scaleFactor;
-        this.localMatrix = mat4.create();
         mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
     }
 
@@ -248,17 +282,11 @@ class BMDRenderer {
         const texture = material.texture;
         const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         const textureMapping = new TextureMapping();
-        
-        const texCoordMode = material.texParams >>> 30;
-        
-        const normalMode = texCoordMode==NITRO_BMD.TexCoordMode.NORMAL;
         if (texture !== null) {
             this.textureHolder.fillTextureMapping(textureMapping, texture.name);
             textureMapping.gfxSampler = this.arena.trackSampler(device.createSampler({
-                //if the texture coord mode is set to normal,
-                //the texture filter is set to bilinear to make everything look more round/smooth
-                minFilter: normalMode?GfxTexFilterMode.BILINEAR:GfxTexFilterMode.POINT,
-                magFilter: normalMode?GfxTexFilterMode.BILINEAR:GfxTexFilterMode.POINT,
+                minFilter: GfxTexFilterMode.POINT,
+                magFilter: GfxTexFilterMode.POINT,
                 mipFilter: GfxMipFilterMode.NO_MIP,
                 wrapS: parseTexImageParamWrapModeS(material.texParams),
                 wrapT: parseTexImageParamWrapModeT(material.texParams),
@@ -271,7 +299,8 @@ class BMDRenderer {
 
         // Find any possible material animations.
         const crg1mat = this.crg1Level ? this.crg1Level.TextureAnimations.find((c) => c.MaterialName === material.name) : undefined;
-        const texAnimMat = mat2d.clone(material.texCoordMat);
+        const texCoordMat = mat4.create();
+        mat4_from_mat2d(texCoordMat, material.texCoordMat);
 
         templateRenderInst.setRenderFlags({
             blendMode: GfxBlendMode.ADD,
@@ -287,9 +316,25 @@ class BMDRenderer {
         const programKey = device.queryProgram(this.gfxProgram).uniqueKey;
         templateRenderInst.sortKey = makeSortKeyOpaque(layer, programKey);
 
+        const texCoordMode: NITRO_BMD.TexCoordMode = material.texParams >>> 30;
+
+        const scratchMat2d = mat2d.create();
         return (hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => {
             function selectArray(arr: Float32Array, time: number): number {
                 return arr[(time | 0) % arr.length];
+            }
+
+            if (texCoordMode === NITRO_BMD.TexCoordMode.NORMAL) {
+                // TODO(jstpierre): Verify that we want this in all cases. Is there some flag
+                // in the engine that turns on the spherical reflection mapping?
+                this.computeNormalMatrix(texCoordMat, viewerInput);
+
+                // Game seems to use this to offset the center of the reflection.
+                texCoordMat[12] += material.texCoordMat[4];
+                texCoordMat[13] += -material.texCoordMat[5];
+
+                // We shouldn't have any texture animations on normal-mapped textures.
+                assert(crg1mat === undefined);
             }
 
             if (crg1mat !== undefined) {
@@ -298,23 +343,32 @@ class BMDRenderer {
                 const rotation = selectArray(crg1mat.Rotation, time);
                 const x = selectArray(crg1mat.X, time);
                 const y = selectArray(crg1mat.Y, time);
-                mat2d.identity(texAnimMat);
-                mat2d.scale(texAnimMat, texAnimMat, [scale, scale, scale]);
-                mat2d.rotate(texAnimMat, texAnimMat, rotation / 180 * Math.PI);
-                mat2d.translate(texAnimMat, texAnimMat, [-x, y, 0]);
-                mat2d.mul(texAnimMat, texAnimMat, material.texCoordMat);
+                mat2d.identity(scratchMat2d);
+                mat2d.scale(scratchMat2d, scratchMat2d, [scale, scale, scale]);
+                mat2d.rotate(scratchMat2d, scratchMat2d, rotation / 180 * Math.PI);
+                mat2d.translate(scratchMat2d, scratchMat2d, [-x, y, 0]);
+                mat2d.mul(scratchMat2d, scratchMat2d, material.texCoordMat);
+                mat4_from_mat2d(texCoordMat, scratchMat2d);
             }
 
             if (texture !== null) {
                 const materialParamsMapped = this.materialParamsBuffer.mapBufferF32(templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams], 12);
                 let offs = templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams];
-                offs += fillMatrix3x2(materialParamsMapped, offs, texAnimMat);
+                offs += fillMatrix4x2(materialParamsMapped, offs, texCoordMat);
                 offs += fillVec4(materialParamsMapped, offs, texCoordMode);
             }
         };
     }
 
-    public computeModelView(viewerInput: Viewer.ViewerRenderInput, isBillboard: boolean): mat4 {
+    public computeViewMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.isSkybox) {
+            computeViewMatrixSkybox(dst, viewerInput.camera);
+        } else {
+            computeViewMatrix(dst, viewerInput.camera);
+        }
+    }
+
+    public computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput, isBillboard: boolean): void {
         // Build model matrix
         const modelMatrix = scratchModelMatrix;
         if (isBillboard) {
@@ -328,16 +382,23 @@ class BMDRenderer {
         if (this.animation !== null)
             this.animation.updateModelMatrix(viewerInput.time, modelMatrix);
 
-        // Build view matrix
-        const viewMatrix = scratchViewMatrix;
-        if (this.isSkybox) {
-            computeViewMatrixSkybox(viewMatrix, viewerInput.camera);
-        } else {
-            computeViewMatrix(viewMatrix, viewerInput.camera);
-        }
+        this.computeViewMatrix(dst, viewerInput);
+        mat4.mul(dst, dst, modelMatrix);
+    }
 
-        mat4.mul(viewMatrix, viewMatrix, modelMatrix);
-        return viewMatrix;
+    public computeNormalMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+        const normalMatrix = scratchModelMatrix;
+
+        mat4.copy(normalMatrix, this.normalMatrix);
+        if (this.animation !== null)
+            this.animation.updateNormalMatrix(viewerInput.time, normalMatrix);
+
+        this.computeViewMatrix(dst, viewerInput);
+        dst[12] = 0;
+        dst[13] = 0;
+        dst[14] = 0;
+
+        mat4.mul(dst, dst, normalMatrix);
     }
 
     private translateBatch(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, model: NITRO_BMD.Model, batch: NITRO_BMD.Batch): void {
@@ -351,7 +412,9 @@ class BMDRenderer {
 
             const packetParamsMapped = this.packetParamsBuffer.mapBufferF32(vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams], 12);
             let offs = vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams];
-            offs += fillMatrix4x3(packetParamsMapped, offs, this.computeModelView(viewerInput, model.billboard));
+
+            this.computeModelView(scratchMat4, viewerInput, model.billboard);
+            offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
         };
 
         this.prepareToRenderFuncs.push(prepareToRenderFunc);
@@ -401,7 +464,7 @@ class SM64DSRenderer implements Viewer.Scene_Device {
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, transparentBlackFullClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SM64DSPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
@@ -452,14 +515,11 @@ interface Sm64DSCRG1 {
     Levels: CRG1Level[];
 }
 
+const GLOBAL_SCALE = 1500;
 export class SceneDesc implements Viewer.SceneDesc {
     public id: string;
-    public name: string;
-    public levelId: number;
 
-    constructor(name: string, levelId: number) {
-        this.name = name;
-        this.levelId = levelId;
+    constructor(public levelId: number, public name: string) {
         this.id = '' + this.levelId;
     }
 
@@ -487,16 +547,23 @@ export class SceneDesc implements Viewer.SceneDesc {
             result = LZ77.maybeDecompress(result);
             const bmd = NITRO_BMD.parse(result);
             const renderer = new BMDRenderer(device, textureHolder, bmd, null);
-            vec3.scale(translation, translation, 1/bmd.scaleFactor);
+            renderer.name = filename;
+
+            vec3.scale(translation, translation, GLOBAL_SCALE / bmd.scaleFactor);
             mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
+
             mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
+
+            // Don't ask, ugh.
+            scale = scale * (GLOBAL_SCALE / 100);
             mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
             
             
 
-            if (spinSpeed > 0) {
+            mat4.rotateY(renderer.normalMatrix, renderer.normalMatrix, rotationY);
+
+            if (spinSpeed > 0)
                 renderer.animation = new YSpinAnimation(spinSpeed, 0);
-            }
 
             return renderer;
         });
@@ -504,7 +571,6 @@ export class SceneDesc implements Viewer.SceneDesc {
 
     private _createBMDRendererForObject(device: GfxDevice, textureHolder: NITROTextureHolder, object: CRG1Object): PromiseLike<BMDRenderer> {
         const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
-        vec3.scale(translation, translation, 100);
         const rotationY = object.Rotation.Y / 180 * Math.PI;
 
         switch (object.ObjectId) {
@@ -529,11 +595,11 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 36: // Pole
             return this._createBMDObjRenderer(device, textureHolder, `normal_obj/obj_pile/pile.bmd`, translation, rotationY, 0.8);
         case 37: // Coin
-            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_poly32.bmd`, translation, rotationY, 0.8, 0.1);
+            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_poly32.bmd`, translation, rotationY, 0.7, 0.1);
         case 38: // Red Coin
-            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_red_poly32.bmd`, translation, rotationY, 0.8, 0.1);
+            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_red_poly32.bmd`, translation, rotationY, 0.7, 0.1);
         case 39: // Blue Coin
-            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_blue_poly32.bmd`, translation, rotationY, 0.8, 0.1);
+            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_blue_poly32.bmd`, translation, rotationY, 0.7, 0.1);
         case 41: { // Tree
             const treeType = (object.Parameters[0] >>> 4) & 0x07;
             const treeFilenames = ['bomb', 'toge', 'yuki', 'yashi', 'castle', 'castle', 'castle', 'castle'];
@@ -548,20 +614,17 @@ export class SceneDesc implements Viewer.SceneDesc {
             ];
             const filename = `picture/${filenames[painting]}.bmd`;
             const scaleX = (object.Parameters[0] & 0xF)+1;
-            const scaleY = ((object.Parameters[0] >> 4) & 0xF)+1;
-            const rotationX = object.Parameters[1]/65536*(Math.PI*2);
-            const isMirrored = ((object.Parameters[0] >> 13) & 0x3) == 3;
-            return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
-                result = LZ77.maybeDecompress(result);
-                const bmd = NITRO_BMD.parse(result);
-                const renderer = new BMDRenderer(device, textureHolder, bmd, null);
-                mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
-                mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
+            const scaleY = ((object.Parameters[0] >> 4) & 0x0F) + 1;
+            const rotationX = object.Parameters[1] / 0x7FFF * (Math.PI);
+            const isMirrored = ((object.Parameters[0] >> 13) & 0x03) === 3;
+            return this._createBMDObjRenderer(device, textureHolder, filename, translation, rotationY, 0.8).then((renderer) => {
                 mat4.rotateX(renderer.localMatrix, renderer.localMatrix, rotationX);
-                mat4.scale(renderer.localMatrix, renderer.localMatrix, [scaleX*0.8, scaleY*0.8, 0.8]);
-                mat4.translate(renderer.localMatrix, renderer.localMatrix, [0, 6.25, 0]);
-                if(isMirrored)
-                    mat2d.scale(bmd.models[0].batches[0].material.texCoordMat, bmd.models[0].batches[0].material.texCoordMat, [-1, 1]);
+                mat4.scale(renderer.localMatrix, renderer.localMatrix, [scaleX, scaleY, 1]);
+                mat4.translate(renderer.localMatrix, renderer.localMatrix, [0, 100/16, 0]);
+                if (isMirrored) {
+                    const texCoordMat = renderer.bmd.models[0].batches[0].material.texCoordMat;
+                    texCoordMat[0] *= -1;
+                }
                 return renderer;
             });
         }
@@ -630,7 +693,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 203: // WF Tower
             return null;
         case 204: // WF Spinning Island
-            return this._createBMDObjRenderer(device, textureHolder, `special_obj/bk_ukisima/bk_ukisima.bmd`, translation, rotationY, 1, 0.1);
+            return this._createBMDObjRenderer(device, textureHolder, `special_obj/bk_ukisima/bk_ukisima.bmd`, translation, rotationY, 1, 0.05);
         case 205: // WF
         case 206: // WF
         case 207: // WF
@@ -680,7 +743,7 @@ export class SceneDesc implements Viewer.SceneDesc {
 
     private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1): PromiseLike<Viewer.Scene_Device> {
         const level = crg1.Levels[this.levelId];
-        const renderers = [this._createBMDRenderer(device, textureHolder, level.MapBmdFile, 100, level, false)];
+        const renderers = [this._createBMDRenderer(device, textureHolder, level.MapBmdFile, GLOBAL_SCALE, level, false)];
         if (level.VrboxBmdFile)
             renderers.push(this._createBMDRenderer(device, textureHolder, level.VrboxBmdFile, 0.8, level, true));
         else

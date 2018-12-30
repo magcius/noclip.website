@@ -56,6 +56,7 @@ export class Viewer {
     private gfxSwapChain: GfxSwapChain;
     private viewerRenderInput: ViewerRenderInput;
     private t: number = 0;
+    public isTimeRunning = true;
 
     public scene: MainScene;
     public scene_device: Scene_Device;
@@ -207,7 +208,9 @@ export class Viewer {
         // TODO(jstpierre): Move this to main
         this.inputManager.afterFrame();
 
-        this.renderState.time += dt;
+        if (this.isTimeRunning)
+            this.renderState.time += dt;
+
         this.render();
     }
 
@@ -247,12 +250,16 @@ export interface SceneDesc {
     id: string;
     name: string;
     createScene?(gl: WebGL2RenderingContext): Progressable<MainScene> | null;
-    createScene_Device?(device: GfxDevice): Progressable<Scene_Device> | null;
+    createScene_Device?(device: GfxDevice, abortSignal: AbortSignal): Progressable<Scene_Device> | null;
     defaultCameraController?: CameraControllerClass;
 }
 
 export interface SceneGroup {
     id: string;
     name: string;
-    sceneDescs: SceneDesc[];
+    sceneDescs: (string | SceneDesc)[];
+}
+
+export function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
+    return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
 }
