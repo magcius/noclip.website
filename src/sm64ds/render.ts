@@ -515,6 +515,7 @@ interface Sm64DSCRG1 {
     Levels: CRG1Level[];
 }
 
+const GLOBAL_SCALE = 1500;
 export class SceneDesc implements Viewer.SceneDesc {
     public id: string;
     public name: string;
@@ -551,9 +552,14 @@ export class SceneDesc implements Viewer.SceneDesc {
             const bmd = NITRO_BMD.parse(result);
             const renderer = new BMDRenderer(device, textureHolder, bmd, null);
             renderer.name = filename;
-            vec3.scale(translation, translation, 1/bmd.scaleFactor);
+
+            vec3.scale(translation, translation, GLOBAL_SCALE / bmd.scaleFactor);
             mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
+
             mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
+
+            // Don't ask, ugh.
+            scale = scale * (GLOBAL_SCALE / 100);
             mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
 
             mat4.rotateY(renderer.normalMatrix, renderer.normalMatrix, rotationY);
@@ -567,7 +573,6 @@ export class SceneDesc implements Viewer.SceneDesc {
 
     private _createBMDRendererForObject(device: GfxDevice, textureHolder: NITROTextureHolder, object: CRG1Object): PromiseLike<BMDRenderer> {
         const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
-        vec3.scale(translation, translation, 100);
         const rotationY = object.Rotation.Y / 180 * Math.PI;
 
         switch (object.ObjectId) {
@@ -592,11 +597,11 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 36: // Pole
             return this._createBMDObjRenderer(device, textureHolder, `normal_obj/obj_pile/pile.bmd`, translation, rotationY, 0.8);
         case 37: // Coin
-            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_poly32.bmd`, translation, rotationY, 0.8, 0.1);
+            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_poly32.bmd`, translation, rotationY, 0.7, 0.1);
         case 38: // Red Coin
-            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_red_poly32.bmd`, translation, rotationY, 0.8, 0.1);
+            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_red_poly32.bmd`, translation, rotationY, 0.7, 0.1);
         case 39: // Blue Coin
-            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_blue_poly32.bmd`, translation, rotationY, 0.8, 0.1);
+            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/coin/coin_blue_poly32.bmd`, translation, rotationY, 0.7, 0.1);
         case 41: { // Tree
             const treeType = (object.Parameters[0] >>> 4) & 0x07;
             const treeFilenames = ['bomb', 'toge', 'yuki', 'yashi', 'castle', 'castle', 'castle', 'castle'];
@@ -693,7 +698,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 203: // WF Tower
             return null;
         case 204: // WF Spinning Island
-            return this._createBMDObjRenderer(device, textureHolder, `special_obj/bk_ukisima/bk_ukisima.bmd`, translation, rotationY, 1, 0.1);
+            return this._createBMDObjRenderer(device, textureHolder, `special_obj/bk_ukisima/bk_ukisima.bmd`, translation, rotationY, 1, 0.05);
         case 205: // WF
         case 206: // WF
         case 207: // WF
@@ -743,7 +748,7 @@ export class SceneDesc implements Viewer.SceneDesc {
 
     private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1): PromiseLike<Viewer.Scene_Device> {
         const level = crg1.Levels[this.levelId];
-        const renderers = [this._createBMDRenderer(device, textureHolder, level.MapBmdFile, 100, level, false)];
+        const renderers = [this._createBMDRenderer(device, textureHolder, level.MapBmdFile, GLOBAL_SCALE, level, false)];
         if (level.VrboxBmdFile)
             renderers.push(this._createBMDRenderer(device, textureHolder, level.VrboxBmdFile, 0.8, level, true));
         else
