@@ -152,6 +152,7 @@ export class FPSCameraController implements CameraController {
     }
 
     public deserialize(state: string) {
+        vec3.set(this.keyMovement, 0, 0, 0);
         const [tx, ty, tz, fx, fy, fz, rx, ry, rz] = state.split(',');
         // Translation.
         this.camera.worldMatrix[12] = +tx;

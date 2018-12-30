@@ -56,6 +56,7 @@ export class Viewer {
     private gfxSwapChain: GfxSwapChain;
     private viewerRenderInput: ViewerRenderInput;
     private t: number = 0;
+    public isTimeRunning = true;
 
     public scene: MainScene;
     public scene_device: Scene_Device;
@@ -207,7 +208,9 @@ export class Viewer {
         // TODO(jstpierre): Move this to main
         this.inputManager.afterFrame();
 
-        this.renderState.time += dt;
+        if (this.isTimeRunning)
+            this.renderState.time += dt;
+
         this.render();
     }
 
