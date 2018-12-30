@@ -343,7 +343,8 @@ class Main {
                         this.saveManager.saveState(key, this._saveSceneState());
                     } else {
                         const state = this.saveManager.loadState(key);
-                        this._loadSceneState(state);
+                        if (state !== null)
+                            this._loadSceneState(state);
                     }
                 }
             }
@@ -398,7 +399,6 @@ class Main {
         const byteLength = btoa(this._saveStateTmp, 0, state);
         let offs = 0;
 
-        console.log(this._saveStateF32);
         if (this.viewer.cameraController !== null) {
             offs += deserializeCamera(this.viewer.cameraController.camera, this._saveStateF32, offs);
             this.viewer.cameraController.cameraUpdateForced();
