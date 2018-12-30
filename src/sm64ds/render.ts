@@ -19,7 +19,7 @@ import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillMatrix4x2 } from '../gfx/he
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import GfxArena from '../gfx/helpers/GfxArena';
 import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
 import { assert } from '../util';
@@ -464,7 +464,7 @@ class SM64DSRenderer implements Viewer.Scene_Device {
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, transparentBlackFullClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SM64DSPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
@@ -518,12 +518,8 @@ interface Sm64DSCRG1 {
 const GLOBAL_SCALE = 1500;
 export class SceneDesc implements Viewer.SceneDesc {
     public id: string;
-    public name: string;
-    public levelId: number;
 
-    constructor(name: string, levelId: number) {
-        this.name = name;
-        this.levelId = levelId;
+    constructor(public levelId: number, public name: string) {
         this.id = '' + this.levelId;
     }
 
@@ -616,9 +612,9 @@ export class SceneDesc implements Viewer.SceneDesc {
             ];
             const filename = `picture/${filenames[painting]}.bmd`;
             const scaleX = (object.Parameters[0] & 0xF)+1;
-            const scaleY = ((object.Parameters[0] >> 4) & 0xF)+1;
-            const rotationX = object.Parameters[1]/65536*(Math.PI*2);
-            const isMirrored = ((object.Parameters[0] >> 13) & 0x3) == 3;
+            const scaleY = ((object.Parameters[0] >> 4) & 0x0F) + 1;
+            const rotationX = object.Parameters[1] / 0x7FFF * (Math.PI);
+            const isMirrored = ((object.Parameters[0] >> 13) & 0x03) === 3;
             return this._createBMDObjRenderer(device, textureHolder, filename, translation, rotationY, 0.8).then((renderer) => {
                 mat4.rotateX(renderer.localMatrix, renderer.localMatrix, rotationX);
                 mat4.scale(renderer.localMatrix, renderer.localMatrix, [scaleX, scaleY, 1]);
