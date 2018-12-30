@@ -254,5 +254,9 @@ export interface SceneDesc {
 export interface SceneGroup {
     id: string;
     name: string;
-    sceneDescs: SceneDesc[];
+    sceneDescs: (string | SceneDesc)[];
+}
+
+export function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
+    return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
 }
