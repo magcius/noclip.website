@@ -3,7 +3,7 @@ import { SceneDesc } from './render';
 import { SceneGroup } from '../viewer';
 
 const id = "zelview";
-const name = "Ocarina of Time";
+const name = "The Legend of Zelda: Ocarina of Time";
 const sceneDescs: SceneDesc[] = [
   {
     filename: "ydan_scene",

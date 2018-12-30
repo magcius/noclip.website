@@ -47,7 +47,7 @@ export class TerrainSceneDesc implements Viewer.SceneDesc {
 }
 
 const id = "z_botw";
-const name = "Breath of the Wild (Experimental)";
+const name = "Breath of the Wild";
 const sceneDescs = [
     new TerrainSceneDesc("MainField", "MainField"),
 ];
