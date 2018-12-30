@@ -258,6 +258,8 @@ class BMDRenderer {
         if (texture !== null) {
             this.textureHolder.fillTextureMapping(textureMapping, texture.name);
             textureMapping.gfxSampler = this.arena.trackSampler(device.createSampler({
+                //if the texture coord mode is set to normal,
+                //the texture filter is set to bilinear to make everything look more round/smooth
                 minFilter: normalMode?GfxTexFilterMode.BILINEAR:GfxTexFilterMode.POINT,
                 magFilter: normalMode?GfxTexFilterMode.BILINEAR:GfxTexFilterMode.POINT,
                 mipFilter: GfxMipFilterMode.NO_MIP,
@@ -586,7 +588,7 @@ export class SceneDesc implements Viewer.SceneDesc {
             return this._createBMDObjRenderer(device, textureHolder, `normal_obj/star/obj_star_silver.bmd`, translation, rotationY, 0.8, 0.08);
         case 63: // Star
             let filename = `normal_obj/star/obj_star.bmd`;
-            let startype = object.Parameters[0]>>4 &0xF;
+            let startype = (object.Parameters[0] >>> 4) & 0x0F;
             let rotateSpeed = 0.08;
             switch (startype)
             {
