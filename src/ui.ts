@@ -901,7 +901,7 @@ const SAVE_ICON = `<svg viewBox="-8 -8 116 116" height="20" fill="white"><path f
 
 function buildShareURL(saveState: string): string {
     const loc = window.location;
-    return `${loc.origin}${loc.pathname}#${saveState}`;
+    return `${loc.origin}${loc.pathname}#${saveState}=`;
 }
 
 export class SaveStatesPanel extends Panel {

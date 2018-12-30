@@ -316,10 +316,10 @@ class Main {
         this._loadSceneGroups();
 
         if (this.currentSceneDesc === undefined) {
-            // Load the state from the hash
-            const hash = window.location.hash.slice(1);
-            if (hash)
-                this._loadState(hash);
+            // Load the state from the hash, remove the extra character at the end.
+            const hash = window.location.hash;
+            if (hash.startsWith('#') && hash.endsWith('='))
+                this._loadState(hash.slice(1, -1));
             // Wipe out the hash from the URL.
             window.history.replaceState('', '', '/');
         }
