@@ -559,21 +559,24 @@ class FullSeaSceneDesc extends SceneDesc {
     }
 }
 
-const sceneDescs: Viewer.SceneDesc[] = [
+const sceneDescs = [
+    "Islands",
+    new FullSeaSceneDesc("sea", "The Great Sea", [
+        1,  2,  3,  4,  5,  6,  7,
+        8,  9, 10, 11, 12, 13, 14,
+       15, 16, 17, 18, 19, 20, 21,
+       22, 23, 24, 25,     27, 28,
+       29, 30, 31, 32, 33, 34, 35,
+       36, 37, 38, 39, 40, 41, 42,
+       43, 44, 45, 46, 47, 48, 49,
+   ]),
+
     new SceneDesc("sea", "Windfall Island",     [11], new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
     new SceneDesc("sea", "Dragon Roost Island", [13], new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
     new SceneDesc("sea", "Forest Haven",        [41], new CameraPos(20000, 1760, -5500, 16000, 1000, 0)),
     new SceneDesc("sea", "Outset Island",       [44], new CameraPos(6000, 6000, 6000, 0, 0, 20000)),
-    new FullSeaSceneDesc("sea", "The Great Sea", [
-         1,  2,  3,  4,  5,  6,  7,
-         8,  9, 10, 11, 12, 13, 14,
-        15, 16, 17, 18, 19, 20, 21,
-        22, 23, 24, 25,     27, 28,
-        29, 30, 31, 32, 33, 34, 35,
-        36, 37, 38, 39, 40, 41, 42,
-        43, 44, 45, 46, 47, 48, 49,
-    ]),
 
+    "Dungeons",
     new SceneDesc("kindan", "Forbidden Woods", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
     new SceneDesc("M_NewD2", "Dragon Roost Cavern", [0, 1, 2, -3, 4, -5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
     new SceneDesc("Siren", "Temple of the Gods", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, -15, 16, 17, -18, 19, 20, 21, 22, -23]),
@@ -586,9 +589,12 @@ const sceneDescs: Viewer.SceneDesc[] = [
 
     // Location names taken from CryZe's Debug Menu.
     // https://github.com/CryZe/WindWakerDebugMenu/blob/master/src/warp_menu/consts.rs
+    "Underground",
     new SceneDesc("Hyrule", "Hyrule Field"),
     new SceneDesc("Hyroom", "Hyrule Castle"),
     new SceneDesc("kenroom", "Master Sword Chamber"),
+
+    "Other",
     new SceneDesc("Asoko", "Tetra's Ship Interior"),
     new SceneDesc("PShip", "Ghost Ship"),
     new SceneDesc("Kaisen", "Windfall Battleship Game Room"),
@@ -600,14 +606,8 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SceneDesc("Pdrgsh", "Chu Jelly Juice Shop"),
     new SceneDesc("Pnezumi", "Windfall Island Jail"),
     new SceneDesc("GanonK", "Puppet Ganon Fight"),
-];
 
-const id = "zww";
-const name = "The Legend of Zelda: The Wind Waker";
-
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
-
-const sceneDescsDev: Viewer.SceneDesc[] = [
+    "Unused Test Maps",
     new SceneDesc("Cave08", "Wind Temple (Early)", [1, 2, 3]),
     new SceneDesc("H_test", "Pig Chamber"),
     new SceneDesc("Ebesso", "Island with House"),
@@ -620,7 +620,10 @@ const sceneDescsDev: Viewer.SceneDesc[] = [
     new SceneDesc("VrTest", "Early Environment Art Test"),
 ];
 
-const idDev = "zww_dev";
-const nameDev = "Wind Waker (Unused Maps)";
+const id = "zww";
+const name = "The Legend of Zelda: The Wind Waker";
 
-export const sceneGroupDev: Viewer.SceneGroup = { id: idDev, name: nameDev, sceneDescs: sceneDescsDev };
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+
+const sceneDescsDev: Viewer.SceneDesc[] = [
+];
