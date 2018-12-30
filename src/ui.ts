@@ -9,7 +9,8 @@ import { Color, colorToCSS } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
 
-const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
+export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
+export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
 
 export function createDOMFromString(s: string): DocumentFragment {
     return document.createRange().createContextualFragment(s);
@@ -43,8 +44,6 @@ function setChildren(parent: Element, children: Element[]): void {
 }
 
 function setElementHighlighted(elem: HTMLElement, highlighted: boolean, normalTextColor: string = '') {
-    elem.classList.toggle('Highlighted', highlighted);
-
     if (highlighted) {
         elem.style.backgroundColor = HIGHLIGHT_COLOR;
         elem.style.color = 'black';
@@ -310,14 +309,15 @@ export class MultiSelect extends ScrollSelect {
 export class Panel implements Widget {
     public elem: HTMLElement;
 
-    public expanded: boolean = false;
+    public expanded: boolean | null = null;
     public manuallyExpanded: boolean = false;
     public autoClosed: boolean = false;
+    public customHeaderBackgroundColor: string = '';
     protected header: HTMLElement;
     protected svgIcon: SVGSVGElement;
 
     private toplevel: HTMLElement;
-    private ignoreAutoCloseTimeout: number;
+    private ignoreAutoCloseTimeout: number = 0;
     public extraRack: HTMLElement;
     public mainPanel: HTMLElement;
     public contents: HTMLElement;
@@ -363,6 +363,11 @@ export class Panel implements Widget {
         this.toplevel.onmouseover = this.syncSize.bind(this);
         this.toplevel.onmouseout = this.syncSize.bind(this);
         this.header.onclick = () => {
+            if (this.ignoreAutoCloseTimeout > 0) {
+                this.ignoreAutoCloseTimeout = 0;
+                return;
+            }
+
             this.toggleExpanded();
         };
         this.mainPanel.appendChild(this.header);
@@ -408,14 +413,24 @@ export class Panel implements Widget {
     }
 
     protected syncHeaderStyle() {
-        this.svgIcon.style.fill = this.expanded ? 'black' : '';
-        setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
+        if (this.customHeaderBackgroundColor) {
+            this.svgIcon.style.fill = '';
+            this.header.style.backgroundColor = this.customHeaderBackgroundColor;
+            this.header.style.color = 'white';
+        } else {
+            this.svgIcon.style.fill = this.expanded ? 'black' : '';
+            setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
+        }
     }
 
-    public syncExpanded() {
-        this.expanded = this.manuallyExpanded && !this.autoClosed;
+    public syncExpanded(): boolean {
+        const newExpanded = this.manuallyExpanded && !this.autoClosed;
+        if (this.expanded === newExpanded)
+            return false;
+        this.expanded = newExpanded;
         this.syncHeaderStyle();
         this.syncSize();
+        return true;
     }
 
     public setExpanded(v: boolean) {
@@ -431,7 +446,13 @@ export class Panel implements Widget {
         if (this.autoClosed === v)
             return;
         this.autoClosed = v;
-        this.syncExpanded();
+        const changed = this.syncExpanded();
+        if (changed && this.expanded) {
+            // If we're coming back from auto-closing, then start a timeout to ignore clicks during this time.
+            this.ignoreAutoCloseTimeout = window.setTimeout(() => {
+                this.ignoreAutoCloseTimeout = 0;
+            }, 1000);
+        }
     }
 }
 
@@ -1021,6 +1042,7 @@ export class LayerPanel extends Panel {
 
     constructor(layers: Layer[] = null) {
         super();
+        this.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         this.setTitle(LAYER_ICON, 'Layers');
         this.multiSelect = new MultiSelect();
         this.multiSelect.onitemchanged = this._onItemChanged.bind(this);

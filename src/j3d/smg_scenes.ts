@@ -235,6 +235,7 @@ class SMGRenderer implements Viewer.MainScene {
 
     public createPanels(): UI.Panel[] {
         const scenarioPanel = new UI.Panel();
+        scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         scenarioPanel.setTitle(TIME_OF_DAY_ICON, 'Scenario');
 
         const scenarioNames = this.scenarioData.records.map((record) => {

@@ -206,6 +206,7 @@ class SkywardSwordScene implements Viewer.MainScene {
 
         if (futureModels.length || pastModels.length) {
             const futurePanel = new UI.Panel();
+            futurePanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
             futurePanel.setTitle(SAND_CLOCK_ICON, "Time Stones");
 
             const selector = new UI.SimpleSingleSelect();
