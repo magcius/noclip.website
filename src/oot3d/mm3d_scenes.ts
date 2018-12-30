@@ -55,16 +55,16 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
         // Fetch the GAR & ZSI.
         const path_zar = `data/mm3d/${this.id}_info.gar`;
         const path_info_zsi = `data/mm3d/${this.id}_info.zsi`;
-        return Progressable.all([fetchData(path_zar), fetchData(path_info_zsi)]).then(([zar, zsi]) => {
-            return this._createSceneFromData(device, zar, zsi);
+        return Progressable.all([fetchData(path_zar, abortSignal), fetchData(path_info_zsi, abortSignal)]).then(([zar, zsi]) => {
+            return this._createSceneFromData(device, abortSignal, zar, zsi);
         });
     }
 
-    private _createSceneFromData(device: GfxDevice, zarBuffer: NamedArrayBufferSlice, zsiBuffer: NamedArrayBufferSlice): Progressable<Viewer.Scene_Device> {
+    private _createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: NamedArrayBufferSlice, zsiBuffer: NamedArrayBufferSlice): Progressable<Viewer.Scene_Device> {
         const textureHolder = new CtrTextureHolder();
 
         const zar = ZAR.parse(maybeDecompress(zarBuffer));
@@ -74,7 +74,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         return Progressable.all(zsi.rooms.map((romPath, i) => {
             const filename = romPath.split('/').pop();
-            return fetchData(`data/mm3d/${filename}`).then((roomResult) => {
+            return fetchData(`data/mm3d/${filename}`, abortSignal).then((roomResult) => {
                 const zsi = ZSI.parse(maybeDecompress(roomResult));
                 assert(zsi.mesh !== null);
 

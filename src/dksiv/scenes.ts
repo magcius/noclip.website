@@ -11,8 +11,8 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public paths: string[]) {
     }
 
-    public createScene_Device(gfxDevice: GfxDevice): Progressable<Viewer.Scene_Device> {
-        return Progressable.all(this.paths.map((path) => fetchData(path))).then((buffers: NamedArrayBufferSlice[]) => {
+    public createScene_Device(gfxDevice: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+        return Progressable.all(this.paths.map((path) => fetchData(path, abortSignal))).then((buffers: NamedArrayBufferSlice[]) => {
             const ivs = buffers.map((buffer) => parseIV(buffer));
             return new Scene(gfxDevice, ivs);
         });

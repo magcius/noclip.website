@@ -47,16 +47,16 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
         // Fetch the ZAR & info ZSI.
         const path_zar = `data/oot3d/${this.id}.zar`;
         const path_info_zsi = `data/oot3d/${this.id}_info.zsi`;
-        return Progressable.all([fetchData(path_zar), fetchData(path_info_zsi)]).then(([zar, zsi]) => {
-            return this._createSceneFromData(device, zar, zsi);
+        return Progressable.all([fetchData(path_zar, abortSignal), fetchData(path_info_zsi, abortSignal)]).then(([zar, zsi]) => {
+            return this._createSceneFromData(device, abortSignal, zar, zsi);
         });
     }
 
-    private _createSceneFromData(device: GfxDevice, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.Scene_Device> {
+    private _createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.Scene_Device> {
         const textureHolder = new CtrTextureHolder();
 
         const zar = zarBuffer.byteLength ? ZAR.parse(zarBuffer) : null;
@@ -69,7 +69,7 @@ class SceneDesc implements Viewer.SceneDesc {
         });
 
         return Progressable.all(roomFilenames.map((filename, i) => {
-            return fetchData(filename).then((roomResult) => {
+            return fetchData(filename, abortSignal).then((roomResult) => {
                 const zsi = ZSI.parse(roomResult);
                 assert(zsi.mesh !== null);
                 const roomRenderer = new RoomRenderer(device, textureHolder, zsi, filename, null);
