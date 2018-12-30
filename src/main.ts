@@ -227,12 +227,44 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
 
+class SaveManager {
+    private _cameraStates: { [k: string]: string };
+
+    constructor() {
+        const cameraStatesStr = window.localStorage.getItem('CameraStates');
+        if (cameraStatesStr)
+            this._cameraStates = JSON.parse(cameraStatesStr);
+        else
+            this._cameraStates = {};
+    }
+
+    private _saveCameraStates() {
+        window.localStorage.setItem('CameraStates', JSON.stringify(this._cameraStates, null, 0))
+    }
+
+    public saveCameraState(key: string, serializedCameraState: string): void {
+        this._cameraStates[key] = serializedCameraState;
+        this._saveCameraStates();
+    }
+
+    public loadCameraState(key: string): string {
+        return this._cameraStates[key];
+    }
+
+    public export(): string {
+        return JSON.stringify({
+            'CameraStates': this._cameraStates,
+        });
+    }
+}
+
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
     public viewer: Viewer;
     public groups: (string | SceneGroup)[];
     public ui: UI;
+    public saveManager = new SaveManager();
 
     private droppedFileGroup: SceneGroup;
 
@@ -311,14 +343,41 @@ class Main {
         this._updateLoop(0);
     }
 
-    private _updateLoop = (time: number) => {
-        if (this.viewer.inputManager.isKeyDownEventTriggered('KeyZ'))
+    private _exportSaveData() {
+        const saveData = this.saveManager.export();
+        const date = new Date();
+        downloadBlob(`noclip_export_${date.toISOString()}`, new Blob([saveData]));
+    }
+
+    private checkKeyShortcuts() {
+        const inputManager = this.viewer.inputManager;
+        if (inputManager.isKeyDownEventTriggered('KeyZ'))
             this._toggleUI();
-
-        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
-
-        if (this.viewer.inputManager.isKeyDownEventTriggered('Numpad9'))
+        if (inputManager.isKeyDownEventTriggered('Numpad9'))
             this._downloadTextures();
+        for (let i = 0; i <= 9; i++) {
+            if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
+                if (this.currentSceneDesc) {
+                    const key = `${this._getCurrentSceneDescId()}/${i}`;
+                    const shouldSave = inputManager.isKeyDown('ShiftLeft');
+                    if (shouldSave)
+                        this.saveManager.saveCameraState(key, this.viewer.cameraController.serialize());
+                    else
+                        this.viewer.cameraController.deserialize(this.saveManager.loadCameraState(key));
+                }
+            }
+        }
+        if (inputManager.isKeyDownEventTriggered('Numpad3'))
+            this._exportSaveData();
+        if (inputManager.isKeyDownEventTriggered('Period'))
+            this.viewer.isTimeRunning = !this.viewer.isTimeRunning;
+    }
+
+    private _updateLoop = (time: number) => {
+        this.checkKeyShortcuts();
+
+        // Needs to be called before this.viewer.update
+        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
 
         this.viewer.update(time);
 
@@ -367,11 +426,15 @@ class Main {
         this._loadSceneDesc(group, desc, cameraState);
     }
 
-    private _getState() {
+    private _getCurrentSceneDescId() {
         const groupId = this.currentSceneGroup.id;
         const sceneId = this.currentSceneDesc.id;
+        return `${groupId}/${sceneId}`;
+    }
+
+    private _getState() {
         const camera = this.viewer.cameraController ? this.viewer.cameraController.serialize() : '';
-        return `${groupId}/${sceneId};${camera}`;
+        return `${this._getCurrentSceneDescId()};${camera}`;
     }
 
     private _saveState() {
