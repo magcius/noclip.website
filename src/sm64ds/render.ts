@@ -62,7 +62,7 @@ out vec2 v_UV;
 void main() {
     gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
     v_Color = a_Color;
-    if(u_TexCoordMode == 2.0){
+    if(u_TexCoordMode == 2.0){ //TexCoordMode == Normal
         v_UV = (a_Normal.xy+vec2(1,1))/4.0;
     }else{
         v_UV = (u_TexMtx[0] * vec4(a_UV, 1.0, 1.0)).st;
