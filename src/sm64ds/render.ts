@@ -483,22 +483,6 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDPaintingRenderer(device: GfxDevice, textureHolder: NITROTextureHolder, filename: string, translation: vec3, scaleX: number, scaleY: number, rotationX: number, rotationY: number, isMirrored: boolean): PromiseLike<BMDRenderer> {
-        return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
-            result = LZ77.maybeDecompress(result);
-            const bmd = NITRO_BMD.parse(result);
-            const renderer = new BMDRenderer(device, textureHolder, bmd, null);
-            mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
-            mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
-            mat4.rotateX(renderer.localMatrix, renderer.localMatrix, rotationX);
-            mat4.scale(renderer.localMatrix, renderer.localMatrix, [scaleX*0.8, scaleY*0.8, 0.8]);
-            mat4.translate(renderer.localMatrix, renderer.localMatrix, [0, 6.25, 0]);
-            if(isMirrored)
-                mat2d.scale(bmd.models[0].batches[0].material.texCoordMat, bmd.models[0].batches[0].material.texCoordMat, [-1, 1]);
-            return renderer;
-        });
-    }
-
     private _createBMDObjRenderer(device: GfxDevice, textureHolder: NITROTextureHolder, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): PromiseLike<BMDRenderer> {
         return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
             result = LZ77.maybeDecompress(result);
@@ -568,7 +552,19 @@ export class SceneDesc implements Viewer.SceneDesc {
             const scaleY = ((object.Parameters[0] >> 4) & 0xF)+1;
             const rotationX = object.Parameters[1]/65536*(Math.PI*2);
             const isMirrored = ((object.Parameters[0] >> 13) & 0x3) == 3;
-            return this._createBMDPaintingRenderer(device, textureHolder, filename, translation, scaleX, scaleY, rotationX, rotationY, isMirrored);
+            return fetchData(`data/sm64ds/${filename}`).then((result: ArrayBufferSlice) => {
+                result = LZ77.maybeDecompress(result);
+                const bmd = NITRO_BMD.parse(result);
+                const renderer = new BMDRenderer(device, textureHolder, bmd, null);
+                mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
+                mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
+                mat4.rotateX(renderer.localMatrix, renderer.localMatrix, rotationX);
+                mat4.scale(renderer.localMatrix, renderer.localMatrix, [scaleX*0.8, scaleY*0.8, 0.8]);
+                mat4.translate(renderer.localMatrix, renderer.localMatrix, [0, 6.25, 0]);
+                if(isMirrored)
+                    mat2d.scale(bmd.models[0].batches[0].material.texCoordMat, bmd.models[0].batches[0].material.texCoordMat, [-1, 1]);
+                return renderer;
+            });
         }
         case 43: // Switch
         case 44: // Switch-powered Star
@@ -589,7 +585,22 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 62: // Silver Star
             return this._createBMDObjRenderer(device, textureHolder, `normal_obj/star/obj_star_silver.bmd`, translation, rotationY, 0.8, 0.08);
         case 63: // Star
-            return this._createBMDObjRenderer(device, textureHolder, `normal_obj/star/obj_star.bmd`, translation, rotationY, 0.8, 0.08);
+            let filename = `normal_obj/star/obj_star.bmd`;
+            let startype = object.Parameters[0]>>4 &0xF;
+            let rotateSpeed = 0.08;
+            switch (startype)
+            {
+                case 0:
+                    filename = `normal_obj/star/star_base.bmd`;
+                    break;
+                case 1:
+                case 4:
+                case 6:
+                    filename = `normal_obj/star_box/star_box.bmd`;
+                    rotateSpeed = 0;
+                    break;
+            }
+            return this._createBMDObjRenderer(device, textureHolder, filename, translation, rotationY, 0.8, rotateSpeed);
         case 64: // Whomp
         case 65: // Big Whomp
         case 66: // Thwomp

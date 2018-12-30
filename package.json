@@ -19,7 +19,7 @@
     "@types/webgl2": "0.0.2"
   },
   "scripts": {
-    "start": "parcel src/index.html",
+    "start": "parcel --static-data-dir=data src/index.html",
     "embed": "parcel src/embed.html",
     "typecheck": "tsc -w --noEmit"
   }
