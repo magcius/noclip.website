@@ -260,9 +260,6 @@ class Main {
 
     private sceneLoader: SceneLoader;
 
-    private lastSavedState: string;
-    private saveTimeout: number;
-
     constructor() {
         this.toplevel = document.createElement('div');
         document.body.appendChild(this.toplevel);
@@ -324,7 +321,7 @@ class Main {
             if (hash)
                 this._loadState(hash);
             // Wipe out the hash from the URL.
-            window.history.replaceState('', '', '');
+            window.history.replaceState('', '', '/');
         }
 
         if (this.currentSceneDesc === undefined) {
@@ -543,7 +540,6 @@ class Main {
             this.saveManager.setCurrentSceneDescId(this._getCurrentSceneDescId());
             const key = this._getSaveStateSlotKey(0);
             const sceneState = this.saveManager.loadState(key);
-            console.log(key, sceneState);
             if (sceneState !== null)
                 this._loadSceneSaveState(sceneState);
         });
