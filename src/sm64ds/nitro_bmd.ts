@@ -20,6 +20,8 @@ export class Material {
     public texCoordMat: mat2d;
     public texture: Texture;
     public texParams: number;
+    public texScaleS: number;
+    public texScaleT: number;
 }
 
 export interface Batch {
@@ -129,12 +131,18 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
         
         const scaleS = view.getInt32(offs + 0x0C, true) / 4096.0;
         const scaleT = view.getInt32(offs + 0x10, true) / 4096.0;
+        // 0x14 = rotation maybe?
         const transS = view.getInt32(offs + 0x18, true) / 4096.0;
         const transT = view.getInt32(offs + 0x1C, true) / 4096.0;
-        mat2d.translate(material.texCoordMat, material.texCoordMat, [transS, transT, 0.0]);
-        mat2d.scale(material.texCoordMat, material.texCoordMat, [scaleS, scaleT, 1.0]);
-        const texScale = [1 / material.texture.width, 1 / material.texture.height, 1];
-        mat2d.scale(material.texCoordMat, material.texCoordMat, texScale);
+        material.texScaleS = 1 / material.texture.width;
+        material.texScaleT = 1 / material.texture.height;
+
+        mat2d.set(material.texCoordMat,
+            scaleS * material.texScaleS, 0.0,
+            0.0, scaleT * material.texScaleT,
+            transS * material.texScaleS,
+            transT * material.texScaleT,
+        );
     } else {
         material.texture = null;
         material.texParams = 0;

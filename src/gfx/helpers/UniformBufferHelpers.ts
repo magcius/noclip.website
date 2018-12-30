@@ -183,3 +183,16 @@ export function fillMatrix3x2(d: Float32Array, offs: number, m: mat2d): number {
     d[offs + 7] = 0;
     return 4*2;
 }
+
+export function fillMatrix4x2(d: Float32Array, offs: number, m: mat4): number {
+    // The bottom two rows are basically just ignored in a 4x2.
+    d[offs +  0] = m[0];
+    d[offs +  1] = m[4];
+    d[offs +  2] = m[8];
+    d[offs +  3] = m[12];
+    d[offs +  4] = m[1];
+    d[offs +  5] = m[5];
+    d[offs +  6] = m[9];
+    d[offs +  7] = m[13];
+    return 4*2;
+}
