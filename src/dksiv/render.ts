@@ -67,7 +67,7 @@ class Chunk {
     public inputState: GfxInputState;
     public renderInst: GfxRenderInst;
 
-    constructor(device: GfxDevice, public chunk: IV.Chunk, inputLayout: GfxInputLayout, renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst) {
+    constructor(device: GfxDevice, public chunk: IV.Chunk, inputLayout: GfxInputLayout, renderInstBuilder: GfxRenderInstBuilder) {
         // Run through our data, calculate normals and such.
         const t = vec3.create();
 
@@ -123,10 +123,9 @@ class Chunk {
 
         this.numVertices = chunk.indexData.length;
 
-        this.renderInst = new GfxRenderInst(baseRenderInst);
-        this.renderInst.drawTriangles(this.numVertices);
+        this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.inputState = this.inputState;
-        renderInstBuilder.pushRenderInst(this.renderInst);
+        this.renderInst.drawTriangles(this.numVertices);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, visible: boolean): void {
@@ -147,14 +146,14 @@ export class IVRenderer {
 
     private chunks: Chunk[];
 
-    constructor(device: GfxDevice, public iv: IV.IV, inputLayout: GfxInputLayout, renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst) {
+    constructor(device: GfxDevice, public iv: IV.IV, inputLayout: GfxInputLayout, renderInstBuilder: GfxRenderInstBuilder) {
         // TODO(jstpierre): Coalesce chunks?
         this.name = iv.name;
 
-        const renderInst = new GfxRenderInst(baseRenderInst);
-        this.colorBufferOffset = renderInstBuilder.newUniformBufferInstance(renderInst, IVProgram.ub_ObjectParams);
-
-        this.chunks = this.iv.chunks.map((chunk) => new Chunk(device, chunk, inputLayout, renderInstBuilder, renderInst));
+        const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
+        this.colorBufferOffset = renderInstBuilder.newUniformBufferInstance(templateRenderInst, IVProgram.ub_ObjectParams);
+        this.chunks = this.iv.chunks.map((chunk) => new Chunk(device, chunk, inputLayout, renderInstBuilder));
+        renderInstBuilder.popTemplateRenderInst();
     }
 
     public fillColorUniformBufferData(hostAccessPass: GfxHostAccessPass, buffer: GfxRenderBuffer): void {
@@ -226,7 +225,7 @@ export class Scene implements Viewer.Scene_Device {
 
         const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.sceneUniformBuffer, this.colorUniformBuffer ]);
 
-        const baseRenderInst = new GfxRenderInst();
+        const baseRenderInst = renderInstBuilder.pushTemplateRenderInst();
         baseRenderInst.setPipelineDirect(this.pipeline);
 
         // Nab a scene buffer instance.
@@ -234,9 +233,10 @@ export class Scene implements Viewer.Scene_Device {
         assert(sceneParamsOffs == 0);
 
         this.ivRenderers = this.ivs.map((iv) => {
-            return new IVRenderer(device, iv, this.inputLayout, renderInstBuilder, baseRenderInst);
+            return new IVRenderer(device, iv, this.inputLayout, renderInstBuilder);
         });
 
+        renderInstBuilder.popTemplateRenderInst();
         renderInstBuilder.finish(device, this.viewRenderer);
 
         // Now that we have our buffers created, fill 'em in.
