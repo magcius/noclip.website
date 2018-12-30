@@ -67,7 +67,6 @@ const sceneGroups = [
     SMS.sceneGroup,
     ZTP.sceneGroup,
     ZWW.sceneGroup,
-    ZWW.sceneGroupDev,
     "Nintendo DS",
     MKDS.sceneGroup,
     SM64DS.sceneGroup,

@@ -130,16 +130,18 @@ export abstract class ScrollSelect implements Widget {
 
     public setFlairs(flairs: Flair[]) {
         this.flairs = flairs;
-        this.syncFlairs();
+        this.syncInternalFlairs();
     }
 
-    protected setInternalFlairs(flairs: Flair[]): void {
+    protected abstract syncInternalFlairs(): void;
+
+    protected setInternalFlairs(flairs: Flair[]) {
         this.internalFlairs = flairs;
-        this.syncFlairs();
+        this.syncFlairDisplay();
     }
 
-    private syncFlairs(): void {
-        const flairs = [...this.internalFlairs, ...this.flairs];
+    private syncFlairDisplay(): void {
+        const flairs = this.internalFlairs;
         let hasHeader = false;
         for (let i = 0; i < this.getNumItems(); i++) {
             const outer = this.scrollContainer.children.item(i) as HTMLElement;
@@ -188,15 +190,19 @@ export abstract class ScrollSelect implements Widget {
 }
 
 function ensureFlairIndex(flairs: Flair[], index: number): Flair {
-    let flair = flairs.find((f) => f.index === index);
-    if (flair === undefined) {
-        flair = { index };
+    const flairIndex = flairs.findIndex((f) => f.index === index);
+    if (flairIndex >= 0) {
+        flairs[flairIndex] = Object.assign({}, flairs[flairIndex]);
+        return flairs[flairIndex];
+    } else {
+        const flair = { index };
         flairs.push(flair);
+        return flair;
     }
-    return flair;
 }
 
 export class SingleSelect extends ScrollSelect {
+    public highlightedIndex: number;
     public onselectionchange: (index: number) => void;
 
     public itemClicked(index: number, first: boolean) {
@@ -208,8 +214,15 @@ export class SingleSelect extends ScrollSelect {
     }
 
     public setHighlighted(highlightedIndex: number) {
+        if (this.highlightedIndex === highlightedIndex)
+            return;
+        this.highlightedIndex = highlightedIndex;
+        this.syncInternalFlairs();
+    }
+
+    protected syncInternalFlairs(): void {
         const flairs = [...this.flairs];
-        const flair = ensureFlairIndex(flairs, highlightedIndex);
+        const flair = ensureFlairIndex(flairs, this.highlightedIndex);
         flair.background = HIGHLIGHT_COLOR;
         flair.color = 'black';
         this.setInternalFlairs(flairs);
@@ -273,7 +286,7 @@ export class MultiSelect extends ScrollSelect {
         this.syncInternalFlairs();
     }
 
-    private syncInternalFlairs() {
+    protected syncInternalFlairs() {
         const flairs: Flair[] = [...this.flairs];
         for (let i = 0; i < this.getNumItems(); i++) {
             const flair = ensureFlairIndex(flairs, i);
@@ -297,13 +310,14 @@ export class MultiSelect extends ScrollSelect {
 export class Panel implements Widget {
     public elem: HTMLElement;
 
-    protected expanded: boolean = false;
-    protected manuallyExpanded: boolean = false;
-    protected autoClosed: boolean = false;
+    public expanded: boolean = false;
+    public manuallyExpanded: boolean = false;
+    public autoClosed: boolean = false;
     protected header: HTMLElement;
     protected svgIcon: SVGSVGElement;
 
     private toplevel: HTMLElement;
+    private ignoreAutoCloseTimeout: number;
     public extraRack: HTMLElement;
     public mainPanel: HTMLElement;
     public contents: HTMLElement;
@@ -414,6 +428,8 @@ export class Panel implements Widget {
     }
 
     public setAutoClosed(v: boolean) {
+        if (this.autoClosed === v)
+            return;
         this.autoClosed = v;
         this.syncExpanded();
     }
@@ -966,7 +982,7 @@ class About extends Panel {
 <a href="https://github.com/vlad001">vlad001</a>,
 <a href="https://twitter.com/Jewelots_">Jewel</a>,
 <a href="https://twitter.com/instant_grat">Instant Grat</a>,
-<a href="https://twitter.com/__Aruki">Aruki</a>
+<a href="https://twitter.com/pupperuki">Aruki</a>
 </p>
 
 <p><strong>OPEN SOURCE</strong> at <a href="${GITHUB_URL}">GitHub</a></p>
@@ -1113,9 +1129,16 @@ export class UI {
             this.panels[i].setAutoClosed(v);
     }
 
+    private shouldPanelsAutoClose(): boolean {
+        // TODO(jstpierre): Lock icon?
+        if (this.statisticsPanel.manuallyExpanded)
+            return false;
+        return true;
+    }
+
     public setIsDragging(isDragging: boolean): void {
         this.elem.style.pointerEvents = isDragging ? 'none' : '';
-        if (isDragging)
+        if (isDragging && this.shouldPanelsAutoClose())
             this.setPanelsAutoClosed(true);
     }
 }
