@@ -340,11 +340,11 @@ class Main {
                     const key = `${this._getCurrentSceneDescId()}/${i}`;
                     const shouldSave = inputManager.isKeyDown('ShiftLeft');
                     if (shouldSave) {
-                        this.saveManager.saveState(key, this._saveSceneState());
+                        this.saveManager.saveState(key, this._getSceneSaveState());
                     } else {
                         const state = this.saveManager.loadState(key);
                         if (state !== null)
-                            this._loadSceneState(state);
+                            this._loadSceneSaveState(state);
                     }
                 }
             }
@@ -395,8 +395,11 @@ class Main {
 
     private _saveStateTmp = new Uint8Array(512);
     private _saveStateF32 = new Float32Array(this._saveStateTmp.buffer);
-    private _loadSceneState(state: string): void {
+    private _loadSceneSaveState(state: string): void {
         const byteLength = btoa(this._saveStateTmp, 0, state);
+        if (byteLength < 4*3*3)
+            return;
+
         let offs = 0;
 
         if (this.viewer.cameraController !== null) {
@@ -406,9 +409,16 @@ class Main {
     }
 
     private _loadState(state: string) {
-        const parts = state.split(';');
-        const [sceneState, sceneStateStr] = parts;
-        const [groupId, ...sceneRest] = sceneState.split('/');
+        let sceneSelector: string = '', sceneSaveState: string = '';
+        const firstSemicolon = state.indexOf(';');
+        if (firstSemicolon >= 0) {
+            sceneSelector = state.slice(0, firstSemicolon);
+            sceneSaveState = state.slice(firstSemicolon + 1);
+        } else {
+            sceneSelector = state;
+        }
+
+        const [groupId, ...sceneRest] = sceneSelector.split('/');
         const sceneId = decodeURIComponent(sceneRest.join('/'));
 
         const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
@@ -418,7 +428,7 @@ class Main {
         const desc = getSceneDescs(group).find((d) => d.id === sceneId);
         this.lastSavedState = state;
         this._loadSceneDesc(group, desc).then(() => {
-            this._loadSceneState(sceneStateStr);
+            this._loadSceneSaveState(sceneSaveState);
         });
     }
 
@@ -428,7 +438,7 @@ class Main {
         return `${groupId}/${sceneId}`;
     }
 
-    private _saveSceneState() {
+    private _getSceneSaveState() {
         let offs = 0;
 
         if (this.viewer.cameraController !== null)
@@ -442,7 +452,7 @@ class Main {
         if (this.currentSceneDesc === null)
             return;
 
-        const sceneStateStr = this._saveSceneState();
+        const sceneStateStr = this._getSceneSaveState();
         const newState = `${this._getCurrentSceneDescId()};${sceneStateStr}`;
         if (this.lastSavedState !== newState) {
             window.history.replaceState('', '', '#' + newState);
