@@ -12,9 +12,58 @@ import * as NSBTX from './nsbtx';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { CourseRenderer, MDL0Renderer, MKDSPass } from './render';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { MDL0Renderer, G3DPass } from './render';
 import { assert } from '../util';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { FakeTextureHolder } from '../TextureHolder';
+
+export class CourseRenderer implements Viewer.Scene_Device {
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
+    public textureHolder: FakeTextureHolder;
+
+    constructor(device: GfxDevice, public courseRenderer: MDL0Renderer, public skyboxRenderer: MDL0Renderer | null) {
+        this.textureHolder = new FakeTextureHolder(this.courseRenderer.viewerTextures);
+        this.courseRenderer.addToViewRenderer(device, this.viewRenderer);
+        if (this.skyboxRenderer !== null)
+            this.skyboxRenderer.addToViewRenderer(device, this.viewRenderer);
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.courseRenderer.prepareToRender(hostAccessPass, viewerInput);
+        if (this.skyboxRenderer !== null)
+            this.skyboxRenderer.prepareToRender(hostAccessPass, viewerInput);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        // First, render the skybox.
+        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, G3DPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, G3DPass.MAIN);
+        return mainPassRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
+
+        this.courseRenderer.destroy(device);
+        if (this.skyboxRenderer !== null)
+            this.skyboxRenderer.destroy(device);
+    }
+}
 
 class MarioKartDSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}

@@ -2,8 +2,6 @@
 // New Super Mario Bros DS
 
 import * as Viewer from '../viewer';
-import * as CX from '../compression/CX';
-import * as NARC from './narc';
 import * as NSBMD from './nsbmd';
 import * as NSBTA from './nsbta';
 import * as NSBTP from './nsbtp';
@@ -12,13 +10,68 @@ import * as NSBTX from './nsbtx';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { CourseRenderer, MDL0Renderer, MKDSPass, WorldMapRenderer } from './render';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { MDL0Renderer, G3DPass } from './render';
 import { assert } from '../util';
 import { mat4 } from 'gl-matrix';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { FakeTextureHolder } from '../TextureHolder';
+
+export class WorldMapRenderer implements Viewer.Scene_Device {
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
+    public textureHolder: FakeTextureHolder;
+
+    constructor(device: GfxDevice, public objs: ObjectRepresentation[]) {
+        let viewerTextures: Viewer.Texture[] = [];
+
+        this.objs.forEach(element => {
+            viewerTextures = viewerTextures.concat(element.renderer.viewerTextures);
+            element.renderer.addToViewRenderer(device, this.viewRenderer);
+            element.applyAnimations(device);
+        });
+
+        this.textureHolder = new FakeTextureHolder(viewerTextures);
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.objs.forEach(element => {
+            element.renderer.prepareToRender(hostAccessPass, viewerInput);
+        });
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        // First, render the skybox.
+        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, transparentBlackFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, G3DPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, G3DPass.MAIN);
+        return mainPassRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
+
+        this.objs.forEach(element => {
+            element.renderer.destroy(device);
+        });
+    }
+}
 
 class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string) {}
+    constructor(public worldNumber: number, public name: string, public id: string = '' + worldNumber) {
+    }
 
     private fetchBMD(path: string, abortSignal: AbortSignal): Progressable<NSBMD.BMD0> {
         return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
@@ -62,12 +115,12 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
 
     private createObjectRepresentation(device: GfxDevice, path: string, abortSignal: AbortSignal): Progressable<ObjectRepresentation> {
         return Progressable.all<any>([
-            this.fetchBMD(path+`.nsbmd`, abortSignal),
-            this.fetchBTX(path+`.nsbtx`, abortSignal),
-            this.fetchBTA(path+`.nsbta`, abortSignal),
-            this.fetchBTP(path+`.nsbtp`, abortSignal),
-        ]).then(([bmd,btx,bta,btp]) => {
-            if(bmd===null)
+            this.fetchBMD(path + `.nsbmd`, abortSignal),
+            this.fetchBTX(path + `.nsbtx`, abortSignal),
+            this.fetchBTA(path + `.nsbta`, abortSignal),
+            this.fetchBTP(path + `.nsbtp`, abortSignal),
+        ]).then(([bmd, btx, bta, btp]) => {
+            if (bmd === null)
                 return null;
             assert(bmd.models.length === 1);
 
@@ -76,18 +129,19 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
-        return Progressable.all<any>([
-            this.createObjectRepresentation(device, `data/nsmbds/map/w${this.id}`, abortSignal),
-            this.createObjectRepresentation(device, `data/nsmbds/map/w${this.id}_tree`, abortSignal),
-            this.createObjectRepresentation(device, `data/nsmbds/map/w1_castle`, abortSignal),
-            this.createObjectRepresentation(device, `data/nsmbds/map/w8_koppaC`, abortSignal),
-            this.fetchBMD(`data/nsmbds/map/w1_tower.nsbmd`, abortSignal),
-            this.fetchBMD(`data/nsmbds/map/map_point.nsbmd`, abortSignal),
-            this.fetchBTP(`data/nsmbds/map/map_point.nsbtp`, abortSignal, 2),
-            this.fetchBTP(`data/nsmbds/map/map_point.nsbtp`, abortSignal, 3),
-        ]).then(([mainObj, treeObj, castleObj, bigCastleObj, towerBMD, mapPintBMD, mapPointStartBTP, mapPointBTP]) => {
+        const basePath = `data/nsmbds`;
 
-            //adjust the nodes/bones to emulate the flag animations
+        return Progressable.all<any>([
+            this.createObjectRepresentation(device, `${basePath}/map/w${this.worldNumber}`, abortSignal),
+            this.createObjectRepresentation(device, `${basePath}/map/w${this.worldNumber}_tree`, abortSignal),
+            this.createObjectRepresentation(device, `${basePath}/map/w1_castle`, abortSignal),
+            this.createObjectRepresentation(device, `${basePath}/map/w8_koppaC`, abortSignal),
+            this.fetchBMD(`${basePath}/map/w1_tower.nsbmd`, abortSignal),
+            this.fetchBMD(`${basePath}/map/map_point.nsbmd`, abortSignal),
+            this.fetchBTP(`${basePath}/map/map_point.nsbtp`, abortSignal, 2),
+            this.fetchBTP(`${basePath}/map/map_point.nsbtp`, abortSignal, 3),
+        ]).then(([mainObj, treeObj, castleObj, bigCastleObj, towerBMD, mapPintBMD, mapPointStartBTP, mapPointBTP]) => {
+            // Adjust the nodes/bones to emulate the flag animations.
             mat4.fromTranslation(towerBMD.models[0].nodes[2].jointMatrix, [0, 5.5, 0]);
             mat4.fromTranslation(towerBMD.models[0].nodes[3].jointMatrix, [0.75, 5.5, 0]);
             mat4.fromTranslation(castleObj.renderer.model.nodes[3].jointMatrix, [0, 5.5, 0]);
@@ -99,85 +153,67 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
             mat4.fromTranslation(bigCastleObj.renderer.model.nodes[9].jointMatrix, [1.25, 2.75, -0.75]);
             mat4.fromTranslation(bigCastleObj.renderer.model.nodes[10].jointMatrix, [1.625, 2.75, -0.75]);
 
-            mat4.scale(mainObj.renderer.modelMatrix,mainObj.renderer.modelMatrix,[1/16,1/16,1/16]);
-            
-            const objects = worldMapDescs[JSON.parse(this.id)-1];
+            mat4.scale(mainObj.renderer.modelMatrix, mainObj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
 
-            let representations:ObjectRepresentation[] = new Array(objects.length+(treeObj!==null?2:1));
-            representations[0] = mainObj;
+            const objects = worldMapDescs[this.worldNumber - 1];
 
-            if(treeObj!==null){
-                mat4.scale(treeObj.renderer.modelMatrix,treeObj.renderer.modelMatrix,[1/16,1/16,1/16]);
-                representations[1] = treeObj;
+            let representations: ObjectRepresentation[] = [];
+            representations.push(mainObj);
+
+            if (treeObj !== null) {
+                mat4.scale(treeObj.renderer.modelMatrix, treeObj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
+                representations.push(treeObj);
             }
-            let i = treeObj!==null?2:1;
-            
-            objects.forEach(element => {
-                if(element.type==WorldMapObjType.ROUTE_POINT){
+
+            objects.forEach((element) => {
+                if (element.type == WorldMapObjType.ROUTE_POINT) {
                     const obj = new ObjectRepresentation(device, mapPintBMD, null, null, mapPointBTP);
-                    mat4.scale(obj.renderer.modelMatrix,obj.renderer.modelMatrix,[1/16,1/16,1/16]);
-                    mat4.translate(obj.renderer.modelMatrix,obj.renderer.modelMatrix,element.position);
-                    representations[i] = obj;
-                }else if(element.type==WorldMapObjType.START_POINT){
+                    mat4.scale(obj.renderer.modelMatrix, obj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
+                    mat4.translate(obj.renderer.modelMatrix, obj.renderer.modelMatrix, element.position);
+                    representations.push(obj);
+                } else if (element.type == WorldMapObjType.START_POINT) {
                     const obj = new ObjectRepresentation(device, mapPintBMD, null, null, mapPointStartBTP);
-                    mat4.scale(obj.renderer.modelMatrix,obj.renderer.modelMatrix,[1/16,1/16,1/16]);
-                    mat4.translate(obj.renderer.modelMatrix,obj.renderer.modelMatrix,element.position);
-                    representations[i] = obj;
-                }else if(element.type==WorldMapObjType.TOWER){
+                    mat4.scale(obj.renderer.modelMatrix, obj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
+                    mat4.translate(obj.renderer.modelMatrix, obj.renderer.modelMatrix, element.position);
+                    representations.push(obj);
+                } else if (element.type == WorldMapObjType.TOWER) {
                     const obj = new ObjectRepresentation(device, towerBMD, null, null, null);
-                    mat4.scale(obj.renderer.modelMatrix,obj.renderer.modelMatrix,[1/16,1/16,1/16]);
-                    mat4.translate(obj.renderer.modelMatrix,obj.renderer.modelMatrix,element.position);
-                    representations[i] = obj;
-                }else if(element.type==WorldMapObjType.CASTLE){
-                    mat4.scale(castleObj.renderer.modelMatrix,castleObj.renderer.modelMatrix,[1/16,1/16,1/16]);
-                    mat4.translate(castleObj.renderer.modelMatrix,castleObj.renderer.modelMatrix,element.position);
-                    representations[i] = castleObj;
-                }else if(element.type==WorldMapObjType.BIG_CASTLE){
-                    mat4.scale(bigCastleObj.renderer.modelMatrix,bigCastleObj.renderer.modelMatrix,[1/16,1/16,1/16]);
-                    mat4.translate(bigCastleObj.renderer.modelMatrix,bigCastleObj.renderer.modelMatrix,element.position);
-                    representations[i] = bigCastleObj;
+                    mat4.scale(obj.renderer.modelMatrix, obj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
+                    mat4.translate(obj.renderer.modelMatrix, obj.renderer.modelMatrix, element.position);
+                    representations.push(obj);
+                } else if (element.type == WorldMapObjType.CASTLE) {
+                    mat4.scale(castleObj.renderer.modelMatrix, castleObj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
+                    mat4.translate(castleObj.renderer.modelMatrix, castleObj.renderer.modelMatrix, element.position);
+                    representations.push(castleObj);
+                } else if (element.type == WorldMapObjType.BIG_CASTLE) {
+                    mat4.scale(bigCastleObj.renderer.modelMatrix, bigCastleObj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
+                    mat4.translate(bigCastleObj.renderer.modelMatrix, bigCastleObj.renderer.modelMatrix, element.position);
+                    representations.push(bigCastleObj);
                 }
-
-                i++;
             });
-            if(this.id=="1")
-                mat4.translate(mainObj.renderer.modelMatrix,mainObj.renderer.modelMatrix,[0,2.5,0]);
-            else if(this.id=="3"){
-                mat4.translate(mainObj.renderer.modelMatrix,mainObj.renderer.modelMatrix,[30,3,0]);
-                mat4.translate(treeObj.renderer.modelMatrix,treeObj.renderer.modelMatrix,[-4,0,0]);
+
+            if (this.worldNumber === 1) {
+                mat4.translate(mainObj.renderer.modelMatrix, mainObj.renderer.modelMatrix, [0, 2.5, 0]);
+            } else if (this.worldNumber === 3) {
+                mat4.translate(mainObj.renderer.modelMatrix, mainObj.renderer.modelMatrix, [30, 3, 0]);
+                mat4.translate(treeObj.renderer.modelMatrix, treeObj.renderer.modelMatrix, [-4, 0, 0]);
             }
 
-
-            const w = new WorldMapRenderer(device, representations);
-
-            return w;
+            return new WorldMapRenderer(device, representations);
         });
     }
 }
 
-enum WorldMapObjType{ROUTE_POINT, START_POINT, TOWER, CASTLE, BIG_CASTLE}
+const enum WorldMapObjType { ROUTE_POINT, START_POINT, TOWER, CASTLE, BIG_CASTLE };
 
-const id = 'nsmbds';
-const name = 'New Super Mrio Bros DS';
-const sceneDescs: Viewer.SceneDesc[] = [
-    new NewSuperMarioBrosDSSceneDesc("1", "World 1"),
-    new NewSuperMarioBrosDSSceneDesc("2", "World 2"),
-    new NewSuperMarioBrosDSSceneDesc("3", "World 3"),
-    new NewSuperMarioBrosDSSceneDesc("4", "World 4"),
-    new NewSuperMarioBrosDSSceneDesc("5", "World 5"),
-    new NewSuperMarioBrosDSSceneDesc("6", "World 6"),
-    new NewSuperMarioBrosDSSceneDesc("7", "World 7"),
-    new NewSuperMarioBrosDSSceneDesc("8", "World 8"),
-];
-
-export class ObjectRepresentation{
+export class ObjectRepresentation {
     public renderer: MDL0Renderer;
 
-    constructor(device: GfxDevice, public bmd: NSBMD.BMD0, public btx: NSBTX.BTX0, public bta: NSBTA.BTA0, public btp: NSBTP.BTP0){
+    constructor(device: GfxDevice, public bmd: NSBMD.BMD0, public btx: NSBTX.BTX0, public bta: NSBTA.BTA0, public btp: NSBTP.BTP0) {
         this.renderer = new MDL0Renderer(device, this.btx !== null ? this.btx.tex0 : this.bmd.tex0, this.bmd.models[0]);
     }
 
-    applyAnimations(device: GfxDevice){
+    public applyAnimations(device: GfxDevice): void {
         if (this.bta !== null)
             this.renderer.bindSRT0(this.bta.srt0);
 
@@ -188,52 +224,65 @@ export class ObjectRepresentation{
 
 interface IWorldMapObj {
     type: WorldMapObjType, position: number[];
- }
+}
 
 const worldMapDescs: IWorldMapObj[][] = [
     [
-        {type: WorldMapObjType.START_POINT,position: [-180,0,0]},
-        {type: WorldMapObjType.TOWER,position: [2,0,-2]},
-        {type: WorldMapObjType.CASTLE,position: [34,0,-3]},
+        { type: WorldMapObjType.START_POINT, position: [-180, 0, 0] },
+        { type: WorldMapObjType.TOWER, position: [2, 0, -2] },
+        { type: WorldMapObjType.CASTLE, position: [34, 0, -3] },
     ],
     [
-        {type: WorldMapObjType.START_POINT,position: [-144,0,0]},
-        {type: WorldMapObjType.TOWER,position: [10,0,-2]},
-        {type: WorldMapObjType.CASTLE,position: [34,0,-3]},
+        { type: WorldMapObjType.START_POINT, position: [-144, 0, 0] },
+        { type: WorldMapObjType.TOWER, position: [10, 0, -2] },
+        { type: WorldMapObjType.CASTLE, position: [34, 0, -3] },
     ],
     [
-        {type: WorldMapObjType.START_POINT,position: [-400,0,0]},
-        {type: WorldMapObjType.TOWER,position: [-26,0,-2]},
-        {type: WorldMapObjType.CASTLE,position: [2,0,-2.5]},
+        { type: WorldMapObjType.START_POINT, position: [-400, 0, 0] },
+        { type: WorldMapObjType.TOWER, position: [-26, 0, -2] },
+        { type: WorldMapObjType.CASTLE, position: [2, 0, -2.5] },
     ],
     [
-        {type: WorldMapObjType.START_POINT,position: [-144,0,0]},
-        {type: WorldMapObjType.TOWER,position: [2,0,-2]},
-        {type: WorldMapObjType.CASTLE,position: [34,0,-3]},
+        { type: WorldMapObjType.START_POINT, position: [-144, 0, 0] },
+        { type: WorldMapObjType.TOWER, position: [2, 0, -2] },
+        { type: WorldMapObjType.CASTLE, position: [34, 0, -3] },
     ],
     [
-        {type: WorldMapObjType.START_POINT,position: [-144,0,0]},
-        {type: WorldMapObjType.TOWER,position: [2,0,-2]},
-        {type: WorldMapObjType.CASTLE,position: [42,0,-3]},
+        { type: WorldMapObjType.START_POINT, position: [-144, 0, 0] },
+        { type: WorldMapObjType.TOWER, position: [2, 0, -2] },
+        { type: WorldMapObjType.CASTLE, position: [42, 0, -3] },
     ],
     [
-        {type: WorldMapObjType.START_POINT,position: [-144,0,0]},
-        {type: WorldMapObjType.TOWER,position: [2,0,-2]},
-        {type: WorldMapObjType.TOWER,position: [18,0,-2]},
-        {type: WorldMapObjType.CASTLE,position: [34,0,-3]},
+        { type: WorldMapObjType.START_POINT, position: [-144, 0, 0] },
+        { type: WorldMapObjType.TOWER, position: [2, 0, -2] },
+        { type: WorldMapObjType.TOWER, position: [18, 0, -2] },
+        { type: WorldMapObjType.CASTLE, position: [34, 0, -3] },
     ],
     [
-        {type: WorldMapObjType.START_POINT,position: [-144,0,0]},
-        {type: WorldMapObjType.TOWER,position: [6,0,-2]},
-        {type: WorldMapObjType.CASTLE,position: [26,0,-3]},
+        { type: WorldMapObjType.START_POINT, position: [-144, 0, 0] },
+        { type: WorldMapObjType.TOWER, position: [6, 0, -2] },
+        { type: WorldMapObjType.CASTLE, position: [26, 0, -3] },
     ],
     [
-        {type: WorldMapObjType.START_POINT,position: [-144,0,0]},
-        {type: WorldMapObjType.TOWER,position: [-2,0,-2]},
-        {type: WorldMapObjType.CASTLE,position: [14,0,-3]},
-        {type: WorldMapObjType.TOWER,position: [50,0,-2]},
-        {type: WorldMapObjType.BIG_CASTLE,position: [33,0,0]},
+        { type: WorldMapObjType.START_POINT, position: [-144, 0, 0] },
+        { type: WorldMapObjType.TOWER, position: [-2, 0, -2] },
+        { type: WorldMapObjType.CASTLE, position: [14, 0, -3] },
+        { type: WorldMapObjType.TOWER, position: [50, 0, -2] },
+        { type: WorldMapObjType.BIG_CASTLE, position: [33, 0, 0] },
     ],
+];
+
+const id = 'nsmbds';
+const name = 'New Super Mrio Bros DS';
+const sceneDescs: Viewer.SceneDesc[] = [
+    new NewSuperMarioBrosDSSceneDesc(1, "World 1"),
+    new NewSuperMarioBrosDSSceneDesc(2, "World 2"),
+    new NewSuperMarioBrosDSSceneDesc(3, "World 3"),
+    new NewSuperMarioBrosDSSceneDesc(4, "World 4"),
+    new NewSuperMarioBrosDSSceneDesc(5, "World 5"),
+    new NewSuperMarioBrosDSSceneDesc(6, "World 6"),
+    new NewSuperMarioBrosDSSceneDesc(7, "World 7"),
+    new NewSuperMarioBrosDSSceneDesc(8, "World 8"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

@@ -14,7 +14,7 @@ import { TEX0, TEX0Texture } from "./nsbtx";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
-import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import AnimationController from "../AnimationController";
 import { nArray } from "../util";
 import { ObjectRepresentation } from "./nsmbds_scenes";
@@ -215,7 +215,7 @@ class Command_Shape {
     }
 }
 
-export enum MKDSPass {
+export const enum G3DPass {
     MAIN = 0x01,
     SKYBOX = 0x02,
 }
@@ -346,7 +346,7 @@ export class MDL0Renderer {
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.updateTime(viewerInput.time);
 
-        this.templateRenderInst.passMask = this.isSkybox ? MKDSPass.SKYBOX : MKDSPass.MAIN;
+        this.templateRenderInst.passMask = this.isSkybox ? G3DPass.SKYBOX : G3DPass.MAIN;
 
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams], 16);
         let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams];
@@ -371,102 +371,5 @@ export class MDL0Renderer {
         this.packetParamsBuffer.destroy(device);
         for (let i = 0; i < this.materialCommands.length; i++)
             this.materialCommands[i].destroy(device);
-    }
-}
-
-export class FakeTextureHolder extends TextureHolder<any> {
-    public addTextureGfx(device: GfxDevice, entry: any): LoadedTexture { throw new Error(); }
-}
-
-export class CourseRenderer implements Viewer.Scene_Device {
-    public viewRenderer = new GfxRenderInstViewRenderer();
-    public renderTarget = new BasicRenderTarget();
-    public textureHolder = new FakeTextureHolder();
-
-    constructor(device: GfxDevice, public courseRenderer: MDL0Renderer, public skyboxRenderer: MDL0Renderer | null) {
-        this.textureHolder.viewerTextures = this.courseRenderer.viewerTextures;
-        this.courseRenderer.addToViewRenderer(device, this.viewRenderer);
-        if (this.skyboxRenderer !== null)
-            this.skyboxRenderer.addToViewRenderer(device, this.viewRenderer);
-    }
-
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.courseRenderer.prepareToRender(hostAccessPass, viewerInput);
-        if (this.skyboxRenderer !== null)
-            this.skyboxRenderer.prepareToRender(hostAccessPass, viewerInput);
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-
-        // First, render the skybox.
-        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, MKDSPass.SKYBOX);
-        skyboxPassRenderer.endPass(null);
-        device.submitPass(skyboxPassRenderer);
-        // Now do main pass.
-        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, MKDSPass.MAIN);
-        return mainPassRenderer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.viewRenderer.destroy(device);
-        this.renderTarget.destroy(device);
-
-        this.courseRenderer.destroy(device);
-        if (this.skyboxRenderer !== null)
-            this.skyboxRenderer.destroy(device);
-    }
-}
-
-export class WorldMapRenderer implements Viewer.Scene_Device {
-    public viewRenderer = new GfxRenderInstViewRenderer();
-    public renderTarget = new BasicRenderTarget();
-    public textureHolder = new FakeTextureHolder();
-
-    constructor(device: GfxDevice, public objs :ObjectRepresentation[]) {
-        this.objs.forEach(element => {
-            this.textureHolder.viewerTextures.concat(element.renderer.viewerTextures);
-            element.renderer.addToViewRenderer(device, this.viewRenderer);
-            element.applyAnimations(device);
-        });
-    }
-
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.objs.forEach(element => {
-            element.renderer.prepareToRender(hostAccessPass, viewerInput);
-        });
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-
-        // First, render the skybox.
-        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, transparentBlackFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, MKDSPass.SKYBOX);
-        skyboxPassRenderer.endPass(null);
-        device.submitPass(skyboxPassRenderer);
-        // Now do main pass.
-        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, MKDSPass.MAIN);
-        return mainPassRenderer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.viewRenderer.destroy(device);
-        this.renderTarget.destroy(device);
-
-        this.objs.forEach(element => {
-            element.renderer.destroy(device);
-        });
     }
 }

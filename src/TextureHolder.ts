@@ -219,3 +219,15 @@ export function bindGLTextureMappings(state: RenderState, textureMappings: Textu
         state.renderStatisticsTracker.textureBindCount++;
     }
 }
+
+export class FakeTextureHolder extends TextureHolder<any> {
+    constructor(viewerTextures: Viewer.Texture[]) {
+        super();
+        this.viewerTextures = viewerTextures;
+    }
+
+    // Now allowed.
+    public addTextureGfx(device: GfxDevice, entry: any): LoadedTexture {
+        throw new Error();
+    }
+}
