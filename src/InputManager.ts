@@ -23,7 +23,10 @@ export default class InputManager {
     public onisdraggingchanged: () => void | null = null;
 
     constructor(toplevel: HTMLElement) {
+        document.body.tabIndex = -1;
+
         this.toplevel = toplevel;
+        this.toplevel.tabIndex = -1;
 
         this.keysDown = new Map<string, boolean>();
         window.addEventListener('keydown', this._onKeyDown);
@@ -57,10 +60,20 @@ export default class InputManager {
         });
     }
 
+    public focusViewer() {
+        this.toplevel.focus();
+    }
+
+    private _hasFocus() {
+        return document.activeElement === document.body || document.activeElement === this.toplevel;
+    }
+
     private _onKeyDown = (e: KeyboardEvent) => {
+        if (!this._hasFocus()) return;
         this.keysDown.set(e.code, !e.repeat);
     };
     private _onKeyUp = (e: KeyboardEvent) => {
+        if (!this._hasFocus()) return;
         this.keysDown.delete(e.code);
     };
 

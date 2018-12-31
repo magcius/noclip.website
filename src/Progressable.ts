@@ -1,12 +1,12 @@
 
 export default class Progressable<T> {
     public promise: PromiseLike<T>;
-    public onProgress: (() => void) | null;
+    public chainProgressable: Progressable<any> | null = null;
+    public onProgress: (() => void) | null = null;
     public progress: number; // Between 0 and 1.
 
     constructor(promise: PromiseLike<T>, initialProgress: number = 0) {
         this.promise = promise;
-        this.onProgress = null;
         this.progress = initialProgress;
     }
 
@@ -14,6 +14,8 @@ export default class Progressable<T> {
         this.progress = n;
         if (this.onProgress !== null)
             this.onProgress();
+        if (this.chainProgressable !== null)
+            this.chainProgressable.setProgress(this.progress);
     }
 
     public then<TResult>(onfulfilled?: ((value: T) => TResult | PromiseLike<TResult> | Progressable<TResult>)): Progressable<TResult> {
@@ -22,9 +24,7 @@ export default class Progressable<T> {
 
             if (result instanceof Progressable) {
                 // If a callback returns a Progressable, then bubble that progress up to us.
-                result.onProgress = () => {
-                    this.setProgress(result.progress)
-                };
+                result.chainProgressable = this;
                 return result.promise;
             } else {
                 return result;
@@ -32,9 +32,7 @@ export default class Progressable<T> {
         }), this.progress);
 
         // Any then-able chain is the same progress as this one (however it can also report progress which will replace this).
-        this.onProgress = () => {
-            pr.setProgress(this.progress);
-        };
+        this.chainProgressable = pr;
 
         return pr;
     }
@@ -47,9 +45,7 @@ export default class Progressable<T> {
         const p = Promise.all(progressables.map((p) => p.promise));
         function calcProgress() {
             const progresses = progressables.map((p) => p.progress);
-            pr.progress = avg(progresses);
-            if (pr.onProgress !== null)
-                pr.onProgress();
+            pr.setProgress(avg(progresses));
         }
         progressables.forEach((p) => {
             p.onProgress = calcProgress;

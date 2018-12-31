@@ -21,11 +21,16 @@ export interface Scene {
     destroy(gl: WebGL2RenderingContext): void;
 }
 
-export interface MainScene extends Scene {
-    textures?: Texture[];
+export interface MainSceneBase {
     textureHolder?: TextureHolder<any>;
-    resetCamera?(camera: Camera): void;
     createPanels?(): UI.Panel[];
+    serializeSaveState?(dst: ArrayBuffer, offs: number): number;
+    deserializeSaveState?(dst: ArrayBuffer, offs: number): number;
+}
+
+export interface MainScene extends MainSceneBase, Scene {
+    textures?: Texture[];
+    resetCamera?(camera: Camera): void;
 }
 
 export interface ViewerRenderInput {
@@ -35,11 +40,9 @@ export interface ViewerRenderInput {
     viewportHeight: number;
 }
 
-export interface Scene_Device {
+export interface Scene_Device extends MainSceneBase {
     render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass;
     destroy(device: GfxDevice): void;
-    createPanels?(): UI.Panel[];
-    textureHolder?: TextureHolder<any>;
 }
 
 export class Viewer {
@@ -58,8 +61,8 @@ export class Viewer {
     private t: number = 0;
     public isTimeRunning = true;
 
-    public scene: MainScene;
-    public scene_device: Scene_Device;
+    public scene: MainScene | null = null;
+    public scene_device: Scene_Device | null = null;
 
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
