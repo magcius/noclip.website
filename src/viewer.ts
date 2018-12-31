@@ -26,11 +26,11 @@ export interface MainSceneBase {
     createPanels?(): UI.Panel[];
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(dst: ArrayBuffer, offs: number): number;
+    resetCamera?(camera: Camera): void;
 }
 
 export interface MainScene extends MainSceneBase, Scene {
     textures?: Texture[];
-    resetCamera?(camera: Camera): void;
 }
 
 export interface ViewerRenderInput {

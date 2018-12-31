@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { MainScene, SceneDesc, SceneGroup, Viewer, Scene_Device, getSceneDescs } from './viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer, Scene_Device, getSceneDescs, MainSceneBase } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -54,6 +54,7 @@ import { GfxDevice } from './gfx/platform/GfxPlatform';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
 import { atob, btoa } from './Ascii85';
+import { vec3, mat4 } from 'gl-matrix';
 
 const sceneGroups = [
     "Wii",
@@ -158,7 +159,7 @@ class SceneLoader {
     constructor(public viewer: Viewer) {
     }
 
-    public loadSceneDesc(sceneDesc: SceneDesc): Progressable<MainScene> | Progressable<Scene_Device> {
+    public loadSceneDesc(sceneDesc: SceneDesc): Progressable<MainSceneBase> {
         this.viewer.setScene(null);
 
         if (this.abortController !== null)
@@ -208,6 +209,10 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 class SaveManager {
+    public getSaveStateSlotKey(sceneDescId: string, slotIndex: number): string {
+        return `${sceneDescId}/${slotIndex}`;
+    }
+
     public getCurrentSceneDescId(): string | null {
         return window.sessionStorage.getItem('CurrentSceneDescId') || null;
     }
@@ -317,8 +322,8 @@ class Main {
         if (this.currentSceneDesc === undefined) {
             // Load the state from the hash, remove the extra character at the end.
             const hash = window.location.hash;
-            if (hash.startsWith('#') && hash.endsWith('='))
-                this._loadState(hash.slice(1, -1));
+            if (hash.startsWith('#'))
+                this._loadState(hash.slice(1));
             // Wipe out the hash from the URL.
             window.history.replaceState('', '', '/');
         }
@@ -327,13 +332,10 @@ class Main {
             // Load the state from session storage.
             const currentDescId = this.saveManager.getCurrentSceneDescId();
             if (currentDescId !== null) {
-                this._loadSceneDescById(currentDescId).then(() => {
-                    // Load save slot 0.
-                    const key = this._getSaveStateSlotKey(0);
-                    const sceneState = this.saveManager.loadState(key);
-                    if (sceneState !== null)
-                        this._loadSceneSaveState(sceneState);
-                });
+                // Load save slot 0.
+                const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
+                const sceneState = this.saveManager.loadState(key);
+                this._loadSceneDescById(currentDescId, sceneState);
             }
         }
 
@@ -429,16 +431,18 @@ class Main {
             offs += this.viewer.scene.serializeSaveState(this._saveStateTmp, offs);
         if (this.viewer.scene_device !== null && this.viewer.scene_device.serializeSaveState)
             offs += this.viewer.scene_device.serializeSaveState(this._saveStateTmp, offs);
-        return atob(this._saveStateTmp, offs);
+
+        const s = atob(this._saveStateTmp, offs);
+        return s + '=';
     }
 
-    private _loadSceneSaveState(state: string): void {
+    private _loadSceneSaveStateVersion2(state: string): boolean {
         const byteLength = btoa(this._saveStateTmp, 0, state);
         if (byteLength < 4)
-            return;
+            return false;
 
         if (!matchString(this._saveStateTmp, 0, SAVE_STATE_MAGIC))
-            return;
+            return false;
 
         let wordOffs = 1;
         this.viewer.renderState.time = this._saveStateF32[wordOffs++];
@@ -451,9 +455,49 @@ class Main {
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
+
+        return true;
     }
 
-    private _loadSceneDescById(id: string): Progressable<any> | null {
+    private _loadSceneSaveStateVersion1(state: string): boolean {
+        const camera = this.viewer.renderState.camera;
+
+        const [tx, ty, tz, fx, fy, fz, rx, ry, rz] = state.split(',');
+        // Translation.
+        camera.worldMatrix[12] = +tx;
+        camera.worldMatrix[13] = +ty;
+        camera.worldMatrix[14] = +tz;
+        camera.worldMatrix[2] = +fx;
+        camera.worldMatrix[6] = +fy;
+        camera.worldMatrix[10] = +fz;
+        camera.worldMatrix[0] = +rx;
+        camera.worldMatrix[4] = +ry;
+        camera.worldMatrix[8] = +rz;
+        const u = vec3.create();
+        vec3.cross(u, [camera.worldMatrix[2], camera.worldMatrix[6], camera.worldMatrix[10]], [camera.worldMatrix[0], camera.worldMatrix[4], camera.worldMatrix[8]]);
+        vec3.normalize(u, u);
+        camera.worldMatrix[1] = u[0];
+        camera.worldMatrix[5] = u[1];
+        camera.worldMatrix[9] = u[2];
+        camera.worldMatrixUpdated();
+
+        if (this.viewer.cameraController !== null)
+            this.viewer.cameraController.cameraUpdateForced();
+
+        return true;
+    }
+
+    private _loadSceneSaveState(state: string | null): boolean {
+        if (state === '' || state === null)
+            return false;
+
+        if (state.endsWith('='))
+            return this._loadSceneSaveStateVersion2(state.slice(0, -1));
+        else
+            return this._loadSceneSaveStateVersion1(state);
+    }
+
+    private _loadSceneDescById(id: string, sceneState: string | null): Progressable<MainSceneBase> | null {
         const [groupId, ...sceneRest] = id.split('/');
         const sceneId = decodeURIComponent(sceneRest.join('/'));
 
@@ -462,7 +506,7 @@ class Main {
             return null;
 
         const desc = getSceneDescs(group).find((d) => d.id === sceneId);
-        return this._loadSceneDesc(group, desc);
+        return this._loadSceneDesc(group, desc, sceneState);
     }
 
     private _loadState(state: string) {
@@ -475,12 +519,7 @@ class Main {
             sceneDescId = state;
         }
 
-        const p = this._loadSceneDescById(sceneDescId);
-        if (p === null) return;
-
-        p.then(() => {
-            this._loadSceneSaveState(sceneSaveState);
-        });
+        return this._loadSceneDescById(sceneDescId, sceneSaveState);
     }
 
     private _getCurrentSceneDescId() {
@@ -495,7 +534,7 @@ class Main {
 
         const sceneStateStr = this._getSceneSaveState();
         const currentDescId = this._getCurrentSceneDescId();
-        const key = this._getSaveStateSlotKey(0);
+        const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
         this.saveManager.saveState(key, sceneStateStr);
 
         const saveState = `${currentDescId};${sceneStateStr}`;
@@ -503,7 +542,7 @@ class Main {
     }
 
     private _getSaveStateSlotKey(slotIndex: number): string {
-        return `${this._getCurrentSceneDescId()}/${slotIndex}`;
+        return this.saveManager.getSaveStateSlotKey(this._getCurrentSceneDescId(), slotIndex);
     }
 
     private _onSceneChanged(): void {
@@ -533,7 +572,16 @@ class Main {
         }
     }
 
-    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc): Progressable<any> {
+    private _resetCamera(mainSceneBase: MainSceneBase): void {
+        const camera = this.viewer.renderState.camera;
+        if (mainSceneBase.resetCamera)
+            mainSceneBase.resetCamera(camera);
+        else
+            mat4.identity(camera.worldMatrix);
+        camera.worldMatrixUpdated();
+    }
+
+    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneState: string | null = null): Progressable<MainSceneBase> {
         if (this.currentSceneDesc === sceneDesc)
             return Progressable.resolve(null);
 
@@ -541,9 +589,14 @@ class Main {
         this.currentSceneDesc = sceneDesc;
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
-        const progressable = this.sceneLoader.loadSceneDesc(sceneDesc);
-        (progressable as Progressable<any>).then(() => {
+        const progressable = this.sceneLoader.loadSceneDesc(sceneDesc).then((mainSceneBase) => {
             this.saveManager.setCurrentSceneDescId(this._getCurrentSceneDescId());
+            console.log(sceneState);
+            if (!this._loadSceneSaveState(sceneState)) {
+                // Set up defaults.
+                this._resetCamera(mainSceneBase);
+            }
+            return mainSceneBase;
         });
         this.ui.sceneSelect.setLoadProgress(progressable.progress);
         progressable.onProgress = () => {

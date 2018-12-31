@@ -112,8 +112,6 @@ export function computeViewSpaceDepth(camera: Camera, aabb: AABB, v: vec3 = scra
 export interface CameraController {
     camera: Camera;
     forceUpdate: boolean;
-    serialize(): string;
-    deserialize(state: string): void;
     cameraUpdateForced(): void;
     update(inputManager: InputManager, dt: number): boolean;
 }
@@ -142,36 +140,6 @@ export class FPSCameraController implements CameraController {
 
     constructor() {
         this.speed = 60;
-    }
-
-    public serialize(): string {
-        const camera = this.camera;
-        const tx = camera.worldMatrix[12], ty = camera.worldMatrix[13], tz = camera.worldMatrix[14];
-        const rx = camera.worldMatrix[0], ry = camera.worldMatrix[4], rz = camera.worldMatrix[8];
-        const fx = camera.worldMatrix[2], fy = camera.worldMatrix[6], fz = camera.worldMatrix[10];
-        return `${tx.toFixed(2)},${ty.toFixed(2)},${tz.toFixed(2)},${fx.toFixed(2)},${fy.toFixed(2)},${fz.toFixed(2)},${rx.toFixed(2)},${ry.toFixed(2)},${rz.toFixed(2)}`;
-    }
-
-    public deserialize(state: string) {
-        vec3.set(this.keyMovement, 0, 0, 0);
-        const [tx, ty, tz, fx, fy, fz, rx, ry, rz] = state.split(',');
-        // Translation.
-        this.camera.worldMatrix[12] = +tx;
-        this.camera.worldMatrix[13] = +ty;
-        this.camera.worldMatrix[14] = +tz;
-        this.camera.worldMatrix[2] = +fx;
-        this.camera.worldMatrix[6] = +fy;
-        this.camera.worldMatrix[10] = +fz;
-        this.camera.worldMatrix[0] = +rx;
-        this.camera.worldMatrix[4] = +ry;
-        this.camera.worldMatrix[8] = +rz;
-        const u = vec3.create();
-        vec3.cross(u, [this.camera.worldMatrix[2], this.camera.worldMatrix[6], this.camera.worldMatrix[10]], [this.camera.worldMatrix[0], this.camera.worldMatrix[4], this.camera.worldMatrix[8]]);
-        vec3.normalize(u, u);
-        this.camera.worldMatrix[1] = u[0];
-        this.camera.worldMatrix[5] = u[1];
-        this.camera.worldMatrix[9] = u[2];
-        this.camera.worldMatrixUpdated();
     }
 
     public cameraUpdateForced(): void {
@@ -283,10 +251,6 @@ export class OrbitCameraController implements CameraController {
     }
 
     public cameraUpdateForced(): void {
-    }
-
-    public serialize(): string {
-        return '';
     }
 
     public deserialize(state: string): void {

@@ -1000,7 +1000,7 @@ function makeHashSafe(s: string): string {
 
 function buildShareURL(saveState: string): string {
     const loc = window.location;
-    return `${loc.origin}${loc.pathname}#${makeHashSafe(saveState)}=`;
+    return `${loc.origin}${loc.pathname}#${makeHashSafe(saveState)}`;
 }
 
 export class SaveStatesPanel extends Panel {
