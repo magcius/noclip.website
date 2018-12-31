@@ -275,9 +275,6 @@ class Main {
             return;
         }
 
-        this.canvas.onmousedown = () => {
-            this._deselectUI();
-        };
         this.toplevel.ondragover = (e) => {
             this.dragHighlight.style.display = 'block';
             e.preventDefault();
@@ -358,8 +355,10 @@ class Main {
             this._toggleUI();
         if (inputManager.isKeyDownEventTriggered('Numpad9'))
             this._downloadTextures();
+        if (inputManager.isKeyDownEventTriggered('KeyT'))
+            this.ui.sceneSelect.expandAndFocus();
         if (inputManager.isKeyDownEventTriggered('KeyG'))
-            this.ui.saveStatesPanel.expandAndSelect();
+            this.ui.saveStatesPanel.expandAndFocus();
         for (let i = 1; i <= 9; i++) {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
                 if (this.currentSceneDesc) {
@@ -394,10 +393,6 @@ class Main {
 
         window.requestAnimationFrame(this._updateLoop);
     };
-
-    private _deselectUI() {
-        this.canvas.focus();
-    }
 
     private _onDrop(e: DragEvent) {
         this.dragHighlight.style.display = 'none';
@@ -556,7 +551,6 @@ class Main {
         // Set window title.
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
 
-        this._deselectUI();
         this._sendAnalytics();
         return progressable;
     }

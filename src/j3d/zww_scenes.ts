@@ -405,7 +405,7 @@ class WindWakerRenderer implements Viewer.MainScene {
 
         const colorPresets = [ '(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ];
 
-        const selector = new UI.SimpleSingleSelect();
+        const selector = new UI.SingleSelect();
         selector.setStrings(colorPresets);
         selector.onselectionchange = (index: number) => {
             this.setTimeOfDay(index);

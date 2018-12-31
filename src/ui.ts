@@ -127,9 +127,9 @@ export class TextEntry implements Widget {
         textarea.style.backgroundPosition = '10px 14px';
         textarea.style.lineHeight = '20px';
         textarea.onkeydown = (e) => {
-            if (e.code === 'Escape') {
+            if (e.code === 'Escape' && this.textfield.getValue().length > 0) {
+                e.stopPropagation();
                 this.clear();
-                textarea.blur();
             }
         };
         textarea.oninput = () => {
@@ -207,6 +207,7 @@ export abstract class ScrollSelect implements Widget {
     protected scrollContainer: HTMLElement;
     protected flairs: Flair[] = [];
     protected internalFlairs: Flair[] = [];
+    private isDragging: boolean = false;
 
     constructor() {
         this.toplevel = document.createElement('div');
@@ -223,6 +224,23 @@ export abstract class ScrollSelect implements Widget {
 
     public setHeight(height: string): void {
         this.scrollContainer.style.height = height;
+    }
+
+    protected getOuterForIndex(i: number): HTMLElement {
+        return this.scrollContainer.children.item(i) as HTMLElement;
+    }
+
+    public focusItem(i: number): boolean {
+        const outer = this.getOuterForIndex(i);
+        if (!this.itemIsVisible(outer))
+            return false;
+        const selector = outer.querySelector('.selector') as HTMLElement;
+        if (selector) {
+            selector.focus();
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public setItems(items: ScrollSelectItem[]): void {
@@ -252,15 +270,19 @@ export abstract class ScrollSelect implements Widget {
                 selector.appendChild(textSpan);
 
                 const index = i;
+                selector.onfocus = () => {
+                    this.itemFocused(index, !this.isDragging);
+                };
                 selector.onmousedown = () => {
                     selector.focus();
-                    this.itemClicked(index, true);
+                    this.isDragging = true;
+                };
+                selector.onmouseup = () => {
+                    this.isDragging = false;
                 };
                 selector.onmouseover = (e) => {
-                    if (e.buttons !== 0) {
+                    if (this.isDragging)
                         selector.focus();
-                        this.itemClicked(index, false);
-                    }
                 };
             } else if (item.type === ScrollSelectItemType.Header) {
                 const textSpan = document.createElement('span');
@@ -291,26 +313,26 @@ export abstract class ScrollSelect implements Widget {
         }));
     }
 
-    private itemIsHeader(outer: HTMLElement): boolean {
+    protected itemIsHeader(outer: HTMLElement): boolean {
         const header = outer.querySelector('span.header');
         return !!header;
     }
 
-    private itemIsVisible(outer: HTMLElement): boolean {
+    protected itemIsVisible(outer: HTMLElement): boolean {
         return outer.style.display !== 'none';
     }
 
     public computeHeaderVisibility(): void {
         const n = this.getNumItems();
         for (let i = 0; i < n;) {
-            const outer = this.scrollContainer.children.item(i) as HTMLElement;
+            const outer = this.getOuterForIndex(i);
 
             if (this.itemIsHeader(outer)) {
                 // Find next header.
                 let j = i + 1;
                 let shouldBeVisible = false;
                 for (; j < n; j++) {
-                    const outer = this.scrollContainer.children.item(j) as HTMLElement;
+                    const outer = this.getOuterForIndex(j);
                     if (this.itemIsHeader(outer))
                         break;
                     if (this.itemIsVisible(outer)) {
@@ -353,9 +375,9 @@ export abstract class ScrollSelect implements Widget {
     private syncFlairDisplay(): void {
         const flairs = this.internalFlairs;
         for (let i = 0; i < this.getNumItems(); i++) {
-            const outer = this.scrollContainer.children.item(i) as HTMLElement;
+            const outer = this.getOuterForIndex(i);
 
-            const selector = outer.querySelector('div.selector') as HTMLElement;
+            const selector = outer.querySelector('.selector') as HTMLElement;
             if (!selector)
                 continue;
 
@@ -383,7 +405,7 @@ export abstract class ScrollSelect implements Widget {
         }
     }
 
-    protected abstract itemClicked(index: number, first: boolean): void;
+    protected abstract itemFocused(index: number, first: boolean): void;
 }
 
 function ensureFlairIndex(flairs: Flair[], index: number): Flair {
@@ -401,12 +423,57 @@ function ensureFlairIndex(flairs: Flair[], index: number): Flair {
 export class SingleSelect extends ScrollSelect {
     public highlightedIndex: number = -1;
     public onselectionchange: (index: number) => void;
+    public setHighlightFlair = true;
 
-    public itemClicked(index: number, first: boolean) {
+    constructor() {
+        super();
+
+        this.toplevel.onkeydown = (e: KeyboardEvent) => {
+            let handled = false;
+            if (e.code === 'ArrowUp')
+                handled = this.navigate(-1);
+            else if (e.code === 'ArrowDown')
+                handled = this.navigate(1);
+            if (handled) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+        };
+    }
+
+    private navigate(direction: number): boolean {
+        const n = this.getNumItems();
+        let newIndex = this.highlightedIndex;
+        // If it's not visible, reset us to the beginning/end.
+        if (newIndex === -1 || newIndex >= n || !this.itemIsVisible(this.getOuterForIndex(newIndex))) {
+            if (direction > 0)
+                newIndex = 0;
+            else if (direction < 0)
+                newIndex = n - 1;
+        } else {
+            newIndex += direction;
+        }
+        while (true) {
+            if (this.focusItem(newIndex))
+                break;
+            newIndex += direction;
+            if (newIndex < 0 || newIndex >= n - 1)
+                break;
+        }
+        return true;
+    }
+
+    public setItems(items: ScrollSelectItem[]): void {
+        this.highlightedIndex = -1;
+        super.setItems(items);
+    }
+
+    public itemFocused(index: number, first: boolean) {
         this.selectItem(index);
     }
 
     public selectItem(index: number) {
+        this.setHighlighted(index);
         this.onselectionchange(index);
     }
 
@@ -419,19 +486,12 @@ export class SingleSelect extends ScrollSelect {
 
     protected syncInternalFlairs(): void {
         const flairs = [...this.flairs];
-        if (this.highlightedIndex >= 0) {
+        if (this.setHighlightFlair && this.highlightedIndex >= 0) {
             const flair = ensureFlairIndex(flairs, this.highlightedIndex);
             flair.background = HIGHLIGHT_COLOR;
             flair.color = 'black';
         }
         this.setInternalFlairs(flairs);
-    }
-}
-
-export class SimpleSingleSelect extends SingleSelect {
-    public selectItem(index: number) {
-        super.selectItem(index);
-        this.setHighlighted(index);
     }
 }
 
@@ -478,7 +538,7 @@ export class MultiSelect extends ScrollSelect {
         this.onitemchanged(index, this.itemIsOn[index]);
     }
 
-    public itemClicked(index: number, first: boolean) {
+    public itemFocused(index: number, first: boolean) {
         if (first)
             this.itemShouldBeOn = !this.itemIsOn[index];
         this.setItemIsOn(index, this.itemShouldBeOn);
@@ -713,6 +773,7 @@ class SceneSelect extends Panel {
         this.setTitle(OPEN_ICON, 'Games');
 
         this.searchEntry = new TextEntry();
+        this.searchEntry.elem.style.background = 'rgba(0, 0, 0, 1.0)';
         this.searchEntry.setIcon(SEARCH_ICON);
         this.searchEntry.setPlaceholder('Search...');
         this.searchEntry.ontext = (searchString: string) => {
@@ -725,6 +786,7 @@ class SceneSelect extends Panel {
         this.contents.appendChild(this.sceneGroupList.elem);
 
         this.sceneDescList = new SingleSelect();
+        this.sceneDescList.setHighlightFlair = false;
         this.sceneDescList.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
         this.sceneDescList.elem.style.width = '500px';
         this.sceneDescList.setHeight('372px');
@@ -740,13 +802,23 @@ class SceneSelect extends Panel {
     }
 
     protected onKeyDown(e: KeyboardEvent): void {
-        super.onKeyDown(e);
+        if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+            this.sceneGroupList.elem.onkeydown(e);
+        } else {
+            const textarea = this.searchEntry.textfield.textarea;
+            textarea.focus();
+            textarea.onkeydown(e);
+        }
+
         if (e.defaultPrevented)
             return;
+        super.onKeyDown(e);
+    }
 
-        const textarea = this.searchEntry.textfield.textarea;
-        textarea.focus();
-        textarea.onkeydown(e);
+    public expandAndFocus(): void {
+        this.setExpanded(true);
+        this.setAutoClosed(false);
+        this.elem.focus();
     }
 
     private _setSearchString(str: string): void {
@@ -773,7 +845,7 @@ class SceneSelect extends Panel {
         }
 
         let lastGroupHeaderVisible = false;
-        let currentGroupExplicitlyVisible = false;
+        let selectedGroupExplicitlyVisible = false;
         for (let i = 0; i < this.sceneGroups.length; i++) {
             const item = this.sceneGroups[i];
             if (typeof item === 'string') {
@@ -793,8 +865,8 @@ class SceneSelect extends Panel {
                     if (!visible && matchRegExps(n, item.name))
                         visible = true;
 
-                    if (item === this.currentSceneGroup)
-                        currentGroupExplicitlyVisible = visible;
+                    if (item === this.selectedSceneGroup)
+                        selectedGroupExplicitlyVisible = visible;
 
                     // Now check for any children.
                     if (!visible) {
@@ -810,7 +882,7 @@ class SceneSelect extends Panel {
         lastDescHeaderVisible = false;
         for (let i = 0; i < this.sceneDescs.length; i++) {
             let visible;
-            if (!visible && currentGroupExplicitlyVisible)
+            if (!visible && selectedGroupExplicitlyVisible)
                 visible = true;
             if (!visible)
                 visible = matchSceneDesc(this.sceneDescs[i]);
@@ -825,6 +897,10 @@ class SceneSelect extends Panel {
         this.selectedSceneGroup = sceneGroup;
         this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;
+
+        const index = this.sceneGroups.indexOf(this.currentSceneGroup);
+        this.sceneGroupList.setHighlighted(index);
+
         this.syncSceneDescs();
     }
 
@@ -868,20 +944,11 @@ class SceneSelect extends Panel {
 
     private syncFlairs() {
         const sceneGroupFlairs: Flair[] = [];
-
         const currentGroupIndex = this.sceneGroups.indexOf(this.currentSceneGroup);
         if (currentGroupIndex >= 0) {
             const flair = ensureFlairIndex(sceneGroupFlairs, currentGroupIndex);
             flair.background = '#666';
         }
-
-        const selectedGroupIndex = this.sceneGroups.indexOf(this.selectedSceneGroup);
-        if (selectedGroupIndex >= 0) {
-            const flair = ensureFlairIndex(sceneGroupFlairs, selectedGroupIndex);
-            flair.background = HIGHLIGHT_COLOR;
-            flair.color = 'white';
-        }
-
         this.sceneGroupList.setFlairs(sceneGroupFlairs);
 
         const sceneDescFlairs: Flair[] = [];
@@ -905,8 +972,6 @@ class SceneSelect extends Panel {
     private syncSceneDescs() {
         if (this.selectedSceneGroup)
             this.setSceneDescs(this.selectedSceneGroup.sceneDescs);
-        else if (this.currentSceneGroup)
-            this.setSceneDescs(this.currentSceneGroup.sceneDescs);
         else
             this.setSceneDescs([]);
     }
@@ -952,11 +1017,10 @@ export class SaveStatesPanel extends Panel {
         this.contents.appendChild(this.currentShareURL.elem);
     }
 
-    public expandAndSelect(): void {
+    public expandAndFocus(): void {
         this.setExpanded(true);
         this.setAutoClosed(false);
         this.currentShareURL.textarea.focus({ preventScroll: true });
-        this.currentShareURL.selectAll();
     }
 
     public setSaveState(saveState: string) {

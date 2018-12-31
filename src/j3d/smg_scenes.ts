@@ -241,7 +241,7 @@ class SMGRenderer implements Viewer.MainScene {
         const scenarioNames = this.scenarioData.records.map((record) => {
             return BCSV.getField<string>(this.scenarioData, record, 'ScenarioName');
         });
-        const scenarioSelect = new UI.SimpleSingleSelect();
+        const scenarioSelect = new UI.SingleSelect();
         scenarioSelect.setStrings(scenarioNames);
         scenarioSelect.onselectionchange = (index: number) => {
             this.setCurrentScenario(index);
