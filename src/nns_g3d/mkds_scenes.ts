@@ -107,8 +107,10 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
 
             const courseBtpFile = courseNARC.files.find((file) => file.path === '/course_model.nsbtp');
             const courseBtp = courseBtpFile !== undefined ? NSBTP.parse(courseBtpFile.buffer) : null;
-            if (courseBtp !== null)
-                courseRenderer.bindPAT0(device, courseBtp.pat0);
+            if (courseBtp !== null) {
+                assert(courseBtp.pat0.length === 0);
+                courseRenderer.bindPAT0(device, courseBtp.pat0[0]);
+            }
 
             if (skyboxRenderer !== null) {
                 const skyboxBtaFile = courseNARC.files.find((file) => file.path === '/course_model_V.nsbta');
