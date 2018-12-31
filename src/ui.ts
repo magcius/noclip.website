@@ -640,8 +640,8 @@ export class Panel implements Widget {
         this.expanded = newExpanded;
         this.syncHeaderStyle();
         this.syncSize();
-        if (this.expanded)
-            this.elem.focus();
+        if (!this.expanded)
+            document.body.focus();
         return true;
     }
 
@@ -955,7 +955,8 @@ export class SaveStatesPanel extends Panel {
     public expandAndSelect(): void {
         this.setExpanded(true);
         this.setAutoClosed(false);
-        this.currentShareURL.textarea.focus();
+        this.currentShareURL.textarea.focus({ preventScroll: true });
+        this.currentShareURL.selectAll();
     }
 
     public setSaveState(saveState: string) {
