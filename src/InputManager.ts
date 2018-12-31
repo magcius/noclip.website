@@ -24,6 +24,7 @@ export default class InputManager {
 
     constructor(toplevel: HTMLElement) {
         this.toplevel = toplevel;
+        this.toplevel.tabIndex = -1;
 
         this.keysDown = new Map<string, boolean>();
         window.addEventListener('keydown', this._onKeyDown);

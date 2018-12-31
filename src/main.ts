@@ -327,8 +327,15 @@ class Main {
         if (this.currentSceneDesc === undefined) {
             // Load the state from session storage.
             const currentDescId = this.saveManager.getCurrentSceneDescId();
-            if (currentDescId !== null)
-                this._loadSceneDescById(currentDescId);
+            if (currentDescId !== null) {
+                this._loadSceneDescById(currentDescId).then(() => {
+                    // Load save slot 0.
+                    const key = this._getSaveStateSlotKey(0);
+                    const sceneState = this.saveManager.loadState(key);
+                    if (sceneState !== null)
+                        this._loadSceneSaveState(sceneState);
+                });
+            }
         }
 
         if (this.currentSceneDesc === undefined) {
@@ -351,6 +358,8 @@ class Main {
             this._toggleUI();
         if (inputManager.isKeyDownEventTriggered('Numpad9'))
             this._downloadTextures();
+        if (inputManager.isKeyDownEventTriggered('KeyG'))
+            this.ui.saveStatesPanel.expandAndSelect();
         for (let i = 1; i <= 9; i++) {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
                 if (this.currentSceneDesc) {
@@ -538,10 +547,6 @@ class Main {
         const progressable = this.sceneLoader.loadSceneDesc(sceneDesc);
         (progressable as Progressable<any>).then(() => {
             this.saveManager.setCurrentSceneDescId(this._getCurrentSceneDescId());
-            const key = this._getSaveStateSlotKey(0);
-            const sceneState = this.saveManager.loadState(key);
-            if (sceneState !== null)
-                this._loadSceneSaveState(sceneState);
         });
         this.ui.sceneSelect.setLoadProgress(progressable.progress);
         progressable.onProgress = () => {

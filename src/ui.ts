@@ -110,7 +110,7 @@ export class TextEntry implements Widget {
     public ontext: (string: string) => void | null = null;
 
     protected toplevel: HTMLElement;
-    protected textfield: TextField;
+    public textfield: TextField;
     protected clearButton: HTMLElement;
     protected svgIcon: SVGSVGElement;
 
@@ -127,8 +127,10 @@ export class TextEntry implements Widget {
         textarea.style.backgroundPosition = '10px 14px';
         textarea.style.lineHeight = '20px';
         textarea.onkeydown = (e) => {
-            if (e.code === 'Escape')
+            if (e.code === 'Escape') {
                 this.clear();
+                textarea.blur();
+            }
         };
         textarea.oninput = () => {
             this.textChanged();
@@ -238,9 +240,11 @@ export abstract class ScrollSelect implements Widget {
                 outer.style.paddingLeft = hasHeader ? '20px' : '';
 
                 const selector = document.createElement('div');
+                selector.tabIndex = -1;
                 selector.classList.add('selector');
                 selector.style.display = 'list-item';
                 selector.style.cursor = 'pointer';
+                selector.style.outline = 'none';
                 outer.appendChild(selector);
                 const textSpan = document.createElement('span');
                 textSpan.classList.add('text');
@@ -528,6 +532,11 @@ export class Panel implements Widget {
         this.toplevel.style.gridGap = '20px';
         this.toplevel.style.transition = '.25s ease-out';
         this.toplevel.style.alignItems = 'start';
+        this.toplevel.style.outline = 'none';
+        this.toplevel.onkeydown = this.onKeyDown.bind(this);
+        this.toplevel.onmouseover = this.syncSize.bind(this);
+        this.toplevel.onmouseout = this.syncSize.bind(this);
+        this.toplevel.tabIndex = -1;
 
         this.mainPanel = document.createElement('div');
         this.mainPanel.style.overflow = 'hidden';
@@ -556,8 +565,6 @@ export class Panel implements Widget {
         this.header.style.alignItems = 'center';
         this.header.style.justifyItems = 'center';
         this.header.style.gridAutoFlow = 'column';
-        this.toplevel.onmouseover = this.syncSize.bind(this);
-        this.toplevel.onmouseout = this.syncSize.bind(this);
         this.header.onclick = () => {
             if (this.ignoreAutoCloseTimeout > 0) {
                 this.ignoreAutoCloseTimeout = 0;
@@ -573,6 +580,14 @@ export class Panel implements Widget {
         this.mainPanel.appendChild(this.contents);
 
         this.elem = this.toplevel;
+    }
+
+    protected onKeyDown(e: KeyboardEvent): void {
+        if (e.code === 'Escape' && this.expanded) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.setExpanded(false);
+        }
     }
 
     private syncSize() {
@@ -625,14 +640,16 @@ export class Panel implements Widget {
         this.expanded = newExpanded;
         this.syncHeaderStyle();
         this.syncSize();
-        if (!this.expanded)
-            document.body.focus();
+        if (this.expanded)
+            this.elem.focus();
         return true;
     }
 
     public setExpanded(v: boolean) {
         this.manuallyExpanded = v;
         this.syncExpanded();
+        if (this.expanded)
+            this.elem.focus();
     }
 
     private toggleExpanded() {
@@ -720,6 +737,16 @@ class SceneSelect extends Panel {
         this.sceneDescList.onselectionchange = (i: number) => {
             this.selectSceneDesc(i);
         };
+    }
+
+    protected onKeyDown(e: KeyboardEvent): void {
+        super.onKeyDown(e);
+        if (e.defaultPrevented)
+            return;
+
+        const textarea = this.searchEntry.textfield.textarea;
+        textarea.focus();
+        textarea.onkeydown(e);
     }
 
     private _setSearchString(str: string): void {
@@ -919,13 +946,19 @@ export class SaveStatesPanel extends Panel {
 
         this.currentShareURL = new TextField();
         this.currentShareURL.textarea.readOnly = true;
-        this.currentShareURL.textarea.onclick = () => {
+        this.currentShareURL.textarea.onfocus = () => {
             this.currentShareURL.selectAll();
         };
         this.contents.appendChild(this.currentShareURL.elem);
     }
 
-    setSaveState(saveState: string) {
+    public expandAndSelect(): void {
+        this.setExpanded(true);
+        this.setAutoClosed(false);
+        this.currentShareURL.textarea.focus();
+    }
+
+    public setSaveState(saveState: string) {
         this.currentShareURL.setValue(buildShareURL(saveState));
     }
 }
