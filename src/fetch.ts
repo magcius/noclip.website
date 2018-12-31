@@ -2,8 +2,6 @@
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
 
-export const BASE_URL = `https://noclip.website/`;
-
 export interface NamedArrayBufferSlice extends ArrayBufferSlice {
     name: string;
 }
