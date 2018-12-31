@@ -23,6 +23,8 @@ export default class InputManager {
     public onisdraggingchanged: () => void | null = null;
 
     constructor(toplevel: HTMLElement) {
+        document.body.tabIndex = -1;
+
         this.toplevel = toplevel;
         this.toplevel.tabIndex = -1;
 
@@ -56,6 +58,10 @@ export default class InputManager {
         this.keysDown.forEach((v, k) => {
             this.keysDown.set(k, false);
         });
+    }
+
+    public focusViewer() {
+        this.toplevel.focus();
     }
 
     private _hasFocus() {
