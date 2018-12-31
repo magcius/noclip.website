@@ -77,7 +77,7 @@ function parsePAT0(buffer: ArrayBufferSlice): PAT0 {
     return { duration, entries };
 }
 
-export function parse(buffer: ArrayBufferSlice): BTP0 {
+export function parse(buffer: ArrayBufferSlice, index: number = 0): BTP0 {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x06) === 'BTP0\xFF\xFE');
@@ -91,8 +91,8 @@ export function parse(buffer: ArrayBufferSlice): BTP0 {
     assert(readString(buffer, 0x14, 0x04) === 'PAT0');
 
     const entries = parseResDict(buffer, 0x1C);
-    assert(entries.length === 1);
-    const pat0 = parsePAT0(buffer.slice(0x14 + entries[0].value));
+    assert(entries.length >= 1);
+    const pat0 = parsePAT0(buffer.slice(0x14 + entries[index].value));
     return { pat0 };
 }
 
