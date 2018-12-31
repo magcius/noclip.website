@@ -7,17 +7,15 @@ import * as NSBTA from "./nsbta";
 import * as NSBTP from "./nsbtp";
 import * as NITRO_GX from '../sm64ds/nitro_gx';
 import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../sm64ds/nitro_tex";
-import { NITRO_Program, Command_VertexData } from '../sm64ds/render';
+import { NITRO_Program, Command_VertexData, VertexData } from '../sm64ds/render';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { TEX0, TEX0Texture } from "./nsbtx";
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
+import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
-import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import AnimationController from "../AnimationController";
 import { nArray } from "../util";
-import { ObjectRepresentation } from "./nsmbds_scenes";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -180,12 +178,14 @@ class Command_Node {
 
 const scratchMat4 = mat4.create();
 class Command_Shape {
+    private vertexData: VertexData;
     public vertexDataCommand: Command_VertexData;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, private materialCommand: Command_Material, public nodeCommand: Command_Node, public shape: NSBMD.MDL0Shape) {
         const baseCtx = materialCommand.baseCtx;
-        const vertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx);
-        this.vertexDataCommand = new Command_VertexData(device, renderInstBuilder, vertexData, shape.name);
+        const nitroVertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx);
+        this.vertexData = new VertexData(device, nitroVertexData);
+        this.vertexDataCommand = new Command_VertexData(renderInstBuilder, this.vertexData, shape.name);
     }
 
     private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
@@ -211,7 +211,7 @@ class Command_Shape {
     }
 
     public destroy(device: GfxDevice): void {
-        this.vertexDataCommand.destroy(device);
+        this.vertexData.destroy(device);
     }
 }
 
@@ -371,5 +371,7 @@ export class MDL0Renderer {
         this.packetParamsBuffer.destroy(device);
         for (let i = 0; i < this.materialCommands.length; i++)
             this.materialCommands[i].destroy(device);
+        for (let i = 0; i < this.shapeCommands.length; i++)
+            this.shapeCommands[i].destroy(device);
     }
 }
