@@ -40,6 +40,7 @@ import * as MKWII from './rres/mkwii_scenes';
 import * as TTYD from './ttyd/scenes';
 import * as SPM from './ttyd/spm_scenes';
 import * as MKDS from './nns_g3d/mkds_scenes';
+import * as NSMBDS from './nns_g3d/nsmbds_scenes';
 import * as Z_BOTW from './z_botw/scenes';
 import * as SMO from './fres_nx/smo_scenes';
 
@@ -71,6 +72,7 @@ const sceneGroups = [
     "Nintendo DS",
     MKDS.sceneGroup,
     SM64DS.sceneGroup,
+    NSMBDS.sceneGroup,
     "Nintendo 3DS",
     LM3D.sceneGroup,
     MM3D.sceneGroup,

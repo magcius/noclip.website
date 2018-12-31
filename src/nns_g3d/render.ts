@@ -14,9 +14,10 @@ import { TEX0, TEX0Texture } from "./nsbtx";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
-import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import AnimationController from "../AnimationController";
 import { nArray } from "../util";
+import { ObjectRepresentation } from "./nsmbds_scenes";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -326,6 +327,14 @@ export class MDL0Renderer {
                     destIdx = view.getUint8(idx++);
                 if (opt & 0x02)
                     srcIdx = view.getUint8(idx++);
+            }  
+            else if (cmd === Op.BB) {
+                const nodeId = view.getUint8(idx++);
+                let destIdx = -1, srcIdx = -1;
+                if (opt & 0x01)
+                    destIdx = view.getUint8(idx++);
+                if (opt & 0x02)
+                    srcIdx = view.getUint8(idx++);
             } else if (cmd === Op.POSSCALE) {
                 //
             } else {
@@ -412,5 +421,52 @@ export class CourseRenderer implements Viewer.Scene_Device {
         this.courseRenderer.destroy(device);
         if (this.skyboxRenderer !== null)
             this.skyboxRenderer.destroy(device);
+    }
+}
+
+export class WorldMapRenderer implements Viewer.Scene_Device {
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
+    public textureHolder = new FakeTextureHolder();
+
+    constructor(device: GfxDevice, public objs :ObjectRepresentation[]) {
+        this.objs.forEach(element => {
+            this.textureHolder.viewerTextures.concat(element.renderer.viewerTextures);
+            element.renderer.addToViewRenderer(device, this.viewRenderer);
+            element.applyAnimations(device);
+        });
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.objs.forEach(element => {
+            element.renderer.prepareToRender(hostAccessPass, viewerInput);
+        });
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        // First, render the skybox.
+        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, transparentBlackFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, MKDSPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, MKDSPass.MAIN);
+        return mainPassRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
+
+        this.objs.forEach(element => {
+            element.renderer.destroy(device);
+        });
     }
 }
