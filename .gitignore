@@ -55,6 +55,7 @@ parcel/
 
 dist/*
 !dist/data
+!dist/.htaccess
 post*.html
 
 deploy_rsa
