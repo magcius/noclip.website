@@ -181,12 +181,12 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
 
             objects.forEach((element) => {
                 if (element.type == WorldMapObjType.ROUTE_POINT) {
-                    const obj = new ObjectRepresentation(device, mapPointBMD, null, null, mapPointBTP.pat0[2]);
+                    const obj = new ObjectRepresentation(device, mapPointBMD, null, null, mapPointBTP.pat0[3]);
                     mat4.scale(obj.renderer.modelMatrix, obj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
                     mat4.translate(obj.renderer.modelMatrix, obj.renderer.modelMatrix, element.position);
                     representations.push(obj);
                 } else if (element.type == WorldMapObjType.START_POINT) {
-                    const obj = new ObjectRepresentation(device, mapPointBMD, null, null, mapPointBTP.pat0[3]);
+                    const obj = new ObjectRepresentation(device, mapPointBMD, null, null, mapPointBTP.pat0[2]);
                     mat4.scale(obj.renderer.modelMatrix, obj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
                     mat4.translate(obj.renderer.modelMatrix, obj.renderer.modelMatrix, element.position);
                     representations.push(obj);
