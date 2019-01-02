@@ -8,7 +8,7 @@ import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import { colorCopy, colorFromRGBA8, colorToRGBA8 } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { RenderFlags as GfxRenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
-import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -1016,22 +1016,22 @@ function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
     }
 }
 
-export function translateRenderFlagsGfx(renderFlags: GfxRenderFlags, material: GXMaterial) {
-    renderFlags.cullMode = translateCullMode(material.cullMode);
-    renderFlags.depthWrite = material.ropInfo.depthWrite;
-    renderFlags.depthCompare = material.ropInfo.depthTest ? translateCompareType(material.ropInfo.depthFunc) : GfxCompareMode.ALWAYS;
-    renderFlags.frontFace = GfxFrontFaceMode.CW;
+export function translateGfxMegaState(megaState: GfxMegaStateDescriptor, material: GXMaterial) {
+    megaState.cullMode = translateCullMode(material.cullMode);
+    megaState.depthWrite = material.ropInfo.depthWrite;
+    megaState.depthCompare = material.ropInfo.depthTest ? translateCompareType(material.ropInfo.depthFunc) : GfxCompareMode.ALWAYS;
+    megaState.frontFace = GfxFrontFaceMode.CW;
 
     if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
-        renderFlags.blendMode = GfxBlendMode.NONE;
+        megaState.blendMode = GfxBlendMode.NONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
-        renderFlags.blendMode = GfxBlendMode.ADD;
-        renderFlags.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
-        renderFlags.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
+        megaState.blendMode = GfxBlendMode.ADD;
+        megaState.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
+        megaState.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.SUBTRACT) {
-        renderFlags.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
-        renderFlags.blendSrcFactor = GfxBlendFactor.ONE;
-        renderFlags.blendDstFactor = GfxBlendFactor.ONE;
+        megaState.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
+        megaState.blendSrcFactor = GfxBlendFactor.ONE;
+        megaState.blendDstFactor = GfxBlendFactor.ONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
         throw new Error("whoops");
     }

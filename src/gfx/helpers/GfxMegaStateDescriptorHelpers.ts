@@ -5,7 +5,7 @@ function resolveField<T>(v: T | undefined, parentV: T): T {
     return v !== undefined ? v : parentV;
 }
 
-export function setMegaState(dst: GfxMegaStateDescriptor, other: Partial<GfxMegaStateDescriptor>): void {
+export function setMegaStateFlags(dst: GfxMegaStateDescriptor, other: Partial<GfxMegaStateDescriptor>): void {
     dst.colorWrite = resolveField(other.colorWrite, dst.colorWrite);
     dst.blendMode = resolveField(other.blendMode, dst.blendMode);
     dst.blendSrcFactor = resolveField(other.blendSrcFactor, dst.blendSrcFactor);
@@ -26,11 +26,11 @@ export function copyMegaState(src: GfxMegaStateDescriptor) {
 
 export function makeMegaState(src: GfxMegaStateDescriptor, other: Partial<GfxMegaStateDescriptor>) {
     const dst = copyMegaState(src);
-    setMegaState(dst, other);
+    setMegaStateFlags(dst, other);
     return dst;
 }
 
-export const defaultMegaState = {
+export const defaultMegaState: GfxMegaStateDescriptor = {
     colorWrite: true,
     blendMode: GfxBlendMode.NONE,
     blendSrcFactor: GfxBlendFactor.ONE,

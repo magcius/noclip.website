@@ -229,7 +229,7 @@ export class GXMaterialHelperGfx {
         // TODO(jstpierre): Cache on RenderHelper?
         const program = new GX_Material.GX_Program(material, materialHacks);
         this.templateRenderInst.gfxProgram = device.createProgram(program);
-        GX_Material.translateRenderFlagsGfx(this.templateRenderInst.setRenderFlags(), material);
+        GX_Material.translateGfxMegaState(this.templateRenderInst.ensureMegaState(), material);
         this.templateRenderInst.samplerBindings = nArray(8, () => null);
         this.programKey = device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey;
         renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);

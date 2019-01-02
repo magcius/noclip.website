@@ -1,8 +1,8 @@
 
-import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice, GfxSamplerBinding, GfxBindingLayoutDescriptor, GfxBufferBinding, GfxProgram, GfxPrimitiveTopology, GfxSampler, GfxBindingsDescriptor } from "../platform/GfxPlatform";
+import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice, GfxSamplerBinding, GfxBindingLayoutDescriptor, GfxBufferBinding, GfxProgram, GfxPrimitiveTopology, GfxSampler, GfxBindingsDescriptor, GfxMegaStateDescriptor } from "../platform/GfxPlatform";
 import { align, assertExists, assert } from "../../util";
 import { GfxRenderBuffer } from "./GfxRenderBuffer";
-import { RenderFlags, RenderFlagsPossibilities } from "../helpers/RenderFlagsHelpers";
+import { RenderFlags } from "../helpers/RenderFlagsHelpers";
 import { TextureMapping } from "../../TextureHolder";
 import { DeviceProgramReflection } from "../../Program";
 import { GfxRenderCache } from "./GfxRenderCache";
@@ -229,11 +229,15 @@ export class GfxRenderInst {
         }
     }
 
-    public setRenderFlags(r: RenderFlagsPossibilities | null = null): RenderFlags {
+    public setRenderFlags(r: Partial<GfxMegaStateDescriptor> | null = null): RenderFlags {
+        this.ensureMegaState();
+        this._renderFlags.set(r);
+        return this._renderFlags;
+    }
+
+    public ensureMegaState(): GfxMegaStateDescriptor {
         if (this._renderFlags === this.parentRenderInst._renderFlags)
             this._renderFlags = new RenderFlags(this.parentRenderInst._renderFlags);
-        if (r !== null)
-            this._renderFlags.set(r);
         return this._renderFlags;
     }
 

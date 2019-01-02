@@ -158,7 +158,7 @@ export class Command_Material {
         this.name = material.name;
         this.program = new GX_Material.GX_Program(material.gxMaterial, hacks);
         this.program.name = this.name;
-        GX_Material.translateRenderFlagsGfx(this.renderFlags = new RenderFlags(), this.material.gxMaterial);
+        GX_Material.translateGfxMegaState(this.renderFlags = new RenderFlags(), this.material.gxMaterial);
     }
 
     public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: GXTextureHolder, materialInstance: MaterialInstance): void {
