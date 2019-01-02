@@ -11,9 +11,9 @@ import { BufferFillerHelper, fillColor } from '../gfx/helpers/UniformBufferHelpe
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstViewRenderer, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { RenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
 import { assert } from '../util';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -205,15 +205,13 @@ export class Scene implements Viewer.Scene_Device {
             { numUniformBuffers: 1, numSamplers: 0 }, // ub_ObjectParams
         ];
 
-        const renderFlags = new RenderFlags();
-        renderFlags.depthWrite = true;
-
+        const megaStateDescriptor = makeMegaState({ depthWrite: true });
         this.pipeline = device.createRenderPipeline({
             topology: GfxPrimitiveTopology.TRIANGLES,
             bindingLayouts: bindingLayouts,
             inputLayout: this.inputLayout,
             program: this.program,
-            megaStateDescriptor: renderFlags.resolveMegaState(),
+            megaStateDescriptor,
         });
 
         this.sceneUniformBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);

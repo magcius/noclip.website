@@ -3,7 +3,7 @@ import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, 
 import * as GX2Texture from './gx2_texture';
 import * as BFRES from './bfres';
 
-import { RenderState, RenderFlags } from '../render';
+import { RenderState } from '../render';
 import { SimpleProgram } from '../Program';
 import { assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -11,9 +11,10 @@ import { Endianness } from '../endian';
 import { CoalescedBuffer, coalesceBuffer } from '../BufferCoalescer';
 import { TextureHolder, LoadedTexture, TextureMapping, getGLTextureFromMapping } from '../TextureHolder';
 import { getTransitionDeviceForWebGL2, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
-import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxFrontFaceMode, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxTextureDescriptor, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxFrontFaceMode, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxTextureDescriptor, GfxTextureDimension, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { GX2Surface } from './gx2_surface';
 import { DecodedSurface, surfaceToCanvas } from './bc_texture';
+import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 class ProgramGambit_UBER extends SimpleProgram {
     public s_a0: WebGLUniformLocation;
@@ -402,7 +403,7 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
 class Command_Material {
     private prog: ProgramGambit_UBER = new ProgramGambit_UBER();
     private samplers: GfxSampler[] = [];
-    private renderFlags: RenderFlags;
+    private renderFlags: GfxMegaStateDescriptor;
     private attribNames: string[];
     private textureAssigns: BFRES.TextureAssign[];
     private textureMapping = new TextureMapping();
@@ -604,16 +605,16 @@ class Command_Material {
         }
     }
 
-    private translateRenderState(renderState: BFRES.RenderState): RenderFlags {
-        const renderFlags = new RenderFlags();
-        renderFlags.frontFace = this.translateFrontFaceMode(renderState.frontFaceMode);
-        renderFlags.depthCompare = renderState.depthTest ? this.translateCompareFunction(renderState.depthCompareFunc) : GfxCompareMode.NEVER;
-        renderFlags.depthWrite = renderState.depthWrite;
-        renderFlags.cullMode = this.translateCullMode(renderState.cullFront, renderState.cullBack);
-        renderFlags.blendMode = this.translateBlendCombine(renderState.blendEnabled, renderState.blendColorCombine);
-        renderFlags.blendDstFactor = this.translateBlendFunction(renderState.blendDstColorFunc);
-        renderFlags.blendSrcFactor = this.translateBlendFunction(renderState.blendSrcColorFunc);
-        return renderFlags;
+    private translateRenderState(renderState: BFRES.RenderState): GfxMegaStateDescriptor {
+        return makeMegaState({
+            frontFace: this.translateFrontFaceMode(renderState.frontFaceMode),
+            depthCompare: renderState.depthTest ? this.translateCompareFunction(renderState.depthCompareFunc) : GfxCompareMode.NEVER,
+            depthWrite: renderState.depthWrite,
+            cullMode: this.translateCullMode(renderState.cullFront, renderState.cullBack),
+            blendMode: this.translateBlendCombine(renderState.blendEnabled, renderState.blendColorCombine),
+            blendDstFactor: this.translateBlendFunction(renderState.blendDstColorFunc),
+            blendSrcFactor: this.translateBlendFunction(renderState.blendSrcColorFunc),
+        });
     }
 }
 

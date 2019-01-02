@@ -4,7 +4,7 @@ import Progressable from '../Progressable';
 import { assert } from '../util';
 import { fetchData } from '../fetch';
 
-import { RenderState, ColorTarget, RenderFlags } from '../render';
+import { RenderState, ColorTarget } from '../render';
 import { FullscreenProgram } from '../Program';
 import * as Viewer from '../viewer';
 
@@ -18,8 +18,9 @@ import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK } from './j3d';
-import { GfxBlendMode, GfxBlendFactor, GfxCompareMode } from '../gfx/platform/GfxPlatform';
+import { GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
+import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 const materialHacks: GXMaterialHacks = {
     alphaLightingFudge: (p) => p.matSource,
@@ -189,7 +190,7 @@ class SMGRenderer implements Viewer.MainScene {
     private bloomColorTarget3: ColorTarget = new ColorTarget();
     private bloomPassBlurProgram: BloomPassBlurProgram = new BloomPassBlurProgram();
     private bloomPassBokehProgram: BloomPassBokehProgram = new BloomPassBokehProgram();
-    private bloomCombineFlags: RenderFlags;
+    private bloomCombineFlags: GfxMegaStateDescriptor;
     private currentScenarioIndex: number = 0;
 
     constructor(
@@ -198,8 +199,7 @@ class SMGRenderer implements Viewer.MainScene {
         private scenarioData: BCSV.Bcsv,
         private zoneNames: string[],
     ) {
-        this.bloomCombineFlags = new RenderFlags();
-        this.bloomCombineFlags.set({
+        this.bloomCombineFlags = makeMegaState({
             depthCompare: GfxCompareMode.ALWAYS,
             blendMode: GfxBlendMode.ADD,
             blendSrcFactor: GfxBlendFactor.ONE,

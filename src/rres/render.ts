@@ -1,5 +1,5 @@
 
-import { RenderState, RenderFlags } from "../render";
+import { RenderState } from "../render";
 import * as BRRES from './brres';
 
 import * as GX_Material from '../gx/gx_material';
@@ -11,7 +11,8 @@ import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
 import { getTransitionDeviceForWebGL2 } from "../gfx/platform/GfxPlatformWebGL2";
-import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxSampler, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
+import { makeMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(gl: WebGL2RenderingContext, rres: BRRES.RRES): void {
@@ -360,7 +361,7 @@ export class MaterialInstance {
 
 const matrixScratch = mat4.create();
 export class Command_Material {
-    private renderFlags: RenderFlags;
+    private renderFlags: GfxMegaStateDescriptor;
     private program: GX_Material.GX_Program;
     private materialParams = new MaterialParams();
     private gfxSamplers: GfxSampler[] = [];
@@ -372,7 +373,7 @@ export class Command_Material {
     ) {
         this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
         this.program.name = this.material.name;
-        GX_Material.translateGfxMegaState(this.renderFlags = new RenderFlags(), this.material.gxMaterial);
+        GX_Material.translateGfxMegaState(this.renderFlags = makeMegaState(), this.material.gxMaterial);
 
         const device = getTransitionDeviceForWebGL2(gl);
         this.translateSamplers(device);

@@ -470,7 +470,7 @@ class FMATInstance {
 
         // Render flags.
         const isTranslucent = program.isTranslucent;
-        this.templateRenderInst.setRenderFlags({
+        this.templateRenderInst.setMegaStateFlags({
             cullMode:       translateCullMode(fmat),
             depthCompare:   translateDepthCompare(fmat),
             depthWrite:     isTranslucent ? false : translateDepthWrite(fmat),

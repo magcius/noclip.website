@@ -7,15 +7,16 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, SceneParams, GXRenderHelper, PacketParams, GXShapeHelper, loadedDataCoalescer, fillSceneParamsFromRenderState, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx } from '../gx/gx_render';
 
-import { RenderFlags, RenderState } from '../render';
+import { RenderState } from '../render';
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx } from '../Camera';
 import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray } from '../util';
 import { AABB } from '../Geometry';
-import { GfxDevice, GfxSampler } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { getTransitionDeviceForWebGL2 } from '../gfx/platform/GfxPlatformWebGL2';
+import { makeMegaState, copyMegaState, defaultMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(gl: WebGL2RenderingContext, bmd: BMD, bmt: BMT = null) {
@@ -151,14 +152,14 @@ export class Command_Material {
 
     public name: string;
 
-    private renderFlags: RenderFlags;
+    private renderFlags: GfxMegaStateDescriptor;
     public program: GX_Material.GX_Program;
 
     constructor(private bmdModel: BMDModel, public material: MaterialEntry, hacks?: GX_Material.GXMaterialHacks) {
         this.name = material.name;
         this.program = new GX_Material.GX_Program(material.gxMaterial, hacks);
         this.program.name = this.name;
-        GX_Material.translateGfxMegaState(this.renderFlags = new RenderFlags(), this.material.gxMaterial);
+        GX_Material.translateGfxMegaState(this.renderFlags = makeMegaState(), this.material.gxMaterial);
     }
 
     public bindMaterial(state: RenderState, renderHelper: GXRenderHelper, textureHolder: GXTextureHolder, materialInstance: MaterialInstance): void {

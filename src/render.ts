@@ -7,9 +7,7 @@ import { BaseProgram, FullscreenProgram, ProgramCache, SimpleProgram } from './P
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from './Camera';
 import { createTransitionDeviceForWebGL2, applyMegaState } from './gfx/platform/GfxPlatformWebGL2';
 import { GfxCompareMode, GfxMegaStateDescriptor, GfxDebugGroup } from './gfx/platform/GfxPlatform';
-import { defaultFlags, RenderFlags } from './gfx/helpers/RenderFlagsHelpers';
-
-export { RenderFlags };
+import { makeMegaState, copyMegaState, defaultMegaState, fullscreenMegaState } from './gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
@@ -131,8 +129,7 @@ export class DepthTarget {
     }
 }
 
-export const depthClearFlags = new RenderFlags();
-depthClearFlags.depthWrite = true;
+export const depthClearFlags = makeMegaState({ depthWrite: true });
 
 export interface RenderStatistics {
     frameStartCPUTime: number;
@@ -173,9 +170,6 @@ class RenderStatisticsTracker {
     }
 }
 
-export const fullscreenFlags = new RenderFlags();
-fullscreenFlags.set({ depthCompare: GfxCompareMode.ALWAYS, depthWrite: false });
-
 // The legacy render system. Mostly replaced by Gfx.
 // TODO(jstpierre): Remove.
 export class RenderState {
@@ -183,7 +177,7 @@ export class RenderState {
 
     // State.
     public currentProgram: BaseProgram | null = null;
-    private currentMegaState: GfxMegaStateDescriptor = new RenderFlags(defaultFlags).resolveMegaState();
+    private currentMegaState: GfxMegaStateDescriptor = copyMegaState(defaultMegaState);
 
     private currentColorTarget: ColorTarget | null = null;
     private currentDepthTarget: DepthTarget | null = null;
@@ -237,18 +231,18 @@ export class RenderState {
 
     public reset() {
         this.useRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
-        this.useFlags(defaultFlags);
+        this.useFlags(defaultMegaState);
         this.camera.newFrame();
     }
 
     // XXX(jstpierre): Design a better API than this.
-    public runFullscreen(flags: RenderFlags | null = null): void {
+    public runFullscreen(flags: GfxMegaStateDescriptor = fullscreenMegaState): void {
         const gl = this.gl;
-        this.useFlags(flags !== null ? flags : fullscreenFlags);
+        this.useFlags(flags);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 
-    private blitFullscreenTexture(colorTexture: WebGLTexture, flags: RenderFlags | null = null) {
+    private blitFullscreenTexture(colorTexture: WebGLTexture, flags: GfxMegaStateDescriptor = fullscreenMegaState) {
         const gl = this.gl;
         this.useProgram(this.fullscreenCopyProgram);
         gl.activeTexture(gl.TEXTURE0);
@@ -257,7 +251,7 @@ export class RenderState {
         this.runFullscreen(flags);
     }
 
-    public blitColorTarget(colorTarget: ColorTarget, flags: RenderFlags | null = null) {
+    public blitColorTarget(colorTarget: ColorTarget, flags: GfxMegaStateDescriptor = fullscreenMegaState) {
         const gl = this.gl;
         const resolvedColorTexture = colorTarget.resolve(gl);
         // Make sure to re-bind our destination RT, since the resolve screws things up...
@@ -359,8 +353,8 @@ export class RenderState {
         gl.uniformMatrix4fv(prog.modelViewLocation, false, scratch);
     }
 
-    public useFlags(flags: RenderFlags) {
+    public useFlags(flags: GfxMegaStateDescriptor) {
         const gl = this.gl;
-        applyMegaState(gl, this.currentMegaState, flags.resolveMegaState());
+        applyMegaState(gl, this.currentMegaState, flags);
     }
 }

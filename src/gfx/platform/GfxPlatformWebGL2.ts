@@ -3,10 +3,10 @@ import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, Gfx
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
-import { DeviceProgram, ProgramCache, DeviceProgramReflection } from '../../Program';
+import { DeviceProgram, ProgramCache } from '../../Program';
 import { FullscreenCopyProgram, RenderState } from '../../render';
 import { assert } from '../../util';
-import { fullscreenFlags, defaultFlags, RenderFlags } from '../helpers/RenderFlagsHelpers';
+import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 interface GfxBufferP_GL extends GfxBuffer {
     gl_buffer_pages: WebGLBuffer[];
@@ -432,7 +432,7 @@ export function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: Gfx
 }
 
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
-    private _fullscreenCopyMegaState = fullscreenFlags.resolveMegaState();
+    private _fullscreenCopyMegaState = fullscreenMegaState;
     private _fullscreenCopyProgram: GfxProgramP_GL;
 
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null;
@@ -441,7 +441,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentRenderTarget: GfxRenderTargetP_GL;
     private _currentPipeline: GfxRenderPipelineP_GL;
     private _currentInputState: GfxInputStateP_GL;
-    private _currentMegaState: GfxMegaStateDescriptor = new RenderFlags(defaultFlags).resolveMegaState();
+    private _currentMegaState: GfxMegaStateDescriptor = copyMegaState(defaultMegaState);
     private _currentSamplers: WebGLSampler[] = [];
     private _currentTextures: WebGLTexture[] = [];
     private _debugGroupStack: GfxDebugGroup[] = [];

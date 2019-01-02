@@ -15,14 +15,12 @@ import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
 import * as water_comparison from './water_comparison';
-import * as cubemap_test from './cubemap_test';
 
 type CreateSceneFunc = (gl: WebGL2RenderingContext, name: string) => Progressable<Viewer.MainScene>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
     "sunshine_water": sunshine_water.createScene,
     "water_comparison": water_comparison.createScene,
-    "cubemap_test": cubemap_test.createScene,
 };
 
 class FsButton {

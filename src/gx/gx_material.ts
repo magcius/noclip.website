@@ -3,11 +3,9 @@
 
 import * as GX from './gx_enum';
 
-import { RenderFlags } from '../render';
 import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import { colorCopy, colorFromRGBA8, colorToRGBA8 } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
-import { RenderFlags as GfxRenderFlags } from '../gfx/helpers/RenderFlagsHelpers';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 
 // TODO(jstpierre): Move somewhere better...

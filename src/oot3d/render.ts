@@ -106,7 +106,7 @@ class MaterialInstance {
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         const programKey = device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey;
         this.templateRenderInst.sortKey = makeSortKeyOpaque(layer, programKey);
-        this.templateRenderInst.setRenderFlags(this.material.renderFlags);
+        this.templateRenderInst.setMegaStateFlags(this.material.renderFlags);
 
         for (let i = 0; i < this.material.textureBindings.length; i++) {
             if (i >= 1) break;

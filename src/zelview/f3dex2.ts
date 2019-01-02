@@ -4,9 +4,10 @@ import { mat4, vec3, vec4 } from 'gl-matrix';
 import * as Render from './render';
 import * as ZELVIEW0 from './zelview0';
 
-import { RenderState, RenderFlags } from '../render';
+import { RenderState } from '../render';
 import * as Viewer from '../viewer';
 import { GfxCompareMode, GfxCullMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
+import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 function extractBits(value: number, offset: number, bits: number) {
     return (value >> offset) & ((1 << bits) - 1);
@@ -298,7 +299,8 @@ function cmd_GEOMETRYMODE(state: State, w0: number, w1: number) {
     state.geometryMode = state.geometryMode & ((~w0) & 0x00FFFFFF) | w1;
     const newMode = state.geometryMode;
 
-    const renderFlags = new RenderFlags();
+    // TODO(jstpierre): Fix this brokenness.
+    const renderFlags = makeMegaState();
 
     const cullFront = newMode & GeometryMode.CULL_FRONT;
     const cullBack = newMode & GeometryMode.CULL_BACK;
@@ -335,7 +337,7 @@ function cmd_SETOTHERMODE_L(state: State, w0: number, w1: number) {
 
     state.otherModeL = (state.otherModeL & ~mask) | (w1 & mask);
 
-    const renderFlags = new RenderFlags();
+    const renderFlags = makeMegaState();
     const newMode = state.otherModeL;
 
     renderFlags.depthCompare = (newMode & OtherModeL.Z_CMP) ? GfxCompareMode.LESS : GfxCompareMode.NEVER;

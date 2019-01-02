@@ -6,7 +6,7 @@ import Progressable from '../Progressable';
 import { readString } from '../util';
 import { fetchData } from '../fetch';
 
-import { RenderState, depthClearFlags, RenderFlags } from '../render';
+import { RenderState, depthClearFlags } from '../render';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
@@ -20,7 +20,7 @@ import { Camera } from '../Camera';
 import { SimpleProgram } from '../Program';
 import { colorToCSS } from '../Color';
 import { ColorKind } from '../gx/gx_render';
-import { defaultFlags } from '../gfx/helpers/RenderFlagsHelpers';
+import { defaultMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 class CameraPos {
     constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
@@ -457,7 +457,7 @@ class WindWakerRenderer implements Viewer.MainScene {
             gl.clear(gl.DEPTH_BUFFER_BIT);
         }
 
-        state.useFlags(defaultFlags);
+        state.useFlags(defaultMegaState);
 
         if (this.seaPlane) {
             // Render sea plane.

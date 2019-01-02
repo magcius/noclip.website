@@ -2,10 +2,10 @@
 import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice, GfxSamplerBinding, GfxBindingLayoutDescriptor, GfxBufferBinding, GfxProgram, GfxPrimitiveTopology, GfxSampler, GfxBindingsDescriptor, GfxMegaStateDescriptor } from "../platform/GfxPlatform";
 import { align, assertExists, assert } from "../../util";
 import { GfxRenderBuffer } from "./GfxRenderBuffer";
-import { RenderFlags } from "../helpers/RenderFlagsHelpers";
 import { TextureMapping } from "../../TextureHolder";
 import { DeviceProgramReflection } from "../../Program";
 import { GfxRenderCache } from "./GfxRenderCache";
+import { setMegaStateFlags, copyMegaState, defaultMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
@@ -106,7 +106,7 @@ export function setSortKeyDepth(sortKey: number, depth: number, maxDepth: number
 function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     dst.sortKey = src.sortKey;
     // TODO(jstpierre): Immutable render flags.
-    dst._renderFlags = src._renderFlags;
+    dst._megaState = src._megaState;
     dst.gfxProgram = src.gfxProgram;
     dst.inputState = src.inputState;
     dst._pipeline = src._pipeline;
@@ -165,7 +165,7 @@ export class GfxRenderInst {
     public _pipeline: GfxRenderPipeline | null = null;
 
     // Pipeline building. The public API to access this is setRenderFlags().
-    public _renderFlags: RenderFlags;
+    public _megaState: GfxMegaStateDescriptor;
 
     // Bindings state.
     public _bindings: GfxBindings[] = [];
@@ -229,16 +229,15 @@ export class GfxRenderInst {
         }
     }
 
-    public setRenderFlags(r: Partial<GfxMegaStateDescriptor> | null = null): RenderFlags {
-        this.ensureMegaState();
-        this._renderFlags.set(r);
-        return this._renderFlags;
+    public setMegaStateFlags(r: Partial<GfxMegaStateDescriptor> | null = null): GfxMegaStateDescriptor {
+        setMegaStateFlags(this.ensureMegaState(), r);
+        return this._megaState;
     }
 
     public ensureMegaState(): GfxMegaStateDescriptor {
-        if (this._renderFlags === this.parentRenderInst._renderFlags)
-            this._renderFlags = new RenderFlags(this.parentRenderInst._renderFlags);
-        return this._renderFlags;
+        if (this._megaState === this.parentRenderInst._megaState)
+            this._megaState = copyMegaState(this.parentRenderInst._megaState);
+        return this._megaState;
     }
 
     public drawTriangles(vertexCount: number, firstVertex: number = 0) {
@@ -276,7 +275,7 @@ export class GfxRenderInst {
             program: this.gfxProgram,
             bindingLayouts: this._bindingLayouts,
             inputLayout,
-            megaStateDescriptor: this._renderFlags.resolveMegaState(),
+            megaStateDescriptor: this._megaState,
         });
     }
 
@@ -381,7 +380,7 @@ export class GfxRenderInstBuilder {
         const baseRenderInst = this.pushTemplateRenderInst();
         baseRenderInst.name = "base render inst";
         baseRenderInst.passMask = 1;
-        baseRenderInst._renderFlags = new RenderFlags();
+        baseRenderInst._megaState = copyMegaState(defaultMegaState);
         baseRenderInst._bindingLayouts = this.bindingLayouts;
     }
 

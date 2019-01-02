@@ -1,10 +1,10 @@
 
-import { assert, readString, hexdump } from '../util';
+import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RenderFlags } from '../render';
 import { mat4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize } from './pica_texture';
-import { GfxCullMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
+import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export interface VatrChunk {
     dataBuffer: ArrayBufferSlice;
@@ -128,7 +128,7 @@ export interface Material {
     textureBindings: TextureBinding[];
     textureMatrices: mat4[];
     alphaTestReference: number;
-    renderFlags: RenderFlags;
+    renderFlags: GfxMegaStateDescriptor;
     isTransparent: boolean;
 }
 
@@ -198,15 +198,15 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const alphaTestEnable = !!view.getUint8(offs + 0x130);
         const alphaTestReference = alphaTestEnable ? (view.getUint8(offs + 0x131) / 0xFF) : -1;
 
-        const renderFlags = new RenderFlags();
         const blendEnable = !!view.getUint8(offs + 0x138);
         const isTransparent = blendEnable;
-        renderFlags.blendSrcFactor = view.getUint16(offs + 0x13C, true) as GfxBlendFactor;
-        renderFlags.blendDstFactor = view.getUint16(offs + 0x13E, true) as GfxBlendFactor;
-        renderFlags.blendMode = blendEnable ? view.getUint16(offs + 0x140, true) as GfxBlendMode : GfxBlendMode.NONE;
-        renderFlags.depthWrite = !isTransparent;
-        renderFlags.cullMode = GfxCullMode.BACK;
-
+        const renderFlags = makeMegaState({
+            blendSrcFactor: view.getUint16(offs + 0x13C, true) as GfxBlendFactor,
+            blendDstFactor: view.getUint16(offs + 0x13E, true) as GfxBlendFactor,
+            blendMode: blendEnable ? view.getUint16(offs + 0x140, true) as GfxBlendMode : GfxBlendMode.NONE,
+            depthWrite: !isTransparent,
+            cullMode: GfxCullMode.BACK,
+        });
         cmb.materials.push({ index: i, textureBindings, textureMatrices, alphaTestReference, renderFlags, isTransparent });
 
         offs += 0x15C;

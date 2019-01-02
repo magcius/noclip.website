@@ -3,13 +3,14 @@ import * as F3DEX2 from './f3dex2';
 import * as ZELVIEW0 from './zelview0';
 
 import Progressable from '../Progressable';
-import { RenderFlags, RenderState } from '../render';
+import { RenderState } from '../render';
 import { SimpleProgram, BaseProgram } from '../Program';
 import { fetchData } from '../fetch';
 
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxBlendFactor, GfxBlendMode, GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export type RenderFunc = (renderState: RenderState) => void;
 
@@ -445,10 +446,11 @@ class Scene implements Viewer.MainScene {
         gl.bindBuffer(gl.ARRAY_BUFFER, collVertBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, coll.verts, gl.STATIC_DRAW);
 
-        const renderFlags = new RenderFlags();
-        renderFlags.blendMode = GfxBlendMode.ADD;
-        renderFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-        renderFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+        const renderFlags = makeMegaState({
+            blendMode: GfxBlendMode.ADD,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+        });
 
         return (state: RenderState) => {
             const prog = this.program_COLL;
@@ -477,12 +479,13 @@ class Scene implements Viewer.MainScene {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wbIdx);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wbIdxData, gl.STATIC_DRAW);
 
-        const renderFlags = new RenderFlags();
-        renderFlags.depthWrite = false;
-        renderFlags.blendMode = GfxBlendMode.ADD;
-        renderFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-        renderFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
-        renderFlags.cullMode = GfxCullMode.NONE;
+        const renderFlags = makeMegaState({
+            depthWrite: false,
+            blendMode: GfxBlendMode.ADD,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            cullMode: GfxCullMode.NONE,
+        });
 
         return (state: RenderState) => {
             const prog = this.program_WATERS;

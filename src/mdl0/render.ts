@@ -3,13 +3,14 @@ import * as MDL0 from './mdl0';
 
 import * as Viewer from '../viewer';
 
-import { RenderFlags, RenderState } from '../render';
+import { RenderState } from '../render';
 import { SimpleProgram } from '../Program';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { OrbitCameraController } from '../Camera';
-import { GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
+import { GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { makeMegaState, defaultMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 class FancyGrid_Program extends SimpleProgram {
     public positionLocation: number;
@@ -85,16 +86,17 @@ class FancyGrid {
     public program: FancyGrid_Program;
 
     private vtxBuffer: WebGLBuffer;
-    private renderFlags: RenderFlags;
+    private renderFlags: GfxMegaStateDescriptor;
 
     constructor(gl: WebGL2RenderingContext) {
         this.program = new FancyGrid_Program();
         this._createBuffers(gl);
 
-        this.renderFlags = new RenderFlags();
-        this.renderFlags.blendMode = GfxBlendMode.ADD;
-        this.renderFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-        this.renderFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+        this.renderFlags = makeMegaState({
+            blendMode: GfxBlendMode.ADD,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+        });
     }
 
     public render(state: RenderState) {
@@ -187,10 +189,8 @@ class Scene implements Viewer.MainScene {
     private clrBuffer: WebGLBuffer;
     private vtxBuffer: WebGLBuffer;
     private idxBuffer: WebGLBuffer;
-    private renderFlags: RenderFlags;
 
     constructor(gl: WebGL2RenderingContext, mdl0: MDL0.MDL0) {
-        this.renderFlags = new RenderFlags();
         this.fancyGrid = new FancyGrid(gl);
         this.program = new MDL0_Program();
         this.mdl0 = mdl0;
@@ -202,7 +202,7 @@ class Scene implements Viewer.MainScene {
 
         state.useProgram(this.program);
         state.bindModelView();
-        state.useFlags(this.renderFlags);
+        state.useFlags(defaultMegaState);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.clrBuffer);
         gl.vertexAttribPointer(this.program.colorLocation, 4, gl.UNSIGNED_BYTE, true, 0, 0);

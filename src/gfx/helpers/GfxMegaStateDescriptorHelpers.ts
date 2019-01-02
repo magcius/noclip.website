@@ -24,9 +24,10 @@ export function copyMegaState(src: GfxMegaStateDescriptor) {
     return Object.assign({}, src);
 }
 
-export function makeMegaState(src: GfxMegaStateDescriptor, other: Partial<GfxMegaStateDescriptor>) {
+export function makeMegaState(other: Partial<GfxMegaStateDescriptor> | null = null, src: GfxMegaStateDescriptor = defaultMegaState) {
     const dst = copyMegaState(src);
-    setMegaStateFlags(dst, other);
+    if (other !== null)
+        setMegaStateFlags(dst, other);
     return dst;
 }
 
@@ -45,4 +46,4 @@ export const defaultMegaState: GfxMegaStateDescriptor = {
     polygonOffset: false,
 };
 
-export const fullscreenMegaState = makeMegaState(defaultMegaState, { depthCompare: GfxCompareMode.ALWAYS, depthWrite: false });
+export const fullscreenMegaState = makeMegaState({ depthCompare: GfxCompareMode.ALWAYS, depthWrite: false }, defaultMegaState);
