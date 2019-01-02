@@ -56,6 +56,7 @@ class FsButton {
     }
 
     private isFS() {
+        // @ts-ignore
         return document.fullscreenElement === document.body;
     }
 
