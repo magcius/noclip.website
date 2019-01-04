@@ -82,6 +82,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
 
 const id = 'mkwii';
 const name = 'Mario Kart Wii';
+// Courses named and organized by Starschulz
 const sceneDescs = [
     "Mushroom Cup",
     new MarioKartWiiSceneDesc('beginner_course', "Luigi Circuit"),

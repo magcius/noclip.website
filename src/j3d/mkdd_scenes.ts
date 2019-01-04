@@ -160,23 +160,35 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-const sceneDescs: Viewer.SceneDesc[] = [
+// Courses named and organized by Starschulz
+const sceneDescs = [
+    "Luigi Circuit",
     new MKDDSceneDesc(`Luigi Circuit`, 'Luigi.arc'),
     new MKDDSceneDesc(`Peach Beach`, 'Peach.arc'),
     new MKDDSceneDesc(`Baby Park`, 'BabyLuigi.arc'),
     new MKDDSceneDesc(`Dry Dry Desert`, 'Desert.arc'),
+    "Flower Cup",
     new MKDDSceneDesc(`Mushroom Bridge`, 'Nokonoko.arc'),
     new MKDDSceneDesc(`Mario Circuit`, 'Mario.arc'),
     new MKDDSceneDesc(`Daisy Cruiser`, 'Daisy.arc'),
     new MKDDSceneDesc(`Waluigi Stadium`, 'Waluigi.arc'),
+    "Star Cup",
     new MKDDSceneDesc(`Sherbet Land`, 'Snow.arc'),
     new MKDDSceneDesc(`Mushroom City`, 'Patapata.arc'),
     new MKDDSceneDesc(`Yoshi Circuit`, 'Yoshi.arc'),
     new MKDDSceneDesc(`DK Mountain`, 'Donkey.arc'),
+    "Special Cup",
     new MKDDSceneDesc(`Wario Colosseum`, 'Wario.arc'),
     new MKDDSceneDesc(`Dino Dino Jungle`, 'Diddy.arc'),
     new MKDDSceneDesc(`Bowser's Castle`, 'Koopa.arc'),
     new MKDDSceneDesc(`Rainbow Road`, 'Rainbow.arc'),
+    "Battle Courses",
+    new MKDDSceneDesc(`Cookie Land`, 'Mini7.arc'),
+    new MKDDSceneDesc(`Block City`, 'Mini3.arc'),
+    new MKDDSceneDesc(`Luigi's Mansion`, 'Mini1.arc'),
+    new MKDDSceneDesc(`Nintendo GameCube`, 'Mini2.arc'),
+    new MKDDSceneDesc(`Pipe Plaza`, 'Mini8.arc'),
+    new MKDDSceneDesc(`Tilt-a-Kart`, 'Mini5.arc'),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
