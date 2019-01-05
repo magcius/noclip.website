@@ -1100,7 +1100,7 @@ export const enum BillboardMode {
     PERSP_Y,
 }
 
-interface MDL0_NodeEntry {
+export interface MDL0_NodeEntry {
     name: string;
     id: number;
     mtxId: number;

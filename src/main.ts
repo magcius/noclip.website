@@ -60,6 +60,7 @@ import { GlobalSaveManager } from './SaveManager';
 
 const sceneGroups = [
     "Wii",
+    ELB.sceneGroup,
     MKWII.sceneGroup,
     SMG.sceneGroup,
     SPM.sceneGroup,
@@ -135,17 +136,17 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.zar') || file.name.endsWith('.gar'))
             return loadFileAsPromise(file).then((buffer) => Grezzo3DS.createSceneFromZARBuffer(device, buffer));
 
+        if (file.name.endsWith('.arc'))
+            return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESRendererFromU8Archive(device, buffer));
+
+        if (file.name.endsWith('.brres'))
+            return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESRendererFromBRRES(device, buffer));
+
         return null;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<MainScene> {
         const file = this.file;
-
-        if (file.name.endsWith('.brres'))
-            return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESSceneFromBuffer(gl, buffer));
-
-        if (file.name.endsWith('.arc'))
-            return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESSceneFromU8Buffer(gl, buffer));
 
         if (file.name.endsWith('.bfres'))
             return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(gl, buffer));

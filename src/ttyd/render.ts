@@ -213,6 +213,7 @@ class Command_Batch {
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private materialCommand: Command_Material, private nodeCommand: Command_Node, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffers) {
         this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
         this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder, materialCommand.templateRenderInst);
+        this.renderInst.setSamplerBindingsInherit();
         this.renderInst.name = nodeCommand.namePath;
         // Pull in render flags on the node itself.
         this.renderInst.setMegaStateFlags(nodeCommand.node.renderFlags);

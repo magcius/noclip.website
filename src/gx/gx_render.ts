@@ -354,6 +354,7 @@ export class GXRenderHelperGfx {
         this.renderInstBuilder = new GfxRenderInstBuilder(device, GX_Material.GX_Program.programReflection, bindingLayouts, [ this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer ]);
         // Create our scene buffer slot.
         this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
+        this.templateRenderInst.name = 'gx render helper';
         this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_SceneParams);
     }
 

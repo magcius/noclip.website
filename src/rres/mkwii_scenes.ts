@@ -12,30 +12,42 @@ import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
-import { RenderState, depthClearFlags } from '../render';
 import AnimationController from '../AnimationController';
+import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
-class MarioKartRenderer implements Viewer.MainScene {
+const enum MKWiiPass { MAIN = 0x01, SKYBOX = 0x02 }
+
+class MarioKartWiiRenderer implements Viewer.Scene_Device {
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
+
     public textureHolder: RRESTextureHolder = new RRESTextureHolder();
+    public renderHelper: GXRenderHelperGfx;
     private animationController: AnimationController;
 
     private skyboxRenderer: MDL0ModelInstance;
     private courseRenderer: MDL0ModelInstance;
 
-    constructor(gl: WebGL2RenderingContext, public courseRRES: BRRES.RRES, public skyboxRRES: BRRES.RRES) {
+    constructor(device: GfxDevice, public courseRRES: BRRES.RRES, public skyboxRRES: BRRES.RRES) {
+        this.renderHelper = new GXRenderHelperGfx(device);
         this.animationController = new AnimationController();
 
-        this.textureHolder.addRRESTextures(gl, skyboxRRES);
-        this.textureHolder.addRRESTextures(gl, courseRRES);
+        this.textureHolder.addRRESTextures(device, skyboxRRES);
+        this.textureHolder.addRRESTextures(device, courseRRES);
 
         assert(skyboxRRES.mdl0.length === 1);
-        const skyboxModel = new MDL0Model(gl, skyboxRRES.mdl0[0]);
-        this.skyboxRenderer = new MDL0ModelInstance(gl, this.textureHolder, skyboxModel, 'vrbox');
+        const skyboxModel = new MDL0Model(device, this.renderHelper, skyboxRRES.mdl0[0]);
+        this.skyboxRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, skyboxModel, 'vrbox');
         this.skyboxRenderer.isSkybox = true;
+        this.skyboxRenderer.passMask = MKWiiPass.SKYBOX;
 
         assert(courseRRES.mdl0.length === 1);
-        const courseModel = new MDL0Model(gl, courseRRES.mdl0[0]);
-        this.courseRenderer = new MDL0ModelInstance(gl, this.textureHolder, courseModel, 'course');
+        const courseModel = new MDL0Model(device, this.renderHelper, courseRRES.mdl0[0]);
+        this.courseRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, courseModel, 'course');
+        this.courseRenderer.passMask = MKWiiPass.MAIN;
 
         // Mario Kart Wii courses appear to be very, very big. Scale them down a bit.
         const scaleFactor = 0.1;
@@ -45,37 +57,58 @@ class MarioKartRenderer implements Viewer.MainScene {
         // Bind animations.
         this.skyboxRenderer.bindRRESAnimations(this.animationController, skyboxRRES);
         this.courseRenderer.bindRRESAnimations(this.animationController, courseRRES);
+
+        this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.textureHolder.destroy(gl);
+    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.renderHelper.fillSceneParams(viewerInput);
+        this.skyboxRenderer.prepareToRender(this.renderHelper, viewerInput);
+        this.courseRenderer.prepareToRender(this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(hostAccessPass);
     }
 
-    public render(state: RenderState): void {
-        const gl = state.gl;
-        this.animationController.updateTime(state.time);
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.animationController.updateTime(viewerInput.time);
 
-        this.skyboxRenderer.render(state);
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
 
-        state.useFlags(depthClearFlags);
-        gl.clear(gl.DEPTH_BUFFER_BIT);
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        // First, render the skybox.
+        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, MKWiiPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, MKWiiPass.MAIN);
+        return mainPassRenderer;
+    }
 
-        this.courseRenderer.render(state);
+    public destroy(device: GfxDevice): void {
+        this.textureHolder.destroyGfx(device);
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
+
+        this.courseRenderer.destroy(device);
+        this.skyboxRenderer.destroy(device);
     }
 }
 
 class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         return fetchData(`data/mkwii/${this.id}.szs`).then((buffer: ArrayBufferSlice) => {
             return Yaz0.decompress(buffer);
-        }).then((buffer: ArrayBufferSlice) => {
+        }).then((buffer: ArrayBufferSlice): Viewer.Scene_Device => {
             const arch = U8.parse(buffer);
             const courseRRES = BRRES.parse(arch.findFile('./course_model.brres').buffer);
             const skyboxRRES = BRRES.parse(arch.findFile('./vrcorn_model.brres').buffer);
-            const scene = new MarioKartRenderer(gl, courseRRES, skyboxRRES);
-            return scene;
+            return new MarioKartWiiRenderer(device, courseRRES, skyboxRRES);
         });
     }
 }

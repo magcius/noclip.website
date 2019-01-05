@@ -14,32 +14,44 @@ import { RenderState } from '../render';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
 import AnimationController from '../AnimationController';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 const materialHacks: GXMaterialHacks = {
     colorLightingFudge: (p) => `${p.matSource}`,
     alphaLightingFudge: (p) => '1.0',
 };
 
-export class BasicRRESScene implements Viewer.MainScene {
-    public textureHolder: RRESTextureHolder;
+export class BasicRRESRenderer implements Viewer.Scene_Device {
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
     public models: MDL0ModelInstance[] = [];
-    public animationController: AnimationController;
 
-    constructor(gl: WebGL2RenderingContext, public stageRRESes: BRRES.RRES[]) {
+    public textureHolder: RRESTextureHolder = new RRESTextureHolder();
+    public renderHelper: GXRenderHelperGfx;
+    private animationController: AnimationController;
+
+    constructor(device: GfxDevice, public stageRRESes: BRRES.RRES[]) {
+        this.renderHelper = new GXRenderHelperGfx(device);
+
         this.textureHolder = new RRESTextureHolder();
         this.animationController = new AnimationController();
 
         for (let i = 0; i < stageRRESes.length; i++) {
             const stageRRES = stageRRESes[i];
-            this.textureHolder.addRRESTextures(gl, stageRRES);
+            this.textureHolder.addRRESTextures(device, stageRRES);
             assert(stageRRES.mdl0.length >= 1);
 
-            const model = new MDL0Model(gl, stageRRES.mdl0[0], materialHacks);
-            const modelRenderer = new MDL0ModelInstance(gl, this.textureHolder, model);
+            const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
+            const modelRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
             this.models.push(modelRenderer);
 
             modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
         }
+
+        this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 
     public createPanels(): UI.Panel[] {
@@ -54,17 +66,33 @@ export class BasicRRESScene implements Viewer.MainScene {
         return panels;
     }
 
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.textureHolder.destroy(gl);
-        this.models.forEach((model) => model.destroy(gl));
+    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.renderHelper.fillSceneParams(viewerInput);
+        for (let i = 0; i < this.models.length; i++)
+            this.models[i].prepareToRender(this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(hostAccessPass);
     }
 
-    public render(state: RenderState): void {
-        this.animationController.updateTime(state.time);
+    public destroy(device: GfxDevice): void {
+        this.textureHolder.destroyGfx(device);
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
 
-        this.models.forEach((model) => {
-            model.render(state);
-        });
+        this.models.forEach((model) => model.destroy(device));
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.animationController.updateTime(viewerInput.time);
+
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer);
+        return mainPassRenderer;
     }
 }
 
@@ -76,22 +104,22 @@ function makeElbPath(stg: string, room: number): string {
 class ElebitsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public rooms: number[]) {}
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         const paths = this.rooms.map((room) => makeElbPath(this.id, room));
         const progressables: Progressable<ArrayBufferSlice>[] = paths.map((path) => fetchData(path));
         return Progressable.all(progressables).then((buffers: ArrayBufferSlice[]) => {
             const stageRRESes = buffers.map((buffer) => BRRES.parse(buffer));
-            return new BasicRRESScene(gl, stageRRESes);
+            return new BasicRRESRenderer(device, stageRRESes);
         });
     }
 }
 
-export function createBasicRRESSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): BasicRRESScene {
+export function createBasicRRESRendererFromBRRES(device: GfxDevice, buffer: ArrayBufferSlice) {
     const stageRRES = BRRES.parse(buffer);
-    return new BasicRRESScene(gl, [stageRRES]);
+    return new BasicRRESRenderer(device, [stageRRES]);
 }
 
-export function createBasicRRESSceneFromU8Buffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): BasicRRESScene {
+export function createBasicRRESRendererFromU8Archive(device: GfxDevice, buffer: ArrayBufferSlice) {
     const u8 = U8.parse(buffer);
 
     function findRRES(rres: BRRES.RRES[], dir: U8.U8Dir) {
@@ -105,7 +133,7 @@ export function createBasicRRESSceneFromU8Buffer(gl: WebGL2RenderingContext, buf
     const rres: BRRES.RRES[] = [];
     findRRES(rres, u8.root);
 
-    return new BasicRRESScene(gl, rres);
+    return new BasicRRESRenderer(device, rres);
 }
 
 function range(start: number, count: number): number[] {

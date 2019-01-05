@@ -14,13 +14,11 @@ import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
-import * as water_comparison from './water_comparison';
 
 type CreateSceneFunc = (gl: WebGL2RenderingContext, name: string) => Progressable<Viewer.MainScene>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
     "sunshine_water": sunshine_water.createScene,
-    "water_comparison": water_comparison.createScene,
 };
 
 class FsButton {
@@ -55,6 +53,7 @@ class FsButton {
 
     private isFS() {
         // @ts-ignore
+        // https://github.com/Microsoft/TSJS-lib-generator/pull/597
         return document.fullscreenElement === document.body;
     }
 
