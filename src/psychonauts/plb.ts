@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataStream } from "./DataStream";
-import { assert, hexdump } from "../util";
+import { assert } from "../util";
 import { AABB } from "../Geometry";
 import { vec3 } from "gl-matrix";
 import { normalizeTextureName } from "./ppf";

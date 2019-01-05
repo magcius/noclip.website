@@ -357,7 +357,7 @@ class Main {
             // Load the state from the hash, remove the extra character at the end.
             const hash = window.location.hash;
             if (hash.startsWith('#'))
-                this._loadState(hash.slice(1));
+                this._loadState(decodeURIComponent(hash.slice(1)));
             // Wipe out the hash from the URL.
             window.history.replaceState('', '', '/');
         }
