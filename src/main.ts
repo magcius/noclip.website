@@ -208,9 +208,18 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
 
+// @ts-ignore
+import { readFileSync } from 'fs';
+const defaultSaveStateData = JSON.parse(readFileSync('src/DefaultSaveStates.nclsp', { encoding: 'utf8' }));
+
 class SaveManager {
+    constructor() {
+        // Clean up old stuff.
+        window.localStorage.removeItem('CameraStates');
+    }
+
     public getSaveStateSlotKey(sceneDescId: string, slotIndex: number): string {
-        return `${sceneDescId}/${slotIndex}`;
+        return `SaveState_${sceneDescId}/${slotIndex}`;
     }
 
     public getCurrentSceneDescId(): string | null {
@@ -221,12 +230,35 @@ class SaveManager {
         window.sessionStorage.setItem('CurrentSceneDescId', id);
     }
 
+    public saveTemporaryState(key: string, serializedState: string): void {
+        // Clean up old stuff.
+        window.localStorage.removeItem(key);
+
+        window.sessionStorage.setItem(key, serializedState);
+    }
+
     public saveState(key: string, serializedState: string): void {
-        window.localStorage.setItem(`SaveState_${key}`, serializedState);
+        window.localStorage.setItem(key, serializedState);
     }
 
     public loadState(key: string): string | null {
-        return window.localStorage.getItem(`SaveState_${key}`) || null;
+        let state: string | null = null;
+
+        state = window.localStorage.getItem(key);
+        if (state)
+            return state;
+
+        // Look up in temporary storage?
+        state = window.sessionStorage.getItem(key);
+        if (state)
+            return state;
+
+        // Look up in default save state data.
+        state = defaultSaveStateData[key];
+        if (state)
+            return state;
+
+        return null;
     }
 
     public export(): string {
@@ -535,7 +567,7 @@ class Main {
         const sceneStateStr = this._getSceneSaveState();
         const currentDescId = this._getCurrentSceneDescId();
         const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
-        this.saveManager.saveState(key, sceneStateStr);
+        this.saveManager.saveTemporaryState(key, sceneStateStr);
 
         const saveState = `${currentDescId};${sceneStateStr}`;
         this.ui.saveStatesPanel.setSaveState(saveState);
@@ -572,12 +604,18 @@ class Main {
         }
     }
 
-    private _resetCamera(mainSceneBase: MainSceneBase): void {
+    private _resetCamera(mainSceneBase: MainSceneBase, sceneDescId: string): void {
         const camera = this.viewer.renderState.camera;
-        if (mainSceneBase.resetCamera)
+
+        const defaultSaveStateStr = this.saveManager.loadState(this.saveManager.getSaveStateSlotKey(sceneDescId, 1));
+        if (defaultSaveStateStr) {
+            this._loadSceneSaveState(defaultSaveStateStr);
+        } else if (mainSceneBase.resetCamera) {
             mainSceneBase.resetCamera(camera);
-        else
+        } else {
             mat4.identity(camera.worldMatrix);
+        }
+
         camera.worldMatrixUpdated();
     }
 
@@ -590,10 +628,11 @@ class Main {
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
         const progressable = this.sceneLoader.loadSceneDesc(sceneDesc).then((mainSceneBase) => {
-            this.saveManager.setCurrentSceneDescId(this._getCurrentSceneDescId());
+            const sceneDescId = this._getCurrentSceneDescId();
+            this.saveManager.setCurrentSceneDescId(sceneDescId);
             if (!this._loadSceneSaveState(sceneState)) {
                 // Set up defaults.
-                this._resetCamera(mainSceneBase);
+                this._resetCamera(mainSceneBase, sceneDescId);
             }
             return mainSceneBase;
         });
