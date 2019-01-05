@@ -1,3 +1,4 @@
+import { assert } from "../../util";
 
 export const enum GfxTopology {
     TRIANGLES, TRISTRIP, QUADS, QUADSTRIP,
@@ -79,4 +80,25 @@ export function getTriangleCountForTopologyIndexCount(topology: GfxTopology, ind
 export function getTriangleIndexCountForTopologyIndexCount(topology: GfxTopology, indexCount: number): number {
     // Three indexes per triangle.
     return 3 * getTriangleCountForTopologyIndexCount(topology, indexCount);
+}
+
+export function filterDegenerateTriangleIndexBuffer(indexData: Uint16Array): Uint16Array {
+    assert(indexData.length % 3 === 0);
+    const dst = new Uint16Array(indexData.length);
+    let dstIdx = 0;
+
+    for (let i = 0; i < indexData.length; i += 3) {
+        const i0 = indexData[i + 0];
+        const i1 = indexData[i + 1];
+        const i2 = indexData[i + 2];
+
+        const isDegenerate = (i0 === i1) || (i1 === i2) || (i2 === i0);
+        if (!isDegenerate) {
+            dst[dstIdx++] = i0;
+            dst[dstIdx++] = i1;
+            dst[dstIdx++] = i2;
+        }
+    }
+
+    return dst.slice(0, dstIdx);
 }

@@ -311,6 +311,7 @@ export class GXShapeHelperGfx {
         renderInstBuilder.newUniformBufferInstance(renderInst, ub_PacketParams);
         renderInst.drawIndexes(this.loadedVertexData.totalTriangleCount * 3);
         renderInst.inputState = this.inputState;
+        renderInst.setSamplerBindingsInherit();
         return renderInst;
     }
 

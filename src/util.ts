@@ -17,7 +17,7 @@ export function readString(buffer: ArrayBufferSlice, offs: number, length: numbe
     let S = '';
     let i = 0;
     while (true) {
-        if (length > 0 && i >= length)
+        if (length >= 0 && i >= length)
             break;
         if (nulTerminated && buf[i] === 0)
             break;

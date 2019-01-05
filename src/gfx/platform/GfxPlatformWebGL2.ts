@@ -746,7 +746,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return inputLayout;
     }
 
-    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: GfxVertexBufferDescriptor[], indexBufferBinding: GfxVertexBufferDescriptor | null): GfxInputState {
+    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: (GfxVertexBufferDescriptor | null)[], indexBufferBinding: GfxVertexBufferDescriptor | null): GfxInputState {
         const inputLayout = inputLayout_ as GfxInputLayoutP_GL;
 
         const gl = this.gl;
@@ -757,6 +757,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const attr = inputLayout.vertexAttributeDescriptors[i];
             const { size, type, normalized } = translateVertexFormat(attr.format);
             const vertexBuffer = vertexBuffers[attr.bufferIndex];
+            if (vertexBuffer === null)
+                continue;
 
             const buffer = vertexBuffer.buffer as GfxBufferP_GL;
             assert(buffer.usage === GfxBufferUsage.VERTEX);

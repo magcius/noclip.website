@@ -113,16 +113,14 @@ function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     dst._bindingLayouts = src._bindingLayouts;
     dst.samplerBindings = src.samplerBindings.slice();
     dst.uniformBufferOffsets = src.uniformBufferOffsets.slice();
-    if (src._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_LATE)
-        dst.setSamplerBindingsLate();
 }
 
 const enum GfxRenderInstFlags {
-    DESTROYED              = 1 << 0,
-    VISIBLE                = 1 << 1,
-    DRAW_INDEXED           = 1 << 2,
-    SAMPLER_BINDINGS_LATE  = 1 << 3,
-    SAMPLER_BINDINGS_DIRTY = 1 << 4,
+    DESTROYED                = 1 << 0,
+    VISIBLE                  = 1 << 1,
+    DRAW_INDEXED             = 1 << 2,
+    SAMPLER_BINDINGS_INHERIT = 1 << 3,
+    SAMPLER_BINDINGS_DIRTY   = 1 << 4,
 }
 
 function setBitValue(bucket: number, bit: number, v: boolean): number {
@@ -182,6 +180,13 @@ export class GfxRenderInst {
         this._flags = setBitValue(this._flags, flag, v);
     }
 
+    private _inheritSamplerBindings(): void {
+        if ((this._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT)) {
+            this.parentRenderInst._inheritSamplerBindings();
+            this.setSamplerBindings(this.parentRenderInst.samplerBindings);
+        }
+    }
+
     public _rebuildSamplerBindings(device: GfxDevice, cache: GfxRenderCache): void {
         if (!(this._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY))
             return;
@@ -206,8 +211,8 @@ export class GfxRenderInst {
         this._pipeline = pipeline;
     }
 
-    public setSamplerBindingsLate(): void {
-        this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_LATE, true);
+    public setSamplerBindingsInherit(v: boolean = true): void {
+        this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT, v);
     }
 
     public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
@@ -374,8 +379,12 @@ export class GfxRenderInstBuilder {
     constructor(device: GfxDevice, public programReflection: DeviceProgramReflection, public bindingLayouts: GfxBindingLayoutDescriptor[], public uniformBuffers: GfxRenderBuffer[]) {
         this.uniformBufferWordAlignment = device.queryLimits().uniformBufferWordAlignment;
 
-        for (let i = 0; i < this.programReflection.uniformBufferLayouts.length; i++)
+        assert(this.uniformBuffers.length === this.programReflection.uniformBufferLayouts.length);
+        for (let i = 0; i < this.programReflection.uniformBufferLayouts.length; i++) {
+            if (this.uniformBuffers[i].resourceName !== '')
+                assert(this.uniformBuffers[i].resourceName === this.programReflection.uniformBufferLayouts[i].blockName);
             this.uniformBufferOffsets[i] = 0;
+        }
 
         const baseRenderInst = this.pushTemplateRenderInst();
         baseRenderInst.name = "base render inst";

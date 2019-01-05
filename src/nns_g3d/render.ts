@@ -199,10 +199,6 @@ class Command_Shape {
     }
 
     public prepareToRender(packetParamsBuffer: GfxRenderBuffer, isSkybox: boolean, viewerInput: Viewer.ViewerRenderInput): void {
-        // XXX(jstpierre): Bad hack to force sampler bindings to reset.
-        for (let i = 0; i < this.vertexDataCommand.renderInsts.length; i++)
-            this.vertexDataCommand.renderInsts[i].setSamplerBindings(this.materialCommand.templateRenderInst.samplerBindings);
-
         const packetParamsMapped = packetParamsBuffer.mapBufferF32(this.vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams], 12);
         let offs = this.vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams];
 

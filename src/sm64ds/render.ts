@@ -176,6 +176,7 @@ export class Command_VertexData {
 
     constructor(renderInstBuilder: GfxRenderInstBuilder, public vertexData: VertexData, name: string) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
+        this.templateRenderInst.setSamplerBindingsInherit();
         this.templateRenderInst.inputState = this.vertexData.inputState;
         this.templateRenderInst.name = name;
 
@@ -184,6 +185,7 @@ export class Command_VertexData {
         const nitroData = this.vertexData.nitroVertexData;
         for (let i = 0; i < nitroData.drawCalls.length; i++) {
             const renderInst = renderInstBuilder.pushRenderInst();
+            renderInst.setSamplerBindingsInherit();
             renderInst.drawIndexes(nitroData.drawCalls[i].numIndices, nitroData.drawCalls[i].startIndex);
             this.renderInsts.push(renderInst);
         }

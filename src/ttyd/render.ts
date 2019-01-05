@@ -227,9 +227,6 @@ class Command_Batch {
         this.renderInst.visible = this.nodeCommand.visible;
 
         if (this.renderInst.visible) {
-            // Force update the sampler updates to be the same as the material.
-            this.renderInst.setSamplerBindings(this.materialCommand.templateRenderInst.samplerBindings);
-
             this.computeModelView(this.packetParams.u_PosMtx[0], renderInput.camera);
             this.shapeHelper.fillPacketParams(this.packetParams, this.renderInst, renderHelper);
             this.renderInst.sortKey = setSortKeyDepth(this.renderInst.sortKey, this.nodeCommand.depth);
