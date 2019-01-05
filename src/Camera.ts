@@ -197,8 +197,8 @@ export class FPSCameraController implements CameraController {
         }
 
         // Rotate view.
-        const dx = inputManager.dx;
-        const dy = inputManager.dy;
+        const dx = inputManager.getMouseDeltaX();
+        const dy = inputManager.getMouseDeltaY();
         if (dx !== 0 || dy !== 0) {
             camera.getWorldUp(tmp);
             vec3.normalize(tmp, tmp);

@@ -214,10 +214,15 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
 import { readFileSync } from 'fs';
 const defaultSaveStateData = JSON.parse(readFileSync('src/DefaultSaveStates.nclsp', { encoding: 'utf8' }));
 
-class SaveManager {
+type SettingCallback = (saveManager: SaveManager, key: string) => void;
+
+export class SaveManager {
+    private settingListeners: { callback: SettingCallback, key: string }[] = [];
+
     constructor() {
         // Clean up old stuff.
         window.localStorage.removeItem('CameraStates');
+        window.localStorage.removeItem('SaveStates');
     }
 
     public getSaveStateSlotKey(sceneDescId: string, slotIndex: number): string {
@@ -237,6 +242,34 @@ class SaveManager {
         window.localStorage.removeItem(key);
 
         window.sessionStorage.setItem(key, serializedState);
+    }
+
+    private getSettingKey(key: string) {
+        return `Setting_${key}`;
+    }
+
+    public loadSetting<T>(key: string, defaultValue: T): T {
+        const valueStr = window.localStorage.getItem(this.getSettingKey(key));
+        if (valueStr !== null)
+            return JSON.parse(valueStr);
+        else
+            return defaultValue;
+    }
+
+    public saveSetting<T>(key: string, value: T, force: boolean = false): void {
+        console.log(value, this.loadSetting<T | null>(key, null));
+        if (force || (this.loadSetting<T | null>(key, null) === value))
+            return;
+        window.localStorage.setItem(this.getSettingKey(key), JSON.stringify(value));
+        for (let i = 0; i < this.settingListeners.length; i++)
+            if (this.settingListeners[i].key === key)
+                this.settingListeners[i].callback(this, key);
+    }
+
+    public addSettingListener(key: string, callback: SettingCallback, triggerNow: boolean = true): void {
+        this.settingListeners.push({ callback, key });
+        if (triggerNow)
+            callback(this, key);
     }
 
     public saveState(key: string, serializedState: string): void {
@@ -268,6 +301,8 @@ class SaveManager {
     }
 }
 
+export const GlobalSaveManager = new SaveManager();
+
 function writeString(d: Uint8Array, offs: number, m: string): number {
     const n = m.length;
     for (let i = 0; i < n; i++)
@@ -290,7 +325,7 @@ class Main {
     public viewer: Viewer;
     public groups: (string | SceneGroup)[];
     public ui: UI;
-    public saveManager = new SaveManager();
+    public saveManager = GlobalSaveManager;
 
     private droppedFileGroup: SceneGroup;
 

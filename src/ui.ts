@@ -11,6 +11,7 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVers
 
 // @ts-ignore
 import logoURL from './logo.png';
+import { GlobalSaveManager, SaveManager } from './main';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1171,6 +1172,8 @@ class ViewerSettings extends Panel {
     private fovSlider: HTMLElement;
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
+    private invertYOff: HTMLElement;
+    private invertYOn: HTMLElement;
 
     constructor(private viewer: Viewer.Viewer) {
         super();
@@ -1230,9 +1233,17 @@ class ViewerSettings extends Panel {
 </style>
 <div class="SettingsHeader">Field of View</div>
 <div><input class="Slider FoVSlider" type="range" min="1" max="100"></div>
+
 <div class="SettingsHeader">Camera Controller</div>
 <div style="display: grid; grid-template-columns: 1fr 1fr;">
 <div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div>
+</div>
+
+<div class="SettingsHeader">Invert Y-Axis?</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr;">
+<div class="SettingsButton InvertYOff">No</div><div class="SettingsButton InvertYOn">Invert</div>
+</div>
+
 </div>
 `;
         this.fovSlider = this.contents.querySelector('.FoVSlider');
@@ -1247,6 +1258,12 @@ class ViewerSettings extends Panel {
         this.cameraControllerOrbit.onclick = () => {
             this.setCameraControllerClass(OrbitCameraController);
         };
+
+        this.invertYOff = this.contents.querySelector('.InvertYOff');
+        this.invertYOff.onclick = () => { this.setInvertY(false); }
+        this.invertYOn = this.contents.querySelector('.InvertYOn');
+        this.invertYOn.onclick = () => { this.setInvertY(true); }
+        GlobalSaveManager.addSettingListener('InvertY', this.invertYChanged.bind(this));
     }
 
     private _getSliderT(slider: HTMLInputElement) {
@@ -1267,6 +1284,17 @@ class ViewerSettings extends Panel {
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
         setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
         setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
+    }
+
+    public setInvertY(v: boolean): void {
+        GlobalSaveManager.saveSetting(`InvertY`, v);
+    }
+
+    private invertYChanged(saveManager: SaveManager, key: string): void {
+        const invertY = saveManager.loadSetting<boolean>(key, false);
+        console.log(invertY);
+        setElementHighlighted(this.invertYOff, !invertY);
+        setElementHighlighted(this.invertYOn, invertY);
     }
 }
 

@@ -1,3 +1,4 @@
+import { GlobalSaveManager, SaveManager } from "./main";
 
 declare global {
     interface HTMLElement {
@@ -21,6 +22,7 @@ export default class InputManager {
     private lastY: number;
     public grabbing: boolean = false;
     public onisdraggingchanged: () => void | null = null;
+    public invertY: boolean = false;
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -35,6 +37,19 @@ export default class InputManager {
         this.toplevel.addEventListener('mousedown', this._onMouseDown);
 
         this.afterFrame();
+
+        GlobalSaveManager.addSettingListener('InvertY', (saveManager: SaveManager, key: string) => {
+            this.invertY = saveManager.loadSetting<boolean>(key, false);
+        });
+    }
+
+    public getMouseDeltaX(obeyInvert: boolean = true): number {
+        return this.dx;
+    }
+
+    public getMouseDeltaY(obeyInvert: boolean = true): number {
+        const mult = (obeyInvert && this.invertY) ? -1 : 1;
+        return this.dy * mult;
     }
 
     public isKeyDownEventTriggered(key: string): boolean {
