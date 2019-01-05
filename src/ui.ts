@@ -11,7 +11,7 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVers
 
 // @ts-ignore
 import logoURL from './logo.png';
-import { GlobalSaveManager, SaveManager } from './main';
+import { SaveManager, GlobalSaveManager } from "./SaveManager";
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';

@@ -1,4 +1,5 @@
-import { GlobalSaveManager, SaveManager } from "./main";
+
+import { SaveManager, GlobalSaveManager } from "./SaveManager";
 
 declare global {
     interface HTMLElement {
