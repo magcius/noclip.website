@@ -17,7 +17,7 @@ export class GfxRenderBuffer {
     private shadowBufferU8: Uint8Array | null = null;
     private pageDirty: boolean[] = [];
 
-    constructor(public usage: GfxBufferUsage, public frequencyHint: GfxBufferFrequencyHint, public resourceName: string = "Unnamed GfxResourceBuffer") {
+    constructor(public usage: GfxBufferUsage, public frequencyHint: GfxBufferFrequencyHint, public resourceName: string = "Unnamed GfxRenderBuffer") {
     }
 
     public setWordCount(device: GfxDevice, newWordCount: number) {

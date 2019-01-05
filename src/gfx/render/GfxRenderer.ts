@@ -188,6 +188,8 @@ export class GfxRenderInst {
     }
 
     public _rebuildSamplerBindings(device: GfxDevice, cache: GfxRenderCache): void {
+        this._inheritSamplerBindings();
+
         if (!(this._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY))
             return;
 
@@ -381,8 +383,9 @@ export class GfxRenderInstBuilder {
 
         assert(this.uniformBuffers.length === this.programReflection.uniformBufferLayouts.length);
         for (let i = 0; i < this.programReflection.uniformBufferLayouts.length; i++) {
-            if (this.uniformBuffers[i].resourceName !== '')
-                assert(this.uniformBuffers[i].resourceName === this.programReflection.uniformBufferLayouts[i].blockName);
+            const bufferName = this.uniformBuffers[i].resourceName;
+            if (bufferName !== "" && bufferName !== "Unnamed GfxRenderBuffer")
+                assert(bufferName === this.programReflection.uniformBufferLayouts[i].blockName);
             this.uniformBufferOffsets[i] = 0;
         }
 
