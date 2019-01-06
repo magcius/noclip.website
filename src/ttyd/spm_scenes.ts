@@ -276,7 +276,7 @@ const sceneDescs = [
     new SPMSceneDesc('gn4_16'),
     new SPMSceneDesc('gn4_17'),
 
-    "Chapter 6 - Land of the Cragnons",
+    "Chapter 6 - Sammer's Kingdom",
     new SPMSceneDesc('wa1_01'),
     new SPMSceneDesc('wa1_02'),
     new SPMSceneDesc('wa1_03'),
