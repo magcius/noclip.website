@@ -617,6 +617,16 @@ while (true) {
     if (cmd === 0)
         break;
 
+    switch (cmd) {
+    case ${GX.Command.LOAD_INDX_A}:
+    case ${GX.Command.LOAD_INDX_B}:
+    case ${GX.Command.LOAD_INDX_C}:
+    case ${GX.Command.LOAD_INDX_D}:
+        // TODO(jstpierre): Load in matrix arrays.
+        drawCallIdx += 0x05;
+        continue;
+    }
+
     const primType = cmd & 0xF8;
     const vertexFormat = cmd & 0x07;
 

@@ -2411,9 +2411,9 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     const modelsEntry = rootResDic.find((entry) => entry.name === '3DModels(NW4R)');
     if (modelsEntry) {
         const modelsResDic = parseResDic(buffer, modelsEntry.offs);
-        for (const mdl0Entry of modelsResDic) {
-            const mdl0_ = parseMDL0(buffer.subarray(mdl0Entry.offs));
-            assert(mdl0_.name === mdl0Entry.name);
+        for (let i = 0; i < modelsResDic.length; i++) {
+            const mdl0_ = parseMDL0(buffer.subarray(modelsResDic[i].offs));
+            assert(mdl0_.name === modelsResDic[i].name);
             mdl0.push(mdl0_);
         }
     }

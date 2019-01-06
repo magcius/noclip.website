@@ -4,6 +4,7 @@
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import * as BRRES from './brres';
+import * as U8 from './u8';
 
 import { assert, leftPad } from '../util';
 import { fetchData } from '../fetch';
@@ -28,9 +29,10 @@ export class BasicRRESScene implements Viewer.MainScene {
         this.textureHolder = new RRESTextureHolder();
         this.animationController = new AnimationController();
 
-        for (const stageRRES of stageRRESes) {
+        for (let i = 0; i < stageRRESes.length; i++) {
+            const stageRRES = stageRRESes[i];
             this.textureHolder.addRRESTextures(gl, stageRRES);
-            assert(stageRRES.mdl0.length === 1);
+            assert(stageRRES.mdl0.length >= 1);
 
             const model = new MDL0Model(gl, stageRRES.mdl0[0], materialHacks);
             const modelRenderer = new MDL0ModelInstance(gl, this.textureHolder, model);
@@ -87,6 +89,23 @@ class ElebitsSceneDesc implements Viewer.SceneDesc {
 export function createBasicRRESSceneFromBuffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): BasicRRESScene {
     const stageRRES = BRRES.parse(buffer);
     return new BasicRRESScene(gl, [stageRRES]);
+}
+
+export function createBasicRRESSceneFromU8Buffer(gl: WebGL2RenderingContext, buffer: ArrayBufferSlice): BasicRRESScene {
+    const u8 = U8.parse(buffer);
+
+    function findRRES(rres: BRRES.RRES[], dir: U8.U8Dir) {
+        for (let i = 0; i < dir.files.length; i++)
+            if (dir.files[i].name.endsWith('.brres'))
+                rres.push(BRRES.parse(dir.files[i].buffer));
+        for (let i = 0; i < dir.subdirs.length; i++)
+            findRRES(rres, dir.subdirs[i]);
+    }
+
+    const rres: BRRES.RRES[] = [];
+    findRRES(rres, u8.root);
+
+    return new BasicRRESScene(gl, rres);
 }
 
 function range(start: number, count: number): number[] {

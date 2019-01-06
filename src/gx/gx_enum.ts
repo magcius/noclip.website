@@ -43,6 +43,11 @@ export const enum Command {
     DRAW_LINE_STRIP     = 0xB0,
     DRAW_POINTS         = 0xB8,
 
+    LOAD_INDX_A         = 0x20,
+    LOAD_INDX_B         = 0x28,
+    LOAD_INDX_C         = 0x30,
+    LOAD_INDX_D         = 0x38,
+
     LOAD_BP_REG         = 0x61,
     LOAD_CP_REG         = 0x08,
     LOAD_XF_REG         = 0x10,
