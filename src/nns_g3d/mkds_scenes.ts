@@ -108,7 +108,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const courseBtpFile = courseNARC.files.find((file) => file.path === '/course_model.nsbtp');
             const courseBtp = courseBtpFile !== undefined ? NSBTP.parse(courseBtpFile.buffer) : null;
             if (courseBtp !== null) {
-                assert(courseBtp.pat0.length === 0);
+                assert(courseBtp.pat0.length === 1);
                 courseRenderer.bindPAT0(device, courseBtp.pat0[0]);
             }
 
@@ -125,42 +125,48 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
 
 const id = 'mkds';
 const name = 'Mario Kart DS';
-const sceneDescs: Viewer.SceneDesc[] = [
+const sceneDescs = [
+    "Mushroom Cup",
     new MarioKartDSSceneDesc("cross_course", "Figure-8 Circuit"),
-    new MarioKartDSSceneDesc("desert_course", "Desert Hills"),
-    new MarioKartDSSceneDesc("snow_course", "DK Pass"),
-    new MarioKartDSSceneDesc("stadium_course", "Wario's Stadium"),
     new MarioKartDSSceneDesc("bank_course", "Yoshi Falls"),
-    new MarioKartDSSceneDesc("town_course", "Delfino Square"),
-    new MarioKartDSSceneDesc("clock_course", "Tick Tock Clock"),
-    new MarioKartDSSceneDesc("garden_course", "Peach Gardens"),
     new MarioKartDSSceneDesc("beach_course", "Cheep Cheep Beach"),
-    new MarioKartDSSceneDesc("pinball_course", "Waluigi Pinball"),
-    new MarioKartDSSceneDesc("mario_course", "Mario Circuit"),
-    new MarioKartDSSceneDesc("koopa_course", "Bowser's Castle"),
     new MarioKartDSSceneDesc("mansion_course", "Luigi's Mansion"),
+    "Flower Cup",
+    new MarioKartDSSceneDesc("desert_course", "Desert Hills"),
+    new MarioKartDSSceneDesc("town_course", "Delfino Square"),
+    new MarioKartDSSceneDesc("pinball_course", "Waluigi Pinball"),
     new MarioKartDSSceneDesc("ridge_course", "Shroom Ridge"),
+    "Star Cup",
+    new MarioKartDSSceneDesc("snow_course", "DK Pass"),
+    new MarioKartDSSceneDesc("clock_course", "Tick Tock Clock"),
+    new MarioKartDSSceneDesc("mario_course", "Mario Circuit"),
     new MarioKartDSSceneDesc("airship_course", "Airship Fortress"),
+    "Special Cup",
+    new MarioKartDSSceneDesc("stadium_course", "Wario's Stadium"),
+    new MarioKartDSSceneDesc("garden_course", "Peach Gardens"),
+    new MarioKartDSSceneDesc("koopa_course", "Bowser's Castle"),
     new MarioKartDSSceneDesc("rainbow_course", "Rainbow Road"),
-
-    new MarioKartDSSceneDesc("old_baby_gc", "old_baby_gc"),
-    new MarioKartDSSceneDesc("old_choco_64", "old_choco_64"),
-    new MarioKartDSSceneDesc("old_choco_sfc", "old_choco_sfc"),
-    new MarioKartDSSceneDesc("old_donut_sfc", "old_donut_sfc"),
-    new MarioKartDSSceneDesc("old_frappe_64", "old_frappe_64"),
-    new MarioKartDSSceneDesc("old_hyudoro_64", "old_hyudoro_64"),
-    new MarioKartDSSceneDesc("old_kinoko_gc", "old_kinoko_gc"),
-    new MarioKartDSSceneDesc("old_koopa_agb", "old_koopa_agb"),
-    new MarioKartDSSceneDesc("old_luigi_agb", "old_luigi_agb"),
-    new MarioKartDSSceneDesc("old_luigi_gc", "old_luigi_gc"),
-    new MarioKartDSSceneDesc("old_mario_gc", "old_mario_gc"),
-    new MarioKartDSSceneDesc("old_mario_sfc", "old_mario_sfc"),
-    new MarioKartDSSceneDesc("old_momo_64", "old_momo_64"),
-    new MarioKartDSSceneDesc("old_noko_sfc", "old_noko_sfc"),
-    new MarioKartDSSceneDesc("old_peach_agb", "old_peach_agb"),
-    new MarioKartDSSceneDesc("old_sky_agb", "old_sky_agb"),
-    new MarioKartDSSceneDesc("old_yoshi_gc", "old_yoshi_gc"),
-
+    "Shell Cup",
+    new MarioKartDSSceneDesc("old_mario_sfc", "SNES Mario Circuit 1"),
+    new MarioKartDSSceneDesc("old_momo_64", "N64 Moo Moo Farm"),
+    new MarioKartDSSceneDesc("old_peach_agb", "GBA Peach Cup"),
+    new MarioKartDSSceneDesc("old_luigi_gc", "GCN Luigi Circuit"),
+    "Banana Cup",
+    new MarioKartDSSceneDesc("old_donut_sfc", "SNES Donut Plains 1"),
+    new MarioKartDSSceneDesc("old_frappe_64", "N64 Frappe Snowland"),
+    new MarioKartDSSceneDesc("old_koopa_agb", "GBA Bowser Castle 2"),
+    new MarioKartDSSceneDesc("old_baby_gc", "GCN Baby Park"),
+    "Leaf Cup",
+    new MarioKartDSSceneDesc("old_noko_sfc", "SNES Koopa Beach 2"),
+    new MarioKartDSSceneDesc("old_choco_64", "N64 Choco Mountain"),
+    new MarioKartDSSceneDesc("old_luigi_agb", "GBA Luigi Circuit"),
+    new MarioKartDSSceneDesc("old_mario_gc", "GCN Mushroom Bridge"),
+    "Lightning Cup",
+    new MarioKartDSSceneDesc("old_choco_sfc", "SNES Choco Island 2"),
+    new MarioKartDSSceneDesc("old_hyudoro_64", "N64 Banshee Boardwalk"),
+    new MarioKartDSSceneDesc("old_sky_agb", "GBA Sky Garden"),
+    new MarioKartDSSceneDesc("old_yoshi_gc", "GCN Yoshi Circuit"),
+    "Mission Stages",
     new MarioKartDSSceneDesc("mini_stage1", "mini_stage1"),
     new MarioKartDSSceneDesc("mini_stage2", "mini_stage2"),
     new MarioKartDSSceneDesc("mini_stage3", "mini_stage3"),
@@ -169,7 +175,7 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new MarioKartDSSceneDesc("MR_stage2", "MR_stage2"),
     new MarioKartDSSceneDesc("MR_stage3", "MR_stage3"),
     new MarioKartDSSceneDesc("MR_stage4", "MR_stage4"),
-
+    "Unused Test Courses",
     new MarioKartDSSceneDesc("dokan_course", "dokan_course"),
     new MarioKartDSSceneDesc("wario_course", "wario_course"),
     new MarioKartDSSceneDesc("donkey_course", "donkey_course"),

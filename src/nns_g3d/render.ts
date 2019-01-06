@@ -323,8 +323,14 @@ export class MDL0Renderer {
                     destIdx = view.getUint8(idx++);
                 if (opt & 0x02)
                     srcIdx = view.getUint8(idx++);
-            }  
-            else if (cmd === Op.BB) {
+            } else if (cmd === Op.BB) {
+                const nodeId = view.getUint8(idx++);
+                let destIdx = -1, srcIdx = -1;
+                if (opt & 0x01)
+                    destIdx = view.getUint8(idx++);
+                if (opt & 0x02)
+                    srcIdx = view.getUint8(idx++);
+            } else if (cmd === Op.BBY) {
                 const nodeId = view.getUint8(idx++);
                 let destIdx = -1, srcIdx = -1;
                 if (opt & 0x01)
