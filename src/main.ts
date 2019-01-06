@@ -1,5 +1,5 @@
 
-/* @preserve The source code to this website is under the MIT license and can be found at https://github.com/magcius/model-viewer */
+/* @preserve The source code to this website is under the MIT license and can be found at https://github.com/magcius/noclip.website */
 
 // Parcel HMR workaround.
 // https://github.com/parcel-bundler/parcel/issues/289
@@ -144,10 +144,13 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.brres'))
             return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESSceneFromBuffer(gl, buffer));
 
+        if (file.name.endsWith('.arc'))
+            return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESSceneFromU8Buffer(gl, buffer));
+
         if (file.name.endsWith('.bfres'))
             return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(gl, buffer));
 
-        if (file.name.endsWith('.szs') || file.name.endsWith('.rarc') || file.name.endsWith('.bmd') || file.name.endsWith('.arc'))
+        if (file.name.endsWith('.szs') || file.name.endsWith('.rarc') || file.name.endsWith('.bmd'))
             return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(gl, buffer));
 
         return null;
@@ -615,8 +618,8 @@ ${message}
     private _makeErrorUI_NoWebGL2(): void {
         return this._makeErrorUI(`
 <p>Your browser does not appear to have WebGL 2 support. Please check <a href="http://webglreport.com/?v=2">WebGL Report</a> for further details.
-<p>If WebGL Report says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/model-viewer/issues/new">GitHub issue</a> with as much as information as possible.
-<p>Unfortunately, this means that Safari and iOS are not supported. The plan is to support <a href="https://github.com/gpuweb/gpuweb">WebGPU</a> once this arrives in browsers, which Apple has promised to support.
+<p>If WebGL Report says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new">GitHub issue</a> with as much as information as possible.
+<p>Unfortunately, this means that Safari and iOS are not supported. The plan is to support <a href="https://github.com/gpuweb/gpuweb">WebGPU</a> once this arrives.
 <p style="text-align: right">Thanks, Jasper.</p>
 `);
     }
