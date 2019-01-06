@@ -42,7 +42,7 @@ function clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(v, max));
 }
 
-const MAX_DEPTH = 500;
+const MAX_DEPTH = 0x10000;
 
 const DEPTH_BITS = 16;
 
@@ -93,12 +93,12 @@ export function makeSortKey(layer: GfxRendererLayer, programKey: number): number
 }
 
 export function setSortKeyDepthKey(sortKey: number, depthKey: number): number {
-    const isTranslucent = (sortKey >>> 30) & 1;
+    const isTranslucent = (sortKey >>> 31) & 1;
     return isTranslucent ? setSortKeyTranslucentDepth(sortKey, depthKey) : setSortKeyOpaqueDepth(sortKey, depthKey);
 }
 
 export function setSortKeyDepth(sortKey: number, depth: number, maxDepth: number = MAX_DEPTH): number {
-    const isTranslucent = (sortKey >>> 30) & 1;
+    const isTranslucent = (sortKey >>> 31) & 1;
     const depthKey = makeDepthKey(isTranslucent, depth, maxDepth);
     return isTranslucent ? setSortKeyTranslucentDepth(sortKey, depthKey) : setSortKeyOpaqueDepth(sortKey, depthKey);
 }

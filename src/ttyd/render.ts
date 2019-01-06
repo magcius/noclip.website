@@ -17,7 +17,6 @@ import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRend
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { Camera, computeViewMatrix, computeViewSpaceDepth } from '../Camera';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { AABB } from '../Geometry';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
@@ -240,7 +239,6 @@ class Command_Batch {
 }
 
 class Command_Node {
-    private bbox = new AABB();
     public visible: boolean = true;
     public children: Command_Node[] = [];
     public modelMatrix: mat4 = mat4.create();
@@ -267,7 +265,7 @@ class Command_Node {
 
         // Compute depth from camera.
         if (this.visible) {
-            this.depth = computeViewSpaceDepth(camera, this.bbox);
+            this.depth = computeViewSpaceDepth(camera, this.node.bbox);
         }
     }
 

@@ -252,18 +252,18 @@ export abstract class ScrollSelect implements Widget {
             const item = items[i];
 
             const outer = document.createElement('div');
+            outer.tabIndex = -1;
             outer.style.display = 'grid';
             outer.style.gridAutoFlow = 'column';
+            outer.style.cursor = 'pointer';
+            outer.style.outline = 'none';
 
             if (item.type === ScrollSelectItemType.Selectable) {
                 outer.style.paddingLeft = hasHeader ? '20px' : '';
 
                 const selector = document.createElement('div');
-                selector.tabIndex = -1;
                 selector.classList.add('selector');
                 selector.style.display = 'list-item';
-                selector.style.cursor = 'pointer';
-                selector.style.outline = 'none';
                 outer.appendChild(selector);
                 const textSpan = document.createElement('span');
                 textSpan.classList.add('text');
@@ -271,22 +271,22 @@ export abstract class ScrollSelect implements Widget {
                 selector.appendChild(textSpan);
 
                 const index = i;
-                selector.onfocus = () => {
+                outer.onfocus = () => {
                     this.itemFocused(index, !this.isDragging);
                 };
-                selector.onmousedown = () => {
-                    if (document.activeElement === selector)
-                        selector.onfocus(null);
+                outer.onmousedown = () => {
+                    if (document.activeElement === outer)
+                        outer.onfocus(null);
                     else
-                        selector.focus();
+                        outer.focus();
                     this.isDragging = true;
                 };
-                selector.onmouseup = () => {
+                outer.onmouseup = () => {
                     this.isDragging = false;
                 };
-                selector.onmouseover = (e) => {
+                outer.onmouseover = (e) => {
                     if (this.isDragging)
-                        selector.focus();
+                        outer.focus();
                 };
             } else if (item.type === ScrollSelectItemType.Header) {
                 const textSpan = document.createElement('span');

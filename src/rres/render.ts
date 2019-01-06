@@ -12,6 +12,7 @@ import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstBuilder, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
+import { assert } from '../util';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
@@ -52,9 +53,9 @@ class ShapeInstance {
     constructor(public shape: BRRES.MDL0_ShapeEntry, public shapeData: GXShapeHelperGfx, public node: BRRES.MDL0_NodeEntry) {
     }
 
-    public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder): void {
+    public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, namePrefix: string): void {
         this.renderInst = this.shapeData.pushRenderInst(renderInstBuilder);
-        this.renderInst.name = this.shape.name;
+        this.renderInst.name = `${namePrefix}/${this.shape.name}`;
     }
 
     private computeModelView(dst: mat4, modelMatrix: mat4, camera: Camera, isSkybox: boolean): void {
@@ -94,7 +95,7 @@ class MaterialInstance {
     private materialHelper: GXMaterialHelperGfx;
     public templateRenderInst: GfxRenderInst;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private modelInstance: MDL0ModelInstance, private materialData: MaterialData) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private modelInstance: MDL0ModelInstance, public materialData: MaterialData) {
         this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, materialData.material.gxMaterial, materialData.materialHacks);
         this.templateRenderInst = this.materialHelper.templateRenderInst;
         this.templateRenderInst.name = this.materialData.material.name;
@@ -288,8 +289,8 @@ export class MDL0ModelInstance {
         this.templateRenderInst.name = this.name;
         for (let i = 0; i < this.mdl0Model.materialData.length; i++)
             this.materialInstances[i] = new MaterialInstance(device, renderHelper, this, this.mdl0Model.materialData[i]);
-        this.execDrawOpList(renderHelper, this.mdl0Model.mdl0.sceneGraph.drawOpaOps);
-        this.execDrawOpList(renderHelper, this.mdl0Model.mdl0.sceneGraph.drawXluOps);
+        this.execDrawOpList(renderHelper, this.mdl0Model.mdl0.sceneGraph.drawOpaOps, false);
+        this.execDrawOpList(renderHelper, this.mdl0Model.mdl0.sceneGraph.drawXluOps, true);
         renderHelper.renderInstBuilder.popTemplateRenderInst();
     }
 
@@ -359,7 +360,7 @@ export class MDL0ModelInstance {
         this.mdl0Model.destroy(device);
     }
 
-    private execDrawOpList(renderHelper: GXRenderHelperGfx, opList: BRRES.DrawOp[]): void {
+    private execDrawOpList(renderHelper: GXRenderHelperGfx, opList: BRRES.DrawOp[], translucent: boolean): void {
         const mdl0 = this.mdl0Model.mdl0;
         const renderInstBuilder = renderHelper.renderInstBuilder;
 
@@ -376,8 +377,9 @@ export class MDL0ModelInstance {
             const shapeInstance = new ShapeInstance(shape, shapeData, node);
 
             const materialInstance = this.materialInstances[op.matId];
+            assert(materialInstance.materialData.material.translucent === translucent);
             renderInstBuilder.pushTemplateRenderInst(materialInstance.templateRenderInst);
-            shapeInstance.buildRenderInst(renderInstBuilder);
+            shapeInstance.buildRenderInst(renderInstBuilder, this.mdl0Model.mdl0.name);
             renderInstBuilder.popTemplateRenderInst();
 
             this.shapeInstances.push(shapeInstance);
@@ -427,11 +429,15 @@ export class MDL0ModelInstance {
                 }
                 mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], modelMatrix);
 
-                if (this.matrixVisibility[parentMtxId] === IntersectionState.PARTIAL_INTERSECT) {
-                    bboxScratch.transform(node.bbox, this.matrixArray[dstMtxId]);
-                    this.matrixVisibility[dstMtxId] = viewerInput.camera.frustum.intersect(bboxScratch);
+                if (visible) {
+                    if (this.isSkybox) {
+                        this.matrixVisibility[dstMtxId] = IntersectionState.FULLY_INSIDE;
+                    } else {
+                        bboxScratch.transform(node.bbox, this.matrixArray[dstMtxId]);
+                        this.matrixVisibility[dstMtxId] = viewerInput.camera.frustum.intersect(bboxScratch);
+                    }
                 } else {
-                    this.matrixVisibility[dstMtxId] = this.matrixVisibility[parentMtxId];
+                    this.matrixVisibility[dstMtxId] = IntersectionState.FULLY_OUTSIDE;
                 }
             } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
                 const srcMtxId = op.fromMtxId;
