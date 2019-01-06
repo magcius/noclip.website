@@ -275,7 +275,10 @@ export abstract class ScrollSelect implements Widget {
                     this.itemFocused(index, !this.isDragging);
                 };
                 selector.onmousedown = () => {
-                    selector.focus();
+                    if (document.activeElement === selector)
+                        selector.onfocus(null);
+                    else
+                        selector.focus();
                     this.isDragging = true;
                 };
                 selector.onmouseup = () => {
@@ -1292,7 +1295,6 @@ class ViewerSettings extends Panel {
 
     private invertYChanged(saveManager: SaveManager, key: string): void {
         const invertY = saveManager.loadSetting<boolean>(key, false);
-        console.log(invertY);
         setElementHighlighted(this.invertYOff, !invertY);
         setElementHighlighted(this.invertYOn, invertY);
     }
