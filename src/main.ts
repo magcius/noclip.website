@@ -60,11 +60,11 @@ import { GlobalSaveManager } from './SaveManager';
 
 const sceneGroups = [
     "Wii",
-    ELB.sceneGroup,
     MKWII.sceneGroup,
     SMG.sceneGroup,
     SPM.sceneGroup,
     ZSS.sceneGroup,
+    ELB.sceneGroup,
     "GameCube",
     LM.sceneGroup,
     MKDD.sceneGroup,
