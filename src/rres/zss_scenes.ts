@@ -241,9 +241,9 @@ class SkywardSwordScene implements Viewer.MainScene {
         state.useRenderTarget(this.mainColorTarget);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
 
-        // Skybox is rendered first. Also, use larger clip planes for the skybox, since it's so large.
-        // The actual game probably renders this with a different reference camera..
-        state.setClipPlanes(10, 90000000);
+        state.setClipPlanes(10, 500000);
+
+        // Skybox is rendered first.
         if (this.vrboxModel) {
             this.vrboxModel.render(state);
         }
@@ -251,10 +251,10 @@ class SkywardSwordScene implements Viewer.MainScene {
         state.useFlags(depthClearFlags);
         gl.clear(gl.DEPTH_BUFFER_BIT);
 
-        state.setClipPlanes(10, 500000);
-
         this.models.forEach((model) => {
             if (this.indirectModels.includes(model))
+                return;
+            if (model === this.vrboxModel)
                 return;
             model.render(state);
         });
@@ -428,6 +428,11 @@ class SkywardSwordScene implements Viewer.MainScene {
 
             for (const modelRenderer of models) {
                 mat4.fromRotationTranslationScale(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz], [obj.sx, obj.sy, obj.sz]);
+
+                if (modelRenderer.isSkybox) {
+                    const scale = 0.001;
+                    mat4.scale(this.vrboxModel.modelMatrix, this.vrboxModel.modelMatrix, [scale, scale, scale]);
+                }
             }
         }
     }
