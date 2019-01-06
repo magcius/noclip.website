@@ -449,7 +449,7 @@ export class SingleSelect extends ScrollSelect {
         const n = this.getNumItems();
         let newIndex = this.highlightedIndex;
         // If it's not visible, reset us to the beginning/end.
-        if (newIndex === -1 || newIndex >= n || !this.itemIsVisible(this.getOuterForIndex(newIndex))) {
+        if (newIndex < 0 || newIndex >= n || !this.itemIsVisible(this.getOuterForIndex(newIndex))) {
             if (direction > 0)
                 newIndex = 0;
             else if (direction < 0)
@@ -458,11 +458,11 @@ export class SingleSelect extends ScrollSelect {
             newIndex += direction;
         }
         while (true) {
+            if (newIndex < 0 || newIndex >= n)
+                break;
             if (this.focusItem(newIndex))
                 break;
             newIndex += direction;
-            if (newIndex < 0 || newIndex >= n - 1)
-                break;
         }
         return true;
     }

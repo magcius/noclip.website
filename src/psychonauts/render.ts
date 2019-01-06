@@ -14,10 +14,11 @@ function decodeTextureData(format: TextureFormat, width: number, height: number,
         return { type: 'RGBA', flag: 'SRGB', width, height, depth: 1, pixels };
     case TextureFormat.DXT1:
         return decompressBC({ type: 'BC1', flag: 'SRGB', width, height, pixels, depth: 1 });
-    case TextureFormat.DXT5:
-        return decompressBC({ type: 'BC3', flag: 'SRGB', width, height, pixels, depth: 1 });
     case TextureFormat.DXT3:
         // who the hell uses BC2 when you also have BC3? just return black for now.
+        return decompressBC({ type: 'BC2', flag: 'SRGB', width, height, pixels, depth: 1 });
+    case TextureFormat.DXT5:
+        return decompressBC({ type: 'BC3', flag: 'SRGB', width, height, pixels, depth: 1 });
     default:
         console.error("Unknown texture format", format);
         return { type: 'RGBA', flag: 'SRGB', width, height, depth: 1, pixels: new Uint8Array(width * height * 4) };

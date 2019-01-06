@@ -75,10 +75,11 @@ export function decodeSurface(surface: GX2Surface, texData: ArrayBufferSlice, mi
 }
 
 export function decompressSurface(texture: DecodedSurface): DecodedSurfaceSW {
-    switch(texture.type) {
+    switch (texture.type) {
     case 'RGBA':
         return texture;
     case 'BC1':
+    case 'BC2':
     case 'BC3':
     case 'BC4':
     case 'BC5':

@@ -23,8 +23,8 @@ interface DecodedSurfaceRGBASN extends DecodedSurfaceBase, DecodedSurfaceSN {
     type: 'RGBA';
 }
 
-interface DecodedSurfaceBC13UN extends DecodedSurfaceBase, DecodedSurfaceUN {
-    type: 'BC1' | 'BC3';
+interface DecodedSurfaceBC123UN extends DecodedSurfaceBase, DecodedSurfaceUN {
+    type: 'BC1' | 'BC2' | 'BC3';
     flag: 'UNORM' | 'SRGB';
 }
 
@@ -40,11 +40,15 @@ interface DecodedSurfaceBC45SN extends DecodedSurfaceBase, DecodedSurfaceSN {
 type DecodedSurfaceRGBA = DecodedSurfaceRGBAUN | DecodedSurfaceRGBASN;
 type DecodedSurfaceBC45 = DecodedSurfaceBC45UN | DecodedSurfaceBC45SN;
 
-export type DecodedSurfaceBC = DecodedSurfaceBC13UN | DecodedSurfaceBC45;
+export type DecodedSurfaceBC = DecodedSurfaceBC123UN | DecodedSurfaceBC45;
 export type DecodedSurfaceSW = DecodedSurfaceRGBA;
-export type DecodedSurface = DecodedSurfaceBC13UN | DecodedSurfaceBC45UN | DecodedSurfaceBC45SN | DecodedSurfaceRGBAUN | DecodedSurfaceRGBASN;
+export type DecodedSurface = DecodedSurfaceBC123UN | DecodedSurfaceBC45UN | DecodedSurfaceBC45SN | DecodedSurfaceRGBAUN | DecodedSurfaceRGBASN;
 
 // #region Texture Decode
+function expand4to8(n: number): number {
+    return (n << (8 - 4)) | (n >>> (8 - 8));
+}
+
 function expand5to8(n: number): number {
     return (n << (8 - 5)) | (n >>> (10 - 8));
 }
@@ -59,8 +63,45 @@ function s3tcblend(a: number, b: number): number {
     return (((a << 1) + a) + ((b << 2) + b)) >>> 3;
 }
 
+function colorTableBC1(colorTable: Uint8Array, color1: number, color2: number): void {
+    // Fill in first two colors in color table.
+    // TODO(jstpierre): SRGB-correct blending.
+    colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
+    colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
+    colorTable[2] = expand5to8(color1 & 0x1F);
+    colorTable[3] = 0xFF;
+
+    colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
+    colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
+    colorTable[6] = expand5to8(color2 & 0x1F);
+    colorTable[7] = 0xFF;
+
+    if (color1 > color2) {
+        // Predict gradients.
+        colorTable[8]  = s3tcblend(colorTable[4], colorTable[0]);
+        colorTable[9]  = s3tcblend(colorTable[5], colorTable[1]);
+        colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
+        colorTable[11] = 0xFF;
+
+        colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
+        colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
+        colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
+        colorTable[15] = 0xFF;
+    } else {
+        colorTable[8]  = (colorTable[0] + colorTable[4]) >>> 1;
+        colorTable[9]  = (colorTable[1] + colorTable[5]) >>> 1;
+        colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
+        colorTable[11] = 0xFF;
+
+        colorTable[12] = 0x00;
+        colorTable[13] = 0x00;
+        colorTable[14] = 0x00;
+        colorTable[15] = 0x00;
+    }
+}
+
 // Software decompresses from standard BC1 (DXT1) to RGBA.
-function decompressBC1Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBAUN {
+function decompressBC1Surface(surface: DecodedSurfaceBC123UN): DecodedSurfaceRGBAUN {
     const bytesPerPixel = 4;
     const width = surface.width;
     const height = surface.height;
@@ -75,53 +116,74 @@ function decompressBC1Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBA
         for (let xx = 0; xx < width; xx += 4) {
             const color1 = view.getUint16(srcOffs + 0x00, true);
             const color2 = view.getUint16(srcOffs + 0x02, true);
+            colorTableBC1(colorTable, color1, color2);
 
-            // Fill in first two colors in color table.
-            // TODO(jstpierre): SRGB-correct blending.
-            colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
-            colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
-            colorTable[2] = expand5to8(color1 & 0x1F);
-            colorTable[3] = 0xFF;
-
-            colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
-            colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
-            colorTable[6] = expand5to8(color2 & 0x1F);
-            colorTable[7] = 0xFF;
-
-            if (color1 > color2) {
-                // Predict gradients.
-                colorTable[8]  = s3tcblend(colorTable[4], colorTable[0]);
-                colorTable[9]  = s3tcblend(colorTable[5], colorTable[1]);
-                colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
-                colorTable[11] = 0xFF;
-
-                colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
-                colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
-                colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
-                colorTable[15] = 0xFF;
-            } else {
-                colorTable[8]  = (colorTable[0] + colorTable[4]) >>> 1;
-                colorTable[9]  = (colorTable[1] + colorTable[5]) >>> 1;
-                colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
-                colorTable[11] = 0xFF;
-
-                colorTable[12] = 0x00;
-                colorTable[13] = 0x00;
-                colorTable[14] = 0x00;
-                colorTable[15] = 0x00;
-            }
-
-            let bits = view.getUint32(srcOffs + 0x04, true);
+            let colorBits = view.getUint32(srcOffs + 0x04, true);
             for (let y = 0; y < 4; y++) {
                 for (let x = 0; x < 4; x++) {
                     const dstPx = (yy + y) * width + xx + x;
                     const dstOffs = dstPx * 4;
-                    const colorIdx = bits & 0x03;
+                    const colorIdx = colorBits & 0x03;
                     dst[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
                     dst[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
                     dst[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
                     dst[dstOffs + 3] = colorTable[colorIdx * 4 + 3];
-                    bits >>= 2;
+                    colorBits >>= 2;
+                }
+            }
+
+            srcOffs += 0x08;
+        }
+    }
+
+    const pixels = dst;
+    return { type: 'RGBA', flag: surface.flag, width, height, depth, pixels };
+}
+
+// Software decompresses from standard BC2 (DXT3) to RGBA.
+function decompressBC2Surface(surface: DecodedSurfaceBC123UN): DecodedSurfaceRGBAUN {
+    const bytesPerPixel = 4;
+    const width = surface.width;
+    const height = surface.height;
+    const depth = surface.depth;
+    const dst = new Uint8Array(width * height * depth * bytesPerPixel);
+    const view = new DataView(surface.pixels.buffer);
+    const colorTable = new Uint8Array(16);
+
+    let srcOffs = 0;
+    const tall = height * depth;
+    for (let yy = 0; yy < tall; yy += 4) {
+        for (let xx = 0; xx < width; xx += 4) {
+            const alphaBits0 = view.getUint32(srcOffs + 0x00, true);
+            const alphaBits1 = view.getUint32(srcOffs + 0x04, true);
+            for (let y = 0; y < 4; y++) {
+                for (let x = 0; x < 4; x++) {
+                    const dstIdx = ((yy + y) * width) + xx + x;
+                    const dstOffs = (dstIdx * bytesPerPixel);
+                    const fullShift = (y * 4 + x) * 4;
+                    const alphaBits = fullShift < 32 ? alphaBits0 : alphaBits1;
+                    const shift = fullShift % 32;
+                    const alpha = (alphaBits >>> shift) & 0x0F;
+                    dst[dstOffs + 3] = expand4to8(alpha);
+                }
+            }
+
+            srcOffs += 0x08;
+
+            const color1 = view.getUint16(srcOffs + 0x00, true);
+            const color2 = view.getUint16(srcOffs + 0x02, true);
+            colorTableBC1(colorTable, color1, color2);
+
+            let colorBits = view.getUint32(srcOffs + 0x04, true);
+            for (let y = 0; y < 4; y++) {
+                for (let x = 0; x < 4; x++) {
+                    const dstIdx = (yy + y) * width + xx + x;
+                    const dstOffs = (dstIdx * bytesPerPixel);
+                    const colorIdx = colorBits & 0x03;
+                    dst[dstOffs + 0] = colorTable[colorIdx * 4 + 0];
+                    dst[dstOffs + 1] = colorTable[colorIdx * 4 + 1];
+                    dst[dstOffs + 2] = colorTable[colorIdx * 4 + 2];
+                    colorBits >>= 2;
                 }
             }
 
@@ -134,7 +196,7 @@ function decompressBC1Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBA
 }
 
 // Software decompresses from standard BC3 (DXT5) to RGBA.
-function decompressBC3Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBAUN {
+function decompressBC3Surface(surface: DecodedSurfaceBC123UN): DecodedSurfaceRGBAUN {
     const bytesPerPixel = 4;
     const width = surface.width;
     const height = surface.height;
@@ -148,7 +210,6 @@ function decompressBC3Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBA
     const tall = height * depth;
     for (let yy = 0; yy < tall; yy += 4) {
         for (let xx = 0; xx < width; xx += 4) {
-
             const alpha1 = view.getUint8(srcOffs + 0x00);
             const alpha2 = view.getUint8(srcOffs + 0x01);
 
@@ -188,41 +249,7 @@ function decompressBC3Surface(surface: DecodedSurfaceBC13UN): DecodedSurfaceRGBA
 
             const color1 = view.getUint16(srcOffs + 0x00, true);
             const color2 = view.getUint16(srcOffs + 0x02, true);
-
-            // Fill in first two colors in color table.
-            // TODO(jstpierre): SRGB-correct blending.
-            colorTable[0] = expand5to8((color1 >> 11) & 0x1F);
-            colorTable[1] = expand6to8((color1 >> 5) & 0x3F);
-            colorTable[2] = expand5to8(color1 & 0x1F);
-            colorTable[3] = 0xFF;
-
-            colorTable[4] = expand5to8((color2 >> 11) & 0x1F);
-            colorTable[5] = expand6to8((color2 >> 5) & 0x3F);
-            colorTable[6] = expand5to8(color2 & 0x1F);
-            colorTable[7] = 0xFF;
-
-            if (color1 > color2) {
-                // Predict gradients.
-                colorTable[8]  = s3tcblend(colorTable[4], colorTable[0]);
-                colorTable[9]  = s3tcblend(colorTable[5], colorTable[1]);
-                colorTable[10] = s3tcblend(colorTable[6], colorTable[2]);
-                colorTable[11] = 0xFF;
-
-                colorTable[12] = s3tcblend(colorTable[0], colorTable[4]);
-                colorTable[13] = s3tcblend(colorTable[1], colorTable[5]);
-                colorTable[14] = s3tcblend(colorTable[2], colorTable[6]);
-                colorTable[15] = 0xFF;
-            } else {
-                colorTable[8]  = (colorTable[0] + colorTable[4]) >>> 1;
-                colorTable[9]  = (colorTable[1] + colorTable[5]) >>> 1;
-                colorTable[10] = (colorTable[2] + colorTable[6]) >>> 1;
-                colorTable[11] = 0xFF;
-
-                colorTable[12] = 0x00;
-                colorTable[13] = 0x00;
-                colorTable[14] = 0x00;
-                colorTable[15] = 0xFF;
-            }
+            colorTableBC1(colorTable, color1, color2);
 
             let colorBits = view.getUint32(srcOffs + 0x04, true);
             for (let y = 0; y < 4; y++) {
@@ -349,6 +376,8 @@ export function decompressBC(surface: DecodedSurfaceBC): DecodedSurfaceSW {
     switch (surface.type) {
     case 'BC1':
         return decompressBC1Surface(surface);
+    case 'BC2':
+        return decompressBC2Surface(surface);
     case 'BC3':
         return decompressBC3Surface(surface);
     case 'BC4':
