@@ -289,9 +289,6 @@ function lerp(k0: AnimationKeyframeLinear, k1: AnimationKeyframeLinear, t: numbe
 function sampleAnimationTrackLinear(track: AnimationTrackLinear, frame: number): number {
     const frames = track.frames;
 
-    if (frames.length === 1)
-        return frames[0].value;
-
     // Find the first frame.
     const idx1 = frames.findIndex((key) => (frame < key.time));
     if (idx1 === 0)
@@ -327,11 +324,10 @@ function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeH
 function sampleAnimationTrackHermite(track: AnimationTrackHermite, frame: number) {
     const frames = track.frames;
 
-    if (frames.length === 1)
-        return frames[0].value;
-
     // Find the first frame.
     const idx1 = frames.findIndex((key) => (frame < key.time));
+    if (idx1 === 0)
+        return frames[0].value;
     if (idx1 < 0)
         return frames[frames.length - 1].value;
     const idx0 = idx1 - 1;

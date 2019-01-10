@@ -1285,9 +1285,6 @@ function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: num
 function sampleAnimationData(track: AnimationTrack, frame: number) {
     const frames = track.frames;
 
-    if (frames.length === 1)
-        return frames[0].value;
-
     // Find the first frame.
     const idx1 = frames.findIndex((key) => (frame < key.time));
     if (idx1 === 0)
