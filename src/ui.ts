@@ -63,6 +63,7 @@ export interface Flair {
     color?: string;
     bulletColor?: string;
     extraHTML?: string;
+    fontWeight?: string;
 }
 
 export interface Widget {
@@ -392,6 +393,8 @@ export abstract class ScrollSelect implements Widget {
             const textSpan = assertExists(outer.querySelector('span.text') as HTMLElement);
             const color = (flair !== undefined && flair.color !== undefined) ? flair.color : '';
             textSpan.style.color = color;
+            const fontWeight = (flair !== undefined && flair.fontWeight !== undefined) ? flair.fontWeight : '';
+            textSpan.style.fontWeight = fontWeight;
 
             if (flair !== undefined && flair.bulletColor !== undefined) {
                 selector.style.listStyleType = 'disc';
@@ -494,6 +497,7 @@ export class SingleSelect extends ScrollSelect {
             const flair = ensureFlairIndex(flairs, this.highlightedIndex);
             flair.background = HIGHLIGHT_COLOR;
             flair.color = 'black';
+            flair.fontWeight = 'bold';
         }
         this.setInternalFlairs(flairs);
     }
@@ -961,6 +965,7 @@ class SceneSelect extends Panel {
             const flair = ensureFlairIndex(sceneDescFlairs, selectedDescIndex);
             flair.background = this.getLoadingGradient();
             flair.color = this.loadProgress > 0.5 ? 'black' : undefined;
+            flair.fontWeight = 'bold';
             const pct = `${Math.round(this.loadProgress * 100)}%`;
             flair.extraHTML = this.loadProgress < 1.0 ? `<span style="font-weight: bold; color: #aaa">${pct}</span>` : ``;
         }
