@@ -19,21 +19,18 @@ class Command_Material {
     private materialHelper: GXMaterialHelperGfx;
     public templateRenderInst: GfxRenderInst;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public scene: Command_Bin, public material: Material) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public binCommand: Command_Bin, public material: Material) {
         this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, material.gxMaterial);
         this.templateRenderInst = this.materialHelper.templateRenderInst;
 
-        // We don't animate, so we only need to compute this once.
-        this.fillMaterialParams(materialParamsScratch);
-    }
-
-    private fillMaterialParams(materialParams: MaterialParams): void {
         // All we care about is textures...
+        const materialParams = materialParamsScratch;
         for (let i = 0; i < this.material.samplerIndexes.length; i++) {
             const samplerIndex = this.material.samplerIndexes[i];
+            materialParams.m_TextureMapping[i].reset();
             if (samplerIndex >= 0) {
-                materialParams.m_TextureMapping[i].gfxTexture = this.scene.gfxTextures[samplerIndex];
-                materialParams.m_TextureMapping[i].gfxSampler = this.scene.gfxSamplers[samplerIndex];
+                materialParams.m_TextureMapping[i].gfxTexture = this.binCommand.gfxTextures[samplerIndex];
+                materialParams.m_TextureMapping[i].gfxSampler = this.binCommand.gfxSamplers[samplerIndex];
             }
         }
 
@@ -41,7 +38,7 @@ class Command_Material {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx): void {
-        this.materialHelper.fillMaterialParams(materialParamsScratch, renderHelper);
+        this.materialHelper.fillMaterialParamsRaw(materialParamsScratch, renderHelper);
     }
 
     public destroy(device: GfxDevice): void {
@@ -189,7 +186,7 @@ export class LuigisMansionRenderer implements Viewer.Scene_Device {
         this.renderHelper = new GXRenderHelperGfx(device);
         for (let i = 0; i < bins.length; i++)
             this.binCommands.push(new Command_Bin(device, this.renderHelper, bins[i]));
-        this.renderHelper.renderInstBuilder.finish(device, this.viewRenderer);
+        this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 
     public createPanels(): UI.Panel[] {

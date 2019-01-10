@@ -255,10 +255,10 @@ export abstract class ScrollSelect implements Widget {
             outer.tabIndex = -1;
             outer.style.display = 'grid';
             outer.style.gridAutoFlow = 'column';
-            outer.style.cursor = 'pointer';
             outer.style.outline = 'none';
 
             if (item.type === ScrollSelectItemType.Selectable) {
+                outer.style.cursor = 'pointer';
                 outer.style.paddingLeft = hasHeader ? '20px' : '';
 
                 const selector = document.createElement('div');

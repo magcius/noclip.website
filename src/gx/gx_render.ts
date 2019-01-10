@@ -229,15 +229,19 @@ export class GXMaterialHelperGfx {
         // TODO(jstpierre): Cache on RenderHelper?
         const program = new GX_Material.GX_Program(material, materialHacks);
         this.templateRenderInst.gfxProgram = device.createProgram(program);
+        this.templateRenderInst.name = material.name;
         GX_Material.translateGfxMegaState(this.templateRenderInst.ensureMegaState(), material);
-        this.templateRenderInst.samplerBindings = nArray(8, () => null);
         this.programKey = device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey;
         renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
     }
 
+    public fillMaterialParamsRaw(materialParams: MaterialParams, renderHelper: GXRenderHelperGfx): void {
+        renderHelper.fillMaterialParams(materialParams, this.templateRenderInst.uniformBufferOffsets[ub_MaterialParams]);
+    }
+
     public fillMaterialParams(materialParams: MaterialParams, renderHelper: GXRenderHelperGfx): void {
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        renderHelper.fillMaterialParams(materialParams, this.templateRenderInst.uniformBufferOffsets[ub_MaterialParams]);
+        this.fillMaterialParamsRaw(materialParams, renderHelper);
     }
 
     public destroy(device: GfxDevice): void {

@@ -180,21 +180,20 @@ export class GfxRenderInst {
         this._flags = setBitValue(this._flags, flag, v);
     }
 
-    private _inheritSamplerBindings(): void {
+    private _tryInheritSamplerBindings(): void {
         if ((this._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT)) {
-            this.parentRenderInst._inheritSamplerBindings();
-            this.setSamplerBindings(this.parentRenderInst.samplerBindings);
+            this.parentRenderInst._tryInheritSamplerBindings();
+            this.inheritSamplerBindings();
         }
     }
 
     public _rebuildSamplerBindings(device: GfxDevice, cache: GfxRenderCache): void {
-        this._inheritSamplerBindings();
+        this._tryInheritSamplerBindings();
 
         if (!(this._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY))
             return;
 
         this.buildBindings(device, cache);
-        this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, false);
     }
 
     public set visible(v: boolean) {
@@ -215,6 +214,10 @@ export class GfxRenderInst {
 
     public setSamplerBindingsInherit(v: boolean = true): void {
         this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT, v);
+    }
+
+    public inheritSamplerBindings(): void {
+        this.setSamplerBindings(this.parentRenderInst.samplerBindings);
     }
 
     public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
@@ -298,6 +301,7 @@ export class GfxRenderInst {
             firstUniformBufferBinding += bindingLayout.numUniformBuffers;
             firstSamplerBinding += bindingLayout.numSamplers;
         }
+        this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, false);
     }
 }
 
