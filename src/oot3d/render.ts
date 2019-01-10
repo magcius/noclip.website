@@ -347,6 +347,7 @@ export class CmbRenderer {
         // Create our template render inst.
         const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         templateRenderInst.inputState = inputState;
+        templateRenderInst.setSamplerBindingsInherit();
 
         function getFirstIndex(prm: CMB.Prm): number {
             if (prm.indexType === CMB.DataType.UByte) {
@@ -369,6 +370,7 @@ export class CmbRenderer {
             renderInstBuilder.newUniformBufferInstance(renderInst, OoT3D_Program.ub_PrmParams);
             const firstIndex = getFirstIndex(prms.prm);
             renderInst.drawIndexes(prms.prm.count, firstIndex);
+            renderInst.setSamplerBindingsInherit();
             renderInsts.push(renderInst);
         }
 

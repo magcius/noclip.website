@@ -120,7 +120,7 @@ const enum GfxRenderInstFlags {
     VISIBLE                  = 1 << 1,
     DRAW_INDEXED             = 1 << 2,
     SAMPLER_BINDINGS_INHERIT = 1 << 3,
-    SAMPLER_BINDINGS_DIRTY   = 1 << 4,
+    BINDINGS_DIRTY   = 1 << 4,
 }
 
 function setBitValue(bucket: number, bit: number, v: boolean): number {
@@ -187,15 +187,6 @@ export class GfxRenderInst {
         }
     }
 
-    public _rebuildSamplerBindings(device: GfxDevice, cache: GfxRenderCache): void {
-        this._tryInheritSamplerBindings();
-
-        if (!(this._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY))
-            return;
-
-        this.buildBindings(device, cache);
-    }
-
     public set visible(v: boolean) {
         this._setFlag(GfxRenderInstFlags.VISIBLE, v);
     }
@@ -214,6 +205,10 @@ export class GfxRenderInst {
 
     public setSamplerBindingsInherit(v: boolean = true): void {
         this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT, v);
+        if (v) {
+            const parentDirty = !!(this.parentRenderInst._flags & GfxRenderInstFlags.BINDINGS_DIRTY);
+            this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, parentDirty);
+        }
     }
 
     public inheritSamplerBindings(): void {
@@ -225,7 +220,7 @@ export class GfxRenderInst {
             const j = firstSampler + i;
             if (!this.samplerBindings[j] || this.samplerBindings[j].texture !== m[i].texture || this.samplerBindings[j].sampler !== m[i].sampler) {
                 this.samplerBindings[j] = m[i];
-                this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, true);
+                this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
             }
         }
     }
@@ -234,7 +229,7 @@ export class GfxRenderInst {
         for (let i = 0; i < m.length; i++) {
             if (!this.samplerBindings[i] || this.samplerBindings[i].texture !== m[i].gfxTexture || this.samplerBindings[i].sampler !== m[i].gfxSampler) {
                 this.samplerBindings[i] = { texture: m[i].gfxTexture, sampler: m[i].gfxSampler };
-                this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, true);
+                this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
             }
         }
     }
@@ -290,6 +285,11 @@ export class GfxRenderInst {
     }
 
     public buildBindings(device: GfxDevice, cache: GfxRenderCache): void {
+        this._tryInheritSamplerBindings();
+
+        if (!(this._flags & GfxRenderInstFlags.BINDINGS_DIRTY))
+            return;
+
         let firstUniformBufferBinding = 0;
         let firstSamplerBinding = 0;
         for (let i = 0; i < this._bindingLayouts.length; i++) {
@@ -301,7 +301,7 @@ export class GfxRenderInst {
             firstUniformBufferBinding += bindingLayout.numUniformBuffers;
             firstSamplerBinding += bindingLayout.numSamplers;
         }
-        this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_DIRTY, false);
+        this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, false);
     }
 }
 
@@ -352,7 +352,7 @@ export class GfxRenderInstViewRenderer {
             if ((renderInst.getPassMask() & passMask) === 0)
                 continue;
 
-            renderInst._rebuildSamplerBindings(device, this.gfxRenderCache);
+            renderInst.buildBindings(device, this.gfxRenderCache);
 
             assert(renderInst._pipeline !== null);
             if (currentPipeline !== renderInst._pipeline) {
