@@ -579,6 +579,7 @@ class Main {
         const progressable = this.sceneLoader.loadSceneDesc(sceneDesc).then((mainSceneBase) => {
             const sceneDescId = this._getCurrentSceneDescId();
             this.saveManager.setCurrentSceneDescId(sceneDescId);
+            this.ui.saveStatesPanel.setCurrentSceneDesc(sceneGroup, sceneDesc);
             if (!this._loadSceneSaveState(sceneState)) {
                 // Set up defaults.
                 this._resetCamera(mainSceneBase, sceneDescId);

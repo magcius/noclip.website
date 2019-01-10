@@ -1014,16 +1014,17 @@ function buildShareURL(saveState: string): string {
 
 export class SaveStatesPanel extends Panel {
     public currentShareURL: TextField;
+    public currentSceneDescId: TextField;
 
     constructor() {
         super();
 
         this.setTitle(SAVE_ICON, 'Save States and Sharing');
 
-        const saveHeader = document.createElement('div');
-        saveHeader.textContent = 'Share URL';
-        saveHeader.style.fontWeight = 'bold';
-        this.contents.appendChild(saveHeader);
+        const shareURLHeader = document.createElement('div');
+        shareURLHeader.textContent = 'Share URL';
+        shareURLHeader.style.fontWeight = 'bold';
+        this.contents.appendChild(shareURLHeader);
 
         this.currentShareURL = new TextField();
         this.currentShareURL.textarea.readOnly = true;
@@ -1031,12 +1032,29 @@ export class SaveStatesPanel extends Panel {
             this.currentShareURL.selectAll();
         };
         this.contents.appendChild(this.currentShareURL.elem);
+
+        const sceneDescIdHeader = document.createElement('div');
+        sceneDescIdHeader.textContent = 'Internal Scene ID';
+        sceneDescIdHeader.style.fontWeight = 'bold';
+        sceneDescIdHeader.style.marginTop = '1em';
+        this.contents.appendChild(sceneDescIdHeader);
+
+        this.currentSceneDescId = new TextField();
+        this.currentSceneDescId.textarea.readOnly = true;
+        this.currentSceneDescId.textarea.onfocus = () => {
+            this.currentSceneDescId.selectAll();
+        };
+        this.contents.appendChild(this.currentSceneDescId.elem);
     }
 
     public expandAndFocus(): void {
         this.setExpanded(true);
         this.setAutoClosed(false);
         this.currentShareURL.textarea.focus({ preventScroll: true });
+    }
+
+    public setCurrentSceneDesc(sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc): void {
+        this.currentSceneDescId.setValue(sceneDesc.id);
     }
 
     public setSaveState(saveState: string) {
@@ -1608,7 +1626,7 @@ export class UI {
     }
 
     public setScenePanels(panels: Panel[]): void {
-        this.setPanels([this.sceneSelect, this.saveStatesPanel, ...panels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
+        this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
     }
 
     public setPanelsAutoClosed(v: boolean): void {

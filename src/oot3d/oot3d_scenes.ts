@@ -98,7 +98,7 @@ const sceneDescs = [
     new SceneDesc("moriboss", "Forest Temple (Boss)"),
     new SceneDesc("k_home", 'k_home'),
     new SceneDesc("kokiri", 'kokiri'),
-    new SceneDesc("link", ''),
+    new SceneDesc("link", 'link'),
 
     "Kakariko Village",
     new SceneDesc("spot01", "Kakariko Village"),
