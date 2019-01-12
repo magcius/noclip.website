@@ -1601,8 +1601,11 @@ export class UI {
 
     public sceneChanged() {
         const cameraControllerClass = (<CameraControllerClass> this.viewer.cameraController.constructor);
+
         // Set up UI.
         this.viewerSettings.cameraControllerSelected(cameraControllerClass);
+
+        // Textures
         if (this.viewer.scene !== null) {
             const scene = this.viewer.scene;
             if (scene.textures !== undefined)

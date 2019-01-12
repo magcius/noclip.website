@@ -26,7 +26,7 @@ export interface MainSceneBase {
     createPanels?(): UI.Panel[];
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(dst: ArrayBuffer, offs: number): number;
-    resetCamera?(camera: Camera): void;
+    resetCamera?(viewer: Viewer, camera: Camera): void;
 }
 
 export interface MainScene extends MainSceneBase, Scene {
@@ -47,7 +47,7 @@ export interface Scene_Device extends MainSceneBase {
 
 export class Viewer {
     public inputManager: InputManager;
-    public cameraController: CameraController;
+    public cameraController: CameraController | null = null;
 
     // GL method.
     public renderState: RenderState;
@@ -76,7 +76,6 @@ export class Viewer {
 
     private constructor(gl: WebGL2RenderingContext, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
-        this.cameraController = null;
 
         // GL
         this.renderState = new RenderState(gl);
@@ -93,6 +92,8 @@ export class Viewer {
     }
 
     public reset() {
+        this.cameraController = null;
+
         const gl = this.renderState.gl;
         gl.activeTexture(gl.TEXTURE0);
         gl.clearColor(0.88, 0.88, 0.88, 0.0);
@@ -254,7 +255,6 @@ export interface SceneDesc {
     name: string;
     createScene?(gl: WebGL2RenderingContext): Progressable<MainScene> | null;
     createScene_Device?(device: GfxDevice, abortSignal: AbortSignal): Progressable<Scene_Device> | null;
-    defaultCameraController?: CameraControllerClass;
 }
 
 export interface SceneGroup {

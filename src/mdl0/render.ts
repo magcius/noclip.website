@@ -4,123 +4,98 @@ import * as MDL0 from './mdl0';
 import * as Viewer from '../viewer';
 
 import { RenderState } from '../render';
-import { SimpleProgram } from '../Program';
+import { SimpleProgram, DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { OrbitCameraController } from '../Camera';
-import { GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { OrbitCameraController, Camera } from '../Camera';
+import { GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxDevice, GfxBufferUsage, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { makeMegaState, defaultMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { BasicRendererHelper } from '../oot3d/render';
 
-class FancyGrid_Program extends SimpleProgram {
-    public positionLocation: number;
+class FancyGrid_Program extends DeviceProgram {
+    public static a_Position = 0;
+    public static ub_Scene = 0;
 
     public vert = `
 precision mediump float;
 
-uniform mat4 u_modelView;
-uniform mat4 u_projection;
+layout(row_major, std140) uniform ub_SceneParams {
+    mat4 u_Projection;
+    mat4x3 u_ModelView;
+};
 
-attribute vec3 a_position;
-varying float v_eyeFade;
-varying vec2 v_surfCoord;
+layout(location = ${FancyGrid_Program.a_Position}) attribute vec3 a_Position;
+varying float v_EyeFade;
+varying vec2 v_SurfCoord;
 
 void main() {
-    v_surfCoord = a_position.xz;
+    v_SurfCoord = a_Position.xz;
 
-    float scale = 200.0;
-    gl_Position = u_projection * u_modelView * vec4(a_position * scale, 1.0);
+    float t_Scale = 200.0;
+    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position * t_Scale, 1.0);
 
-    vec3 V = (vec4(0.0, 0.0, 1.0, 0.0) * u_modelView).xyz;
+    vec3 V = (vec3(0.0, 0.0, 1.0) * u_ModelView).xyz;
     vec3 N = vec3(0.0, 1.0, 0.0);
-    v_eyeFade = dot(V, N);
+    v_EyeFade = dot(V, N);
 }
 `;
 
     public frag = `
-#extension GL_EXT_frag_depth : enable
-#extension GL_OES_standard_derivatives : enable
-
 precision highp float;
-varying float v_eyeFade;
-varying vec2 v_surfCoord;
+varying float v_EyeFade;
+varying vec2 v_SurfCoord;
 
 void main() {
-    float distFromCenter = distance(v_surfCoord, vec2(0.0));
-    vec2 uv = (v_surfCoord + 1.0) * 0.5;
+    float t_DistFromCenter = distance(v_SurfCoord, vec2(0.0));
+    vec2 t_UV = (v_SurfCoord + 1.0) * 0.5;
 
-    vec4 color;
-    color.a = 1.0;
+    vec4 t_Color;
+    t_Color.a = 1.0;
 
-    // Base Grid color.
-    color.rgb = mix(vec3(0.8, 0.0, 0.8), vec3(0.4, 0.2, 0.8), clamp(distFromCenter * 1.5, 0.0, 1.0));
-    color.a *= clamp(mix(2.0, 0.0, distFromCenter), 0.0, 1.0);
+    // Base Grid color
+    t_Color.rgb = mix(vec3(0.8, 0.0, 0.8), vec3(0.4, 0.2, 0.8), clamp(t_DistFromCenter * 1.5, 0.0, 1.0));
+    t_Color.a *= clamp(mix(2.0, 0.0, t_DistFromCenter), 0.0, 1.0);
 
     // Grid lines mask.
-    uv *= 80.0;
-    float sharpDx = clamp(1.0 / min(abs(dFdx(uv.x)), abs(dFdy(uv.y))), 2.0, 20.0);
-    float sharpMult = sharpDx * 10.0;
-    float sharpOffs = sharpDx * 4.40;
-    vec2 gridM = (abs(fract(uv) - 0.5)) * sharpMult - sharpOffs;
-    float gridMask = max(gridM.x, gridM.y);
-    color.a *= clamp(gridMask, 0.0, 1.0);
+    t_UV *= 80.0;
+    float t_SharpDx = clamp(1.0 / min(abs(dFdx(t_UV.x)), abs(dFdy(t_UV.y))), 2.0, 20.0);
+    float t_SharpMult = t_SharpDx * 10.0;
+    float t_SharpOffs = t_SharpDx * 4.40;
+    vec2 t_GridM = (abs(fract(t_UV) - 0.5)) * t_SharpMult - t_SharpOffs;
+    float t_GridMask = max(t_GridM.x, t_GridM.y);
+    t_Color.a *= clamp(t_GridMask, 0.0, 1.0);
 
-    color.a += (1.0 - clamp(distFromCenter * 1.2, 0.0, 1.0)) * 0.5 * v_eyeFade;
+    t_Color.a += (1.0 - clamp(t_DistFromCenter * 1.2, 0.0, 1.0)) * 0.5 * v_EyeFade;
 
     // Eye fade.
-    color.a *= clamp(v_eyeFade, 0.3, 1.0);
-    gl_FragColor = color;
+    t_Color.a *= clamp(v_EyeFade, 0.3, 1.0);
+    gl_FragColor = t_Color;
 
     gl_FragDepth = gl_FragCoord.z + 1e-6;
 }
 `;
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-
-        this.positionLocation = gl.getAttribLocation(prog, "a_position");
-    }
 }
 
 class FancyGrid {
-    public program: FancyGrid_Program;
+    public gfxProgram: GfxProgram;
+    private posBuffer: GfxBuffer;
+    private idxBuffer: GfxBuffer;
+    private sceneParamsBuffer: GfxRenderBuffer;
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+    private renderInst: GfxRenderInst;
 
-    private vtxBuffer: WebGLBuffer;
-    private renderFlags: GfxMegaStateDescriptor;
-
-    constructor(gl: WebGL2RenderingContext) {
-        this.program = new FancyGrid_Program();
-        this._createBuffers(gl);
-
-        this.renderFlags = makeMegaState({
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-        });
-    }
-
-    public render(state: RenderState) {
-        const gl = state.gl;
-
-        state.useProgram(this.program);
-        state.bindModelView();
-        state.useFlags(this.renderFlags);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
-        gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(this.program.positionLocation);
-
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-        gl.disableVertexAttribArray(this.program.positionLocation);
-    }
-
-    private _createBuffers(gl: WebGL2RenderingContext) {
-        this.vtxBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
+    constructor(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
+        const program = new FancyGrid_Program();
+        this.gfxProgram = device.createProgram(program);
+        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
 
         const vtx = new Float32Array(4 * 3);
-
         vtx[0]  = -1;
         vtx[1]  = 0;
         vtx[2]  = -1;
@@ -133,122 +108,206 @@ class FancyGrid {
         vtx[9]  = 1;
         vtx[10] = 0;
         vtx[11] = 1;
+        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
 
-        gl.bufferData(gl.ARRAY_BUFFER, vtx, gl.STATIC_DRAW);
+        const idx = new Uint8Array([0, 1, 2, 2, 1, 3]);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, idx.buffer);
+
+        const programReflection = device.queryProgram(this.gfxProgram);
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+            { numSamplers: 0, numUniformBuffers: 1 },
+        ];
+        const uniformBuffers = [ this.sceneParamsBuffer ];
+        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, uniformBuffers);
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: FancyGrid_Program.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+        ];
+        this.inputLayout = device.createInputLayout({
+            vertexAttributeDescriptors,
+            indexBufferFormat: GfxFormat.U8_R,
+        })
+        const vertexBuffers: GfxVertexBufferDescriptor[] = [
+            { buffer: this.posBuffer, byteOffset: 0, byteStride: 12 },
+        ];
+        this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0, byteStride: 1 });
+        this.renderInst = renderInstBuilder.pushRenderInst();
+        renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
+        this.renderInst.gfxProgram = this.gfxProgram;
+        this.renderInst.inputState = this.inputState;
+        this.renderInst.setMegaStateFlags({
+            blendMode: GfxBlendMode.ADD,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+        });
+        this.renderInst.drawIndexes(6);
+
+        renderInstBuilder.finish(device, viewRenderer);
     }
 
-    public destroy(gl: WebGL2RenderingContext) {
-        this.program.destroy(gl);
-        gl.deleteBuffer(this.vtxBuffer);
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        let offs = this.renderInst.getUniformBufferOffset(FancyGrid_Program.a_Position);
+        const mappedF32 = this.sceneParamsBuffer.mapBufferF32(offs, 4*7);
+        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x3(mappedF32, offs, viewerInput.camera.viewMatrix);
+
+        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
+    }
+
+    public destroy(device: GfxDevice) {
+        device.destroyProgram(this.gfxProgram);
+        device.destroyBuffer(this.posBuffer);
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputState);
+        this.sceneParamsBuffer.destroy(device);
     }
 }
 
-class MDL0_Program extends SimpleProgram {
-    public positionLocation: number;
-    public colorLocation: number;
+class MDL0_Program extends DeviceProgram {
+    public static a_Position = 0;
+    public static a_Color = 1;
+
+    public static ub_SceneParams = 0;
 
     public vert = `
 precision mediump float;
 
-uniform mat4 u_modelView;
-uniform mat4 u_projection;
+layout(row_major, std140) uniform ub_SceneParams {
+    mat4 u_Projection;
+    mat4x3 u_ModelView;
+};
 
-attribute vec3 a_position;
-attribute vec4 a_color;
-varying vec4 v_color;
+layout(location = ${MDL0_Program.a_Position}) attribute vec3 a_Position;
+layout(location = ${MDL0_Program.a_Color}) attribute vec4 a_Color;
+varying vec4 v_Color;
 
 void main() {
-    v_color = a_color.bgra;
-    gl_Position = u_projection * u_modelView * vec4(a_position, 1.0);
+    v_Color = a_Color.bgra;
+    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
 }
 `;
 
     public frag = `
 precision mediump float;
 
-varying vec4 v_color;
+varying vec4 v_Color;
 
 void main() {
-    gl_FragColor = v_color;
+    gl_FragColor = v_Color;
 }
 `;
+}
 
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
+class MDL0Renderer {
+    private gfxProgram: GfxProgram;
+    private posBuffer: GfxBuffer;
+    private clrBuffer: GfxBuffer;
+    private idxBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private templateRenderInst: GfxRenderInst;
+    private renderInsts: GfxRenderInst[] = [];
+    private sceneParamsBuffer: GfxRenderBuffer;
 
-        this.positionLocation = gl.getAttribLocation(prog, "a_position");
-        this.colorLocation = gl.getAttribLocation(prog, "a_color");
+    constructor(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer, public mdl0: MDL0.MDL0) {
+        const program = new MDL0_Program();
+        this.gfxProgram = device.createProgram(program);
+        const programReflection = device.queryProgram(this.gfxProgram);
+
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+            { numSamplers: 0, numUniformBuffers: 1 },
+        ];
+        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
+        const uniformBuffers = [ this.sceneParamsBuffer ];
+        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, uniformBuffers);
+
+        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.mdl0.vtxData.buffer);
+        this.clrBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.mdl0.clrData.buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.mdl0.idxData.buffer);
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: MDL0_Program.a_Position, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+            { location: MDL0_Program.a_Color, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+        ];
+        this.inputLayout = device.createInputLayout({
+            vertexAttributeDescriptors,
+            indexBufferFormat: GfxFormat.U16_R,
+        });
+
+        this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
+        this.templateRenderInst.gfxProgram = this.gfxProgram;
+        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, MDL0_Program.ub_SceneParams);
+
+        const idxCount = this.mdl0.idxData.length;
+
+        for (let i = 0; i < this.mdl0.animCount; i++) {
+            const posByteOffset = i * this.mdl0.animSize;
+            const renderInst = renderInstBuilder.pushRenderInst();
+            renderInst.inputState = device.createInputState(this.inputLayout, [
+                { buffer: this.posBuffer, byteOffset: posByteOffset, byteStride: this.mdl0.vertSize },
+                { buffer: this.clrBuffer, byteOffset: 0, byteStride: 4 },
+            ], { buffer: this.idxBuffer, byteOffset: 0, byteStride: 2 });
+            renderInst.drawIndexes(idxCount);
+
+            this.renderInsts[i] = renderInst;
+        }
+
+        renderInstBuilder.popTemplateRenderInst();
+        renderInstBuilder.finish(device, viewRenderer);
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        let offs = this.templateRenderInst.getUniformBufferOffset(FancyGrid_Program.a_Position);
+        const mappedF32 = this.sceneParamsBuffer.mapBufferF32(offs, 4*7);
+        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x3(mappedF32, offs, viewerInput.camera.viewMatrix);
+
+        const frameNumber = ((viewerInput.time / 16) % this.mdl0.animCount) | 0;
+        for (let i = 0; i < this.renderInsts.length; i++) {
+            this.renderInsts[i].visible = (i === frameNumber);
+        }
+
+        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyProgram(this.gfxProgram);
+        device.destroyBuffer(this.posBuffer);
+        device.destroyBuffer(this.clrBuffer);
+        device.destroyBuffer(this.idxBuffer);
+        device.destroyInputLayout(this.inputLayout);
+        this.sceneParamsBuffer.destroy(device);
+        for (let i = 0; i < this.renderInsts.length; i++)
+            device.destroyInputState(this.renderInsts[i].inputState);
     }
 }
 
-class Scene implements Viewer.MainScene {
-    public program: MDL0_Program;
-    public mdl0: MDL0.MDL0;
+class SceneRenderer extends BasicRendererHelper {
+    public mdl0Renderer: MDL0Renderer;
     public fancyGrid: FancyGrid;
 
-    private clrBuffer: WebGLBuffer;
-    private vtxBuffer: WebGLBuffer;
-    private idxBuffer: WebGLBuffer;
-
-    constructor(gl: WebGL2RenderingContext, mdl0: MDL0.MDL0) {
-        this.fancyGrid = new FancyGrid(gl);
-        this.program = new MDL0_Program();
-        this.mdl0 = mdl0;
-        this._createBuffers(gl);
+    constructor(device: GfxDevice, mdl0: MDL0.MDL0) {
+        super();
+        this.mdl0Renderer = new MDL0Renderer(device, this.viewRenderer, mdl0);
+        this.fancyGrid = new FancyGrid(device, this.viewRenderer);
     }
 
-    public render(state: RenderState) {
-        const gl = state.gl;
-
-        state.useProgram(this.program);
-        state.bindModelView();
-        state.useFlags(defaultMegaState);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.clrBuffer);
-        gl.vertexAttribPointer(this.program.colorLocation, 4, gl.UNSIGNED_BYTE, true, 0, 0);
-        gl.enableVertexAttribArray(this.program.colorLocation);
-
-        const frameNumber = ((state.time / 16) % this.mdl0.animCount) | 0;
-        const vtxOffset = frameNumber * this.mdl0.animSize;
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
-        gl.vertexAttribPointer(this.program.positionLocation, 3, gl.FLOAT, false, this.mdl0.vertSize, vtxOffset);
-        gl.enableVertexAttribArray(this.program.positionLocation);
-
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuffer);
-        gl.drawElements(gl.TRIANGLES, this.mdl0.idxData.length, gl.UNSIGNED_SHORT, 0);
-
-        gl.disableVertexAttribArray(this.program.colorLocation);
-        gl.disableVertexAttribArray(this.program.positionLocation);
-
-        this.fancyGrid.render(state);
+    public resetCamera(viewer: Viewer.Viewer, camera: Camera): void {
+        viewer.setCameraController(new OrbitCameraController());
     }
 
-    private _createBuffers(gl: WebGL2RenderingContext) {
-        this.clrBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.clrBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, this.mdl0.clrData, gl.STATIC_DRAW);
-
-        this.idxBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.mdl0.idxData, gl.STATIC_DRAW);
-
-        this.vtxBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vtxBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, this.mdl0.vtxData, gl.STATIC_DRAW);
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.mdl0Renderer.prepareToRender(hostAccessPass, viewerInput);
+        this.fancyGrid.prepareToRender(hostAccessPass, viewerInput);
     }
 
-    public destroy(gl: WebGL2RenderingContext) {
-        gl.deleteBuffer(this.clrBuffer);
-        gl.deleteBuffer(this.vtxBuffer);
-        gl.deleteBuffer(this.idxBuffer);
-        this.program.destroy(gl);
-        this.fancyGrid.destroy(gl);
+    public destroy(device: GfxDevice) {
+        super.destroy(device);
+        this.mdl0Renderer.destroy(device);
+        this.fancyGrid.destroy(device);
     }
 }
 
 export class SceneDesc implements Viewer.SceneDesc {
-    public defaultCameraController = OrbitCameraController;
     public id: string;
     public name: string;
     public path: string;
@@ -259,10 +318,10 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Scene> {
+    public createScene_Device(device: GfxDevice): Progressable<SceneRenderer> {
         return fetchData(this.path).then((result: ArrayBufferSlice) => {
             const mdl0 = MDL0.parse(result);
-            return new Scene(gl, mdl0);
+            return new SceneRenderer(device, mdl0);
         });
     }
 }

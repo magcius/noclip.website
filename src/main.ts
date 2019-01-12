@@ -161,7 +161,6 @@ class DroppedFileSceneDesc implements SceneDesc {
 class SceneLoader {
     public loadingSceneDesc: SceneDesc = null;
     public abortController: AbortController | null = null;
-    public onscenechanged: () => void;
 
     constructor(public viewer: Viewer) {
     }
@@ -181,9 +180,7 @@ class SceneLoader {
                 progressable.then((scene: Scene_Device) => {
                     if (this.loadingSceneDesc === sceneDesc) {
                         this.loadingSceneDesc = null;
-                        this.viewer.setCameraController(new FPSCameraController());
                         this.viewer.setSceneDevice(scene);
-                        this.onscenechanged();
                     }
                 });
                 return progressable;
@@ -197,9 +194,7 @@ class SceneLoader {
                 progressable.then((scene: MainScene) => {
                     if (this.loadingSceneDesc === sceneDesc) {
                         this.loadingSceneDesc = null;
-                        this.viewer.setCameraController(new FPSCameraController());
                         this.viewer.setScene(scene);
-                        this.onscenechanged();
                     }
                 });
                 return progressable;
@@ -288,7 +283,6 @@ class Main {
         };
 
         this.sceneLoader = new SceneLoader(this.viewer);
-        this.sceneLoader.onscenechanged = this._onSceneChanged.bind(this);
 
         this._makeUI();
 
@@ -526,15 +520,25 @@ class Main {
         return this.saveManager.getSaveStateSlotKey(this._getCurrentSceneDescId(), slotIndex);
     }
 
-    private _onSceneChanged(): void {
-        this.ui.sceneChanged();
-
-        if (this.viewer.scene && this.viewer.scene.createPanels)
-            this.ui.setScenePanels(this.viewer.scene.createPanels());
-        else if (this.viewer.scene_device && this.viewer.scene_device.createPanels)
-            this.ui.setScenePanels(this.viewer.scene_device.createPanels());
+    private _onSceneChanged(mainSceneBase: MainSceneBase, sceneStateStr: string): void {
+        if (mainSceneBase.createPanels !== undefined)
+            this.ui.setScenePanels(mainSceneBase.createPanels());
         else
             this.ui.setScenePanels([]);
+
+        const sceneDescId = this._getCurrentSceneDescId();
+        this.saveManager.setCurrentSceneDescId(sceneDescId);
+        this.ui.saveStatesPanel.setCurrentSceneDesc(this.currentSceneGroup, this.currentSceneDesc);
+        if (!this._loadSceneSaveState(sceneStateStr)) {
+            // Set up defaults.
+            this._resetCamera(mainSceneBase, sceneDescId);
+        }
+
+        // TODO(jstpierre): Figure out how to do this less terribly.
+        if (this.viewer.cameraController === null)
+            this.viewer.setCameraController(new FPSCameraController());
+
+        this.ui.sceneChanged();
     }
 
     private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
@@ -553,14 +557,14 @@ class Main {
         }
     }
 
-    private _resetCamera(mainSceneBase: MainSceneBase, sceneDescId: string): void {
+    private _resetCamera(mainSceneBase: MainSceneBase, sceneDescId: string | null): void {
         const camera = this.viewer.renderState.camera;
 
         const defaultSaveStateStr = this.saveManager.loadState(this.saveManager.getSaveStateSlotKey(sceneDescId, 1));
         if (defaultSaveStateStr) {
             this._loadSceneSaveState(defaultSaveStateStr);
         } else if (mainSceneBase.resetCamera) {
-            mainSceneBase.resetCamera(camera);
+            mainSceneBase.resetCamera(this.viewer, camera);
         } else {
             mat4.identity(camera.worldMatrix);
         }
@@ -568,7 +572,7 @@ class Main {
         camera.worldMatrixUpdated();
     }
 
-    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneState: string | null = null): Progressable<MainSceneBase> {
+    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): Progressable<MainSceneBase> {
         if (this.currentSceneDesc === sceneDesc)
             return Progressable.resolve(null);
 
@@ -577,13 +581,7 @@ class Main {
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
         const progressable = this.sceneLoader.loadSceneDesc(sceneDesc).then((mainSceneBase) => {
-            const sceneDescId = this._getCurrentSceneDescId();
-            this.saveManager.setCurrentSceneDescId(sceneDescId);
-            this.ui.saveStatesPanel.setCurrentSceneDesc(sceneGroup, sceneDesc);
-            if (!this._loadSceneSaveState(sceneState)) {
-                // Set up defaults.
-                this._resetCamera(mainSceneBase, sceneDescId);
-            }
+            this._onSceneChanged(mainSceneBase, sceneStateStr);
             return mainSceneBase;
         });
         this.ui.sceneSelect.setLoadProgress(progressable.progress);

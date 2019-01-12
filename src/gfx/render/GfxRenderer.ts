@@ -465,6 +465,7 @@ export class GfxRenderInstBuilder {
 
             // Set up our dynamic uniform buffer offsets.
             let firstUniformBuffer = 0;
+            let totalSamplerBindings = 0;
             for (let j = 0; j < this.bindingLayouts.length; j++) {
                 const bindingLayout = this.bindingLayouts[j];
 
@@ -478,7 +479,15 @@ export class GfxRenderInstBuilder {
                 }
 
                 firstUniformBuffer = lastUniformBuffer;
+                totalSamplerBindings += bindingLayout.numSamplers;
             }
+
+            let shouldBuildBindings = false;
+            if (renderInst.samplerBindings.length === totalSamplerBindings)
+                shouldBuildBindings = true;
+
+            if (shouldBuildBindings)
+                renderInst._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
 
             renderInst.buildBindings(device, viewRenderer.gfxRenderCache);
 

@@ -38,7 +38,7 @@ export function parse(buffer: ArrayBufferSlice): MDL0 {
 
     let clrData: Uint8Array;
     if (flags & Flag.HAS_COLOR) {
-        clrData = buffer.createTypedArray(Uint8Array, offs, vertCount * 4);
+        clrData = buffer.createTypedArrayCopy(Uint8Array, offs, vertCount * 4);
         offs += clrData.byteLength;
     } else {
         clrData = new Uint8Array(vertCount * 4);
@@ -49,7 +49,7 @@ export function parse(buffer: ArrayBufferSlice): MDL0 {
     offs += 0x02;
     let idxData;
     {
-        const idxArr = buffer.createTypedArray(Uint16Array, offs, idxCount);
+        const idxArr = buffer.createTypedArrayCopy(Uint16Array, offs, idxCount);
         if (primType === 3) {
             idxData = idxArr;
         } else if (primType === 4) {
@@ -72,7 +72,7 @@ export function parse(buffer: ArrayBufferSlice): MDL0 {
     const vertSize = 4 * (3 + ((flags & Flag.HAS_NORMAL) ? 3 : 0));
     const animSize = vertCount * vertSize;
     {
-        vtxData = buffer.createTypedArray(Float32Array, offs, (animCount * animSize) / 4);
+        vtxData = buffer.createTypedArrayCopy(Float32Array, offs, (animCount * animSize) / 4);
         offs += vtxData.byteLength;
     }
     assert(offs === buffer.byteLength);
