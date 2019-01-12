@@ -13,7 +13,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, MaterialEntry } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { Command_Material, J3DTextureHolder, BMDModel, MaterialInstance } from '../j3d/render';
+import { MaterialData, J3DTextureHolder, BMDModel, MaterialInstance } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { GXRenderHelper, SceneParams, PacketParams, fillSceneParamsFromRenderState } from '../gx/gx_render';
@@ -26,8 +26,8 @@ mat4.fromScaling(posMtx, [scale, scale, scale]);
 class SeaPlaneScene implements Scene {
     private sceneParams = new SceneParams();
 
-    private seaCmd: Command_Material;
-    private seaCmdInstance: MaterialInstance;
+    private seaMaterial: MaterialData;
+    private seaMaterialInstance: MaterialInstance;
     private plane: PlaneShape;
     private renderHelper: GXRenderHelper;
     private bmdModel: BMDModel;
@@ -49,15 +49,15 @@ class SeaPlaneScene implements Scene {
         this.bmdModel = new BMDModel(gl, bmd);
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
-        this.seaCmd = this.makeMaterialCommand(gl, seaMaterial, configName);
-        this.seaCmdInstance = new MaterialInstance(null, seaMaterial);
-        this.seaCmdInstance.bindTTK1(this.animationController, btk.ttk1);
+        this.seaMaterial = this.makeMaterialData(seaMaterial, configName);
+        this.seaMaterialInstance = new MaterialInstance(null, this.seaMaterial);
+        this.seaMaterialInstance.bindTTK1(this.animationController, btk.ttk1);
         this.plane = new PlaneShape(gl);
 
         this.renderHelper = new GXRenderHelper(gl);
     }
 
-    public makeMaterialCommand(gl: WebGL2RenderingContext, material: MaterialEntry, configName: string) {
+    public makeMaterialData(material: MaterialEntry, configName: string) {
         const gxMaterial = material.gxMaterial;
 
         if (configName.includes('noalpha')) {
@@ -95,7 +95,7 @@ class SeaPlaneScene implements Scene {
             }
         }
 
-        return new Command_Material(this.bmdModel, material);
+        return new MaterialData(material);
     }
 
     public render(state: RenderState): void {
@@ -106,13 +106,13 @@ class SeaPlaneScene implements Scene {
 
         this.animationController.updateTime(state.time);
 
-        this.seaCmd.bindMaterial(state, this.renderHelper, this.textureHolder, this.seaCmdInstance);
+        this.seaMaterialInstance.bindMaterial(state, this.bmdModel, this.renderHelper, this.textureHolder);
         this.plane.render(state, this.renderHelper);
     }
 
     public destroy(gl: WebGL2RenderingContext) {
         this.plane.destroy(gl);
-        this.seaCmd.destroy(gl);
+        this.seaMaterial.destroy(gl);
         this.renderHelper.destroy(gl);
         this.bmdModel.destroy(gl);
     }

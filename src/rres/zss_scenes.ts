@@ -11,7 +11,6 @@ import { assert, readString, assertExists } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color, GX_Program } from '../gx/gx_material';

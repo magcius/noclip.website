@@ -24,16 +24,15 @@ class MarioKartWiiRenderer implements Viewer.Scene_Device {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
 
-    public textureHolder: RRESTextureHolder = new RRESTextureHolder();
     public renderHelper: GXRenderHelperGfx;
-    private animationController: AnimationController;
+    public textureHolder = new RRESTextureHolder();
+    private animationController = new AnimationController();
 
     private skyboxRenderer: MDL0ModelInstance;
     private courseRenderer: MDL0ModelInstance;
 
     constructor(device: GfxDevice, public courseRRES: BRRES.RRES, public skyboxRRES: BRRES.RRES) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.animationController = new AnimationController();
 
         this.textureHolder.addRRESTextures(device, skyboxRRES);
         this.textureHolder.addRRESTextures(device, courseRRES);
