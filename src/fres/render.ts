@@ -17,7 +17,7 @@ import { getFormatCompByteSize, getFormatComponentCount } from '../gfx/platform/
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { FVTX_VertexAttribute, FVTX_VertexBuffer, FTEXEntry, FRES, FVTX, FSHP_Mesh, FMAT, FSHP, FMDL } from './bfres';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
-import { computeViewSpaceDepth, computeViewMatrix } from '../Camera';
+import { computeViewSpaceDepth, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
@@ -55,7 +55,10 @@ layout(row_major, std140) uniform ub_ShapeParams {
     mat4x3 u_ModelView;
 };
 
-uniform sampler2D u_Samplers[8];
+uniform sampler2D s_a0;
+uniform sampler2D s_n0;
+uniform sampler2D s_e0;
+uniform sampler2D s_s0;
 `;
 
     public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(AglProgram.globalDefinitions);
@@ -90,11 +93,6 @@ void main() {
 `;
 
     public frag = `
-uniform sampler2D s_a0;
-uniform sampler2D s_n0;
-uniform sampler2D s_e0;
-uniform sampler2D s_s0;
-
 in vec3 v_PositionWorld;
 in vec2 v_TexCoord0;
 in vec3 v_NormalWorld;
@@ -443,7 +441,8 @@ class FVTXData {
     
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.vertexBufferDescriptors.length; i++)
-            device.destroyBuffer(this.vertexBufferDescriptors[i].buffer);
+            if (this.vertexBufferDescriptors[i])
+                device.destroyBuffer(this.vertexBufferDescriptors[i].buffer);
     }
 }
 
@@ -792,7 +791,7 @@ class FSHPInstance {
 
         const viewMatrix = scratchMatrix;
         if (isSkybox)
-            mat4.identity(viewMatrix);
+            computeViewMatrixSkybox(viewMatrix, viewerInput.camera);
         else
             computeViewMatrix(viewMatrix, viewerInput.camera);
 

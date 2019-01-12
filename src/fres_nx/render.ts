@@ -615,7 +615,8 @@ class FVTXData {
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.vertexBufferDescriptors.length; i++)
-            device.destroyBuffer(this.vertexBufferDescriptors[i].buffer);
+            if (this.vertexBufferDescriptors[i])
+                device.destroyBuffer(this.vertexBufferDescriptors[i].buffer);
     }
 }
 
