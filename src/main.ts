@@ -23,7 +23,6 @@ import * as SMS from './j3d/sms_scenes';
 import * as SMG from './j3d/smg_scenes';
 import * as SM64DS from './sm64ds/scenes';
 import * as MDL0 from './mdl0/scenes';
-import * as ZELVIEW from './zelview/scenes';
 import * as OOT3D from './oot3d/oot3d_scenes';
 import * as MM3D from './oot3d/mm3d_scenes';
 import * as LM3D from './oot3d/lm3d_scenes';
@@ -84,7 +83,6 @@ const sceneGroups = [
     "Other",
     DKSIV.sceneGroup,
     MDL0.sceneGroup,
-    ZELVIEW.sceneGroup,
     "Experimental",
     PSY.sceneGroup,
     DKCR.sceneGroup,
