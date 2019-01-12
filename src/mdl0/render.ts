@@ -12,7 +12,7 @@ import { OrbitCameraController, Camera } from '../Camera';
 import { GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxDevice, GfxBufferUsage, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { makeMegaState, defaultMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRenderInst } from '../gfx/render/GfxRenderer';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRendererHelper } from '../oot3d/render';
@@ -220,9 +220,9 @@ class MDL0Renderer {
         const uniformBuffers = [ this.sceneParamsBuffer ];
         const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, uniformBuffers);
 
-        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.mdl0.vtxData.buffer);
-        this.clrBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.mdl0.clrData.buffer);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.mdl0.idxData.buffer);
+        this.posBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, this.mdl0.vtxData);
+        this.clrBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, this.mdl0.clrData);
+        this.idxBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, this.mdl0.idxData);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MDL0_Program.a_Position, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
@@ -237,7 +237,7 @@ class MDL0Renderer {
         this.templateRenderInst.gfxProgram = this.gfxProgram;
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, MDL0_Program.ub_SceneParams);
 
-        const idxCount = this.mdl0.idxData.length;
+        const idxCount = this.mdl0.idxData.byteLength / 2;
 
         for (let i = 0; i < this.mdl0.animCount; i++) {
             const posByteOffset = i * this.mdl0.animSize;

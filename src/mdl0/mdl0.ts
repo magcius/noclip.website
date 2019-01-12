@@ -3,9 +3,9 @@ import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export interface MDL0 {
-    clrData: Uint8Array;
-    idxData: Uint16Array;
-    vtxData: Float32Array;
+    clrData: ArrayBufferSlice;
+    idxData: ArrayBufferSlice;
+    vtxData: ArrayBufferSlice;
 
     animCount: number;
     animSize: number;
@@ -36,43 +36,45 @@ export function parse(buffer: ArrayBufferSlice): MDL0 {
         offs = end;
     }
 
-    let clrData: Uint8Array;
+    let clrData: ArrayBufferSlice;
     if (flags & Flag.HAS_COLOR) {
-        clrData = buffer.createTypedArrayCopy(Uint8Array, offs, vertCount * 4);
+        clrData = buffer.subarray(offs, vertCount * 4);
         offs += clrData.byteLength;
     } else {
-        clrData = new Uint8Array(vertCount * 4);
+        clrData = new ArrayBufferSlice(new Uint8Array(vertCount * 4));
     }
 
     // Read in index buffer.
     let idxCount = view.getUint16(offs, true);
     offs += 0x02;
-    let idxData;
+    let idxData: ArrayBufferSlice;
     {
-        const idxArr = buffer.createTypedArrayCopy(Uint16Array, offs, idxCount);
         if (primType === 3) {
-            idxData = idxArr;
+            idxData = buffer.subarray(offs, idxCount * 2);
+            offs += idxData.byteLength;
         } else if (primType === 4) {
+            const idxArr = buffer.createTypedArray(Uint16Array, offs, idxCount);
+            offs += idxArr.byteLength;
             idxCount = (idxCount / 4 * 6);
-            idxData = new Uint16Array(idxCount);
+            const newArr = new Uint16Array(idxCount);
             for (let i = 0, j = 0; i < idxCount; i += 6) {
-                idxData[i + 0] = idxArr[j + 0];
-                idxData[i + 1] = idxArr[j + 1];
-                idxData[i + 2] = idxArr[j + 2];
-                idxData[i + 3] = idxArr[j + 2];
-                idxData[i + 4] = idxArr[j + 3];
-                idxData[i + 5] = idxArr[j + 0];
+                newArr[i + 0] = idxArr[j + 0];
+                newArr[i + 1] = idxArr[j + 1];
+                newArr[i + 2] = idxArr[j + 2];
+                newArr[i + 3] = idxArr[j + 2];
+                newArr[i + 4] = idxArr[j + 3];
+                newArr[i + 5] = idxArr[j + 0];
                 j += 4;
             }
+            idxData = new ArrayBufferSlice(newArr);
         }
-        offs += idxArr.byteLength;
     }
 
-    let vtxData: Float32Array;
+    let vtxData: ArrayBufferSlice;
     const vertSize = 4 * (3 + ((flags & Flag.HAS_NORMAL) ? 3 : 0));
     const animSize = vertCount * vertSize;
     {
-        vtxData = buffer.createTypedArrayCopy(Float32Array, offs, (animCount * animSize) / 4);
+        vtxData = buffer.subarray(offs, (animCount * animSize));
         offs += vtxData.byteLength;
     }
     assert(offs === buffer.byteLength);

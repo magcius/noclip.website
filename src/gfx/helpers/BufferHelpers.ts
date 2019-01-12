@@ -85,3 +85,11 @@ export function makeStaticDataBuffer(device: GfxDevice, usage: GfxBufferUsage, d
     device.submitPass(hostAccessPass);
     return gfxBuffer;
 }
+
+export function makeStaticDataBufferFromSlice(device: GfxDevice, usage: GfxBufferUsage, data: ArrayBufferSlice): GfxBuffer {
+    const gfxBuffer = device.createBuffer(align(data.byteLength, 4) / 4, usage, GfxBufferFrequencyHint.STATIC);
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadBufferData(gfxBuffer, 0, data.createTypedArray(Uint8Array));
+    device.submitPass(hostAccessPass);
+    return gfxBuffer;
+}

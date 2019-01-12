@@ -148,8 +148,4 @@ export default class ArrayBufferSlice {
             return new clazz(this.copyToBuffer(offs, byteLength), 0);
         }
     }
-
-    public createTypedArrayCopy<T extends ArrayBufferView>(clazz: _TypedArrayConstructor<T>, offs: number = 0, count?: number, endianness: Endianness = Endianness.LITTLE_ENDIAN): T {
-        return this.createTypedArray(clazz, offs, count, endianness, true);
-    }
 }
