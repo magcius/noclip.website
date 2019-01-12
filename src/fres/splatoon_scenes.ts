@@ -2,39 +2,63 @@
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 
-import { RenderState, depthClearFlags } from '../render';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as SARC from './sarc';
 import * as BFRES from './bfres';
-import * as GX2Texture from './gx2_texture';
-import { GX2TextureHolder, ModelRenderer } from './render';
+import { GX2TextureHolder, FMDLRenderer, FMDLData } from './render';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
-class SplatoonRenderer implements Viewer.MainScene {
-    constructor(public textureHolder: GX2TextureHolder, public mainRenderers: ModelRenderer[], public skyRenderers: ModelRenderer[]) {
+enum SplatoonPass {
+    SKYBOX = 0x01,
+    MAIN = 0x02,
+}
+
+class SplatoonRenderer implements Viewer.Scene_Device {
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
+
+    public textureHolder = new GX2TextureHolder();
+
+    public fmdlData: FMDLData[] = [];
+    public fmdlRenderers: FMDLRenderer[] = [];
+
+    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.fmdlRenderers.length; i++)
+            this.fmdlRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
 
-    public render(state: RenderState) {
-        const gl = state.gl;
-        state.setClipPlanes(0.2, 500000);
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
 
-        this.skyRenderers.forEach((renderer) => renderer.render(state));
-
-        state.useFlags(depthClearFlags);
-        gl.clear(gl.DEPTH_BUFFER_BIT);
-
-        this.mainRenderers.forEach((renderer) => renderer.render(state));
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        // First, render the skybox.
+        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SplatoonPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, SplatoonPass.MAIN);
+        return mainPassRenderer;
     }
 
-    public destroy(gl: WebGL2RenderingContext) {
-        GX2Texture.deswizzler.terminate();
+    public destroy(device: GfxDevice): void {
+        this.textureHolder.destroyGfx(device);
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
 
-        for (const renderer of this.skyRenderers)
-            renderer.destroy(gl);
-        for (const renderer of this.mainRenderers)
-            renderer.destroy(gl);
+        for (let i = 0; i < this.fmdlData.length; i++)
+            this.fmdlData[i].destroy(device);
+        for (let i = 0; i < this.fmdlRenderers.length; i++)
+            this.fmdlRenderers[i].destroy(device);
     }
 }
 
@@ -49,45 +73,49 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
-        const textureHolder = new GX2TextureHolder();
+    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+        const renderer = new SplatoonRenderer();
 
         return Progressable.all([
-            this._createRenderersFromPath(gl, textureHolder, `data/spl/${this.path}`, false),
-            this._createRenderersFromPath(gl, textureHolder, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
-        ]).then((renderers: ModelRenderer[][]): Viewer.MainScene => {
-            const [mainRenderers, skyRenderers] = renderers;
-            return new SplatoonRenderer(textureHolder, mainRenderers, skyRenderers);
+            this._createRenderersFromPath(device, renderer, `data/spl/${this.path}`, false),
+            this._createRenderersFromPath(device, renderer, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
+        ]).then(() => {
+            return renderer;
         });
     }
 
-    private _createRenderersFromPath(gl: WebGL2RenderingContext, textureHolder: GX2TextureHolder, path: string, isSkybox: boolean): Progressable<ModelRenderer[]> {
+    private _createRenderersFromPath(device: GfxDevice, renderer: SplatoonRenderer, path: string, isSkybox: boolean): Progressable<void> {
+        const textureHolder = renderer.textureHolder;
+
         return fetchData(path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((result: ArrayBufferSlice) => {
-            const renderers: ModelRenderer[] = [];
             const sarc = SARC.parse(result);
             const file = sarc.files.find((file) => file.name.endsWith('.bfres'));
             const fres = BFRES.parse(file.buffer);
 
-            textureHolder.addFRESTextures(gl, fres);
+            textureHolder.addFRESTextures(device, fres);
 
-            for (const fmdlEntry of fres.fmdl) {
+            for (let i = 0; i < fres.fmdl.length; i++) {
+                const fmdl = fres.fmdl[i];
+
                 // _drcmap is the map used for the Gamepad. It does nothing but cause Z-fighting.
-                if (fmdlEntry.entry.name.endsWith('_drcmap'))
+                if (fmdl.name.endsWith('_drcmap'))
                     continue;
 
                 // "_DV" seems to be the skybox. There are additional models which are powered
                 // by skeleton animation, which we don't quite support yet. Kill them for now.
-                if (fmdlEntry.entry.name.indexOf('_DV_') !== -1)
+                if (fmdl.name.indexOf('_DV_') !== -1)
                     continue;
 
-                const modelRenderer = new ModelRenderer(gl, textureHolder, fres, fmdlEntry.fmdl);
-                modelRenderer.isSkybox = isSkybox;
-                renderers.push(modelRenderer);
+                const fmdlData = new FMDLData(device, fmdl);
+                renderer.fmdlData.push(fmdlData);
+                const fmdlRenderer = new FMDLRenderer(device, textureHolder, fmdlData);
+                fmdlRenderer.isSkybox = isSkybox;
+                fmdlRenderer.passMask = isSkybox ? SplatoonPass.SKYBOX : SplatoonPass.MAIN;
+                fmdlRenderer.addToViewRenderer(device, renderer.viewRenderer);
+                renderer.fmdlRenderers.push(fmdlRenderer);
             }
-
-            return renderers;
         });
     }
 }

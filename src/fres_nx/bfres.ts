@@ -38,10 +38,10 @@ export interface FSHP_SubMesh {
 
 export interface FSHP_Mesh {
     primType: PrimitiveTopology;
-    format: IndexFormat;
     count: number;
     offset: number;
     subMeshes: FSHP_SubMesh[];
+    indexFormat: IndexFormat;
     indexBufferData: ArrayBufferSlice;
     bbox: AABB;
 }
@@ -278,7 +278,7 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
         const memoryPoolOffset = view.getUint32(meshArrayIdx + 0x20, littleEndian);
         const primType = view.getUint32(meshArrayIdx + 0x24, littleEndian);
         assert(primType === PrimitiveTopology.TriangleList);
-        const format = view.getUint32(meshArrayIdx + 0x28, littleEndian);
+        const indexFormat = view.getUint32(meshArrayIdx + 0x28, littleEndian);
         const count = view.getUint32(meshArrayIdx + 0x2C, littleEndian);
         const offset = view.getUint32(meshArrayIdx + 0x30, littleEndian);
         const subMeshCount = view.getUint16(meshArrayIdx + 0x34, littleEndian);
@@ -298,7 +298,7 @@ function parseFSHP(buffer: ArrayBufferSlice, memoryPoolBuffer: ArrayBufferSlice,
         const bbox = readBBox();
 
         meshArrayIdx += 0x38;
-        mesh.push({ primType, format, count, offset, subMeshes, indexBufferData, bbox });
+        mesh.push({ primType, indexFormat, count, offset, subMeshes, indexBufferData, bbox });
     }
 
     return { name, mesh, vertexIndex, boneIndex, materialIndex };

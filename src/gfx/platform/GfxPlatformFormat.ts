@@ -46,6 +46,7 @@ export enum GfxFormat {
     F32_RGB       = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RGB,  FormatFlags.NONE),
     F32_RGBA      = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     U8_R          = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_R,    FormatFlags.NONE),
+    U8_R_NORM     = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
     U8_RG         = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RG,   FormatFlags.NONE),
     U8_RG_NORM    = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RG,   FormatFlags.NORMALIZED),
     U8_RGBA       = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
@@ -54,10 +55,12 @@ export enum GfxFormat {
     U16_R         = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_R,    FormatFlags.NONE),
     U16_R_NORM    = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
     U16_RG_NORM   = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_RG,   FormatFlags.NORMALIZED),
+    U16_RGBA_NORM = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
     U16_RGB       = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_RGB,  FormatFlags.NONE),
     U32_R         = makeFormat(FormatTypeFlags.U32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
     U32_RG        = makeFormat(FormatTypeFlags.U32, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
     S8_R          = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NONE),
+    S8_R_NORM     = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
     S8_RG_NORM    = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
     S8_RGBA_NORM  = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
     S16_R         = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_R,    FormatFlags.NONE),
@@ -83,7 +86,7 @@ export function getFormatFlags(fmt: GfxFormat): FormatFlags {
     return fmt & 0xFF;
 }
 
-export function getFormatTypeFlagsByteSize(typeFlags: FormatTypeFlags): number {
+export function getFormatTypeFlagsByteSize(typeFlags: FormatTypeFlags): 1 | 2 | 4 {
     switch (typeFlags) {
     case FormatTypeFlags.F32:
     case FormatTypeFlags.U32:
@@ -91,6 +94,7 @@ export function getFormatTypeFlagsByteSize(typeFlags: FormatTypeFlags): number {
         return 4;
     case FormatTypeFlags.U16:
     case FormatTypeFlags.S16:
+    case FormatTypeFlags.F16:
         return 2;
     case FormatTypeFlags.U8:
     case FormatTypeFlags.S8:
@@ -104,7 +108,7 @@ export function getFormatTypeFlagsByteSize(typeFlags: FormatTypeFlags): number {
  * Gets the byte size for an individual component.
  * e.g. for F32_RGB, this will return "4", since F32 has 4 bytes.
  */
-export function getFormatCompByteSize(fmt: GfxFormat): number {
+export function getFormatCompByteSize(fmt: GfxFormat): 1 | 2 | 4 {
     return getFormatTypeFlagsByteSize(getFormatTypeFlags(fmt));
 }
 

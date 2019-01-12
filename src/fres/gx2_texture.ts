@@ -24,10 +24,6 @@ class Deswizzler {
     public terminate() {
         this.pool.terminate();
     }
-
-    public build() {
-        this.pool.build();
-    }
 }
 
 export const deswizzler: Deswizzler = new Deswizzler();

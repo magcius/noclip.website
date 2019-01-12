@@ -5,6 +5,7 @@ import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexX
 import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureBase } from '../TextureHolder';
+import { AABB } from '../Geometry';
 
 function readBinPtrT(view: DataView, offs: number, littleEndian: boolean) {
     const offs2 = view.getInt32(offs, littleEndian);
@@ -150,40 +151,44 @@ function parseFTEX(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
     return { surface, texData, mipData, userData };
 }
 
-interface SubMesh {
-    indexBufferCount: number;
-    indexBufferOffset: number;
-}
-
-export interface BufferData {
+export interface FVTX_VertexBuffer {
     stride: number;
     data: ArrayBufferSlice;
 }
 
-interface Mesh {
+export interface FSHP_SubMesh {
+    count: number;
+    offset: number;
+    bbox: AABB;
+}
+
+export interface FSHP_Mesh {
     primType: GX2PrimitiveType;
     indexFormat: GX2IndexFormat;
-    indexBufferData: BufferData;
-    submeshes: SubMesh[];
+    indexBufferData: FVTX_VertexBuffer;
+    offset: number;
+    count: number;
+    submeshes: FSHP_SubMesh[];
+    bbox: AABB;
 }
 
 export interface FSHP {
     name: string;
-    fmatIndex: number;
-    fvtxIndex: number;
-    meshes: Mesh[];
+    materialIndex: number;
+    vertexIndex: number;
+    mesh: FSHP_Mesh[];
 }
 
-export interface VtxAttrib {
+export interface FVTX_VertexAttribute {
     name: string;
     bufferIndex: number;
-    bufferStart: number;
+    offset: number;
     format: GX2AttribFormat;
 }
 
 export interface FVTX {
-    buffers: BufferData[];
-    attribs: VtxAttrib[];
+    vertexBuffers: FVTX_VertexBuffer[];
+    vertexAttributes: FVTX_VertexAttribute[];
     vtxCount: number;
 }
 
@@ -195,8 +200,8 @@ interface ShaderAssignDictEntry {
 interface ShaderAssign {
     shaderArchiveName: string;
     shadingModelName: string;
-    vertShaderInputDict: ShaderAssignDictEntry[];
-    fragShaderInputDict: ShaderAssignDictEntry[];
+    attribAssign: ShaderAssignDictEntry[];
+    samplerAssign: ShaderAssignDictEntry[];
     paramDict: ShaderAssignDictEntry[];
 }
 
@@ -304,12 +309,13 @@ export interface FMAT {
 }
 
 export interface FMDL {
+    name: string;
     fshp: FSHP[];
     fvtx: FVTX[];
     fmat: FMAT[];
 }
 
-function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: boolean): FMDL {
+function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: boolean, name: string): FMDL {
     const offs = entry.offs;
     const view = buffer.createDataView();
 
@@ -329,7 +335,7 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
     assert(fshpCount === fshpResDic.length);
     assert(fmatCount === fmatResDic.length);
 
-    function readBufferData(offs: number): BufferData {
+    function readBufferData(offs: number): FVTX_VertexBuffer {
         const size = view.getUint32(offs + 0x04, littleEndian);
         const stride = view.getUint16(offs + 0x0C, littleEndian);
         const dataOffs = readBinPtrT(view, offs + 0x14, littleEndian);
@@ -361,18 +367,18 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
         const attribArrayOffs = readBinPtrT(view, fvtxIdx + 0x10, littleEndian);
         const bufferArrayOffs = readBinPtrT(view, fvtxIdx + 0x18, littleEndian);
 
-        const attribs: VtxAttrib[] = [];
+        const attribs: FVTX_VertexAttribute[] = [];
         let attribArrayIdx = attribArrayOffs;
         for (let j = 0; j < attribCount; j++) {
             const name = readString(buffer, readBinPtrT(view, attribArrayIdx + 0x00, littleEndian));
             const bufferIndex = view.getUint8(attribArrayIdx + 0x04);
             const bufferStart = view.getUint16(attribArrayIdx + 0x06, littleEndian);
             const format = view.getUint32(attribArrayIdx + 0x08, littleEndian);
-            attribs.push({ name, bufferIndex, bufferStart, format });
+            attribs.push({ name, bufferIndex, offset: bufferStart, format });
             attribArrayIdx += 0x0C;
         }
 
-        const buffers: BufferData[] = [];
+        const buffers: FVTX_VertexBuffer[] = [];
         let bufferArrayIdx = bufferArrayOffs;
         for (let j = 0; j < bufferCount; j++) {
             const bufferData = readBufferData(bufferArrayIdx);
@@ -380,7 +386,7 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
             bufferArrayIdx += 0x18;
         }
 
-        fvtx.push({ buffers, attribs, vtxCount });
+        fvtx.push({ vertexBuffers: buffers, vertexAttributes: attribs, vtxCount });
 
         fvtxIdx += 0x20;
     }
@@ -391,36 +397,56 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
         const offs = fshpEntry.offs;
         assert(readString(buffer, offs + 0x00, 0x04) === 'FSHP');
         const name = readString(buffer, readBinPtrT(view, offs + 0x04, littleEndian));
-        const fmatIndex = view.getUint16(offs + 0x0E, littleEndian);
+        const materialIndex = view.getUint16(offs + 0x0E, littleEndian);
         const fsklIndex = view.getUint16(offs + 0x10, littleEndian);
-        const fvtxIndex = view.getUint16(offs + 0x12, littleEndian);
+        const vertexIndex = view.getUint16(offs + 0x12, littleEndian);
 
+        let boundingBoxArrayIdx = readBinPtrT(view, offs + 0x30, littleEndian);
+        const readBBox = () => {
+            const centerX = view.getFloat32(boundingBoxArrayIdx + 0x00, littleEndian);
+            const centerY = view.getFloat32(boundingBoxArrayIdx + 0x04, littleEndian);
+            const centerZ = view.getFloat32(boundingBoxArrayIdx + 0x08, littleEndian);
+            const extentX = view.getFloat32(boundingBoxArrayIdx + 0x0C, littleEndian);
+            const extentY = view.getFloat32(boundingBoxArrayIdx + 0x10, littleEndian);
+            const extentZ = view.getFloat32(boundingBoxArrayIdx + 0x14, littleEndian);
+            boundingBoxArrayIdx += 0x18;
+    
+            const minX = centerX - extentX, minY = centerY - extentY, minZ = centerZ - extentZ;
+            const maxX = centerX + extentX, maxY = centerY + extentY, maxZ = centerZ + extentZ;
+    
+            return new AABB(minX, minY, minZ, maxX, maxY, maxZ);
+        };
+    
         // Each mesh corresponds to one LoD.
         const meshArrayCount = view.getUint8(offs + 0x17);
         const meshArrayOffs = readBinPtrT(view, offs + 0x24, littleEndian);
         let meshArrayIdx = meshArrayOffs;
-        const meshes: Mesh[] = [];
+        const mesh: FSHP_Mesh[] = [];
         for (let i = 0; i < meshArrayCount; i++) {
             const primType: GX2PrimitiveType = view.getUint32(meshArrayIdx + 0x00, littleEndian);
             const indexFormat: GX2IndexFormat = view.getUint32(meshArrayIdx + 0x04, littleEndian);
-            const indexBufferOffs = readBinPtrT(view, meshArrayIdx + 0x14, littleEndian);
-            const indexBufferData = readBufferData(indexBufferOffs);
-
+            const count = view.getUint32(meshArrayIdx + 0x08, littleEndian);
             const submeshArrayCount = view.getUint16(meshArrayIdx + 0x0C, littleEndian);
             const submeshArrayOffs = readBinPtrT(view, meshArrayIdx + 0x10, littleEndian);
+            const indexBufferOffs = readBinPtrT(view, meshArrayIdx + 0x14, littleEndian);
+            const indexBufferData = readBufferData(indexBufferOffs);
+            const offset = view.getUint32(meshArrayIdx + 0x18, littleEndian);
+
             let submeshArrayIdx = submeshArrayOffs;
-            const submeshes: SubMesh[] = [];
+            const submeshes: FSHP_SubMesh[] = [];
             for (let j = 0; j < submeshArrayCount; j++) {
-                const indexBufferOffset = view.getUint32(submeshArrayIdx + 0x00, littleEndian);
-                const indexBufferCount = view.getUint32(submeshArrayIdx + 0x04, littleEndian);
-                submeshes.push({ indexBufferOffset, indexBufferCount });
+                const offset = view.getUint32(submeshArrayIdx + 0x00, littleEndian);
+                const count = view.getUint32(submeshArrayIdx + 0x04, littleEndian);
+                const bbox = readBBox();
+                submeshes.push({ offset, count, bbox });
                 submeshArrayIdx += 0x08;
             }
-            meshes.push({ primType, indexFormat, indexBufferData, submeshes });
+            const bbox = readBBox();
+            mesh.push({ primType, indexFormat, indexBufferData, offset, count, submeshes, bbox });
 
             meshArrayIdx += 0x1C;
         }
-        fshp.push({ name, fmatIndex, fvtxIndex, meshes });
+        fshp.push({ name, materialIndex, vertexIndex, mesh: mesh });
     }
 
     // Materials.
@@ -530,12 +556,12 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
         // Shader assign.
         const shaderArchiveName = readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x00, littleEndian));
         const shadingModelName = readString(buffer, readBinPtrT(view, shaderAssignOffs + 0x04, littleEndian));
-        const vertShaderInputCount = view.getUint8(shaderAssignOffs + 0x0C);
-        const vertShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x10, littleEndian));
-        assert(vertShaderInputDict.length === vertShaderInputCount);
-        const fragShaderInputCount = view.getUint8(shaderAssignOffs + 0x0D);
-        const fragShaderInputDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x14, littleEndian));
-        assert(fragShaderInputDict.length === fragShaderInputCount);
+        const attribAssignCount = view.getUint8(shaderAssignOffs + 0x0C);
+        const attribAssign = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x10, littleEndian));
+        assert(attribAssign.length === attribAssignCount);
+        const samplerAssignCount = view.getUint8(shaderAssignOffs + 0x0D);
+        const samplerAssign = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x14, littleEndian));
+        assert(samplerAssign.length === samplerAssignCount);
         const paramDict = parseShaderAssignDict(readBinPtrT(view, shaderAssignOffs + 0x18, littleEndian));
         const paramCount = view.getUint16(shaderAssignOffs + 0x0E);
         assert(paramDict.length === paramCount);
@@ -543,10 +569,10 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
         const shaderAssign: ShaderAssign = {
             shaderArchiveName,
             shadingModelName,
-            vertShaderInputDict,
-            fragShaderInputDict,
+            attribAssign,
+            samplerAssign,
             paramDict,
-        }
+        };
 
         // Render state.
         const renderState0 = view.getUint32(renderStateOffs + 0x00, littleEndian);
@@ -583,7 +609,7 @@ function parseFMDL(buffer: ArrayBufferSlice, entry: ResDicEntry, littleEndian: b
         fmat.push({ name, renderInfoParameters, textureAssigns, materialParameterDataBuffer, materialParameters, shaderAssign, renderState });
     }
 
-    return { fvtx, fshp, fmat };
+    return { name, fvtx, fshp, fmat };
 }
 
 export interface FTEXEntry extends TextureBase {
@@ -594,14 +620,9 @@ export interface FTEXEntry extends TextureBase {
     ftex: DecodableTexture;
 }
 
-export interface FMDLEntry {
-    entry: ResDicEntry;
-    fmdl: FMDL;
-}
-
 export interface FRES {
     ftex: FTEXEntry[];
-    fmdl: FMDLEntry[];
+    fmdl: FMDL[];
 }
 
 export function parse(buffer: ArrayBufferSlice): FRES {
@@ -652,10 +673,10 @@ export function parse(buffer: ArrayBufferSlice): FRES {
         ftex.push({ name: ftexTable[i].name, width: ftex_.surface.width, height: ftex_.surface.height, entry: ftexTable[i], ftex: ftex_ });
     }
 
-    const fmdl: FMDLEntry[] = [];
+    const fmdl: FMDL[] = [];
     for (const entry of fmdlTable) {
-        const fmdl_ = parseFMDL(buffer, entry, littleEndian);
-        fmdl.push({ entry, fmdl: fmdl_ });
+        const fmdl_ = parseFMDL(buffer, entry, littleEndian, entry.name);
+        fmdl.push(fmdl_);
     }
 
     return { ftex, fmdl };

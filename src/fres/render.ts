@@ -1,68 +1,95 @@
 
-import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2PrimitiveType, GX2IndexFormat, GX2SurfaceFormat, GX2BlendCombine, GX2BlendFunction, GX2Dimension } from './gx2_enum';
+import { GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2FrontFaceMode, GX2CompareFunction, GX2IndexFormat, GX2SurfaceFormat, GX2BlendCombine, GX2BlendFunction, GX2Dimension } from './gx2_enum';
 import * as GX2Texture from './gx2_texture';
-import * as BFRES from './bfres';
 
-import { RenderState } from '../render';
-import { SimpleProgram } from '../Program';
-import { assert } from '../util';
+import * as Viewer from '../viewer';
+import * as UI from '../ui';
+
+import { DeviceProgramReflection, DeviceProgram } from '../Program';
+import { assert, nArray } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
-import { CoalescedBuffer, coalesceBuffer } from '../BufferCoalescer';
-import { TextureHolder, LoadedTexture, TextureMapping, getGLTextureFromMapping } from '../TextureHolder';
-import { getTransitionDeviceForWebGL2, getPlatformSampler } from '../gfx/platform/GfxPlatformWebGL2';
-import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxFrontFaceMode, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxTextureDescriptor, GfxTextureDimension, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
+import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxFrontFaceMode, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxTextureDescriptor, GfxTextureDimension, GfxInputState, GfxBuffer, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeFrequency, GfxInputLayout, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexture } from '../gfx/platform/GfxPlatform';
 import { GX2Surface } from './gx2_surface';
 import { DecodedSurface, surfaceToCanvas } from './bc_texture';
-import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { getFormatCompByteSize, getFormatComponentCount } from '../gfx/platform/GfxPlatformFormat';
+import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
+import { FVTX_VertexAttribute, FVTX_VertexBuffer, FTEXEntry, FRES, FVTX, FSHP_Mesh, FMAT, FSHP, FMDL } from './bfres';
+import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
+import { computeViewSpaceDepth, computeViewMatrix } from '../Camera';
+import { mat4 } from 'gl-matrix';
+import { AABB } from '../Geometry';
+import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { BasicRendererHelper } from '../oot3d/render';
 
-class ProgramGambit_UBER extends SimpleProgram {
-    public s_a0: WebGLUniformLocation;
-    public s_e0: WebGLUniformLocation;
-    public s_n0: WebGLUniformLocation;
-    public s_s0: WebGLUniformLocation;
-    public u_view: WebGLUniformLocation;
+class AglProgram extends DeviceProgram {
+    public static ub_SceneParams = 0;
+    public static ub_MaterialParams = 1;
+    public static ub_ShapeParams = 2;
 
-    public static attribLocations: { [name: string]: number } = {
-        _p0: 0, // Position
-        _n0: 1, // Normal
-        _t0: 2, // Tangent
-        _u0: 3, // UV of albedo map 0
-        _u1: 4, // UV of albedo map 1
-    };
+    public static _p0: number = 0;
+    public static _c0: number = 1;
+    public static _n0: number = 2;
+    public static _t0: number = 3;
+    public static _u0: number = 4;
+    public static _u1: number = 5;
+    public static a_Orders = [ '_p0', '_c0', '_n0', '_t0', '_u0', '_u1' ];
 
-    private $a = ProgramGambit_UBER.attribLocations;
+    public static s_Orders = [ '_a0', '_n0', '_e0', '_s0' ];
+
+    public static globalDefinitions = `
+precision mediump float;
+
+layout(row_major, std140) uniform ub_SceneParams {
+    mat4 u_Projection;
+};
+
+layout(row_major, std140) uniform ub_MaterialParams {
+    vec4 u_Misc0;
+};
+
+layout(row_major, std140) uniform ub_ShapeParams {
+    mat4x3 u_View;
+    mat4x3 u_ModelView;
+};
+
+uniform sampler2D u_Samplers[8];
+`;
+
+    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(AglProgram.globalDefinitions);
+    public both = AglProgram.globalDefinitions;
+
     public vert = `
-uniform mat4 u_modelView;
-uniform mat4 u_projection;
-uniform mat4 u_view;
-layout(location = ${this.$a._p0}) in vec3 a_p0;
-layout(location = ${this.$a._n0}) in vec3 a_n0;
-layout(location = ${this.$a._t0}) in vec4 a_t0;
-layout(location = ${this.$a._u0}) in vec2 a_u0;
-layout(location = ${this.$a._u1}) in vec2 a_u1;
+layout(location = ${AglProgram._p0}) in vec3 a_p0;
+layout(location = ${AglProgram._c0}) in vec3 a_c0;
+layout(location = ${AglProgram._n0}) in vec3 a_n0;
+layout(location = ${AglProgram._t0}) in vec4 a_t0;
+layout(location = ${AglProgram._u0}) in vec2 a_u0;
+layout(location = ${AglProgram._u1}) in vec2 a_u1;
 
 out vec3 v_PositionWorld;
 out vec2 v_TexCoord0;
+out vec2 v_TexCoord1;
 out vec3 v_NormalWorld;
 out vec4 v_TangentWorld;
 
 out vec3 v_CameraWorld;
 
 void main() {
-    gl_Position = u_projection * u_modelView * vec4(a_p0, 1.0);
+    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_p0, 1.0);
     v_PositionWorld = a_p0.xyz;
     v_TexCoord0 = a_u0;
+    v_TexCoord1 = a_u1;
     v_NormalWorld = a_n0;
     v_TangentWorld = a_t0;
     // TODO(jstpierre): Don't be dumb.
-    v_CameraWorld = inverse(u_view)[3].xyz;
+    v_CameraWorld = inverse(mat4(u_View))[3].xyz;
 }
 `;
 
     public frag = `
-uniform mat4 u_view;
-
 uniform sampler2D s_a0;
 uniform sampler2D s_n0;
 uniform sampler2D s_e0;
@@ -103,7 +130,7 @@ void main() {
     float t_IncidentSpecular = 0.0;
 
     // Basic directional lighting.
-    vec3 t_LightDir = normalize(vec3(-u_view[2].x, 0.0, u_view[2].z));
+    vec3 t_LightDir = normalize(vec3(-u_View[2].x, 0.0, u_View[2].z));
     // Sky-ish color. If we were better we would use a cubemap...
     const vec3 t_LightColor = vec3(0.9, 0.9, 1.4);
     const float t_SpecPower = 35.0;
@@ -136,195 +163,11 @@ void main() {
     o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));
 }
 `;
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        super.bind(gl, prog);
-        this.u_view = gl.getUniformLocation(prog, "u_view");
-        this.s_a0 = gl.getUniformLocation(prog, "s_a0");
-        this.s_e0 = gl.getUniformLocation(prog, "s_e0");
-        this.s_n0 = gl.getUniformLocation(prog, "s_n0");
-        this.s_s0 = gl.getUniformLocation(prog, "s_s0");
-    }
-
-    public getTextureUniformLocation(name: string): WebGLUniformLocation | null {
-        if (name === "_a0")
-            return this.s_a0;
-        else if (name === "_e0")
-            return this.s_e0;
-        else if (name === "_n0")
-            return this.s_n0;
-        else if (name === "_s0")
-            return this.s_s0;
-        else
-            return null;
-    }
 }
 
-interface GX2AttribFormatInfo {
-    compCount: number;
-    elemSize: 1 | 2 | 4;
-    type: number;
-    normalized: boolean;
-}
-
-function getAttribFormatInfo(format: GX2AttribFormat): GX2AttribFormatInfo {
-    switch (format) {
-    case GX2AttribFormat._8_SINT:
-        return { compCount: 1, elemSize: 1, type: WebGL2RenderingContext.BYTE, normalized: false };
-    case GX2AttribFormat._8_SNORM:
-        return { compCount: 1, elemSize: 1, type: WebGL2RenderingContext.BYTE, normalized: true };
-    case GX2AttribFormat._8_UINT:
-        return { compCount: 1, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: false };
-    case GX2AttribFormat._8_UNORM:
-        return { compCount: 1, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
-    case GX2AttribFormat._8_8_UNORM:
-        return { compCount: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
-    case GX2AttribFormat._8_8_SNORM:
-        return { compCount: 2, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
-    case GX2AttribFormat._8_8_8_8_UNORM:
-        return { compCount: 4, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
-    case GX2AttribFormat._8_8_8_8_SNORM:
-        return { compCount: 4, elemSize: 1, type: WebGL2RenderingContext.UNSIGNED_BYTE, normalized: true };
-    case GX2AttribFormat._16_16_UNORM:
-        return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.UNSIGNED_SHORT, normalized: true };
-    case GX2AttribFormat._16_16_SNORM:
-        return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.SHORT, normalized: true };
-    case GX2AttribFormat._16_16_FLOAT:
-        return { compCount: 2, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
-    case GX2AttribFormat._16_16_16_16_FLOAT:
-        return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.HALF_FLOAT, normalized: false };
-    case GX2AttribFormat._16_16_16_16_UNORM:
-        return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.UNSIGNED_SHORT, normalized: true };
-    case GX2AttribFormat._16_16_16_16_SNORM:
-        return { compCount: 4, elemSize: 2, type: WebGL2RenderingContext.SHORT, normalized: true };
-    case GX2AttribFormat._32_32_FLOAT:
-        return { compCount: 2, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
-    case GX2AttribFormat._32_32_32_FLOAT:
-        return { compCount: 4, elemSize: 4, type: WebGL2RenderingContext.FLOAT, normalized: false };
-    case GX2AttribFormat._10_10_10_2_UNORM:
-    case GX2AttribFormat._10_10_10_2_SNORM:
-        // Should be handled during the buffer load case.
-        return null;
-    default:
-        throw new Error(`Unsupported attribute format ${format}`);
-    }
-}
-
-function convertVertexBufferCopy(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, vtxCount: number): ArrayBufferSlice {
-    const stride = buffer.stride;
-    assert(stride !== 0);
-
-    const formatInfo = getAttribFormatInfo(attrib.format);
-    assert(formatInfo !== null);
-
-    const numValues = vtxCount * formatInfo.compCount;
-
-    function getOutputBuffer() {
-        if (formatInfo.elemSize === 1)
-            return new Uint8Array(numValues);
-        else if (formatInfo.elemSize === 2)
-            return new Uint16Array(numValues);
-        else if (formatInfo.elemSize === 4)
-            return new Uint32Array(numValues);
-        else
-            throw new Error();
-    }
-
-    const dataView = buffer.data.createDataView();
-    const out = getOutputBuffer();
-
-    let offs = attrib.bufferStart;
-    let dst = 0;
-    for (let i = 0; i < vtxCount; i++) {
-        for (let j = 0; j < formatInfo.compCount; j++) {
-            let srcOffs = offs + j * formatInfo.elemSize;
-            if (formatInfo.elemSize === 1)
-                out[dst] = dataView.getUint8(srcOffs);
-            else if (formatInfo.elemSize === 2)
-                out[dst] = dataView.getUint16(srcOffs);
-            else if (formatInfo.elemSize === 4)
-                out[dst] = dataView.getUint32(srcOffs);
-            dst++;
-        }
-        offs += stride;
-    }
-    return new ArrayBufferSlice(out.buffer);
-}
-
-function convertVertexBuffer_10_10_10_2(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, vtxCount: number): ArrayBufferSlice {
-    assert(buffer.stride !== 0);
-
-    const elemSize = 4;
-    const compCount = 4;
-
-    const numValues = vtxCount * compCount;
-
-    let signed: boolean;
-    function getOutputBuffer() {
-        if (attrib.format === GX2AttribFormat._10_10_10_2_SNORM) {
-            attrib.format = GX2AttribFormat._16_16_16_16_SNORM;
-            signed = true;
-            return new Int16Array(numValues);
-        } else if (attrib.format === GX2AttribFormat._10_10_10_2_UNORM) {
-            attrib.format = GX2AttribFormat._16_16_16_16_UNORM;
-            signed = false;
-            return new Uint16Array(numValues);
-        } else {
-            throw new Error("whoops");
-        }
-    }
-
-    const view = buffer.data.createDataView();
-    const out = getOutputBuffer();
-
-    function signExtend10(n: number): number {
-        if (signed)
-            return (n << 22) >> 22;
-        else
-            return n;
-    }
-
-    let offs = attrib.bufferStart;
-    let dst = 0;
-    for (let i = 0; i < vtxCount; i++) {
-        const n = view.getUint32(offs, false);
-        out[dst++] = signExtend10((n >>>  0) & 0x3FF) << 4;
-        out[dst++] = signExtend10((n >>> 10) & 0x3FF) << 4;
-        out[dst++] = signExtend10((n >>> 20) & 0x3FF) << 4;
-        out[dst++] = ((n >>> 30) & 0x03) << 14;
-        offs += buffer.stride;
-    }
-
-    return new ArrayBufferSlice(out.buffer);
-}
-
-function convertVertexBuffer(buffer: BFRES.BufferData, attrib: BFRES.VtxAttrib, vtxCount: number): ArrayBufferSlice {
-    const formatInfo = getAttribFormatInfo(attrib.format);
-
-    if (formatInfo !== null) {
-        const byteSize = formatInfo.compCount * formatInfo.elemSize;
-        if (buffer.stride <= byteSize && attrib.bufferStart === 0) {
-            // Fastest path -- just endian swap.
-            return buffer.data.convertFromEndianness(Endianness.BIG_ENDIAN, formatInfo.elemSize);
-        } else {
-            // Has a native WebGL equivalent, just requires us to convert strides.
-            return convertVertexBufferCopy(buffer, attrib, vtxCount);
-        }
-    } else {
-        // No native WebGL equivalent. Let's see what we can do...
-        switch (attrib.format) {
-        case GX2AttribFormat._10_10_10_2_SNORM:
-        case GX2AttribFormat._10_10_10_2_UNORM:
-            return convertVertexBuffer_10_10_10_2(buffer, attrib, vtxCount);
-        }
-    }
-
-    throw new Error("whoops");
-}
-
-export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
-    public addFRESTextures(gl: WebGL2RenderingContext, fres: BFRES.FRES): void {
-        this.addTextures(gl, fres.ftex);
+export class GX2TextureHolder extends TextureHolder<FTEXEntry> {
+    public addFRESTextures(device: GfxDevice, fres: FRES): void {
+        this.addTexturesGfx(device, fres.ftex);
     }
 
     public static translateTextureDescriptor(device: GfxDevice, surface: GX2Surface): GfxTextureDescriptor {
@@ -358,11 +201,12 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
         };
     }
 
-    protected addTextureGfx(device: GfxDevice, textureEntry: BFRES.FTEXEntry): LoadedTexture | null {
+    protected addTextureGfx(device: GfxDevice, textureEntry: FTEXEntry): LoadedTexture | null {
         const texture = textureEntry.ftex;
         const surface = texture.surface;
 
         const gfxTexture = device.createTexture_(GX2TextureHolder.translateTextureDescriptor(device, surface));
+        device.setResourceName(gfxTexture, textureEntry.name);
         const canvases: HTMLCanvasElement[] = [];
 
         for (let i = 0; i < surface.numMips; i++) {
@@ -400,325 +244,227 @@ export class GX2TextureHolder extends TextureHolder<BFRES.FTEXEntry> {
     }
 }
 
-class Command_Material {
-    private prog: ProgramGambit_UBER = new ProgramGambit_UBER();
-    private samplers: GfxSampler[] = [];
-    private renderFlags: GfxMegaStateDescriptor;
-    private attribNames: string[];
-    private textureAssigns: BFRES.TextureAssign[];
-    private textureMapping = new TextureMapping();
-    private blankTexture: WebGLTexture;
+function translateAttributeFormat(format: GX2AttribFormat): GfxFormat | null {
+    switch (format) {
+    case GX2AttribFormat._8_UINT:            return GfxFormat.U8_R;
+    case GX2AttribFormat._8_UNORM:           return GfxFormat.U8_R_NORM;
+    case GX2AttribFormat._8_SINT:            return GfxFormat.S8_R; 
+    case GX2AttribFormat._8_SNORM:           return GfxFormat.S8_R_NORM;
+    case GX2AttribFormat._8_8_UNORM:         return GfxFormat.U8_RG_NORM;
+    case GX2AttribFormat._8_8_SNORM:         return GfxFormat.S8_RG_NORM;
+    case GX2AttribFormat._8_8_8_8_UNORM:     return GfxFormat.U8_RGBA_NORM;
+    case GX2AttribFormat._8_8_8_8_SNORM:     return GfxFormat.S8_RGBA_NORM;
+    case GX2AttribFormat._16_16_UNORM:       return GfxFormat.U16_RG_NORM;
+    case GX2AttribFormat._16_16_SNORM:       return GfxFormat.S16_RG_NORM;
+    case GX2AttribFormat._16_16_FLOAT:       return GfxFormat.F16_RG;
+    case GX2AttribFormat._16_16_16_16_FLOAT: return GfxFormat.F16_RGBA;
+    case GX2AttribFormat._16_16_16_16_UNORM: return GfxFormat.U16_RGBA_NORM;
+    case GX2AttribFormat._16_16_16_16_SNORM: return GfxFormat.S16_RGBA_NORM;
+    case GX2AttribFormat._32_32_FLOAT:       return GfxFormat.F32_RG;
+    case GX2AttribFormat._32_32_32_FLOAT:    return GfxFormat.F32_RGB;
 
-    constructor(gl: WebGL2RenderingContext, private textureHolder: GX2TextureHolder, private modelRenderer: ModelRenderer, private fmat: BFRES.FMAT) {
-        this.attribNames = ['_a0', '_e0', '_n0', '_s0'];
-        this.textureAssigns = fmat.textureAssigns.filter((textureAssign) => {
-            return this.attribNames.includes(textureAssign.attribName);
-        });
+    case GX2AttribFormat._10_10_10_2_UNORM:
+    case GX2AttribFormat._10_10_10_2_SNORM:
+        // No native equivalent.
+        return null;
 
-        this.blankTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
-
-        const device = getTransitionDeviceForWebGL2(gl);
-        for (const textureAssign of this.textureAssigns) {
-            const sampler = device.createSampler({
-                wrapS: this.translateTexClamp(textureAssign.texClampU),
-                wrapT: this.translateTexClamp(textureAssign.texClampV),
-                minFilter: this.translateTexFilter(textureAssign.texFilterMin),
-                mipFilter: this.translateMipFilter(textureAssign.texFilterMip),
-                magFilter: this.translateTexFilter(textureAssign.texFilterMag),
-                minLOD: textureAssign.minLOD,
-                maxLOD: textureAssign.maxLOD,
-            })
-            this.samplers.push(sampler);
-        }
-
-        this.renderFlags = this.translateRenderState(this.fmat.renderState);
+    default:
+        throw new Error(`Unsupported attribute format ${format}`);
     }
+}
 
-    public exec(state: RenderState): void {
-        const gl = state.gl;
+function convertVertexBufferCopy(buffer: FVTX_VertexBuffer, attrib: FVTX_VertexAttribute, fmt: GfxFormat, vtxCount: number): ArrayBufferSlice {
+    const stride = buffer.stride;
+    assert(stride !== 0);
 
-        state.useProgram(this.prog);
-        state.bindModelView(this.modelRenderer.isSkybox);
-        gl.uniformMatrix4fv(this.prog.u_view, false, state.view);
+    const compCount = getFormatComponentCount(fmt);
+    const compByteSize = getFormatCompByteSize(fmt);
+    const numValues = vtxCount * compCount;
 
-        state.useFlags(this.renderFlags);
-
-        // Textures.
-        for (let i = 0; i < this.attribNames.length; i++) {
-            const attribName = this.attribNames[i];
-
-            gl.activeTexture(gl.TEXTURE0 + i);
-
-            const uniformLocation = this.prog.getTextureUniformLocation(attribName);
-            gl.uniform1i(uniformLocation, i);
-
-            const textureAssignIndex = this.textureAssigns.findIndex((textureAssign) => textureAssign.attribName === attribName);
-            let boundTexture = false;
-            if (textureAssignIndex >= 0) {
-                const textureAssign = this.textureAssigns[textureAssignIndex];
-                if (this.textureHolder.hasTexture(textureAssign.textureName)) {
-                    this.textureHolder.fillTextureMapping(this.textureMapping, textureAssign.textureName);
-                    gl.bindTexture(gl.TEXTURE_2D, getGLTextureFromMapping(this.textureMapping));
-                    const sampler = this.samplers[textureAssignIndex];
-                    gl.bindSampler(i, getPlatformSampler(sampler));
-                    boundTexture = true;
-                }
-            }
-
-            if (!boundTexture)
-                gl.bindTexture(gl.TEXTURE_2D, this.blankTexture);
-        }
-    }
-
-    public destroy(gl: WebGL2RenderingContext): void {
-        const device = getTransitionDeviceForWebGL2(gl);
-        gl.deleteTexture(this.blankTexture);
-        this.samplers.forEach((s) => device.destroySampler(s));
-    }
-
-    private translateTexClamp(clampMode: GX2TexClamp): GfxWrapMode {
-        switch (clampMode) {
-        case GX2TexClamp.CLAMP:
-            return GfxWrapMode.CLAMP;
-        case GX2TexClamp.WRAP:
-            return GfxWrapMode.REPEAT;
-        case GX2TexClamp.MIRROR:
-            return GfxWrapMode.MIRROR;
-        default:
-            throw new Error(`Unknown tex clamp mode ${clampMode}`);
-        }
-    }
-
-    private translateTexFilter(texFilter: GX2TexXYFilterType): GfxTexFilterMode {
-        switch (texFilter) {
-        case GX2TexXYFilterType.BILINEAR:
-            return GfxTexFilterMode.BILINEAR;
-        case GX2TexXYFilterType.POINT:
-            return GfxTexFilterMode.POINT;
-        }
-    }
-
-    private translateMipFilter(mipFilter: GX2TexMipFilterType): GfxMipFilterMode {
-        switch (mipFilter) {
-        case GX2TexMipFilterType.NO_MIP:
-            return GfxMipFilterMode.NO_MIP;
-        case GX2TexMipFilterType.LINEAR:
-            return GfxMipFilterMode.LINEAR;
-        case GX2TexMipFilterType.POINT:
-            return GfxMipFilterMode.NEAREST;
-        }
-    }
-
-    private translateFrontFaceMode(frontFaceMode: GX2FrontFaceMode): GfxFrontFaceMode {
-        switch (frontFaceMode) {
-        case GX2FrontFaceMode.CCW:
-            return GfxFrontFaceMode.CCW;
-        case GX2FrontFaceMode.CW:
-            return GfxFrontFaceMode.CW;
-        }
-    }
-
-    private translateCompareFunction(compareFunc: GX2CompareFunction): GfxCompareMode {
-        switch (compareFunc) {
-        case GX2CompareFunction.NEVER:
-            return GfxCompareMode.NEVER;
-        case GX2CompareFunction.LESS:
-            return GfxCompareMode.LESS;
-        case GX2CompareFunction.EQUAL:
-            return GfxCompareMode.EQUAL;
-        case GX2CompareFunction.LEQUAL:
-            return GfxCompareMode.LEQUAL;
-        case GX2CompareFunction.GREATER:
-            return GfxCompareMode.GREATER;
-        case GX2CompareFunction.NOTEQUAL:
-            return GfxCompareMode.NEQUAL;
-        case GX2CompareFunction.GEQUAL:
-            return GfxCompareMode.GEQUAL;
-        case GX2CompareFunction.ALWAYS:
-            return GfxCompareMode.ALWAYS;
-        }
-    }
-
-    private translateCullMode(cullFront: boolean, cullBack: boolean): GfxCullMode {
-        if (cullFront && cullBack)
-            return GfxCullMode.FRONT_AND_BACK;
-        else if (cullFront)
-            return GfxCullMode.FRONT;
-        else if (cullBack)
-            return GfxCullMode.BACK;
+    function getOutputBuffer() {
+        if (compByteSize === 1)
+            return new Uint8Array(numValues);
+        else if (compByteSize === 2)
+            return new Uint16Array(numValues);
+        else if (compByteSize === 4)
+            return new Uint32Array(numValues);
         else
-            return GfxCullMode.NONE;
+            throw new Error();
     }
 
-    private translateBlendCombine(enabled: boolean, combine: GX2BlendCombine): GfxBlendMode {
-        if (enabled) {
-            switch (combine) {
-            case GX2BlendCombine.ADD:
-                return GfxBlendMode.ADD;
-            case GX2BlendCombine.DST_MINUS_SRC:
-                return GfxBlendMode.SUBTRACT;
-            case GX2BlendCombine.SRC_MINUS_DST:
-                return GfxBlendMode.REVERSE_SUBTRACT;
-            default:
-                throw "whoops";
-            }
-        } else {
-            return GfxBlendMode.NONE;
+    const dataView = buffer.data.createDataView();
+    const out = getOutputBuffer();
+
+    let offs = attrib.offset;
+    let dst = 0;
+    for (let i = 0; i < vtxCount; i++) {
+        for (let j = 0; j < compCount; j++) {
+            let srcOffs = offs + j * compByteSize;
+            if (compByteSize === 1)
+                out[dst] = dataView.getUint8(srcOffs);
+            else if (compByteSize === 2)
+                out[dst] = dataView.getUint16(srcOffs);
+            else if (compByteSize === 4)
+                out[dst] = dataView.getUint32(srcOffs);
+            dst++;
         }
+        offs += stride;
     }
-
-    private translateBlendFunction(func: GX2BlendFunction): GfxBlendFactor {
-        switch (func) {
-        case GX2BlendFunction.ZERO:
-            return GfxBlendFactor.ZERO;
-        case GX2BlendFunction.ONE:
-            return GfxBlendFactor.ONE;
-
-        case GX2BlendFunction.SRC_ALPHA:
-        case GX2BlendFunction.SRC1_ALPHA:
-            return GfxBlendFactor.SRC_ALPHA;
-        case GX2BlendFunction.ONE_MINUS_SRC_ALPHA:
-        case GX2BlendFunction.ONE_MINUS_SRC1_ALPHA:
-            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-
-        case GX2BlendFunction.DST_ALPHA:
-            return GfxBlendFactor.DST_ALPHA;
-        case GX2BlendFunction.ONE_MINUS_DST_ALPHA:
-            return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
-
-        case GX2BlendFunction.SRC_COLOR:
-        case GX2BlendFunction.SRC1_COLOR:
-            return GfxBlendFactor.SRC_COLOR;
-        case GX2BlendFunction.ONE_MINUS_SRC_COLOR:
-        case GX2BlendFunction.ONE_MINUS_SRC1_COLOR:
-            return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
-
-        case GX2BlendFunction.DST_COLOR:
-            return GfxBlendFactor.DST_COLOR;
-        case GX2BlendFunction.ONE_MINUS_DST_COLOR:
-            return GfxBlendFactor.ONE_MINUS_DST_COLOR;
-
-        default:
-            throw "whoops";
-        }
-    }
-
-    private translateRenderState(renderState: BFRES.RenderState): GfxMegaStateDescriptor {
-        return makeMegaState({
-            frontFace: this.translateFrontFaceMode(renderState.frontFaceMode),
-            depthCompare: renderState.depthTest ? this.translateCompareFunction(renderState.depthCompareFunc) : GfxCompareMode.NEVER,
-            depthWrite: renderState.depthWrite,
-            cullMode: this.translateCullMode(renderState.cullFront, renderState.cullBack),
-            blendMode: this.translateBlendCombine(renderState.blendEnabled, renderState.blendColorCombine),
-            blendDstFactor: this.translateBlendFunction(renderState.blendDstColorFunc),
-            blendSrcFactor: this.translateBlendFunction(renderState.blendSrcColorFunc),
-        });
-    }
+    return new ArrayBufferSlice(out.buffer);
 }
 
-class Command_Shape {
-    private glIndexBuffers: CoalescedBuffer[] = [];
-
-    constructor(gl: WebGL2RenderingContext, private fshp: BFRES.FSHP, coalescedIndex: CoalescedBuffer[]) {
-        for (const mesh of fshp.meshes) {
-            this.glIndexBuffers.push(coalescedIndex.shift());
-        }
-    }
-
-    private translateIndexFormat(gl: WebGL2RenderingContext, indexFormat: GX2IndexFormat): GLenum {
-        // Little-endian translation was done above.
-        switch (indexFormat) {
-        case GX2IndexFormat.U16:
-        case GX2IndexFormat.U16_LE:
-            return gl.UNSIGNED_SHORT;
-        case GX2IndexFormat.U32:
-        case GX2IndexFormat.U32_LE:
-            return gl.UNSIGNED_INT;
-        default:
-            throw new Error(`Unsupported index format ${indexFormat}`);
-        }
-    }
-
-    private translatePrimType(gl: WebGL2RenderingContext, primType: GX2PrimitiveType) {
-        switch (primType) {
-        case GX2PrimitiveType.TRIANGLES:
-            return gl.TRIANGLES;
-        default:
-            throw new Error(`Unsupported primitive type ${primType}`);
-        }
-    }
-
-    public exec(state: RenderState): void {
-        const gl = state.gl;
-        const lod = 0;
-        const mesh = this.fshp.meshes[lod];
-        const glIndexBuffer = this.glIndexBuffers[lod];
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIndexBuffer.buffer);
-
-        for (const submesh of mesh.submeshes) {
-            gl.drawElements(this.translatePrimType(gl, mesh.primType),
-                submesh.indexBufferCount,
-                this.translateIndexFormat(gl, mesh.indexFormat),
-                glIndexBuffer.offset + submesh.indexBufferOffset,
-            );
-        }
-    }
+interface ConvertedVertexAttribute {
+    format: GfxFormat;
+    data: ArrayBuffer;
+    stride: number;
 }
 
-export class ModelRenderer {
-    private vertexBuffer: WebGLBuffer;
-    private indexBuffer: WebGLBuffer;
+class FVTXData {
+    public vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+    public vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
 
-    private materialCommands: Command_Material[];
-    private shapeCommands: Command_Shape[];
-    private vaos: WebGLVertexArrayObject[];
+    constructor(device: GfxDevice, public fvtx: FVTX) {
+        let nextBufferIndex = fvtx.vertexBuffers.length;
 
-    public isSkybox: boolean = false;
-
-    constructor(gl: WebGL2RenderingContext, public textureHolder: GX2TextureHolder, public fres: BFRES.FRES, public fmdl: BFRES.FMDL) {
-        const vertexDatas: ArrayBufferSlice[] = [];
-        const indexDatas: ArrayBufferSlice[] = [];
-        // Translate vertex data.
-        fmdl.fvtx.forEach((fvtx) => this.translateFVTXBuffers(fvtx, vertexDatas));
-        fmdl.fshp.forEach((fshp) => this.translateFSHPBuffers(fshp, indexDatas));
-
-        const coalescedVertex = coalesceBuffer(gl, gl.ARRAY_BUFFER, vertexDatas);
-        const coalescedIndex = coalesceBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, indexDatas);
-        this.vertexBuffer = coalescedVertex[0].buffer;
-        this.indexBuffer = coalescedIndex[0].buffer;
-
-        this.vaos = fmdl.fvtx.map((fvtx) => this.translateFVTX(gl, fvtx, coalescedVertex));
-        this.materialCommands = fmdl.fmat.map((fmat) => new Command_Material(gl, this.textureHolder, this, fmat));
-        this.shapeCommands = fmdl.fshp.map((fshp) => new Command_Shape(gl, fshp, coalescedIndex));
-    }
-
-    public render(state: RenderState): void {
-        const gl = state.gl;
-
-        for (let i = 0; i < this.fmdl.fshp.length; i++) {
-            const fshp = this.fmdl.fshp[i];
-
-            // XXX(jstpierre): Sun is dynamically moved by the game engine, I think...
-            // ... unless it's SKL animation. For now, skip it.
-            if (fshp.name === 'Sun__VRL_Sun')
+        for (let i = 0; i < fvtx.vertexAttributes.length; i++) {
+            const vertexAttribute = fvtx.vertexAttributes[i];
+            const attribLocation = AglProgram.a_Orders.indexOf(vertexAttribute.name);
+            if (attribLocation < 0)
                 continue;
 
-            gl.bindVertexArray(this.vaos[fshp.fvtxIndex]);
-            this.materialCommands[fshp.fmatIndex].exec(state);
-            this.shapeCommands[i].exec(state);
+            const bufferIndex = vertexAttribute.bufferIndex;
+            const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
+            const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer, fvtx.vtxCount);
+            if (convertedAttribute !== null) {
+                const attribBufferIndex = nextBufferIndex++;
+
+                this.vertexAttributeDescriptors.push({
+                    location: attribLocation,
+                    format: convertedAttribute.format,
+                    bufferIndex: attribBufferIndex,
+                    // When we convert the buffer we remove the byte offset.
+                    bufferByteOffset: 0,
+                    frequency: GfxVertexAttributeFrequency.PER_VERTEX,
+                });
+
+                const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, convertedAttribute.data);
+                this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer, byteOffset: 0, byteStride: convertedAttribute.stride };
+            } else {
+                // Can use buffer data directly, just need to swizzle it to the correct endianness.
+                const fmt = translateAttributeFormat(vertexAttribute.format);
+                this.vertexAttributeDescriptors.push({
+                    location: attribLocation,
+                    format: fmt,
+                    bufferIndex: bufferIndex,
+                    bufferByteOffset: vertexAttribute.offset,
+                    frequency: GfxVertexAttributeFrequency.PER_VERTEX,
+                });
+
+                if (!this.vertexBufferDescriptors[bufferIndex]) {
+                    const compByteSize = getFormatCompByteSize(fmt);
+                    const gfxBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, vertexBuffer.data.convertFromEndianness(Endianness.BIG_ENDIAN, compByteSize));
+                    this.vertexBufferDescriptors[bufferIndex] = { buffer: gfxBuffer, byteOffset: 0, byteStride: vertexBuffer.stride };
+                }
+            }
         }
     }
 
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.materialCommands.forEach((cmd) => cmd.destroy(gl));
-        this.vaos.forEach((vao) => gl.deleteVertexArray(vao));
-        gl.deleteBuffer(this.vertexBuffer);
-        gl.deleteBuffer(this.indexBuffer);
+    public convertVertexAttribute(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer, vtxCount: number): ConvertedVertexAttribute | null {
+        // No native WebGL equivalent. Let's see what we can do...
+        switch (vertexAttribute.format) {
+        case GX2AttribFormat._10_10_10_2_SNORM:
+        case GX2AttribFormat._10_10_10_2_UNORM:
+            return this.convertVertexAttribute_10_10_10_2(vertexAttribute, vertexBuffer, vtxCount);
+        default:
+            break;
+        }
+
+        const fmt = translateAttributeFormat(vertexAttribute.format);
+        const compByteSize = getFormatCompByteSize(fmt);
+        const compCount = getFormatComponentCount(fmt);
+        const byteStride = compCount * compByteSize;
+        if (vertexBuffer.stride <= byteStride && vertexAttribute.offset === 0) {
+            // In this case, we can't simply endian-swap, since we don't know the rest of the buffer layout.
+            // Will need to convert it to something we can control.
+            const newVertexBufferData = convertVertexBufferCopy(vertexBuffer, vertexAttribute, fmt, vtxCount);
+            return { format: fmt, data: newVertexBufferData.castToBuffer(), stride: byteStride };
+        }
+
+        return null;
     }
 
-    private translateIndexBuffer( indexFormat: GX2IndexFormat, indexBufferData: ArrayBufferSlice): ArrayBufferSlice {
+    private convertVertexAttribute_10_10_10_2(attrib: FVTX_VertexAttribute, buffer: FVTX_VertexBuffer, vtxCount: number): ConvertedVertexAttribute {
+        assert(buffer.stride !== 0);
+    
+        const compCount = 4;
+    
+        const numValues = vtxCount * compCount;
+    
+        let signed: boolean;
+        let format: GfxFormat;
+        const stride = 8;
+        function getOutputBuffer() {
+            if (attrib.format === GX2AttribFormat._10_10_10_2_SNORM) {
+                format = GfxFormat.S16_RGBA_NORM;
+                signed = true;
+                return new Int16Array(numValues);
+            } else if (attrib.format === GX2AttribFormat._10_10_10_2_UNORM) {
+                format = GfxFormat.U16_RGBA_NORM;
+                signed = false;
+                return new Uint16Array(numValues);
+            } else {
+                throw new Error("whoops");
+            }
+        }
+    
+        const view = buffer.data.createDataView();
+        const out = getOutputBuffer();
+    
+        function signExtend10(n: number): number {
+            if (signed)
+                return (n << 22) >> 22;
+            else
+                return n;
+        }
+    
+        let offs = attrib.offset;
+        let dst = 0;
+        for (let i = 0; i < vtxCount; i++) {
+            const n = view.getUint32(offs, false);
+            out[dst++] = signExtend10((n >>>  0) & 0x3FF) << 4;
+            out[dst++] = signExtend10((n >>> 10) & 0x3FF) << 4;
+            out[dst++] = signExtend10((n >>> 20) & 0x3FF) << 4;
+            out[dst++] = ((n >>> 30) & 0x03) << 14;
+            offs += buffer.stride;
+        }
+
+        return { format, stride, data: out.buffer };
+    }
+    
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.vertexBufferDescriptors.length; i++)
+            device.destroyBuffer(this.vertexBufferDescriptors[i].buffer);
+    }
+}
+
+class FSHPMeshData {
+    public inputState: GfxInputState;
+    public inputLayout: GfxInputLayout;
+    public indexBuffer: GfxBuffer;
+
+    constructor(device: GfxDevice, public mesh: FSHP_Mesh, fvtxData: FVTXData) {
+        const indexBufferFormat = translateIndexFormat(mesh.indexFormat);
+        this.inputLayout = device.createInputLayout({
+            vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors, indexBufferFormat,
+        });
+    
+        const indexBufferData = this.convertIndexBufferData(mesh.indexFormat, mesh.indexBufferData.data);
+        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, indexBufferData);
+        const indexBufferDescriptor: GfxVertexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 };
+        this.inputState = device.createInputState(this.inputLayout, fvtxData.vertexBufferDescriptors, indexBufferDescriptor);
+    }
+
+    private convertIndexBufferData(indexFormat: GX2IndexFormat, indexBufferData: ArrayBufferSlice): ArrayBufferSlice {
         switch (indexFormat) {
         case GX2IndexFormat.U16_LE:
         case GX2IndexFormat.U32_LE:
@@ -730,48 +476,464 @@ export class ModelRenderer {
         }
     }
 
-    private translateFSHPBuffers(fshp: BFRES.FSHP, indexDatas: ArrayBufferSlice[]) {
-        for (const mesh of fshp.meshes) {
-            assert(mesh.indexBufferData.stride === 0);
-            const indexData = this.translateIndexBuffer(mesh.indexFormat, mesh.indexBufferData.data);
-            indexDatas.push(indexData);
+    public destroy(device: GfxDevice): void {
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputState);
+        device.destroyBuffer(this.indexBuffer);
+    }
+}
+
+class FSHPData {
+    public meshData: FSHPMeshData[] = [];
+
+    constructor(device: GfxDevice, public fshp: FSHP, fvtxData: FVTXData) {
+        for (let i = 0; i < fshp.mesh.length; i++)
+            this.meshData.push(new FSHPMeshData(device, fshp.mesh[i], fvtxData));
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.meshData.length; i++)
+            this.meshData[i].destroy(device);
+    }
+}
+
+export class FMDLData {
+    public fvtxData: FVTXData[] = [];
+    public fshpData: FSHPData[] = [];
+
+    constructor(device: GfxDevice, public fmdl: FMDL) {
+        for (let i = 0; i < fmdl.fvtx.length; i++)
+            this.fvtxData.push(new FVTXData(device, fmdl.fvtx[i]));
+        for (let i = 0; i < fmdl.fshp.length; i++) {
+            const fshp = fmdl.fshp[i];
+            this.fshpData.push(new FSHPData(device, fshp, this.fvtxData[fshp.vertexIndex]));
         }
     }
 
-    private translateFVTX(gl: WebGL2RenderingContext, fvtx: BFRES.FVTX, coalescedVertex: CoalescedBuffer[]): WebGLVertexArrayObject {
-        const vao = gl.createVertexArray();
-        gl.bindVertexArray(vao);
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.fvtxData.length; i++)
+            this.fvtxData[i].destroy(device);
+        for (let i = 0; i < this.fshpData.length; i++)
+            this.fshpData[i].destroy(device);
+    }
+}
 
-        for (let i = 0; i < fvtx.attribs.length; i++) {
-            const attrib = fvtx.attribs[i];
-            const location = ProgramGambit_UBER.attribLocations[attrib.name];
+function translateTexClamp(clampMode: GX2TexClamp): GfxWrapMode {
+    switch (clampMode) {
+    case GX2TexClamp.CLAMP:
+        return GfxWrapMode.CLAMP;
+    case GX2TexClamp.WRAP:
+        return GfxWrapMode.REPEAT;
+    case GX2TexClamp.MIRROR:
+        return GfxWrapMode.MIRROR;
+    default:
+        throw new Error(`Unknown tex clamp mode ${clampMode}`);
+    }
+}
 
-            if (location === undefined)
-                continue;
+function translateTexFilter(texFilter: GX2TexXYFilterType): GfxTexFilterMode {
+    switch (texFilter) {
+    case GX2TexXYFilterType.BILINEAR:
+        return GfxTexFilterMode.BILINEAR;
+    case GX2TexXYFilterType.POINT:
+        return GfxTexFilterMode.POINT;
+    }
+}
 
-            const formatInfo = getAttribFormatInfo(attrib.format);
-            const buffer = coalescedVertex.shift();
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffer.buffer);
-            gl.vertexAttribPointer(location, formatInfo.compCount, formatInfo.type, formatInfo.normalized, 0, buffer.offset);
-            gl.enableVertexAttribArray(location);
+function translateMipFilter(mipFilter: GX2TexMipFilterType): GfxMipFilterMode {
+    switch (mipFilter) {
+    case GX2TexMipFilterType.NO_MIP:
+        return GfxMipFilterMode.NO_MIP;
+    case GX2TexMipFilterType.LINEAR:
+        return GfxMipFilterMode.LINEAR;
+    case GX2TexMipFilterType.POINT:
+        return GfxMipFilterMode.NEAREST;
+    }
+}
+
+function translateFrontFaceMode(frontFaceMode: GX2FrontFaceMode): GfxFrontFaceMode {
+    switch (frontFaceMode) {
+    case GX2FrontFaceMode.CCW:
+        return GfxFrontFaceMode.CCW;
+    case GX2FrontFaceMode.CW:
+        return GfxFrontFaceMode.CW;
+    }
+}
+
+function translateCompareFunction(compareFunc: GX2CompareFunction): GfxCompareMode {
+    switch (compareFunc) {
+    case GX2CompareFunction.NEVER:
+        return GfxCompareMode.NEVER;
+    case GX2CompareFunction.LESS:
+        return GfxCompareMode.LESS;
+    case GX2CompareFunction.EQUAL:
+        return GfxCompareMode.EQUAL;
+    case GX2CompareFunction.LEQUAL:
+        return GfxCompareMode.LEQUAL;
+    case GX2CompareFunction.GREATER:
+        return GfxCompareMode.GREATER;
+    case GX2CompareFunction.NOTEQUAL:
+        return GfxCompareMode.NEQUAL;
+    case GX2CompareFunction.GEQUAL:
+        return GfxCompareMode.GEQUAL;
+    case GX2CompareFunction.ALWAYS:
+        return GfxCompareMode.ALWAYS;
+    }
+}
+
+function translateCullMode(cullFront: boolean, cullBack: boolean): GfxCullMode {
+    if (cullFront && cullBack)
+        return GfxCullMode.FRONT_AND_BACK;
+    else if (cullFront)
+        return GfxCullMode.FRONT;
+    else if (cullBack)
+        return GfxCullMode.BACK;
+    else
+        return GfxCullMode.NONE;
+}
+
+function translateBlendCombine(enabled: boolean, combine: GX2BlendCombine): GfxBlendMode {
+    if (enabled) {
+        switch (combine) {
+        case GX2BlendCombine.ADD:
+            return GfxBlendMode.ADD;
+        case GX2BlendCombine.DST_MINUS_SRC:
+            return GfxBlendMode.SUBTRACT;
+        case GX2BlendCombine.SRC_MINUS_DST:
+            return GfxBlendMode.REVERSE_SUBTRACT;
+        default:
+            throw "whoops";
+        }
+    } else {
+        return GfxBlendMode.NONE;
+    }
+}
+
+function translateBlendFunction(func: GX2BlendFunction): GfxBlendFactor {
+    switch (func) {
+    case GX2BlendFunction.ZERO:
+        return GfxBlendFactor.ZERO;
+    case GX2BlendFunction.ONE:
+        return GfxBlendFactor.ONE;
+
+    case GX2BlendFunction.SRC_ALPHA:
+    case GX2BlendFunction.SRC1_ALPHA:
+        return GfxBlendFactor.SRC_ALPHA;
+    case GX2BlendFunction.ONE_MINUS_SRC_ALPHA:
+    case GX2BlendFunction.ONE_MINUS_SRC1_ALPHA:
+        return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+
+    case GX2BlendFunction.DST_ALPHA:
+        return GfxBlendFactor.DST_ALPHA;
+    case GX2BlendFunction.ONE_MINUS_DST_ALPHA:
+        return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
+
+    case GX2BlendFunction.SRC_COLOR:
+    case GX2BlendFunction.SRC1_COLOR:
+        return GfxBlendFactor.SRC_COLOR;
+    case GX2BlendFunction.ONE_MINUS_SRC_COLOR:
+    case GX2BlendFunction.ONE_MINUS_SRC1_COLOR:
+        return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
+
+    case GX2BlendFunction.DST_COLOR:
+        return GfxBlendFactor.DST_COLOR;
+    case GX2BlendFunction.ONE_MINUS_DST_COLOR:
+        return GfxBlendFactor.ONE_MINUS_DST_COLOR;
+
+    default:
+        throw "whoops";
+    }
+}
+
+class FMATInstance {
+    public gfxSamplers: GfxSampler[] = [];
+    public textureMapping: TextureMapping[] = [];
+    public templateRenderInst: GfxRenderInst;
+    private blankTexture: GfxTexture;
+
+    constructor(device: GfxDevice, textureHolder: GX2TextureHolder, renderInstBuilder: GfxRenderInstBuilder, public fmat: FMAT) {
+        this.blankTexture = device.createTexture(GfxFormat.U8_RGBA, 1, 1, 1);
+
+        this.templateRenderInst = renderInstBuilder.newRenderInst();
+
+        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, AglProgram.ub_MaterialParams);
+
+        const program = new AglProgram();
+        this.templateRenderInst.gfxProgram = device.createProgram(program);
+
+        // Fill in our texture mappings.
+        this.textureMapping = nArray(8, () => new TextureMapping());
+        for (let i = 0; i < AglProgram.s_Orders.length; i++) {
+            const samplerName = AglProgram.s_Orders[i];
+            const textureAssign = fmat.textureAssigns.find((textureAssign) => textureAssign.attribName === samplerName);
+
+            let boundTexture = false;
+            if (textureAssign !== undefined) {
+                if (textureHolder.hasTexture(textureAssign.textureName)) {
+                    textureHolder.fillTextureMapping(this.textureMapping[i], textureAssign.textureName);
+
+                    const sampler = device.createSampler({
+                        wrapS: translateTexClamp(textureAssign.texClampU),
+                        wrapT: translateTexClamp(textureAssign.texClampV),
+                        minFilter: translateTexFilter(textureAssign.texFilterMin),
+                        mipFilter: translateMipFilter(textureAssign.texFilterMip),
+                        magFilter: translateTexFilter(textureAssign.texFilterMag),
+                        minLOD: textureAssign.minLOD,
+                        maxLOD: textureAssign.maxLOD,
+                    })
+                    this.gfxSamplers.push(sampler);
+
+                    this.textureMapping[i].gfxSampler = sampler;
+                    boundTexture = true;
+                }
+            }
+
+            if (!boundTexture)
+                this.textureMapping[i].gfxTexture = this.blankTexture;
         }
 
-        return vao;
+        this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+
+        const isTranslucent = fmat.renderState.blendEnabled;
+
+        // Render flags.
+        this.templateRenderInst.setMegaStateFlags({
+            cullMode:       translateCullMode(fmat.renderState.cullFront, fmat.renderState.cullBack),
+            blendMode:      translateBlendCombine(fmat.renderState.blendEnabled, fmat.renderState.blendColorCombine),
+            blendSrcFactor: translateBlendFunction(fmat.renderState.blendSrcColorFunc),
+            blendDstFactor: translateBlendFunction(fmat.renderState.blendDstColorFunc),
+            depthCompare:   translateCompareFunction(fmat.renderState.depthCompareFunc),
+            depthWrite:     isTranslucent ? false : fmat.renderState.depthWrite,
+            frontFace:      translateFrontFaceMode(fmat.renderState.frontFaceMode),
+        });
+
+        const materialLayer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.templateRenderInst.sortKey = makeSortKey(materialLayer, 0);
     }
 
-    private translateFVTXBuffers(fvtx: BFRES.FVTX, vertexDatas: ArrayBufferSlice[]) {
-        for (let i = 0; i < fvtx.attribs.length; i++) {
-            const attrib = fvtx.attribs[i];
-            const location = ProgramGambit_UBER.attribLocations[attrib.name];
+    public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
+    }
 
-            if (location === undefined)
-                continue;
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.gfxSamplers.length; i++)
+            device.destroySampler(this.gfxSamplers[i]);
+        device.destroyProgram(this.templateRenderInst.gfxProgram);
+        device.destroyTexture(this.blankTexture);
+    }
+}
 
-            const buffer = fvtx.buffers[attrib.bufferIndex];
-            // Convert the vertex buffer data into a loadable format... might edit "attrib"
-            // if it has to load a non-WebGL-native format...
-            const vertexData = convertVertexBuffer(buffer, attrib, fvtx.vtxCount);
-            vertexDatas.push(vertexData);
+function translateIndexFormat(indexFormat: GX2IndexFormat): GfxFormat {
+    // Little-endian translation was done above.
+    switch (indexFormat) {
+    case GX2IndexFormat.U16:
+    case GX2IndexFormat.U16_LE:
+        return GfxFormat.U16_R;
+    case GX2IndexFormat.U32:
+    case GX2IndexFormat.U32_LE:
+        return GfxFormat.U32_R;
+    default:
+        throw new Error(`Unsupported index format ${indexFormat}`);
+    }
+}
+
+class FSHPMeshInstance {
+    public renderInsts: GfxRenderInst[] = [];
+
+    constructor(renderInstBuilder: GfxRenderInstBuilder, public meshData: FSHPMeshData) {
+        const mesh = meshData.mesh;
+
+        assert(mesh.offset === 0);
+
+        // TODO(jstpierre): Do we have to care about submeshes?
+        const renderInst = renderInstBuilder.pushRenderInst();
+        renderInst.drawIndexes(mesh.count);
+        renderInst.inputState = meshData.inputState;
+        this.renderInsts.push(renderInst);
+    }
+
+    public prepareToRender(visible: boolean, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.renderInsts.length; i++) {
+            this.renderInsts[i].visible = visible;
+            if (visible) {
+                const depth = computeViewSpaceDepth(viewerInput.camera, this.meshData.mesh.bbox);
+                this.renderInsts[i].sortKey = setSortKeyDepth(this.renderInsts[i].sortKey, depth);
+            }
         }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.renderInsts.length; i++)
+            this.renderInsts[i].destroy();
+    }
+}
+
+const scratchMatrix = mat4.create();
+const bboxScratch = new AABB();
+class FSHPInstance {
+    private lodMeshInstances: FSHPMeshInstance[] = [];
+    public templateRenderInst: GfxRenderInst;
+    public visible = true;
+
+    constructor(renderInstBuilder: GfxRenderInstBuilder, public fshpData: FSHPData) {
+        // TODO(jstpierre): Joints.
+        this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
+        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, AglProgram.ub_ShapeParams);
+
+        // Only construct the first LOD mesh for now.
+        for (let i = 0; i < 1; i++)
+            this.lodMeshInstances.push(new FSHPMeshInstance(renderInstBuilder, fshpData.meshData[i]));
+
+        renderInstBuilder.popTemplateRenderInst();
+    }
+
+    public prepareToRender(shapeParamsBuffer: GfxRenderBuffer, mdlVisible: boolean, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
+        let offs = this.templateRenderInst.getUniformBufferOffset(AglProgram.ub_ShapeParams);
+        const mappedF32 = shapeParamsBuffer.mapBufferF32(offs, 24);
+
+        const viewMatrix = scratchMatrix;
+        if (isSkybox)
+            mat4.identity(viewMatrix);
+        else
+            computeViewMatrix(viewMatrix, viewerInput.camera);
+
+        offs += fillMatrix4x3(mappedF32, offs, viewMatrix);
+
+        mat4.mul(viewMatrix, viewMatrix, modelMatrix);
+        offs += fillMatrix4x3(mappedF32, offs, viewMatrix);
+
+        for (let i = 0; i < this.lodMeshInstances.length; i++) {
+            let visible = mdlVisible;
+
+            if (visible)
+                visible = this.visible;
+
+            if (visible) {
+                bboxScratch.transform(this.lodMeshInstances[i].meshData.mesh.bbox, modelMatrix);
+                visible = viewerInput.camera.frustum.contains(bboxScratch);
+            }
+
+            this.lodMeshInstances[i].prepareToRender(visible, viewerInput);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.lodMeshInstances.length; i++)
+            this.lodMeshInstances[i].destroy(device);
+    }
+}
+
+export class FMDLRenderer {
+    public fmatInst: FMATInstance[] = [];
+    public fshpInst: FSHPInstance[] = [];
+    public renderInstBuilder: GfxRenderInstBuilder;
+    public sceneParamsBuffer: GfxRenderBuffer;
+    public materialParamsBuffer: GfxRenderBuffer;
+    public shapeParamsBuffer: GfxRenderBuffer;
+    public templateRenderInst: GfxRenderInst;
+    public modelMatrix = mat4.create();
+    public visible = true;
+    public isSkybox = false;
+    public passMask: number = 0x01;
+    public name: string;
+
+    constructor(device: GfxDevice, public textureHolder: GX2TextureHolder, public fmdlData: FMDLData) {
+        this.name = fmdlData.fmdl.name;
+
+        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
+        this.materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
+        this.shapeParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_ShapeParams`);
+
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+            { numUniformBuffers: 1, numSamplers: 0 }, // Scene
+            { numUniformBuffers: 1, numSamplers: 8 }, // Material
+            { numUniformBuffers: 1, numSamplers: 0 }, // Shape
+        ];
+        const uniformBuffers = [ this.sceneParamsBuffer, this.materialParamsBuffer, this.shapeParamsBuffer ];
+
+        this.renderInstBuilder = new GfxRenderInstBuilder(device, AglProgram.programReflection, bindingLayouts, uniformBuffers);
+
+        this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
+        this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, AglProgram.ub_SceneParams);
+
+        this.translateModel(device);
+    }
+
+    public setVisible(v: boolean) {
+        this.visible = v;
+    }
+
+    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
+        this.renderInstBuilder.popTemplateRenderInst();
+        this.renderInstBuilder.finish(device, viewRenderer);
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.templateRenderInst.passMask = this.passMask;
+
+        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[AglProgram.ub_SceneParams], 16);
+        let offs = this.templateRenderInst.uniformBufferOffsets[AglProgram.ub_SceneParams];
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+
+        for (let i = 0; i < this.fshpInst.length; i++)
+            this.fshpInst[i].prepareToRender(this.shapeParamsBuffer, this.visible, this.modelMatrix, viewerInput, this.isSkybox);
+
+        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
+        this.materialParamsBuffer.prepareToRender(hostAccessPass);
+        this.shapeParamsBuffer.prepareToRender(hostAccessPass);
+    }
+
+    public translateModel(device: GfxDevice): void {
+        for (let i = 0; i < this.fmdlData.fmdl.fmat.length; i++)
+            this.fmatInst.push(new FMATInstance(device, this.textureHolder, this.renderInstBuilder, this.fmdlData.fmdl.fmat[i]));
+        for (let i = 0; i < this.fmdlData.fshpData.length; i++) {
+            const fshpData = this.fmdlData.fshpData[i];
+            const fmatInstance = this.fmatInst[fshpData.fshp.materialIndex];
+            this.renderInstBuilder.pushTemplateRenderInst(fmatInstance.templateRenderInst);
+            this.fshpInst.push(new FSHPInstance(this.renderInstBuilder, fshpData));
+            this.renderInstBuilder.popTemplateRenderInst();
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.fmatInst.length; i++)
+            this.fmatInst[i].destroy(device);
+        for (let i = 0; i < this.fshpInst.length; i++)
+            this.fshpInst[i].destroy(device);
+        this.sceneParamsBuffer.destroy(device);
+        this.materialParamsBuffer.destroy(device);
+        this.shapeParamsBuffer.destroy(device);
+
+        
+    }
+}
+
+export class BasicFRESRenderer extends BasicRendererHelper {
+    public fmdlRenderers: FMDLRenderer[] = [];
+
+    constructor(public textureHolder: GX2TextureHolder) {
+        super();
+    }
+
+    public createPanels(): UI.Panel[] {
+        const layersPanel = new UI.LayerPanel();
+        layersPanel.setLayers(this.fmdlRenderers);
+        return [layersPanel];
+    }
+
+    public addFMDLRenderer(device: GfxDevice, fmdlRenderer: FMDLRenderer): void {
+        fmdlRenderer.addToViewRenderer(device, this.viewRenderer);
+        this.fmdlRenderers.push(fmdlRenderer);
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(10, 500000);
+        for (let i = 0; i < this.fmdlRenderers.length; i++)
+            this.fmdlRenderers[i].prepareToRender(hostAccessPass, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        for (let i = 0; i < this.fmdlRenderers.length; i++)
+            this.fmdlRenderers[i].destroy(device);
     }
 }

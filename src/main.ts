@@ -142,14 +142,14 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.brres'))
             return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESRendererFromBRRES(device, buffer));
 
+        if (file.name.endsWith('.bfres'))
+            return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(device, buffer));
+
         return null;
     }
 
     public createScene(gl: WebGL2RenderingContext): Progressable<MainScene> {
         const file = this.file;
-
-        if (file.name.endsWith('.bfres'))
-            return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(gl, buffer));
 
         if (file.name.endsWith('.szs') || file.name.endsWith('.rarc') || file.name.endsWith('.bmd'))
             return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(gl, buffer));

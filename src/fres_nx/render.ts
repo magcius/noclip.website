@@ -3,12 +3,12 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 
-import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxProgram, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxBufferBinding, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxBufferBinding, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 
 import * as BNTX from './bntx';
 import { surfaceToCanvas } from '../fres/bc_texture';
 import { translateImageFormat, deswizzle, decompress, getImageFormatString } from './tegra_texture';
-import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FMAT_ShaderAssign, FVTX_VertexAttribute, FVTX_VertexBuffer } from './bfres';
+import { FMDL, FSHP, FMAT, FMAT_RenderInfo, FMAT_RenderInfoType, FVTX, FSHP_Mesh, FRES, FVTX_VertexAttribute, FVTX_VertexBuffer } from './bfres';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { TextureAddressMode, FilterMode, IndexFormat, AttributeFormat, getChannelFormat, getTypeFormat } from './nngfx_enum';
 import { nArray, assert, assertExists } from '../util';
@@ -162,8 +162,8 @@ layout(row_major, std140) uniform ub_ShapeParams {
 
 uniform sampler2D u_Samplers[8];
 `;
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(AglProgram.globalDefinitions);
 
+    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(AglProgram.globalDefinitions);
     public both = AglProgram.globalDefinitions;
 
     public lookupSamplerIndex(shadingModelSamplerBindingName: string) {
@@ -526,7 +526,7 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
     }
 }
 
-interface ConvertedBuffer {
+interface ConvertedVertexAttribute {
     format: GfxFormat;
     data: ArrayBuffer;
     stride: number;
@@ -547,21 +547,21 @@ class FVTXData {
 
             const bufferIndex = vertexAttribute.bufferIndex;
             const vertexBuffer = fvtx.vertexBuffers[bufferIndex];
-            const convertedBuffer = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
-            if (convertedBuffer !== null) {
+            const convertedAttribute = this.convertVertexAttribute(vertexAttribute, vertexBuffer);
+            if (convertedAttribute !== null) {
                 const attribBufferIndex = nextBufferIndex++;
 
                 this.vertexAttributeDescriptors.push({
                     location: attribLocation,
-                    format: convertedBuffer.format,
+                    format: convertedAttribute.format,
                     bufferIndex: attribBufferIndex,
                     // When we convert the buffer we remove the byte offset.
                     bufferByteOffset: 0,
                     frequency: GfxVertexAttributeFrequency.PER_VERTEX,
                 });
 
-                const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, convertedBuffer.data);
-                this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer, byteOffset: 0, byteStride: convertedBuffer.stride };
+                const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, convertedAttribute.data);
+                this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer, byteOffset: 0, byteStride: convertedAttribute.stride };
             } else {
                 // Can use buffer data directly.
                 this.vertexAttributeDescriptors.push({
@@ -580,7 +580,7 @@ class FVTXData {
         }
     }
 
-    public convertVertexAttribute(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedBuffer {
+    public convertVertexAttribute(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute {
         switch (vertexAttribute.format) {
         case AttributeFormat._10_10_10_2_Snorm:
             return this.convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute, vertexBuffer);
@@ -589,7 +589,7 @@ class FVTXData {
         }
     }
 
-    public convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedBuffer {
+    public convertVertexAttribute_10_10_10_2_Snorm(vertexAttribute: FVTX_VertexAttribute, vertexBuffer: FVTX_VertexBuffer): ConvertedVertexAttribute {
         function signExtend10(n: number): number {
             return (n << 22) >> 22;
         }
@@ -625,7 +625,7 @@ export class FSHPMeshData {
     public indexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, public mesh: FSHP_Mesh, fvtxData: FVTXData) {
-        const indexBufferFormat = translateIndexFormat(mesh.format);
+        const indexBufferFormat = translateIndexFormat(mesh.indexFormat);
         this.inputLayout = device.createInputLayout({
             vertexAttributeDescriptors: fvtxData.vertexAttributeDescriptors, indexBufferFormat,
         });
@@ -667,6 +667,13 @@ export class FMDLData {
             const fshp = fmdl.fshp[i];
             this.fshpData.push(new FSHPData(device, fshp, this.fvtxData[fshp.vertexIndex]));
         }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.fvtxData.length; i++)
+            this.fvtxData[i].destroy(device);
+        for (let i = 0; i < this.fshpData.length; i++)
+            this.fshpData[i].destroy(device);
     }
 }
 
@@ -738,9 +745,9 @@ class FSHPInstance {
     }
 
     public prepareToRender(shapeParamsBuffer: GfxRenderBuffer, mdlVisible: boolean, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        const shapeParamsMapped = shapeParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[AglProgram.ub_ShapeParams], 12);
-        let offs = this.templateRenderInst.uniformBufferOffsets[AglProgram.ub_ShapeParams];
-        offs += fillMatrix4x3(shapeParamsMapped, offs, this.computeModelView(modelMatrix, viewerInput));
+        let offs = this.templateRenderInst.getUniformBufferOffset(AglProgram.ub_ShapeParams);
+        const mappedF32 = shapeParamsBuffer.mapBufferF32(offs, 12);
+        offs += fillMatrix4x3(mappedF32, offs, this.computeModelView(modelMatrix, viewerInput));
 
         for (let i = 0; i < this.lodMeshInstances.length; i++) {
             let visible = mdlVisible;

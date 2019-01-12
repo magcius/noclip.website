@@ -65,6 +65,10 @@ class ResourceSystem {
         const sarc = assertExists(this.mounts.get(mountName));
         return sarc.files.find((n) => n.name === fileName).buffer;
     }
+
+    public destroy(device: GfxDevice): void {
+        this.fmdlDataCache.forEach((value) => value.destroy(device));
+    }
 }
 
 type StageMap = { ObjectList: StageObject[] }[];
@@ -92,6 +96,17 @@ function calcModelMtxFromTRSVectors(dst: mat4, tv: Vector, rv: Vector, sv: Vecto
     vec3.set(v, tv.X, tv.Y, tv.Z);
     vec3.set(s, sv.X, sv.Y, sv.Z);
     mat4.fromRotationTranslationScale(dst, q, v, s);
+}
+
+export class OdysseyRenderer extends BasicFRESRenderer {
+    constructor(private resourceSystem: ResourceSystem) {
+        super(resourceSystem.textureHolder);
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.resourceSystem.destroy(device);
+    }
 }
 
 class OdysseySceneDesc implements Viewer.SceneDesc {
@@ -145,7 +160,7 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
             // but how it interacts with the layer system, I don't know.
             const entry = worldHomeStageMap[1];
 
-            const sceneRenderer = new BasicFRESRenderer(resourceSystem.textureHolder);
+            const sceneRenderer = new OdysseyRenderer(resourceSystem);
             for (let i = 0; i < entry.ObjectList.length; i++) {
                 const stageObject = entry.ObjectList[i];
                 const fmdlData = resourceSystem.getFMDLData(device, `ObjectData/${stageObject.UnitConfigName}`);
