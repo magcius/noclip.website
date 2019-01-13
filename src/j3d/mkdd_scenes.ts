@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 
-import { MultiScene, createScene } from './scenes';
+import { createModelInstance, BasicRenderer } from './scenes';
 
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -11,6 +11,7 @@ import { mat4, quat } from 'gl-matrix';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance } from './render';
 import { BCK } from './j3d';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";
@@ -64,20 +65,20 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    private spawnBMD(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, basename: string, modelMatrix: mat4 = null): BMDModelInstance {
+    private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 = null): BMDModelInstance {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         assertExists(bmdFile);
         const btkFile = rarc.findFile(`${basename}.btk`);
         const brkFile = rarc.findFile(`${basename}.brk`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, null, bmtFile);
+        const scene = createModelInstance(device, renderer.renderHelper, renderer.textureHolder, bmdFile, btkFile, brkFile, null, bmtFile);
         scene.name = basename;
         if (modelMatrix !== null)
             mat4.copy(scene.modelMatrix, modelMatrix);
         return scene;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const path = `data/j3d/mkdd/Course/${this.path}`;
         return fetchData(path).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);
@@ -85,16 +86,16 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
             const bolFile = rarc.files.find((f) => f.name.endsWith('_course.bol'));
             const courseName = bolFile.name.replace('_course.bol', '');
 
-            const textureHolder = new J3DTextureHolder();
-            const scenes: BMDModelInstance[] = [];
+            const renderer = new BasicRenderer(device, new J3DTextureHolder());
 
             if (rarc.findFile(`${courseName}_sky.bmd`))
-                scenes.push(this.spawnBMD(gl, textureHolder, rarc, `${courseName}_sky`));
+                renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `${courseName}_sky`));
 
-            scenes.push(this.spawnBMD(gl, textureHolder, rarc, `${courseName}_course`));
+            renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `${courseName}_course`));
 
-            const spawnObject = (obj: Obj, basename: string, animName: string = null): BMDModelInstance => {
-                const scene = this.spawnBMD(gl, textureHolder, rarc, basename, obj.modelMatrix);
+            const spawnObject = (obj: Obj, basename: string, animName: string = null) => {
+                const scene = this.spawnBMD(device, renderer, rarc, basename, obj.modelMatrix);
+                renderer.addModelInstance(scene);
                 let bckFile;
                 if (animName !== null) {
                     bckFile = rarc.findFile(animName);
@@ -106,9 +107,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                     const bck = BCK.parse(bckFile.buffer);
                     scene.bindANK1(bck.ank1);
                 }
-                scenes.push(scene);
-                return scene;
-            }
+            };
 
             const bol = parseBOL(bolFile.buffer);
             console.log(courseName, rarc, bol);
@@ -155,7 +154,8 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 }
             }
 
-            return new MultiScene(textureHolder, scenes);
+            renderer.finish(device);
+            return renderer;
         });
     }
 }

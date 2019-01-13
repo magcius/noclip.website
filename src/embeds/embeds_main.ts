@@ -14,11 +14,12 @@ import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
-type CreateSceneFunc = (gl: WebGL2RenderingContext, name: string) => Progressable<Viewer.MainScene>;
+type CreateSceneFunc = (device: GfxDevice, name: string) => Progressable<Viewer.SceneGfx>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
-    "sunshine_water": sunshine_water.createScene,
+    "sunshine_water": sunshine_water.createSceneGfx,
 };
 
 class FsButton {
@@ -102,11 +103,11 @@ class Main {
 
     private async loadScene(hash: string) {
         const [file, name] = hash.split('/');
-        const gl = this.viewer.renderState.gl;
+        const device = this.viewer.gfxDevice;
         const createScene = embeds[file];
-        const scene = await createScene(gl, name);
+        const scene = await createScene(device, name);
         this.viewer.setCameraController(new OrbitCameraController());
-        this.viewer.setScene(scene);
+        this.viewer.setSceneDevice(scene);
     }
 
     private onResize() {

@@ -549,8 +549,6 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
     }
 
     function compileVatFormats(): string {
-        const sources = [];
-
         const vatLayoutSources = new Map<GX.VtxFmt, string>();
         for (let i = 0; i < GX.VtxFmt.VTXFMT7; i++) {
             const vatLayout = loadedVertexLayout.vatLayouts[i];

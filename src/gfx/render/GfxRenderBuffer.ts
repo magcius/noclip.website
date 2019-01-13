@@ -20,7 +20,7 @@ export class GfxRenderBuffer {
     constructor(public usage: GfxBufferUsage, public frequencyHint: GfxBufferFrequencyHint, public resourceName: string = "Unnamed GfxRenderBuffer") {
     }
 
-    public setWordCount(device: GfxDevice, newWordCount: number) {
+    public setWordCount(device: GfxDevice, newWordCount: number): boolean {
         if (newWordCount > this.wordCount) {
             this.wordCount = newWordCount;
 
@@ -55,6 +55,10 @@ export class GfxRenderBuffer {
                 this.pageDirty.push(false);
                 this.usesMultiplePages = false;
             }
+
+            return true;
+        } else {
+            return false;
         }
     }
 

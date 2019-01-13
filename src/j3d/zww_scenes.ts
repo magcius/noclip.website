@@ -6,7 +6,6 @@ import Progressable from '../Progressable';
 import { readString } from '../util';
 import { fetchData } from '../fetch';
 
-import { RenderState, depthClearFlags } from '../render';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
@@ -16,10 +15,17 @@ import * as GX_Material from '../gx/gx_material';
 import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
-import { SimpleProgram } from '../Program';
-import { colorToCSS } from '../Color';
-import { ColorKind } from '../gx/gx_render';
-import { defaultMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { Camera, computeViewMatrix } from '../Camera';
+import { DeviceProgram } from '../Program';
+import { colorToCSS, Color } from '../Color';
+import { ColorKind, GXRenderHelperGfx } from '../gx/gx_render';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
+import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
@@ -117,7 +123,7 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
     return { amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
 }
 
-function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance {
+function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -127,9 +133,10 @@ function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder
     const brkFile = rarc.findFile(`brk/${name}.brk`);
     const bckFile = rarc.findFile(`bck/${name}.bck`);
     const bdl = BMD.parse(bdlFile.buffer);
-    textureHolder.addJ3DTextures(gl, bdl);
-    const bmdModel = new BMDModel(gl, bdl, null);
-    const scene = new BMDModelInstance(gl, textureHolder, bmdModel);
+    textureHolder.addJ3DTextures(device, bdl);
+    const bmdModel = new BMDModel(device, renderHelper, bdl, null);
+    const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel);
+    scene.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -150,7 +157,7 @@ function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder
     return scene;
 }
 
-class WindWakerRoomRenderer implements Viewer.Scene {
+class WindWakerRoomRenderer {
     public model: BMDModelInstance;
     public model1: BMDModelInstance;
     public model2: BMDModelInstance;
@@ -158,19 +165,30 @@ class WindWakerRoomRenderer implements Viewer.Scene {
     public name: string;
     public visible: boolean = true;
 
-    constructor(gl: WebGL2RenderingContext, private textureHolder: J3DTextureHolder, public roomIdx: number, public roomRarc: RARC.RARC) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, public roomIdx: number, public roomRarc: RARC.RARC) {
         this.name = `Room ${roomIdx}`;
 
-        this.model = createScene(gl, textureHolder, roomRarc, `model`);
+        this.model = createScene(device, renderHelper, textureHolder, roomRarc, `model`);
 
         // Ocean.
-        this.model1 = createScene(gl, textureHolder, roomRarc, `model1`);
+        this.model1 = createScene(device, renderHelper, textureHolder, roomRarc, `model1`);
 
         // Special effects / Skybox as seen in Hyrule.
-        this.model2 = createScene(gl, textureHolder, roomRarc, `model2`);
+        this.model2 = createScene(device, renderHelper, textureHolder, roomRarc, `model2`);
 
         // Windows / doors.
-        this.model3 = createScene(gl, textureHolder, roomRarc, `model3`);
+        this.model3 = createScene(device, renderHelper, textureHolder, roomRarc, `model3`);
+    }
+
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.model)
+            this.model.prepareToRender(renderHelper, viewerInput);
+        if (this.model1)
+            this.model1.prepareToRender(renderHelper, viewerInput);
+        if (this.model2)
+            this.model2.prepareToRender(renderHelper, viewerInput);
+        if (this.model3)
+            this.model3.prepareToRender(renderHelper, viewerInput);
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
@@ -215,104 +233,121 @@ class WindWakerRoomRenderer implements Viewer.Scene {
 
     public setVisible(v: boolean): void {
         this.visible = v;
+        if (this.model)
+            this.model.visible = v;
+        if (this.model1)
+            this.model1.visible = v;
+        if (this.model2)
+            this.model2.visible = v;
+        if (this.model3)
+            this.model3.visible = v;
     }
 
-    public render(state: RenderState): void {
-        if (!this.visible)
-            return;
-
+    public destroy(device: GfxDevice): void {
         if (this.model)
-            this.model.render(state);
+            this.model.destroy(device);
         if (this.model1)
-            this.model1.render(state);
+            this.model1.destroy(device);
         if (this.model2)
-            this.model2.render(state);
+            this.model2.destroy(device);
         if (this.model3)
-            this.model3.render(state);
-    }
-
-    public destroy(gl: WebGL2RenderingContext): void {
-        if (this.model)
-            this.model.destroy(gl);
-        if (this.model1)
-            this.model1.destroy(gl);
-        if (this.model2)
-            this.model2.destroy(gl);
-        if (this.model3)
-            this.model3.destroy(gl);
+            this.model3.destroy(device);
     }
 }
 
-class PlaneColorProgram extends SimpleProgram {
+class PlaneColorProgram extends DeviceProgram {
     public static a_Position: number = 0;
 
-    public vert = `
+    public both = `
 precision mediump float;
-uniform mat4 u_modelView;
-uniform mat4 u_projection;
+layout(row_major, std140) uniform ub_Params {
+    mat4 u_Projection;
+    mat4x3 u_ModelView;
+    vec4 u_PlaneColor;
+};
+#ifdef VERT
 layout(location = ${PlaneColorProgram.a_Position}) in vec3 a_Position;
-
 void main() {
-    gl_Position = u_projection * u_modelView * vec4(a_Position, 1.0);
+    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
 }
-`;
-
-    public frag = `
-precision mediump float;
-uniform vec4 u_PlaneColor;
-
+#endif
+#ifdef FRAG
 void main() {
     gl_FragColor = u_PlaneColor;
 }
+#endif
 `;
-
-    public u_PlaneColor: WebGLUniformLocation;
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram): void {
-        super.bind(gl, prog);
-        this.u_PlaneColor = gl.getUniformLocation(prog, `u_PlaneColor`);
-    }
 }
 
+const scratchMatrix = mat4.create();
 class SeaPlane {
-    private vao: WebGLVertexArrayObject;
-    private posBuffer: WebGLBuffer;
+    private posBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+    private gfxProgram: GfxProgram;
+    private renderInst: GfxRenderInst;
+    private paramsBuffer: GfxRenderBuffer;
+    private bufferFiller: BufferFillerHelper;
+    private paramsBufferOffset: number;
     private modelMatrix = mat4.create();
-    private color = new Float32Array(4);
-    private program = new PlaneColorProgram();
+    private color: Color;
 
-    constructor(gl: WebGL2RenderingContext) {
-        this.createBuffers(gl);
+    constructor(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
+        this.createBuffers(device);
         mat4.fromScaling(this.modelMatrix, [200000, 1, 200000]);
+        mat4.translate(this.modelMatrix, this.modelMatrix, [0, -100, 0]);
+
+        this.gfxProgram = device.createProgram(new PlaneColorProgram());
+
+        const programReflection = device.queryProgram(this.gfxProgram);
+        const paramsLayout = programReflection.uniformBufferLayouts[0];
+        this.bufferFiller = new BufferFillerHelper(paramsLayout);
+        this.paramsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
+        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.paramsBuffer ]);
+        this.renderInst = renderInstBuilder.pushRenderInst();
+        this.renderInst.name = 'SeaPlane';
+        this.renderInst.gfxProgram = this.gfxProgram;
+        this.renderInst.inputState = this.inputState;
+        this.renderInst.setMegaStateFlags({
+            depthWrite: true,
+            depthCompare: GfxCompareMode.LESS,
+        });
+        this.renderInst.drawIndexes(6, 0);
+        this.paramsBufferOffset = renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
+        renderInstBuilder.finish(device, viewRenderer);
+    }
+
+    private computeModelView(dst: mat4, camera: Camera): void {
+        computeViewMatrix(dst, camera);
+        mat4.mul(dst, dst, this.modelMatrix);
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.bufferFiller.reset();
+        this.bufferFiller.fillMatrix4x4(viewerInput.camera.projectionMatrix);
+        this.computeModelView(scratchMatrix, viewerInput.camera);
+        this.bufferFiller.fillMatrix4x3(scratchMatrix);
+        this.bufferFiller.fillColor(this.color);
+        this.bufferFiller.endAndUpload(hostAccessPass, this.paramsBuffer, this.paramsBufferOffset);
+        this.paramsBuffer.prepareToRender(hostAccessPass);
     }
 
     public setColor(color: GX_Material.Color): void {
-        this.color[0] = color.r;
-        this.color[1] = color.g;
-        this.color[2] = color.b;
-        this.color[3] = color.a;
+        this.color = color;
     }
 
-    public render(state: RenderState): void {
-        const gl = state.gl;
-
-        state.useProgram(this.program);
-        state.bindModelView(false, this.modelMatrix);
-        gl.uniform4fv(this.program.u_PlaneColor, this.color);
-
-        gl.bindVertexArray(this.vao);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        gl.bindVertexArray(null);
+    public destroy(device: GfxDevice) {
+        device.destroyBuffer(this.posBuffer);
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputState);
+        device.destroyProgram(this.gfxProgram);
     }
 
-    public destroy(gl: WebGL2RenderingContext) {
-        gl.deleteVertexArray(this.vao);
-        gl.deleteBuffer(this.posBuffer);
-    }
-
-    private createBuffers(gl: WebGL2RenderingContext) {
-        this.vao = gl.createVertexArray();
-        gl.bindVertexArray(this.vao);
-
+    private createBuffers(device: GfxDevice) {
         const posData = new Float32Array(4 * 3);
         posData[0]  = -1;
         posData[1]  = 0;
@@ -326,19 +361,29 @@ class SeaPlane {
         posData[9]  = 1;
         posData[10] = 0;
         posData[11] = 1;
-
-        this.posBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, posData, gl.STATIC_DRAW);
-        const posAttribLocation = PlaneColorProgram.a_Position;
-        gl.vertexAttribPointer(posAttribLocation, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(posAttribLocation);
-
-        gl.bindVertexArray(null);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
+        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, posData.buffer);
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { format: GfxFormat.F32_RGB, location: PlaneColorProgram.a_Position, bufferByteOffset: 0, bufferIndex: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+        ];
+        const indexBufferFormat = GfxFormat.U16_R;
+        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
+        this.inputState = device.createInputState(this.inputLayout, [
+            { buffer: this.posBuffer, byteOffset: 0, byteStride: 0 },
+        ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 });
     }
 }
 
-class WindWakerRenderer implements Viewer.MainScene {
+const enum WindWakerPass {
+    MAIN = 0x01,
+    SKYBOX = 0x02,
+}
+
+class WindWakerRenderer implements Viewer.SceneGfx {
+    private viewRenderer = new GfxRenderInstViewRenderer();
+    private renderTarget = new BasicRenderTarget();
+    public renderHelper: GXRenderHelperGfx;
+
     private seaPlane: SeaPlane;
     private vr_sky: BMDModelInstance;
     private vr_uso_umi: BMDModelInstance;
@@ -346,14 +391,16 @@ class WindWakerRenderer implements Viewer.MainScene {
     private vr_back_cloud: BMDModelInstance;
     public roomRenderers: WindWakerRoomRenderer[] = [];
 
-    constructor(gl: WebGL2RenderingContext, wantsSeaPlane: boolean, public textureHolder: J3DTextureHolder, private stageRarc: RARC.RARC) {
-        if (wantsSeaPlane)
-            this.seaPlane = new SeaPlane(gl);
+    constructor(device: GfxDevice, public textureHolder: J3DTextureHolder, wantsSeaPlane: boolean, private stageRarc: RARC.RARC) {
+        this.renderHelper = new GXRenderHelperGfx(device);
 
-        this.vr_sky = createScene(gl, this.textureHolder, stageRarc, `vr_sky`, true);
-        this.vr_uso_umi = createScene(gl, this.textureHolder, stageRarc, `vr_uso_umi`, true);
-        this.vr_kasumi_mae = createScene(gl, this.textureHolder, stageRarc, `vr_kasumi_mae`, true);
-        this.vr_back_cloud = createScene(gl, this.textureHolder, stageRarc, `vr_back_cloud`, true);
+        if (wantsSeaPlane)
+            this.seaPlane = new SeaPlane(device, this.viewRenderer);
+
+        this.vr_sky = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_sky`, true);
+        this.vr_uso_umi = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_uso_umi`, true);
+        this.vr_kasumi_mae = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_kasumi_mae`, true);
+        this.vr_back_cloud = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_back_cloud`, true);
     }
 
     public setTimeOfDay(index: number): void {
@@ -390,9 +437,12 @@ class WindWakerRenderer implements Viewer.MainScene {
         }
     }
 
+    public finish(device: GfxDevice): void {
+        this.renderHelper.finishBuilder(device, this.viewRenderer);
+    }
+
     public createPanels(): UI.Panel[] {
         const timeOfDayPanel = new UI.Panel();
-        timeOfDayPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         timeOfDayPanel.setTitle(TIME_OF_DAY_ICON, "Time of Day");
 
         const colorPresets = [ '(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ];
@@ -421,52 +471,58 @@ class WindWakerRenderer implements Viewer.MainScene {
         return [timeOfDayPanel, layersPanel];
     }
 
-    public render(state: RenderState) {
-        const gl = state.gl;
-
-        state.setClipPlanes(20, 500000);
-
-        if (this.vr_sky) {
-            // Render skybox.
-            this.vr_sky.render(state);
-            if (this.vr_kasumi_mae)
-                this.vr_kasumi_mae.render(state);
-            if (this.vr_uso_umi)
-                this.vr_uso_umi.render(state);
-            if (this.vr_back_cloud)
-                this.vr_back_cloud.render(state);
-
-            state.useFlags(depthClearFlags);
-            gl.clear(gl.DEPTH_BUFFER_BIT);
-        }
-
-        state.useFlags(defaultMegaState);
-
-        if (this.seaPlane) {
-            // Render sea plane.
-            this.seaPlane.render(state);
-        }
-
-        for (let i = 0; i < this.roomRenderers.length; i++) {
-            const roomRenderer = this.roomRenderers[i];
-            roomRenderer.render(state);
-        }
+    private prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(20, 500000);
+        this.renderHelper.fillSceneParams(viewerInput);
+        if (this.seaPlane)
+            this.seaPlane.prepareToRender(hostAccessPass, viewerInput);
+        if (this.vr_sky)
+            this.vr_sky.prepareToRender(this.renderHelper, viewerInput);
+        if (this.vr_kasumi_mae)
+            this.vr_kasumi_mae.prepareToRender(this.renderHelper, viewerInput);
+        if (this.vr_uso_umi)
+            this.vr_uso_umi.prepareToRender(this.renderHelper, viewerInput);
+        if (this.vr_back_cloud)
+            this.vr_back_cloud.prepareToRender(this.renderHelper, viewerInput);
+        for (let i = 0; i < this.roomRenderers.length; i++)
+            this.roomRenderers[i].prepareToRender(this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(hostAccessPass);
     }
 
-    public destroy(gl: WebGL2RenderingContext) {
-        this.textureHolder.destroy(gl);
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        viewerInput.camera.setClipPlanes(20, 500000);
+
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        // First, render the skybox.
+        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, WindWakerPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, WindWakerPass.MAIN);
+        return mainPassRenderer;
+    }
+
+    public destroy(device: GfxDevice) {
+        this.textureHolder.destroyGfx(device);
         if (this.vr_sky)
-            this.vr_sky.destroy(gl);
+            this.vr_sky.destroy(device);
         if (this.vr_kasumi_mae)
-            this.vr_kasumi_mae.destroy(gl);
+            this.vr_kasumi_mae.destroy(device);
         if (this.vr_uso_umi)
-            this.vr_uso_umi.destroy(gl);
+            this.vr_uso_umi.destroy(device);
         if (this.vr_back_cloud)
-            this.vr_back_cloud.destroy(gl);
+            this.vr_back_cloud.destroy(device);
         if (this.seaPlane)
-            this.seaPlane.destroy(gl);
+            this.seaPlane.destroy(device);
         for (const roomRenderer of this.roomRenderers)
-            roomRenderer.destroy(gl);
+            roomRenderer.destroy(device);
     }
 }
 
@@ -481,7 +537,7 @@ class SceneDesc {
             this.id = `Room${rooms[0]}.arc`;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const rarcs = [];
 
         // XXX(jstpierre): This is really terrible code.
@@ -494,20 +550,21 @@ class SceneDesc {
         return Progressable.all(rarcs).then(([stageRarc, ...roomRarcs]) => {
             const textureHolder = new J3DTextureHolder();
             const wantsSeaPlane = this.stageDir === 'sea';
-            const renderer = new WindWakerRenderer(gl, wantsSeaPlane, textureHolder, stageRarc.rarc);
+            const renderer = new WindWakerRenderer(device, textureHolder, wantsSeaPlane, stageRarc.rarc);
             for (const roomRarc of roomRarcs) {
                 const roomIdx = parseInt(roomRarc.path.match(/Room(\d+)/)[1], 10);
                 const visible = roomIdx === 0 || this.rooms.indexOf(-roomIdx) === -1;
-                const roomRenderer = this.spawnRoom(gl, textureHolder, roomIdx, roomRarc.rarc);
+                const roomRenderer = this.spawnRoom(device, renderer, roomIdx, roomRarc.rarc);
                 roomRenderer.visible = visible;
                 renderer.roomRenderers.push(roomRenderer);
             }
+            renderer.finish(device);
             return renderer;
         });
     }
 
-    protected spawnRoom(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, roomIdx: number, roomRarc: RARC.RARC): WindWakerRoomRenderer {
-        return new WindWakerRoomRenderer(gl, textureHolder, roomIdx, roomRarc);
+    protected spawnRoom(device: GfxDevice, renderer: WindWakerRenderer, roomIdx: number, roomRarc: RARC.RARC): WindWakerRoomRenderer {
+        return new WindWakerRoomRenderer(device, renderer.renderHelper, renderer.textureHolder, roomIdx, roomRarc);
     }
 
     private fetchRarc(path: string): Progressable<{ path: string, rarc: RARC.RARC }> {
@@ -525,8 +582,8 @@ class SceneDesc {
 
 class FullSeaSceneDesc extends SceneDesc {
     // Place islands on sea.
-    protected spawnRoom(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, roomIdx: number, roomRarc: RARC.RARC): WindWakerRoomRenderer {
-        const roomRenderer = super.spawnRoom(gl, textureHolder, roomIdx, roomRarc);
+    protected spawnRoom(device: GfxDevice, renderer: WindWakerRenderer, roomIdx: number, roomRarc: RARC.RARC): WindWakerRoomRenderer {
+        const roomRenderer = super.spawnRoom(device, renderer, roomIdx, roomRarc);
 
         const modelMatrix = mat4.create();
         const scale = 0.4;

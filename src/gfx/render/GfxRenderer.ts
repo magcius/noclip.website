@@ -128,14 +128,14 @@ const enum GfxRenderInstFlags {
     VISIBLE                  = 1 << 1,
     DRAW_INDEXED             = 1 << 2,
     SAMPLER_BINDINGS_INHERIT = 1 << 3,
-    BINDINGS_DIRTY   = 1 << 4,
+    BINDINGS_DIRTY           = 1 << 4,
 }
 
 function setBitValue(bucket: number, bit: number, v: boolean): number {
-    if (!!(bucket & bit) === v)
-        return bucket;
+    if (v)
+        return bucket | bit;
     else
-        return (bucket & ~bit) | (v ? bit : 0);
+        return bucket & ~bit;
 }
 
 // The finished, low-level instance of a draw call. This is what's sorted and executed.
@@ -387,7 +387,8 @@ export class GfxRenderInstViewRenderer {
 export class GfxRenderInstBuilder {
     private uniformBufferOffsets: number[] = [];
     private uniformBufferWordAlignment: number;
-    private renderInsts: GfxRenderInst[] = [];
+    private newRenderInsts: GfxRenderInst[] = [];
+    private allRenderInsts: GfxRenderInst[] = [];
     private templateStack: GfxRenderInst[] = [];
 
     constructor(device: GfxDevice, public programReflection: DeviceProgramReflection, public bindingLayouts: GfxBindingLayoutDescriptor[], public uniformBuffers: GfxRenderBuffer[]) {
@@ -400,6 +401,14 @@ export class GfxRenderInstBuilder {
                 assert(bufferName === this.programReflection.uniformBufferLayouts[i].blockName);
             this.uniformBufferOffsets[i] = 0;
         }
+
+        let totalSamplerBindings = 0, totalUniformBufferBindings = 0;
+        for (let i = 0; i < this.bindingLayouts.length; i++) {
+            totalSamplerBindings += this.bindingLayouts[i].numSamplers;
+            totalUniformBufferBindings += this.bindingLayouts[i].numUniformBuffers;
+        }
+        assert(this.programReflection.uniformBufferLayouts.length === totalUniformBufferBindings);
+        assert(this.programReflection.totalSamplerBindingsCount === totalSamplerBindings);
 
         const baseRenderInst = this.pushTemplateRenderInst();
         baseRenderInst.name = "base render inst";
@@ -441,19 +450,64 @@ export class GfxRenderInstBuilder {
     public pushRenderInst(renderInst: GfxRenderInst = null): GfxRenderInst {
         if (renderInst === null)
             renderInst = this.newRenderInst();
-        this.renderInsts.push(renderInst);
+        this.newRenderInsts.push(renderInst);
         return renderInst;
     }
 
-    public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
-        assert(this.templateStack.length === 1);
+    private buildRenderInstUniformBufferBindings(renderInst: GfxRenderInst): void {
+        // Uniform buffer bindings.
+        let changedBufferBinding = false;
+        for (let i = 0; i < this.uniformBuffers.length; i++) {
+            const { buffer } = this.uniformBuffers[i].getGfxBuffer(renderInst.getUniformBufferOffset(i));
+            assertExists(buffer);
 
-        // Once we're finished building our RenderInsts, go through and assign buffers and bindings for all.
+            const wordCount = this.programReflection.uniformBufferLayouts[i].totalWordSize;
+            if (renderInst._uniformBufferBindings[i] === undefined) {
+                renderInst._uniformBufferBindings[i] = { buffer, wordOffset: 0, wordCount };
+                changedBufferBinding = true;
+            } else if (renderInst._uniformBufferBindings[i].buffer !== buffer) {
+                renderInst._uniformBufferBindings[i].buffer = buffer;
+                changedBufferBinding = true;
+            }
+        }
+
+        // Set up our dynamic uniform buffer offsets.
+        let firstUniformBuffer = 0;
+        let totalSamplerBindings = 0;
+        for (let i = 0; i < this.bindingLayouts.length; i++) {
+            const bindingLayout = this.bindingLayouts[i];
+
+            const lastUniformBuffer = firstUniformBuffer + bindingLayout.numUniformBuffers;
+
+            renderInst._uniformBufferOffsetGroups[i] = Array(bindingLayout.numUniformBuffers);
+            for (let j = firstUniformBuffer; j < lastUniformBuffer; j++) {
+                const j0 = j - firstUniformBuffer;
+                const { wordOffset } = this.uniformBuffers[j].getGfxBuffer(renderInst.uniformBufferOffsets[j]);
+                renderInst._uniformBufferOffsetGroups[i][j0] = wordOffset;
+            }
+
+            firstUniformBuffer = lastUniformBuffer;
+            totalSamplerBindings += bindingLayout.numSamplers;
+        }
+
+        // TODO(jstpierre): Find a better way to do this.
+        let shouldBuildBindings = false;
+        if (changedBufferBinding) {
+            if (renderInst.samplerBindings.length === totalSamplerBindings)
+                shouldBuildBindings = true;
+        }
+
+        if (shouldBuildBindings)
+            renderInst._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
+    }
+
+    public constructRenderInsts(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
+        // Update our buffers for the new counts.
         for (let i = 0; i < this.uniformBuffers.length; i++)
             this.uniformBuffers[i].setWordCount(device, this.uniformBufferOffsets[i]);
 
-        for (let i = 0; i < this.renderInsts.length; i++) {
-            const renderInst = this.renderInsts[i];
+        for (let i = 0; i < this.newRenderInsts.length; i++) {
+            const renderInst = this.newRenderInsts[i];
 
             // Construct a pipeline if we need one.
             if (renderInst._pipeline !== null) {
@@ -462,46 +516,19 @@ export class GfxRenderInstBuilder {
                 renderInst.buildPipeline(device, viewRenderer.gfxRenderCache);
             }
 
-            // Uniform buffer bindings.
-            for (let j = 0; j < this.uniformBuffers.length; j++) {
-                const { buffer } = this.uniformBuffers[j].getGfxBuffer(renderInst.getUniformBufferOffset(j));
-                assertExists(buffer);
-
-                const wordCount = this.programReflection.uniformBufferLayouts[j].totalWordSize;
-                renderInst._uniformBufferBindings[j] = { buffer, wordOffset: 0, wordCount };
-            }
-
-            // Set up our dynamic uniform buffer offsets.
-            let firstUniformBuffer = 0;
-            let totalSamplerBindings = 0;
-            for (let j = 0; j < this.bindingLayouts.length; j++) {
-                const bindingLayout = this.bindingLayouts[j];
-
-                const lastUniformBuffer = firstUniformBuffer + bindingLayout.numUniformBuffers;
-
-                renderInst._uniformBufferOffsetGroups[j] = Array(bindingLayout.numUniformBuffers);
-                for (let k = firstUniformBuffer; k < lastUniformBuffer; k++) {
-                    const k0 = k - firstUniformBuffer;
-                    const { wordOffset } = this.uniformBuffers[k].getGfxBuffer(renderInst.uniformBufferOffsets[k]);
-                    renderInst._uniformBufferOffsetGroups[j][k0] = wordOffset;
-                }
-
-                firstUniformBuffer = lastUniformBuffer;
-                totalSamplerBindings += bindingLayout.numSamplers;
-            }
-
-            let shouldBuildBindings = false;
-            if (renderInst.samplerBindings.length === totalSamplerBindings)
-                shouldBuildBindings = true;
-
-            if (shouldBuildBindings)
-                renderInst._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
-
-            renderInst.buildBindings(device, viewRenderer.gfxRenderCache);
-
+            this.allRenderInsts.push(renderInst);
             viewRenderer.renderInsts.push(renderInst);
         }
 
-        this.renderInsts.length = 0;
+        // It's plausible that our uniform buffers might have changed, so rebuild.
+        for (let i = 0; i < this.allRenderInsts.length; i++)
+            this.buildRenderInstUniformBufferBindings(this.allRenderInsts[i]);
+
+        this.newRenderInsts.length = 0;
+    }
+
+    public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
+        assert(this.templateStack.length === 1);
+        this.constructRenderInsts(device, viewRenderer);
     }
 }

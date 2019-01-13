@@ -2,7 +2,7 @@
 import { GfxRenderTarget, GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture } from "../platform/GfxPlatform";
 import { colorNew, TransparentBlack, Color } from "../../Color";
 
-const DEFAULT_NUM_SAMPLES = 4;
+export const DEFAULT_NUM_SAMPLES = 4;
 
 export class ColorTexture {
     public gfxTexture: GfxTexture | null = null;

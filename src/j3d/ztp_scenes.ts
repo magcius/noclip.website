@@ -9,10 +9,13 @@ import * as UI from '../ui';
 import { BMD, BMT, BTK, BTI, TEX1_TextureData, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
-import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { TextureOverride } from '../TextureHolder';
 import { readString, leftPad } from '../util';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 class ZTPTextureHolder extends J3DTextureHolder {
     protected findTextureEntryIndex(name: string): number {
@@ -27,20 +30,20 @@ class ZTPTextureHolder extends J3DTextureHolder {
         return -1;
     }
 
-    public addExtraTextures(gl: WebGL2RenderingContext, extraTextures: TEX1_TextureData[]): void {
-        this.addTextures(gl, extraTextures.map((texture) => {
+    public addExtraTextures(device: GfxDevice, extraTextures: TEX1_TextureData[]): void {
+        this.addTexturesGfx(device, extraTextures.map((texture) => {
             const name = `ExtraTex/${texture.name.toLowerCase()}`;
             return { ...texture, name };
         }));
     }
 }
 
-function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
+function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    textureHolder.addJ3DTextures(gl, bmd, bmt);
-    const bmdModel = new BMDModel(gl, bmd, bmt);
-    const scene = new BMDModelInstance(gl, textureHolder, bmdModel);
+    textureHolder.addJ3DTextures(device, bmd, bmt);
+    const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
+    const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -60,114 +63,84 @@ function createScene(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder
     return scene;
 }
 
-function createScenesFromRARC(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarcName: string, rarc: RARC.RARC): BMDModelInstance[] {
-    const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
-    const scenes = bmdFiles.map((bmdFile) => {
-        const basename = bmdFile.name.split('.')[0];
-        const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`) || null;
-        const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`) || null;
-        const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
-        const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
-        const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
-        scene.name = `${rarcName}/${basename}`;
-        return scene;
-    });
-
-    return scenes.filter((s) => !!s);
+const enum ZTPPass {
+    SKYBOX = 1 << 0,
+    OPAQUE = 1 << 1,
+    INDIRECT = 1 << 2,
+    TRANSPARENT = 1 << 3,
 }
 
-class TwilightPrincessRenderer implements Viewer.MainScene {
-    private mainColorTarget: ColorTarget = new ColorTarget();
-    private opaqueScenes: BMDModelInstance[] = [];
-    private indTexScenes: BMDModelInstance[] = [];
-    private transparentScenes: BMDModelInstance[] = [];
-    private windowScenes: BMDModelInstance[] = [];
+class TwilightPrincessRenderer implements Viewer.SceneGfx {
+    public renderHelper: GXRenderHelperGfx;
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public mainRenderTarget = new BasicRenderTarget();
+    public opaqueSceneTexture = new ColorTexture();
+    public modelInstances: BMDModelInstance[] = [];
 
-    constructor(public textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC, public roomRarcs: RARC.RARC[], public skyboxScenes: BMDModelInstance[], public roomScenes: BMDModelInstance[], public roomNames: string[]) {
-        this.roomScenes.forEach((scene) => {
-            if (scene.name.endsWith('model')) {
-                this.opaqueScenes.push(scene);
-            } else if (scene.name.endsWith('model1')) {
-                this.indTexScenes.push(scene);
-            } else if (scene.name.endsWith('model2')) {
-                this.transparentScenes.push(scene);
-            } else if (scene.name.endsWith('model3')) {
-                this.windowScenes.push(scene);
-            } else if (scene.name.endsWith('model4') || scene.name.endsWith('model5')) {
-                // Not sure what these are, so just throw them in the transparent bucket.
-                this.transparentScenes.push(scene);
-             } else {
-                throw "whoops";
-            }
-        });
-    }
-
-    private setRoomVisible(name: string, v: boolean): void {
-        for (let i = 0; i < this.roomScenes.length; i++)
-            if (this.roomScenes[i].name.startsWith(name))
-                this.roomScenes[i].setVisible(v);
+    constructor(device: GfxDevice, public textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC) {
+        this.renderHelper = new GXRenderHelperGfx(device);
     }
 
     public createPanels(): UI.Panel[] {
-        const rooms = new UI.LayerPanel();
-        rooms.setLayers(this.roomNames.map((name) => {
-            const room = { name, visible: true, setVisible: (v: boolean): void => {
-                room.visible = v;
-                this.setRoomVisible(name, v);
-            } };
-            return room;
-        }));
-        return [rooms];
+        const layers = new UI.LayerPanel();
+        layers.setLayers(this.modelInstances);
+        return [layers];
     }
 
-    public render(state: RenderState) {
-        const gl = state.gl;
+    public finish(device: GfxDevice): void {
+        this.renderHelper.finishBuilder(device, this.viewRenderer);
+    }
 
-        // Draw skybox + opaque to main RT.
-        this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
-        state.useRenderTarget(this.mainColorTarget);
-        state.setClipPlanes(20, 500000);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        this.skyboxScenes.forEach((scene) => {
-            scene.render(state);
-        });
-        state.useFlags(depthClearFlags);
-        gl.clear(gl.DEPTH_BUFFER_BIT);
+    private prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(20, 500000);
+        this.renderHelper.fillSceneParams(viewerInput);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(hostAccessPass);
+    }
 
-        this.opaqueScenes.forEach((scene) => {
-            scene.render(state);
-        });
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        // Copy to main render target.
-        state.useRenderTarget(state.onscreenColorTarget);
-        state.blitColorTarget(this.mainColorTarget);
+        const skyboxPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, ZTPPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
 
-        // IndTex.
-        if (this.indTexScenes.length && this.textureHolder.hasTexture('fbtex_dummy')) {
-            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+        const opaquePassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, opaquePassRenderer, ZTPPass.OPAQUE);
+
+        let lastPassRenderer: GfxRenderPass;
+        if (this.textureHolder.hasTexture('fbtex_dummy')) {
+            opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
+            device.submitPass(opaquePassRenderer);
+
+            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
+
+            const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
+            this.viewRenderer.executeOnPass(device, indTexPassRenderer, ZTPPass.INDIRECT);
+            lastPassRenderer = indTexPassRenderer;
+        } else {
+            lastPassRenderer = opaquePassRenderer;
         }
 
-        this.indTexScenes.forEach((indirectScene) => {
-            indirectScene.render(state);
-        });
-
-        // Transparent.
-        this.transparentScenes.forEach((scene) => {
-            scene.render(state);
-        });
-
-        // Window & Doorway fades. Separate so that the renderer can override color registers separately.
-        // We don't do anything about this yet...
-        this.windowScenes.forEach((scene) => {
-            scene.render(state);
-        });
+        this.viewRenderer.executeOnPass(device, lastPassRenderer, ZTPPass.TRANSPARENT);
+        return lastPassRenderer;
     }
 
-    public destroy(gl: WebGL2RenderingContext) {
-        this.textureHolder.destroy(gl);
-        this.skyboxScenes.forEach((scene) => scene.destroy(gl));
-        this.roomScenes.forEach((scene) => scene.destroy(gl));
+    public destroy(device: GfxDevice) {
+        this.renderHelper.destroy(device);
+        this.viewRenderer.destroy(device);
+        this.textureHolder.destroyGfx(device);
+        this.mainRenderTarget.destroy(device);
+        this.opaqueSceneTexture.destroy(device);
+        this.modelInstances.forEach((instance) => instance.destroy(device));
     }
 }
 
@@ -205,7 +178,38 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         this.id = this.folder;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    private createRoomScenes(device: GfxDevice, renderer: TwilightPrincessRenderer, rarc: RARC.RARC, rarcBasename: string): void {
+        const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
+        bmdFiles.forEach((bmdFile) => {
+            const basename = bmdFile.name.split('.')[0];
+            const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`) || null;
+            const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`) || null;
+            const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
+            const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
+
+            let passMask: ZTPPass = 0;
+            if (basename === 'model') {
+                passMask = ZTPPass.OPAQUE;
+            } else if (basename === 'model1') {
+                passMask = ZTPPass.INDIRECT;
+            } else if (basename === 'model2') {
+                passMask = ZTPPass.TRANSPARENT;
+            } else if (basename === 'model3') {
+                // Window/doorways.
+                passMask = ZTPPass.TRANSPARENT;
+            } else if (basename === 'model4' || basename === 'model5') {
+                // Light beams? No clue, stick 'em in the transparent pass.
+                passMask = ZTPPass.TRANSPARENT;
+            }
+    
+            const scene = createScene(device, renderer.renderHelper, renderer.textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+            scene.name = `${rarcBasename}/${basename}`;
+            scene.passMask = passMask;
+            renderer.modelInstances.push(scene);
+        });
+    }
+
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const basePath = `data/j3d/ztp/${this.folder}`;
         const textureHolder = new ZTPTextureHolder();
 
@@ -218,19 +222,22 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 return BTI.parse(file.buffer, name).texture;
             });
 
-            textureHolder.addExtraTextures(gl, extraTextures);
+            textureHolder.addExtraTextures(device, extraTextures);
 
-            const skyboxScenes: BMDModelInstance[] = [`vrbox_sora`, `vrbox_kasumim`].map((basename) => {
+            const renderer = new TwilightPrincessRenderer(device, textureHolder, stageRarc);
+
+            [`vrbox_sora`, `vrbox_kasumim`].forEach((basename) => {
                 const bmdFile = stageRarc.findFile(`bmdp/${basename}.bmd`);
                 if (!bmdFile)
                     return null;
                 const btkFile = stageRarc.findFile(`btk/${basename}.btk`);
                 const brkFile = stageRarc.findFile(`brk/${basename}.brk`);
                 const bckFile = stageRarc.findFile(`bck/${basename}.bck`);
-                const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, null);
+                const scene = createScene(device, renderer.renderHelper, textureHolder, bmdFile, btkFile, brkFile, bckFile, null);
+                scene.name = `stage/${basename}`;
                 scene.setIsSkybox(true);
-                return scene;
-            }).filter((s) => !!s);
+                renderer.modelInstances.push(scene);
+            });
 
             // Pull out the dzs, get the scene definition.
             const dzsBuffer = stageRarc.findFile(`dzs/stage.dzs`).buffer;
@@ -239,15 +246,14 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             const roomList = getRoomListFromDZS(dzsBuffer);
             const roomNames = roomList.map((i) => `R${leftPad(''+i, 2)}_00`);
 
-            return Progressable.all(roomNames.map(name => this.fetchRarc(`${basePath}/${name}.arc`))).then((roomRarcs: (RARC.RARC | null)[]) => {
-                const roomScenes_: BMDModelInstance[][] = roomRarcs.map((rarc: RARC.RARC | null, i: number) => {
-                    if (rarc === null) return null;
-                    return createScenesFromRARC(gl, textureHolder, roomNames[i], rarc);
+            return Progressable.all(roomNames.map((roomName) => this.fetchRarc(`${basePath}/${roomName}.arc`))).then((roomRarcs: (RARC.RARC | null)[]) => {
+                roomRarcs.forEach((rarc: RARC.RARC | null, i) => {
+                    if (rarc === null) return;
+                    this.createRoomScenes(device, renderer, rarc, roomNames[i]);
                 });
-                const roomScenes: BMDModelInstance[] = [];
-                roomScenes_.forEach((scenes: BMDModelInstance[]) => roomScenes.push.apply(roomScenes, scenes));
 
-                return new TwilightPrincessRenderer(textureHolder, stageRarc, roomRarcs, skyboxScenes, roomScenes, roomNames);
+                renderer.finish(device);
+                return renderer;
             });
         });
     }

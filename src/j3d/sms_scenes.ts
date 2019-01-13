@@ -10,11 +10,16 @@ import * as Yaz0 from '../compression/Yaz0';
 
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
-import { createScene } from './scenes';
+import { createModelInstance } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import { LoopMode, BMD, BMT, BCK, BTK, BRK } from './j3d';
 import { TextureOverride } from '../TextureHolder';
+import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, ColorTexture, makeClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { colorNew } from '../Color';
 
 const sjisDecoder = new TextDecoder('sjis');
 
@@ -258,61 +263,79 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
     }
 }
 
-export class SunshineRenderer implements Viewer.MainScene {
-    private mainColorTarget: ColorTarget = new ColorTarget();
+export const enum SMSPass {
+    SKYBOX = 1 << 0,
+    OPAQUE = 1 << 1,
+    INDIRECT = 1 << 2,
+    TRANSPARENT = 1 << 3,
+}
 
-    constructor(public textureHolder: J3DTextureHolder, public skyScene: Viewer.Scene, public mapScene: Viewer.Scene, public seaScene: Viewer.Scene, public seaIndirectScene: BMDModelInstance, public extraScenes: BMDModelInstance[], public rarc: RARC.RARC = null) {
+const sunshineClearDescriptor = makeClearRenderPassDescriptor(true, colorNew(0, 0, 0.125, 1));
+
+export class SunshineRenderer implements Viewer.SceneGfx {
+    public renderHelper: GXRenderHelperGfx;
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public mainRenderTarget = new BasicRenderTarget();
+    public opaqueSceneTexture = new ColorTexture();
+    public modelInstances: BMDModelInstance[] = [];
+
+    constructor(device: GfxDevice, public textureHolder: J3DTextureHolder, public rarc: RARC.RARC) {
+        this.renderHelper = new GXRenderHelperGfx(device);
     }
 
-    public render(state: RenderState): void {
-        const gl = state.gl;
-
-        this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
-        state.useRenderTarget(this.mainColorTarget);
-        state.setClipPlanes(20, 500000);
-        gl.clearColor(0, 0, 0.125, 1);
-        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-
-        if (this.skyScene) {
-            this.skyScene.render(state);
-            state.useFlags(depthClearFlags);
-            gl.clear(gl.DEPTH_BUFFER_BIT);
-        }
-
-        if (this.mapScene)
-            this.mapScene.render(state);
-        if (this.seaScene)
-            this.seaScene.render(state);
-
-        for (const scene of this.extraScenes)
-            scene.render(state);
-
-        // Copy to main render target.
-        state.useRenderTarget(state.onscreenColorTarget);
-        state.blitColorTarget(this.mainColorTarget);
-
-        if (this.seaIndirectScene) {
-            const indirectScene = this.seaIndirectScene;
-            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
-            this.textureHolder.setTextureOverride("indirectdummy", textureOverride);
-            indirectScene.render(state);
-        }
+    public finish(device: GfxDevice): void {
+        this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.textureHolder.destroy(gl);
-        if (this.skyScene)
-            this.skyScene.destroy(gl);
-        if (this.mapScene)
-            this.mapScene.destroy(gl);
-        if (this.seaScene)
-            this.seaScene.destroy(gl);
-        this.extraScenes.forEach((scene) => scene.destroy(gl));
+    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(20, 500000);
+        this.renderHelper.fillSceneParams(viewerInput);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(hostAccessPass);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        const skyboxPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, sunshineClearDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SMSPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+
+        const opaquePassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, opaquePassRenderer, SMSPass.OPAQUE);
+        opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
+        device.submitPass(opaquePassRenderer);
+
+        // IndTex.
+        const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+        this.textureHolder.setTextureOverride("indirectdummy", textureOverride);
+
+        const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMSPass.INDIRECT);
+        // Window & transparent.
+        this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMSPass.TRANSPARENT);
+        return indTexPassRenderer;
+    }
+
+    public destroy(device: GfxDevice) {
+        this.renderHelper.destroy(device);
+        this.viewRenderer.destroy(device);
+        this.textureHolder.destroyGfx(device);
+        this.mainRenderTarget.destroy(device);
+        this.opaqueSceneTexture.destroy(device);
+        this.modelInstances.forEach((instance) => instance.destroy(device));
     }
 }
 
 export class SunshineSceneDesc implements Viewer.SceneDesc {
-    public static createSunshineSceneForBasename(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, basename: string, isSkybox: boolean): BMDModelInstance {
+    public static createSunshineSceneForBasename(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, passMask: number, rarc: RARC.RARC, basename: string, isSkybox: boolean): BMDModelInstance {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         if (!bmdFile)
             return null;
@@ -320,10 +343,11 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         const brkFile = rarc.findFile(`${basename}.brk`);
         const bckFile = rarc.findFile(`${basename}.bck`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const scene = createScene(gl, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
-        scene.name = basename;
-        scene.setIsSkybox(isSkybox);
-        return scene;
+        const modelInstance = createModelInstance(device, renderHelper, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+        modelInstance.name = basename;
+        modelInstance.setIsSkybox(isSkybox);
+        modelInstance.passMask = passMask;
+        return modelInstance;
     }
 
     public id: string;
@@ -334,7 +358,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         this.id = this.name;
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         return fetchData(this.path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
@@ -345,18 +369,31 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             console.log(sceneBinObj);
 
             const textureHolder = new J3DTextureHolder();
-            const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/sky', true);
-            const mapScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/map', false);
-            const seaScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/sea', false);
-            const seaIndirectScene = SunshineSceneDesc.createSunshineSceneForBasename(gl, textureHolder, rarc, 'map/map/seaindirect', false);
+            const renderer = new SunshineRenderer(device, textureHolder, rarc);
 
-            const extraScenes = this.createSceneBinObjects(gl, textureHolder, rarc, sceneBinObj);
+            const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(device, renderer.renderHelper, textureHolder, SMSPass.SKYBOX, rarc, 'map/map/sky', true);
+            if (skyScene !== null)
+                renderer.modelInstances.push(skyScene);
+            const mapScene = SunshineSceneDesc.createSunshineSceneForBasename(device, renderer.renderHelper, textureHolder, SMSPass.OPAQUE, rarc, 'map/map/map', false);
+            if (mapScene !== null)
+                renderer.modelInstances.push(mapScene);
+            const seaScene = SunshineSceneDesc.createSunshineSceneForBasename(device, renderer.renderHelper, textureHolder, SMSPass.OPAQUE, rarc, 'map/map/sea', false);
+            if (seaScene !== null)
+                renderer.modelInstances.push(seaScene);
+            const seaIndirectScene = SunshineSceneDesc.createSunshineSceneForBasename(device, renderer.renderHelper, textureHolder, SMSPass.INDIRECT, rarc, 'map/map/seaindirect', false);
+            if (seaIndirectScene !== null)
+                renderer.modelInstances.push(seaIndirectScene);
 
-            return new SunshineRenderer(textureHolder, skyScene, mapScene, seaScene, seaIndirectScene, extraScenes, rarc);
+            const extraScenes = this.createSceneBinObjects(device, renderer.renderHelper, textureHolder, rarc, sceneBinObj);
+            for (let i = 0; i < extraScenes.length; i++)
+                renderer.modelInstances.push(extraScenes[i]);
+
+            renderer.finish(device);
+            return renderer;
         });
     }
 
-    private createSceneBinObjects(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObj): BMDModelInstance[] {
+    private createSceneBinObjects(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObj): BMDModelInstance[] {
         function flatten<T>(L: T[][]): T[] {
             const R: T[] = [];
             for (const Ts of L)
@@ -366,18 +403,18 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
         switch (obj.type) {
         case 'Group':
-            const childTs: BMDModelInstance[][] = obj.children.map(c => this.createSceneBinObjects(gl, textureHolder, rarc, c));
+            const childTs: BMDModelInstance[][] = obj.children.map(c => this.createSceneBinObjects(device, renderHelper, textureHolder, rarc, c));
             const flattened: BMDModelInstance[] = flatten(childTs).filter(o => !!o);
             return flattened;
         case 'Model':
-            return [this.createSceneForSceneBinModel(gl, textureHolder, rarc, obj)];
+            return [this.createSceneForSceneBinModel(device, renderHelper, textureHolder, rarc, obj)];
         default:
             // Don't care.
             return undefined;
         }
     }
 
-    private createSceneForSceneBinModel(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObjModel): BMDModelInstance {
+    private createSceneForSceneBinModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObjModel): BMDModelInstance {
         interface ModelLookup {
             k: string; // klass
             m: string; // model
@@ -393,8 +430,8 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             } else {
                 const bmd = BMD.parse(bmdFile.buffer);
                 const bmt = bmtFile !== null ? BMT.parse(bmtFile.buffer) : null;
-                textureHolder.addJ3DTextures(gl, bmd, bmt);
-                const bmdModel = new BMDModel(gl, bmd, bmt);
+                textureHolder.addJ3DTextures(device, bmd, bmt);
+                const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
                 modelCache.set(bmdFile, bmdModel);
                 return bmdModel;
             }
@@ -404,13 +441,16 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmdFile = rarc.findFile(bmd);
             const bmtFile = rarc.findFile(bmt);
             const bmdModel = lookupModel(bmdFile, bmtFile);
-            return new BMDModelInstance(gl, textureHolder, bmdModel);
+            const modelInstance = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel);
+            modelInstance.passMask = SMSPass.OPAQUE;
+            return modelInstance;
         }
 
         function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT): BMDModelInstance {
             const bmdFile = rarc.findFile(bmdFilename);
             const bmdModel = lookupModel(bmdFile, null);
-            const modelInstance = new BMDModelInstance(gl, textureHolder, bmdModel);
+            const modelInstance = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel);
+            modelInstance.passMask = SMSPass.OPAQUE;
             const bckFile = rarc.findFile(bckFilename);
             const bck = BCK.parse(bckFile.buffer);
             bck.ank1.loopMode = loopMode;
@@ -428,7 +468,8 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmtFile = rarc.findFile(`${basename}.bmt`);
 
             const bmdModel = lookupModel(bmdFile, bmtFile);
-            const modelInstance = new BMDModelInstance(gl, textureHolder, bmdModel);
+            const modelInstance = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel);
+            modelInstance.passMask = SMSPass.OPAQUE;
 
             if (btkFile !== null) {
                 const btk = BTK.parse(btkFile.buffer);

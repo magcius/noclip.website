@@ -813,7 +813,7 @@ export class GX_Program extends DeviceProgram {
         }).join('\n');
     }
 
-    public static UBODefinition = `
+    public static BindingsDefinition = `
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
     mat4 u_Projection;
@@ -839,16 +839,17 @@ layout(row_major, std140) uniform ub_MaterialParams {
 layout(row_major, std140) uniform ub_PacketParams {
     mat4x3 u_PosMtx[10];
 };
+
+uniform sampler2D u_Texture[8];
 `;
 
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(GX_Program.UBODefinition);
+    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(GX_Program.BindingsDefinition);
 
     private generateShaders() {
         this.both = `
 // ${this.material.name}
 precision mediump float;
-${GX_Program.UBODefinition}
-uniform sampler2D u_Texture[8];
+${GX_Program.BindingsDefinition}
 
 varying vec3 v_Position;
 varying vec3 v_Normal;

@@ -191,6 +191,7 @@ function range(start: number, num: number): number[] {
 }
 
 export interface DeviceProgramReflection {
+    name: string;
     uniformBufferLayouts: BufferLayout[];
     samplerBindings: SamplerBindingReflection[];
     totalSamplerBindingsCount: number;

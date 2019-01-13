@@ -1,16 +1,15 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { assert } from '../util';
+import { assert, nArray } from '../util';
 import { fetchData } from '../fetch';
 
-import { RenderState, ColorTarget } from '../render';
-import { FullscreenProgram } from '../Program';
+import {  DeviceProgram } from '../Program';
 import * as Viewer from '../viewer';
 
 import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
-import { TextureOverride } from '../TextureHolder';
+import { TextureOverride, TextureMapping } from '../TextureHolder';
 
 import * as RARC from './rarc';
 import * as Yaz0 from '../compression/Yaz0';
@@ -18,19 +17,57 @@ import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK } from './j3d';
-import { GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderTarget, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
-import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GfxRenderInstViewRenderer, GfxRenderInst, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES } from '../gfx/helpers/RenderTargetHelpers';
+import { TransparentBlack } from '../Color';
 
 const materialHacks: GXMaterialHacks = {
     alphaLightingFudge: (p) => p.matSource,
 };
 
 // Should I try to do this with GX? lol.
-class BloomPassBlurProgram extends FullscreenProgram {
-    public frag: string = `
+class FullscreenBaseProgram extends DeviceProgram {
+    public static BindingsDefinition = `
+out vec2 v_TexCoord;
 uniform sampler2D u_Texture;
+`;
+
+    public static programReflection = DeviceProgram.parseReflectionDefinitions(FullscreenBaseProgram.BindingsDefinition); 
+
+    public vert: string = `
+${FullscreenBaseProgram.BindingsDefinition}
+void main() {
+    vec2 p;
+    p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    p.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = p * vec2(2) - vec2(1);
+    gl_Position.zw = vec2(1);
+    v_TexCoord = p;
+}
+`;
+}
+
+class FullscreenCopyProgram extends FullscreenBaseProgram {
+    public frag: string = `
 in vec2 v_TexCoord;
+
+uniform sampler2D u_Texture;
+
+void main() {
+    gl_FragColor = texture(u_Texture, v_TexCoord);
+}
+`;
+}
+
+class BloomPassBlurProgram extends FullscreenBaseProgram {
+    public frag: string = `
+in vec2 v_TexCoord;
+
+uniform sampler2D u_Texture;
 
 vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
 void main() {
@@ -55,7 +92,7 @@ void main() {
 `;
 }
 
-class BloomPassBokehProgram extends FullscreenProgram {
+class BloomPassBokehProgram extends FullscreenBaseProgram {
     public frag: string = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
@@ -169,10 +206,26 @@ class SceneGraph {
             this.onnodeadded(node, i);
     }
 
-    public destroy(gl: WebGL2RenderingContext): void {
+    public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.nodes.length; i++)
-            this.nodes[i].destroy(gl);
+            this.nodes[i].destroy(device);
     }
+}
+
+function makeFullscreenPassRenderInstBuilder(device: GfxDevice) {
+    const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 0, numSamplers: 1 }];
+    return new GfxRenderInstBuilder(device, FullscreenBaseProgram.programReflection, bindingLayouts, []);
+}
+
+function makeFullscreenPassRenderInst(renderInstBuilder: GfxRenderInstBuilder, name: string, program: GfxProgram): GfxRenderInst {
+    const renderInst = renderInstBuilder.pushRenderInst();
+    renderInst.drawTriangles(3);
+    renderInst.name = name;
+    renderInst.gfxProgram = program;
+    renderInst.inputState = null;
+    renderInst.samplerBindings = [null];
+    renderInst.setMegaStateFlags(fullscreenMegaState);
+    return renderInst;
 }
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
@@ -181,34 +234,119 @@ function getZoneLayerFilterTag(zoneName: string, layerIndex: number): string {
     return `${zoneName}_${getLayerName(layerIndex)}`;
 }
 
-class SMGRenderer implements Viewer.MainScene {
-    private mainColorTarget: ColorTarget = new ColorTarget();
+const enum SMGPass {
+    SKYBOX = 1 << 0,
+    OPAQUE = 1 << 1,
+    INDIRECT = 1 << 2,
+    BLOOM = 1 << 3,
+
+    BLOOM_DOWNSAMPLE = 1 << 4,
+    BLOOM_BLUR = 1 << 5,
+    BLOOM_BOKEH = 1 << 6,
+    BLOOM_COMBINE = 1 << 7,
+}
+
+export class WeirdFancyRenderTarget {
+    public gfxRenderTarget: GfxRenderTarget | null = null;
+    public colorAttachment = new ColorAttachment();
+
+    constructor(public depthStencilAttachment: DepthStencilAttachment) {
+    }
+
+    public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
+        const colorChanged = this.colorAttachment.setParameters(device, width, height, numSamples);
+        if (colorChanged) {
+            this.destroyInternal(device);
+            this.gfxRenderTarget = device.createRenderTarget({
+                colorAttachment: this.colorAttachment.gfxColorAttachment,
+                depthStencilAttachment: this.depthStencilAttachment.gfxDepthStencilAttachment,
+            });
+        }
+    }
+
+    private destroyInternal(device: GfxDevice): void {
+        if (this.gfxRenderTarget !== null) {
+            device.destroyRenderTarget(this.gfxRenderTarget);
+            this.gfxRenderTarget = null;
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.colorAttachment.destroy(device);
+    }
+}
+
+const bloomClearRenderPassDescriptor: GfxRenderPassDescriptor = {
+    colorClearColor: TransparentBlack,
+    colorLoadDisposition: GfxLoadDisposition.CLEAR,
+    depthClearValue: 1.0,
+    depthLoadDisposition: GfxLoadDisposition.LOAD,
+    stencilClearValue: 0.0,
+    stencilLoadDisposition: GfxLoadDisposition.LOAD,
+};
+
+class SMGRenderer implements Viewer.SceneGfx {
+    private sceneGraph: SceneGraph;
+    public textureHolder: J3DTextureHolder
 
     // Bloom stuff.
-    private bloomColorTarget1: ColorTarget = new ColorTarget();
-    private bloomColorTarget2: ColorTarget = new ColorTarget();
-    private bloomColorTarget3: ColorTarget = new ColorTarget();
-    private bloomPassBlurProgram: BloomPassBlurProgram = new BloomPassBlurProgram();
-    private bloomPassBokehProgram: BloomPassBokehProgram = new BloomPassBokehProgram();
-    private bloomCombineFlags: GfxMegaStateDescriptor;
+    private bloomRenderInstDownsample: GfxRenderInst;
+    private bloomRenderInstBlur: GfxRenderInst;
+    private bloomRenderInstBokeh: GfxRenderInst;
+    private bloomRenderInstCombine: GfxRenderInst;
+
+    private bloomSampler: GfxSampler;
+    private bloomTextureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
+    private bloomSceneColorTarget: WeirdFancyRenderTarget;
+    private bloomSceneColorTexture = new ColorTexture();
+    private bloomScratch1ColorTarget = new PostFXRenderTarget();
+    private bloomScratch1ColorTexture = new ColorTexture();
+    private bloomScratch2ColorTarget = new PostFXRenderTarget();
+    private bloomScratch2ColorTexture = new ColorTexture();
+
+    private mainRenderTarget = new BasicRenderTarget();
+    private opaqueSceneTexture = new ColorTexture();
     private currentScenarioIndex: number = 0;
 
-    constructor(
-        public textureHolder: J3DTextureHolder,
-        private sceneGraph: SceneGraph,
-        private scenarioData: BCSV.Bcsv,
-        private zoneNames: string[],
-    ) {
-        this.bloomCombineFlags = makeMegaState({
-            depthCompare: GfxCompareMode.ALWAYS,
+    constructor(device: GfxDevice, private spawner: SMGSpawner, private viewRenderer: GfxRenderInstViewRenderer, private scenarioData: BCSV.Bcsv, private zoneNames: string[]) {
+        this.sceneGraph = spawner.sceneGraph;
+        this.textureHolder = spawner.textureHolder;
+
+        this.sceneGraph.onnodeadded = (node: BMDModelInstance, i: number) => {
+            this.applyCurrentScenario();
+        };
+
+        this.bloomSampler = device.createSampler({
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.bloomTextureMapping[0].gfxSampler = this.bloomSampler;
+
+        const renderInstBuilder = makeFullscreenPassRenderInstBuilder(device);
+        this.bloomSceneColorTarget = new WeirdFancyRenderTarget(this.mainRenderTarget.depthStencilAttachment);
+        this.bloomRenderInstDownsample = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom downsample', device.createProgram(new FullscreenCopyProgram()));
+        this.bloomRenderInstDownsample.passMask = SMGPass.BLOOM_DOWNSAMPLE;
+
+        this.bloomRenderInstBlur = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom blur', device.createProgram(new BloomPassBlurProgram()));
+        this.bloomRenderInstBlur.passMask = SMGPass.BLOOM_BLUR;
+
+        this.bloomRenderInstBokeh = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom bokeh', device.createProgram(new BloomPassBokehProgram()));
+        this.bloomRenderInstBokeh.passMask = SMGPass.BLOOM_BOKEH;
+
+        this.bloomRenderInstCombine = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom combine', device.createProgram(new FullscreenCopyProgram()));
+        this.bloomRenderInstCombine.passMask = SMGPass.BLOOM_COMBINE;
+        this.bloomRenderInstCombine.setMegaStateFlags({
             blendMode: GfxBlendMode.ADD,
             blendSrcFactor: GfxBlendFactor.ONE,
             blendDstFactor: GfxBlendFactor.ONE,
         });
 
-        this.sceneGraph.onnodeadded = (node: BMDModelInstance, i: number) => {
-            this.applyCurrentScenario();
-        };
+        renderInstBuilder.finish(device, this.viewRenderer);
     }
 
     private setZoneLayersVisible(zoneName: string, layerMask: number): void {
@@ -253,102 +391,108 @@ class SMGRenderer implements Viewer.MainScene {
         return [scenarioPanel];
     }
 
-    public render(state: RenderState): void {
-        const gl = state.gl;
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.spawner.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        this.mainColorTarget.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
-        state.useRenderTarget(this.mainColorTarget);
-        state.setClipPlanes(50, 5000000);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        const skyboxPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SMGPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
 
-        this.sceneGraph.forTag(SceneGraphTag.Skybox, (node) => {
-            if (!node.bindState(state))
-                return;
-            node.renderOpaque(state);
-        });
+        const opaquePassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, opaquePassRenderer, SMGPass.OPAQUE);
 
-        gl.clear(gl.DEPTH_BUFFER_BIT);
-        state.setClipPlanes(20, 500000);
-
-        this.sceneGraph.forTag(SceneGraphTag.Normal, (node) => {
-            if (!node.bindState(state))
-                return;
-            node.renderOpaque(state);
-        });
-
-        this.sceneGraph.forTag(SceneGraphTag.Normal, (node) => {
-            if (!node.bindState(state))
-                return;
-            node.renderTransparent(state);
-        });
-
-        // Copy to main render target.
-        state.useRenderTarget(state.onscreenColorTarget);
-        state.blitColorTarget(this.mainColorTarget);
-
+        let lastPassRenderer: GfxRenderPass;
         if (this.sceneGraph.hasTag(SceneGraphTag.Indirect)) {
-            const textureOverride: TextureOverride = { glTexture: this.mainColorTarget.resolvedColorTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+            opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
+            device.submitPass(opaquePassRenderer);
+
+            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("IndDummy", textureOverride);
-            this.sceneGraph.forTag(SceneGraphTag.Indirect, (node) => {
-                if (!node.bindState(state))
-                    return;
-                node.renderOpaque(state);
-            });
+
+            const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
+            this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMGPass.INDIRECT);
+            lastPassRenderer = indTexPassRenderer;
+        } else {
+            lastPassRenderer = opaquePassRenderer;
         }
 
         if (this.sceneGraph.hasTag(SceneGraphTag.Bloom)) {
-            const gl = state.gl;
+            const bloomColorTargetScene = this.bloomSceneColorTarget;
+            const bloomColorTextureScene = this.bloomSceneColorTexture;
+            bloomColorTargetScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+            bloomColorTextureScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+            const bloomPassRenderer = device.createRenderPass(bloomColorTargetScene.gfxRenderTarget, bloomClearRenderPassDescriptor);
+            this.viewRenderer.executeOnPass(device, bloomPassRenderer, SMGPass.BLOOM);
+            bloomPassRenderer.endPass(bloomColorTextureScene.gfxTexture);
+            device.submitPass(bloomPassRenderer);
 
-            const bloomColorTargetScene = this.bloomColorTarget1;
-            bloomColorTargetScene.setParameters(gl, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
-            state.useRenderTarget(bloomColorTargetScene);
-            gl.clearColor(0, 0, 0, 0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            this.sceneGraph.forTag(SceneGraphTag.Bloom, (node) => {
-                node.render(state);
-            });
+            // Downsample.
+            const bloomWidth = viewerInput.viewportWidth >> 2;
+            const bloomHeight = viewerInput.viewportHeight >> 2;
+            this.viewRenderer.setViewport(bloomWidth, bloomHeight);
 
-            // First downsample.
-            const bloomColorTargetDownsample = this.bloomColorTarget2;
-            const bloomWidth = state.onscreenColorTarget.width >> 2;
-            const bloomHeight = state.onscreenColorTarget.height >> 2;
-            bloomColorTargetDownsample.setParameters(gl, bloomWidth, bloomHeight);
-            state.useRenderTarget(bloomColorTargetDownsample, null);
-            state.blitColorTarget(bloomColorTargetScene);
+            const bloomColorTargetDownsample = this.bloomScratch1ColorTarget;
+            const bloomColorTextureDownsample = this.bloomScratch1ColorTexture;
+            bloomColorTargetDownsample.setParameters(device, bloomWidth, bloomHeight, 1);
+            bloomColorTextureDownsample.setParameters(device, bloomWidth, bloomHeight);
+            this.bloomTextureMapping[0].gfxTexture = bloomColorTextureScene.gfxTexture;
+            this.bloomRenderInstDownsample.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
+            const bloomDownsamplePassRenderer = device.createRenderPass(bloomColorTargetDownsample.gfxRenderTarget, noClearRenderPassDescriptor);
+            this.viewRenderer.executeOnPass(device, bloomDownsamplePassRenderer, SMGPass.BLOOM_DOWNSAMPLE);
+            bloomDownsamplePassRenderer.endPass(bloomColorTextureDownsample.gfxTexture);
+            device.submitPass(bloomDownsamplePassRenderer);
 
-            // First pass is a blur.
-            const bloomColorTargetBlur = this.bloomColorTarget3;
-            bloomColorTargetDownsample.resolve(gl);
-            bloomColorTargetBlur.setParameters(gl, bloomColorTargetDownsample.width, bloomColorTargetDownsample.height);
-            state.useRenderTarget(bloomColorTargetBlur, null);
-            state.useProgram(this.bloomPassBlurProgram);
-            gl.bindTexture(gl.TEXTURE_2D, bloomColorTargetDownsample.resolvedColorTexture);
-            state.runFullscreen();
+            // Blur.
+            const bloomColorTargetBlur = this.bloomScratch2ColorTarget;
+            const bloomColorTextureBlur = this.bloomScratch2ColorTexture;
+            bloomColorTargetBlur.setParameters(device, bloomWidth, bloomHeight, 1);
+            bloomColorTextureBlur.setParameters(device, bloomWidth, bloomHeight);
+            this.bloomTextureMapping[0].gfxTexture = bloomColorTextureDownsample.gfxTexture;
+            this.bloomRenderInstBlur.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
+            const bloomBlurPassRenderer = device.createRenderPass(bloomColorTargetBlur.gfxRenderTarget, noClearRenderPassDescriptor);
+            this.viewRenderer.executeOnPass(device, bloomBlurPassRenderer, SMGPass.BLOOM_BLUR);
+            bloomBlurPassRenderer.endPass(bloomColorTextureBlur.gfxTexture);
+            device.submitPass(bloomBlurPassRenderer);
 
             // TODO(jstpierre): Downsample blur / bokeh as well.
 
-            // Second pass is bokeh-ify.
+            // Bokeh-ify.
             // We can ditch the second render target now, so just reuse it.
-            const bloomColorTargetBokeh = this.bloomColorTarget2;
-            bloomColorTargetBlur.resolve(gl);
-            state.useRenderTarget(bloomColorTargetBokeh, null);
-            state.useProgram(this.bloomPassBokehProgram);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            gl.bindTexture(gl.TEXTURE_2D, bloomColorTargetBlur.resolvedColorTexture);
-            state.runFullscreen();
+            const bloomColorTargetBokeh = this.bloomScratch1ColorTarget;
+            const bloomColorTextureBokeh = this.bloomScratch1ColorTexture;
+            const bloomBokehPassRenderer = device.createRenderPass(bloomColorTargetBokeh.gfxRenderTarget, noClearRenderPassDescriptor);
+            this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBlur.gfxTexture;
+            this.bloomRenderInstBokeh.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
+            this.viewRenderer.executeOnPass(device, bloomBokehPassRenderer, SMGPass.BLOOM_BOKEH);
+            bloomBokehPassRenderer.endPass(bloomColorTextureBokeh.gfxTexture);
+            device.submitPass(bloomBokehPassRenderer);
 
-            // Third pass combines.
-            state.useRenderTarget(state.onscreenColorTarget);
-            state.blitColorTarget(bloomColorTargetBokeh, this.bloomCombineFlags);
+            // Combine.
+            this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBokeh.gfxTexture;
+            this.bloomRenderInstCombine.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
+            this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+            this.viewRenderer.executeOnPass(device, lastPassRenderer, SMGPass.BLOOM_COMBINE);
         }
+
+        return lastPassRenderer;
     }
 
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.textureHolder.destroy(gl);
-        this.sceneGraph.destroy(gl);
-        this.bloomColorTarget1.destroy(gl);
-        this.bloomColorTarget2.destroy(gl);
-        this.bloomColorTarget3.destroy(gl);
+    public destroy(device: GfxDevice): void {
+        this.spawner.destroy(device);
+
+        device.destroySampler(this.bloomSampler);
+        this.bloomSceneColorTarget.destroy(device);
+        this.bloomSceneColorTexture.destroy(device);
+        this.bloomScratch1ColorTarget.destroy(device);
+        this.bloomScratch1ColorTexture.destroy(device);
+        this.bloomScratch2ColorTarget.destroy(device);
+        this.bloomScratch2ColorTexture.destroy(device);
     }
 }
 
@@ -423,7 +567,7 @@ class ModelCache {
     public promiseCache = new Map<string, Progressable<BMDModel>>();
     public archiveCache = new Map<string, RARC.RARC>();
 
-    public getModel(gl: WebGL2RenderingContext, textureHolder: J3DTextureHolder, archiveName: string): Progressable<BMDModel> {
+    public getModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, archiveName: string): Progressable<BMDModel> {
         if (this.promiseCache.has(archiveName))
             return this.promiseCache.get(archiveName);
 
@@ -439,12 +583,12 @@ class ModelCache {
             const rarc = RARC.parse(buffer);
             const lowerName = archiveName.toLowerCase();
             const bmd = rarc.findFileData(`${lowerName}.bdl`) !== null ? BMD.parse(rarc.findFileData(`${lowerName}.bdl`)) : null;
-            const bmdModel = new BMDModel(gl, bmd, null, materialHacks);
-            textureHolder.addJ3DTextures(gl, bmd);
+            const bmdModel = new BMDModel(device, renderHelper, bmd, null, materialHacks);
+            textureHolder.addJ3DTextures(device, bmd);
             this.archiveCache.set(archiveName, rarc);
             return bmdModel;
         });
-        
+
         this.promiseCache.set(archiveName, p);
         return p;
     }
@@ -453,11 +597,17 @@ class ModelCache {
 class SMGSpawner {
     public textureHolder = new J3DTextureHolder();
     public sceneGraph = new SceneGraph();
-    public modelCache = new ModelCache();
+    private modelCache = new ModelCache();
 
-    constructor(
-        public planetTable: BCSV.Bcsv,
-    ) {
+    constructor(private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv) {
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(20, 500000);
+        this.renderHelper.fillSceneParams(viewerInput);
+        for (let i = 0; i < this.sceneGraph.nodes.length; i++)
+            this.sceneGraph.nodes[i].prepareToRender(this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(hostAccessPass);
     }
 
     public applyAnimations(modelInstance: BMDModelInstance, rarc: RARC.RARC, animOptions?: AnimOptions): void {
@@ -502,16 +652,16 @@ class SMGSpawner {
         }
     }
 
-    public spawnArchive(gl: WebGL2RenderingContext, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<BMDModelInstance | null> {
+    public spawnArchive(device: GfxDevice, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<BMDModelInstance | null> {
         // Should do a remap at some point.
-        return this.modelCache.getModel(gl, this.textureHolder, name).then((bmdModel) => {
+        return this.modelCache.getModel(device, this.renderHelper, this.textureHolder, name).then((bmdModel) => {
             if (bmdModel === null)
                 return null;
 
             // Trickery.
             const rarc = this.modelCache.archiveCache.get(name);
 
-            const bmdModelInstance = new BMDModelInstance(gl, this.textureHolder, bmdModel);
+            const bmdModelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
             bmdModelInstance.name = name;
             this.applyAnimations(bmdModelInstance, rarc, animOptions);
             mat4.copy(bmdModelInstance.modelMatrix, modelMatrix);
@@ -519,18 +669,32 @@ class SMGSpawner {
         });
     }
 
-    public spawnObject(gl: WebGL2RenderingContext, zoneLayerFilterTag: string, objinfo: ObjInfo, modelMatrix: mat4): void {
+    public spawnObject(device: GfxDevice, zoneLayerFilterTag: string, objinfo: ObjInfo, modelMatrix: mat4): void {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions?: AnimOptions) => {
-            this.spawnArchive(gl, modelMatrix, arcName, animOptions).then((modelInstance) => {
+            this.spawnArchive(device, modelMatrix, arcName, animOptions).then((modelInstance) => {
                 if (modelInstance) {
-                    if (tag === SceneGraphTag.Skybox)
+                    if (tag === SceneGraphTag.Skybox) {
+                        // If we have a skybox, then shrink it down a bit.
+                        const skyboxScale = 0.5;
+                        mat4.scale(modelInstance.modelMatrix, modelInstance.modelMatrix, [skyboxScale, skyboxScale, skyboxScale]);
                         modelInstance.setIsSkybox(true);
+                        modelInstance.passMask = SMGPass.SKYBOX;
+                    } else if (tag === SceneGraphTag.Indirect) {
+                        modelInstance.passMask = SMGPass.INDIRECT;
+                    } else if (tag === SceneGraphTag.Bloom) {
+                        modelInstance.passMask = SMGPass.BLOOM;
+                    } else {
+                        modelInstance.passMask = SMGPass.OPAQUE;
+                    }
+
                     this.sceneGraph.addNode(modelInstance, [tag, zoneLayerFilterTag]);
 
                     if (objinfo.rotateSpeed !== 0) {
                         // Set up a rotator animation to spin it around.
                         modelInstance.bindModelMatrixAnimator(new YSpinAnimator(modelInstance.animationController, objinfo));
                     }
+
+                    this.renderHelper.renderInstBuilder.constructRenderInsts(device, this.viewRenderer);
                 }
             });
         };
@@ -621,7 +785,7 @@ class SMGSpawner {
         }
     }
 
-    public spawnZone(gl: WebGL2RenderingContext, zone: Zone, zones: Zone[], modelMatrixBase: mat4): void {
+    public spawnZone(device: GfxDevice, zone: Zone, zones: Zone[], modelMatrixBase: mat4): void {
         // Spawn all layers. We'll hide them later when masking out the others.
 
         for (const layer of zone.layers) {
@@ -630,22 +794,28 @@ class SMGSpawner {
             for (const objinfo of layer.objinfo) {
                 const modelMatrix = mat4.create();
                 mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
-                this.spawnObject(gl, zoneLayerFilterTag, objinfo, modelMatrix);
+                this.spawnObject(device, zoneLayerFilterTag, objinfo, modelMatrix);
             }
 
             for (const objinfo of layer.mappartsinfo) {
                 const modelMatrix = mat4.create();
                 mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
-                this.spawnObject(gl, zoneLayerFilterTag, objinfo, modelMatrix);
+                this.spawnObject(device, zoneLayerFilterTag, objinfo, modelMatrix);
             }
 
             for (const zoneinfo of layer.stageobjinfo) {
                 const subzone = zones.find((zone) => zone.name === zoneinfo.objName);
                 const subzoneModelMatrix = mat4.create();
                 mat4.mul(subzoneModelMatrix, modelMatrixBase, zoneinfo.modelMatrix);
-                this.spawnZone(gl, subzone, zones, subzoneModelMatrix);
+                this.spawnZone(device, subzone, zones, subzoneModelMatrix);
             }
         }
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.sceneGraph.destroy(device);
+        this.textureHolder.destroyGfx(device);
+        this.viewRenderer.destroy(device);
     }
 }
 
@@ -683,11 +853,11 @@ class SMGSceneDesc implements Viewer.SceneDesc {
         return { name, layers };
     }
 
-    public createScene(gl: WebGL2RenderingContext): Progressable<Viewer.MainScene> {
+    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const galaxyName = this.galaxyName;
         return Progressable.all([
-            fetchData(`${pathBase}/ObjectData/PlanetMapDataTable.arc`),
-            fetchData(`${pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`)
+            fetchData(`${pathBase}/ObjectData/PlanetMapDataTable.arc`, abortSignal),
+            fetchData(`${pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`, abortSignal),
         ]).then((buffers: ArrayBufferSlice[]) => {
             return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
         }).then((buffers: ArrayBufferSlice[]) => {
@@ -711,14 +881,20 @@ class SMGSceneDesc implements Viewer.SceneDesc {
             const masterZoneName = zoneNames[0];
             assert(masterZoneName === galaxyName);
 
+            const renderHelper = new GXRenderHelperGfx(device);
+            const viewRenderer = new GfxRenderInstViewRenderer();
+
+            // Construct initial state.
+            renderHelper.renderInstBuilder.constructRenderInsts(device, viewRenderer);
+
             return Progressable.all(zoneNames.map((zoneName) => fetchData(`${pathBase}/StageData/${zoneName}.arc`))).then((buffers: ArrayBufferSlice[]) => {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
-            }).then((zoneBuffers: ArrayBufferSlice[]) => {
+            }).then((zoneBuffers: ArrayBufferSlice[]): Viewer.SceneGfx => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
-                const spawner = new SMGSpawner(planetTable);
+                const spawner = new SMGSpawner(renderHelper, viewRenderer, planetTable);
                 const modelMatrixBase = mat4.create();
-                spawner.spawnZone(gl, zones[0], zones, modelMatrixBase);
-                return new SMGRenderer(spawner.textureHolder, spawner.sceneGraph, scenariodata, zoneNames);
+                spawner.spawnZone(device, zones[0], zones, modelMatrixBase);
+                return new SMGRenderer(device, spawner, viewRenderer, scenariodata, zoneNames);
             });
         });
     }
