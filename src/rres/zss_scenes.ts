@@ -13,7 +13,7 @@ import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { TextureOverride } from '../TextureHolder';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color, GX_Program } from '../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { ColorKind, GXRenderHelperGfx } from '../gx/gx_render';
@@ -259,7 +259,6 @@ class SkywardSwordScene implements Viewer.Scene_Device {
         device.submitPass(hostAccessPass);
 
         this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         const skyboxPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
@@ -269,16 +268,22 @@ class SkywardSwordScene implements Viewer.Scene_Device {
 
         const opaquePassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, opaquePassRenderer, ZSSPass.OPAQUE);
-        opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
-        device.submitPass(opaquePassRenderer);
 
-        // IndTex.
-        const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
-        this.textureHolder.setTextureOverride("DummyWater", textureOverride);
+        if (this.textureHolder.hasTexture('DummyWater')) {
+            this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+            opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
+            device.submitPass(opaquePassRenderer);
 
-        const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, indTexPassRenderer, ZSSPass.INDIRECT);
-        return indTexPassRenderer;
+            // IndTex.
+            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+            this.textureHolder.setTextureOverride("DummyWater", textureOverride);
+
+            const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
+            this.viewRenderer.executeOnPass(device, indTexPassRenderer, ZSSPass.INDIRECT);
+            return indTexPassRenderer;
+        } else {
+            return opaquePassRenderer;
+        }
     }
 
     private spawnModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, mdl0: BRRES.MDL0, rres: BRRES.RRES, namePrefix: string): MDL0ModelInstance {
