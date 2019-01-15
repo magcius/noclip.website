@@ -559,13 +559,15 @@ class Main {
         const camera = this.viewer.renderState.camera;
 
         const defaultSaveStateStr = this.saveManager.loadState(this.saveManager.getSaveStateSlotKey(sceneDescId, 1));
+        let didLoadCameraState = false;
         if (defaultSaveStateStr) {
-            this._loadSceneSaveState(defaultSaveStateStr);
+            didLoadCameraState = this._loadSceneSaveState(defaultSaveStateStr);
         } else if (mainSceneBase.resetCamera) {
-            mainSceneBase.resetCamera(this.viewer, camera);
-        } else {
-            mat4.identity(camera.worldMatrix);
+            didLoadCameraState = mainSceneBase.resetCamera(this.viewer, camera);
         }
+
+        if (!didLoadCameraState)
+            mat4.identity(camera.worldMatrix);
 
         camera.worldMatrixUpdated();
     }

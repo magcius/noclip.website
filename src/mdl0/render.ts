@@ -3,14 +3,12 @@ import * as MDL0 from './mdl0';
 
 import * as Viewer from '../viewer';
 
-import { RenderState } from '../render';
-import { SimpleProgram, DeviceProgram } from '../Program';
+import { DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { OrbitCameraController, Camera } from '../Camera';
-import { GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxDevice, GfxBufferUsage, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import { makeMegaState, defaultMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBufferUsage, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRenderInst } from '../gfx/render/GfxRenderer';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
@@ -291,8 +289,9 @@ class SceneRenderer extends BasicRendererHelper {
         this.fancyGrid = new FancyGrid(device, this.viewRenderer);
     }
 
-    public resetCamera(viewer: Viewer.Viewer, camera: Camera): void {
+    public resetCamera(viewer: Viewer.Viewer, camera: Camera): boolean {
         viewer.setCameraController(new OrbitCameraController());
+        return false;
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

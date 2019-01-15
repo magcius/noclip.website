@@ -26,7 +26,7 @@ export interface MainSceneBase {
     createPanels?(): UI.Panel[];
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(dst: ArrayBuffer, offs: number): number;
-    resetCamera?(viewer: Viewer, camera: Camera): void;
+    resetCamera?(viewer: Viewer, camera: Camera): boolean;
 }
 
 export interface MainScene extends MainSceneBase, Scene {

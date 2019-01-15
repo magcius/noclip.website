@@ -429,12 +429,15 @@ class WindWakerRenderer implements Viewer.MainScene {
         return [timeOfDayPanel, layersPanel];
     }
 
-    public resetCamera(viewer: Viewer.Viewer, camera: Camera): void {
+    public resetCamera(viewer: Viewer.Viewer, camera: Camera): boolean {
         if (this.cameraPos) {
             const m = mat4.create();
             this.cameraPos.set(m);
             mat4.invert(camera.worldMatrix, m);
             camera.worldMatrixUpdated();
+            return true;
+        } else {
+            return false;
         }
     }
 
@@ -560,8 +563,10 @@ class FullSeaSceneDesc extends SceneDesc {
     }
 }
 
+// Location names taken from CryZe's Debug Menu.
+// https://github.com/CryZe/WindWakerDebugMenu/blob/master/src/warp_menu/consts.rs
 const sceneDescs = [
-    "Islands",
+    "The Great Sea",
     new FullSeaSceneDesc("sea", "The Great Sea", [
         1,  2,  3,  4,  5,  6,  7,
         8,  9, 10, 11, 12, 13, 14,
@@ -570,46 +575,152 @@ const sceneDescs = [
        29, 30, 31, 32, 33, 34, 35,
        36, 37, 38, 39, 40, 41, 42,
        43, 44, 45, 46, 47, 48, 49,
-   ]),
+    ]),
 
-    new SceneDesc("sea", "Windfall Island",     [11], new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
-    new SceneDesc("sea", "Dragon Roost Island", [13], new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
-    new SceneDesc("sea", "Forest Haven",        [41], new CameraPos(20000, 1760, -5500, 16000, 1000, 0)),
-    new SceneDesc("sea", "Outset Island",       [44], new CameraPos(6000, 6000, 6000, 0, 0, 20000)),
-
-    "Dungeons",
-    new SceneDesc("kindan", "Forbidden Woods", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
-    new SceneDesc("M_NewD2", "Dragon Roost Cavern", [0, 1, 2, -3, 4, -5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
-    new SceneDesc("Siren", "Temple of the Gods", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, -15, 16, 17, -18, 19, 20, 21, 22, -23]),
-
-    new SceneDesc("Edaichi", "Earth Temple Entrance"),
-    new SceneDesc("M_Dai", "Earth Temple", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]),
-
-    new SceneDesc("Ekaze", "Wind Temple Entrance"),
-    new SceneDesc("kaze", "Wind Temple", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
-
-    // Location names taken from CryZe's Debug Menu.
-    // https://github.com/CryZe/WindWakerDebugMenu/blob/master/src/warp_menu/consts.rs
-    "Underground",
-    new SceneDesc("Hyrule", "Hyrule Field"),
-    new SceneDesc("Hyroom", "Hyrule Castle"),
-    new SceneDesc("kenroom", "Master Sword Chamber"),
-
-    "Other",
-    new SceneDesc("Asoko", "Tetra's Ship Interior"),
+    new SceneDesc("Asoko", "Tetra's Ship"),
+    new SceneDesc("Abship", "Submarine"),
+    new SceneDesc("Abesso", "Cabana"),
+    new SceneDesc("Ocean", "Boating Course"),
+    new SceneDesc("ShipD", "Islet of Steel"),
     new SceneDesc("PShip", "Ghost Ship"),
-    new SceneDesc("Kaisen", "Windfall Battleship Game Room"),
+    new SceneDesc("Obshop", "Beetle's Shop", [1]),
+
+    "Outset Island",
+    new SceneDesc("sea", "Outset Island",       [44], new CameraPos(6000, 6000, 6000, 0, 0, 20000)),
+    new SceneDesc("LinkRM", "Link's House"),
+    new SceneDesc("LinkUG", "Under Link's House"),
+    new SceneDesc("A_mori", "Forest of Fairies"),
+    new SceneDesc("Ojhous", "Orca's House", [0]), // I forget who lives upstairs
+    new SceneDesc("Omasao", "Mesa's House"),
+    new SceneDesc("Onobuta", "Abe and Rose's House"),
+    new SceneDesc("Pjavdou", "Jabun's Cavern"),
+
+    "Forsaken Fortress",
+    new SceneDesc("M2ganon", "Ganondorf's Room"),
+    new SceneDesc("MajyuE", "Exterior"),
+    new SceneDesc("majroom", "Interior (First Visit)", [0, 1, 2, 3, 4]),
+    new SceneDesc("ma2room", "Interior (Second Visit)", [0, 1, 2, 3, 4]),
+    new SceneDesc("ma3room", "Interior (Third  Visit)", [0, 1, 2, 3, 4]),
+    new SceneDesc("Mjtower", "The Tower (First Visit)"),
+    new SceneDesc("M2Tower", "The Tower (Second Visit)"),
+
+    "Windfall Island",
+    new SceneDesc("sea", "Windfall Island", [11], new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
+    new SceneDesc("Kaisen", "Battleship Game Room"),
     new SceneDesc("Nitiyou", "School of Joy"),
     new SceneDesc("Obombh", "Bomb Shop"),
     new SceneDesc("Ocmera", "Lenzo's House"),
     new SceneDesc("Opub", "Cafe Bar"),
     new SceneDesc("Orichh", "House of Wealth"),
     new SceneDesc("Pdrgsh", "Chu Jelly Juice Shop"),
-    new SceneDesc("Pnezumi", "Windfall Island Jail"),
+    new SceneDesc("Pnezumi", "Jail"),
+
+    "Dragon Roost",
+    new SceneDesc("sea", "Dragon Roost Island", [13], new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
+    new SceneDesc("Adanmae", "Pond"),
+    new SceneDesc("Comori", "Komali's Room"),
+    new SceneDesc("Atorizk", "Postal Service"),
+    new SceneDesc("M_NewD2", "Dragon Roost Cavern", [0, 1, 2, -3, 4, -5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+    new SceneDesc("M_DragB", "Boss Room"),
+    new SceneDesc("M_Dra09", "Mini Boss Room", [9]),
+
+    "Forest Haven",
+    new SceneDesc("sea", "Forest Haven Island", [41], new CameraPos(20000, 1760, -5500, 16000, 1000, 0)),
+    new SceneDesc("Omori", "Forest Haven Exterior"),
+    new SceneDesc("Ocrogh", "Potion Room"),
+    new SceneDesc("Otkura", "Makar's Hiding Place"),
+
+    "Forbidden Woods",
+    new SceneDesc("kindan", "Forbidden Woods", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+    new SceneDesc("kinBOSS", "Boss Room"),
+    new SceneDesc("kinMB", "Mini Boss Room", [10]),
+
+    "Tower of the Gods",
+    new SceneDesc("Siren", "Tower of the Gods", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, -15, 16, 17, -18, 19, 20, 21, 22, -23]),
+    new SceneDesc("SirenB", "Boss Room"),
+    new SceneDesc("SirenMB", "Mini Boss Room", [23]),
+
+    "Hyrule",
+    new SceneDesc("Hyrule", "Hyrule Field"),
+    new SceneDesc("Hyroom", "Hyrule Castle"),
+    new SceneDesc("kenroom", "Master Sword Chamber"),
+
+    "Earth Temple",
+    new SceneDesc("Edaichi", "Entrance"),
+    new SceneDesc("M_Dai", "Earth Temple", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]),
+    new SceneDesc("M_DaiB", "Boss Room"),
+    new SceneDesc("M_DaiMB", "Mini Boss Room", [12]),
+
+    "Wind Temple",
+    new SceneDesc("Ekaze", "Wind Temple Entrance"),
+    new SceneDesc("kaze", "Wind Temple", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+    new SceneDesc("kazeB", "Boss Room"),
+    new SceneDesc("kazeMB", "Mini Boss Room"),
+
+    "Ganon's Tower",
+    new SceneDesc("GanonA", "Entrance"),
+    new SceneDesc("GanonB", "Room Towards Gohma"),
+    new SceneDesc("GanonC", "Room Towards Molgera"),
+    new SceneDesc("GanonD", "Room Towards Kalle Demos"),
+    new SceneDesc("GanonE", "Room Towards Jalhalla"),
+    new SceneDesc("GanonJ", "Phantom Ganon's Maze"),
     new SceneDesc("GanonK", "Puppet Ganon Fight"),
+    new SceneDesc("GanonL", "Staircase Towards Puppet Ganon"),
+    new SceneDesc("GanonM", "Main Room"),
+    new SceneDesc("GanonN", "Starcase to Main Room"),
+    new SceneDesc("GTower", "Tower"),
+    new SceneDesc("Xboss0", "Gohma Refight"),
+    new SceneDesc("Xboss1", "Kalle Demos Refight"),
+    new SceneDesc("Xboss2", "Jalhalla Refight"),
+    new SceneDesc("Xboss3", "Molgera Refight"),
+
+    "Grottos and Caverns",
+    new SceneDesc("Cave01", "Bomb Island", [0, 1]),
+    new SceneDesc("Cave02", "Star Island"),
+    new SceneDesc("Cave03", "Cliff Plateau Isles"),
+    new SceneDesc("Cave04", "Rock Spire Isle"),
+    new SceneDesc("Cave05", "Horseshoe Island"),
+    new SceneDesc("Cave07", "Pawprint Isle Wizzrobe"),
+    new SceneDesc("ITest63", "Shark Island"),
+    new SceneDesc("MiniHyo", "Ice Ring Isle"),
+    new SceneDesc("MiniKaz", "Fire Mountain"),
+    new SceneDesc("SubD42", "Needle Rock Isle"),
+    new SceneDesc("SubD43", "Angular Isles"),
+    new SceneDesc("SubD71", "Boating Course"),
+    new SceneDesc("TF_01", "Stone Watcher Island", [0, 1, 2, 3, 4, 5, 6]),
+    new SceneDesc("TF_02", "Overlook Island", [0, 1, 2, 3, 4, 5, 6]),
+    new SceneDesc("TF_03", "Birds Peak Rock", [0, -1, -2, -3, -4, -5, -6]),
+    new SceneDesc("TF_04", "Cabana Maze"),
+    new SceneDesc("TF_06", "Dragon Roost Island"),
+    new SceneDesc("TyuTyu", "Pawprint Isle Chuchu"),
+    new SceneDesc("WarpD", "Diamond Steppe Island"),
+
+    "Savage Labryinth",
+    new SceneDesc("Cave09", "Entrance"),
+    new SceneDesc("Cave10", "Room 11"),
+    new SceneDesc("Cave11", "Room 32"),
+    new SceneDesc("Cave06", "End"),
+
+    "Great Fairy Fountains",
+    new SceneDesc("Fairy01", "North Fairy Fountain"),
+    new SceneDesc("Fairy02", "East Fairy Fountain"),
+    new SceneDesc("Fairy03", "West Fairy Fountain"),
+    new SceneDesc("Fairy04", "Forest of Fairies"),
+    new SceneDesc("Fairy05", "Thorned Fairy Fountain"),
+    new SceneDesc("Fairy06", "South Fairy Fountain"),
+
+    "Nintendo Gallery",
+    new SceneDesc("figureA", "Great Sea"),
+    new SceneDesc("figureB", "Windfall Island"),
+    new SceneDesc("figureC", "Outset Island"),
+    new SceneDesc("figureD", "Forsaken Fortress"),
+    new SceneDesc("figureE", "Secret Cavern"),
+    new SceneDesc("figureF", "Dragon Roost Island"),
+    new SceneDesc("figureG", "Forest Haven"),
+    new SceneDesc("Pfigure", "Main Room"),
 
     "Unused Test Maps",
-    new SceneDesc("Cave08", "Wind Temple (Early)", [1, 2, 3]),
+    new SceneDesc("Cave08", "Early Wind Temple", [1, 2, 3]),
     new SceneDesc("H_test", "Pig Chamber"),
     new SceneDesc("Ebesso", "Island with House"),
     new SceneDesc("KATA_HB", "Bridge Room"),
@@ -619,12 +730,14 @@ const sceneDescs = [
     new SceneDesc("Mukao", "Early Headstone Island"),
     new SceneDesc("tincle", "Tingle's Room"),
     new SceneDesc("VrTest", "Early Environment Art Test"),
+    new SceneDesc("Ojhous2", "Early Orca's House", [0, 1]),
+    new SceneDesc("SubD44", "Early Stone Watcher Island Cavern", [0, 1, 2, 3, 4, 5, 6]),
+    new SceneDesc("SubD51", "Early Bomb Island Cavern", [0, 1]),
+    new SceneDesc("TF_07", "Stone Watcher Island Scenario Test", [1]),
+    new SceneDesc("TF_05", "Early Battle Grotto", [0, 1, 2, 3, 4, 5, 6]),
 ];
 
 const id = "zww";
 const name = "The Legend of Zelda: The Wind Waker";
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
-
-const sceneDescsDev: Viewer.SceneDesc[] = [
-];
