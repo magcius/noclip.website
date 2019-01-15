@@ -144,9 +144,7 @@ class SkywardSwordScene implements Viewer.Scene_Device {
         const systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
         this.textureHolder.addRRESTextures(device, systemRRES);
 
-        const needsSkyCmn = this.stageId.startsWith('F0') || this.stageId === 'F406';
-        if (needsSkyCmn)
-            this.oarcCollection.loadRRESFromArc(device, this.textureHolder, 'oarc/SkyCmn.arc');
+        this.oarcCollection.loadRRESFromArc(device, this.textureHolder, 'oarc/SkyCmn.arc');
 
         // Water animations appear in Common.arc.
         this.commonRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, 'oarc/Common.arc');
@@ -561,9 +559,9 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
 
     public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
         const basePath = `data/zss`;
-        const systemPath = `${basePath}/System.arc`;
-        const objPackPath = `${basePath}/ObjectPack.arc.LZ`;
-        const stagePath = `${basePath}/${this.id}_stg_l0.arc.LZ`;
+        const systemPath = `${basePath}/Object/System.arc`;
+        const objPackPath = `${basePath}/Object/ObjectPack.arc.LZ`;
+        const stagePath = `${basePath}/Stage/${this.id}/${this.id}_stg_l0.arc.LZ`;
         return Progressable.all([fetchData(systemPath), fetchData(objPackPath), fetchData(stagePath)]).then((buffers: ArrayBufferSlice[]) => {
             const [systemBuffer, objPackBuffer, stageBuffer] = buffers;
 
@@ -582,9 +580,9 @@ const name = "The Legend of Zelda: Skyward Sword";
 const sceneDescs = [
     "Skyloft",
     new SkywardSwordSceneDesc("F000", "Skyloft"),
-	new SkywardSwordSceneDesc("F001r", "Knight's Academy"),
+    new SkywardSwordSceneDesc("F001r", "Knight's Academy"),
 	new SkywardSwordSceneDesc("D000", "Waterfall Cave"),
-		
+
     "Faron Woods",
 	new SkywardSwordSceneDesc("F100", "Faron Woods"),
 	new SkywardSwordSceneDesc("F100_1", "Inside the Great Tree"),
@@ -629,15 +627,34 @@ const sceneDescs = [
 	new SkywardSwordSceneDesc("F302", "Lanayru Gorge"),
 	new SkywardSwordSceneDesc("F303", "Lanayru Caves"),
 	
-	"Sacred Grounds",
-	new SkywardSwordSceneDesc("F400", "Despacito 400"),
-	new SkywardSwordSceneDesc("F401", "Despacito 401"),
-	new SkywardSwordSceneDesc("F402", "Despacito 402"),
-	new SkywardSwordSceneDesc("F403", "Despacito 403"),
-	new SkywardSwordSceneDesc("F404", "Despacito 404"),
-	new SkywardSwordSceneDesc("F405", "Despacito 405"),
-	new SkywardSwordSceneDesc("F406", "Despacito 406"),
-	new SkywardSwordSceneDesc("F407", "Despacito 407"),
+    "Untagged - Skyloft",
+    new SkywardSwordSceneDesc("F002r", "F002r"),
+    new SkywardSwordSceneDesc("F004r", "F004r"),
+    new SkywardSwordSceneDesc("F005r", "F005r"),
+    new SkywardSwordSceneDesc("F006r", "F006r"),
+    new SkywardSwordSceneDesc("F007r", "F007r"),
+    new SkywardSwordSceneDesc("F008r", "F008r"),
+    new SkywardSwordSceneDesc("F009r", "F009r"),
+    new SkywardSwordSceneDesc("F010r", "F010r"),
+    new SkywardSwordSceneDesc("F011r", "F011r"),
+    new SkywardSwordSceneDesc("F012r", "F012r"),
+    new SkywardSwordSceneDesc("F013r", "F013r"),
+    new SkywardSwordSceneDesc("F014r", "F014r"),
+    new SkywardSwordSceneDesc("F015r", "F015r"),
+    new SkywardSwordSceneDesc("F016r", "F016r"),
+    new SkywardSwordSceneDesc("F017r", "F017r"),
+    new SkywardSwordSceneDesc("F018r", "F018r"),
+    new SkywardSwordSceneDesc("F019r", "F019r"),
+
+	"Untagged - Sacred Grounds",
+	new SkywardSwordSceneDesc("F400", "F400"),
+	new SkywardSwordSceneDesc("F401", "F401"),
+	new SkywardSwordSceneDesc("F402", "F402"),
+	new SkywardSwordSceneDesc("F403", "F403"),
+	new SkywardSwordSceneDesc("F404", "F404"),
+	new SkywardSwordSceneDesc("F405", "F405"),
+	new SkywardSwordSceneDesc("F406", "F406"),
+    new SkywardSwordSceneDesc("F407", "F407"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
