@@ -534,6 +534,9 @@ class Main {
             this.viewer.setCameraController(controller);
         }
 
+        if (this.viewer.cameraController === null)
+            this.viewer.setCameraController(new FPSCameraController());
+
         if (!this._loadSceneSaveState(sceneStateStr)) {
             // Set up defaults.
             this._resetCamera(sceneDescId);

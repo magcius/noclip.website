@@ -150,6 +150,12 @@ export class FPSCameraController implements CameraController {
         const camera = this.camera;
         let updated = false;
 
+        if (inputManager.isKeyDown('KeyB')) {
+            mat4.identity(camera.worldMatrix);
+            this.cameraUpdateForced();
+            updated = true;
+        }
+
         this.speed += inputManager.dz;
         this.speed = Math.max(this.speed, 1);
 
@@ -189,11 +195,6 @@ export class FPSCameraController implements CameraController {
         } else {
             movement[1] *= drag;
             if (Math.abs(movement[1]) < lowSpeedCap) movement[1] = 0.0;
-        }
-
-        if (inputManager.isKeyDown('KeyB')) {
-            mat4.identity(camera.worldMatrix);
-            updated = true;
         }
 
         // Rotate view.
