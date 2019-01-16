@@ -14,6 +14,7 @@ import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/help
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRendererHelper } from '../oot3d/render';
+import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 
 class FancyGrid_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -108,8 +109,7 @@ class FancyGrid {
         vtx[11] = 1;
         this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
 
-        const idx = new Uint8Array([0, 1, 2, 2, 1, 3]);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, idx.buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
 
         const programReflection = device.queryProgram(this.gfxProgram);
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -123,7 +123,7 @@ class FancyGrid {
         ];
         this.inputLayout = device.createInputLayout({
             vertexAttributeDescriptors,
-            indexBufferFormat: GfxFormat.U8_R,
+            indexBufferFormat: GfxFormat.U16_R,
         })
         const vertexBuffers: GfxVertexBufferDescriptor[] = [
             { buffer: this.posBuffer, byteOffset: 0, byteStride: 12 },
