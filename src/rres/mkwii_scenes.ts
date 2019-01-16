@@ -20,7 +20,7 @@ import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRen
 
 const enum MKWiiPass { MAIN = 0x01, SKYBOX = 0x02 }
 
-class MarioKartWiiRenderer implements Viewer.Scene_Device {
+class MarioKartWiiRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
 
@@ -100,10 +100,10 @@ class MarioKartWiiRenderer implements Viewer.Scene_Device {
 class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         return fetchData(`data/mkwii/${this.id}.szs`).then((buffer: ArrayBufferSlice) => {
             return Yaz0.decompress(buffer);
-        }).then((buffer: ArrayBufferSlice): Viewer.Scene_Device => {
+        }).then((buffer: ArrayBufferSlice): Viewer.SceneGfx => {
             const arch = U8.parse(buffer);
             const courseRRES = BRRES.parse(arch.findFile('./course_model.brres').buffer);
             const skyboxRRES = BRRES.parse(arch.findFile('./vrcorn_model.brres').buffer);

@@ -19,7 +19,7 @@ import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 
-export class CourseRenderer implements Viewer.Scene_Device {
+export class CourseRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
     public textureHolder: FakeTextureHolder;
@@ -74,7 +74,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         return Progressable.all([
             this.fetchCARC(`data/mkds/Course/${this.id}.carc`, abortSignal),
             this.fetchCARC(`data/mkds/Course/${this.id}Tex.carc`, abortSignal),

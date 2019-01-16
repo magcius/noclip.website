@@ -23,7 +23,7 @@ function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
         return buffer;
 }
 
-class MultiRoomScene extends BasicRendererHelper implements Viewer.Scene_Device {
+class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
     constructor(device: GfxDevice, public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
         super();
         for (let i = 0; i < this.scenes.length; i++)
@@ -52,7 +52,7 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         // Fetch the GAR & ZSI.
         const path_zar = `data/mm3d/${this.id}_info.gar`;
         const path_info_zsi = `data/mm3d/${this.id}_info.zsi`;
@@ -61,7 +61,7 @@ class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: NamedArrayBufferSlice, zsiBuffer: NamedArrayBufferSlice): Progressable<Viewer.Scene_Device> {
+    private _createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: NamedArrayBufferSlice, zsiBuffer: NamedArrayBufferSlice): Progressable<Viewer.SceneGfx> {
         const textureHolder = new CtrTextureHolder();
 
         const zar = ZAR.parse(maybeDecompress(zarBuffer));

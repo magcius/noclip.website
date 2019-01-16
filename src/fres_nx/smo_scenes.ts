@@ -133,7 +133,7 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
         return true;
     }
 
-    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const resourceSystem = new ResourceSystem();
 
         return this._fetchSARC(`SystemData/WorldList.szs`, abortSignal).then((worldListSARC) => {

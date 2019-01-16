@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { MainScene, SceneDesc, SceneGroup, Viewer, Scene_Device, getSceneDescs, MainSceneBase } from './viewer';
+import { MainScene, SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, MainSceneBase } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -128,7 +128,7 @@ class DroppedFileSceneDesc implements SceneDesc {
         this.name = file.name;
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Scene_Device> {
+    public createSceneGfx(device: GfxDevice): Progressable<SceneGfx> {
         const file = this.file;
 
         if (file.name.endsWith('.zar') || file.name.endsWith('.gar'))
@@ -172,10 +172,10 @@ class SceneLoader {
 
         this.loadingSceneDesc = sceneDesc;
 
-        if (sceneDesc.createScene_Device !== undefined) {
-            const progressable = sceneDesc.createScene_Device(this.viewer.gfxDevice, this.abortController.signal);
+        if (sceneDesc.createSceneGfx !== undefined) {
+            const progressable = sceneDesc.createSceneGfx(this.viewer.gfxDevice, this.abortController.signal);
             if (progressable !== null) {
-                progressable.then((scene: Scene_Device) => {
+                progressable.then((scene: SceneGfx) => {
                     if (this.loadingSceneDesc === sceneDesc) {
                         this.loadingSceneDesc = null;
                         this.viewer.setSceneDevice(scene);

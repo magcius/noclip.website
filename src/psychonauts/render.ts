@@ -378,7 +378,7 @@ export class SceneRenderer {
     }
 }
 
-export class PsychonautsRenderer extends BasicRendererHelper implements Viewer.Scene_Device {
+export class PsychonautsRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     public textureHolder = new PsychonautsTextureHolder();
     private sceneRenderers: SceneRenderer[] = [];
 

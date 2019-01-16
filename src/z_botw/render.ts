@@ -244,7 +244,7 @@ export class TerrainRenderer {
     }
 }
 
-export class TerrainScene extends BasicRendererHelper implements Viewer.Scene_Device {
+export class TerrainScene extends BasicRendererHelper implements Viewer.SceneGfx {
     public terrainRenderer: TerrainRenderer;
     public staticData: TerrainAreaRendererStatic;
     public timeoutId: number = 0;

@@ -27,7 +27,7 @@ function fetchBin(path: string, abortSignal: AbortSignal): Progressable<BIN.BIN>
 class LuigisMansionBinSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public paths: string[]) {}
 
-    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const promises: Progressable<BIN.BIN>[] = this.paths.map((path) => fetchBin(path, abortSignal));
 
         // TODO(jstpierre): J3D format in VRB has a different version with a different MAT3 chunk.

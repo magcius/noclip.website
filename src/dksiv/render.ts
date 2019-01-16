@@ -177,7 +177,7 @@ export class IVRenderer {
     }
 }
 
-export class Scene implements Viewer.Scene_Device {
+export class Scene implements Viewer.SceneGfx {
     private inputLayout: GfxInputLayout;
     private pipeline: GfxRenderPipeline;
     private program: GfxProgram;

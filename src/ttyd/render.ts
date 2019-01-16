@@ -286,7 +286,7 @@ class Command_Node {
     }
 }
 
-export class WorldRenderer implements Viewer.Scene_Device {
+export class WorldRenderer implements Viewer.SceneGfx {
     public name: string;
 
     private viewRenderer = new GfxRenderInstViewRenderer();

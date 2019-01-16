@@ -15,7 +15,7 @@ import { assert } from '../util';
 import { fetchData } from '../fetch';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 
-class MultiRoomScene extends BasicRendererHelper implements Viewer.Scene_Device {
+class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
     constructor(device: GfxDevice, public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
         super();
         for (let i = 0; i < this.scenes.length; i++)
@@ -42,7 +42,7 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         // Fetch the ZAR & info ZSI.
         const path_zar = `data/oot3d/${this.id}.zar`;
         const path_info_zsi = `data/oot3d/${this.id}_info.zsi`;
@@ -51,7 +51,7 @@ class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.Scene_Device> {
+    private _createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.SceneGfx> {
         const textureHolder = new CtrTextureHolder();
 
         const zar = zarBuffer.byteLength ? ZAR.parse(zarBuffer) : null;

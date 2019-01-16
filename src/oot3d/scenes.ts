@@ -33,7 +33,7 @@ export class GrezzoTextureHolder extends CtrTextureHolder {
     }
 }
 
-export class MultiCmbScene extends BasicRendererHelper implements Viewer.Scene_Device {
+export class MultiCmbScene extends BasicRendererHelper implements Viewer.SceneGfx {
     constructor(device: GfxDevice, public scenes: CmbRenderer[], public textureHolder: CtrTextureHolder) {
         super();
         for (let i = 0; i < this.scenes.length; i++)
@@ -56,7 +56,7 @@ export class MultiCmbScene extends BasicRendererHelper implements Viewer.Scene_D
     }
 }
 
-export function createSceneFromZARBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Viewer.Scene_Device {
+export function createSceneFromZARBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Viewer.SceneGfx {
     const textureHolder = new GrezzoTextureHolder();
     const scenes: CmbRenderer[] = [];
 

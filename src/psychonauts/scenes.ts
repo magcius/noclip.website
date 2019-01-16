@@ -17,7 +17,7 @@ class PsychonautsSceneDesc implements Viewer.SceneDesc {
         })
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         return Progressable.all([this.fetchPPF('common', false), this.fetchPPF(this.id, true)]).then(([commonPPF, scenePPF]) => {
             const renderer = new PsychonautsRenderer();
             // TODO(jstpierre): Only translate the textures that are actually used.

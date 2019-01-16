@@ -18,7 +18,7 @@ import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 
-export class WorldMapRenderer implements Viewer.Scene_Device {
+export class WorldMapRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
     public textureHolder: FakeTextureHolder;
@@ -134,7 +134,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const basePath = `data/nsmbds`;
 
         // TODO(jstpierre): Stop the type system abuse.

@@ -462,7 +462,7 @@ class BMDRenderer {
     }
 }
 
-class SM64DSRenderer implements Viewer.Scene_Device {
+class SM64DSRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
 
@@ -574,7 +574,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = '' + this.levelId;
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         return fetchData('data/sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
             const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
             const textureHolder = new NITROTextureHolder();
@@ -786,7 +786,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1): PromiseLike<Viewer.Scene_Device> {
+    private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1): PromiseLike<Viewer.SceneGfx> {
         const level = crg1.Levels[this.levelId];
         const modelCache = new ModelCache();
         const renderers = [this._createBMDRenderer(device, modelCache, textureHolder, level.MapBmdFile, GLOBAL_SCALE, level, false)];

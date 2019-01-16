@@ -40,7 +40,7 @@ export interface ViewerRenderInput {
     viewportHeight: number;
 }
 
-export interface Scene_Device extends MainSceneBase {
+export interface SceneGfx extends MainSceneBase {
     render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass;
     destroy(device: GfxDevice): void;
 }
@@ -62,7 +62,7 @@ export class Viewer {
     public isTimeRunning = true;
 
     public scene: MainScene | null = null;
-    public scene_device: Scene_Device | null = null;
+    public scene_device: SceneGfx | null = null;
 
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
@@ -193,7 +193,7 @@ export class Viewer {
         this.scene = scene;
     }
 
-    public setSceneDevice(scene_device: Scene_Device): void {
+    public setSceneDevice(scene_device: SceneGfx): void {
         this.reset();
         this.destroyScenes();
         this.scene_device = scene_device;
@@ -254,7 +254,7 @@ export interface SceneDesc {
     id: string;
     name: string;
     createScene?(gl: WebGL2RenderingContext): Progressable<MainScene> | null;
-    createScene_Device?(device: GfxDevice, abortSignal: AbortSignal): Progressable<Scene_Device> | null;
+    createSceneGfx?(device: GfxDevice, abortSignal: AbortSignal): Progressable<SceneGfx> | null;
 }
 
 export interface SceneGroup {

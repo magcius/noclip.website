@@ -176,7 +176,7 @@ class Command_Bin {
     }
 }
 
-export class LuigisMansionRenderer implements Viewer.Scene_Device {
+export class LuigisMansionRenderer implements Viewer.SceneGfx {
     private binCommands: Command_Bin[] = [];
     private renderHelper: GXRenderHelperGfx;
     public viewRenderer: GfxRenderInstViewRenderer = new GfxRenderInstViewRenderer();

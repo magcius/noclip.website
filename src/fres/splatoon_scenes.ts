@@ -18,7 +18,7 @@ enum SplatoonPass {
     MAIN = 0x02,
 }
 
-class SplatoonRenderer implements Viewer.Scene_Device {
+class SplatoonRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
 
@@ -73,7 +73,7 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const renderer = new SplatoonRenderer();
 
         return Progressable.all([

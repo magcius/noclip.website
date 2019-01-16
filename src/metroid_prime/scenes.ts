@@ -16,7 +16,7 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
-export class RetroSceneRenderer implements Viewer.Scene_Device {
+export class RetroSceneRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
 
@@ -72,7 +72,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         this.id = filename;
     }
 
-    public createScene_Device(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const stringsPakP = fetchData(`data/metroid_prime/mp1/Strings.pak`, abortSignal);
         const levelPakP = fetchData(`data/metroid_prime/mp1/${this.filename}`, abortSignal);
         const nameDataP = fetchData(`data/metroid_prime/mp1/MP1_NameData.crg1`, abortSignal);

@@ -25,7 +25,7 @@ export function createSceneFromFRESBuffer(device: GfxDevice, buffer: ArrayBuffer
     return sceneRenderer;
 }
 
-export function createSceneFromSARCBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Promise<Viewer.Scene_Device> {
+export function createSceneFromSARCBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Promise<Viewer.SceneGfx> {
     return Promise.resolve(buffer).then((buffer: ArrayBufferSlice) => {
         if (readString(buffer, 0, 4) === 'Yaz0')
             return Yaz0.decompress(buffer);

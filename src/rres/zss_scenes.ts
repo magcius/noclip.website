@@ -117,7 +117,7 @@ const enum ZSSPass {
     INDIRECT = 1 << 2,
 }
 
-class SkywardSwordScene implements Viewer.Scene_Device {
+class SkywardSwordScene implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public mainRenderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
@@ -557,7 +557,7 @@ class SkywardSwordScene implements Viewer.Scene_Device {
 class SkywardSwordSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const basePath = `data/zss`;
         const systemPath = `${basePath}/Object/System.arc`;
         const objPackPath = `${basePath}/Object/ObjectPack.arc.LZ`;

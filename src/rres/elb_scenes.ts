@@ -24,7 +24,7 @@ const materialHacks: GXMaterialHacks = {
     alphaLightingFudge: (p) => '1.0',
 };
 
-export class BasicRRESRenderer implements Viewer.Scene_Device {
+export class BasicRRESRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
     public models: MDL0ModelInstance[] = [];
@@ -104,7 +104,7 @@ function makeElbPath(stg: string, room: number): string {
 class ElebitsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public rooms: number[]) {}
 
-    public createScene_Device(device: GfxDevice): Progressable<Viewer.Scene_Device> {
+    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const paths = this.rooms.map((room) => makeElbPath(this.id, room));
         const progressables: Progressable<ArrayBufferSlice>[] = paths.map((path) => fetchData(path));
         return Progressable.all(progressables).then((buffers: ArrayBufferSlice[]) => {
