@@ -280,6 +280,8 @@ class MDL0Renderer {
 }
 
 class SceneRenderer extends BasicRendererHelper {
+    public defaultCameraController = OrbitCameraController;
+
     public mdl0Renderer: MDL0Renderer;
     public fancyGrid: FancyGrid;
 
@@ -287,11 +289,6 @@ class SceneRenderer extends BasicRendererHelper {
         super();
         this.mdl0Renderer = new MDL0Renderer(device, this.viewRenderer, mdl0);
         this.fancyGrid = new FancyGrid(device, this.viewRenderer);
-    }
-
-    public resetCamera(viewer: Viewer.Viewer, camera: Camera): boolean {
-        viewer.setCameraController(new OrbitCameraController());
-        return false;
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

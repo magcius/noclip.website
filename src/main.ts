@@ -527,14 +527,17 @@ class Main {
         const sceneDescId = this._getCurrentSceneDescId();
         this.saveManager.setCurrentSceneDescId(sceneDescId);
         this.ui.saveStatesPanel.setCurrentSceneDesc(this.currentSceneGroup, this.currentSceneDesc);
-        if (!this._loadSceneSaveState(sceneStateStr)) {
-            // Set up defaults.
-            this._resetCamera(mainSceneBase, sceneDescId);
+
+        // Set camera controller.
+        if (mainSceneBase.defaultCameraController !== undefined) {
+            const controller = new mainSceneBase.defaultCameraController();
+            this.viewer.setCameraController(controller);
         }
 
-        // TODO(jstpierre): Figure out how to do this less terribly.
-        if (this.viewer.cameraController === null)
-            this.viewer.setCameraController(new FPSCameraController());
+        if (!this._loadSceneSaveState(sceneStateStr)) {
+            // Set up defaults.
+            this._resetCamera(sceneDescId);
+        }
 
         this.ui.sceneChanged();
     }
@@ -555,16 +558,14 @@ class Main {
         }
     }
 
-    private _resetCamera(mainSceneBase: MainSceneBase, sceneDescId: string | null): void {
+    private _resetCamera(sceneDescId: string | null): void {
         const camera = this.viewer.renderState.camera;
 
-        const defaultSaveStateStr = this.saveManager.loadState(this.saveManager.getSaveStateSlotKey(sceneDescId, 1));
         let didLoadCameraState = false;
-        if (defaultSaveStateStr) {
+
+        const defaultSaveStateStr = this.saveManager.loadState(this.saveManager.getSaveStateSlotKey(sceneDescId, 1));
+        if (defaultSaveStateStr)
             didLoadCameraState = this._loadSceneSaveState(defaultSaveStateStr);
-        } else if (mainSceneBase.resetCamera) {
-            didLoadCameraState = mainSceneBase.resetCamera(this.viewer, camera);
-        }
 
         if (!didLoadCameraState)
             mat4.identity(camera.worldMatrix);

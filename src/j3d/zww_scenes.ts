@@ -354,7 +354,7 @@ class WindWakerRenderer implements Viewer.MainScene {
     private vr_back_cloud: BMDModelInstance;
     public roomRenderers: WindWakerRoomRenderer[] = [];
 
-    constructor(gl: WebGL2RenderingContext, wantsSeaPlane: boolean, public textureHolder: J3DTextureHolder, private stageRarc: RARC.RARC, public cameraPos: CameraPos = null) {
+    constructor(gl: WebGL2RenderingContext, wantsSeaPlane: boolean, public textureHolder: J3DTextureHolder, private stageRarc: RARC.RARC) {
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(gl);
 
@@ -429,18 +429,6 @@ class WindWakerRenderer implements Viewer.MainScene {
         return [timeOfDayPanel, layersPanel];
     }
 
-    public resetCamera(viewer: Viewer.Viewer, camera: Camera): boolean {
-        if (this.cameraPos) {
-            const m = mat4.create();
-            this.cameraPos.set(m);
-            mat4.invert(camera.worldMatrix, m);
-            camera.worldMatrixUpdated();
-            return true;
-        } else {
-            return false;
-        }
-    }
-
     public render(state: RenderState) {
         const gl = state.gl;
 
@@ -493,7 +481,7 @@ class WindWakerRenderer implements Viewer.MainScene {
 class SceneDesc {
     public id: string;
 
-    public constructor(public stageDir: string, public name: string, public rooms: number[] = [0], public cameraPos: CameraPos = null) {
+    public constructor(public stageDir: string, public name: string, public rooms: number[] = [0]) {
         this.id = stageDir;
 
         // Garbage hack.
@@ -514,7 +502,7 @@ class SceneDesc {
         return Progressable.all(rarcs).then(([stageRarc, ...roomRarcs]) => {
             const textureHolder = new J3DTextureHolder();
             const wantsSeaPlane = this.stageDir === 'sea';
-            const renderer = new WindWakerRenderer(gl, wantsSeaPlane, textureHolder, stageRarc.rarc, this.cameraPos);
+            const renderer = new WindWakerRenderer(gl, wantsSeaPlane, textureHolder, stageRarc.rarc);
             for (const roomRarc of roomRarcs) {
                 const roomIdx = parseInt(roomRarc.path.match(/Room(\d+)/)[1], 10);
                 const visible = roomIdx === 0 || this.rooms.indexOf(-roomIdx) === -1;
@@ -586,7 +574,7 @@ const sceneDescs = [
     new SceneDesc("Obshop", "Beetle's Shop", [1]),
 
     "Outset Island",
-    new SceneDesc("sea", "Outset Island",       [44], new CameraPos(6000, 6000, 6000, 0, 0, 20000)),
+    new SceneDesc("sea", "Outset Island", [44]),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
     new SceneDesc("A_mori", "Forest of Fairies"),
@@ -605,7 +593,7 @@ const sceneDescs = [
     new SceneDesc("M2Tower", "The Tower (Second Visit)"),
 
     "Windfall Island",
-    new SceneDesc("sea", "Windfall Island", [11], new CameraPos(-148, 1760, 7560, -1000, 1000, -5000)),
+    new SceneDesc("sea", "Windfall Island", [11]),
     new SceneDesc("Kaisen", "Battleship Game Room"),
     new SceneDesc("Nitiyou", "School of Joy"),
     new SceneDesc("Obombh", "Bomb Shop"),
@@ -616,7 +604,7 @@ const sceneDescs = [
     new SceneDesc("Pnezumi", "Jail"),
 
     "Dragon Roost",
-    new SceneDesc("sea", "Dragon Roost Island", [13], new CameraPos(-8000, 1760, 280, 0, 500, -1000)),
+    new SceneDesc("sea", "Dragon Roost Island", [13]),
     new SceneDesc("Adanmae", "Pond"),
     new SceneDesc("Comori", "Komali's Room"),
     new SceneDesc("Atorizk", "Postal Service"),
@@ -625,7 +613,7 @@ const sceneDescs = [
     new SceneDesc("M_Dra09", "Mini Boss Room", [9]),
 
     "Forest Haven",
-    new SceneDesc("sea", "Forest Haven Island", [41], new CameraPos(20000, 1760, -5500, 16000, 1000, 0)),
+    new SceneDesc("sea", "Forest Haven Island", [41]),
     new SceneDesc("Omori", "Forest Haven Exterior"),
     new SceneDesc("Ocrogh", "Potion Room"),
     new SceneDesc("Otkura", "Makar's Hiding Place"),

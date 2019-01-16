@@ -22,11 +22,11 @@ export interface Scene {
 }
 
 export interface MainSceneBase {
+    defaultCameraController?: CameraControllerClass;
     textureHolder?: TextureHolder<any>;
     createPanels?(): UI.Panel[];
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(dst: ArrayBuffer, offs: number): number;
-    resetCamera?(viewer: Viewer, camera: Camera): boolean;
 }
 
 export interface MainScene extends MainSceneBase, Scene {
