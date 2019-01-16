@@ -16,18 +16,10 @@ import * as GX_Material from '../gx/gx_material';
 import { BMD, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
-import { Camera } from '../Camera';
 import { SimpleProgram } from '../Program';
 import { colorToCSS } from '../Color';
 import { ColorKind } from '../gx/gx_render';
 import { defaultMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-
-class CameraPos {
-    constructor(public x: number, public y: number, public z: number, public lx: number, public ly: number, public lz: number) {}
-    public set(m: mat4) {
-        mat4.lookAt(m, [this.x, this.y, this.z], [this.lx, this.ly, this.lz], [0, 1, 0]);
-    }
-}
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 

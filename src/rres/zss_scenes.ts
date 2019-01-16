@@ -117,6 +117,21 @@ const enum ZSSPass {
     INDIRECT = 1 << 2,
 }
 
+class ZSSTextureHolder extends RRESTextureHolder {
+    protected findTextureEntryIndex(name: string): number {
+        let i: number = -1;
+
+        i = this.searchTextureEntryIndex(name);
+        if (i >= 0) return i;
+
+        // XXX(jstpierre): Thrill Digger (F211) seems to have a missing texture. Where is it???
+        if (name === 'F211_Wood01')
+            return this.searchTextureEntryIndex('F211_Wood02');
+
+        return -1;
+    }
+}
+
 class SkywardSwordScene implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public mainRenderTarget = new BasicRenderTarget();
@@ -135,7 +150,7 @@ class SkywardSwordScene implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.renderHelper = new GXRenderHelperGfx(device);
-        this.textureHolder = new RRESTextureHolder();
+        this.textureHolder = new ZSSTextureHolder();
         this.animationController = new AnimationController();
 
         this.oarcCollection.addSearchPath(this.stageArchive);

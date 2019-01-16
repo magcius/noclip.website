@@ -24,7 +24,7 @@ class ZTPTextureHolder extends J3DTextureHolder {
         i = this.searchTextureEntryIndex(`ExtraTex/${name.toLowerCase().replace('.tga', '')}`);
         if (i >= 0) return i;
 
-        return i;
+        return -1;
     }
 
     public addExtraTextures(gl: WebGL2RenderingContext, extraTextures: TEX1_TextureData[]): void {
