@@ -175,14 +175,19 @@ class SkywardSwordScene implements Viewer.SceneGfx {
         // Load rooms.
         const roomArchivesDir = stageArchive.findDir('rarc');
         if (roomArchivesDir) {
-            for (const roomArchiveFile of roomArchivesDir.files) {
+            for (let i = 0; i < roomArchivesDir.files.length; i++) {
+                const roomArchiveFile = roomArchivesDir.files[i];
                 const roomArchive = U8.parse(roomArchiveFile.buffer);
                 const roomRRES = BRRES.parse(roomArchive.findFile('g3d/room.brres').buffer);
 
                 this.textureHolder.addRRESTextures(device, roomRRES);
 
-                for (const mdl0 of roomRRES.mdl0) {
-                    this.spawnModel(device, this.renderHelper, mdl0, roomRRES, roomArchiveFile.name);
+                for (let i = 0; i < roomRRES.mdl0.length; i++) {
+                    const mdl0 = roomRRES.mdl0[i];
+                    const renderer = this.spawnModel(device, this.renderHelper, mdl0, roomRRES, roomArchiveFile.name);
+                    // Detail / transparent meshes end with '_s'. Typical depth sorting won't work, we have to explicitly bias.
+                    if (mdl0.name.endsWith('_s'))
+                        renderer.renderLayerBias = 1;
                 }
 
                 const roomBZS = this.parseBZS(roomArchive.findFile('dat/room.bzs').buffer);

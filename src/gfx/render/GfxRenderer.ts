@@ -67,8 +67,16 @@ export function makeDepthKey(sortKey: number, depth: number, maxDepth: number = 
 // Opaque:      00LLLLLL DDDDDDDD DDDDDDPP PPPPPPDD
 // Translucent: 01LLLLLL DDDDDDDD DDDDDDDD PPPPPPPP
 
+export function getSortKeyLayer(sortKey: number): number {
+    return (sortKey >>> 24) & 0xFF;
+}
+
+export function setSortKeyLayer(sortKey: number, layer: number): number {
+    return ((sortKey & 0x00FFFFFFFF) | ((layer & 0xFF) << 24)) >>> 0;
+}
+
 export function makeSortKeyOpaque(layer: number, programKey: number): number {
-    return (((layer & 0xFF) << 24) | ((programKey & 0xFF) << 2)) >>> 0;
+    return setSortKeyLayer(((programKey & 0xFF) << 2), layer);
 }
 
 export function setSortKeyOpaqueDepth(sortKey: number, depthKey: number): number {
@@ -77,7 +85,7 @@ export function setSortKeyOpaqueDepth(sortKey: number, depthKey: number): number
 }
 
 export function makeSortKeyTranslucent(layer: number, programKey: number): number {
-    return (((layer & 0xFF) << 24) | (programKey & 0xFF)) >>> 0;
+    return setSortKeyLayer((programKey & 0xFF), layer);
 }
 
 export function setSortKeyTranslucentDepth(sortKey: number, depthKey: number): number {

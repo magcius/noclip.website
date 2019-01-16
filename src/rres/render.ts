@@ -10,7 +10,7 @@ import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
 import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
-import { GfxRenderInst, GfxRenderInstBuilder, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstBuilder, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyLayer, getSortKeyLayer } from "../gfx/render/GfxRenderer";
 import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { assert } from '../util';
 
@@ -68,7 +68,7 @@ class ShapeInstance {
         mat4.mul(dst, dst, modelMatrix);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, matrixArray: mat4[], matrixVisibility: IntersectionState[], viewerInput: ViewerRenderInput, isSkybox: boolean): void {
+    public prepareToRender(renderHelper: GXRenderHelperGfx, renderLayerBias: number, matrixArray: mat4[], matrixVisibility: IntersectionState[], viewerInput: ViewerRenderInput, isSkybox: boolean): void {
         const visibility = matrixVisibility[this.node.mtxId];
         this.renderInst.visible = visibility !== IntersectionState.FULLY_OUTSIDE;
 
@@ -81,6 +81,11 @@ class ShapeInstance {
             bboxScratch.transform(this.node.bbox, modelMatrix);            
             const depth = computeViewSpaceDepth(camera, bboxScratch);
             this.renderInst.sortKey = setSortKeyDepth(this.renderInst.sortKey, depth);
+
+            if (renderLayerBias !== 0) {
+                const baseLayer = getSortKeyLayer(this.renderInst.parentRenderInst.sortKey);
+                this.renderInst.sortKey = setSortKeyLayer(this.renderInst.sortKey, baseLayer + renderLayerBias);
+            }
 
             this.shapeData.fillPacketParams(this.packetParams, this.renderInst, renderHelper);
         }
@@ -278,6 +283,7 @@ export class MDL0ModelInstance {
     public name: string;
     public isSkybox: boolean = false;
     public passMask: number = 1;
+    public renderLayerBias: number = 0;
     public templateRenderInst: GfxRenderInst;
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public textureHolder: GXTextureHolder, public mdl0Model: MDL0Model, public namePrefix: string = '') {
@@ -346,7 +352,7 @@ export class MDL0ModelInstance {
         this.execNodeTreeOpList(mdl0.sceneGraph.nodeTreeOps, viewerInput, visible);
 
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(renderHelper, this.matrixArray, this.matrixVisibility, viewerInput, this.isSkybox);
+            this.shapeInstances[i].prepareToRender(renderHelper, this.renderLayerBias, this.matrixArray, this.matrixVisibility, viewerInput, this.isSkybox);
 
         if (visible) {
             this.templateRenderInst.passMask = this.passMask;
