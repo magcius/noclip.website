@@ -10,7 +10,6 @@ import { assert, leftPad } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RenderState } from '../render';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
 import AnimationController from '../AnimationController';
@@ -74,7 +73,7 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
 
@@ -104,7 +103,7 @@ function makeElbPath(stg: string, room: number): string {
 class ElebitsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public rooms: number[]) {}
 
-    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const paths = this.rooms.map((room) => makeElbPath(this.id, room));
         const progressables: Progressable<ArrayBufferSlice>[] = paths.map((path) => fetchData(path));
         return Progressable.all(progressables).then((buffers: ArrayBufferSlice[]) => {

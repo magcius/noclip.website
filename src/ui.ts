@@ -4,7 +4,6 @@
 import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController } from './Camera';
-import { RenderStatistics } from './render';
 import { Color, colorToCSS } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
@@ -12,6 +11,7 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVers
 // @ts-ignore
 import logoURL from './logo.png';
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
+import { RenderStatistics } from './RenderStatistics';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1299,7 +1299,7 @@ class ViewerSettings extends Panel {
     private onFovSliderChange(e: UIEvent): void {
         const slider = (<HTMLInputElement> e.target);
         const value = this._getSliderT(slider);
-        this.viewer.renderState.fov = value * (Math.PI * 0.995);
+        this.viewer.fovY = value * (Math.PI * 0.995);
     }
 
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
@@ -1608,16 +1608,8 @@ export class UI {
         // Textures
         if (this.viewer.scene !== null) {
             const scene = this.viewer.scene;
-            if (scene.textures !== undefined)
-                this.textureViewer.setTextureList(scene.textures);
-            else if (scene.textureHolder !== undefined)
+            if (scene.textureHolder !== undefined)
                 this.textureViewer.setTextureHolder(scene.textureHolder);
-            else
-                this.textureViewer.setTextureList([]);
-        } else if (this.viewer.scene_device !== null) {
-            const scene_device = this.viewer.scene_device;
-            if (scene_device.textureHolder !== undefined)
-                this.textureViewer.setTextureHolder(scene_device.textureHolder);
             else
                 this.textureViewer.setTextureList([]);
         }

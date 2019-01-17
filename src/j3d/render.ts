@@ -19,9 +19,9 @@ import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer,
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
-        this.addTexturesGfx(device, bmd.tex1.textureDatas);
+        this.addTextures(device, bmd.tex1.textureDatas);
         if (bmt)
-            this.addTexturesGfx(device, bmt.tex1.textureDatas);
+            this.addTextures(device, bmt.tex1.textureDatas);
     }
 }
 

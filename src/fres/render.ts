@@ -165,7 +165,7 @@ void main() {
 
 export class GX2TextureHolder extends TextureHolder<FTEXEntry> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
-        this.addTexturesGfx(device, fres.ftex);
+        this.addTextures(device, fres.ftex);
     }
 
     public static translateTextureDescriptor(device: GfxDevice, surface: GX2Surface): GfxTextureDescriptor {

@@ -394,6 +394,6 @@ export class PsychonautsRenderer extends BasicRendererHelper implements Viewer.S
 
     public destroy(device: GfxDevice): void {
         super.destroy(device);
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
     }
 }

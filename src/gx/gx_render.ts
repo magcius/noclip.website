@@ -8,18 +8,15 @@ import * as GX_Material from './gx_material';
 import * as GX_Texture from './gx_texture';
 import * as Viewer from '../viewer';
 
-import { RenderState } from '../render';
 import { assert, nArray } from '../util';
 import { LoadedVertexData, LoadedVertexLayout } from './gx_displaylist';
-import BufferCoalescer, { CoalescedBuffers } from '../BufferCoalescer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { TextureMapping, TextureHolder, LoadedTexture, bindGLTextureMappings } from '../TextureHolder';
+import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeFrequency } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
-import { translateVertexFormat, getTransitionDeviceForWebGL2, getPlatformBuffer } from '../gfx/platform/GfxPlatformWebGL2';
 import { Camera } from '../Camera';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
@@ -97,127 +94,6 @@ export function fillPacketParamsData(d: Float32Array, packetParams: PacketParams
 
     assert(offs === bOffs + u_PacketParamsBufferSize);
     assert(d.length >= offs);
-}
-
-const bufferDataScratchSize = Math.max(u_PacketParamsBufferSize, u_MaterialParamsBufferSize, u_SceneParamsBufferSize);
-
-// TODO(jstpierre): Remove.
-export class GXRenderHelper {
-    public bufferDataScratch = new Float32Array(bufferDataScratchSize);
-
-    private sceneParamsBuffer: GfxBuffer;
-    private materialParamsBuffer: GfxBuffer;
-    private packetParamsBuffer: GfxBuffer;
-
-    constructor(gl: WebGL2RenderingContext) {
-        const device = getTransitionDeviceForWebGL2(gl);
-        this.sceneParamsBuffer = device.createBuffer(u_SceneParamsBufferSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
-        this.materialParamsBuffer = device.createBuffer(u_MaterialParamsBufferSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
-        this.packetParamsBuffer = device.createBuffer(u_PacketParamsBufferSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
-    }
-
-    public bindSceneParams(state: RenderState, params: SceneParams): void {
-        const gl = state.gl;
-        fillSceneParamsData(this.bufferDataScratch, params);
-        gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.sceneParamsBuffer));
-        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, this.bufferDataScratch, 0, u_SceneParamsBufferSize);
-        state.renderStatisticsTracker.bufferUploadCount++;
-    }
-
-    public bindMaterialParams(state: RenderState, params: MaterialParams): void {
-        const gl = state.gl;
-        fillMaterialParamsData(this.bufferDataScratch, params);
-        gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.materialParamsBuffer));
-        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, this.bufferDataScratch, 0, u_MaterialParamsBufferSize);
-        state.renderStatisticsTracker.bufferUploadCount++;
-    }
-
-    public bindPacketParams(state: RenderState, params: PacketParams): void {
-        const gl = state.gl;
-        fillPacketParamsData(this.bufferDataScratch, params);
-        gl.bindBuffer(gl.UNIFORM_BUFFER, getPlatformBuffer(this.packetParamsBuffer));
-        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, this.bufferDataScratch, 0, u_PacketParamsBufferSize);
-        state.renderStatisticsTracker.bufferUploadCount++;
-    }
-
-    public bindMaterialTextures(state: RenderState, materialParams: MaterialParams): void {
-        bindGLTextureMappings(state, materialParams.m_TextureMapping);
-    }
-
-    public bindUniformBuffers(state: RenderState): void {
-        const gl = state.gl;
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_SceneParams, getPlatformBuffer(this.sceneParamsBuffer));
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_MaterialParams, getPlatformBuffer(this.materialParamsBuffer));
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, GX_Material.GX_Program.ub_PacketParams, getPlatformBuffer(this.packetParamsBuffer));
-    }
-
-    public destroy(gl: WebGL2RenderingContext): void {
-        const device = getTransitionDeviceForWebGL2(gl);
-        device.destroyBuffer(this.sceneParamsBuffer);
-        device.destroyBuffer(this.materialParamsBuffer);
-        device.destroyBuffer(this.packetParamsBuffer);
-    }
-}
-
-export class GXShapeHelper {
-    public vao: WebGLVertexArrayObject;
-
-    constructor(gl: WebGL2RenderingContext, public coalescedBuffers: CoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
-        assert(this.loadedVertexData.indexFormat === GfxFormat.U16_R);
-
-        this.vao = gl.createVertexArray();
-        gl.bindVertexArray(this.vao);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, coalescedBuffers.vertexBuffer.buffer);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, coalescedBuffers.indexBuffer.buffer);
-
-        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < GX.VertexAttribute.MAX; vtxAttrib++) {
-            const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
-
-            // TODO(jstpierre): Handle TEXMTXIDX attributes.
-            if (attribLocation === -1)
-                continue;
-
-            const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
-            const attrib = this.loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
-            if (attrib !== undefined) {
-                const stride = this.loadedVertexLayout.dstVertexSize;
-                const offset = coalescedBuffers.vertexBuffer.offset + attrib.offset;
-
-                const { type, size, normalized } = translateVertexFormat(attribGenDef.format);
-
-                gl.enableVertexAttribArray(attribLocation);
-                if (type === gl.FLOAT) {
-                    gl.vertexAttribPointer(attribLocation, size, type, normalized, stride, offset);
-                } else {
-                    gl.vertexAttribIPointer(attribLocation, size, type, stride, offset);
-                }
-            } else {
-                if (getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32) {
-                    // TODO(jstpierre): Remove ghost buffer usage... replace with something saner.
-                    gl.vertexAttribI4ui(attribLocation, 0, 0, 0, 0);
-                }
-            }
-        }
-
-        gl.bindVertexArray(null);
-    }
-
-    public destroy(gl: WebGL2RenderingContext): void {
-        gl.deleteVertexArray(this.vao);
-    }
-
-    public draw(state: RenderState, firstTriangle: number = 0, numTriangles: number = this.loadedVertexData.totalTriangleCount): void {
-        const gl = state.gl;
-        gl.bindVertexArray(this.vao);
-        const firstVertex = firstTriangle * 3;
-        const numVertices = numTriangles * 3;
-        const indexType = gl.UNSIGNED_SHORT, indexByteSize = 2;
-        const indexBufferOffset = this.coalescedBuffers.indexBuffer.offset + (firstVertex * indexByteSize);
-        gl.drawElements(gl.TRIANGLES, numVertices, indexType, indexBufferOffset);
-        gl.bindVertexArray(null);
-        state.renderStatisticsTracker.drawCallCount++;
-    }
 }
 
 export class GXMaterialHelperGfx {
@@ -401,17 +277,6 @@ export function fillSceneParams(sceneParams: SceneParams, camera: Camera, viewpo
     // make sure textures are sampled correctly...
     const textureLODBias = Math.log2(Math.min(viewportWidth / GX_Material.EFB_WIDTH, viewportHeight / GX_Material.EFB_HEIGHT));
     sceneParams.u_SceneTextureLODBias = textureLODBias;
-}
-
-export function fillSceneParamsFromRenderState(sceneParams: SceneParams, state: RenderState): void {
-    fillSceneParams(sceneParams, state.camera, state.onscreenColorTarget.width, state.onscreenColorTarget.height);
-}
-
-export function loadedDataCoalescer(gl: WebGL2RenderingContext, loadedVertexDatas: LoadedVertexData[]): BufferCoalescer {
-    return new BufferCoalescer(gl,
-        loadedVertexDatas.map((data) => new ArrayBufferSlice(data.packedVertexData)),
-        loadedVertexDatas.map((data) => new ArrayBufferSlice(data.indexData))
-    );
 }
 
 export function loadedDataCoalescerGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[]): GfxBufferCoalescer {

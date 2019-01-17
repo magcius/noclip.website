@@ -27,7 +27,7 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
         for (let i = 0; i < fres.externalFiles.length; i++) {
             if (fres.externalFiles[i].name !== 'textures.bntx') continue;
             const bntx = BNTX.parse(bntxFile.buffer);
-            this.addTexturesGfx(device, bntx.textures);
+            this.addTextures(device, bntx.textures);
             break;
         }
     }

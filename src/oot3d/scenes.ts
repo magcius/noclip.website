@@ -25,7 +25,7 @@ export class GrezzoTextureHolder extends CtrTextureHolder {
     }
 
     public addCTXB(device: GfxDevice, ctxb: CTXB.CTXB): void {
-        this.addTexturesGfx(device, ctxb.textures.map((texture) => {
+        this.addTextures(device, ctxb.textures.map((texture) => {
             const basename = texture.name.split('/')[2];
             const name = `${basename}.ctxb`;
             return { ...texture, name };
@@ -74,7 +74,7 @@ export function createSceneFromZARBuffer(device: GfxDevice, buffer: ArrayBufferS
                 textureHolder.addCTXB(device, ctxb);
             } else if (file.name.endsWith('.cmab')) {
                 const cmab = CMAB.parse(zar.version, file.buffer);
-                textureHolder.addTexturesGfx(device, cmab.textures);
+                textureHolder.addTextures(device, cmab.textures);
             }
         }
     }

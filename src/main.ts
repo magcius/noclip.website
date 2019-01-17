@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { MainScene, SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, MainSceneBase } from './viewer';
+import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -47,15 +47,15 @@ import * as PSY from './psychonauts/scenes';
 import * as J3D from './j3d/scenes';
 import { UI, createDOMFromString } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { RenderStatistics } from './render';
 import { hexdump } from './util';
 import { downloadBlob, downloadBuffer } from './fetch';
-import { GfxDevice } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxDebugGroup } from './gfx/platform/GfxPlatform';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
 import { atob, btoa } from './Ascii85';
 import { vec3, mat4 } from 'gl-matrix';
 import { GlobalSaveManager } from './SaveManager';
+import { RenderStatistics } from './RenderStatistics';
 
 const sceneGroups = [
     "Wii",
@@ -128,7 +128,7 @@ class DroppedFileSceneDesc implements SceneDesc {
         this.name = file.name;
     }
 
-    public createSceneGfx(device: GfxDevice): Progressable<SceneGfx> {
+    public createScene(device: GfxDevice): Progressable<SceneGfx> {
         const file = this.file;
 
         if (file.name.endsWith('.zar') || file.name.endsWith('.gar'))
@@ -148,12 +148,6 @@ class DroppedFileSceneDesc implements SceneDesc {
 
         return null;
     }
-
-    public createScene(gl: WebGL2RenderingContext): Progressable<MainScene> {
-        const file = this.file;
-
-        return null;
-    }
 }
 
 class SceneLoader {
@@ -163,7 +157,7 @@ class SceneLoader {
     constructor(public viewer: Viewer) {
     }
 
-    public loadSceneDesc(sceneDesc: SceneDesc): Progressable<MainSceneBase> {
+    public loadSceneDesc(sceneDesc: SceneDesc): Progressable<SceneGfx> {
         this.viewer.setScene(null);
 
         if (this.abortController !== null)
@@ -172,24 +166,10 @@ class SceneLoader {
 
         this.loadingSceneDesc = sceneDesc;
 
-        if (sceneDesc.createSceneGfx !== undefined) {
-            const progressable = sceneDesc.createSceneGfx(this.viewer.gfxDevice, this.abortController.signal);
+        if (sceneDesc.createScene !== undefined) {
+            const progressable = sceneDesc.createScene(this.viewer.gfxDevice, this.abortController.signal);
             if (progressable !== null) {
                 progressable.then((scene: SceneGfx) => {
-                    if (this.loadingSceneDesc === sceneDesc) {
-                        this.loadingSceneDesc = null;
-                        this.viewer.setSceneDevice(scene);
-                    }
-                });
-                return progressable;
-            }
-        }
-
-        if (sceneDesc.createScene !== undefined) {
-            const gl = this.viewer.renderState.gl;
-            const progressable = sceneDesc.createScene(gl);
-            if (progressable !== null) {
-                progressable.then((scene: MainScene) => {
                     if (this.loadingSceneDesc === sceneDesc) {
                         this.loadingSceneDesc = null;
                         this.viewer.setScene(scene);
@@ -354,7 +334,7 @@ class Main {
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
-            this.viewer.isTimeRunning = !this.viewer.isTimeRunning;
+            this.viewer.isSceneTimeRunning = !this.viewer.isSceneTimeRunning;
     }
 
     private _updateLoop = (time: number) => {
@@ -397,13 +377,11 @@ class Main {
         writeString(this._saveStateTmp, 0, SAVE_STATE_MAGIC);
 
         let wordOffs = 1;
-        this._saveStateF32[wordOffs++] = this.viewer.renderState.time;
-        wordOffs += serializeCamera(this._saveStateF32, wordOffs, this.viewer.renderState.camera);
+        this._saveStateF32[wordOffs++] = this.viewer.viewerRenderInput.time;
+        wordOffs += serializeCamera(this._saveStateF32, wordOffs, this.viewer.viewerRenderInput.camera);
         let offs = wordOffs * 4;
         if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
             offs += this.viewer.scene.serializeSaveState(this._saveStateTmp, offs);
-        if (this.viewer.scene_device !== null && this.viewer.scene_device.serializeSaveState)
-            offs += this.viewer.scene_device.serializeSaveState(this._saveStateTmp, offs);
 
         const s = atob(this._saveStateTmp, offs);
         return s + '=';
@@ -418,13 +396,11 @@ class Main {
             return false;
 
         let wordOffs = 1;
-        this.viewer.renderState.time = this._saveStateF32[wordOffs++];
-        wordOffs += deserializeCamera(this.viewer.renderState.camera, this._saveStateF32, wordOffs);
+        this.viewer.viewerRenderInput.time = this._saveStateF32[wordOffs++];
+        wordOffs += deserializeCamera(this.viewer.viewerRenderInput.camera, this._saveStateF32, wordOffs);
         let offs = wordOffs * 4;
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
             offs += this.viewer.scene.deserializeSaveState(this._saveStateTmp, offs);
-        if (this.viewer.scene_device !== null && this.viewer.scene_device.deserializeSaveState)
-            offs += this.viewer.scene_device.deserializeSaveState(this._saveStateTmp, offs);
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
@@ -433,7 +409,7 @@ class Main {
     }
 
     private _loadSceneSaveStateVersion1(state: string): boolean {
-        const camera = this.viewer.renderState.camera;
+        const camera = this.viewer.viewerRenderInput.camera;
 
         const [tx, ty, tz, fx, fy, fz, rx, ry, rz] = state.split(',');
         // Translation.
@@ -470,7 +446,7 @@ class Main {
             return this._loadSceneSaveStateVersion1(state);
     }
 
-    private _loadSceneDescById(id: string, sceneState: string | null): Progressable<MainSceneBase> | null {
+    private _loadSceneDescById(id: string, sceneState: string | null): Progressable<SceneGfx> | null {
         const [groupId, ...sceneRest] = id.split('/');
         const sceneId = decodeURIComponent(sceneRest.join('/'));
 
@@ -518,9 +494,9 @@ class Main {
         return this.saveManager.getSaveStateSlotKey(this._getCurrentSceneDescId(), slotIndex);
     }
 
-    private _onSceneChanged(mainSceneBase: MainSceneBase, sceneStateStr: string): void {
-        if (mainSceneBase.createPanels !== undefined)
-            this.ui.setScenePanels(mainSceneBase.createPanels());
+    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string): void {
+        if (scene.createPanels !== undefined)
+            this.ui.setScenePanels(scene.createPanels());
         else
             this.ui.setScenePanels([]);
 
@@ -529,8 +505,8 @@ class Main {
         this.ui.saveStatesPanel.setCurrentSceneDesc(this.currentSceneGroup, this.currentSceneDesc);
 
         // Set camera controller.
-        if (mainSceneBase.defaultCameraController !== undefined) {
-            const controller = new mainSceneBase.defaultCameraController();
+        if (scene.defaultCameraController !== undefined) {
+            const controller = new scene.defaultCameraController();
             this.viewer.setCameraController(controller);
         }
 
@@ -562,7 +538,7 @@ class Main {
     }
 
     private _resetCamera(sceneDescId: string | null): void {
-        const camera = this.viewer.renderState.camera;
+        const camera = this.viewer.viewerRenderInput.camera;
 
         let didLoadCameraState = false;
 
@@ -576,7 +552,7 @@ class Main {
         camera.worldMatrixUpdated();
     }
 
-    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): Progressable<MainSceneBase> {
+    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): Progressable<SceneGfx> {
         if (this.currentSceneDesc === sceneDesc)
             return Progressable.resolve(null);
 
@@ -584,9 +560,9 @@ class Main {
         this.currentSceneDesc = sceneDesc;
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
-        const progressable = this.sceneLoader.loadSceneDesc(sceneDesc).then((mainSceneBase) => {
-            this._onSceneChanged(mainSceneBase, sceneStateStr);
-            return mainSceneBase;
+        const progressable = this.sceneLoader.loadSceneDesc(sceneDesc).then((scene) => {
+            this._onSceneChanged(scene, sceneStateStr);
+            return scene;
         });
         this.ui.sceneSelect.setLoadProgress(progressable.progress);
         progressable.onProgress = () => {

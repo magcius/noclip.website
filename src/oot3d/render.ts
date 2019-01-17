@@ -223,7 +223,7 @@ export class CmbRenderer {
     private templateRenderInst: GfxRenderInst;
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
-        this.textureHolder.addTexturesGfx(device, cmb.textures.filter((texture) => texture.levels.length > 0));
+        this.textureHolder.addTextures(device, cmb.textures.filter((texture) => texture.levels.length > 0));
         this.gfxProgram = device.createProgram(new OoT3D_Program());
 
         for (let i = 0; i < cmb.materials.length; i++)

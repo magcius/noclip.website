@@ -88,7 +88,7 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
 
@@ -100,7 +100,7 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
 class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         return fetchData(`data/mkwii/${this.id}.szs`).then((buffer: ArrayBufferSlice) => {
             return Yaz0.decompress(buffer);
         }).then((buffer: ArrayBufferSlice): Viewer.SceneGfx => {

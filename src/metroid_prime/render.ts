@@ -30,7 +30,7 @@ mat4.mul(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStil
 
 export class RetroTextureHolder extends GXTextureHolder<TXTR> {
     public addMaterialSetTextures(device: GfxDevice, materialSet: MaterialSet): void {
-        this.addTexturesGfx(device, materialSet.textures);
+        this.addTextures(device, materialSet.textures);
     }
 }
 

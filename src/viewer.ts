@@ -1,5 +1,4 @@
 
-import { RenderState, ColorTarget, DepthTarget, RenderStatistics } from './render';
 import * as UI from './ui';
 
 import Progressable from './Progressable';
@@ -9,28 +8,12 @@ import { TextureHolder } from './TextureHolder';
 import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl } from './gfx/platform/GfxPlatformWebGL2';
 import { downloadTextureToCanvas } from './Screenshot';
+import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
 
 export interface Texture {
     name: string;
     surfaces: HTMLCanvasElement[];
     extraInfo?: Map<string, string>;
-}
-
-export interface Scene {
-    render(state: RenderState): void;
-    destroy(gl: WebGL2RenderingContext): void;
-}
-
-export interface MainSceneBase {
-    defaultCameraController?: CameraControllerClass;
-    textureHolder?: TextureHolder<any>;
-    createPanels?(): UI.Panel[];
-    serializeSaveState?(dst: ArrayBuffer, offs: number): number;
-    deserializeSaveState?(dst: ArrayBuffer, offs: number): number;
-}
-
-export interface MainScene extends MainSceneBase, Scene {
-    textures?: Texture[];
 }
 
 export interface ViewerRenderInput {
@@ -40,7 +23,12 @@ export interface ViewerRenderInput {
     viewportHeight: number;
 }
 
-export interface SceneGfx extends MainSceneBase {
+export interface SceneGfx {
+    defaultCameraController?: CameraControllerClass;
+    textureHolder?: TextureHolder<any>;
+    createPanels?(): UI.Panel[];
+    serializeSaveState?(dst: ArrayBuffer, offs: number): number;
+    deserializeSaveState?(dst: ArrayBuffer, offs: number): number;
     render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass;
     destroy(device: GfxDevice): void;
 }
@@ -49,20 +37,20 @@ export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController | null = null;
 
-    // GL method.
-    public renderState: RenderState;
-    private onscreenColorTarget: ColorTarget = new ColorTarget();
-    private onscreenDepthTarget: DepthTarget = new DepthTarget();
+    public camera = new Camera();
+    public fovY: number = Math.PI / 4;
+    // Scene time. Can be paused / scaled / rewound / whatever.
+    public sceneTime: number = 0;
+    // requestAnimationFrame time. Used to calculate dt from the new time.
+    public rafTime: number = 0;
 
-    // GfxPlatform method.
     public gfxDevice: GfxDevice;
     private gfxSwapChain: GfxSwapChain;
-    private viewerRenderInput: ViewerRenderInput;
-    private t: number = 0;
-    public isTimeRunning = true;
+    public viewerRenderInput: ViewerRenderInput;
+    public isSceneTimeRunning = true;
+    public renderStatisticsTracker = new RenderStatisticsTracker();
 
-    public scene: MainScene | null = null;
-    public scene_device: SceneGfx | null = null;
+    public scene: SceneGfx | null = null;
 
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
@@ -77,91 +65,57 @@ export class Viewer {
     private constructor(gl: WebGL2RenderingContext, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
 
-        // GL
-        this.renderState = new RenderState(gl);
-
         // GfxDevice.
         this.gfxSwapChain = createSwapChainForWebGL2(gl);
         this.gfxDevice = this.gfxSwapChain.getDevice();
         this.viewerRenderInput = {
-            camera: this.renderState.camera,
-            time: 0,
+            camera: this.camera,
+            time: this.sceneTime,
             viewportWidth: 0,
             viewportHeight: 0,
-        }
-    }
-
-    public reset() {
-        this.cameraController = null;
-
-        const gl = this.renderState.gl;
-        gl.activeTexture(gl.TEXTURE0);
-        gl.clearColor(0.88, 0.88, 0.88, 0.0);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    }
-
-    private renderGL() {
-        const gl = this.renderState.gl;
-
-        this.renderState.renderStatisticsTracker.beginFrame();
-
-        this.onscreenColorTarget.setParameters(gl, this.canvas.width, this.canvas.height);
-        this.onscreenDepthTarget.setParameters(gl, this.canvas.width, this.canvas.height);
-        this.renderState.setOnscreenRenderTarget(this.onscreenColorTarget, this.onscreenDepthTarget);
-        this.renderState.reset();
-        this.renderState.setClipPlanes(10, 50000);
-
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-        // Main scene. This renders to the onscreen target.
-        this.scene.render(this.renderState);
-
-        // Blit to the screen.
-        this.renderState.blitOnscreenToGL();
-
-        this.renderState.renderStatisticsTracker.endFrame();
-        this.onstatistics(this.renderState.renderStatisticsTracker);
+        };
     }
 
     private renderGfxPlatform(): void {
-        // Hack in projection for now until we have that unfolded from RenderState.
-        this.viewerRenderInput.camera.newFrame();
-        this.viewerRenderInput.camera.setClipPlanes(10, 50000);
-        const aspect = this.canvas.width / this.canvas.height;
-        this.viewerRenderInput.camera.setPerspective(this.renderState.fov, aspect, 10, 50000);
+        const camera = this.camera;
 
-        this.viewerRenderInput.time = this.renderState.time;
+        // Hack in projection for now until we have that unfolded from RenderState.
+        camera.newFrame();
+        camera.setClipPlanes(10, 50000);
+        const aspect = this.canvas.width / this.canvas.height;
+        camera.setPerspective(this.fovY, aspect, 10, 50000);
+
+        this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.viewportWidth = this.canvas.width;
         this.viewerRenderInput.viewportHeight = this.canvas.height;
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
 
         // TODO(jstpierre): Move RenderStatisticsTracker outside of RenderSTate
-        this.renderState.renderStatisticsTracker.beginFrame();
+        this.renderStatisticsTracker.beginFrame();
 
         // TODO(jstpierre): Allocations.
         const debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0 };
         this.gfxDevice.pushDebugGroup(debugGroup);
 
-        const renderPass = this.scene_device.render(this.gfxDevice, this.viewerRenderInput);
+        const renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
         const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
         renderPass.endPass(onscreenTexture);
         this.gfxDevice.submitPass(renderPass);
         this.gfxSwapChain.present();
 
         this.gfxDevice.popDebugGroup();
-        this.renderState.renderStatisticsTracker.endFrame();
+        this.renderStatisticsTracker.endFrame();
 
-        this.renderState.renderStatisticsTracker.applyDebugGroup(debugGroup);
-        this.onstatistics(this.renderState.renderStatisticsTracker);
+        this.renderStatisticsTracker.applyDebugGroup(debugGroup);
+        this.onstatistics(this.renderStatisticsTracker);
     }
 
     private render(): void {
         if (this.scene) {
-            this.renderGL();
-        } else if (this.scene_device) {
             this.renderGfxPlatform();
         } else {
-            const gl = this.renderState.gl;
+            // TODO(jstpierre): Rewrite in GfxPlatform.
+            const gl = gfxDeviceGetImpl(this.gfxDevice).gl;
             // Render black.
             gl.clearColor(0, 0, 0, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
@@ -171,37 +125,27 @@ export class Viewer {
 
     public setCameraController(cameraController: CameraController) {
         this.cameraController = cameraController;
-        this.cameraController.camera = this.renderState.camera;
+        this.cameraController.camera = this.camera;
         this.cameraController.forceUpdate = true;
     }
 
     private destroyScenes(): void {
         if (this.scene) {
-            this.scene.destroy(this.renderState.gl);
+            this.scene.destroy(this.gfxDevice);
             this.scene = null;
         }
 
-        if (this.scene_device) {
-            this.scene_device.destroy(this.gfxDevice);
-            this.scene_device = null;
-        }
+        this.cameraController = null;
     }
 
-    public setScene(scene: MainScene): void {
-        this.reset();
+    public setScene(scene: SceneGfx): void {
         this.destroyScenes();
         this.scene = scene;
     }
 
-    public setSceneDevice(scene_device: SceneGfx): void {
-        this.reset();
-        this.destroyScenes();
-        this.scene_device = scene_device;
-    }
-
     public update(nt: number): void {
-        const dt = nt - this.t;
-        this.t = nt;
+        const dt = nt - this.rafTime;
+        this.rafTime = nt;
 
         if (this.cameraController) {
             const updated = this.cameraController.update(this.inputManager, dt);
@@ -212,8 +156,8 @@ export class Viewer {
         // TODO(jstpierre): Move this to main
         this.inputManager.afterFrame();
 
-        if (this.isTimeRunning)
-            this.renderState.time += dt;
+        if (this.isSceneTimeRunning)
+            this.sceneTime += dt;
 
         this.render();
     }
@@ -227,12 +171,7 @@ export class Viewer {
         // nice-looking screenshot, we'd need to do a custom resolve of the MSAA render target.
 
         if (this.scene !== null) {
-            // RenderState GL.
-            const gl = this.renderState.gl;
-            const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
-            const texture = this.renderState.onscreenColorTarget.resolvedColorTexture;
-            downloadTextureToCanvas(gl, texture, width, height, canvas);
-        } else if (this.scene_device !== null) {
+            // TODO(jstpierre): Implement in Gfx somehow.
             const gl = gfxDeviceGetImpl(this.gfxDevice).gl;
             const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
             downloadTextureToCanvas(gl, this.gfxSwapChain.getOnscreenTexture(), width, height, canvas);
@@ -242,8 +181,6 @@ export class Viewer {
     }
 
     public getCurrentTextureHolder(): TextureHolder<any> | null {
-        if (this.scene_device !== null)
-            return this.scene_device.textureHolder;
         if (this.scene !== null)
             return this.scene.textureHolder;
         return null;
@@ -253,8 +190,7 @@ export class Viewer {
 export interface SceneDesc {
     id: string;
     name: string;
-    createScene?(gl: WebGL2RenderingContext): Progressable<MainScene> | null;
-    createSceneGfx?(device: GfxDevice, abortSignal: AbortSignal): Progressable<SceneGfx> | null;
+    createScene?(device: GfxDevice, abortSignal: AbortSignal): Progressable<SceneGfx> | null;
 }
 
 export interface SceneGroup {

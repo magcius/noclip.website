@@ -20,7 +20,7 @@ export class TerrainSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const teraPath = `${pathBase}/Terrain/A/${this.id}`;
         return Progressable.all([fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`, abortSignal), fetchData(`${pathBase}/Model/Terrain.Tex2.sbfres`), fetchData(`${teraPath}.tscb`, abortSignal)]).then(([terrainTex1Buffer, terrainTex2Buffer, tscbBuffer]) => {
             const tscb = TSCB.parse(tscbBuffer);
@@ -38,7 +38,7 @@ export class TerrainSceneDesc implements Viewer.SceneDesc {
                     // TODO(jstpierre): Turn back on once we can parse mips better.
                     ftex.surface.numMips = 5;
                 }
-                textureHolder.addTexturesGfx(device, textureEntries1);
+                textureHolder.addTextures(device, textureEntries1);
 
                 return new TerrainScene(device, textureHolder, terrainManager);
             });

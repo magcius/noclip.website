@@ -24,7 +24,7 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = `map${mapNumber}`;
     }
 
-    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         // Fetch the ZAR & info ZSI.
         const path_gar = `data/lm3d/map/map${leftPad(''+this.mapNumber, 2, '0')}.gar`;
         const models_path = `data/lm3d/mapmdl/map${this.mapNumber}`;
@@ -66,7 +66,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     const cmabFile = roomGar.files.find((file) => file.name === `${cmbBasename}.cmab`);
                     if (cmabFile) {
                         const cmab = CMAB.parse(CMB.Version.LuigisMansion, cmabFile.buffer);
-                        textureHolder.addTexturesGfx(device, cmab.textures);
+                        textureHolder.addTextures(device, cmab.textures);
                         cmbRenderer.bindCMAB(cmab, 1);
                     }
 

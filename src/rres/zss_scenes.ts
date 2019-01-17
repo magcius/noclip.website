@@ -257,7 +257,7 @@ class SkywardSwordScene implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
         this.models.forEach((model) => model.destroy(device));
     }
 
@@ -577,7 +577,7 @@ class SkywardSwordScene implements Viewer.SceneGfx {
 class SkywardSwordSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const basePath = `data/zss`;
         const systemPath = `${basePath}/Object/System.arc`;
         const objPackPath = `${basePath}/Object/ObjectPack.arc.LZ`;

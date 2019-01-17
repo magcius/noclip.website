@@ -34,7 +34,7 @@ function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     return shader;
 }
 
-export abstract class BaseProgram {
+abstract class BaseProgram {
     public name: string = '(unnamed)';
     // Add some extra fields so that the monstrosity of frag/vert doesn't show up in Firefox's debugger.
     public _pad0 = false;
@@ -258,17 +258,6 @@ export class DeviceProgram extends BaseProgram {
             gl.uniform1iv(samplerUniformLocation, range(samplerIndex, this.samplerBindings[i].arraySize));
             samplerIndex += this.samplerBindings[i].arraySize;
         }
-    }
-}
-
-// TODO(jstpierre): Remove.
-export class SimpleProgram extends BaseProgram {
-    public projectionLocation: WebGLUniformLocation | null = null;
-    public modelViewLocation: WebGLUniformLocation | null = null;
-
-    public bind(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-        this.modelViewLocation  = assertExists(gl.getUniformLocation(prog, "u_modelView"));
-        this.projectionLocation = assertExists(gl.getUniformLocation(prog, "u_projection"));
     }
 }
 

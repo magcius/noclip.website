@@ -3,10 +3,21 @@ import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, Gfx
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
-import { DeviceProgram, ProgramCache } from '../../Program';
-import { FullscreenCopyProgram, RenderState } from '../../render';
+import { DeviceProgram, ProgramCache, FullscreenProgram } from '../../Program';
 import { assert } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
+
+export class FullscreenCopyProgram extends FullscreenProgram {
+    public frag: string = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 color = texture(u_Texture, v_TexCoord);
+    gl_FragColor = vec4(color.rgb, 1.0);
+}
+`;
+}
 
 interface GfxBufferP_GL extends GfxBuffer {
     gl_buffer_pages: WebGLBuffer[];
@@ -1258,20 +1269,4 @@ export function createSwapChainForWebGL2(gl: WebGL2RenderingContext): GfxSwapCha
 
 export function gfxDeviceGetImpl(gfxDevice: GfxDevice): GfxImplP_GL {
     return gfxDevice as GfxImplP_GL;
-}
-
-interface TransitionExpando {
-    _transitionDevice: GfxImplP_GL | undefined;
-}
-
-export function createTransitionDeviceForWebGL2(gl: WebGL2RenderingContext, state: RenderState): void {
-    const expando = gl as any as TransitionExpando;
-    assert(expando._transitionDevice === undefined)
-    expando._transitionDevice = new GfxImplP_GL(gl, state.programCache, true);
-}
-
-// Transition API. This lets clients use some parts of the implementation, etc. while still using RenderState.
-export function getTransitionDeviceForWebGL2(gl: WebGL2RenderingContext): GfxDevice {
-    const expando = gl as any as TransitionExpando;
-    return expando._transitionDevice;
 }

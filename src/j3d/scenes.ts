@@ -1,6 +1,5 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { RenderState } from '../render';
 import { readString } from '../util';
 
 import * as UI from '../ui';
@@ -58,7 +57,7 @@ export class BasicRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);

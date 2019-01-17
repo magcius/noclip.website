@@ -42,7 +42,7 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         // Fetch the ZAR & info ZSI.
         const path_zar = `data/oot3d/${this.id}.zar`;
         const path_info_zsi = `data/oot3d/${this.id}_info.zsi`;
@@ -72,7 +72,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
                     if (cmabFile) {
                         const cmab = CMAB.parse(CMB.Version.Ocarina, cmabFile.buffer);
-                        textureHolder.addTexturesGfx(device, cmab.textures);
+                        textureHolder.addTextures(device, cmab.textures);
                         roomRenderer.bindCMAB(cmab);
                     }
                 }

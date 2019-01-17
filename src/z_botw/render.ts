@@ -275,6 +275,6 @@ export class TerrainScene extends BasicRendererHelper implements Viewer.SceneGfx
 
     public destroy(device: GfxDevice): void {
         this.terrainRenderer.destroy(device);
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
     }
 }

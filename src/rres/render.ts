@@ -16,7 +16,7 @@ import { assert } from '../util';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
-        this.addTexturesGfx(device, rres.tex0);
+        this.addTextures(device, rres.tex0);
     }
 }
 

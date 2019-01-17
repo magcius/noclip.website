@@ -72,7 +72,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         this.id = filename;
     }
 
-    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const stringsPakP = fetchData(`data/metroid_prime/mp1/Strings.pak`, abortSignal);
         const levelPakP = fetchData(`data/metroid_prime/mp1/${this.filename}`, abortSignal);
         const nameDataP = fetchData(`data/metroid_prime/mp1/MP1_NameData.crg1`, abortSignal);

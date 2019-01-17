@@ -51,7 +51,7 @@ class SplatoonRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
 
@@ -73,7 +73,7 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const renderer = new SplatoonRenderer();
 
         return Progressable.all([

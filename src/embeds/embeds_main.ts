@@ -107,7 +107,7 @@ class Main {
         const createScene = embeds[file];
         const scene = await createScene(device, name);
         this.viewer.setCameraController(new OrbitCameraController());
-        this.viewer.setSceneDevice(scene);
+        this.viewer.setScene(scene);
     }
 
     private onResize() {

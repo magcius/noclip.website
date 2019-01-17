@@ -1,8 +1,6 @@
 
 import * as Viewer from './viewer';
 import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform';
-import { getTransitionDeviceForWebGL2, getPlatformTexture, getPlatformSampler } from './gfx/platform/GfxPlatformWebGL2';
-import { RenderState } from './render';
 
 // Used mostly by indirect texture FB installations...
 export interface TextureOverride {
@@ -66,12 +64,8 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
     public textureOverrides = new Map<string, TextureOverride>();
     public onnewtextures: (() => void) | null = null;
 
-    public destroyGfx(device: GfxDevice): void {
+    public destroy(device: GfxDevice): void {
         this.gfxTextures.forEach((texture) => device.destroyTexture(texture));
-    }
-
-    public destroy(gl: WebGL2RenderingContext): void {
-        this.destroyGfx(getTransitionDeviceForWebGL2(gl));
     }
 
     protected searchTextureEntryIndex(name: string): number {
@@ -136,33 +130,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
     protected abstract addTextureGfx(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null;
 
-    protected addTexture(gl: WebGL2RenderingContext, textureEntry: TextureType): LoadedTexture | null {
-        return this.addTextureGfx(getTransitionDeviceForWebGL2(gl), textureEntry);
-    }
-
-    public addTextures(gl: WebGL2RenderingContext, textureEntries: TextureType[]): void {
-        for (let i = 0; i < textureEntries.length; i++) {
-            const texture = textureEntries[i];
-
-            // Don't add dupes for the same name.
-            if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
-                continue;
-
-            const loadedTexture = this.addTexture(gl, texture);
-            if (loadedTexture === null)
-                continue;
-
-            const { gfxTexture, viewerTexture } = loadedTexture;
-            this.textureEntries.push(texture);
-            this.gfxTextures.push(gfxTexture);
-            this.viewerTextures.push(viewerTexture);
-        }
-
-        if (this.onnewtextures !== null)
-            this.onnewtextures();
-    }
-
-    public addTexturesGfx(device: GfxDevice, textureEntries: TextureType[]): void {
+    public addTextures(device: GfxDevice, textureEntries: TextureType[]): void {
         for (let i = 0; i < textureEntries.length; i++) {
             const texture = textureEntries[i];
 
@@ -182,41 +150,6 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
         if (this.onnewtextures !== null)
             this.onnewtextures();
-    }
-}
-
-export function getGLTextureFromMapping(m: TextureMapping): WebGLTexture | null {
-    if (m.gfxTexture)
-        return getPlatformTexture(m.gfxTexture);
-    else if (m.glTexture)
-        return m.glTexture;
-    else
-        return null;
-}
-
-export function getGLSamplerFromMapping(m: TextureMapping): WebGLSampler | null {
-    if (m.glSampler !== null)
-        return m.glSampler;
-    else if (m.gfxSampler !== null)
-        return getPlatformSampler(m.gfxSampler);
-    else
-        return null;
-}
-
-export function bindGLTextureMappings(state: RenderState, textureMappings: TextureMapping[]): void {
-    const gl = state.gl;
-
-    for (let i = 0; i < textureMappings.length; i++) {
-        const m = textureMappings[i];
-        const glTexture = getGLTextureFromMapping(m);
-        if (glTexture === null)
-            continue;
-
-        const glSampler = getGLSamplerFromMapping(m);
-        gl.activeTexture(gl.TEXTURE0 + i);
-        gl.bindTexture(gl.TEXTURE_2D, glTexture);
-        gl.bindSampler(i, glSampler);
-        state.renderStatisticsTracker.textureBindCount++;
     }
 }
 

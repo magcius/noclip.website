@@ -52,7 +52,7 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         // Fetch the GAR & ZSI.
         const path_zar = `data/mm3d/${this.id}_info.gar`;
         const path_info_zsi = `data/mm3d/${this.id}_info.zsi`;
@@ -89,14 +89,14 @@ class SceneDesc implements Viewer.SceneDesc {
                 const cmabFile = ZAR.findFile(zar, `${roomNameBase}.cmab`);
                 if (cmabFile !== null) {
                     const cmab = CMAB.parse(CMB.Version.Majora, cmabFile.buffer);
-                    textureHolder.addTexturesGfx(device, cmab.textures);
+                    textureHolder.addTextures(device, cmab.textures);
                     roomRenderer.bindCMAB(cmab);
                 }
 
                 const wcmabFile = ZAR.findFile(zar, `${roomNameBase}_w.cmab`);
                 if (wcmabFile !== null) {
                     const wcmab = CMAB.parse(CMB.Version.Majora, wcmabFile.buffer);
-                    textureHolder.addTexturesGfx(device, wcmab.textures);
+                    textureHolder.addTextures(device, wcmab.textures);
                     roomRenderer.bindWCMAB(wcmab);
                 }
 

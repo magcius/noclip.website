@@ -814,7 +814,7 @@ class SMGSpawner {
 
     public destroy(device: GfxDevice): void {
         this.sceneGraph.destroy(device);
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
     }
 }
@@ -853,7 +853,7 @@ class SMGSceneDesc implements Viewer.SceneDesc {
         return { name, layers };
     }
 
-    public createSceneGfx(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const galaxyName = this.galaxyName;
         return Progressable.all([
             fetchData(`${pathBase}/ObjectData/PlanetMapDataTable.arc`, abortSignal),

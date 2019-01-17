@@ -21,7 +21,7 @@ import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelper
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
-        this.addTexturesGfx(device, tpl.textures);
+        this.addTextures(device, tpl.textures);
     }
 }
 

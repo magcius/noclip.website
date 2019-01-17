@@ -260,7 +260,7 @@ class BMDRenderer {
 
     constructor(device: GfxDevice, public textureHolder: NITROTextureHolder, public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
         const bmd = this.bmdData.bmd;
-        this.textureHolder.addTexturesGfx(device, bmd.textures);
+        this.textureHolder.addTextures(device, bmd.textures);
 
         this.gfxProgram = device.createProgram(new NITRO_Program());
 
@@ -574,7 +574,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = '' + this.levelId;
     }
 
-    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         return fetchData('data/sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
             const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
             const textureHolder = new NITROTextureHolder();

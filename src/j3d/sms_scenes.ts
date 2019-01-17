@@ -4,7 +4,6 @@ import Progressable from '../Progressable';
 import { readString, assert } from '../util';
 import { fetchData } from '../fetch';
 
-import { RenderState, ColorTarget, depthClearFlags } from '../render';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 
@@ -327,7 +326,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy(device);
         this.viewRenderer.destroy(device);
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
         this.modelInstances.forEach((instance) => instance.destroy(device));
@@ -358,7 +357,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         this.id = this.name;
     }
 
-    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         return fetchData(this.path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {

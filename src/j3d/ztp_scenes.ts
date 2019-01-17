@@ -31,7 +31,7 @@ class ZTPTextureHolder extends J3DTextureHolder {
     }
 
     public addExtraTextures(device: GfxDevice, extraTextures: TEX1_TextureData[]): void {
-        this.addTexturesGfx(device, extraTextures.map((texture) => {
+        this.addTextures(device, extraTextures.map((texture) => {
             const name = `ExtraTex/${texture.name.toLowerCase()}`;
             return { ...texture, name };
         }));
@@ -137,7 +137,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy(device);
         this.viewRenderer.destroy(device);
-        this.textureHolder.destroyGfx(device);
+        this.textureHolder.destroy(device);
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
         this.modelInstances.forEach((instance) => instance.destroy(device));
@@ -209,7 +209,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const basePath = `data/j3d/ztp/${this.folder}`;
         const textureHolder = new ZTPTextureHolder();
 
