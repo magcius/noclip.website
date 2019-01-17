@@ -41,7 +41,7 @@ export function parse(buffer: ArrayBufferSlice): MDL0 {
         clrData = buffer.subarray(offs, vertCount * 4);
         offs += clrData.byteLength;
     } else {
-        clrData = new ArrayBufferSlice(new Uint8Array(vertCount * 4));
+        clrData = new ArrayBufferSlice(new ArrayBuffer(vertCount * 4));
     }
 
     // Read in index buffer.
@@ -66,7 +66,7 @@ export function parse(buffer: ArrayBufferSlice): MDL0 {
                 newArr[i + 5] = idxArr[j + 0];
                 j += 4;
             }
-            idxData = new ArrayBufferSlice(newArr);
+            idxData = new ArrayBufferSlice(newArr.buffer);
         }
     }
 

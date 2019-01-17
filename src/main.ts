@@ -381,7 +381,7 @@ class Main {
         wordOffs += serializeCamera(this._saveStateF32, wordOffs, this.viewer.viewerRenderInput.camera);
         let offs = wordOffs * 4;
         if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
-            offs += this.viewer.scene.serializeSaveState(this._saveStateTmp, offs);
+            offs += this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, offs);
 
         const s = atob(this._saveStateTmp, offs);
         return s + '=';
@@ -400,7 +400,7 @@ class Main {
         wordOffs += deserializeCamera(this.viewer.viewerRenderInput.camera, this._saveStateF32, wordOffs);
         let offs = wordOffs * 4;
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            offs += this.viewer.scene.deserializeSaveState(this._saveStateTmp, offs);
+            offs += this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, offs);
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
