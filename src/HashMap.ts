@@ -1,7 +1,7 @@
 
 // Quick and dirty HashMap for basic lookups.
-// ECMAScript WeakMap
-// separate objects. Not optimized at all.
+// ECMAScript WeakMap does not allow two independent key objects to be "equivalent",
+// which is the exact thing we want in our case. Currently not optimized at all.
 
 import { nArray } from "./util";
 
