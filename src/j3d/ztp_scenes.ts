@@ -116,7 +116,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.viewRenderer.executeOnPass(device, opaquePassRenderer, ZTPPass.OPAQUE);
 
         let lastPassRenderer: GfxRenderPass;
-        if (this.textureHolder.hasTexture('fbtex_dummy')) {
+        if (this.viewRenderer.hasAnyVisible(ZTPPass.INDIRECT)) {
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 

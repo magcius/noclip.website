@@ -15,16 +15,95 @@ import * as RARC from '../j3d/rarc';
 import { MaterialData, J3DTextureHolder, BMDModel, MaterialInstance } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
-import { GXRenderHelperGfx, ub_PacketParams } from '../gx/gx_render';
+import { GXRenderHelperGfx, ub_PacketParams, PacketParams } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst } from '../gfx/render/GfxRenderer';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
+import { computeViewMatrix } from '../Camera';
 
 const scale = 200;
 const posMtx = mat4.create();
 mat4.fromScaling(posMtx, [scale, scale, scale]);
+
+class PlaneShape {
+    private vtxBuffer: GfxBuffer;
+    private idxBuffer: GfxBuffer;
+    private zeroBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+    private renderInst: GfxRenderInst;
+    private packetParams = new PacketParams();
+
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx) {
+        const vtx = new Float32Array(4 * 5);
+        vtx[0]  = -1;
+        vtx[1]  = 0;
+        vtx[2]  = -1;
+        vtx[3] = 0;
+        vtx[4] = 0;
+
+        vtx[5]  = 1;
+        vtx[6]  = 0;
+        vtx[7]  = -1;
+        vtx[8]  = 2;
+        vtx[9]  = 0;
+
+        vtx[10] = -1;
+        vtx[11] = 0;
+        vtx[12] = 1;
+        vtx[13] = 0;
+        vtx[14] = 2;
+
+        vtx[15] = 1;
+        vtx[16] = 0;
+        vtx[17] = 1;
+        vtx[18] = 2;
+        vtx[19] = 2;
+
+        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
+        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: GX_Material.getVertexAttribLocation(GX.VertexAttribute.PNMTXIDX), format: GfxFormat.U8_R, bufferByteOffset: 0, bufferIndex: 1, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader: true },
+            { location: GX_Material.getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferByteOffset: 4*0, bufferIndex: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+            { location: GX_Material.getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferByteOffset: 4*3, bufferIndex: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+        ];
+
+        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
+        this.inputLayout = device.createInputLayout({
+            vertexAttributeDescriptors,
+            indexBufferFormat: GfxFormat.U16_R,
+        });
+        const vertexBuffers: GfxVertexBufferDescriptor[] = [
+            { buffer: this.vtxBuffer, byteOffset: 0, byteStride: 4*5 },
+            { buffer: this.zeroBuffer, byteOffset: 0, byteStride: 4 },
+        ];
+        this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0, byteStride: 1 });
+        const renderInstBuilder = renderHelper.renderInstBuilder;
+
+        this.renderInst = renderInstBuilder.pushRenderInst();
+        this.renderInst.setSamplerBindingsInherit();
+        this.renderInst.inputState = this.inputState;
+        renderInstBuilder.newUniformBufferInstance(this.renderInst, ub_PacketParams);
+        this.renderInst.drawIndexes(6);
+    }
+
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
+        computeViewMatrix(this.packetParams.u_PosMtx[0], viewerInput.camera);
+        mat4.mul(this.packetParams.u_PosMtx[0], this.packetParams.u_PosMtx[0], posMtx);
+        renderHelper.fillPacketParams(this.packetParams, this.renderInst.getUniformBufferOffset(ub_PacketParams));
+    }
+
+    public destroy(device: GfxDevice) {
+        device.destroyBuffer(this.vtxBuffer);
+        device.destroyBuffer(this.idxBuffer);
+        device.destroyBuffer(this.zeroBuffer);
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputState);
+    }
+}
 
 class SeaPlaneScene {
     private seaMaterial: MaterialData;
@@ -101,6 +180,8 @@ class SeaPlaneScene {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
+        this.plane.prepareToRender(renderHelper, viewerInput);
+        this.animationController.updateTime(viewerInput.time);
         this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.bmdModel, this.textureHolder);
     }
 
@@ -108,70 +189,6 @@ class SeaPlaneScene {
         this.plane.destroy(device);
         this.seaMaterial.destroy(device);
         this.bmdModel.destroy(device);
-    }
-}
-
-class PlaneShape {
-    private vtxBuffer: GfxBuffer;
-    private idxBuffer: GfxBuffer;
-    private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
-    private renderInst: GfxRenderInst;
-
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx) {
-        const vtx = new Float32Array(4 * 5);
-        vtx[0]  = -1;
-        vtx[1]  = 0;
-        vtx[2]  = -1;
-        vtx[3] = 0;
-        vtx[4] = 0;
-
-        vtx[5]  = 1;
-        vtx[6]  = 0;
-        vtx[7]  = -1;
-        vtx[8]  = 2;
-        vtx[9]  = 0;
-
-        vtx[10] = -1;
-        vtx[11] = 0;
-        vtx[12] = 1;
-        vtx[13] = 0;
-        vtx[14] = 2;
-
-        vtx[15] = 1;
-        vtx[16] = 0;
-        vtx[17] = 1;
-        vtx[18] = 2;
-        vtx[19] = 2;
-
-        this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
-        this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
-
-        const posAttribLocation = GX_Material.getVertexAttribLocation(GX.VertexAttribute.POS);
-        const txcAttribLocation = GX_Material.getVertexAttribLocation(GX.VertexAttribute.TEX0);
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: posAttribLocation, format: GfxFormat.F32_RGB, bufferByteOffset: 4*0, bufferIndex: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
-            { location: txcAttribLocation, format: GfxFormat.F32_RGB, bufferByteOffset: 4*3, bufferIndex: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
-        ];
-        this.inputLayout = device.createInputLayout({
-            vertexAttributeDescriptors,
-            indexBufferFormat: GfxFormat.U16_R,
-        });
-        const vertexBuffers: GfxVertexBufferDescriptor[] = [
-            { buffer: this.vtxBuffer, byteOffset: 0, byteStride: 4*5 },
-        ];
-        this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0, byteStride: 1 });
-        const renderInstBuilder = renderHelper.renderInstBuilder;
-
-        this.renderInst = renderInstBuilder.pushRenderInst();
-        renderInstBuilder.newUniformBufferInstance(this.renderInst, ub_PacketParams);
-        this.renderInst.drawIndexes(6);
-    }
-
-    public destroy(device: GfxDevice) {
-        device.destroyBuffer(this.vtxBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
     }
 }
 
@@ -202,6 +219,7 @@ export function createSceneGfx(device: GfxDevice, name: string): Progressable<Sc
 
         const seaScene = new SeaPlaneScene(device, renderer.renderHelper, textureHolder, bmd, btk, name);
         renderer.seaPlaneScene = seaScene;
+        renderer.finish(device);
         return renderer;
     });
 }

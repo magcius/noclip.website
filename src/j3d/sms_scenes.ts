@@ -309,18 +309,26 @@ export class SunshineRenderer implements Viewer.SceneGfx {
 
         const opaquePassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, opaquePassRenderer, SMSPass.OPAQUE);
-        opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
-        device.submitPass(opaquePassRenderer);
 
-        // IndTex.
-        const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
-        this.textureHolder.setTextureOverride("indirectdummy", textureOverride);
+        let lastPassRenderer: GfxRenderPass;
+        if (this.viewRenderer.hasAnyVisible(SMSPass.INDIRECT)) {
+            opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
+            device.submitPass(opaquePassRenderer);
 
-        const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMSPass.INDIRECT);
+            // IndTex.
+            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+            this.textureHolder.setTextureOverride("indirectdummy", textureOverride);
+
+            const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
+            this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMSPass.INDIRECT);
+            lastPassRenderer = indTexPassRenderer;
+        } else {
+            lastPassRenderer = opaquePassRenderer;
+        }
+
         // Window & transparent.
-        this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMSPass.TRANSPARENT);
-        return indTexPassRenderer;
+        this.viewRenderer.executeOnPass(device, lastPassRenderer, SMSPass.TRANSPARENT);
+        return lastPassRenderer;
     }
 
     public destroy(device: GfxDevice) {

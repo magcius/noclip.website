@@ -408,7 +408,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.viewRenderer.executeOnPass(device, opaquePassRenderer, SMGPass.OPAQUE);
 
         let lastPassRenderer: GfxRenderPass;
-        if (this.sceneGraph.hasTag(SceneGraphTag.Indirect)) {
+        if (this.viewRenderer.hasAnyVisible(SMGPass.INDIRECT)) {
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
@@ -422,7 +422,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             lastPassRenderer = opaquePassRenderer;
         }
 
-        if (this.sceneGraph.hasTag(SceneGraphTag.Bloom)) {
+        if (this.viewRenderer.hasAnyVisible(SMGPass.BLOOM)) {
             const bloomColorTargetScene = this.bloomSceneColorTarget;
             const bloomColorTextureScene = this.bloomSceneColorTexture;
             bloomColorTargetScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);

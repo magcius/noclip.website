@@ -334,6 +334,22 @@ export class GfxRenderInstViewRenderer {
         this.viewportHeight = viewportHeight;
     }
 
+    public hasAnyVisible(passMask: number): boolean {
+        for (let i = 0; i < this.renderInsts.length; i++) {
+            const renderInst = this.renderInsts[i];
+
+            if (!renderInst.visible)
+                continue;
+
+            if ((renderInst.getPassMask() & passMask) === 0)
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
     public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass, passMask: number = 1): void {
         // Kill any destroyed instances.
         for (let i = this.renderInsts.length - 1; i >= 0; i--) {

@@ -287,7 +287,7 @@ class SkywardSwordScene implements Viewer.SceneGfx {
         const opaquePassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, opaquePassRenderer, ZSSPass.OPAQUE);
 
-        if (this.textureHolder.hasTexture('DummyWater')) {
+        if (this.viewRenderer.hasAnyVisible(ZSSPass.INDIRECT)) {
             this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);

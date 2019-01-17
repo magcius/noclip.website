@@ -13,7 +13,7 @@ import { LoadedVertexData, LoadedVertexLayout } from './gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
-import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
+import { GfxBufferCoalescer, GfxCoalescedBuffers, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeFrequency } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
@@ -171,10 +171,7 @@ export class GXShapeHelperGfx {
 
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
-            this.zeroBuffer = device.createBuffer(4, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadBufferData(this.zeroBuffer, 0, new Uint8Array(16));
-            device.submitPass(hostAccessPass);
+            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
             buffers.push({ buffer: this.zeroBuffer, byteOffset: 0, byteStride: 0 });
         }
 
@@ -200,7 +197,7 @@ export class GXShapeHelperGfx {
     }
 
     public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst, renderHelper: GXRenderHelperGfx): void {
-        renderHelper.fillPacketParams(packetParams, renderInst.uniformBufferOffsets[ub_PacketParams]);
+        renderHelper.fillPacketParams(packetParams, renderInst.getUniformBufferOffset(ub_PacketParams));
     }
 
     public destroy(device: GfxDevice): void {
