@@ -207,7 +207,7 @@ export class LuigisMansionRenderer implements Viewer.SceneGfx {
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, passRenderer);
         return passRenderer;

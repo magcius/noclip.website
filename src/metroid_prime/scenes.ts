@@ -42,12 +42,12 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, skyboxPassRenderer, RetroPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
-        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, mainPassRenderer, RetroPass.MAIN);
         return mainPassRenderer;
     }

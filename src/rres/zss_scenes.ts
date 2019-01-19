@@ -279,12 +279,12 @@ class SkywardSwordScene implements Viewer.SceneGfx {
         this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        const skyboxPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, skyboxPassRenderer, ZSSPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
 
-        const opaquePassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, opaquePassRenderer, ZSSPass.OPAQUE);
 
         if (this.viewRenderer.hasAnyVisible(ZSSPass.INDIRECT)) {
@@ -296,7 +296,7 @@ class SkywardSwordScene implements Viewer.SceneGfx {
             const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("DummyWater", textureOverride);
 
-            const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
+            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
             this.viewRenderer.executeOnPass(device, indTexPassRenderer, ZSSPass.INDIRECT);
             return indTexPassRenderer;
         } else {

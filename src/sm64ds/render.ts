@@ -493,12 +493,12 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SM64DSPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
-        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, mainPassRenderer, SM64DSPass.MAIN);
         return mainPassRenderer;
     }

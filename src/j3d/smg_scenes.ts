@@ -17,12 +17,12 @@ import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK } from './j3d';
-import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderTarget, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
+import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxRenderInstViewRenderer, GfxRenderInst, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, copyRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TransparentBlack } from '../Color';
 
 const materialHacks: GXMaterialHacks = {
@@ -247,36 +247,31 @@ const enum SMGPass {
 }
 
 export class WeirdFancyRenderTarget {
-    public gfxRenderTarget: GfxRenderTarget | null = null;
     public colorAttachment = new ColorAttachment();
+    private renderPassDescriptor = makeEmptyRenderPassDescriptor();
 
     constructor(public depthStencilAttachment: DepthStencilAttachment) {
     }
 
     public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
-        const colorChanged = this.colorAttachment.setParameters(device, width, height, numSamples);
-        if (colorChanged) {
-            this.destroyInternal(device);
-            this.gfxRenderTarget = device.createRenderTarget({
-                colorAttachment: this.colorAttachment.gfxColorAttachment,
-                depthStencilAttachment: this.depthStencilAttachment.gfxDepthStencilAttachment,
-            });
-        }
-    }
-
-    private destroyInternal(device: GfxDevice): void {
-        if (this.gfxRenderTarget !== null) {
-            device.destroyRenderTarget(this.gfxRenderTarget);
-            this.gfxRenderTarget = null;
-        }
+        this.colorAttachment.setParameters(device, width, height, numSamples);
     }
 
     public destroy(device: GfxDevice): void {
         this.colorAttachment.destroy(device);
     }
+
+    public createRenderPass(device: GfxDevice, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
+        copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
+        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxColorAttachment;
+        this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment.gfxDepthStencilAttachment;
+        return device.createRenderPass(this.renderPassDescriptor);
+    }
 }
 
 const bloomClearRenderPassDescriptor: GfxRenderPassDescriptor = {
+    colorAttachment: null,
+    depthStencilAttachment: null,
     colorClearColor: TransparentBlack,
     colorLoadDisposition: GfxLoadDisposition.CLEAR,
     depthClearValue: 1.0,
@@ -399,12 +394,12 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        const skyboxPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SMGPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
 
-        const opaquePassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, opaquePassRenderer, SMGPass.OPAQUE);
 
         let lastPassRenderer: GfxRenderPass;
@@ -415,7 +410,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("IndDummy", textureOverride);
 
-            const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
+            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
             this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMGPass.INDIRECT);
             lastPassRenderer = indTexPassRenderer;
         } else {
@@ -427,7 +422,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             const bloomColorTextureScene = this.bloomSceneColorTexture;
             bloomColorTargetScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
             bloomColorTextureScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-            const bloomPassRenderer = device.createRenderPass(bloomColorTargetScene.gfxRenderTarget, bloomClearRenderPassDescriptor);
+            const bloomPassRenderer = bloomColorTargetScene.createRenderPass(device, bloomClearRenderPassDescriptor);
             this.viewRenderer.executeOnPass(device, bloomPassRenderer, SMGPass.BLOOM);
             bloomPassRenderer.endPass(bloomColorTextureScene.gfxTexture);
             device.submitPass(bloomPassRenderer);
@@ -443,7 +438,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             bloomColorTextureDownsample.setParameters(device, bloomWidth, bloomHeight);
             this.bloomTextureMapping[0].gfxTexture = bloomColorTextureScene.gfxTexture;
             this.bloomRenderInstDownsample.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
-            const bloomDownsamplePassRenderer = device.createRenderPass(bloomColorTargetDownsample.gfxRenderTarget, noClearRenderPassDescriptor);
+            const bloomDownsamplePassRenderer = bloomColorTargetDownsample.createRenderPass(device, noClearRenderPassDescriptor);
             this.viewRenderer.executeOnPass(device, bloomDownsamplePassRenderer, SMGPass.BLOOM_DOWNSAMPLE);
             bloomDownsamplePassRenderer.endPass(bloomColorTextureDownsample.gfxTexture);
             device.submitPass(bloomDownsamplePassRenderer);
@@ -455,7 +450,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             bloomColorTextureBlur.setParameters(device, bloomWidth, bloomHeight);
             this.bloomTextureMapping[0].gfxTexture = bloomColorTextureDownsample.gfxTexture;
             this.bloomRenderInstBlur.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
-            const bloomBlurPassRenderer = device.createRenderPass(bloomColorTargetBlur.gfxRenderTarget, noClearRenderPassDescriptor);
+            const bloomBlurPassRenderer = bloomColorTargetBlur.createRenderPass(device, noClearRenderPassDescriptor);
             this.viewRenderer.executeOnPass(device, bloomBlurPassRenderer, SMGPass.BLOOM_BLUR);
             bloomBlurPassRenderer.endPass(bloomColorTextureBlur.gfxTexture);
             device.submitPass(bloomBlurPassRenderer);
@@ -466,7 +461,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             // We can ditch the second render target now, so just reuse it.
             const bloomColorTargetBokeh = this.bloomScratch1ColorTarget;
             const bloomColorTextureBokeh = this.bloomScratch1ColorTexture;
-            const bloomBokehPassRenderer = device.createRenderPass(bloomColorTargetBokeh.gfxRenderTarget, noClearRenderPassDescriptor);
+            const bloomBokehPassRenderer = bloomColorTargetBokeh.createRenderPass(device, noClearRenderPassDescriptor);
             this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBlur.gfxTexture;
             this.bloomRenderInstBokeh.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
             this.viewRenderer.executeOnPass(device, bloomBokehPassRenderer, SMGPass.BLOOM_BOKEH);

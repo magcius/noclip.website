@@ -452,7 +452,7 @@ export abstract class BasicRendererHelper {
         this.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const finalPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        const finalPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, finalPassRenderer);
         return finalPassRenderer;

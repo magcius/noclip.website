@@ -302,12 +302,12 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        const skyboxPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, sunshineClearDescriptor);
+        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, sunshineClearDescriptor);
         this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SMSPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
 
-        const opaquePassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, depthClearRenderPassDescriptor);
+        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, opaquePassRenderer, SMSPass.OPAQUE);
 
         let lastPassRenderer: GfxRenderPass;
@@ -319,7 +319,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("indirectdummy", textureOverride);
 
-            const indTexPassRenderer = device.createRenderPass(this.mainRenderTarget.gfxRenderTarget, noClearRenderPassDescriptor);
+            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
             this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMSPass.INDIRECT);
             lastPassRenderer = indTexPassRenderer;
         } else {

@@ -89,7 +89,7 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const mainPassRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, mainPassRenderer);
         return mainPassRenderer;
     }

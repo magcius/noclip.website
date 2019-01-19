@@ -1,5 +1,5 @@
 
-import { GfxRenderTarget, GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension } from "../platform/GfxPlatform";
+import { GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension, GfxRenderPass } from "../platform/GfxPlatform";
 import { colorNew, TransparentBlack, Color } from "../../Color";
 
 export const DEFAULT_NUM_SAMPLES = 4;
@@ -86,28 +86,34 @@ export class DepthStencilAttachment {
     }
 }
 
+export function copyRenderPassDescriptor(dst: GfxRenderPassDescriptor, src: GfxRenderPassDescriptor): void {
+    dst.colorClearColor = src.colorClearColor;
+    dst.colorLoadDisposition = src.colorLoadDisposition;
+    dst.depthClearValue = src.depthClearValue;
+    dst.depthLoadDisposition = src.depthLoadDisposition;
+    dst.stencilClearValue = src.stencilClearValue;
+    dst.stencilLoadDisposition = src.stencilLoadDisposition;
+}
+
+export function makeEmptyRenderPassDescriptor(): GfxRenderPassDescriptor {
+    return makeClearRenderPassDescriptor(false, TransparentBlack);
+}
+
 export class BasicRenderTarget {
-    public gfxRenderTarget: GfxRenderTarget | null = null;
     public colorAttachment = new ColorAttachment();
     public depthStencilAttachment = new DepthStencilAttachment();
+    private renderPassDescriptor = makeEmptyRenderPassDescriptor();
 
     public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
-        const colorChanged = this.colorAttachment.setParameters(device, width, height, numSamples);
-        const depthStencilChanged = this.depthStencilAttachment.setParameters(device, width, height, numSamples);
-        if (colorChanged || depthStencilChanged) {
-            this.destroyInternal(device);
-            this.gfxRenderTarget = device.createRenderTarget({
-                colorAttachment: this.colorAttachment.gfxColorAttachment,
-                depthStencilAttachment: this.depthStencilAttachment.gfxDepthStencilAttachment,
-            });
-        }
+        this.colorAttachment.setParameters(device, width, height, numSamples);
+        this.depthStencilAttachment.setParameters(device, width, height, numSamples);
     }
 
-    private destroyInternal(device: GfxDevice): void {
-        if (this.gfxRenderTarget !== null) {
-            device.destroyRenderTarget(this.gfxRenderTarget);
-            this.gfxRenderTarget = null;
-        }
+    public createRenderPass(device: GfxDevice, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
+        copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
+        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxColorAttachment;
+        this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment.gfxDepthStencilAttachment;
+        return device.createRenderPass(this.renderPassDescriptor);
     }
 
     public destroy(device: GfxDevice): void {
@@ -118,25 +124,18 @@ export class BasicRenderTarget {
 
 // No depth buffer, designed for postprocessing.
 export class PostFXRenderTarget {
-    public gfxRenderTarget: GfxRenderTarget | null = null;
     public colorAttachment = new ColorAttachment();
+    private renderPassDescriptor = makeEmptyRenderPassDescriptor();
 
     public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
-        const colorChanged = this.colorAttachment.setParameters(device, width, height, numSamples);
-        if (colorChanged) {
-            this.destroyInternal(device);
-            this.gfxRenderTarget = device.createRenderTarget({
-                colorAttachment: this.colorAttachment.gfxColorAttachment,
-                depthStencilAttachment: null,
-            });
-        }
+        this.colorAttachment.setParameters(device, width, height, numSamples);
     }
 
-    private destroyInternal(device: GfxDevice): void {
-        if (this.gfxRenderTarget !== null) {
-            device.destroyRenderTarget(this.gfxRenderTarget);
-            this.gfxRenderTarget = null;
-        }
+    public createRenderPass(device: GfxDevice, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
+        copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
+        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxColorAttachment;
+        this.renderPassDescriptor.depthStencilAttachment = null;
+        return device.createRenderPass(this.renderPassDescriptor);
     }
 
     public destroy(device: GfxDevice): void {
@@ -146,6 +145,8 @@ export class PostFXRenderTarget {
 
 export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearColor: Color): GfxRenderPassDescriptor {
     return {
+        colorAttachment: null,
+        depthStencilAttachment: null,
         colorClearColor: clearColor,
         colorLoadDisposition: shouldClearColor ? GfxLoadDisposition.CLEAR : GfxLoadDisposition.LOAD,
         depthClearValue: 1.0,
@@ -158,7 +159,9 @@ export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearCo
 export const standardFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(true, colorNew(0.88, 0.88, 0.88, 0.0));
 export const transparentBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(true, TransparentBlack);
 export const depthClearRenderPassDescriptor = makeClearRenderPassDescriptor(false, TransparentBlack);
-export const noClearRenderPassDescriptor = {
+export const noClearRenderPassDescriptor: GfxRenderPassDescriptor = {
+    colorAttachment: null,
+    depthStencilAttachment: null,
     colorClearColor: TransparentBlack,
     colorLoadDisposition: GfxLoadDisposition.LOAD,
     depthClearValue: 1.0,

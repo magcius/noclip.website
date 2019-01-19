@@ -28,12 +28,16 @@ export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
 class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
-    public vert: string = `
-out vec2 v_TexCoord;
-
+    public both: string = `
 layout(row_major, std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
+
+uniform sampler2D u_Texture;
+`;
+
+    public vert: string = `
+out vec2 v_TexCoord;
 
 void main() {
     vec2 p;
@@ -46,7 +50,6 @@ void main() {
 `;
 
     public frag: string = `
-uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
 void main() {
@@ -390,7 +393,7 @@ export class WorldRenderer implements Viewer.SceneGfx {
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = device.createRenderPass(this.renderTarget.gfxRenderTarget, standardFullClearRenderPassDescriptor);
+        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, passRenderer);
         return passRenderer;
