@@ -286,7 +286,7 @@ class Node {
             this.modelMatrixAnimator = new RailAnimationPlatform(this.objinfo.path, this.modelMatrix);
         else if (objName === 'TicoRail')
             this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
-        else if (objName.includes('Coin')) {
+        else if (objName.endsWith('Coin')) {
             this.rotateSpeed = 140;
             this.rotatePhase = (this.objinfo.modelMatrix[12] + this.objinfo.modelMatrix[13] + this.objinfo.modelMatrix[14]);
         }
@@ -963,6 +963,9 @@ class SMGSpawner {
         // SMG2
         case 'PlantC':
             spawnGraph(`PlantC00`);
+            break;
+        case 'PlantD':
+            spawnGraph(`PlantD01`);
             break;
         case 'CareTakerHunter':
             spawnGraph(`CaretakerHunter`);
