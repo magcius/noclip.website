@@ -488,7 +488,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (this._scTexture !== null)
                 this.destroyTexture(this._scTexture);
 
-            this._scTexture = this.createTexture(GfxFormat.U8_RGBA, this._scWidth, this._scHeight, 1);
+            this._scTexture = this.createTexture({
+                dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+                width: this._scWidth, height: this._scHeight, depth: 1, numLevels: 1,
+            });
             gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(this._scTexture));
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -660,7 +663,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return buffer;
     }
 
-    public createTexture_(descriptor: GfxTextureDescriptor): GfxTexture {
+    public createTexture(descriptor: GfxTextureDescriptor): GfxTexture {
         const gl = this.gl;
         const gl_texture = gl.createTexture();
         let gl_target: GLenum;
@@ -684,10 +687,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             depth: descriptor.depth,
         };
         return texture;
-    }
-
-    public createTexture(format: GfxFormat, width: number, height: number, numLevels: number): GfxTexture {
-        return this.createTexture_(makeTextureDescriptor2D(format, width, height, numLevels));
     }
 
     public createSampler(descriptor: GfxSamplerDescriptor): GfxSampler {

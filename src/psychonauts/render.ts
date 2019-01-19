@@ -1,7 +1,7 @@
 
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
 import * as Viewer from "../viewer";
 import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../fres/bc_texture";
 import { EMeshFrag, EMesh, EScene, EDomain } from "./plb";
@@ -53,7 +53,10 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
             if (mipHeight > 1) mipHeight >>>= 1;
         }
 
-        const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, texture.width, texture.height, texture.mipData.length);
+        const gfxTexture = device.createTexture({
+            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+            width: texture.width, height: texture.height, depth: 1, numLevels: texture.mipData.length,
+        });
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadTextureData(gfxTexture, 0, levelDatas);
         device.submitPass(hostAccessPass);

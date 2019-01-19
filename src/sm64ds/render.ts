@@ -14,7 +14,7 @@ import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox, Camera } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
-import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
@@ -126,7 +126,10 @@ class YSpinAnimation {
 
 export class NITROTextureHolder extends TextureHolder<NITRO_BMD.Texture> {
     public loadTexture(device: GfxDevice, texture: NITRO_BMD.Texture): LoadedTexture {
-        const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, texture.width, texture.height, 1);
+        const gfxTexture = device.createTexture({
+            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+            width: texture.width, height: texture.height, depth: 1, numLevels: 1,
+        });
         device.setResourceName(gfxTexture, texture.name);
 
         const hostAccessPass = device.createHostAccessPass();

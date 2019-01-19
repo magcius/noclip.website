@@ -203,7 +203,7 @@ export class GX2TextureHolder extends TextureHolder<FTEXEntry> {
         const texture = textureEntry.ftex;
         const surface = texture.surface;
 
-        const gfxTexture = device.createTexture_(GX2TextureHolder.translateTextureDescriptor(device, surface));
+        const gfxTexture = device.createTexture(GX2TextureHolder.translateTextureDescriptor(device, surface));
         device.setResourceName(gfxTexture, textureEntry.name);
         const canvases: HTMLCanvasElement[] = [];
 
@@ -651,7 +651,10 @@ class FMATInstance {
     private blankTexture: GfxTexture;
 
     constructor(device: GfxDevice, textureHolder: GX2TextureHolder, renderInstBuilder: GfxRenderInstBuilder, public fmat: FMAT) {
-        this.blankTexture = device.createTexture(GfxFormat.U8_RGBA, 1, 1, 1);
+        this.blankTexture = device.createTexture({
+            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+            width: 1, height: 1, depth: 1, numLevels: 1
+        });
 
         this.templateRenderInst = renderInstBuilder.newRenderInst();
 

@@ -1,6 +1,6 @@
 
 import { mat4, mat2d } from "gl-matrix";
-import { GfxFormat, GfxDevice, GfxProgram, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxDevice, GfxProgram, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxRenderPass, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
 import * as NSBMD from './nsbmd';
 import * as NSBTA from "./nsbta";
@@ -88,7 +88,10 @@ class Command_Material {
 
         const inTexture: Texture = { ...texture, palData: palette !== null ? palette.data : null } as Texture;
         const pixels = readTexture(inTexture);
-        const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, texture.width, texture.height, 1);
+        const gfxTexture = device.createTexture({
+            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+            width: texture.width, height: texture.height, depth: 1, numLevels: 1,
+        });
         this.gfxTextures.push(gfxTexture);
         hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
 

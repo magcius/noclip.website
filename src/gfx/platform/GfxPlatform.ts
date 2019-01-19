@@ -98,6 +98,8 @@ export interface GfxTextureDescriptor {
     width: number;
     height: number;
     depth: number;
+    // TODO(jstpierre): The number of mipmaps is not explicitly choosable on Metal. I assume WebGPU
+    // will not allow this either. At some point, I will have to move this into the sampler.
     numLevels: number;
 }
 
@@ -243,11 +245,7 @@ export type GfxPass = GfxRenderPass | GfxHostAccessPass;
 
 export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
-    // TODO(jstpierre): The number of mipmaps is not explicitly choosable on Metal. I assume WebGPU
-    // will not allow this either. At some point, I will have to move this into the sampler.
-    // TODO(jstpierre): Remove non-descriptor version?
-    createTexture(format: GfxFormat, width: number, height: number, numLevels: number): GfxTexture;
-    createTexture_(descriptor: GfxTextureDescriptor): GfxTexture;
+    createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createColorAttachment(width: number, height: number, numSamples: number): GfxColorAttachment;
     createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;

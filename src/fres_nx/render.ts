@@ -33,7 +33,7 @@ export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     }
 
     public loadTexture(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
-        const gfxTexture = device.createTexture_({
+        const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2D,
             pixelFormat: translateImageFormat(textureEntry.imageFormat),
             width: textureEntry.width,

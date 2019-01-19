@@ -1,5 +1,5 @@
 
-import { GfxRenderTarget, GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture } from "../platform/GfxPlatform";
+import { GfxRenderTarget, GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension } from "../platform/GfxPlatform";
 import { colorNew, TransparentBlack, Color } from "../../Color";
 
 export const DEFAULT_NUM_SAMPLES = 4;
@@ -14,7 +14,10 @@ export class ColorTexture {
             this.destroy(device);
             this.width = width;
             this.height = height;
-            this.gfxTexture = device.createTexture(GfxFormat.U8_RGBA, width, height, 1);
+            this.gfxTexture = device.createTexture({
+                dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+                width, height, depth: 1, numLevels: 1
+            });
             return true;
         } else {
             return false;

@@ -9,7 +9,7 @@ import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { vec3 } from 'gl-matrix';
 import { assertExists, assert, nArray } from '../util';
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxTexture } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxTexture, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { AABB } from '../Geometry';
 
@@ -46,11 +46,14 @@ class QuadTreeNode {
 }
 
 function makeStaticDataTexture(device: GfxDevice, data: Uint8Array, width: number, height: number): GfxTexture {
-    const texture = device.createTexture(GfxFormat.U8_RGBA, width, height, 1);
+    const gfxTexture = device.createTexture({
+        dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+        width, height, depth: 1, numLevels: 1,
+    });
     const hostAccessPass = device.createHostAccessPass();
-    hostAccessPass.uploadTextureData(texture, 0, [data]);
+    hostAccessPass.uploadTextureData(gfxTexture, 0, [data]);
     device.submitPass(hostAccessPass);
-    return texture;
+    return gfxTexture;
 }
 
 const WORLD_SCALE = 50000;

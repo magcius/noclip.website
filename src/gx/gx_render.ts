@@ -15,7 +15,7 @@ import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescer, GfxCoalescedBuffers, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeFrequency } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeFrequency, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { Camera } from '../Camera';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
@@ -285,7 +285,10 @@ export function loadedDataCoalescerGfx(device: GfxDevice, loadedVertexDatas: Loa
 
 export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.MipChain): LoadedTexture {
     const firstMipLevel = mipChain.mipLevels[0];
-    const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, firstMipLevel.width, firstMipLevel.height, mipChain.mipLevels.length);
+    const gfxTexture = device.createTexture({
+        pixelFormat: GfxFormat.U8_RGBA, width: firstMipLevel.width, height: firstMipLevel.height, numLevels: mipChain.mipLevels.length,
+        depth: 1, dimension: GfxTextureDimension.n2D,
+    });
     device.setResourceName(gfxTexture, mipChain.name);
 
     const hostAccessPass = device.createHostAccessPass();

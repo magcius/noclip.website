@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxProgram, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxProgram, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNew, colorFromRGBA } from '../Color';
 import { getTextureFormatName } from './pica_texture';
@@ -51,7 +51,10 @@ function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
 
 export class CtrTextureHolder extends TextureHolder<CMB.Texture> {
     public loadTexture(device: GfxDevice, texture: CMB.Texture): LoadedTexture {
-        const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, texture.width, texture.height, texture.levels.length);
+        const gfxTexture = device.createTexture({
+            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+            width: texture.width, height: texture.height, depth: 1, numLevels: texture.levels.length,
+        });
         device.setResourceName(gfxTexture, texture.name);
 
         const hostAccessPass = device.createHostAccessPass();
