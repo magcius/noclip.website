@@ -380,8 +380,8 @@ class Main {
         writeString(this._saveStateTmp, 0, SAVE_STATE_MAGIC);
 
         let wordOffs = 1;
-        this._saveStateF32[wordOffs++] = this.viewer.viewerRenderInput.time;
-        wordOffs += serializeCamera(this._saveStateF32, wordOffs, this.viewer.viewerRenderInput.camera);
+        this._saveStateF32[wordOffs++] = this.viewer.sceneTime;
+        wordOffs += serializeCamera(this._saveStateF32, wordOffs, this.viewer.camera);
         let offs = wordOffs * 4;
         if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
             offs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, offs);
@@ -399,8 +399,8 @@ class Main {
             return false;
 
         let wordOffs = 1;
-        this.viewer.viewerRenderInput.time = this._saveStateF32[wordOffs++];
-        wordOffs += deserializeCamera(this.viewer.viewerRenderInput.camera, this._saveStateF32, wordOffs);
+        this.viewer.sceneTime = this._saveStateF32[wordOffs++];
+        wordOffs += deserializeCamera(this.viewer.camera, this._saveStateF32, wordOffs);
         let offs = wordOffs * 4;
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
             offs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, offs, byteLength);
@@ -412,7 +412,7 @@ class Main {
     }
 
     private _loadSceneSaveStateVersion1(state: string): boolean {
-        const camera = this.viewer.viewerRenderInput.camera;
+        const camera = this.viewer.camera;
 
         const [tx, ty, tz, fx, fy, fz, rx, ry, rz] = state.split(',');
         // Translation.
@@ -548,7 +548,7 @@ class Main {
     }
 
     private _resetCamera(sceneDescId: string | null): void {
-        const camera = this.viewer.viewerRenderInput.camera;
+        const camera = this.viewer.camera;
 
         let didLoadCameraState = false;
 
