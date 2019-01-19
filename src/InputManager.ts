@@ -34,6 +34,7 @@ export default class InputManager {
         this.keysDown = new Map<string, boolean>();
         window.addEventListener('keydown', this._onKeyDown);
         window.addEventListener('keyup', this._onKeyUp);
+        window.addEventListener('blur', this._onBlur);
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
         this.toplevel.addEventListener('mousedown', this._onMouseDown);
 
@@ -85,12 +86,17 @@ export default class InputManager {
     }
 
     private _onKeyDown = (e: KeyboardEvent) => {
+        if (e.code === 'AltLeft' || e.code === 'AltRight') e.preventDefault();
         if (!this._hasFocus()) return;
         this.keysDown.set(e.code, !e.repeat);
     };
     private _onKeyUp = (e: KeyboardEvent) => {
+        if (e.code === 'AltLeft' || e.code === 'AltRight') e.preventDefault();
         if (!this._hasFocus()) return;
         this.keysDown.delete(e.code);
+    };
+    private _onBlur = () => {
+        this.keysDown.clear();
     };
 
     private _onWheel = (e: WheelEvent) => {
