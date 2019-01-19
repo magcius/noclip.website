@@ -349,7 +349,7 @@ export class MDL0Renderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.animationController.updateTime(viewerInput.time);
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         this.templateRenderInst.passMask = this.isSkybox ? G3DPass.SKYBOX : G3DPass.MAIN;
 

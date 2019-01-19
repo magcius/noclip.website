@@ -264,7 +264,7 @@ class Node {
     private rotatePhase = 0;
 
     constructor(public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
-        this.name = objinfo.objName;
+        this.name = modelInstance.name;
         // BlackHole is special and doesn't inherit SR from parent.
         if (objinfo.objName === 'BlackHole') {
             mat4.copy(this.modelMatrix, objinfo.modelMatrix);
@@ -684,6 +684,7 @@ interface ObjInfo {
     objId: number;
     objName: string;
     objArg0: number;
+    objArg1: number;
     rotateSpeed: number;
     rotateAccelType: number;
     modelMatrix: mat4;
@@ -796,7 +797,9 @@ class SMGSpawner {
         this.renderHelper.prepareToRender(hostAccessPass);
     }
 
-    public applyAnimations(modelInstance: BMDModelInstance, rarc: RARC.RARC, animOptions?: AnimOptions): void {
+    public applyAnimations(node: Node, rarc: RARC.RARC, animOptions?: AnimOptions): void {
+        const modelInstance = node.modelInstance;
+
         let bckFile: RARC.RARCFile | null = null;
         let brkFile: RARC.RARCFile | null = null;
         let btkFile: RARC.RARCFile | null = null;
@@ -838,49 +841,60 @@ class SMGSpawner {
         }
     }
 
-    public createModelInstanceFromArchive(device: GfxDevice, name: string, animOptions?: AnimOptions): Progressable<BMDModelInstance | null> {
-        // Should do a remap at some point.
-        const arcPath = `${this.pathBase}/ObjectData/${name}.arc`;
-        const modelFilename = `${name}.bdl`;
-        return this.modelCache.getModel(device, this.renderHelper, this.textureHolder, arcPath, modelFilename).then((bmdModel) => {
-            if (bmdModel === null)
-                return null;
+    public bindChangeAnimation(node: Node, rarc: RARC.RARC, frame: number): void {
+        const brkFile = rarc.findFile('colorchange.brk');
+        const btkFile = rarc.findFile('texchange.btk');
+        console.log(node, frame);
 
-            // Trickery.
-            const rarc = this.modelCache.archiveCache.get(arcPath);
+        const animationController = new AnimationController();
+        animationController.setTimeInFrames(frame);
 
-            const bmdModelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
-            bmdModelInstance.name = name;
-            this.applyAnimations(bmdModelInstance, rarc, animOptions);
-            return bmdModelInstance;
-        });
+        if (brkFile) {
+            const brk = BRK.parse(brkFile.buffer);
+            node.modelInstance.bindTRK1(brk.trk1, animationController);
+        }
+
+        if (btkFile) {
+            const btk = BTK.parse(btkFile.buffer);
+            node.modelInstance.bindTTK1(btk.ttk1, animationController);
+        }
     }
 
     public spawnObject(device: GfxDevice, zoneLayerFilterTag: string, objinfo: ObjInfo, modelMatrixBase: mat4): void {
-        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions?: AnimOptions) => {
-            return this.createModelInstanceFromArchive(device, arcName, animOptions).then((modelInstance) => {
-                if (modelInstance) {
-                    modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
+        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
+            const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
+            const modelFilename = `${arcName}.bdl`;
+            return this.modelCache.getModel(device, this.renderHelper, this.textureHolder, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] | null => {
+                if (bmdModel === null)
+                    return null;
 
-                    if (tag === SceneGraphTag.Skybox) {
-                        // If we have a skybox, then shrink it down a bit.
-                        const skyboxScale = 0.5;
-                        mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [skyboxScale, skyboxScale, skyboxScale]);
-                        modelInstance.setIsSkybox(true);
-                        modelInstance.passMask = SMGPass.SKYBOX;
-                    } else if (tag === SceneGraphTag.Indirect) {
-                        modelInstance.passMask = SMGPass.INDIRECT;
-                    } else if (tag === SceneGraphTag.Bloom) {
-                        modelInstance.passMask = SMGPass.BLOOM;
-                    } else {
-                        modelInstance.passMask = SMGPass.OPAQUE;
-                    }
+                // Trickery.
+                const rarc = this.modelCache.archiveCache.get(arcPath);
 
-                    const node = new Node(objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
-                    this.sceneGraph.addNode(node, [tag, zoneLayerFilterTag]);
+                const modelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
+                modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
-                    this.renderHelper.renderInstBuilder.constructRenderInsts(device, this.viewRenderer);
+                if (tag === SceneGraphTag.Skybox) {
+                    // If we have a skybox, then shrink it down a bit.
+                    const skyboxScale = 0.5;
+                    mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [skyboxScale, skyboxScale, skyboxScale]);
+                    modelInstance.setIsSkybox(true);
+                    modelInstance.passMask = SMGPass.SKYBOX;
+                } else if (tag === SceneGraphTag.Indirect) {
+                    modelInstance.passMask = SMGPass.INDIRECT;
+                } else if (tag === SceneGraphTag.Bloom) {
+                    modelInstance.passMask = SMGPass.BLOOM;
+                } else {
+                    modelInstance.passMask = SMGPass.OPAQUE;
                 }
+
+                const node = new Node(objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
+                this.applyAnimations(node, rarc, animOptions);
+
+                this.sceneGraph.addNode(node, [tag, zoneLayerFilterTag]);
+
+                this.renderHelper.renderInstBuilder.constructRenderInsts(device, this.viewRenderer);
+                return [node, rarc];
             });
         };
 
@@ -949,6 +963,20 @@ class SMGSpawner {
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'waita.bck' });
             break;
 
+        case 'SweetsDecoratePartsFork':
+        case 'SweetsDecoratePartsSpoon':
+            spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
+                this.bindChangeAnimation(node, rarc, objinfo.objArg1);
+            });
+            break;
+        case 'UFOKinoko':
+            spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
+                this.bindChangeAnimation(node, rarc, objinfo.objArg0);
+            });
+            break;
+
+
+        // Skyboxen.
         case 'BeyondSummerSky':
         case 'CloudSky':
         case 'HalfGalaxySky':
@@ -956,7 +984,6 @@ class SMGSpawner {
         case 'RockPlanetOrbitSky':
         case 'SummerSky':
         case 'VROrbit':
-            // Skyboxen.
             spawnGraph(name, SceneGraphTag.Skybox);
             break;
 
@@ -1037,13 +1064,14 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const objId = BCSV.getField<number>(bcsv, record, 'l_id', -1);
             const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
             const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
+            const objArg1 = BCSV.getField<number>(bcsv, record, 'Obj_arg1', -1);
             const rotateSpeed = BCSV.getField<number>(bcsv, record, 'RotateSpeed', 0);
             const rotateAccelType = BCSV.getField<number>(bcsv, record, 'RotateAccelType', 0);
             const pathId: number = BCSV.getField<number>(bcsv, record, 'CommonPath_ID', -1);
             const path = paths.find((path) => path.l_id === pathId) || null;
             const modelMatrix = mat4.create();
             computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-            return { objId, objName, objArg0, rotateSpeed, rotateAccelType, modelMatrix, path };
+            return { objId, objName, objArg0, objArg1, rotateSpeed, rotateAccelType, modelMatrix, path };
         });
     }
     

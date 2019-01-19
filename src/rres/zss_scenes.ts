@@ -270,7 +270,7 @@ class SkywardSwordScene implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        this.animationController.updateTime(viewerInput.time);
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(hostAccessPass, viewerInput);

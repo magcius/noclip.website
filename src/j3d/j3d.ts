@@ -1256,7 +1256,7 @@ function applyLoopMode(t: number, loopMode: LoopMode) {
 }
 
 function getAnimFrame(anim: AnimationBase, frame: number): number {
-    const lastFrame = anim.duration - 1;
+    const lastFrame = anim.duration;
     const normTime = frame / lastFrame;
     const animFrame = applyLoopMode(normTime, anim.loopMode) * lastFrame;
     return animFrame;
@@ -1429,6 +1429,11 @@ export class TTK1Animator {
         const rotation = sampleAnimationData(this.animationEntry.rotationQ, animFrame);
         const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
         const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
+
+        if (frame === 3) {
+            console.log(this.ttk1, this.animationEntry.translationT, translationT, animFrame);
+        }
+
         calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
     }
 }

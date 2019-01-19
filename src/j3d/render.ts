@@ -562,26 +562,26 @@ export class BMDModelInstance {
      * Binds {@param ttk1} (texture animations) to this model renderer.
      * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
      */
-    public bindTTK1(ttk1: TTK1): void {
+    public bindTTK1(ttk1: TTK1, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTTK1(this.animationController, ttk1);
+            this.materialInstances[i].bindTTK1(animationController, ttk1);
     }
 
     /**
      * Binds {@param trk1} (color register animations) to this model renderer.
      * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
      */
-    public bindTRK1(trk1: TRK1): void {
+    public bindTRK1(trk1: TRK1, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTRK1(this.animationController, trk1);
+            this.materialInstances[i].bindTRK1(animationController, trk1);
     }
 
     /**
      * Binds {@param ank1} (joint animations) to this model renderer.
      * ANK1 objects can be parsed from {@link BCK} files. See {@link BCK.parse}.
      */
-    public bindANK1(ank1: ANK1): void {
-        this.ank1Animator = bindANK1Animator(this.animationController, ank1);
+    public bindANK1(ank1: ANK1, animationController: AnimationController = this.animationController): void {
+        this.ank1Animator = bindANK1Animator(animationController, ank1);
     }
 
     public getTimeInFrames(milliseconds: number) {
@@ -595,7 +595,7 @@ export class BMDModelInstance {
             this.templateRenderInst.name = this.name;
             this.templateRenderInst.passMask = this.passMask;
 
-            this.animationController.updateTime(viewerInput.time);
+            this.animationController.setTimeInMilliseconds(viewerInput.time);
 
             // Billboards shouldn't have their root joint modified, given that we have to compute a new model
             // matrix that faces the camera view.

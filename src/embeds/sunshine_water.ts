@@ -181,7 +181,7 @@ class SeaPlaneScene {
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         this.plane.prepareToRender(renderHelper, viewerInput);
-        this.animationController.updateTime(viewerInput.time);
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
         this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.bmdModel, this.textureHolder);
     }
 
