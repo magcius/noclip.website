@@ -9,7 +9,7 @@ class SMG2SceneDesc extends SMGSceneDescBase {
     }
 }
 
-const id = "smg 2";
+const id = "smg2";
 const name = "Super Mario Galaxy 2";
 
 const sceneDescs: Viewer.SceneDesc[] = [
