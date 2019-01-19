@@ -813,8 +813,8 @@ class SMGSpawner {
                 btkFile = rarc.findFile('wait.btk');
                 if (!(bckFile || brkFile || btkFile)) {
                     bckFile = rarc.files.find((file) => file.name.endsWith('.bck')) || null;
-                    brkFile = rarc.files.find((file) => file.name.endsWith('.brk') && file.name !== 'colorchange.brk') || null;
-                    btkFile = rarc.files.find((file) => file.name.endsWith('.btk') && file.name !== 'texchange.btk') || null;
+                    brkFile = rarc.files.find((file) => file.name.endsWith('.brk') && file.name.toLowerCase() !== 'colorchange.brk') || null;
+                    btkFile = rarc.files.find((file) => file.name.endsWith('.btk') && file.name.toLowerCase() !== 'texchange.btk') || null;
                 }
             }
         }
