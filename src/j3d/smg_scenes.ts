@@ -279,22 +279,25 @@ class Node {
     }
 
     public setupAnimations(): void {
+        this.rotateSpeed = this.objinfo.rotateSpeed;
+
         const objName = this.objinfo.objName;
         if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path)
             this.modelMatrixAnimator = new RailAnimationPlatform(this.objinfo.path, this.modelMatrix);
         else if (objName === 'TicoRail')
             this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
-        else if (objName.includes('RotateParts')) {
-            this.rotateSpeed = this.objinfo.rotateSpeed;
+        else if (objName.includes('Coin')) {
+            this.rotateSpeed = 140;
+            this.rotatePhase = (this.objinfo.modelMatrix[12] + this.objinfo.modelMatrix[13] + this.objinfo.modelMatrix[14]);
         }
     }
 
     public updateMapPartsRotation(dst: mat4, time: number): void {
-        if (this.objinfo.rotateSpeed !== 0) {
+        if (this.rotateSpeed !== 0) {
             // RotateSpeed appears to be deg/sec?
-            const rotateSpeed = this.objinfo.rotateSpeed / (this.objinfo.rotateAccelType > 0 ? this.objinfo.rotateAccelType : 1);
+            const rotateSpeed = this.rotateSpeed / (this.objinfo.rotateAccelType > 0 ? this.objinfo.rotateAccelType : 1);
             const speed = rotateSpeed * Math.PI / 180;
-            mat4.rotateY(dst, dst, time * speed);
+            mat4.rotateY(dst, dst, (time + this.rotatePhase) * speed);
         }
     }
 
