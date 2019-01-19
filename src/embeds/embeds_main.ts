@@ -19,7 +19,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 type CreateSceneFunc = (device: GfxDevice, name: string) => Progressable<Viewer.SceneGfx>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
-    "sunshine_water": sunshine_water.createSceneGfx,
+    "sunshine_water": sunshine_water.createScene,
 };
 
 class FsButton {

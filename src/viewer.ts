@@ -28,7 +28,8 @@ export interface SceneGfx {
     textureHolder?: TextureHolder<any>;
     createPanels?(): UI.Panel[];
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
-    deserializeSaveState?(dst: ArrayBuffer, offs: number): number;
+    deserializeSaveState?(dst: ArrayBuffer, offs: number, byteLength: number): number;
+    onstatechanged?: () => void;
     render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass;
     destroy(device: GfxDevice): void;
 }

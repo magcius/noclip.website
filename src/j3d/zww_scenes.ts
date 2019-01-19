@@ -391,6 +391,11 @@ class WindWakerRenderer implements Viewer.SceneGfx {
     private vr_back_cloud: BMDModelInstance;
     public roomRenderers: WindWakerRoomRenderer[] = [];
 
+    private currentTimeOfDay: number;
+    private timeOfDaySelector: UI.SingleSelect;
+
+    public onstatechanged!: () => void;
+
     constructor(device: GfxDevice, public textureHolder: J3DTextureHolder, wantsSeaPlane: boolean, private stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
@@ -403,10 +408,15 @@ class WindWakerRenderer implements Viewer.SceneGfx {
         this.vr_back_cloud = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_back_cloud`, true);
     }
 
-    public setTimeOfDay(index: number): void {
+    private setTimeOfDay(timeOfDay: number): void {
+        if (this.currentTimeOfDay === timeOfDay)
+            return;
+
+        this.currentTimeOfDay = timeOfDay;
+        this.timeOfDaySelector.selectItem(timeOfDay + 1);
+        this.onstatechanged();
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`);
 
-        const timeOfDay = index - 1;
         const colors = timeOfDay === -1 ? undefined : getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
 
         if (colors !== undefined) {
@@ -447,10 +457,11 @@ class WindWakerRenderer implements Viewer.SceneGfx {
 
         const colorPresets = [ '(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ];
 
-        const selector = new UI.SingleSelect();
-        selector.setStrings(colorPresets);
-        selector.onselectionchange = (index: number) => {
-            this.setTimeOfDay(index);
+        this.timeOfDaySelector = new UI.SingleSelect();
+        this.timeOfDaySelector.setStrings(colorPresets);
+        this.timeOfDaySelector.onselectionchange = (index: number) => {
+            const timeOfDay = index - 1;
+            this.setTimeOfDay(timeOfDay);
         };
 
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`);
@@ -460,10 +471,10 @@ class WindWakerRenderer implements Viewer.SceneGfx {
             const stageColors = getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
             return { index: elemIndex, background: colorToCSS(stageColors.vr_sky) };
         });
-        selector.setFlairs(flairs);
+        this.timeOfDaySelector.setFlairs(flairs);
 
-        selector.selectItem(3); // Day
-        timeOfDayPanel.contents.appendChild(selector.elem);
+        this.setTimeOfDay(2);
+        timeOfDayPanel.contents.appendChild(this.timeOfDaySelector.elem);
 
         const layersPanel = new UI.LayerPanel();
         layersPanel.setLayers(this.roomRenderers);
@@ -509,6 +520,19 @@ class WindWakerRenderer implements Viewer.SceneGfx {
         return mainPassRenderer;
     }
 
+    public serializeSaveState(dst: ArrayBuffer, offs: number): number {
+        const view = new DataView(dst);
+        view.setUint8(offs++, this.currentTimeOfDay);
+        return offs;
+    }
+
+    public deserializeSaveState(dst: ArrayBuffer, offs: number, byteLength: number): number {
+        const view = new DataView(dst);
+        if (offs < byteLength)
+            this.setTimeOfDay(view.getUint8(offs++));
+        return offs;
+    }
+
     public destroy(device: GfxDevice) {
         this.textureHolder.destroy(device);
         if (this.vr_sky)
@@ -537,14 +561,14 @@ class SceneDesc {
             this.id = `Room${rooms[0]}.arc`;
     }
 
-    public createSceneGfx(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const rarcs = [];
 
         // XXX(jstpierre): This is really terrible code.
-        rarcs.push(this.fetchRarc(`data/j3d/ww/${this.stageDir}/Stage.arc`));
+        rarcs.push(this.fetchRarc(`data/j3d/ww/${this.stageDir}/Stage.arc`, abortSignal));
         for (const r of this.rooms) {
             const roomIdx = Math.abs(r);
-            rarcs.push(this.fetchRarc(`data/j3d/ww/${this.stageDir}/Room${roomIdx}.arc`));
+            rarcs.push(this.fetchRarc(`data/j3d/ww/${this.stageDir}/Room${roomIdx}.arc`, abortSignal));
         }
 
         return Progressable.all(rarcs).then(([stageRarc, ...roomRarcs]) => {
@@ -567,8 +591,8 @@ class SceneDesc {
         return new WindWakerRoomRenderer(device, renderer.renderHelper, renderer.textureHolder, roomIdx, roomRarc);
     }
 
-    private fetchRarc(path: string): Progressable<{ path: string, rarc: RARC.RARC }> {
-        return fetchData(path).then((buffer: ArrayBufferSlice) => {
+    private fetchRarc(path: string, abortSignal: AbortSignal): Progressable<{ path: string, rarc: RARC.RARC }> {
+        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
             if (readString(buffer, 0, 4) === 'Yaz0')
                 return Yaz0.decompress(buffer);
             else

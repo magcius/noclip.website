@@ -50,7 +50,7 @@ import { UI, createDOMFromString } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump } from './util';
 import { downloadBlob, downloadBuffer } from './fetch';
-import { GfxDevice, GfxDebugGroup } from './gfx/platform/GfxPlatform';
+import { GfxDevice } from './gfx/platform/GfxPlatform';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
 import { atob, btoa } from './Ascii85';
@@ -384,7 +384,7 @@ class Main {
         wordOffs += serializeCamera(this._saveStateF32, wordOffs, this.viewer.viewerRenderInput.camera);
         let offs = wordOffs * 4;
         if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
-            offs += this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, offs);
+            offs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, offs);
 
         const s = atob(this._saveStateTmp, offs);
         return s + '=';
@@ -403,7 +403,7 @@ class Main {
         wordOffs += deserializeCamera(this.viewer.viewerRenderInput.camera, this._saveStateF32, wordOffs);
         let offs = wordOffs * 4;
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            offs += this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, offs);
+            offs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, offs, byteLength);
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
@@ -498,6 +498,10 @@ class Main {
     }
 
     private _onSceneChanged(scene: SceneGfx, sceneStateStr: string): void {
+        scene.onstatechanged = () => {
+            this._saveState();
+        };
+
         if (scene.createPanels !== undefined)
             this.ui.setScenePanels(scene.createPanels());
         else

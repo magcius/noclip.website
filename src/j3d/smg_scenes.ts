@@ -303,6 +303,8 @@ class SMGRenderer implements Viewer.SceneGfx {
     private opaqueSceneTexture = new ColorTexture();
     private currentScenarioIndex: number = 0;
 
+    public onstatechanged!: () => void;
+
     constructor(device: GfxDevice, private spawner: SMGSpawner, private viewRenderer: GfxRenderInstViewRenderer, private scenarioData: BCSV.Bcsv, private zoneNames: string[]) {
         this.sceneGraph = spawner.sceneGraph;
         this.textureHolder = spawner.textureHolder;
@@ -362,7 +364,11 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public setCurrentScenario(index: number): void {
+        if (this.currentScenarioIndex === index)
+            return;
+
         this.currentScenarioIndex = index;
+        this.onstatechanged();
         this.applyCurrentScenario();
     }
 
@@ -476,6 +482,19 @@ class SMGRenderer implements Viewer.SceneGfx {
         }
 
         return lastPassRenderer;
+    }
+
+    public serializeSaveState(dst: ArrayBuffer, offs: number): number {
+        const view = new DataView(dst);
+        view.setUint8(offs++, this.currentScenarioIndex);
+        return offs;
+    }
+
+    public deserializeSaveState(dst: ArrayBuffer, offs: number, byteLength: number): number {
+        const view = new DataView(dst);
+        if (offs < byteLength)
+            this.setCurrentScenario(view.getUint8(offs++));
+        return offs;
     }
 
     public destroy(device: GfxDevice): void {

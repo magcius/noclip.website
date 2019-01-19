@@ -42,7 +42,8 @@ export function btoa(dst: Uint8Array, dstOffs: number = 0, str: string, charset:
         table[charset.charAt(i)] = i;
 
     const n = str.length;
-    const byteLength = ((n * 4 / 5) | 0) + ((-n) % 5);
+    const numCharGroups = ((n + 4) / 5) | 0;
+    const byteLength = numCharGroups * 4 - (5 - (n % 5));
     assert(byteLength <= dst.byteLength - dstOffs);
 
     for (let i = 0; i < n;) {
