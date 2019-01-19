@@ -1,6 +1,6 @@
 
 export default class AnimationController {
-    private timeMilliseconds: number;
+    private timeMilliseconds: number = 0;
     public phaseFrames: number = 0;
 
     constructor(public fps: number = 30) {}

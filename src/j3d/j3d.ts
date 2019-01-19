@@ -13,6 +13,7 @@ import * as GX_Material from '../gx/gx_material';
 import AnimationController from '../AnimationController';
 import { ColorKind } from '../gx/gx_render';
 import { AABB } from '../Geometry';
+import { getPointHermite } from '../Spline';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
@@ -1261,10 +1262,6 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
     return animFrame;
 }
 
-function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number): number {
-    return (((cf0 * t + cf1) * t + cf2) * t + cf3);
-}
-
 function lerp(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number) {
     return k0.value + (k1.value - k0.value) * t;
 }
@@ -1275,11 +1272,7 @@ function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: num
     const p1 = k1.value;
     const s0 = k0.tangentOut * length;
     const s1 = k1.tangentIn * length;
-    const cf0 = (p0 *  2) + (p1 * -2) + (s0 *  1) +  (s1 *  1);
-    const cf1 = (p0 * -3) + (p1 *  3) + (s0 * -2) +  (s1 * -1);
-    const cf2 = (p0 *  0) + (p1 *  0) + (s0 *  1) +  (s1 *  0);
-    const cf3 = (p0 *  1) + (p1 *  0) + (s0 *  0) +  (s1 *  0);
-    return cubicEval(cf0, cf1, cf2, cf3, t);
+    return getPointHermite(p0, p1, s0, s1, t);
 }
 
 function sampleAnimationData(track: AnimationTrack, frame: number) {

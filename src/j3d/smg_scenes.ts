@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { assert, nArray } from '../util';
+import { assert, nArray, assertExists } from '../util';
 import { fetchData } from '../fetch';
 
 import { DeviceProgram } from '../Program';
@@ -15,7 +15,7 @@ import * as RARC from './rarc';
 import * as Yaz0 from '../compression/Yaz0';
 import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
-import { mat4, quat } from 'gl-matrix';
+import { mat4, quat, vec3 } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK } from './j3d';
 import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
@@ -24,6 +24,7 @@ import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxRenderInstViewRenderer, GfxRenderInst, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, copyRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TransparentBlack } from '../Color';
+import { getPointBezier } from '../Spline';
 
 const materialHacks: GXMaterialHacks = {
     alphaLightingFudge: (p) => p.matSource,
@@ -173,12 +174,152 @@ const enum SceneGraphTag {
     Bloom = 'Bloom',
     Water = 'Water',
     Indirect = 'Indirect',
+};
+
+interface ModelMatrixAnimator {
+    updateRailAnimation(dst: mat4, time: number): void;
+}
+
+class RailAnimationPlatform {
+    private railPhase: number = 0;
+
+    constructor(public path: Path, modelMatrix: mat4) {
+        assert(path.points.length === 2);
+        assert(path.closed === 'OPEN');
+        const translation = scratchVec3;
+        mat4.getTranslation(translation, modelMatrix);
+
+        // Project translation onto our line segment to find t.
+        const seg = vec3.create();
+        const prj = vec3.create();
+        vec3.sub(seg, path.points[1].p0, path.points[0].p0);
+        vec3.sub(prj, translation, path.points[0].p0);
+        const n = vec3.dot(prj, seg);
+        const d = vec3.dot(seg, seg);
+        const t = n / d;
+        this.railPhase = t;
+    }
+
+    public updateRailAnimation(dst: mat4, time: number): void {
+        // TODO(jstpierre): Figure out the path speed.
+        const tS = time / 10;
+        const t = (tS + this.railPhase) % 1.0;
+        interpPathPoints(scratchVec3, this.path.points[0], this.path.points[1], t);
+        dst[12] = scratchVec3[0];
+        dst[13] = scratchVec3[1];
+        dst[14] = scratchVec3[2];
+    }
+}
+
+class RailAnimationTico {
+    private railPhase: number = 0;
+
+    constructor(public path: Path) {
+    }
+
+    public updateRailAnimation(dst: mat4, time: number): void {
+        const path = this.path;
+
+        // TODO(jstpierre): calculate speed. probably on the objinfo.
+        const tS = time / 70;
+        const t = (tS + this.railPhase) % 1.0;
+
+        // Which point are we in?
+        let numSegments = path.points.length;
+        if (path.closed === 'OPEN')
+            --numSegments;
+
+        const segmentFrac = t * numSegments;
+        const s0 = segmentFrac | 0;
+        const sT = segmentFrac - s0;
+
+        const s1 = (s0 >= path.points.length - 1) ? 0 : s0 + 1;
+        const pt0 = assertExists(path.points[s0]);
+        const pt1 = assertExists(path.points[s1]);
+
+        const c = scratchVec3;
+        interpPathPoints(c, pt0, pt1, sT);
+        dst[12] = c[0];
+        dst[13] = c[1];
+        dst[14] = c[2];
+
+        // Now compute the derivative to rotate.
+        interpPathPoints(c, pt0, pt1, sT + 0.05);
+        c[0] -= dst[12];
+        c[1] -= dst[13];
+        c[2] -= dst[14];
+
+        const ny = Math.atan2(c[2], -c[0]);
+        mat4.rotateY(dst, dst, ny);
+    }
+}
+
+const scratchVec3 = vec3.create();
+class Node {
+    public name: string = '';
+
+    private modelMatrixAnimator: ModelMatrixAnimator | null = null;
+    private modelMatrix = mat4.create();
+    private rotateSpeed = 0;
+    private rotatePhase = 0;
+
+    constructor(public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
+        this.name = objinfo.objName;
+        // BlackHole is special and doesn't inherit SR from parent.
+        if (objinfo.objName === 'BlackHole') {
+            mat4.copy(this.modelMatrix, objinfo.modelMatrix);
+            this.modelMatrix[12] += parentModelMatrix[12];
+            this.modelMatrix[13] += parentModelMatrix[13];
+            this.modelMatrix[14] += parentModelMatrix[14];
+        } else {
+            mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
+        }
+
+        this.setupAnimations();
+    }
+
+    public setupAnimations(): void {
+        const objName = this.objinfo.objName;
+        if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path)
+            this.modelMatrixAnimator = new RailAnimationPlatform(this.objinfo.path, this.modelMatrix);
+        else if (objName === 'TicoRail')
+            this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
+        else if (objName.includes('RotateParts')) {
+            this.rotateSpeed = this.objinfo.rotateSpeed;
+        }
+    }
+
+    public updateMapPartsRotation(dst: mat4, time: number): void {
+        if (this.objinfo.rotateSpeed !== 0) {
+            // RotateSpeed appears to be deg/sec?
+            const rotateSpeed = this.objinfo.rotateSpeed / (this.objinfo.rotateAccelType > 0 ? this.objinfo.rotateAccelType : 1);
+            const speed = rotateSpeed * Math.PI / 180;
+            mat4.rotateY(dst, dst, time * speed);
+        }
+    }
+
+    public updateSpecialAnimations(): void {
+        const time = this.animationController.getTimeInSeconds();
+        mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
+        this.updateMapPartsRotation(this.modelInstance.modelMatrix, time);
+        if (this.modelMatrixAnimator !== null)
+            this.modelMatrixAnimator.updateRailAnimation(this.modelInstance.modelMatrix, time);
+    }
+
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        this.updateSpecialAnimations();
+        this.modelInstance.prepareToRender(renderHelper, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.modelInstance.destroy(device);
+    }
 }
 
 class SceneGraph {
-    public nodes: BMDModelInstance[] = [];
+    public nodes: Node[] = [];
     public nodeTags: string[][] = [];
-    public onnodeadded: (node: BMDModelInstance, i: number) => void | null = null;
+    public onnodeadded: () => void | null = null;
 
     public hasTag(tag: string): boolean {
         return this.nodeTags.some((tags) => tags.includes(tag));
@@ -188,7 +329,7 @@ class SceneGraph {
         return this.nodeTags[i].includes(tag);
     }
 
-    public forTag(tag: string, cb: (node: BMDModelInstance, i: number) => void): void {
+    public forTag(tag: string, cb: (node: Node, i: number) => void): void {
         for (let i = 0; i < this.nodes.length; i++) {
             const nodeTags = this.nodeTags[i];
             if (nodeTags.includes(tag))
@@ -196,14 +337,14 @@ class SceneGraph {
         }
     }
 
-    public addNode(node: BMDModelInstance | null, tags: string[]): void {
+    public addNode(node: Node | null, tags: string[]): void {
         if (node === null)
             return;
         this.nodes.push(node);
         this.nodeTags.push(tags);
         const i = this.nodes.length - 1;
         if (this.onnodeadded !== null)
-            this.onnodeadded(node, i);
+            this.onnodeadded();
     }
 
     public destroy(device: GfxDevice): void {
@@ -302,6 +443,7 @@ class SMGRenderer implements Viewer.SceneGfx {
     private mainRenderTarget = new BasicRenderTarget();
     private opaqueSceneTexture = new ColorTexture();
     private currentScenarioIndex: number = 0;
+    private scenarioSelect: UI.SingleSelect;
 
     public onstatechanged!: () => void;
 
@@ -309,7 +451,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.sceneGraph = spawner.sceneGraph;
         this.textureHolder = spawner.textureHolder;
 
-        this.sceneGraph.onnodeadded = (node: BMDModelInstance, i: number) => {
+        this.sceneGraph.onnodeadded = () => {
             this.applyCurrentScenario();
         };
 
@@ -350,7 +492,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < 26; i++) {
             const visible = !!(layerMask & (1 << i));
             this.sceneGraph.forTag(getZoneLayerFilterTag(zoneName, i), (node) => {
-                node.setVisible(visible);
+                node.modelInstance.setVisible(visible);
             });
         }
     }
@@ -368,6 +510,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             return;
 
         this.currentScenarioIndex = index;
+        this.scenarioSelect.setHighlighted(this.currentScenarioIndex);
         this.onstatechanged();
         this.applyCurrentScenario();
     }
@@ -380,14 +523,14 @@ class SMGRenderer implements Viewer.SceneGfx {
         const scenarioNames = this.scenarioData.records.map((record) => {
             return BCSV.getField<string>(this.scenarioData, record, 'ScenarioName');
         });
-        const scenarioSelect = new UI.SingleSelect();
-        scenarioSelect.setStrings(scenarioNames);
-        scenarioSelect.onselectionchange = (index: number) => {
+        this.scenarioSelect = new UI.SingleSelect();
+        this.scenarioSelect.setStrings(scenarioNames);
+        this.scenarioSelect.onselectionchange = (index: number) => {
             this.setCurrentScenario(index);
         };
-        scenarioSelect.selectItem(0);
+        this.scenarioSelect.selectItem(0);
 
-        scenarioPanel.contents.appendChild(scenarioSelect.elem);
+        scenarioPanel.contents.appendChild(this.scenarioSelect.elem);
 
         return [scenarioPanel];
     }
@@ -520,6 +663,20 @@ function getLayerName(index: number) {
     }
 }
 
+interface Point {
+    p0: vec3;
+    p1: vec3;
+    p2: vec3;
+}
+
+interface Path {
+    l_id: number;
+    name: string;
+    type: string;
+    closed: string;
+    points: Point[];
+}
+
 interface ObjInfo {
     objId: number;
     objName: string;
@@ -527,6 +684,7 @@ interface ObjInfo {
     rotateSpeed: number;
     rotateAccelType: number;
     modelMatrix: mat4;
+    path: Path;
 }
 
 interface ZoneLayer {
@@ -562,17 +720,31 @@ interface AnimOptions {
     brk?: string;
 }
 
-class YSpinAnimator {
-    constructor(public animationController: AnimationController, public objinfo: ObjInfo) {
-    }
+function lerp(a: number, b: number, t: number): number {
+    return a + (b - a) * t;
+}
 
-    public calcModelMtx(dst: mat4, src: mat4): void {
-        const time = this.animationController.getTimeInSeconds();
-        // RotateSpeed appears to be deg/sec?
-        const rotateSpeed = this.objinfo.rotateSpeed / (this.objinfo.rotateAccelType > 0 ? this.objinfo.rotateAccelType : 1);
-        const speed = rotateSpeed * Math.PI / 180;
-        mat4.rotateY(dst, src, time * speed);
-    }
+function getPointLinear_3(dst: vec3, p0: vec3, p1: vec3, t: number): void {
+    dst[0] = lerp(p0[0], p1[0], t);
+    dst[1] = lerp(p0[1], p1[1], t);
+    dst[2] = lerp(p0[2], p1[2], t);
+}
+
+function getPointBezier_3(dst: vec3, p0: vec3, c0: vec3, c1: vec3, p1: vec3, t: number): void {
+    dst[0] = getPointBezier(p0[0], c0[0], c1[0], p1[0], t);
+    dst[1] = getPointBezier(p0[1], c0[1], c1[1], p1[1], t);
+    dst[2] = getPointBezier(p0[2], c0[2], c1[2], p1[2], t);
+}
+
+function interpPathPoints(dst: vec3, pt0: Point, pt1: Point, t: number): void {
+    const p0 = pt0.p0;
+    const c0 = pt0.p2;
+    const c1 = pt1.p1;
+    const p1 = pt1.p0;
+    if (vec3.equals(p0, c0) && vec3.equals(c1, p1))
+        getPointLinear_3(dst, p0, p1, t);
+    else
+        getPointBezier_3(dst, p0, c0, c1, p1, t);
 }
 
 class ModelCache {
@@ -638,8 +810,8 @@ class SMGSpawner {
                 btkFile = rarc.findFile('wait.btk');
                 if (!(bckFile || brkFile || btkFile)) {
                     bckFile = rarc.files.find((file) => file.name.endsWith('.bck')) || null;
-                    brkFile = rarc.files.find((file) => file.name.endsWith('.brk')) || null;
-                    btkFile = rarc.files.find((file) => file.name.endsWith('.btk')) || null;
+                    brkFile = rarc.files.find((file) => file.name.endsWith('.brk') && file.name !== 'colorchange.brk') || null;
+                    btkFile = rarc.files.find((file) => file.name.endsWith('.btk') && file.name !== 'texchange.btk') || null;
                 }
             }
         }
@@ -663,7 +835,7 @@ class SMGSpawner {
         }
     }
 
-    public spawnArchive(device: GfxDevice, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<BMDModelInstance | null> {
+    public createModelInstanceFromArchive(device: GfxDevice, name: string, animOptions?: AnimOptions): Progressable<BMDModelInstance | null> {
         // Should do a remap at some point.
         const arcPath = `${this.pathBase}/ObjectData/${name}.arc`;
         const modelFilename = `${name}.bdl`;
@@ -677,19 +849,20 @@ class SMGSpawner {
             const bmdModelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
             bmdModelInstance.name = name;
             this.applyAnimations(bmdModelInstance, rarc, animOptions);
-            mat4.copy(bmdModelInstance.modelMatrix, modelMatrix);
             return bmdModelInstance;
         });
     }
 
-    public spawnObject(device: GfxDevice, zoneLayerFilterTag: string, objinfo: ObjInfo, modelMatrix: mat4): void {
+    public spawnObject(device: GfxDevice, zoneLayerFilterTag: string, objinfo: ObjInfo, modelMatrixBase: mat4): void {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions?: AnimOptions) => {
-            this.spawnArchive(device, modelMatrix, arcName, animOptions).then((modelInstance) => {
+            return this.createModelInstanceFromArchive(device, arcName, animOptions).then((modelInstance) => {
                 if (modelInstance) {
+                    modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
+
                     if (tag === SceneGraphTag.Skybox) {
                         // If we have a skybox, then shrink it down a bit.
                         const skyboxScale = 0.5;
-                        mat4.scale(modelInstance.modelMatrix, modelInstance.modelMatrix, [skyboxScale, skyboxScale, skyboxScale]);
+                        mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [skyboxScale, skyboxScale, skyboxScale]);
                         modelInstance.setIsSkybox(true);
                         modelInstance.passMask = SMGPass.SKYBOX;
                     } else if (tag === SceneGraphTag.Indirect) {
@@ -700,12 +873,8 @@ class SMGSpawner {
                         modelInstance.passMask = SMGPass.OPAQUE;
                     }
 
-                    this.sceneGraph.addNode(modelInstance, [tag, zoneLayerFilterTag]);
-
-                    if (objinfo.rotateSpeed !== 0) {
-                        // Set up a rotator animation to spin it around.
-                        modelInstance.bindModelMatrixAnimator(new YSpinAnimator(modelInstance.animationController, objinfo));
-                    }
+                    const node = new Node(objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
+                    this.sceneGraph.addNode(node, [tag, zoneLayerFilterTag]);
 
                     this.renderHelper.renderInstBuilder.constructRenderInsts(device, this.viewRenderer);
                 }
@@ -718,6 +887,9 @@ class SMGSpawner {
         case 'FlagPeachCastleB':
         case 'FlagPeachCastleC':
             // Archives just contain the textures. Mesh geometry appears to be generated at runtime by the game.
+            return;
+        case 'ElectricRail':
+            // Covers the path with the rail -- will require special spawn logic.
             return;
         case 'PeachCastleTownBeforeAttack':
             spawnGraph('PeachCastleTownBeforeAttack', SceneGraphTag.Normal);
@@ -764,18 +936,22 @@ class SMGSpawner {
             }
             break;
         }
-        case 'SignBoard':
-            spawnGraph(name, SceneGraphTag.Normal, null);
+        case 'TicoRail':
+            spawnGraph('Tico');
             break;
-        case 'UFOKinoko':
-            spawnGraph(name, SceneGraphTag.Normal, null);
+        case 'Rabbit':
+            spawnGraph('TrickRabbit');
             break;
         case 'Rosetta':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'waita.bck' });
             break;
+
+        case 'BeyondSummerSky':
+        case 'CloudSky':
         case 'HalfGalaxySky':
         case 'GalaxySky':
         case 'RockPlanetOrbitSky':
+        case 'SummerSky':
         case 'VROrbit':
             // Skyboxen.
             spawnGraph(name, SceneGraphTag.Skybox);
@@ -820,17 +996,11 @@ class SMGSpawner {
         for (const layer of zone.layers) {
             const zoneLayerFilterTag = getZoneLayerFilterTag(zone.name, layer.index);
 
-            for (const objinfo of layer.objinfo) {
-                const modelMatrix = mat4.create();
-                mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
-                this.spawnObject(device, zoneLayerFilterTag, objinfo, modelMatrix);
-            }
+            for (const objinfo of layer.objinfo)
+                this.spawnObject(device, zoneLayerFilterTag, objinfo, modelMatrixBase);
 
-            for (const objinfo of layer.mappartsinfo) {
-                const modelMatrix = mat4.create();
-                mat4.mul(modelMatrix, modelMatrixBase, objinfo.modelMatrix);
-                this.spawnObject(device, zoneLayerFilterTag, objinfo, modelMatrix);
-            }
+            for (const objinfo of layer.mappartsinfo)
+                this.spawnObject(device, zoneLayerFilterTag, objinfo, modelMatrixBase);
 
             for (const zoneinfo of layer.stageobjinfo) {
                 const subzone = zones.find((zone) => zone.name === zoneinfo.objName);
@@ -848,19 +1018,6 @@ class SMGSpawner {
     }
 }
 
-function parsePlacement(bcsv: BCSV.Bcsv): ObjInfo[] {
-    return bcsv.records.map((record): ObjInfo => {
-        const objId = BCSV.getField<number>(bcsv, record, 'l_id', -1);
-        const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
-        const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
-        const rotateSpeed = BCSV.getField<number>(bcsv, record, 'RotateSpeed', 0);
-        const rotateAccelType = BCSV.getField<number>(bcsv, record, 'RotateAccelType', 0);
-        const modelMatrix = mat4.create();
-        computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-        return { objId, objName, objArg0, rotateSpeed, rotateAccelType, modelMatrix };
-    });
-}
-
 export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     protected pathBase: string;
 
@@ -869,18 +1026,68 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
     protected abstract getZoneMapFilename(zoneName: string): string;
 
+    public parsePlacement(bcsv: BCSV.Bcsv, paths: Path[]): ObjInfo[] {
+        return bcsv.records.map((record): ObjInfo => {
+            const objId = BCSV.getField<number>(bcsv, record, 'l_id', -1);
+            const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
+            const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
+            const rotateSpeed = BCSV.getField<number>(bcsv, record, 'RotateSpeed', 0);
+            const rotateAccelType = BCSV.getField<number>(bcsv, record, 'RotateAccelType', 0);
+            const pathId: number = BCSV.getField<number>(bcsv, record, 'CommonPath_ID', -1);
+            const path = paths.find((path) => path.l_id === pathId) || null;
+            const modelMatrix = mat4.create();
+            computeModelMatrixFromRecord(modelMatrix, bcsv, record);
+            return { objId, objName, objArg0, rotateSpeed, rotateAccelType, modelMatrix, path };
+        });
+    }
+    
+    public parsePaths(pathDir: RARC.RARCDir): Path[] {
+        const commonPathInfo = BCSV.parse(RARC.findFileDataInDir(pathDir, 'commonpathinfo'));
+        return commonPathInfo.records.map((record, i): Path => {
+            const l_id = BCSV.getField<number>(commonPathInfo, record, 'l_id');
+            const no = BCSV.getField<number>(commonPathInfo, record, 'no');
+            assert(no === i);
+            const name = BCSV.getField<string>(commonPathInfo, record, 'name');
+            const type = BCSV.getField<string>(commonPathInfo, record, 'type');
+            const closed = BCSV.getField<string>(commonPathInfo, record, 'closed', 'OPEN');
+            const path_arg0 = BCSV.getField<string>(commonPathInfo, record, 'path_arg0');
+            const path_arg1 = BCSV.getField<string>(commonPathInfo, record, 'path_arg1');
+            const pointinfo = BCSV.parse(RARC.findFileDataInDir(pathDir, `commonpathpointinfo.${i}`));
+            const points = pointinfo.records.map((record, i) => {
+                const id = BCSV.getField<number>(pointinfo, record, 'id');
+                assert(id === i);
+                const pnt0_x = BCSV.getField<number>(pointinfo, record, 'pnt0_x');
+                const pnt0_y = BCSV.getField<number>(pointinfo, record, 'pnt0_y');
+                const pnt0_z = BCSV.getField<number>(pointinfo, record, 'pnt0_z');
+                const pnt1_x = BCSV.getField<number>(pointinfo, record, 'pnt1_x');
+                const pnt1_y = BCSV.getField<number>(pointinfo, record, 'pnt1_y');
+                const pnt1_z = BCSV.getField<number>(pointinfo, record, 'pnt1_z');
+                const pnt2_x = BCSV.getField<number>(pointinfo, record, 'pnt2_x');
+                const pnt2_y = BCSV.getField<number>(pointinfo, record, 'pnt2_y');
+                const pnt2_z = BCSV.getField<number>(pointinfo, record, 'pnt2_z');
+                const p0 = vec3.fromValues(pnt0_x, pnt0_y, pnt0_z);
+                const p1 = vec3.fromValues(pnt1_x, pnt1_y, pnt1_z);
+                const p2 = vec3.fromValues(pnt2_x, pnt2_y, pnt2_z);
+                return { p0, p1, p2 };
+            });
+            return { l_id, name, type, closed, points };
+        });
+    }
+
     public parseZone(name: string, buffer: ArrayBufferSlice): Zone {
         const rarc = RARC.parse(buffer);
         const layers: ZoneLayer[] = [];
         for (let i = -1; i < 26; i++) {
-            const layerName = getLayerName(i).toLowerCase();
+            const layerName = getLayerName(i);
             const placementDir = `jmp/placement/${layerName}`;
+            const pathDir = `jmp/path`;
             const mappartsDir = `jmp/mapparts/${layerName}`;
             if (!rarc.findDir(placementDir))
                 continue;
-            const objinfo = parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/objinfo`)));
-            const mappartsinfo = parsePlacement(BCSV.parse(rarc.findFileData(`${mappartsDir}/mappartsinfo`)));
-            const stageobjinfo = parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/stageobjinfo`)));
+            const paths = this.parsePaths(rarc.findDir(pathDir));
+            const objinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/objinfo`)), paths);
+            const mappartsinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${mappartsDir}/mappartsinfo`)), paths);
+            const stageobjinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/stageobjinfo`)), paths);
             layers.push({ index: i, objinfo, mappartsinfo, stageobjinfo });
         }
         return { name, layers };

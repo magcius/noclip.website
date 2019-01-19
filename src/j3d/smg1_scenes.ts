@@ -17,6 +17,9 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SMG1SceneDesc("Comet Observatory", "AstroGalaxy"),
     new SMG1SceneDesc("Battlerock Galaxy", "BattleShipGalaxy"),
     new SMG1SceneDesc("Honeyhive Galaxy", "HoneyBeeKingdomGalaxy"),
+    new SMG1SceneDesc("Sweet Sweet Galaxy", "BeltConveyerExGalaxy"),
+    new SMG1SceneDesc("Good Egg Galaxy", "EggStarGalaxy"),
+    new SMG1SceneDesc("Beach Bowl Galaxy", "HeavenlyBeachGalaxy"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

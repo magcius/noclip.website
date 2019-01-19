@@ -16,6 +16,7 @@ import AnimationController from '../AnimationController';
 import { cv, Graph } from '../DebugJunk';
 import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
+import { getPointHermite } from '../Spline';
 
 //#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {
@@ -1434,10 +1435,6 @@ function sampleFloatAnimationTrackLinear(track: FloatAnimationTrackLinear, frame
     return lerpPeriodic(k0, k1, t);
 }
 
-function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number): number {
-    return (((cf0 * t + cf1) * t + cf2) * t + cf3);
-}
-
 function hermiteInterpolate(k0: FloatAnimationKeyframeHermite, k1: FloatAnimationKeyframeHermite, frame: number): number {
     const length = k1.frame - k0.frame;
     const t = (frame - k0.frame) / length;
@@ -1445,11 +1442,7 @@ function hermiteInterpolate(k0: FloatAnimationKeyframeHermite, k1: FloatAnimatio
     const p1 = k1.value;
     const s0 = k0.tangent * length;
     const s1 = k1.tangent * length;
-    const cf0 = (p0 *  2) + (p1 * -2) + (s0 *  1) +  (s1 *  1);
-    const cf1 = (p0 * -3) + (p1 *  3) + (s0 * -2) +  (s1 * -1);
-    const cf2 = (p0 *  0) + (p1 *  0) + (s0 *  1) +  (s1 *  0);
-    const cf3 = (p0 *  1) + (p1 *  0) + (s0 *  0) +  (s1 *  0);
-    return cubicEval(cf0, cf1, cf2, cf3, t);
+    return getPointHermite(p0, p1, s0, s1, t);
 }
 
 function sampleFloatAnimationTrackHermite(track: FloatAnimationTrackHermite, frame: number): number {

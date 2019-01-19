@@ -15,9 +15,10 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { Camera, computeViewMatrix, computeViewSpaceDepth } from '../Camera';
+import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { AABB } from '../Geometry';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -241,6 +242,7 @@ class Command_Batch {
     }
 }
 
+const bboxScratch = new AABB();
 class Command_Node {
     public visible: boolean = true;
     public children: Command_Node[] = [];
@@ -268,7 +270,8 @@ class Command_Node {
 
         // Compute depth from camera.
         if (this.visible) {
-            this.depth = computeViewSpaceDepth(camera, this.node.bbox);
+            bboxScratch.transform(this.node.bbox, this.modelMatrix);
+            this.depth = computeViewSpaceDepthFromWorldSpaceAABB(camera, bboxScratch);
         }
     }
 

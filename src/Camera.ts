@@ -103,8 +103,25 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
 }
 
 const scratchVec3 = vec3.create();
-export function computeViewSpaceDepth(camera: Camera, aabb: AABB, v: vec3 = scratchVec3): number {
+
+/**
+ * Computes a view-space depth given @param camera and @param aabb in world-space.
+ * 
+ * The convention of "view-space depth" is that 0 is near plane, +z is further away.
+ * The returned value can be passed directly to {@link GfxRenderer.setSortKeyDepth}.
+ */
+export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AABB, v: vec3 = scratchVec3): number {
     aabb.centerPoint(v);
+    return computeViewSpaceDepthFromWorldSpacePoint(camera, v);
+}
+
+/**
+ * Computes a view-space depth given @param camera and @param v in world-space.
+ * 
+ * The convention of "view-space depth" is that 0 is near plane, +z is further away.
+ * The returned value can be passed directly to {@link GfxRenderer.setSortKeyDepth}.
+ */
+export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3): number {
     vec3.transformMat4(v, v, camera.viewMatrix);
     return Math.max(-v[2], 0);
 }

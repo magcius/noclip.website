@@ -6,6 +6,7 @@ import { mat4 } from "gl-matrix";
 import { Color, colorFromRGBA } from "../Color";
 import { Texture, TextureLevel, Version, calcTexMtx } from "./cmb";
 import { decodeTexture, computeTextureByteSize } from "./pica_texture";
+import { getPointHermite } from "../Spline";
 
 // CMAB (CTR Material Animation Binary)
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?
@@ -304,21 +305,13 @@ function sampleAnimationTrackLinear(track: AnimationTrackLinear, frame: number):
     return lerp(k0, k1, t);
 }
 
-function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number): number {
-    return (((cf0 * t + cf1) * t + cf2) * t + cf3);
-}
-
 function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number): number {
     const length = k1.time - k0.time;
     const p0 = k0.value;
     const p1 = k1.value;
     const s0 = k0.tangentOut * length;
     const s1 = k1.tangentIn * length;
-    const cf0 = (p0 *  2) + (p1 * -2) + (s0 *  1) +  (s1 *  1);
-    const cf1 = (p0 * -3) + (p1 *  3) + (s0 * -2) +  (s1 * -1);
-    const cf2 = (p0 *  0) + (p1 *  0) + (s0 *  1) +  (s1 *  0);
-    const cf3 = (p0 *  1) + (p1 *  0) + (s0 *  0) +  (s1 *  0);
-    return cubicEval(cf0, cf1, cf2, cf3, t);
+    return getPointHermite(p0, p1, s0, s1, t);
 }
 
 function sampleAnimationTrackHermite(track: AnimationTrackHermite, frame: number) {

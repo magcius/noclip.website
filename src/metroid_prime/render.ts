@@ -14,7 +14,7 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffers, GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, GfxRenderInstViewRenderer, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderer';
-import { computeViewSpaceDepth, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
+import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0,  0, 0,
@@ -303,7 +303,7 @@ export class MREARenderer {
                 const worldModel = this.mrea.worldModels[i];
                 bbox.transform(worldModel.bbox, posMtx);
                 if (camera.frustum.contains(bbox))
-                    this.modelViewSpaceDepth[i] = computeViewSpaceDepth(camera, bbox);
+                    this.modelViewSpaceDepth[i] = computeViewSpaceDepthFromWorldSpaceAABB(camera, bbox);
                 else
                     visible = false;
             }
@@ -423,7 +423,7 @@ export class CMDLRenderer {
         if (visible && !this.isSkybox) {
             bbox.transform(this.cmdl.bbox, posMtx);
             if (camera.frustum.contains(bbox))
-                modelViewSpaceDepth = computeViewSpaceDepth(camera, bbox);
+                modelViewSpaceDepth = computeViewSpaceDepthFromWorldSpaceAABB(camera, bbox);
         }
         if (!visible)
             modelViewSpaceDepth = Infinity;

@@ -45,6 +45,11 @@ export class MaterialParams {
 
 export class PacketParams {
     public u_PosMtx: mat4[] = nArray(10, () => mat4.create());
+
+    public clear(): void {
+        for (let i = 0; i < 8; i++)
+            mat4.identity(this.u_PosMtx[i]);
+    }
 }
 
 export const ub_SceneParams = 0;

@@ -17,7 +17,7 @@ import { getFormatCompByteSize, getFormatComponentCount } from '../gfx/platform/
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { FVTX_VertexAttribute, FVTX_VertexBuffer, FTEXEntry, FRES, FVTX, FSHP_Mesh, FMAT, FSHP, FMDL } from './bfres';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
-import { computeViewSpaceDepth, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
+import { computeViewSpaceDepthFromWorldSpaceAABB, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
@@ -757,7 +757,7 @@ class FSHPMeshInstance {
         for (let i = 0; i < this.renderInsts.length; i++) {
             this.renderInsts[i].visible = visible;
             if (visible) {
-                const depth = computeViewSpaceDepth(viewerInput.camera, this.meshData.mesh.bbox);
+                const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.meshData.mesh.bbox);
                 this.renderInsts[i].sortKey = setSortKeyDepth(this.renderInsts[i].sortKey, depth);
             }
         }

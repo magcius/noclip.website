@@ -16,13 +16,23 @@ export interface RARCDir {
     subdirs: RARCDir[];
 }
 
+export function findFileInDir(dir: RARCDir, filename: string): RARCFile | null {
+    const file = dir.files.find((file) => file.name.toLowerCase() === filename.toLowerCase());
+    return file || null;
+}
+
+export function findFileDataInDir(dir: RARCDir, filename: string): ArrayBufferSlice | null {
+    const file = findFileInDir(dir, filename);
+    return file ? file.buffer : null;
+}
+
 export class RARC {
     // All the files in a flat list.
     public files: RARCFile[];
     // Root directory.
     public root: RARCDir;
 
-    public findDirParts(parts: string[]): RARCDir {
+    public findDirParts(parts: string[]): RARCDir | null {
         let dir = this.root;
         for (const part of parts) {
             dir = dir.subdirs.find((subdir) => subdir.name.toLowerCase() === part);
@@ -32,7 +42,7 @@ export class RARC {
         return dir;
     }
 
-    public findDir(path: string): RARCDir {
+    public findDir(path: string): RARCDir | null {
         return this.findDirParts(path.split('/'));
     }
 
@@ -43,10 +53,7 @@ export class RARC {
         const dir = this.findDirParts(parts);
         if (dir === null)
             return null;
-        const file = dir.files.find((file) => file.name.toLowerCase() === filename);
-        if (!file)
-            return null;
-        return file;
+        return findFileInDir(dir, filename);
     }
 
     public findFileData(path: string): ArrayBufferSlice | null {

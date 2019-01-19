@@ -14,6 +14,7 @@ const name = "Super Mario Galaxy 2";
 
 const sceneDescs: Viewer.SceneDesc[] = [
     new SMG2SceneDesc("Mario's Faceship", "MarioFaceShipGalaxy"),
+    new SMG2SceneDesc("Starshine Beach Galaxy", "TropicalResortGalaxy"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

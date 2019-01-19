@@ -7,7 +7,7 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams } from '../gx/gx_render';
 
-import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepth } from '../Camera';
+import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assertExists } from '../util';
@@ -15,7 +15,7 @@ import { AABB } from '../Geometry';
 import { GfxDevice, GfxSampler, GfxProgram } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput } from '../viewer';
-import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyLayer, getSortKeyLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
@@ -68,7 +68,7 @@ const posMtxVisibility: boolean[] = nArray(10, () => true);
 const packetParams = new PacketParams();
 export class ShapeInstance {
     private renderInsts: GfxRenderInst[] = [];
-    public layerRenderBias: number = 0;
+    public sortKeyBias: number = 0;
 
     constructor(public shapeData: ShapeData) {
     }
@@ -78,29 +78,13 @@ export class ShapeInstance {
             this.renderInsts.push(this.shapeData.shapeHelpers[i].pushRenderInst(renderInstBuilder));
     }
 
-    public shouldDraw(shapeInstanceState: ShapeInstanceState): boolean {
-        const shape = this.shapeData.shape;
-        for (let p = 0; p < shape.packets.length; p++) {
-            const packet = shape.packets[p];
-            for (let i = 0; i < packet.matrixTable.length; i++) {
-                const matrixIndex = packet.matrixTable[i];
-
-                if (matrixIndex === 0xFFFF)
-                    continue;
-
-                if (shapeInstanceState.matrixVisibility[matrixIndex])
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    public prepareToRender(renderHelper: GXRenderHelperGfx, visible: boolean, viewerInput: ViewerRenderInput, shapeInstanceState: ShapeInstanceState): void {
+    public prepareToRender(renderHelper: GXRenderHelperGfx, depth: number, viewerInput: ViewerRenderInput, shapeInstanceState: ShapeInstanceState): void {
         const shape = this.shapeData.shape;
 
         const modelView = this.computeModelView(viewerInput.camera, shapeInstanceState);
+        packetParams.clear();
 
+        const visible = depth >= 0;
         for (let p = 0; p < shape.packets.length; p++) {
             const packet = shape.packets[p];
             const renderInst = this.renderInsts[p];
@@ -130,12 +114,8 @@ export class ShapeInstance {
             }
 
             if (renderInst.visible) {
-                const depth = computeViewSpaceDepth(viewerInput.camera, this.shapeData.shape.bbox);
                 renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
-                if (this.layerRenderBias != 0) {
-                    const baseLayer = getSortKeyLayer(renderInst.parentRenderInst.sortKey);
-                    renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, baseLayer + this.layerRenderBias);
-                }
+                renderInst.sortKey = setSortKeyBias(renderInst.sortKey, this.sortKeyBias);
                 this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst, renderHelper);
             }
         }
@@ -146,7 +126,8 @@ export class ShapeInstance {
         switch (shape.displayFlags) {
         case ShapeDisplayFlags.USE_PNMTXIDX:
         case ShapeDisplayFlags.NORMAL:
-            // We always use PNMTXIDX in the normal case -- and we hardcode missing attributes to 0.
+            // NORMAL is equivalent to using PNMTX0 on original hardware.
+            // If we don't have a PNMTXIDX buffer, we create a phony one with all zeroes. So we're good.
             mat4.copy(scratchModelMatrix, shapeInstanceState.modelMatrix);
             break;
 
@@ -470,10 +451,6 @@ export class BMDModel {
 
 }
 
-interface ModelMatrixAnimator {
-    calcModelMtx(dst: mat4, src: mat4): void;
-}
-
 export class BMDModelInstance {
     public name: string = '';
     public visible: boolean = true;
@@ -489,7 +466,6 @@ export class BMDModelInstance {
     // Animations.
     public animationController = new AnimationController();
     public ank1Animator: ANK1Animator | null = null;
-    public modelMatrixAnimator: ModelMatrixAnimator | null = null;
 
     // Temporary state when calculating bone matrices.
     private jointMatrices: mat4[];
@@ -548,7 +524,7 @@ export class BMDModelInstance {
                 const shapeInstance = this.shapeInstances[node.shapeIdx];
                 // Translucent draws need to be in-order, for J3D, as far as I can tell?
                 if (currentMaterial.materialData.material.translucent)
-                    shapeInstance.layerRenderBias = translucentDrawIndex++;
+                    shapeInstance.sortKeyBias = translucentDrawIndex++;
                 shapeInstance.pushRenderInsts(renderInstBuilder);
                 renderInstBuilder.popTemplateRenderInst();
                 break;
@@ -608,10 +584,6 @@ export class BMDModelInstance {
         this.ank1Animator = bindANK1Animator(this.animationController, ank1);
     }
 
-    public bindModelMatrixAnimator(m: ModelMatrixAnimator) {
-        this.modelMatrixAnimator = m;
-    }
-
     public getTimeInFrames(milliseconds: number) {
         return (milliseconds / 1000) * this.fps;
     }
@@ -627,6 +599,7 @@ export class BMDModelInstance {
 
             // Billboards shouldn't have their root joint modified, given that we have to compute a new model
             // matrix that faces the camera view.
+            // TODO(jstpierre): There's a way to do this without this hackiness, I'm sure of it.
             const rootJointMatrix = matrixScratch;
 
             if (this.bmdModel.hasBillboard) {
@@ -636,9 +609,6 @@ export class BMDModelInstance {
                 mat4.copy(rootJointMatrix, this.modelMatrix);
                 mat4.identity(this.shapeInstanceState.modelMatrix);
             }
-
-            if (this.modelMatrixAnimator !== null)
-                this.modelMatrixAnimator.calcModelMtx(rootJointMatrix, rootJointMatrix);
 
             // Skyboxes implicitly center themselves around the view matrix (their view translation is removed).
             // While we could represent this, a skybox is always visible in theory so it's probably not worth it
@@ -660,13 +630,20 @@ export class BMDModelInstance {
         }
 
         // Now update our materials and shapes.
+        let depth = -1;
         if (modelVisible) {
             for (let i = 0; i < this.materialInstances.length; i++)
                 this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.bmdModel, this.textureHolder);
+
+            // Use the root joint to calculate depth.
+            const bbox = this.bboxScratch;
+            const rootJoint = this.bmdModel.bmd.jnt1.joints[0];
+            bbox.transform(rootJoint.bbox, this.modelMatrix);
+            depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bbox);
         }
 
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(renderHelper, modelVisible, viewerInput, this.shapeInstanceState);
+            this.shapeInstances[i].prepareToRender(renderHelper, depth, viewerInput, this.shapeInstanceState);
     }
 
     private updateJointMatrixHierarchy(camera: Camera, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {

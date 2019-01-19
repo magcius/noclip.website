@@ -4,7 +4,7 @@ import * as BRRES from './brres';
 import * as GX_Material from '../gx/gx_material';
 import { mat4, mat2d } from "gl-matrix";
 import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx, PacketParams } from "../gx/gx_render";
-import { texProjPerspMtx, texEnvMtx, computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepth } from "../Camera";
+import { texProjPerspMtx, texEnvMtx, computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
@@ -79,7 +79,7 @@ class ShapeInstance {
             this.computeModelView(this.packetParams.u_PosMtx[0], modelMatrix, camera, isSkybox);
 
             bboxScratch.transform(this.node.bbox, modelMatrix);            
-            const depth = computeViewSpaceDepth(camera, bboxScratch);
+            const depth = computeViewSpaceDepthFromWorldSpaceAABB(camera, bboxScratch);
             this.renderInst.sortKey = setSortKeyDepth(this.renderInst.sortKey, depth);
 
             if (renderLayerBias !== 0) {

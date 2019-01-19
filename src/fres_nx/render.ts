@@ -17,7 +17,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4 } from 'gl-matrix';
-import { computeViewMatrix, computeViewSpaceDepth } from '../Camera';
+import { computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { BasicRendererHelper } from '../oot3d/render';
 import { AABB } from '../Geometry';
 
@@ -706,7 +706,7 @@ class FSHPMeshInstance {
         for (let i = 0; i < this.renderInsts.length; i++) {
             this.renderInsts[i].visible = visible;
             if (visible) {
-                const depth = computeViewSpaceDepth(viewerInput.camera, this.meshData.mesh.bbox);
+                const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.meshData.mesh.bbox);
                 this.renderInsts[i].sortKey = setSortKeyDepth(this.renderInsts[i].sortKey, depth);
             }
         }

@@ -57,22 +57,25 @@ export function makeDepthKeyEx(depth: number, flipDepth: boolean, maxDepth: numb
     return depthKey & 0xFFFF;
 }
 
-export function makeDepthKey(sortKey: number, depth: number, maxDepth: number = MAX_DEPTH) {
-    const isTranslucent = ((sortKey >>> 30) & 1) !== 0;
-    return makeDepthKeyEx(depth, isTranslucent, maxDepth);
-}
-
 // Common sort key kinds.
-// Indexed:     0TLLLLLL IIIIIIII IIIIIIII IIIIIIII
-// Opaque:      00LLLLLL DDDDDDDD DDDDDDPP PPPPPPDD
-// Translucent: 01LLLLLL DDDDDDDD DDDDDDDD PPPPPPPP
+// Indexed:     TLLLLLLL IIIIIIII IIIIIIII IIIIIIII
+// Opaque:      0LLLLLLL DDDDDDDD DDDDDDPP PPPPPPDD
+// Translucent: 1LLLLLLL DDDDDDDD DDDDDDDD BBBBBBBB
 
 export function getSortKeyLayer(sortKey: number): number {
     return (sortKey >>> 24) & 0xFF;
 }
 
 export function setSortKeyLayer(sortKey: number, layer: number): number {
-    return ((sortKey & 0x00FFFFFFFF) | ((layer & 0xFF) << 24)) >>> 0;
+    return ((sortKey & 0x00FFFFFF) | ((layer & 0xFF) << 24)) >>> 0;
+}
+
+export function setSortKeyBias(sortKey: number, bias: number): number {
+    const isTransparent = !!((sortKey >>> 31) & 1);
+    if (isTransparent)
+        return ((sortKey & 0xFFFFFF00) | (bias & 0xFF)) >>> 0;
+    else
+        return sortKey;
 }
 
 export function makeSortKeyOpaque(layer: number, programKey: number): number {
@@ -84,31 +87,40 @@ export function setSortKeyOpaqueDepth(sortKey: number, depthKey: number): number
     return ((sortKey & 0xFF0003FC) | ((depthKey & 0xFFFC) << 8) | (depthKey & 0x0003)) >>> 0;
 }
 
-export function makeSortKeyTranslucent(layer: number, programKey: number): number {
-    return setSortKeyLayer((programKey & 0xFF), layer);
+export function makeSortKeyTranslucent(layer: number): number {
+    return setSortKeyLayer(0, layer);
 }
 
 export function setSortKeyTranslucentDepth(sortKey: number, depthKey: number): number {
     assert(depthKey >= 0);
-    return ((sortKey & 0xFF0000FF) | (depthKey)) >>> 0;
+    return ((sortKey & 0xFF0000FF) | (depthKey << 8)) >>> 0;
 }
 
 export function makeSortKey(layer: GfxRendererLayer, programKey: number): number {
     if (layer & GfxRendererLayer.TRANSLUCENT)
-        return makeSortKeyTranslucent(layer, programKey);
+        return makeSortKeyTranslucent(layer);
     else
         return makeSortKeyOpaque(layer, programKey);
 }
 
 export function setSortKeyDepthKey(sortKey: number, depthKey: number): number {
-    const isTranslucent = (sortKey >>> 31) & 1;
+    const isTranslucent = !!((sortKey >>> 31) & 1);
     return isTranslucent ? setSortKeyTranslucentDepth(sortKey, depthKey) : setSortKeyOpaqueDepth(sortKey, depthKey);
 }
 
 export function setSortKeyDepth(sortKey: number, depth: number, maxDepth: number = MAX_DEPTH): number {
-    const isTranslucent = (sortKey >>> 31) & 1;
-    const depthKey = makeDepthKey(isTranslucent, depth, maxDepth);
+    const isTranslucent = !!((sortKey >>> 31) & 1);
+    const depthKey = makeDepthKeyEx(depth, isTranslucent, maxDepth);
     return isTranslucent ? setSortKeyTranslucentDepth(sortKey, depthKey) : setSortKeyOpaqueDepth(sortKey, depthKey);
+}
+
+export function getSortKeyDepth(sortKey: number): number {
+    const isTranslucent = !!((sortKey >>> 31) & 1);
+    if (isTranslucent)
+        return (sortKey >>> 8) & 0xFFFF;
+    else {
+        return ((sortKey >>> 8) & 0xFFFC | (sortKey & 0x03));
+    }
 }
 
 function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
