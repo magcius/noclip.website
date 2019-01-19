@@ -320,9 +320,10 @@ class Main {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
                 if (this.currentSceneDesc) {
                     const key = this._getSaveStateSlotKey(i);
-                    const shouldSave = inputManager.isKeyDown('ShiftLeft');
-                    if (shouldSave) {
+                    if (inputManager.isKeyDown('ShiftLeft')) {
                         this.saveManager.saveState(key, this._getSceneSaveState());
+                    } else if (inputManager.isKeyDown('AltLeft')) {
+                        this.saveManager.deleteState(key);
                     } else {
                         const state = this.saveManager.loadState(key);
                         if (state !== null)

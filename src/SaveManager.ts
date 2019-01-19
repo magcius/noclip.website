@@ -75,6 +75,10 @@ export class SaveManager {
         window.localStorage.setItem(key, serializedState);
     }
 
+    public deleteState(key: string): void {
+        window.localStorage.removeItem(key);
+    }
+
     public loadState(key: string): string | null {
         let state: string | null = null;
 
