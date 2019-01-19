@@ -20,7 +20,8 @@ import * as ZTP from './j3d/ztp_scenes';
 import * as MKDD from './j3d/mkdd_scenes';
 import * as ZWW from './j3d/zww_scenes';
 import * as SMS from './j3d/sms_scenes';
-import * as SMG from './j3d/smg_scenes';
+import * as SMG1 from './j3d/smg1_scenes';
+import * as SMG2 from './j3d/smg2_scenes';
 import * as SM64DS from './sm64ds/scenes';
 import * as MDL0 from './mdl0/scenes';
 import * as OOT3D from './oot3d/oot3d_scenes';
@@ -60,7 +61,8 @@ import { RenderStatistics } from './RenderStatistics';
 const sceneGroups = [
     "Wii",
     MKWII.sceneGroup,
-    SMG.sceneGroup,
+    SMG1.sceneGroup,
+    SMG2.sceneGroup,
     SPM.sceneGroup,
     ZSS.sceneGroup,
     ELB.sceneGroup,

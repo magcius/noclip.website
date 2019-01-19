@@ -25,7 +25,7 @@ export class RARC {
     public findDirParts(parts: string[]): RARCDir {
         let dir = this.root;
         for (const part of parts) {
-            dir = dir.subdirs.find((subdir) => subdir.name === part);
+            dir = dir.subdirs.find((subdir) => subdir.name.toLowerCase() === part);
             if (dir === undefined)
                 return null;
         }
@@ -37,12 +37,13 @@ export class RARC {
     }
 
     public findFile(path: string): RARCFile | null {
+        path = path.toLowerCase();
         const parts = path.split('/');
         const filename = parts.pop();
         const dir = this.findDirParts(parts);
         if (dir === null)
             return null;
-        const file = dir.files.find((file) => file.name === filename);
+        const file = dir.files.find((file) => file.name.toLowerCase() === filename);
         if (!file)
             return null;
         return file;

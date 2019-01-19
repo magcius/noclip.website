@@ -4,7 +4,7 @@ import Progressable from '../Progressable';
 import { assert, nArray } from '../util';
 import { fetchData } from '../fetch';
 
-import {  DeviceProgram } from '../Program';
+import { DeviceProgram } from '../Program';
 import * as Viewer from '../viewer';
 
 import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
@@ -345,7 +345,7 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     private setZoneLayersVisible(zoneName: string, layerMask: number): void {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 26; i++) {
             const visible = !!(layerMask & (1 << i));
             this.sceneGraph.forTag(getZoneLayerFilterTag(zoneName, i), (node) => {
                 node.setVisible(visible);
@@ -543,8 +543,6 @@ interface AnimOptions {
     brk?: string;
 }
 
-const pathBase = `data/j3d/smg`;
-
 class YSpinAnimator {
     constructor(public animationController: AnimationController, public objinfo: ObjInfo) {
     }
@@ -562,13 +560,13 @@ class ModelCache {
     public promiseCache = new Map<string, Progressable<BMDModel>>();
     public archiveCache = new Map<string, RARC.RARC>();
 
-    public getModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, archiveName: string): Progressable<BMDModel> {
-        if (this.promiseCache.has(archiveName))
-            return this.promiseCache.get(archiveName);
+    public getModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, archivePath: string, modelFilename: string): Progressable<BMDModel> {
+        if (this.promiseCache.has(archivePath))
+            return this.promiseCache.get(archivePath);
 
-        const p = fetchData(`${pathBase}/ObjectData/${archiveName}.arc`).then((buffer: ArrayBufferSlice) => {
+        const p = fetchData(archivePath).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
-                console.warn(`Could not spawn archive ${archiveName}`);
+                console.warn(`Could not fetch archive ${archivePath}`);
                 return null;
             }
             return Yaz0.decompress(buffer);
@@ -576,15 +574,14 @@ class ModelCache {
             if (buffer === null)
                 return null;
             const rarc = RARC.parse(buffer);
-            const lowerName = archiveName.toLowerCase();
-            const bmd = rarc.findFileData(`${lowerName}.bdl`) !== null ? BMD.parse(rarc.findFileData(`${lowerName}.bdl`)) : null;
+            const bmd = rarc.findFileData(modelFilename) !== null ? BMD.parse(rarc.findFileData(modelFilename)) : null;
             const bmdModel = new BMDModel(device, renderHelper, bmd, null, materialHacks);
             textureHolder.addJ3DTextures(device, bmd);
-            this.archiveCache.set(archiveName, rarc);
+            this.archiveCache.set(archivePath, rarc);
             return bmdModel;
         });
 
-        this.promiseCache.set(archiveName, p);
+        this.promiseCache.set(archivePath, p);
         return p;
     }
 }
@@ -594,7 +591,7 @@ class SMGSpawner {
     public sceneGraph = new SceneGraph();
     private modelCache = new ModelCache();
 
-    constructor(private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv) {
+    constructor(private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv) {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -649,12 +646,14 @@ class SMGSpawner {
 
     public spawnArchive(device: GfxDevice, modelMatrix: mat4, name: string, animOptions?: AnimOptions): Progressable<BMDModelInstance | null> {
         // Should do a remap at some point.
-        return this.modelCache.getModel(device, this.renderHelper, this.textureHolder, name).then((bmdModel) => {
+        const arcPath = `${this.pathBase}/ObjectData/${name}.arc`;
+        const modelFilename = `${name}.bdl`;
+        return this.modelCache.getModel(device, this.renderHelper, this.textureHolder, arcPath, modelFilename).then((bmdModel) => {
             if (bmdModel === null)
                 return null;
 
             // Trickery.
-            const rarc = this.modelCache.archiveCache.get(name);
+            const rarc = this.modelCache.archiveCache.get(arcPath);
 
             const bmdModelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
             bmdModelInstance.name = name;
@@ -749,6 +748,9 @@ class SMGSpawner {
         case 'SignBoard':
             spawnGraph(name, SceneGraphTag.Normal, null);
             break;
+        case 'UFOKinoko':
+            spawnGraph(name, SceneGraphTag.Normal, null);
+            break;
         case 'Rosetta':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'waita.bck' });
             break;
@@ -759,6 +761,19 @@ class SMGSpawner {
             // Skyboxen.
             spawnGraph(name, SceneGraphTag.Skybox);
             break;
+
+        // SMG2
+        case 'PlantC':
+            spawnGraph(`PlantC00`);
+            break;
+        case 'CareTakerHunter':
+            spawnGraph(`CaretakerHunter`);
+            break;
+        case 'WorldMapSyncSky':
+            // Presumably this uses the "current world map". I chose 04, because I like it.
+            spawnGraph(`WorldMap03Sky`, SceneGraphTag.Skybox);
+            break;
+
         default: {
             const name = objinfo.objName;
             spawnGraph(name, SceneGraphTag.Normal);
@@ -814,35 +829,39 @@ class SMGSpawner {
     }
 }
 
-class SMGSceneDesc implements Viewer.SceneDesc {
+function parsePlacement(bcsv: BCSV.Bcsv): ObjInfo[] {
+    return bcsv.records.map((record): ObjInfo => {
+        const objId = BCSV.getField<number>(bcsv, record, 'l_id', -1);
+        const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
+        const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
+        const rotateSpeed = BCSV.getField<number>(bcsv, record, 'RotateSpeed', 0);
+        const rotateAccelType = BCSV.getField<number>(bcsv, record, 'RotateAccelType', 0);
+        const modelMatrix = mat4.create();
+        computeModelMatrixFromRecord(modelMatrix, bcsv, record);
+        return { objId, objName, objArg0, rotateSpeed, rotateAccelType, modelMatrix };
+    });
+}
+
+export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
+    protected pathBase: string;
+
     constructor(public name: string, public galaxyName: string, public id: string = galaxyName) {
     }
 
-    public parsePlacement(bcsv: BCSV.Bcsv): ObjInfo[] {
-        return bcsv.records.map((record): ObjInfo => {
-            const objId = BCSV.getField<number>(bcsv, record, 'l_id', -1);
-            const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
-            const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
-            const rotateSpeed = BCSV.getField<number>(bcsv, record, 'RotateSpeed', 0);
-            const rotateAccelType = BCSV.getField<number>(bcsv, record, 'RotateAccelType', 0);
-            const modelMatrix = mat4.create();
-            computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-            return { objId, objName, objArg0, rotateSpeed, rotateAccelType, modelMatrix };
-        });
-    }
+    protected abstract getZoneMapFilename(zoneName: string): string;
 
     public parseZone(name: string, buffer: ArrayBufferSlice): Zone {
         const rarc = RARC.parse(buffer);
         const layers: ZoneLayer[] = [];
-        for (let i = -1; i < 10; i++) {
-            const layerName = getLayerName(i);
+        for (let i = -1; i < 26; i++) {
+            const layerName = getLayerName(i).toLowerCase();
             const placementDir = `jmp/placement/${layerName}`;
             const mappartsDir = `jmp/mapparts/${layerName}`;
             if (!rarc.findDir(placementDir))
                 continue;
-            const objinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/objinfo`)));
-            const mappartsinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${mappartsDir}/mappartsinfo`)));
-            const stageobjinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/stageobjinfo`)));
+            const objinfo = parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/objinfo`)));
+            const mappartsinfo = parsePlacement(BCSV.parse(rarc.findFileData(`${mappartsDir}/mappartsinfo`)));
+            const stageobjinfo = parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/stageobjinfo`)));
             layers.push({ index: i, objinfo, mappartsinfo, stageobjinfo });
         }
         return { name, layers };
@@ -851,8 +870,8 @@ class SMGSceneDesc implements Viewer.SceneDesc {
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const galaxyName = this.galaxyName;
         return Progressable.all([
-            fetchData(`${pathBase}/ObjectData/PlanetMapDataTable.arc`, abortSignal),
-            fetchData(`${pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`, abortSignal),
+            fetchData(`${this.pathBase}/ObjectData/PlanetMapDataTable.arc`, abortSignal),
+            fetchData(`${this.pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`, abortSignal),
         ]).then((buffers: ArrayBufferSlice[]) => {
             return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
         }).then((buffers: ArrayBufferSlice[]) => {
@@ -882,11 +901,11 @@ class SMGSceneDesc implements Viewer.SceneDesc {
             // Construct initial state.
             renderHelper.renderInstBuilder.constructRenderInsts(device, viewRenderer);
 
-            return Progressable.all(zoneNames.map((zoneName) => fetchData(`${pathBase}/StageData/${zoneName}.arc`))).then((buffers: ArrayBufferSlice[]) => {
+            return Progressable.all(zoneNames.map((zoneName) => fetchData(this.getZoneMapFilename(zoneName)))).then((buffers: ArrayBufferSlice[]) => {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]): Viewer.SceneGfx => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
-                const spawner = new SMGSpawner(renderHelper, viewRenderer, planetTable);
+                const spawner = new SMGSpawner(this.pathBase, renderHelper, viewRenderer, planetTable);
                 const modelMatrixBase = mat4.create();
                 spawner.spawnZone(device, zones[0], zones, modelMatrixBase);
                 return new SMGRenderer(device, spawner, viewRenderer, scenariodata, zoneNames);
@@ -894,15 +913,3 @@ class SMGSceneDesc implements Viewer.SceneDesc {
         });
     }
 }
-
-const id = "smg";
-const name = "Super Mario Galaxy";
-
-const sceneDescs: Viewer.SceneDesc[] = [
-    new SMGSceneDesc("Peach's Castle Garden", "PeachCastleGardenGalaxy"),
-    new SMGSceneDesc("Comet Observatory", "AstroGalaxy"),
-    new SMGSceneDesc("Battlerock Galaxy", "BattleShipGalaxy"),
-    new SMGSceneDesc("Honeyhive Galaxy", "HoneyBeeKingdomGalaxy"),
-];
-
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
