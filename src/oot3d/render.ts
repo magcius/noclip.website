@@ -50,7 +50,7 @@ function textureToCanvas(texture: CMB.Texture): Viewer.Texture {
 }
 
 export class CtrTextureHolder extends TextureHolder<CMB.Texture> {
-    public addTextureGfx(device: GfxDevice, texture: CMB.Texture): LoadedTexture {
+    public loadTexture(device: GfxDevice, texture: CMB.Texture): LoadedTexture {
         const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, texture.width, texture.height, texture.levels.length);
         device.setResourceName(gfxTexture, texture.name);
 

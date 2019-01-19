@@ -32,7 +32,7 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
         return this.ppakTextures.find((t) => t.name === name);
     }
 
-    public addTextureGfx(device: GfxDevice, texture: PPAK_Texture): LoadedTexture | null {
+    public loadTexture(device: GfxDevice, texture: PPAK_Texture): LoadedTexture | null {
         if (texture.mipData.length === 0)
             return null;
 

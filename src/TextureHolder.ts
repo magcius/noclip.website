@@ -18,20 +18,16 @@ export interface TextureBase {
 }
 
 export class TextureMapping {
-    public glTexture: WebGLTexture = null;
-    public glSampler: WebGLSampler = null;
     public gfxTexture: GfxTexture = null;
     public gfxSampler: GfxSampler = null;
     public width: number = 0;
     public height: number = 0;
     public lodBias: number = 0;
     // GL fucking sucks. This is a convenience when building texture matrices.
-    // gx_render does *not* use this parameter at all!
+    // The core renderer does not use this code at all.
     public flipY: boolean = false;
 
     public reset(): void {
-        this.glTexture = null;
-        this.glSampler = null;
         this.gfxTexture = null;
         this.gfxSampler = null;
         this.width = 0;
@@ -41,8 +37,6 @@ export class TextureMapping {
     }
 
     public copy(other: TextureMapping): void {
-        this.glTexture = other.glTexture;
-        this.glSampler = other.glSampler;
         this.gfxTexture = other.gfxTexture;
         this.gfxSampler = other.gfxSampler;
         this.width = other.width;
@@ -97,7 +91,6 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         const textureOverride = this.textureOverrides.get(name);
         if (textureOverride) {
             textureMapping.gfxTexture = textureOverride.gfxTexture;
-            textureMapping.glTexture = textureOverride.glTexture;
             textureMapping.width = textureOverride.width;
             textureMapping.height = textureOverride.height;
             textureMapping.flipY = textureOverride.flipY;
@@ -128,7 +121,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         this.textureOverrides.set(name, textureOverride);
     }
 
-    protected abstract addTextureGfx(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null;
+    protected abstract loadTexture(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null;
 
     public addTextures(device: GfxDevice, textureEntries: TextureType[]): void {
         for (let i = 0; i < textureEntries.length; i++) {
@@ -138,7 +131,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
             if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
                 continue;
 
-            const loadedTexture = this.addTextureGfx(device, texture);
+            const loadedTexture = this.loadTexture(device, texture);
             if (loadedTexture === null)
                 continue;
 
@@ -159,8 +152,8 @@ export class FakeTextureHolder extends TextureHolder<any> {
         this.viewerTextures = viewerTextures;
     }
 
-    // Now allowed.
-    public addTextureGfx(device: GfxDevice, entry: any): LoadedTexture {
+    // Not allowed.
+    public loadTexture(device: GfxDevice, entry: any): LoadedTexture {
         throw new Error();
     }
 }

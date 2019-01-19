@@ -199,7 +199,7 @@ export class GX2TextureHolder extends TextureHolder<FTEXEntry> {
         };
     }
 
-    protected addTextureGfx(device: GfxDevice, textureEntry: FTEXEntry): LoadedTexture | null {
+    protected loadTexture(device: GfxDevice, textureEntry: FTEXEntry): LoadedTexture | null {
         const texture = textureEntry.ftex;
         const surface = texture.surface;
 

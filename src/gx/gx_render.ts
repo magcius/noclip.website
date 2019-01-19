@@ -350,7 +350,7 @@ export function translateTexFilterGfx(texFilter: GX.TexFilter): [GfxTexFilterMod
 }
 
 export class GXTextureHolder<TextureType extends GX_Texture.Texture = GX_Texture.Texture> extends TextureHolder<TextureType> {
-    protected addTextureGfx(device: GfxDevice, texture: TextureType): LoadedTexture | null {
+    protected loadTexture(device: GfxDevice, texture: TextureType): LoadedTexture | null {
         // Don't add textures without data.
         if (texture.data === null)
             return null;

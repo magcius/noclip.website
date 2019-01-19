@@ -125,7 +125,7 @@ class YSpinAnimation {
 }
 
 export class NITROTextureHolder extends TextureHolder<NITRO_BMD.Texture> {
-    public addTextureGfx(device: GfxDevice, texture: NITRO_BMD.Texture): LoadedTexture {
+    public loadTexture(device: GfxDevice, texture: NITRO_BMD.Texture): LoadedTexture {
         const gfxTexture = device.createTexture(GfxFormat.U8_RGBA, texture.width, texture.height, 1);
         device.setResourceName(gfxTexture, texture.name);
 
