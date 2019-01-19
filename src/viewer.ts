@@ -198,6 +198,7 @@ export interface SceneGroup {
     id: string;
     name: string;
     sceneDescs: (string | SceneDesc)[];
+    sceneIdMap?: Map<string, string>;
 }
 
 export function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {

@@ -451,11 +451,14 @@ class Main {
 
     private _loadSceneDescById(id: string, sceneState: string | null): Progressable<SceneGfx> | null {
         const [groupId, ...sceneRest] = id.split('/');
-        const sceneId = decodeURIComponent(sceneRest.join('/'));
+        let sceneId = decodeURIComponent(sceneRest.join('/'));
 
         const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
         if (!group)
             return null;
+
+        if (group.sceneIdMap !== undefined && group.sceneIdMap.has(sceneId))
+            sceneId = group.sceneIdMap.get(sceneId);
 
         const desc = getSceneDescs(group).find((d) => d.id === sceneId);
         return this._loadSceneDesc(group, desc, sceneState);

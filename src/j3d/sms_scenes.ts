@@ -357,16 +357,13 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         return modelInstance;
     }
 
-    public id: string;
-
-    constructor(public path: string, public name: string) {
-        this.name = name;
-        this.path = path;
-        this.id = this.name;
+    constructor(public id: string, public name: string) {
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        return fetchData(this.path).then((result: ArrayBufferSlice) => {
+        const pathBase = `data/j3d/sms`;
+        const path = `${pathBase}/${this.id}.szs`;
+        return fetchData(path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);
@@ -582,17 +579,21 @@ const id = "sms";
 const name = "Super Mario Sunshine";
 
 const sceneDescs: Viewer.SceneDesc[] = [
-    new SunshineSceneDesc("data/j3d/sms/dolpic0.szs", "Delfino Plaza"),
-    new SunshineSceneDesc("data/j3d/sms/airport0.szs", "Delfino Airport"),
-    new SunshineSceneDesc("data/j3d/sms/bianco0.szs", "Bianco Hills"),
-    new SunshineSceneDesc("data/j3d/sms/ricco0.szs", "Ricco Harbor"),
-    new SunshineSceneDesc("data/j3d/sms/mamma0.szs", "Gelato Beach"),
-    new SunshineSceneDesc("data/j3d/sms/pinnaBeach0.szs", "Pinna Park Beach"),
-    new SunshineSceneDesc("data/j3d/sms/pinnaParco0.szs", "Pinna Park"),
-    new SunshineSceneDesc("data/j3d/sms/sirena0.szs", "Sirena Beach"),
-    new SunshineSceneDesc("data/j3d/sms/delfino0.szs", "Delfino Hotel"),
-    new SunshineSceneDesc("data/j3d/sms/mare0.szs", "Noki Bay"),
-    new SunshineSceneDesc("data/j3d/sms/monte3.szs", "Pianta Village"),
+    new SunshineSceneDesc("dolpic0", "Delfino Plaza"),
+    new SunshineSceneDesc("airport0", "Delfino Airport"),
+    new SunshineSceneDesc("bianco0", "Bianco Hills"),
+    new SunshineSceneDesc("ricco0", "Ricco Harbor"),
+    new SunshineSceneDesc("mamma0", "Gelato Beach"),
+    new SunshineSceneDesc("pinnaBeach0", "Pinna Park Beach"),
+    new SunshineSceneDesc("pinnaParco0", "Pinna Park"),
+    new SunshineSceneDesc("sirena0", "Sirena Beach"),
+    new SunshineSceneDesc("delfino0", "Delfino Hotel"),
+    new SunshineSceneDesc("mare0", "Noki Bay"),
+    new SunshineSceneDesc("monte3", "Pianta Village"),
 ];
 
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+const sceneIdMap = new Map<string, string>();
+for (let i = 0; i < sceneDescs.length; i++)
+    sceneIdMap.set(sceneDescs[i].name, sceneDescs[i].id);
+
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, sceneIdMap };
