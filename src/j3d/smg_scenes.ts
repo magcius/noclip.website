@@ -16,7 +16,7 @@ import * as Yaz0 from '../compression/Yaz0';
 import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { BMD, BRK, BTK, BCK } from './j3d';
+import { BMD, BRK, BTK, BCK, LoopMode } from './j3d';
 import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -834,6 +834,9 @@ class SMGSpawner {
 
         if (bckFile !== null) {
             const bck = BCK.parse(bckFile.buffer);
+            // XXX(jstpierre): Some wait.bck animations are set to ONCE instead of REPEAT (e.g. Kinopio/Toad in SMG2)
+            if (bckFile.name === 'wait.bck')
+                bck.ank1.loopMode = LoopMode.REPEAT;
             modelInstance.bindANK1(bck.ank1);
 
             // Apply a random phase to the animation.
@@ -844,7 +847,6 @@ class SMGSpawner {
     public bindChangeAnimation(node: Node, rarc: RARC.RARC, frame: number): void {
         const brkFile = rarc.findFile('colorchange.brk');
         const btkFile = rarc.findFile('texchange.btk');
-        console.log(node, frame);
 
         const animationController = new AnimationController();
         animationController.setTimeInFrames(frame);
@@ -953,16 +955,27 @@ class SMGSpawner {
             }
             break;
         }
-        case 'TicoRail':
-            spawnGraph('Tico');
+        case 'SignBoard':
+            // SignBoard has a single animation for falling over which we don't want to play.
+            spawnGraph('SignBoard', SceneGraphTag.Normal, null);
             break;
         case 'Rabbit':
             spawnGraph('TrickRabbit');
             break;
+        case 'Kinopio':
+            spawnGraph('Kinopio', SceneGraphTag.Normal, { bck: 'wait.bck' });
+            break;
         case 'Rosetta':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'waita.bck' });
             break;
-
+        case 'Tico':
+        case 'TicoAstro':
+        case 'TicoRail':
+            spawnGraph('Tico').then(([node, rarc]) => {
+                this.bindChangeAnimation(node, rarc, objinfo.objArg0);
+            });
+            break;
+    
         case 'SweetsDecoratePartsFork':
         case 'SweetsDecoratePartsSpoon':
             spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
@@ -974,7 +987,6 @@ class SMGSpawner {
                 this.bindChangeAnimation(node, rarc, objinfo.objArg0);
             });
             break;
-
 
         // Skyboxen.
         case 'BeyondSummerSky':

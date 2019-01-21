@@ -1255,10 +1255,10 @@ function applyLoopMode(t: number, loopMode: LoopMode) {
     }
 }
 
-function getAnimFrame(anim: AnimationBase, frame: number): number {
+function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopMode = anim.loopMode): number {
     const lastFrame = anim.duration;
     const normTime = frame / lastFrame;
-    const animFrame = applyLoopMode(normTime, anim.loopMode) * lastFrame;
+    const animFrame = applyLoopMode(normTime, loopMode) * lastFrame;
     return animFrame;
 }
 

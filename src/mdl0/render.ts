@@ -7,7 +7,7 @@ import { DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { OrbitCameraController, Camera } from '../Camera';
+import { OrbitCameraController } from '../Camera';
 import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBufferUsage, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRenderInst } from '../gfx/render/GfxRenderer';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
