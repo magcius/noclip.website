@@ -292,7 +292,7 @@ const sceneDescs = [
     new TwilightPrincessSceneDesc("Kakariko Village", "F_SP109"),
     new TwilightPrincessSceneDesc("Death Mountain Trail", "F_SP110"),
     new TwilightPrincessSceneDesc("Kakariko Graveyard", "F_SP111"),
-    new TwilightPrincessSceneDesc("Rapid's Ride", "F_SP112"),
+    new TwilightPrincessSceneDesc("Rapids Ride", "F_SP112"),
     new TwilightPrincessSceneDesc("Zora's Domain", "F_SP113"),
     new TwilightPrincessSceneDesc("Snowpeak Mountain", "F_SP114"),
     new TwilightPrincessSceneDesc("Lanayru's Spring", "F_SP115"),
