@@ -369,7 +369,7 @@ export class BMDModel {
     private realized: boolean = false;
 
     private gfxSamplers!: GfxSampler[];
-    private tex1Samplers!: TEX1_Sampler[];
+    public tex1Samplers!: TEX1_Sampler[];
 
     private bufferCoalescer: GfxBufferCoalescer;
 
@@ -481,7 +481,7 @@ export class BMDModelInstance {
         device: GfxDevice,
         renderHelper: GXRenderHelperGfx,
         private textureHolder: J3DTextureHolder,
-        private bmdModel: BMDModel,
+        public bmdModel: BMDModel,
     ) {
         this.modelMatrix = mat4.create();
 
@@ -619,7 +619,7 @@ export class BMDModelInstance {
             //
             // For now, we simply don't cull both of these special cases, hoping they'll be simple enough to just always
             // render. In theory, we could cull billboards using the bounding sphere.
-            const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
+            const disableCulling = true || this.isSkybox || this.bmdModel.hasBillboard;
 
             this.shapeInstanceState.isSkybox = this.isSkybox;
             this.updateMatrixArray(viewerInput.camera, rootJointMatrix, disableCulling);

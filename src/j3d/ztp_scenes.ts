@@ -171,6 +171,10 @@ function getRoomListFromDZS(buffer: ArrayBufferSlice): number[] {
     return [... roomList.values()];
 }
 
+function bmdModelUsesTexture(model: BMDModel, textureName: string): boolean {
+    return model.tex1Samplers.some((tex1Sampler) => tex1Sampler.name === textureName);
+}
+
 class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
@@ -187,11 +191,17 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
             const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
 
+            const modelInstance = createScene(device, renderer.renderHelper, renderer.textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+            modelInstance.name = `${rarcBasename}/${basename}`;
+
             let passMask: ZTPPass = 0;
             if (basename === 'model') {
                 passMask = ZTPPass.OPAQUE;
             } else if (basename === 'model1') {
-                passMask = ZTPPass.INDIRECT;
+                // "Water". Doesn't always mean indirect, but often can be.
+                // (Snowpeak Ruins has a model1 which is not indirect)
+                const usesIndirectMaterial = bmdModelUsesTexture(modelInstance.bmdModel, 'fbtex_dummy');
+                passMask = usesIndirectMaterial ? ZTPPass.INDIRECT : ZTPPass.OPAQUE;
             } else if (basename === 'model2') {
                 passMask = ZTPPass.TRANSPARENT;
             } else if (basename === 'model3') {
@@ -201,11 +211,9 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 // Light beams? No clue, stick 'em in the transparent pass.
                 passMask = ZTPPass.TRANSPARENT;
             }
-    
-            const scene = createScene(device, renderer.renderHelper, renderer.textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
-            scene.name = `${rarcBasename}/${basename}`;
-            scene.passMask = passMask;
-            renderer.modelInstances.push(scene);
+
+            modelInstance.passMask = passMask;
+            renderer.modelInstances.push(modelInstance);
         });
     }
 
