@@ -44,6 +44,7 @@ import * as NSMBDS from './nns_g3d/nsmbds_scenes';
 import * as Z_BOTW from './z_botw/scenes';
 import * as SMO from './fres_nx/smo_scenes';
 import * as PSY from './psychonauts/scenes';
+import * as DKS from './dks/scenes';
 
 import * as J3D from './j3d/scenes';
 import { UI, createDOMFromString } from './ui';
@@ -91,6 +92,7 @@ const sceneGroups = [
     SMO.sceneGroup,
     SPL.sceneGroup,
     Z_BOTW.sceneGroup,
+    DKS.sceneGroup,
 ];
 
 function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {

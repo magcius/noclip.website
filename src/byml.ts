@@ -1,5 +1,5 @@
 
-import ArrayBufferSlice from "./ArrayBufferSlice";
+import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice";
 import { assert, readString, align } from "./util";
 import { Endianness } from "./endian";
 
@@ -41,7 +41,19 @@ const fileDescriptions: { [key: number]: FileDescription } = {
     },
 }
 
-const utf8Decoder = new TextDecoder('utf8');
+function decodeUTF8(buffer: Uint8Array): string {
+    if (typeof TextDecoder !== 'undefined') {
+        return new TextDecoder('utf8').decode(buffer);
+    // @ts-ignore
+    } else if (typeof require !== 'undefined') {
+        // @ts-ignore
+        const { StringDecoder } = require('string_decoder');
+        return new StringDecoder('utf8').write(buffer);
+    } else {
+        throw "whoops";
+    }
+}
+
 function readStringUTF8(buffer: ArrayBufferSlice, offs: number): string {
     const buf = buffer.createTypedArray(Uint8Array, offs);
     let i = 0;
@@ -50,7 +62,7 @@ function readStringUTF8(buffer: ArrayBufferSlice, offs: number): string {
             break;
         i++;
     }
-    return utf8Decoder.decode(buffer.createTypedArray(Uint8Array, offs, i));
+    return decodeUTF8(buffer.createTypedArray(Uint8Array, offs, i));
 }
 
 export type StringTable = string[];
@@ -80,7 +92,6 @@ function getUint24(view: DataView, offs: number, littleEndian: boolean) {
 
 function parseStringTable(context: ParseContext, buffer: ArrayBufferSlice, offs: number): StringTable {
     const view = buffer.createDataView();
-    const header = view.getUint32(offs + 0x00, context.littleEndian);
     const nodeType: NodeType = view.getUint8(offs + 0x00);
     const numValues = getUint24(view, offs + 0x01, context.littleEndian);
     assert(nodeType === NodeType.STRING_TABLE);
@@ -221,4 +232,370 @@ export function parse<T>(buffer: ArrayBufferSlice, fileType: FileType = FileType
     context.strValueTable = strValueTableOffs !== 0 ? parseStringTable(context, buffer, strValueTableOffs) : null;
     const node = parseComplexNode(context, buffer, rootNodeOffs);
     return node as any as T;
+}
+
+class GrowableBuffer {
+    public buffer: ArrayBuffer;
+    public view: DataView;
+    public userSize: number = 0;
+    public bufferSize: number = 0;
+
+    constructor(initialSize: number = 0x10000, public growAmount: number = 0x1000) {
+        this.maybeGrow(initialSize);
+    }
+
+    public maybeGrow(newSize: number): void {
+        if (newSize > this.userSize)
+            this.userSize = newSize;
+
+        if (newSize > this.bufferSize) {
+            this.bufferSize = align(newSize, this.growAmount);
+            const newBuffer = new ArrayBuffer(this.bufferSize);
+            // memcpy
+            new Uint8Array(newBuffer).set(new Uint8Array(this.buffer));
+            this.buffer = newBuffer;
+            this.view = new DataView(this.buffer);
+        }
+    }
+
+    public finalize(): ArrayBuffer {
+        const buffer = this.buffer;
+        this.buffer = null;
+        return ArrayBuffer_slice.call(buffer, 0x00, this.userSize);
+    }
+}
+
+function setUint24(view: DataView, offs: number, v: number, littleEndian: boolean) {
+    if (littleEndian) {
+        view.setUint8(offs + 0x00, (v >>>  0) & 0xFF);
+        view.setUint8(offs + 0x01, (v >>>  8) & 0xFF);
+        view.setUint8(offs + 0x02, (v >>> 16) & 0xFF);
+    } else {
+        view.setUint8(offs + 0x00, (v >>> 16) & 0xFF);
+        view.setUint8(offs + 0x01, (v >>>  8) & 0xFF);
+        view.setUint8(offs + 0x02, (v >>>  0) & 0xFF);
+    }
+}
+
+class WritableStream {
+    constructor(public buffer: GrowableBuffer = new GrowableBuffer(), public offs: number = 0) {
+    }
+
+    public setBufferSlice(offs: number, src: ArrayBufferSlice): void {
+        this.buffer.maybeGrow(offs + src.byteLength);
+        new Uint8Array(this.buffer.buffer, this.offs).set(src.createTypedArray(Uint8Array));
+    }
+
+    public writeBufferSlice(src: ArrayBufferSlice): void {
+        this.setBufferSlice(this.offs, src);
+        this.offs += src.byteLength;
+    }
+
+    public setString(offs: number, v: string): void {
+        this.buffer.maybeGrow(offs + v.length);
+        const a = new Uint8Array(this.buffer.buffer, this.offs);
+        for (let i = 0; i < v.length; i++)
+            a[i] = v.charCodeAt(i);
+    }
+
+    public writeString(v: string): void {
+        this.setString(this.offs, v);
+        this.offs += v.length;
+    }
+
+    public setUint8(offs: number, v: number): void {
+        this.buffer.maybeGrow(offs + 0x01);
+        this.buffer.view.setUint8(offs, v);
+    }
+
+    public writeUint8(v: number): void {
+        this.setUint8(this.offs, v);
+        this.offs += 0x01;
+    }
+
+    public setUint24(offs: number, v: number, littleEndian: boolean): void {
+        this.buffer.maybeGrow(offs + 0x03);
+        setUint24(this.buffer.view, offs, v, littleEndian);
+    }
+
+    public writeUint24(v: number, littleEndian: boolean): void {
+        this.setUint24(this.offs, v, littleEndian);
+        this.offs += 0x03;
+    }
+
+    public setUint32(offs: number, v: number, littleEndian: boolean): void {
+        this.buffer.maybeGrow(offs + 0x04);
+        this.buffer.view.setUint32(offs, v, littleEndian);
+    }
+
+    public writeUint32(v: number, littleEndian: boolean): void {
+        this.setUint32(this.offs, v, littleEndian);
+        this.offs += 0x04;
+    }
+
+    public setInt32(offs: number, v: number, littleEndian: boolean): void {
+        this.buffer.maybeGrow(offs + 0x04);
+        this.buffer.view.setInt32(offs, v, littleEndian);
+    }
+
+    public writeInt32(v: number, littleEndian: boolean): void {
+        this.setInt32(this.offs, v, littleEndian);
+        this.offs += 0x04;
+    }
+
+    public setFloat32(offs: number, v: number, littleEndian: boolean): void {
+        this.buffer.maybeGrow(offs + 0x04);
+        this.buffer.view.setFloat32(offs, v, littleEndian);
+    }
+
+    public writeFloat32(v: number, littleEndian: boolean): void {
+        this.setFloat32(this.offs, v, littleEndian);
+        this.offs += 0x04;
+    }
+
+    public seekTo(n: number): void {
+        this.offs = n;
+        this.buffer.maybeGrow(this.offs);
+    }
+
+    public align(m: number): void {
+        this.seekTo(align(this.offs, m));
+    }
+
+    public finalize(): ArrayBuffer {
+        return this.buffer.finalize();
+    }
+}
+
+class WriteContext {
+    constructor(public stream: WritableStream, public fileType: FileType, public endianness: Endianness, public strKeyTable: StringTable, public strValueTable: StringTable) {}
+    public get littleEndian() { return this.endianness === Endianness.LITTLE_ENDIAN; }
+    public canUseNodeType(t: NodeType) { return fileDescriptions[this.fileType].allowedNodeTypes.includes(t); }
+}
+
+function strTableIndex(t: StringTable, s: string): number {
+    const i = t.indexOf(s);
+    assert(i >= 0);
+    return i;
+}
+
+function writeHeader(w: WriteContext, nodeType: NodeType, numEntries: number): void {
+    const stream = w.stream;
+    stream.writeUint8(nodeType);
+    stream.writeUint24(numEntries, w.littleEndian);
+}
+
+function classifyNodeValue(w: WriteContext, v: Node): NodeType {
+    if (v === undefined || v === null) {
+        return NodeType.NULL;
+    } if (typeof v === 'boolean') {
+        return NodeType.BOOL;
+    } else if (typeof v === 'string') {
+        return NodeType.STRING;
+    } else if (typeof v === 'number') {
+        if ((v >>> 0) === v)
+            return NodeType.UINT;
+        else if ((v | 0) === v)
+            return NodeType.INT;
+        else
+            return NodeType.FLOAT;
+    } else if (w.canUseNodeType(NodeType.FLOAT_ARRAY) && v instanceof Float32Array) {
+        return NodeType.FLOAT_ARRAY;
+    } else if (w.canUseNodeType(NodeType.BINARY_DATA) && v instanceof ArrayBufferSlice) {
+        return NodeType.BINARY_DATA;
+    } else if (v instanceof Array) {
+        return NodeType.ARRAY;
+    } else if (v.constructor === Object) {
+        return NodeType.DICT;
+    } else {
+        throw "whoops";
+    }
+}
+
+function writeComplexValueArray(w: WriteContext, v: NodeArray): void {
+    const stream = w.stream;
+
+    const numEntries = v.length;
+    writeHeader(w, NodeType.ARRAY, numEntries);
+    // First up is child value types.
+    for (let i = 0; i < v.length; i++)
+        stream.writeUint8(classifyNodeValue(w, v[i]));
+    stream.align(0x04);
+
+    let headerIdx = stream.offs;
+    const headerSize = 0x04 * numEntries;
+    stream.seekTo(stream.offs + headerSize);
+
+    for (let i = 0; i < v.length; i++) {
+        writeValue(w, classifyNodeValue(w, v[i]), v[i], headerIdx + 0x00);
+        headerIdx += 0x04;
+    }
+}
+
+function writeComplexValueDict(w: WriteContext, v: NodeDict): void {
+    const stream = w.stream;
+
+    const keys = Object.keys(v);
+    const numEntries = keys.length;
+
+    writeHeader(w, NodeType.DICT, numEntries);
+    // Write our children values, then go back and write our header.
+    // Each header item is 0x08 bytes.
+    let headerIdx = stream.offs;
+
+    const headerSize = 0x08 * numEntries;
+    stream.seekTo(stream.offs + headerSize);
+
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const childValue: Node = v[key];
+        const nodeType: NodeType = classifyNodeValue(w, childValue);
+
+        const keyStrIndex = strTableIndex(w.strKeyTable, key);
+        stream.setUint24(headerIdx + 0x00, keyStrIndex, w.littleEndian);
+        stream.setUint8(headerIdx + 0x03, nodeType);
+        writeValue(w, nodeType, childValue, headerIdx + 0x04);
+        headerIdx += 0x08;
+    }
+}
+
+function writeComplexValueFloatArray(w: WriteContext, v: Float32Array): void {
+    const stream = w.stream;
+    writeHeader(w, NodeType.FLOAT64, v.length);
+    for (let i = 0; i < v.length; i++)
+        stream.writeFloat32(v[i], w.littleEndian);
+}
+
+function writeComplexValueBinary(w: WriteContext, v: ArrayBufferSlice): void {
+    const stream = w.stream;
+    writeHeader(w, NodeType.BINARY_DATA, v.byteLength);
+    stream.writeBufferSlice(v);
+    stream.align(0x04);
+}
+
+function writeValue(w: WriteContext, nodeType: NodeType, v: Node, valueOffs: number): void {
+    const stream = w.stream;
+
+    if (v === undefined || v === null) {
+        stream.setUint32(valueOffs, 0x00, w.littleEndian);
+    } if (typeof v === 'boolean') {
+        stream.setUint32(valueOffs, v ? 0x01 : 0x00, w.littleEndian);
+    } else if (typeof v === 'string') {
+        stream.setUint32(valueOffs, strTableIndex(w.strValueTable, v), w.littleEndian);
+    } else if (typeof v === 'number') {
+        if (nodeType === NodeType.FLOAT)
+            stream.setFloat32(valueOffs, v, w.littleEndian);
+        else if (nodeType === NodeType.UINT)
+            stream.setUint32(valueOffs, v, w.littleEndian);
+        else
+            stream.setInt32(valueOffs, v, w.littleEndian);
+    } else if (w.canUseNodeType(NodeType.FLOAT_ARRAY) && v instanceof Float32Array) {
+        stream.setUint32(valueOffs, stream.offs, w.littleEndian);
+        writeComplexValueFloatArray(w, v);
+    } else if (w.canUseNodeType(NodeType.BINARY_DATA) && v instanceof ArrayBufferSlice) {
+        stream.setUint32(valueOffs, stream.offs, w.littleEndian);
+        writeComplexValueBinary(w, v);
+    } else if (v instanceof Array) {
+        stream.setUint32(valueOffs, stream.offs, w.littleEndian);
+        writeComplexValueArray(w, v as NodeArray);
+    } else if (v.constructor === Object) {
+        stream.setUint32(valueOffs, stream.offs, w.littleEndian);
+        writeComplexValueDict(w, v as NodeDict);
+    } else {
+        throw "whoops";
+    }
+}
+
+function gatherStrings(v: Node, keyStrings: Set<string>, valueStrings: Set<string>): void {
+    if (v === undefined || v === null || typeof v === 'number' || typeof v === 'boolean' || v instanceof Float32Array || v instanceof ArrayBufferSlice) {
+        // Nothing.
+        return;
+    } else if (typeof v === 'string') {
+        valueStrings.add(v);
+    } else if (v instanceof Array) {
+        for (let i = 0; i < v.length; i++)
+            gatherStrings(v[i], keyStrings, valueStrings);
+    } else if (v.constructor === Object) {
+        // Generic object.
+        const keys = Object.keys(v);
+        for (let i = 0; i < keys.length; i++)
+            keyStrings.add(keys[i]);
+        for (let i = 0; i < keys.length; i++)
+            gatherStrings(v[keys[i]], keyStrings, valueStrings);
+    } else {
+        throw "whoops";
+    }
+}
+
+function bymlStrCompare(a: string, b: string): number {
+    if (a == '')
+        return 1;
+    else if (b == '')
+        return -1;
+    else
+        return a.localeCompare(b);
+}
+
+function writeStringTable(w: WriteContext, v: StringTable): void {
+    const stream = w.stream;
+
+    // A string table contains at least one entry, so this field is the number of entries minus one.
+    const numEntries = v.length - 1;
+
+    writeHeader(w, NodeType.STRING_TABLE, numEntries);
+
+    // Strings should already be sorted.
+    let strDataIdx = 0x04 // Header
+    for (let i = 0; i < v.length; i++)
+        strDataIdx += 0x04;
+
+    for (let i = 0; i < v.length; i++) {
+        stream.writeUint32(strDataIdx, w.littleEndian);
+        strDataIdx += v[i].length + 0x01;
+    }
+
+    for (let i = 0; i < v.length; i++)
+        stream.writeString(v[i] + '\0');
+}
+
+export function write<T extends {}>(v: T, fileType: FileType = FileType.CRG1, magic?: string): ArrayBuffer {
+    const stream = new WritableStream(new GrowableBuffer(0x1000000));
+
+    const magics = fileDescriptions[fileType].magics;
+
+    if (magic !== undefined)
+        assert(magics.includes(magic));
+    else
+        magic = magics[magics.length - 1];
+    assert(magic.length === 0x04);
+
+    const littleEndian = magic.slice(0, 2) == 'YB';
+    const endianness: Endianness = littleEndian ? Endianness.LITTLE_ENDIAN : Endianness.BIG_ENDIAN;
+
+    const keyStringSet = new Set<string>(['']);
+    const valueStringSet = new Set<string>(['']);
+    gatherStrings(v, keyStringSet, valueStringSet);
+
+    const keyStrings: string[] = [...keyStringSet.keys()];
+    const valueStrings: string[] = [...valueStringSet.keys()];
+    keyStrings.sort(bymlStrCompare);
+    valueStrings.sort(bymlStrCompare);
+
+    const w = new WriteContext(stream, fileType, endianness, keyStrings, valueStrings);
+    stream.setString(0x00, magic);
+
+    stream.seekTo(0x10);
+    const keyStringTableOffs = stream.offs;
+    stream.setUint32(0x04, keyStringTableOffs, w.littleEndian);
+    writeStringTable(w, keyStrings);
+    stream.align(0x04);
+    const valueStringTableOffs = stream.offs;
+    stream.setUint32(0x08, valueStringTableOffs, w.littleEndian);
+    writeStringTable(w, valueStrings);
+    stream.align(0x04);
+    const rootNodeOffs = stream.offs;
+    stream.setUint32(0x0C, rootNodeOffs, w.littleEndian);
+    writeComplexValueDict(w, v);
+
+    return stream.finalize();
 }

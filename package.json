@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@types/gl-matrix": "^2.4.4",
+    "@types/node": "^10.12.18",
     "@types/pako": "^1.0.0",
     "@types/systemjs": "^0.20.6",
     "@types/webassembly-js-api": "0.0.1",

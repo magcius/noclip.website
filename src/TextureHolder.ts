@@ -114,9 +114,9 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         return null;
     }
 
-    public setTextureOverride(name: string, textureOverride: TextureOverride): void {
+    public setTextureOverride(name: string, textureOverride: TextureOverride, checkExisting: boolean = true): void {
         // Only allow setting texture overrides for textures that exist.
-        if (!this.hasTexture(name))
+        if (checkExisting && !this.hasTexture(name))
            throw new Error(`Trying to override non-existent texture ${name}`);
         this.textureOverrides.set(name, textureOverride);
     }

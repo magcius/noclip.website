@@ -107,7 +107,7 @@ function decompressBC1Surface(surface: DecodedSurfaceBC123UN): DecodedSurfaceRGB
     const height = surface.height;
     const depth = surface.depth;
     const dst = new Uint8Array(width * height * depth * bytesPerPixel);
-    const view = new DataView(surface.pixels.buffer);
+    const view = new DataView(surface.pixels.buffer, surface.pixels.byteOffset, surface.pixels.byteLength);
     const colorTable = new Uint8Array(16);
 
     let srcOffs = 0;
@@ -147,7 +147,7 @@ function decompressBC2Surface(surface: DecodedSurfaceBC123UN): DecodedSurfaceRGB
     const height = surface.height;
     const depth = surface.depth;
     const dst = new Uint8Array(width * height * depth * bytesPerPixel);
-    const view = new DataView(surface.pixels.buffer);
+    const view = new DataView(surface.pixels.buffer, surface.pixels.byteOffset, surface.pixels.byteLength);
     const colorTable = new Uint8Array(16);
 
     let srcOffs = 0;
@@ -202,7 +202,7 @@ function decompressBC3Surface(surface: DecodedSurfaceBC123UN): DecodedSurfaceRGB
     const height = surface.height;
     const depth = surface.depth;
     const dst = new Uint8Array(width * height * depth * bytesPerPixel);
-    const view = new DataView(surface.pixels.buffer);
+    const view = new DataView(surface.pixels.buffer, surface.pixels.byteOffset, surface.pixels.byteLength);
     const colorTable = new Uint8Array(16);
     const alphaTable = new Uint8Array(8);
 
@@ -280,7 +280,7 @@ function decompressBC45Surface(surface: DecodedSurfaceBC45): DecodedSurfaceRGBA 
     const depth = surface.depth;
 
     const signed = surface.flag === 'SNORM';
-    const view = new DataView(surface.pixels.buffer);
+    const view = new DataView(surface.pixels.buffer, surface.pixels.byteOffset, surface.pixels.byteLength);
     let dst;
     let colorTable;
 

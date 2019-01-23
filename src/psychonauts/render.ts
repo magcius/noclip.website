@@ -7,6 +7,14 @@ import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../fres/bc_text
 import { EMeshFrag, EMesh, EScene, EDomain } from "./plb";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
+import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
+import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
+import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
+import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { mat4 } from "gl-matrix";
+import { computeViewMatrix, Camera } from "../Camera";
+import { BasicRendererHelper } from "../oot3d/render";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array): DecodedSurfaceSW {
     switch (format) {
@@ -74,14 +82,6 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
 
 // @ts-ignore
 import { readFileSync } from 'fs';
-import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
-import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
-import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
-import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4 } from "gl-matrix";
-import { computeViewMatrix, Camera } from "../Camera";
-import { BasicRendererHelper } from "../oot3d/render";
-import ArrayBufferSlice from "../ArrayBufferSlice";
 
 class PsychonautsProgram extends DeviceProgram {
     public static a_Position = 0;

@@ -16,11 +16,18 @@
         "sourceMap": true,
         "moduleResolution": "node",
         "module": "commonjs",
+        "types": [
+            "gl-matrix",
+            "webgl2",
+            "pako",
+        ],
     },
     "include": [
         "src/"
     ],
     "exclude": [
-        "**/*_as.ts"
+        "**/assembly/*.ts",
+        "**/worker/*.ts",
+        "**/tools/*.ts",
     ]
 }

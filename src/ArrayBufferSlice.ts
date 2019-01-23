@@ -13,7 +13,7 @@ import { assert } from "./util";
 import { getSystemEndianness, Endianness } from "./endian";
 
 // Install our dummy ArrayBuffer.prototype.slice to catch any rogue offenders.
-const ArrayBuffer_slice = ArrayBuffer.prototype.slice;
+export const ArrayBuffer_slice = ArrayBuffer.prototype.slice;
 ArrayBuffer.prototype.slice = (begin: number, end?: number): ArrayBuffer => {
     throw new Error("Do not use ArrayBuffer.prototype.slice");
 };
@@ -88,7 +88,7 @@ export default class ArrayBufferSlice {
             o[i+0] = a[i+1];
             o[i+1] = a[i+0];
         }
-        return new ArrayBufferSlice(o.buffer);
+        return new ArrayBufferSlice(o.buffer as ArrayBuffer);
     }
 
     private bswap32(): ArrayBufferSlice {
@@ -101,7 +101,7 @@ export default class ArrayBufferSlice {
             o[i+2] = a[i+1];
             o[i+3] = a[i+0];
         }
-        return new ArrayBufferSlice(o.buffer);
+        return new ArrayBufferSlice(o.buffer as ArrayBuffer);
     }
 
     private bswap(componentSize: 2 | 4): ArrayBufferSlice {
