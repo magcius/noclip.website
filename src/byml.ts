@@ -157,9 +157,14 @@ function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, offs:
     case NodeType.STRING_TABLE:
         return parseStringTable(context, buffer, offs);
     case NodeType.BINARY_DATA:
-        return buffer.subarray(offs + 0x04, numValues);
+        if (numValues == 0x00FFFFFF) {
+            const numValues2 = view.getUint32(offs + 0x04, context.littleEndian);
+            return buffer.subarray(offs + 0x08, numValues + numValues2);
+        } else {
+            return buffer.subarray(offs + 0x04, numValues);
+        }
     case NodeType.FLOAT_ARRAY:
-        return buffer.createTypedArray(Float32Array, offs + 0x04, numValues, Endianness.BIG_ENDIAN);
+        return buffer.createTypedArray(Float32Array, offs + 0x04, numValues, context.endianness);
     default:
         throw new Error("whoops");
     }
@@ -468,7 +473,14 @@ function writeComplexValueFloatArray(w: WriteContext, v: Float32Array): void {
 
 function writeComplexValueBinary(w: WriteContext, v: ArrayBufferSlice): void {
     const stream = w.stream;
-    writeHeader(w, NodeType.BINARY_DATA, v.byteLength);
+    if (v.byteLength >= 0x00FFFFFF) {
+        writeHeader(w, NodeType.BINARY_DATA, 0x00FFFFFF);
+        const numValues2 = v.byteLength - 0x00FFFFFF;
+        assert(numValues2 <= 0xFFFFFFFF);
+        stream.writeUint32(numValues2, w.littleEndian);
+    } else {
+        writeHeader(w, NodeType.BINARY_DATA, v.byteLength);
+    }
     stream.writeBufferSlice(v);
     stream.align(0x04);
 }

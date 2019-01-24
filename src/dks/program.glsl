@@ -36,7 +36,12 @@ void main() {
     t_Color *= v_Color;
 
 #ifdef USE_LIGHTMAP
-    t_Color *= texture2D(u_Texture[1], v_TexCoord[1]);
+    t_Color.rgb *= texture2D(u_Texture[1], v_TexCoord[1]).rgb;
+#endif
+
+#ifdef USE_ALPHATEST
+    if (t_Color.a < 0.1)
+        discard;
 #endif
 
     gl_FragColor = t_Color;

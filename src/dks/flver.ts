@@ -1,13 +1,13 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import { readString, assert, hexdump } from "../util";
 import { vec3 } from "gl-matrix";
 import { AABB } from "../Geometry";
 
 const utf16Decoder = new TextDecoder('utf-16le');
 
 function readStringUTF16(buffer: ArrayBufferSlice, offs: number): string {
-    const arr = buffer.createTypedArray(Uint8Array, offs, 0x80);
+    const arr = buffer.createTypedArray(Uint8Array, offs, Math.min(buffer.byteLength - offs, 0x100));
     const raw = utf16Decoder.decode(arr);
     const nul = raw.indexOf('\u0000');
     let str: string;
@@ -131,6 +131,7 @@ export function parse(buffer: ArrayBufferSlice): FLVER {
 
     const materials: Material[] = [];
     for (let i = 0; i < materialCount; i++) {
+        const mo = offs;
         const nameOffs = view.getUint32(offs + 0x00, true);
         const name = readStringUTF16(buffer, nameOffs);
         const mtdNameOffs = view.getUint32(offs + 0x04, true);

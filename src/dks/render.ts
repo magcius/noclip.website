@@ -166,16 +166,12 @@ export class FLVERInstance {
     private templateRenderInst: GfxRenderInst;
     private renderInsts: GfxRenderInst[] = [];
     public modelMatrix = mat4.create();
+    public visible = true;
+    public name: string;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: DDSTextureHolder, public flverData: FLVERData) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-
-        const program = new DKSProgram();
-        program.defines.set('USE_LIGHTMAP', '1');
-
-        this.templateRenderInst.gfxProgram = device.createProgram(program);
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, DKSProgram.ub_MeshFragParams);
-
         const textureMapping = nArray(2, () => new TextureMapping());
 
         let inputStateIndex = 0, nextInputStateIndex = 0;
@@ -192,26 +188,37 @@ export class FLVERInstance {
             if (diffuseTextureName === null || !textureHolder.hasTexture(diffuseTextureName))
                 continue;
 
-            let lightmapTextureName = lookupTextureParameter(material, 'g_Lightmap');
-            if (lightmapTextureName === null || !textureHolder.hasTexture(lightmapTextureName))
-                lightmapTextureName = 'WhiteDummy';
-
             const batchTemplateRenderInst = renderInstBuilder.pushTemplateRenderInst();
             textureHolder.fillTextureMapping(textureMapping[0], diffuseTextureName);
-            textureHolder.fillTextureMapping(textureMapping[1], lightmapTextureName);
-            batchTemplateRenderInst.setSamplerBindingsFromTextureMappings(textureMapping);
 
-            // TODO(jstpierre): Investigate flags more carefully
-            if (material.flags & 0x100) {
+            const program = new DKSProgram();
+
+            let lightmapTextureName = lookupTextureParameter(material, 'g_Lightmap');
+            if (lightmapTextureName !== null && textureHolder.hasTexture(lightmapTextureName)) {
+                program.defines.set('USE_LIGHTMAP', '1');
+                textureHolder.fillTextureMapping(textureMapping[1], lightmapTextureName);
+            }
+
+            // TODO(jstpierre): Until we can parse out MTDs, just rely on this hack for now.
+            const hasAlphaBlend = material.mtdName.includes('_Add') || material.mtdName.includes('_Edge');
+            if (hasAlphaBlend) {
                 batchTemplateRenderInst.setMegaStateFlags({
                     blendMode: GfxBlendMode.ADD,
                     blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
                     blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-                    // depthWrite: false,
+                    depthWrite: false,
                 });
             }
 
-            const isTranslucent = material.flags & 0x02;
+            const hasAlphaTest = material.mtdName.includes('_Alp');
+            if (hasAlphaTest) {
+                program.defines.set('USE_ALPHATEST', '1');
+            }
+
+            batchTemplateRenderInst.gfxProgram = device.createProgram(program);
+            batchTemplateRenderInst.setSamplerBindingsFromTextureMappings(textureMapping);
+
+            const isTranslucent = hasAlphaBlend;
             const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
             batchTemplateRenderInst.sortKey = makeSortKey(layer, 0);
 
@@ -230,9 +237,16 @@ export class FLVERInstance {
         renderInstBuilder.popTemplateRenderInst();
     }
 
+    public setVisible(v: boolean) {
+        this.visible = v;
+    }
+
     public prepareToRender(meshFragParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
-        bboxScratch.transform(this.flverData.flver.bbox, this.modelMatrix);
-        const visible = viewerInput.camera.frustum.contains(bboxScratch);
+        let visible = this.visible;
+        if (visible) {
+            bboxScratch.transform(this.flverData.flver.bbox, this.modelMatrix);
+            visible = viewerInput.camera.frustum.contains(bboxScratch);
+        }
 
         for (let i = 0; i < this.renderInsts.length; i++)
             this.renderInsts[i].visible = visible;
@@ -253,7 +267,6 @@ export class FLVERInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.templateRenderInst.gfxProgram);
     }
 }
 

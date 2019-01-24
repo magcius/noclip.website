@@ -17,6 +17,7 @@ import { assert } from "../util";
 import { BasicRendererHelper } from "../oot3d/render";
 import { FLVERData, SceneRenderer, FLVERInstance } from "./render";
 import { mat4 } from "gl-matrix";
+import { Panel, LayerPanel } from "../ui";
 
 const pathBase = `data/dks/`;
 
@@ -45,6 +46,11 @@ class DKSRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
         super();
     }
 
+    public createPanels(): Panel[] {
+        const layerPanel = new LayerPanel(this.sceneRenderers[0].flverInstances);
+        return [layerPanel];
+    }
+
     public addSceneRenderer(device: GfxDevice, sceneRenderer: SceneRenderer): void {
         this.sceneRenderers.push(sceneRenderer);
         sceneRenderer.addToViewRenderer(device, this.viewRenderer);
@@ -65,18 +71,18 @@ class DKSRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
 }
 
 class ModelHolder {
-    public flverData: FLVERData[] = [];
+    public flverData: (FLVERData | undefined)[] = [];
 
     constructor(device: GfxDevice, flver: (FLVER.FLVER | undefined)[]) {
-        for (let i = 0; i < flver.length; i++) {
+        for (let i = 0; i < flver.length; i++)
             if (flver[i] !== undefined)
                 this.flverData[i] = new FLVERData(device, flver[i]);
-        }
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.flverData.length; i++)
-            this.flverData[i].destroy(device);
+            if (this.flverData[i] !== undefined)
+                this.flverData[i].destroy(device);
     }
 }
 
@@ -117,13 +123,15 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
     }
 
     private modelMatrixFromPart(m: mat4, part: MSB.Part): void {
+        const modelScale = 100;
+        // Game uses +x = left convention for some reason.
+        mat4.scale(m, m, [-modelScale, modelScale, modelScale]);
+
         mat4.translate(m, m, part.translation);
         mat4.rotateX(m, m, part.rotation[0] * Math.PI / 180);
         mat4.rotateY(m, m, part.rotation[1] * Math.PI / 180);
         mat4.rotateZ(m, m, part.rotation[2] * Math.PI / 180);
         mat4.scale(m, m, part.scale);
-        const modelScale = 100;
-        mat4.scale(m, m, [modelScale, modelScale, modelScale]);
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
@@ -150,7 +158,9 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
             for (let i = 0; i < msb.models.length; i++) {
                 if (msb.models[i].type === 0) {
                     const flverBuffer = resourceSystem.lookupFile(msb.models[i].flverPath);
-                    flver[i] = FLVER.parse(new ArrayBufferSlice(DCX.decompressBuffer(flverBuffer)));
+                    const flver_ = FLVER.parse(new ArrayBufferSlice(DCX.decompressBuffer(flverBuffer)));
+                    if (flver_.batches.length > 0)
+                        flver[i] = flver_;
                 }
             }
 
@@ -168,10 +178,12 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
                 const part = msb.parts[i];
                 if (part.type === 0) {
                     const flverData = modelHolder.flverData[part.modelIndex];
+                    if (flverData === undefined)
+                        continue;
 
                     const instance = new FLVERInstance(device, sceneRenderer.renderInstBuilder, textureHolder, flverData);
+                    instance.name = part.name;
                     this.modelMatrixFromPart(instance.modelMatrix, part);
-
                     sceneRenderer.flverInstances.push(instance);
                 }
             }

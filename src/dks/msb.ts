@@ -132,6 +132,12 @@ export function parse(buffer: ArrayBufferSlice, mapID: string): MSB {
         const rotation = readVec3();
         const scale = readVec3();
 
+        const dispGroup1 = view.getUint32(offs + 0x00, true);
+        const dispGroup2 = view.getUint32(offs + 0x04, true);
+        const dispGroup3 = view.getUint32(offs + 0x08, true);
+        const dispGroup4 = view.getUint32(offs + 0x0C, true);
+        offs += 0x10;
+
         return { name, type, modelIndex, translation, rotation, scale };
     }
 
