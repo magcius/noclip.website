@@ -47,7 +47,7 @@ import * as PSY from './psychonauts/scenes';
 import * as DKS from './dks/scenes';
 
 import * as J3D from './j3d/scenes';
-import { UI, createDOMFromString } from './ui';
+import { UI, createDOMFromString, SaveStatesAction } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump } from './util';
 import { downloadBlob, downloadBuffer } from './fetch';
@@ -56,7 +56,7 @@ import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
 import { atob, btoa } from './Ascii85';
 import { vec3, mat4 } from 'gl-matrix';
-import { GlobalSaveManager } from './SaveManager';
+import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
 
 const sceneGroups = [
@@ -324,15 +324,8 @@ class Main {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
                 if (this.currentSceneDesc) {
                     const key = this._getSaveStateSlotKey(i);
-                    if (inputManager.isKeyDown('ShiftLeft')) {
-                        this.saveManager.saveState(key, this._getSceneSaveState());
-                    } else if (inputManager.isKeyDown('AltLeft')) {
-                        this.saveManager.deleteState(key);
-                    } else {
-                        const state = this.saveManager.loadState(key);
-                        if (state !== null)
-                            this._loadSceneSaveState(state);
-                    }
+                    const action = this.ui.saveStatesPanel.pickSaveStatesAction(inputManager);
+                    this.doSaveStatesAction(action, key);
                 }
             }
         }
@@ -433,7 +426,6 @@ class Main {
         camera.worldMatrix[1] = u[0];
         camera.worldMatrix[5] = u[1];
         camera.worldMatrix[9] = u[2];
-        camera.worldMatrixUpdated();
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
@@ -514,7 +506,7 @@ class Main {
 
         const sceneDescId = this._getCurrentSceneDescId();
         this.saveManager.setCurrentSceneDescId(sceneDescId);
-        this.ui.saveStatesPanel.setCurrentSceneDesc(this.currentSceneGroup, this.currentSceneDesc);
+        this.ui.saveStatesPanel.setCurrentSceneDescId(sceneDescId);
 
         // Set camera controller.
         if (scene.defaultCameraController !== undefined) {
@@ -526,8 +518,13 @@ class Main {
             this.viewer.setCameraController(new FPSCameraController());
 
         if (!this._loadSceneSaveState(sceneStateStr)) {
-            // Set up defaults.
-            this._resetCamera(sceneDescId);
+            const camera = this.viewer.camera;
+
+            const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 1);
+            const didLoadCameraState = this._loadSceneSaveState(key);
+    
+            if (!didLoadCameraState)
+                mat4.identity(camera.worldMatrix);
         }
 
         this.ui.sceneChanged();
@@ -535,6 +532,20 @@ class Main {
 
     private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
         this._loadSceneDesc(sceneGroup, sceneDesc);
+    }
+
+    private doSaveStatesAction(action: SaveStatesAction, key: string): void {
+        if (action === SaveStatesAction.Save) {
+            this.saveManager.saveState(key, this._getSceneSaveState());
+        } else if (action === SaveStatesAction.Delete) {
+            this.saveManager.deleteState(key);
+        } else if (action === SaveStatesAction.Load) {
+            const state = this.saveManager.loadState(key);
+            this._loadSceneSaveState(state);
+        } else if (action === SaveStatesAction.LoadDefault) {
+            const state = this.saveManager.loadStateFromLocation(key, SaveStateLocation.Defaults);
+            this._loadSceneSaveState(state);
+        }
     }
 
     private _sendAnalytics(): void {
@@ -547,21 +558,6 @@ class Main {
                 'event_label': `${groupId}/${sceneId}`,
             });
         }
-    }
-
-    private _resetCamera(sceneDescId: string | null): void {
-        const camera = this.viewer.camera;
-
-        let didLoadCameraState = false;
-
-        const defaultSaveStateStr = this.saveManager.loadState(this.saveManager.getSaveStateSlotKey(sceneDescId, 1));
-        if (defaultSaveStateStr)
-            didLoadCameraState = this._loadSceneSaveState(defaultSaveStateStr);
-
-        if (!didLoadCameraState)
-            mat4.identity(camera.worldMatrix);
-
-        camera.worldMatrixUpdated();
     }
 
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): Progressable<SceneGfx> {
@@ -620,6 +616,9 @@ ${message}
         this.ui = new UI(this.viewer);
         this.uiContainers.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
+        this.ui.saveStatesPanel.onsavestatesaction = (action: SaveStatesAction, key: string) => {
+            this.doSaveStatesAction(action, key);
+        };
 
         this.dragHighlight = document.createElement('div');
         this.uiContainers.appendChild(this.dragHighlight);

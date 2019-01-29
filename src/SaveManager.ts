@@ -4,12 +4,23 @@ import { readFileSync } from 'fs';
 const defaultSaveStateData = JSON.parse(readFileSync('src/DefaultSaveStates.nclsp', { encoding: 'utf8' }));
 
 export type SettingCallback = (saveManager: SaveManager, key: string) => void;
+export type SaveStateCallback = (saveManager: SaveManager) => void;
+
+export const enum SaveStateLocation {
+    LocalStorage,
+    SessionStorage,
+    Defaults,
+    None,
+}
+
+interface SettingListener {
+    callback: SettingCallback;
+    key: string;
+}
 
 export class SaveManager {
-    private settingListeners: {
-        callback: SettingCallback;
-        key: string;
-    }[] = [];
+    private settingListeners: SettingListener[] = [];
+    private saveStateListeners: SaveStateCallback[] = [];
 
     constructor() {
         this.cleanOldKeys();
@@ -24,24 +35,6 @@ export class SaveManager {
             if (key.startsWith('SaveState_') && key.endsWith('/0'))
                 window.localStorage.removeItem(key);
         }
-    }
-
-    public getSaveStateSlotKey(sceneDescId: string, slotIndex: number): string {
-        return `SaveState_${sceneDescId}/${slotIndex}`;
-    }
-
-    public getCurrentSceneDescId(): string | null {
-        return window.sessionStorage.getItem('CurrentSceneDescId') || null;
-    }
-
-    public setCurrentSceneDescId(id: string) {
-        window.sessionStorage.setItem('CurrentSceneDescId', id);
-    }
-
-    public saveTemporaryState(key: string, serializedState: string): void {
-        // Clean up old stuff.
-        window.localStorage.removeItem(key);
-        window.sessionStorage.setItem(key, serializedState);
     }
 
     private getSettingKey(key: string) {
@@ -71,12 +64,68 @@ export class SaveManager {
             callback(this, key);
     }
 
+    public getSaveStateSlotKey(sceneDescId: string, slotIndex: number): string {
+        return `SaveState_${sceneDescId}/${slotIndex}`;
+    }
+
+    public getCurrentSceneDescId(): string | null {
+        return window.sessionStorage.getItem('CurrentSceneDescId') || null;
+    }
+
+    public setCurrentSceneDescId(id: string) {
+        window.sessionStorage.setItem('CurrentSceneDescId', id);
+    }
+
+    public addSaveStateListener(callback: SaveStateCallback): void {
+        this.saveStateListeners.push(callback);
+    }
+
+    private callSaveStateListeners(): void {
+        for (let i = 0; i < this.saveStateListeners.length; i++)
+            this.saveStateListeners[i](this);
+    }
+ 
+    public saveTemporaryState(key: string, serializedState: string): void {
+        // Clean up old stuff.
+        window.localStorage.removeItem(key);
+        window.sessionStorage.setItem(key, serializedState);
+        this.callSaveStateListeners();
+    }
+
     public saveState(key: string, serializedState: string): void {
         window.localStorage.setItem(key, serializedState);
+        this.callSaveStateListeners();
     }
 
     public deleteState(key: string): void {
         window.localStorage.removeItem(key);
+        this.callSaveStateListeners();
+    }
+
+    public getSaveStateLocation(key: string): SaveStateLocation {
+        if (key in window.localStorage)
+            return SaveStateLocation.LocalStorage;
+
+        if (key in window.sessionStorage)
+            return SaveStateLocation.SessionStorage;
+
+        if (key in defaultSaveStateData)
+            return SaveStateLocation.Defaults;
+
+        return SaveStateLocation.None;
+    }
+
+    public loadStateFromLocation(key: string, location: SaveStateLocation): string | null {
+        if (location === SaveStateLocation.LocalStorage)
+            return window.localStorage.getItem(key);
+
+        if (location === SaveStateLocation.SessionStorage)
+            return window.sessionStorage.getItem(key);
+
+        if (location === SaveStateLocation.Defaults)
+            return defaultSaveStateData.getItem(key);
+
+        return null;
     }
 
     public loadState(key: string): string | null {
