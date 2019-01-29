@@ -1021,6 +1021,7 @@ export class SaveStatesPanel extends Panel {
     private currentSceneDescId: string;
     private stateButtonsHeader: HTMLElement;
     private stateButtons: HTMLElement[] = [];
+    private defaultStateButtons: HTMLElement[] = [];
 
     public onsavestatesaction: (action: SaveStatesAction, key: string) => void;
 
@@ -1051,6 +1052,27 @@ export class SaveStatesPanel extends Panel {
         }
         this.contents.appendChild(stateButtons);
 
+        const defaultStateButtonsHeader = document.createElement('div');
+        defaultStateButtonsHeader.textContent = 'Load Default Save State';
+        defaultStateButtonsHeader.style.fontWeight = 'bold';
+        defaultStateButtonsHeader.style.marginTop = '1em';
+        this.contents.appendChild(defaultStateButtonsHeader);
+
+        const defaultStateButtons = document.createElement('div');
+        defaultStateButtons.style.display = 'grid';
+        defaultStateButtons.style.gridAutoFlow = 'column';
+        defaultStateButtons.style.gridGap = '8px';
+        for (let i = 1; i <= 9; i++) {
+            const button = document.createElement('div');
+            button.textContent = '' + i;
+            button.style.textAlign = 'center';
+            button.style.lineHeight = '1.2em';
+            button.style.userSelect = 'none';
+            this.defaultStateButtons.push(button);
+            defaultStateButtons.appendChild(button);
+        }
+        this.contents.appendChild(defaultStateButtons);
+
         const shareURLHeader = document.createElement('div');
         shareURLHeader.textContent = 'Share URL';
         shareURLHeader.style.fontWeight = 'bold';
@@ -1076,6 +1098,16 @@ export class SaveStatesPanel extends Panel {
             this.currentSceneDescIdEntry.selectAll();
         };
         this.contents.appendChild(this.currentSceneDescIdEntry.elem);
+
+
+        const helpText = document.createElement('div');
+        helpText.style.marginTop = '1em';
+        helpText.innerHTML = `
+Hold <b>Shift</b> to save new save states<br>
+Hold <b>Alt</b> to delete saves you made<br>
+Use <b>&lt;Num&gt;</b> on keyboard for quick access
+`.trim();
+        this.contents.appendChild(helpText);
     }
 
     public pickSaveStatesAction(inputManager: InputManager): SaveStatesAction {
@@ -1088,15 +1120,13 @@ export class SaveStatesPanel extends Panel {
     }
 
     private initLoadStateButton(button: HTMLElement, action: SaveStatesAction, saveManager: SaveManager, key: string): void {
-        const location = saveManager.getSaveStateLocation(key);
-
         let active = false;
-        if (location === SaveStateLocation.LocalStorage) {
+        if (action !== SaveStatesAction.LoadDefault && saveManager.hasStateInLocation(key, SaveStateLocation.LocalStorage)) {
             button.style.backgroundColor = COOL_BLUE_COLOR;
             button.style.fontWeight = 'bold';
             button.style.color = '';
             active = true;
-        } else if (action === SaveStatesAction.Load && location == SaveStateLocation.Defaults) {
+        } else if (action === SaveStatesAction.LoadDefault && saveManager.hasStateInLocation(key, SaveStateLocation.Defaults)) {
             button.style.backgroundColor = '#8fa88f';
             button.style.fontWeight = 'bold';
             button.style.color = '';
@@ -1128,15 +1158,16 @@ export class SaveStatesPanel extends Panel {
         const action = this.pickSaveStatesAction(this.inputManager);
 
         if (action === SaveStatesAction.Load)
-            this.stateButtonsHeader.textContent = `Load States`;
+            this.stateButtonsHeader.textContent = `Load Save State`;
         else if (action === SaveStatesAction.Save)
-            this.stateButtonsHeader.textContent = `Save States`;
+            this.stateButtonsHeader.textContent = `Save Save State`;
         else if (action === SaveStatesAction.Delete)
-            this.stateButtonsHeader.textContent = `Delete States`;
+            this.stateButtonsHeader.textContent = `Delete Save State`;
 
         for (let i = 0; i < this.stateButtons.length; i++) {
             const key = saveManager.getSaveStateSlotKey(sceneDescId, i + 1);
             this.initLoadStateButton(this.stateButtons[i], action, saveManager, key);
+            this.initLoadStateButton(this.defaultStateButtons[i], SaveStatesAction.LoadDefault, saveManager, key);
         }
     }
 

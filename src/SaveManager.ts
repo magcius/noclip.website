@@ -102,17 +102,17 @@ export class SaveManager {
         this.callSaveStateListeners();
     }
 
-    public getSaveStateLocation(key: string): SaveStateLocation {
-        if (key in window.localStorage)
-            return SaveStateLocation.LocalStorage;
+    public hasStateInLocation(key: string, location: SaveStateLocation): boolean {
+        if (location === SaveStateLocation.LocalStorage)
+            return key in window.localStorage;
 
-        if (key in window.sessionStorage)
-            return SaveStateLocation.SessionStorage;
+        if (location === SaveStateLocation.SessionStorage)
+            return key in window.sessionStorage;
 
-        if (key in defaultSaveStateData)
-            return SaveStateLocation.Defaults;
+        if (location === SaveStateLocation.Defaults)
+            return key in defaultSaveStateData;
 
-        return SaveStateLocation.None;
+        return false;
     }
 
     public loadStateFromLocation(key: string, location: SaveStateLocation): string | null {
@@ -123,7 +123,7 @@ export class SaveManager {
             return window.sessionStorage.getItem(key);
 
         if (location === SaveStateLocation.Defaults)
-            return defaultSaveStateData.getItem(key);
+            return defaultSaveStateData[key];
 
         return null;
     }
