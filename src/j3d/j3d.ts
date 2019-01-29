@@ -329,9 +329,12 @@ export interface JNT1 {
 }
 
 const quatScratch = quat.create();
+const vec3Scratch1 = vec3.create();
+const vec3Scratch2 = vec3.create();
 function createJointMatrix(m: mat4, sx: number, sy: number, sz: number, rx: number, ry: number, rz: number, tx: number, ty: number, tz: number): void {
     quat.fromEuler(quatScratch, rx, ry, rz);
-    mat4.fromRotationTranslationScale(m, quatScratch, [tx, ty, tz], [sx, sy, sz]);
+    const _t1 = vec3Scratch1, _t2 = vec3Scratch2;
+    mat4.fromRotationTranslationScale(m, quatScratch, vec3.set(_t1, tx, ty, tz), vec3.set(_t2, sx, sy, sz));
 }
 
 function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
@@ -1275,11 +1278,18 @@ function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: num
     return getPointHermite(p0, p1, s0, s1, t);
 }
 
+function findKeyframe(frames: AnimationKeyframe[], time: number): number {
+    for (let i = 0; i < frames.length; i++)
+        if (time < frames[i].time)
+            return i;
+    return -1;
+}
+
 function sampleAnimationData(track: AnimationTrack, frame: number) {
     const frames = track.frames;
 
     // Find the first frame.
-    const idx1 = frames.findIndex((key) => (frame < key.time));
+    const idx1 = findKeyframe(frames, frame);
     if (idx1 === 0)
         return frames[0].value;
     if (idx1 < 0)

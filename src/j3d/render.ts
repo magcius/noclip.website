@@ -197,48 +197,48 @@ export class MaterialInstance {
         }
     }
 
+    private copyColor(i: ColorKind, fallbackColor: GX_Material.Color) {
+        const dst = materialParams.u_Color[i];
+
+        if (this.trk1Animators[i] !== undefined) {
+            this.trk1Animators[i].calcColor(dst);
+            return;
+        }
+
+        let color: GX_Material.Color;
+        if (this.modelInstance !== null && this.modelInstance.colorOverrides[i] !== undefined) {
+            color = this.modelInstance.colorOverrides[i];
+        } else {
+            color = fallbackColor;
+        }
+
+        let alpha: number;
+        if (this.modelInstance !== null && this.modelInstance.alphaOverrides[i]) {
+            alpha = color.a;
+        } else {
+            alpha = fallbackColor.a;
+        }
+
+        dst.copy(color, alpha);
+    }
+
     public fillMaterialParams(materialParams: MaterialParams, camera: Camera, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
-        const material = this.materialData.material;
+       const material = this.materialData.material;
 
-        const copyColor = (i: ColorKind, fallbackColor: GX_Material.Color) => {
-            const dst = materialParams.u_Color[i];
+        this.copyColor(ColorKind.MAT0, material.colorMatRegs[0]);
+        this.copyColor(ColorKind.MAT1, material.colorMatRegs[1]);
+        this.copyColor(ColorKind.AMB0, material.colorAmbRegs[0]);
+        this.copyColor(ColorKind.AMB1, material.colorAmbRegs[1]);
 
-            if (this.trk1Animators[i] !== undefined) {
-                this.trk1Animators[i].calcColor(dst);
-                return;
-            }
+        this.copyColor(ColorKind.K0, material.colorConstants[0]);
+        this.copyColor(ColorKind.K1, material.colorConstants[1]);
+        this.copyColor(ColorKind.K2, material.colorConstants[2]);
+        this.copyColor(ColorKind.K3, material.colorConstants[3]);
 
-            let color: GX_Material.Color;
-            if (this.modelInstance !== null && this.modelInstance.colorOverrides[i] !== undefined) {
-                color = this.modelInstance.colorOverrides[i];
-            } else {
-                color = fallbackColor;
-            }
-
-            let alpha: number;
-            if (this.modelInstance !== null && this.modelInstance.alphaOverrides[i]) {
-                alpha = color.a;
-            } else {
-                alpha = fallbackColor.a;
-            }
-    
-            dst.copy(color, alpha);
-        };
-
-        copyColor(ColorKind.MAT0, material.colorMatRegs[0]);
-        copyColor(ColorKind.MAT1, material.colorMatRegs[1]);
-        copyColor(ColorKind.AMB0, material.colorAmbRegs[0]);
-        copyColor(ColorKind.AMB1, material.colorAmbRegs[1]);
-
-        copyColor(ColorKind.K0, material.colorConstants[0]);
-        copyColor(ColorKind.K1, material.colorConstants[1]);
-        copyColor(ColorKind.K2, material.colorConstants[2]);
-        copyColor(ColorKind.K3, material.colorConstants[3]);
-
-        copyColor(ColorKind.CPREV, material.colorRegisters[0]);
-        copyColor(ColorKind.C0, material.colorRegisters[1]);
-        copyColor(ColorKind.C1, material.colorRegisters[2]);
-        copyColor(ColorKind.C2, material.colorRegisters[3]);
+        this.copyColor(ColorKind.CPREV, material.colorRegisters[0]);
+        this.copyColor(ColorKind.C0, material.colorRegisters[1]);
+        this.copyColor(ColorKind.C1, material.colorRegisters[2]);
+        this.copyColor(ColorKind.C2, material.colorRegisters[3]);
 
         // Bind textures.
         for (let i = 0; i < material.textureIndexes.length; i++) {
@@ -588,6 +588,13 @@ export class BMDModelInstance {
         return (milliseconds / 1000) * this.fps;
     }
 
+    private isAnyShapeVisible(): boolean {
+        for (let i = 0; i < this.shapeInstanceState.matrixVisibility.length; i++)
+            if (this.shapeInstanceState.matrixVisibility[i])
+                return true;
+        return false;
+    }
+
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         let modelVisible = this.visible;
 
@@ -625,7 +632,7 @@ export class BMDModelInstance {
             this.updateMatrixArray(viewerInput.camera, rootJointMatrix, disableCulling);
 
             // If entire model is culled away, then we don't need to render anything.
-            if (!this.shapeInstanceState.matrixVisibility.some((visible) => visible))
+            if (!this.isAnyShapeVisible())
                 modelVisible = false;
         }
 
