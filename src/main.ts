@@ -521,7 +521,7 @@ class Main {
             const camera = this.viewer.camera;
 
             const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 1);
-            const didLoadCameraState = this._loadSceneSaveState(key);
+            const didLoadCameraState = this._loadSceneSaveState(this.saveManager.loadState(key));
     
             if (!didLoadCameraState)
                 mat4.identity(camera.worldMatrix);
