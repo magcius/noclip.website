@@ -151,13 +151,16 @@ export class FPSCameraController implements CameraController {
     public forceUpdate: boolean = false;
 
     private keyMovement = vec3.create();
+    private mouseMovement = vec3.create();
     private tmp1: vec3 = vec3.create();
     private tmp2: vec3 = vec3.create();
-    private speed: number;
 
-    constructor() {
-        this.speed = 60;
-    }
+    private keyMoveSpeed: number = 60;
+    private keyMoveDrag = 0.8;
+
+    private mouseLookSpeed: number = 500;
+    private mouseLookDragFast = 0.8;
+    private mouseLookDragSlow = 0.9;
 
     public cameraUpdateForced(): void {
         vec3.set(this.keyMovement, 0, 0, 0);
@@ -173,67 +176,78 @@ export class FPSCameraController implements CameraController {
             updated = true;
         }
 
-        this.speed += inputManager.dz;
-        this.speed = Math.max(this.speed, 1);
+        this.keyMoveSpeed += inputManager.dz;
+        this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
 
-        let speedCap = this.speed;
+        let keyMoveSpeedCap = this.keyMoveSpeed;
         if (inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight'))
-            speedCap *= 5;
+            keyMoveSpeedCap *= 5;
 
-        const movement = this.keyMovement;
+        const keyMovement = this.keyMovement;
         const tmp = this.tmp2;
 
-        const velocity = speedCap / 5;
-        const drag = 0.8;
-        const lowSpeedCap = 0.01;
+        const keyMoveVelocitgy = keyMoveSpeedCap / 5;
+        const keyMoveLowSpeedCap = 0.01;
 
         if (inputManager.isKeyDown('KeyW')) {
-            movement[2] = clampRange(movement[2] - velocity, speedCap);
+            keyMovement[2] = clampRange(keyMovement[2] - keyMoveVelocitgy, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyS')) {
-            movement[2] = clampRange(movement[2] + velocity, speedCap);
+            keyMovement[2] = clampRange(keyMovement[2] + keyMoveVelocitgy, keyMoveSpeedCap);
         } else {
-            movement[2] *= drag;
-            if (Math.abs(movement[2]) < lowSpeedCap) movement[2] = 0.0;
+            keyMovement[2] *= this.keyMoveDrag;
+            if (Math.abs(keyMovement[2]) < keyMoveLowSpeedCap) keyMovement[2] = 0.0;
         }
 
         if (inputManager.isKeyDown('KeyA')) {
-            movement[0] = clampRange(movement[0] - velocity, speedCap);
+            keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocitgy, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyD')) {
-            movement[0] = clampRange(movement[0] + velocity, speedCap);
+            keyMovement[0] = clampRange(keyMovement[0] + keyMoveVelocitgy, keyMoveSpeedCap);
         } else {
-            movement[0] *= drag;
-            if (Math.abs(movement[0]) < lowSpeedCap) movement[0] = 0.0;
+            keyMovement[0] *= this.keyMoveDrag;
+            if (Math.abs(keyMovement[0]) < keyMoveLowSpeedCap) keyMovement[0] = 0.0;
         }
 
         if (inputManager.isKeyDown('KeyQ')) {
-            movement[1] = clampRange(movement[1] - velocity, speedCap);
+            keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocitgy, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyE')) {
-            movement[1] = clampRange(movement[1] + velocity, speedCap);
+            keyMovement[1] = clampRange(keyMovement[1] + keyMoveVelocitgy, keyMoveSpeedCap);
         } else {
-            movement[1] *= drag;
-            if (Math.abs(movement[1]) < lowSpeedCap) movement[1] = 0.0;
+            keyMovement[1] *= this.keyMoveDrag;
+            if (Math.abs(keyMovement[1]) < keyMoveLowSpeedCap) keyMovement[1] = 0.0;
         }
 
-        // Rotate view.
-        const dx = inputManager.getMouseDeltaX();
-        const dy = inputManager.getMouseDeltaY();
-        if (dx !== 0 || dy !== 0) {
-            camera.getWorldUp(tmp);
-            vec3.normalize(tmp, tmp);
-            mat4.rotate(camera.worldMatrix, camera.worldMatrix, -dx / 500.0, tmp);
-            mat4.rotate(camera.worldMatrix, camera.worldMatrix, -dy / 500.0, [1, 0, 0]);
-            updated = true;
-        }
-
-        // Apply movement.
-        if (!vec3.exactEquals(movement, vec3Zero)) {
+        if (!vec3.exactEquals(keyMovement, vec3Zero)) {
             const finalMovement = this.tmp1;
-            vec3.set(finalMovement, movement[0], 0, movement[2]);
+            vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
 
             // Instead of getting the camera up, instead use world up. Feels more natural.
             camera.getWorldUp(tmp);
-            vec3.scaleAndAdd(finalMovement, finalMovement, tmp, movement[1]);
+            vec3.scaleAndAdd(finalMovement, finalMovement, tmp, keyMovement[1]);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
+            updated = true;
+        }
+
+        const mouseMoveLowSpeedCap = 0.0001;
+
+        const dx = inputManager.getMouseDeltaX() * (-1 / this.mouseLookSpeed);
+        const dy = inputManager.getMouseDeltaY() * (-1 / this.mouseLookSpeed);
+
+        this.mouseMovement[0] += dx;
+        this.mouseMovement[1] += dy;
+
+        if (inputManager.isDragging()) {
+            vec3.scale(this.mouseMovement, this.mouseMovement, this.mouseLookDragFast);
+        } else {
+            vec3.scale(this.mouseMovement, this.mouseMovement, this.mouseLookDragSlow);
+        }
+        if (Math.abs(this.mouseMovement[0]) < mouseMoveLowSpeedCap) this.mouseMovement[0] = 0.0;
+        if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
+
+        if (!vec3.exactEquals(this.mouseMovement, vec3Zero)) {
+            camera.getWorldUp(tmp);
+            vec3.normalize(tmp, tmp);
+            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[0], tmp);
+            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[1], [1, 0, 0]);
             updated = true;
         }
 
