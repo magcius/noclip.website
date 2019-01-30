@@ -186,31 +186,31 @@ export class FPSCameraController implements CameraController {
         const keyMovement = this.keyMovement;
         const tmp = this.tmp2;
 
-        const keyMoveVelocitgy = keyMoveSpeedCap / 5;
+        const keyMoveVelocity = keyMoveSpeedCap / 5;
         const keyMoveLowSpeedCap = 0.01;
 
         if (inputManager.isKeyDown('KeyW')) {
-            keyMovement[2] = clampRange(keyMovement[2] - keyMoveVelocitgy, keyMoveSpeedCap);
+            keyMovement[2] = clampRange(keyMovement[2] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyS')) {
-            keyMovement[2] = clampRange(keyMovement[2] + keyMoveVelocitgy, keyMoveSpeedCap);
+            keyMovement[2] = clampRange(keyMovement[2] + keyMoveVelocity, keyMoveSpeedCap);
         } else {
             keyMovement[2] *= this.keyMoveDrag;
             if (Math.abs(keyMovement[2]) < keyMoveLowSpeedCap) keyMovement[2] = 0.0;
         }
 
         if (inputManager.isKeyDown('KeyA')) {
-            keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocitgy, keyMoveSpeedCap);
+            keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyD')) {
-            keyMovement[0] = clampRange(keyMovement[0] + keyMoveVelocitgy, keyMoveSpeedCap);
+            keyMovement[0] = clampRange(keyMovement[0] + keyMoveVelocity, keyMoveSpeedCap);
         } else {
             keyMovement[0] *= this.keyMoveDrag;
             if (Math.abs(keyMovement[0]) < keyMoveLowSpeedCap) keyMovement[0] = 0.0;
         }
 
         if (inputManager.isKeyDown('KeyQ')) {
-            keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocitgy, keyMoveSpeedCap);
+            keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyE')) {
-            keyMovement[1] = clampRange(keyMovement[1] + keyMoveVelocitgy, keyMoveSpeedCap);
+            keyMovement[1] = clampRange(keyMovement[1] + keyMoveVelocity, keyMoveSpeedCap);
         } else {
             keyMovement[1] *= this.keyMoveDrag;
             if (Math.abs(keyMovement[1]) < keyMoveLowSpeedCap) keyMovement[1] = 0.0;
