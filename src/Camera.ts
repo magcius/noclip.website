@@ -159,8 +159,8 @@ export class FPSCameraController implements CameraController {
     private keyMoveDrag = 0.8;
 
     private mouseLookSpeed: number = 500;
-    private mouseLookDragFast = 0.8;
-    private mouseLookDragSlow = 0.9;
+    private mouseLookDragFast = 0;
+    private mouseLookDragSlow = 0;
 
     public cameraUpdateForced(): void {
         vec3.set(this.keyMovement, 0, 0, 0);
@@ -235,14 +235,6 @@ export class FPSCameraController implements CameraController {
         this.mouseMovement[0] += dx;
         this.mouseMovement[1] += dy;
 
-        if (inputManager.isDragging()) {
-            vec3.scale(this.mouseMovement, this.mouseMovement, this.mouseLookDragFast);
-        } else {
-            vec3.scale(this.mouseMovement, this.mouseMovement, this.mouseLookDragSlow);
-        }
-        if (Math.abs(this.mouseMovement[0]) < mouseMoveLowSpeedCap) this.mouseMovement[0] = 0.0;
-        if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
-
         if (!vec3.exactEquals(this.mouseMovement, vec3Zero)) {
             camera.getWorldUp(tmp);
             vec3.normalize(tmp, tmp);
@@ -250,6 +242,14 @@ export class FPSCameraController implements CameraController {
             mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[1], [1, 0, 0]);
             updated = true;
         }
+
+        if (inputManager.isDragging()) {
+            vec3.scale(this.mouseMovement, this.mouseMovement, this.mouseLookDragFast);
+        } else {
+            vec3.scale(this.mouseMovement, this.mouseMovement, this.mouseLookDragSlow);
+        }
+        if (Math.abs(this.mouseMovement[0]) < mouseMoveLowSpeedCap) this.mouseMovement[0] = 0.0;
+        if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
 
         updated = updated || this.forceUpdate;
 
