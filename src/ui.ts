@@ -1621,7 +1621,7 @@ class About extends Panel {
 <a href="https://twitter.com/pupperuki">Aruki</a>
 </p>
 
-<p><strong>MODELS</strong> © Nintendo, SEGA, Retro Studios, FROM Software, Konami</p>
+<p><strong>MODELS</strong> © Nintendo, SEGA, Retro Studios, FROM Software, Konami, Neversoft, Double Fine Productions</p>
 
 <p><strong>ICONS</strong> from <a href="https://thenounproject.com/">The Noun Project</a>, used under Creative Commons CC-BY:</p>
 <ul>

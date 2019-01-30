@@ -1,5 +1,5 @@
 
-import { FLVER, VertexInputSemantic, MaterialParameter, Material } from "./flver";
+import { FLVER, VertexInputSemantic, Material } from "./flver";
 import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxProgram, GfxHostAccessPass, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer } from "../gfx/helpers/BufferHelpers";

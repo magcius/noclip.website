@@ -129,7 +129,6 @@ export default class ArrayBufferSlice {
             byteLength = clazz.BYTES_PER_ELEMENT * count;
         } else {
             byteLength = this.byteLength - offs;
-            assert(isAligned(begin, clazz.BYTES_PER_ELEMENT));
             count = byteLength / clazz.BYTES_PER_ELEMENT;
             assert((count | 0) === count);
         }

@@ -16,6 +16,7 @@ import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs } from './viewer
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
 
+import * as THUG2 from './thug2/scenes';
 import * as ZTP from './j3d/ztp_scenes';
 import * as MKDD from './j3d/mkdd_scenes';
 import * as ZWW from './j3d/zww_scenes';
@@ -93,6 +94,7 @@ const sceneGroups = [
     SPL.sceneGroup,
     Z_BOTW.sceneGroup,
     DKS.sceneGroup,
+    THUG2.sceneGroup,
 ];
 
 function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {
