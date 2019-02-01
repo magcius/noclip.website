@@ -14,7 +14,7 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxHostAccessPass, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTextureDimension, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffers, GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, GfxRenderInstViewRenderer, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
-import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
+import { computeViewMatrixSkybox, computeViewMatrix, texEnvMtx } from '../Camera';
 import { LoadedVertexData } from '../gx/gx_displaylist';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
@@ -85,6 +85,7 @@ class SurfaceInstance {
     }
 }
 
+const matrixScratch2 = mat4.create();
 class Command_MaterialGroup {
     private materialParams = new MaterialParams();
     public materialHelper: GXMaterialHelperGfx;
@@ -174,9 +175,8 @@ class Command_MaterialGroup {
                 texMtx[13] = trans;
                 break;
             }
-            /*
             case UVAnimationType.INV_MAT_SKY:
-                mat4.invert(texMtx, state.view);
+                mat4.invert(texMtx, viewerInput.camera.viewMatrix);
                 if (modelMatrix !== null)
                     mat4.mul(texMtx, texMtx, modelMatrix);
                 texMtx[12] = 0;
@@ -185,7 +185,7 @@ class Command_MaterialGroup {
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
                 break;
             case UVAnimationType.INV_MAT:
-                mat4.invert(texMtx, state.view);
+                mat4.invert(texMtx, viewerInput.camera.viewMatrix);
                 if (modelMatrix !== null)
                     mat4.mul(texMtx, texMtx, modelMatrix);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
@@ -201,19 +201,19 @@ class Command_MaterialGroup {
                 texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
                 break;
             case UVAnimationType.CYLINDER: {
-                mat4.copy(texMtx, state.view);
+                mat4.copy(texMtx, viewerInput.camera.viewMatrix);
                 if (modelMatrix !== null)
                     mat4.mul(texMtx, texMtx, modelMatrix);
                 texMtx[12] = 0;
                 texMtx[13] = 0;
                 texMtx[14] = 0;
-                const xy = ((state.view[12] + state.view[13]) * 0.025 * uvAnimation.phi) % 1.0;
-                const z = (state.view[14] * 0.05 * uvAnimation.phi) % 1.0;
+                mat4.invert(matrixScratch2, viewerInput.camera.viewMatrix);
+                const xy = ((matrixScratch2[12] + matrixScratch2[14]) * 0.025 * uvAnimation.phi) % 1.0;
+                const z = (matrixScratch2[13] * 0.05 * uvAnimation.phi) % 1.0;
                 const a = uvAnimation.theta * 0.5;
                 texEnvMtx(postMtx, a, -a, xy, z);
                 break;
             }
-            */
             }
         }
     }

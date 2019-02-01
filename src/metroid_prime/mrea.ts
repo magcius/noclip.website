@@ -336,7 +336,7 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             const source: GX.TexGenSrc = (flags >>> 4) & 0x0F;
             const matrix: GX.TexGenMatrix = ((flags >>> 9) & 0x1F) + 30;
 
-            const normalize: boolean = !!(flags & 14);
+            const normalize: boolean = !!(flags >>> 14);
             const postMatrix: GX.PostTexGenMatrix = ((flags >>> 15) & 0x3F) + 64;
 
             texGens.push({ index, type, source, matrix, normalize, postMatrix });
