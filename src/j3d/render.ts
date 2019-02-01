@@ -223,7 +223,7 @@ export class MaterialInstance {
     }
 
     public fillMaterialParams(materialParams: MaterialParams, camera: Camera, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
-       const material = this.materialData.material;
+        const material = this.materialData.material;
 
         this.copyColor(ColorKind.MAT0, material.colorMatRegs[0]);
         this.copyColor(ColorKind.MAT1, material.colorMatRegs[1]);
@@ -235,10 +235,10 @@ export class MaterialInstance {
         this.copyColor(ColorKind.K2, material.colorConstants[2]);
         this.copyColor(ColorKind.K3, material.colorConstants[3]);
 
-        this.copyColor(ColorKind.CPREV, material.colorRegisters[0]);
-        this.copyColor(ColorKind.C0, material.colorRegisters[1]);
-        this.copyColor(ColorKind.C1, material.colorRegisters[2]);
-        this.copyColor(ColorKind.C2, material.colorRegisters[3]);
+        this.copyColor(ColorKind.CPREV, material.colorRegisters[3]);
+        this.copyColor(ColorKind.C0, material.colorRegisters[0]);
+        this.copyColor(ColorKind.C1, material.colorRegisters[1]);
+        this.copyColor(ColorKind.C2, material.colorRegisters[2]);
 
         // Bind textures.
         for (let i = 0; i < material.textureIndexes.length; i++) {

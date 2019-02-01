@@ -715,9 +715,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             colorRegisters.push(color);
         }
 
-        // BMD stores CPREV at the end. We store CPREV at the beginning.
-        colorRegisters.unshift(colorRegisters.pop());
-
         let textureIndexTableIdx = materialEntryIdx + 0x84;
         const textureIndexes = [];
         for (let j = 0; j < 8; j++) {
