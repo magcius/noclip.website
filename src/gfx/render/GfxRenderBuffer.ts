@@ -63,7 +63,7 @@ export class GfxRenderBuffer {
     }
 
     public allocateChunk(bigWordOffset: number, wordCount: number): number {
-        if (this.usesMultiplePages) {
+        if (this.usage === GfxBufferUsage.UNIFORM) {
             assert(wordCount < UBO_PAGE_WORD_LIMIT);
             // If we straddle the page, then put it at the start of the next one.
             if (this.findPageIndex(bigWordOffset) !== this.findPageIndex(bigWordOffset + wordCount - 1))
