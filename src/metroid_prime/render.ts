@@ -11,7 +11,7 @@ import { AABB } from '../Geometry';
 import { TXTR } from './txtr';
 import { CMDL } from './cmdl';
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxHostAccessPass, GfxFormat } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTextureDimension, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffers, GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, GfxRenderInstViewRenderer, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
@@ -89,15 +89,27 @@ class Command_MaterialGroup {
     private materialParams = new MaterialParams();
     public materialHelper: GXMaterialHelperGfx;
     public hasPreparedToRender: boolean = false;
+    public gfxSampler: GfxSampler;
 
     constructor(device: GfxDevice, public renderHelper: GXRenderHelperGfx, public material: Material) {
-        this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.material.gxMaterial);
+        this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.material.gxMaterial, { colorLightingFudge: (p) => '0' });
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.materialHelper.templateRenderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
+
+        this.gfxSampler = device.createSampler({
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.LINEAR,
+            minLOD: 0,
+            maxLOD: 100,
+            wrapS: GfxWrapMode.REPEAT,
+            wrapT: GfxWrapMode.REPEAT,
+        })
     }
 
     public destroy(device: GfxDevice) {
         this.materialHelper.destroy(device);
+        device.destroySampler(this.gfxSampler);
     }
 
     public prepareToRender(viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean): void {
@@ -224,6 +236,7 @@ class Command_Material {
 
             const txtr = materialSet.textures[materialSet.textureRemapTable[textureIndex]];
             textureHolder.fillTextureMapping(textureMappings[i], txtr.name);
+            textureMappings[i].gfxSampler = materialGroup.gfxSampler;
 
             const globalTexIndex = textureHolder.findTextureEntryIndex(txtr.name);
             this.textureKey = (this.textureKey | globalTexIndex << (30 - (i * 10))) >>> 0;
@@ -292,7 +305,6 @@ export class MREARenderer {
     private materialCommands: Command_Material[] = [];
     private surfaceInstances: SurfaceInstance[] = [];
     private renderHelper: GXRenderHelperGfx;
-    private bboxScratch: AABB = new AABB();
     public visible: boolean = true;
 
     constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
