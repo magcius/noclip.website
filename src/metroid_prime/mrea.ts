@@ -433,6 +433,7 @@ export interface Surface {
     materialIndex: number;
     loadedVertexData: LoadedVertexData;
     loadedVertexLayout: LoadedVertexLayout;
+    worldModelIndex: number;
 }
 
 export interface WorldModel {
@@ -445,7 +446,7 @@ export interface Geometry {
     surfaces: Surface[];
 }
 
-export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, sectionIndex: number): [Geometry, number] {
+export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
     const view = buffer.createDataView();
 
     const posSectionOffs = sectionOffsTable[sectionIndex++];
@@ -543,6 +544,7 @@ export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet
 
         const surface: Surface = {
             materialIndex,
+            worldModelIndex,
             loadedVertexData,
             loadedVertexLayout,
         };
@@ -628,8 +630,9 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
 
         geometrySectionIndex += 1;
 
+        const worldModelIndex = worldModels.length;
         let geometry: Geometry;
-        [geometry, geometrySectionIndex] = parseGeometry(buffer, materialSet, dataSectionOffsTable, true, geometrySectionIndex);
+        [geometry, geometrySectionIndex] = parseGeometry(buffer, materialSet, dataSectionOffsTable, true, geometrySectionIndex, worldModelIndex);
         worldModels.push({ geometry, modelMatrix, bbox });
     }
 
@@ -1055,6 +1058,8 @@ function parse_DKCR(resourceSystem: ResourceSystem, assetID: string, buffer: Arr
         const uvsSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
         const firstSurfaceOffs = dataSectionOffsTable[gpudSectionIndex];
 
+        const worldModelIndex: number = worldModels.length;
+
         const surfaceCount = secView.getUint32(surfaceDefinitionTableOffs + 0x00);
         let surfaceDefinitionTableIdx = surfaceDefinitionTableOffs + 0x04;
         const surfaces: Surface[] = [];
@@ -1113,7 +1118,7 @@ function parse_DKCR(resourceSystem: ResourceSystem, assetID: string, buffer: Arr
             const dlData = secBuffer.slice(primitiveDataOffs, surfaceEnd);
             const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
 
-            surfaces.push({ materialIndex, loadedVertexData, loadedVertexLayout });
+            surfaces.push({ materialIndex, worldModelIndex, loadedVertexData, loadedVertexLayout });
         }
 
         const geometry: Geometry = { surfaces };

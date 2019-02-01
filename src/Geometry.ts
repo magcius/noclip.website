@@ -90,6 +90,15 @@ export class AABB {
         }
     }
 
+    public union(a: AABB, b: AABB): void {
+        this.minX = Math.min(a.minX, b.minX);
+        this.minY = Math.min(a.minY, b.minY);
+        this.minZ = Math.min(a.minZ, b.minZ);
+        this.maxX = Math.max(a.maxX, b.maxX);
+        this.maxY = Math.max(a.maxY, b.maxY);
+        this.maxZ = Math.max(a.maxZ, b.maxZ);
+    }
+
     public static intersect(a: AABB, b: AABB): boolean {
         return !(
             a.minX > b.maxX || b.minX > a.maxX ||
