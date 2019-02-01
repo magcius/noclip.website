@@ -1,6 +1,6 @@
 
 import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass } from "../platform/GfxPlatform";
-import { assert } from "../../util";
+import { assert, align } from "../../util";
 
 // Implements a high-level resizable buffer that uses the platform GfxBuffer under the hood.
 
@@ -59,6 +59,19 @@ export class GfxRenderBuffer {
             return true;
         } else {
             return false;
+        }
+    }
+
+    public allocateChunk(bigWordOffset: number, wordCount: number): number {
+        if (this.usesMultiplePages) {
+            assert(wordCount < UBO_PAGE_WORD_LIMIT);
+            // If we straddle the page, then put it at the start of the next one.
+            if (this.findPageIndex(bigWordOffset) !== this.findPageIndex(bigWordOffset + wordCount - 1))
+                return align(bigWordOffset, UBO_PAGE_WORD_LIMIT);
+            else
+                return bigWordOffset;
+        } else {
+            return bigWordOffset;
         }
     }
 

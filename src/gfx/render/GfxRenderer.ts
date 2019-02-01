@@ -446,9 +446,9 @@ export class GfxRenderInstBuilder {
     }
 
     private newUniformBufferOffset(index: number): number {
-        const offset = this.uniformBufferOffsets[index];
         const incrSize = align(this.programReflection.uniformBufferLayouts[index].totalWordSize, this.uniformBufferWordAlignment);
-        this.uniformBufferOffsets[index] += incrSize;
+        const offset = this.uniformBuffers[index].allocateChunk(this.uniformBufferOffsets[index], incrSize);
+        this.uniformBufferOffsets[index] = offset + incrSize;
         return offset;
     }
 
