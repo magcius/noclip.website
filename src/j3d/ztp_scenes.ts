@@ -18,7 +18,7 @@ import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 class ZTPTextureHolder extends J3DTextureHolder {
-    protected findTextureEntryIndex(name: string): number {
+    public findTextureEntryIndex(name: string): number {
         let i: number = -1;
 
         i = this.searchTextureEntryIndex(name);

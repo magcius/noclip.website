@@ -71,7 +71,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
         return -1;
     }
 
-    protected findTextureEntryIndex(name: string): number {
+    public findTextureEntryIndex(name: string): number {
         return this.searchTextureEntryIndex(name);
     }
 
