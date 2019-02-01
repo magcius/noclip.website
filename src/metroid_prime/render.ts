@@ -3,7 +3,7 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray } from '../util';
-import { MaterialParams, PacketParams, GXTextureHolder, GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
+import { MaterialParams, PacketParams, GXTextureHolder, GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx, ColorKind } from '../gx/gx_render';
 
 import { MREA, Material, Surface, UVAnimationType, MaterialSet } from './mrea';
 import * as Viewer from '../viewer';
@@ -103,16 +103,16 @@ class Command_MaterialGroup {
     }
 
     private fillMaterialParamsData(materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean): void {
-        materialParams.u_Color[0].set(1, 1, 1, 1);
+        materialParams.u_Color[ColorKind.MAT0].set(1, 1, 1, 1);
         if (isSkybox)
-            materialParams.u_Color[2].set(1, 1, 1, 1);
+            materialParams.u_Color[ColorKind.AMB0].set(1, 1, 1, 1);
         else
-            materialParams.u_Color[2].set(0, 0, 0, 1);
+            materialParams.u_Color[ColorKind.AMB0].set(0, 0, 0, 1);
 
         for (let i = 0; i < 4; i++)
-            materialParams.u_Color[4 + i].copy(this.material.colorRegisters[i]);
+            materialParams.u_Color[ColorKind.CPREV + i].copy(this.material.colorRegisters[i]);
         for (let i = 0; i < 4; i++)
-            materialParams.u_Color[8 + i].copy(this.material.colorConstants[i]);
+            materialParams.u_Color[ColorKind.K0 + i].copy(this.material.colorConstants[i]);
 
         const animTime = ((viewerInput.time / 1000) % 900);
         for (let i = 0; i < this.material.uvAnimations.length; i++) {
@@ -291,7 +291,7 @@ export class MREARenderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(2, 7500);
+        viewerInput.camera.setClipPlanes(2, 75000);
         this.renderHelper.fillSceneParams(viewerInput);
 
         // Frustum cull.
@@ -409,7 +409,7 @@ export class CMDLRenderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(2, 7500);
+        viewerInput.camera.setClipPlanes(2, 75000);
         this.renderHelper.fillSceneParams(viewerInput);
 
         this.renderHelper.templateRenderInst.passMask = this.isSkybox ? RetroPass.SKYBOX : RetroPass.MAIN;
