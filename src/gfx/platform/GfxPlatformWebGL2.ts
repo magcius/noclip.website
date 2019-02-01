@@ -1109,26 +1109,32 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicWordOffsetsCount: number, dynamicWordOffsets: Uint32Array, dynamicWordOffsetsStart: number): void {
         const gl = this.gl;
 
-        assert(bindingLayoutIndex < this._currentPipeline.bindingLayouts.bindingLayoutTables.length);
+        assert(bindingLayoutIndex < this._currentPipeline.bindingLayouts.bindingLayoutTables.length,
+            `bindingLayoutIndex (${bindingLayoutIndex}) < this._currentPipeline.bindingLayouts.bindingLayoutTables.length (${this._currentPipeline.bindingLayouts.bindingLayoutTables.length})`);
         const bindingLayoutTable = this._currentPipeline.bindingLayouts.bindingLayoutTables[bindingLayoutIndex];
 
         const { uniformBufferBindings, samplerBindings } = bindings_ as GfxBindingsP_GL;
-        assert(uniformBufferBindings.length === bindingLayoutTable.numUniformBuffers);
-        assert(samplerBindings.length === bindingLayoutTable.numSamplers);
-        assert(dynamicWordOffsetsCount === uniformBufferBindings.length);
+        assert(uniformBufferBindings.length === bindingLayoutTable.numUniformBuffers,
+            `uniformBufferBindings.length (${uniformBufferBindings.length}) === bindingLayoutTable.numUniformBuffers (${bindingLayoutTable.numUniformBuffers})`);
+        assert(samplerBindings.length === bindingLayoutTable.numSamplers,
+            `samplerBindings.length (${samplerBindings.length}) === bindingLayoutTable.numSamplers (${bindingLayoutTable.numSamplers})`);
+        assert(dynamicWordOffsetsCount === uniformBufferBindings.length,
+            `dynamicWordOffsetsCount (${dynamicWordOffsetsCount}) === uniformBufferBindings.length (${uniformBufferBindings.length})`);
 
         for (let i = 0; i < uniformBufferBindings.length; i++) {
             const binding = uniformBufferBindings[i];
             const index = bindingLayoutTable.firstUniformBuffer + i;
             const buffer = binding.buffer as GfxBufferP_GL;
-            assert(buffer.usage === GfxBufferUsage.UNIFORM);
+            assert(buffer.usage === GfxBufferUsage.UNIFORM,
+                `buffer.usage (${buffer.usage}, i=${i}) === GfxBufferUsage.UNIFORM (${GfxBufferUsage.UNIFORM})`);
             const wordOffset = (binding.wordOffset + dynamicWordOffsets[dynamicWordOffsetsStart + i]);
             const byteOffset = wordOffset * 4;
             const byteSize = binding.wordCount * 4;
             if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferOffsets[index]) {
                 const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
                 const platformBuffer = buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
-                assert(byteOffset + byteSize < buffer.pageByteSize);
+                assert(byteOffset + byteSize < buffer.pageByteSize,
+                    `byteOffset (${byteOffset}) + byteSize (${byteSize}) < buffer.pageByteSize (${buffer.pageByteSize}) (i=${i}, byteOffset=${byteOffset})`);
                 gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, platformBufferByteOffset, byteSize);
                 this._currentUniformBuffers[index] = buffer;
                 this._currentUniformBufferOffsets[index] = byteOffset;
