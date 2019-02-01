@@ -448,9 +448,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentUniformBuffers: GfxBuffer[] = [];
     private _currentUniformBufferOffsets: number[] = [];
     private _debugGroupStack: GfxDebugGroup[] = [];
-    private _resolveReadFramebuffer: WebGLFramebuffer | null = null;
-    private _resolveDrawFramebuffer: WebGLFramebuffer | null = null;
-    private _renderPassDrawFramebuffer: WebGLFramebuffer | null = null;
+    private _resolveReadFramebuffer!: WebGLFramebuffer;
+    private _resolveDrawFramebuffer!: WebGLFramebuffer;
+    private _renderPassDrawFramebuffer!: WebGLFramebuffer;
+    private _blackTexture!: WebGLTexture;
     private _hostAccessPassPool: GfxHostAccessPassP_GL[] = [];
     private _renderPassPool: GfxRenderPassP_GL[] = [];
 
@@ -471,6 +472,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._resolveReadFramebuffer = gl.createFramebuffer();
         this._resolveDrawFramebuffer = gl.createFramebuffer();
         this._renderPassDrawFramebuffer = gl.createFramebuffer();
+
+        this._blackTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
     }
@@ -1150,6 +1155,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     this._debugGroupStatisticsTextureBind();
                 } else {
                     // XXX(jstpierre): wtf do I do here? Maybe do nothing?
+                    // Let's hope that it's a 2D texture.
+                    gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
                 }
                 this._currentTextures[samplerIndex] = gl_texture;
             }
