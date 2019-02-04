@@ -19,8 +19,6 @@ import { FLVERData, SceneRenderer, FLVERInstance } from "./render";
 import { mat4 } from "gl-matrix";
 import { Panel, LayerPanel } from "../ui";
 
-const pathBase = `dks/`;
-
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
 }
@@ -91,7 +89,7 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
     }
 
     public fetchCRG1Arc(resourceSystem: ResourceSystem, archiveName: string, abortSignal: AbortSignal): Progressable<void> {
-        return fetchData(`${pathBase}/${archiveName}`, abortSignal).then((buffer) => {
+        return fetchData(`dks/${archiveName}`, abortSignal).then((buffer) => {
             const crg1Arc = BYML.parse<CRG1Arc>(buffer, BYML.FileType.CRG1)
             resourceSystem.mountCRG1(crg1Arc);
         });
