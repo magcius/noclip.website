@@ -524,6 +524,7 @@ export function parse(buffer: ArrayBufferSlice): FRES {
     const version = view.getUint32(0x08, littleEndian);
     const supportedVersions: number[] = [
         0x00080000, // Super Mario Odyssey
+        0x00050003,
     ];
     assert(supportedVersions.includes(version));
 

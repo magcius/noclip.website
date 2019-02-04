@@ -24,8 +24,10 @@ import { AABB } from '../Geometry';
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
         const bntxFile = fres.externalFiles.find((f) => f.name === 'textures.bntx');
-        const bntx = BNTX.parse(bntxFile.buffer);
-        this.addTextures(device, bntx.textures);
+        if (bntxFile !== undefined) {
+            const bntx = BNTX.parse(bntxFile.buffer);
+            this.addTextures(device, bntx.textures);
+        }
     }
 
     public loadTexture(device: GfxDevice, textureEntry: BNTX.BRTI): LoadedTexture | null {
