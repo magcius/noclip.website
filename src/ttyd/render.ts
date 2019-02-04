@@ -110,6 +110,7 @@ class BackgroundBillboardRenderer {
 
     public destroy(device: GfxDevice): void {
         device.destroyProgram(this.renderInst.gfxProgram);
+        this.paramsBuffer.destroy(device);
     }
 }
 
@@ -409,6 +410,7 @@ export class WorldRenderer implements Viewer.SceneGfx {
         this.renderHelper.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
+        this.textureHolder.destroy(device);
         if (this.backgroundRenderer !== null)
             this.backgroundRenderer.destroy(device);
     }

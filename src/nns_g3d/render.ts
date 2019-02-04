@@ -230,32 +230,35 @@ export class MDL0Renderer {
     private shapeCommands: Command_Shape[] = [];
     private nodeCommands: Command_Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
+    private renderInstBuilder: GfxRenderInstBuilder;
 
     private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
     private packetParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_PacketParams`);
 
-    constructor(device: GfxDevice, private tex0: TEX0, public model: NSBMD.MDL0Model) {
+    constructor(device: GfxDevice, public model: NSBMD.MDL0Model, private tex0: TEX0) {
         this.gfxProgram = device.createProgram(new NITRO_Program());
         const posScale = model.posScale * 50;
         mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
-    }
-
-    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
-        const hostAccessPass = device.createHostAccessPass();
 
         const programReflection = device.queryProgram(this.gfxProgram);
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [];
         bindingLayouts[NITRO_Program.ub_SceneParams]    = { numUniformBuffers: 1, numSamplers: 0 };
         bindingLayouts[NITRO_Program.ub_MaterialParams] = { numUniformBuffers: 1, numSamplers: 1 };
         bindingLayouts[NITRO_Program.ub_PacketParams]   = { numUniformBuffers: 1, numSamplers: 0 };
-        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer]);
-        this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.templateRenderInst.gfxProgram = this.gfxProgram;
-        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_SceneParams);
 
+        this.renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer]);
+        this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
+        this.templateRenderInst.gfxProgram = this.gfxProgram;
+        this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_SceneParams);
+
+        const hostAccessPass = device.createHostAccessPass();
         for (let i = 0; i < this.model.materials.length; i++)
-            this.materialCommands.push(new Command_Material(device, renderInstBuilder, hostAccessPass, this.tex0, this.model.materials[i]));
+            this.materialCommands.push(new Command_Material(device, this.renderInstBuilder, hostAccessPass, this.tex0, this.model.materials[i]));
+        device.submitPass(hostAccessPass);
+    }
+
+    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
         for (let i = 0; i < this.model.nodes.length; i++)
             this.nodeCommands.push(new Command_Node(this.model.nodes[i]));
 
@@ -263,10 +266,9 @@ export class MDL0Renderer {
             if (this.materialCommands[i].viewerTextures.length > 0)
                 this.viewerTextures.push(this.materialCommands[i].viewerTextures[0]);
 
-        this.execSBC(device, renderInstBuilder);
-        device.submitPass(hostAccessPass);
-        renderInstBuilder.popTemplateRenderInst();
-        renderInstBuilder.finish(device, viewRenderer);
+        this.execSBC(device, this.renderInstBuilder);
+        this.renderInstBuilder.popTemplateRenderInst();
+        this.renderInstBuilder.finish(device, viewRenderer);
     }
 
     public bindSRT0(srt0: NSBTA.SRT0): void {

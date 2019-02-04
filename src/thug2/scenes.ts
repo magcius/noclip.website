@@ -14,6 +14,7 @@ const pathBase = `thug2`;
 
 class THUG2Renderer extends BasicRendererHelper implements Viewer.SceneGfx {
     private sceneRenderers: SceneRenderer[] = [];
+    public scnDatas: SCNData[] = [];
 
     constructor(device: GfxDevice, public textureHolder: TEX.TEXTextureHolder) {
         super();
@@ -33,6 +34,8 @@ class THUG2Renderer extends BasicRendererHelper implements Viewer.SceneGfx {
         super.destroy(device);
         for (let i = 0; i < this.sceneRenderers.length; i++)
             this.sceneRenderers[i].destroy(device);
+        for (let i = 0; i < this.scnDatas.length; i++)
+            this.scnDatas[i].destroy(device);
         this.textureHolder.destroy(device);
     }
 }
@@ -58,6 +61,7 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.scnInstances.push(scnInstance);
 
             const renderer = new THUG2Renderer(device, textureHolder);
+            renderer.scnDatas.push(scnData);
             renderer.addSceneRenderer(device, sceneRenderer);
             return renderer;
         });

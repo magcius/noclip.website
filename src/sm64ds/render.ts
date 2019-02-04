@@ -458,6 +458,7 @@ class BMDRenderer {
     }
 
     public destroy(device: GfxDevice) {
+        device.destroyProgram(this.gfxProgram);
         this.sceneParamsBuffer.destroy(device);
         this.materialParamsBuffer.destroy(device);
         this.packetParamsBuffer.destroy(device);
@@ -506,6 +507,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
+        this.textureHolder.destroy(device);
 
         this.modelCache.destroy(device);
         this.mainBMD.destroy(device);

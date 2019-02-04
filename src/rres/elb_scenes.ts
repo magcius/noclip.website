@@ -26,7 +26,8 @@ const materialHacks: GXMaterialHacks = {
 export class BasicRRESRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
-    public models: MDL0ModelInstance[] = [];
+    private modelInstances: MDL0ModelInstance[] = [];
+    private models: MDL0Model[] = [];
 
     public textureHolder: RRESTextureHolder = new RRESTextureHolder();
     public renderHelper: GXRenderHelperGfx;
@@ -44,8 +45,9 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
             assert(stageRRES.mdl0.length >= 1);
 
             const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
+            this.models.push(model);
             const modelRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
-            this.models.push(modelRenderer);
+            this.modelInstances.push(modelRenderer);
 
             modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
         }
@@ -56,9 +58,9 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
     public createPanels(): UI.Panel[] {
         const panels: UI.Panel[] = [];
 
-        if (this.models.length > 1) {
+        if (this.modelInstances.length > 1) {
             const layersPanel = new UI.LayerPanel();
-            layersPanel.setLayers(this.models);
+            layersPanel.setLayers(this.modelInstances);
             panels.push(layersPanel);
         }
 
@@ -67,8 +69,8 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
 
     protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.fillSceneParams(viewerInput);
-        for (let i = 0; i < this.models.length; i++)
-            this.models[i].prepareToRender(this.renderHelper, viewerInput);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender(hostAccessPass);
     }
 
@@ -76,8 +78,12 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
         this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
+        this.renderHelper.destroy(device);
 
-        this.models.forEach((model) => model.destroy(device));
+        for (let i = 0; i < this.models.length; i++)
+            this.models[i].destroy(device);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].destroy(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {

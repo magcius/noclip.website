@@ -274,6 +274,7 @@ export class Scene implements Viewer.SceneGfx {
         device.destroyBindings(this.sceneUniformBufferBinding);
         this.ivRenderers.forEach((r) => r.destroy(device));
         this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
     }
 
     public createPanels(): UI.Panel[] {

@@ -646,6 +646,14 @@ class SMGRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.spawner.destroy(device);
 
+        this.mainRenderTarget.destroy(device);
+        this.opaqueSceneTexture.destroy(device);
+
+        device.destroyProgram(this.bloomRenderInstBlur.gfxProgram);
+        device.destroyProgram(this.bloomRenderInstBokeh.gfxProgram);
+        device.destroyProgram(this.bloomRenderInstCombine.gfxProgram);
+        device.destroyProgram(this.bloomRenderInstDownsample.gfxProgram);
+
         device.destroySampler(this.bloomSampler);
         this.bloomSceneColorTarget.destroy(device);
         this.bloomSceneColorTexture.destroy(device);
@@ -754,6 +762,8 @@ function interpPathPoints(dst: vec3, pt0: Point, pt1: Point, t: number): void {
 class ModelCache {
     public promiseCache = new Map<string, Progressable<BMDModel>>();
     public archiveCache = new Map<string, RARC.RARC>();
+    private models: BMDModel[] = [];
+    private destroyed: boolean = false;
 
     public getModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, archivePath: string, modelFilename: string): Progressable<BMDModel> {
         if (this.promiseCache.has(archivePath))
@@ -768,16 +778,25 @@ class ModelCache {
         }).then((buffer: ArrayBufferSlice) => {
             if (buffer === null)
                 return null;
+            if (this.destroyed)
+                return null;
             const rarc = RARC.parse(buffer);
             const bmd = rarc.findFileData(modelFilename) !== null ? BMD.parse(rarc.findFileData(modelFilename)) : null;
             const bmdModel = new BMDModel(device, renderHelper, bmd, null, materialHacks);
             textureHolder.addJ3DTextures(device, bmd);
             this.archiveCache.set(archivePath, rarc);
+            this.models.push(bmdModel);
             return bmdModel;
         });
 
         this.promiseCache.set(archivePath, p);
         return p;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.destroyed = true;
+        for (let i = 0; i < this.models.length; i++)
+            this.models[i].destroy(device);
     }
 }
 
@@ -1057,9 +1076,11 @@ class SMGSpawner {
     }
 
     public destroy(device: GfxDevice): void {
+        this.modelCache.destroy(device);
         this.sceneGraph.destroy(device);
         this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
+        this.renderHelper.destroy(device);
     }
 }
 

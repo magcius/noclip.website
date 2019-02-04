@@ -67,7 +67,11 @@ class ResourceSystem {
     }
 
     public destroy(device: GfxDevice): void {
-        this.fmdlDataCache.forEach((value) => value.destroy(device));
+        this.textureHolder.destroy(device);
+        this.fmdlDataCache.forEach((value) => {
+            if (value !== null)
+                value.destroy(device);
+        });
     }
 }
 

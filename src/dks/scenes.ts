@@ -139,15 +139,6 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
         return this.fetchCRG1Arc(resourceSystem, arcName, abortSignal).then(() => {
             const textureHolder = new DDSTextureHolder();
 
-            const whiteDummy = device.createTexture({
-                dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA_SRGB,
-                width: 1, height: 1, depth: 1, numLevels: 1,
-            });
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(whiteDummy, 0, [new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF])]);
-            device.submitPass(hostAccessPass);
-            textureHolder.setTextureOverride('WhiteDummy', { gfxTexture: whiteDummy, width: 1, height: 1, flipY: false }, false);
-
             const msbPath = `/map/MapStudio/${this.id}.msb`;
             const msbBuffer = resourceSystem.lookupFile(msbPath);
             const msb = MSB.parse(msbBuffer, this.id);

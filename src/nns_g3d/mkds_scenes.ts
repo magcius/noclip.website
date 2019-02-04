@@ -84,7 +84,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const courseBtxFile = textureNARC.files.find((file) => file.path === '/course_model.nsbtx');
             const courseBtx = courseBtxFile !== undefined ? NSBTX.parse(courseBtxFile.buffer) : null;
             assert(courseBmd.models.length === 1);
-            const courseRenderer = new MDL0Renderer(device, courseBtx !== null ? courseBtx.tex0 : courseBmd.tex0, courseBmd.models[0]);
+            const courseRenderer = new MDL0Renderer(device, courseBmd.models[0], courseBtx !== null ? courseBtx.tex0 : courseBmd.tex0);
 
             let skyboxRenderer: MDL0Renderer | null = null;
             const skyboxBmdFile = courseNARC.files.find((file) => file.path === '/course_model_V.nsbmd');
@@ -93,7 +93,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
                 const skyboxBtxFile = textureNARC.files.find((file) => file.path === '/course_model_V.nsbtx');
                 const skyboxBtx = skyboxBtxFile !== undefined ? NSBTX.parse(skyboxBtxFile.buffer) : null;
                 assert(skyboxBmd.models.length === 1);
-                skyboxRenderer = new MDL0Renderer(device, skyboxBtx !== null ? skyboxBtx.tex0 : skyboxBmd.tex0, skyboxBmd.models[0]);
+                skyboxRenderer = new MDL0Renderer(device, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : skyboxBmd.tex0);
                 skyboxRenderer.modelMatrix[13] -= 1500;
                 skyboxRenderer.isSkybox = true;
             }

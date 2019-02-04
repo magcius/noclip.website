@@ -23,22 +23,21 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
     public textureHolder: FakeTextureHolder;
 
-    constructor(device: GfxDevice, public objs: ObjectRepresentation[]) {
+    constructor(device: GfxDevice, public objs: MDL0Renderer[]) {
         let viewerTextures: Viewer.Texture[] = [];
 
-        this.objs.forEach(element => {
-            viewerTextures = viewerTextures.concat(element.renderer.viewerTextures);
-            element.renderer.addToViewRenderer(device, this.viewRenderer);
-            element.applyAnimations(device);
-        });
+        for (let i = 0; i < this.objs.length; i++) {
+            const element = this.objs[i];
+            viewerTextures = viewerTextures.concat(element.viewerTextures);
+            element.addToViewRenderer(device, this.viewRenderer);
+        }
 
         this.textureHolder = new FakeTextureHolder(viewerTextures);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.objs.forEach(element => {
-            element.renderer.prepareToRender(hostAccessPass, viewerInput);
-        });
+        for (let i = 0; i < this.objs.length; i++)
+            this.objs[i].prepareToRender(hostAccessPass, viewerInput);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -63,9 +62,8 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
 
-        this.objs.forEach(element => {
-            element.renderer.destroy(device);
-        });
+        for (let i = 0; i < this.objs.length; i++)
+            this.objs[i].destroy(device);
     }
 }
 
@@ -113,7 +111,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private createObjectRepresentation(device: GfxDevice, path: string, abortSignal: AbortSignal): Progressable<ObjectRepresentation> {
+    private fetchObjectData(path: string, abortSignal: AbortSignal): Progressable<ObjectData> {
         return Progressable.all<any>([
             this.fetchBMD(path + `.nsbmd`, abortSignal),
             this.fetchBTX(path + `.nsbtx`, abortSignal),
@@ -129,110 +127,94 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
                 return null;
             assert(bmd.models.length === 1);
 
-            const pat0 = btp !== null ? btp.pat0[0] : null;
-            return new ObjectRepresentation(device, bmd, btx, bta, pat0);
+            return new ObjectData(bmd, btx, bta, btp);
         });
+    }
+
+    private createRendererFromData(device: GfxDevice, objectData: ObjectData, position: number[] | null = null): MDL0Renderer {
+        const scaleFactor = 1/16;
+        const renderer = new MDL0Renderer(device, objectData.bmd.models[0], objectData.btx !== null ? objectData.btx.tex0 : objectData.bmd.tex0);
+        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+        if (position !== null)
+            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
+        if (objectData.bta !== null)
+            renderer.bindSRT0(objectData.bta.srt0);
+        if (objectData.btp !== null)
+            renderer.bindPAT0(device, objectData.btp.pat0[0]);
+        return renderer;
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const basePath = `nsmbds`;
 
-        // TODO(jstpierre): Stop the type system abuse.
-        return Progressable.all<any>([
-            this.createObjectRepresentation(device, `${basePath}/map/w${this.worldNumber}`, abortSignal),
-            this.createObjectRepresentation(device, `${basePath}/map/w${this.worldNumber}_tree`, abortSignal),
-            this.createObjectRepresentation(device, `${basePath}/map/w1_castle`, abortSignal),
-            this.createObjectRepresentation(device, `${basePath}/map/w8_koppaC`, abortSignal),
-            this.fetchBMD(`${basePath}/map/w1_tower.nsbmd`, abortSignal),
-            this.fetchBMD(`${basePath}/map/map_point.nsbmd`, abortSignal),
-            this.fetchBTP(`${basePath}/map/map_point.nsbtp`, abortSignal),
-        ]).then(([_mainObj, _treeObj, _castleObj, _bigCastleObj, _towerBMD, _mapPointBMD, _mapPointBTP]) => {
-            const mainObj = _mainObj as ObjectRepresentation;
-            const treeObj = _treeObj as ObjectRepresentation;
-            const castleObj = _castleObj as ObjectRepresentation;
-            const bigCastleObj = _bigCastleObj as ObjectRepresentation;
-            const towerBMD = _towerBMD as NSBMD.BMD0;
-            const mapPointBMD = _mapPointBMD as NSBMD.BMD0;
-            const mapPointBTP = _mapPointBTP as NSBTP.BTP0;
-
+        return Progressable.all([
+            this.fetchObjectData(`${basePath}/map/w${this.worldNumber}`, abortSignal),
+            this.fetchObjectData(`${basePath}/map/w${this.worldNumber}_tree`, abortSignal),
+            this.fetchObjectData(`${basePath}/map/w1_castle`, abortSignal),
+            this.fetchObjectData(`${basePath}/map/w8_koppaC`, abortSignal),
+            this.fetchObjectData(`${basePath}/map/w1_tower`, abortSignal),
+            this.fetchObjectData(`${basePath}/map/map_point`, abortSignal),
+        ]).then(([mainObjData, treeObjData, castleObjData, bigCastleObjData, towerObjData, mapPointObjData]) => {
             // Adjust the nodes/bones to emulate the flag animations.
-            mat4.fromTranslation(towerBMD.models[0].nodes[2].jointMatrix, [0, 5.5, 0]);
-            mat4.fromTranslation(towerBMD.models[0].nodes[3].jointMatrix, [0.75, 5.5, 0]);
-            mat4.fromTranslation(castleObj.renderer.model.nodes[3].jointMatrix, [0, 5.5, 0]);
-            mat4.fromTranslation(castleObj.renderer.model.nodes[4].jointMatrix, [0.75, 5.5, 0]);
-            mat4.fromTranslation(bigCastleObj.renderer.model.nodes[5].jointMatrix, [-1.25, 0, -0.75]);
-            mat4.fromTranslation(bigCastleObj.renderer.model.nodes[6].jointMatrix, [-1.25, 2.75, -0.75]);
-            mat4.fromTranslation(bigCastleObj.renderer.model.nodes[7].jointMatrix, [-0.875, 2.75, -0.75]);
-            mat4.fromTranslation(bigCastleObj.renderer.model.nodes[8].jointMatrix, [1.25, 0, -0.75]);
-            mat4.fromTranslation(bigCastleObj.renderer.model.nodes[9].jointMatrix, [1.25, 2.75, -0.75]);
-            mat4.fromTranslation(bigCastleObj.renderer.model.nodes[10].jointMatrix, [1.625, 2.75, -0.75]);
-
-            mat4.scale(mainObj.renderer.modelMatrix, mainObj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
+            mat4.fromTranslation(castleObjData.bmd.models[0].nodes[3].jointMatrix, [0, 5.5, 0]);
+            mat4.fromTranslation(castleObjData.bmd.models[0].nodes[4].jointMatrix, [0.75, 5.5, 0]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[5].jointMatrix, [-1.25, 0, -0.75]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[6].jointMatrix, [-1.25, 2.75, -0.75]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[7].jointMatrix, [-0.875, 2.75, -0.75]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[8].jointMatrix, [1.25, 0, -0.75]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[9].jointMatrix, [1.25, 2.75, -0.75]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[10].jointMatrix, [1.625, 2.75, -0.75]);
+            mat4.fromTranslation(towerObjData.bmd.models[0].nodes[2].jointMatrix, [0, 5.5, 0]);
+            mat4.fromTranslation(towerObjData.bmd.models[0].nodes[3].jointMatrix, [0.75, 5.5, 0]);
 
             const objects = worldMapDescs[this.worldNumber - 1];
 
-            let representations: ObjectRepresentation[] = [];
-            representations.push(mainObj);
+            const renderers: MDL0Renderer[] = [];
 
-            if (treeObj !== null) {
-                mat4.scale(treeObj.renderer.modelMatrix, treeObj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
-                representations.push(treeObj);
+            const mainObj = this.createRendererFromData(device, mainObjData);
+            renderers.push(mainObj);
+
+            let treeObj: MDL0Renderer | null = null;
+            if (treeObjData !== null) {
+                treeObj = this.createRendererFromData(device, treeObjData);
+                renderers.push(treeObj);
             }
 
-            objects.forEach((element) => {
+            for (let i = 0; i < objects.length; i++) {
+                const element = objects[i];
                 if (element.type == WorldMapObjType.ROUTE_POINT) {
-                    const obj = new ObjectRepresentation(device, mapPointBMD, null, null, mapPointBTP.pat0[3]);
-                    mat4.scale(obj.renderer.modelMatrix, obj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
-                    mat4.translate(obj.renderer.modelMatrix, obj.renderer.modelMatrix, element.position);
-                    representations.push(obj);
+                    const obj = this.createRendererFromData(device, mapPointObjData, element.position);
+                    obj.bindPAT0(device, mapPointObjData.btp.pat0[3]);
+                    renderers.push(obj);
                 } else if (element.type == WorldMapObjType.START_POINT) {
-                    const obj = new ObjectRepresentation(device, mapPointBMD, null, null, mapPointBTP.pat0[2]);
-                    mat4.scale(obj.renderer.modelMatrix, obj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
-                    mat4.translate(obj.renderer.modelMatrix, obj.renderer.modelMatrix, element.position);
-                    representations.push(obj);
+                    const obj = this.createRendererFromData(device, mapPointObjData, element.position);
+                    obj.bindPAT0(device, mapPointObjData.btp.pat0[2]);
+                    renderers.push(obj);
                 } else if (element.type == WorldMapObjType.TOWER) {
-                    const obj = new ObjectRepresentation(device, towerBMD, null, null, null);
-                    mat4.scale(obj.renderer.modelMatrix, obj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
-                    mat4.translate(obj.renderer.modelMatrix, obj.renderer.modelMatrix, element.position);
-                    representations.push(obj);
+                    renderers.push(this.createRendererFromData(device, towerObjData, element.position));
                 } else if (element.type == WorldMapObjType.CASTLE) {
-                    mat4.scale(castleObj.renderer.modelMatrix, castleObj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
-                    mat4.translate(castleObj.renderer.modelMatrix, castleObj.renderer.modelMatrix, element.position);
-                    representations.push(castleObj);
+                    renderers.push(this.createRendererFromData(device, castleObjData, element.position));
                 } else if (element.type == WorldMapObjType.BIG_CASTLE) {
-                    mat4.scale(bigCastleObj.renderer.modelMatrix, bigCastleObj.renderer.modelMatrix, [1 / 16, 1 / 16, 1 / 16]);
-                    mat4.translate(bigCastleObj.renderer.modelMatrix, bigCastleObj.renderer.modelMatrix, element.position);
-                    representations.push(bigCastleObj);
+                    renderers.push(this.createRendererFromData(device, bigCastleObjData, element.position));
                 }
-            });
+            }
 
             if (this.worldNumber === 1) {
-                mat4.translate(mainObj.renderer.modelMatrix, mainObj.renderer.modelMatrix, [0, 2.5, 0]);
+                mat4.translate(mainObj.modelMatrix, mainObj.modelMatrix, [0, 2.5, 0]);
             } else if (this.worldNumber === 3) {
-                mat4.translate(mainObj.renderer.modelMatrix, mainObj.renderer.modelMatrix, [30, 3, 0]);
-                mat4.translate(treeObj.renderer.modelMatrix, treeObj.renderer.modelMatrix, [-4, 0, 0]);
+                mat4.translate(mainObj.modelMatrix, mainObj.modelMatrix, [30, 3, 0]);
+                mat4.translate(treeObj.modelMatrix, treeObj.modelMatrix, [-4, 0, 0]);
             }
 
-            return new WorldMapRenderer(device, representations);
+            return new WorldMapRenderer(device, renderers);
         });
     }
 }
 
 const enum WorldMapObjType { ROUTE_POINT, START_POINT, TOWER, CASTLE, BIG_CASTLE };
 
-export class ObjectRepresentation {
-    public renderer: MDL0Renderer;
-
-    constructor(device: GfxDevice, public bmd: NSBMD.BMD0, public btx: NSBTX.BTX0, public bta: NSBTA.BTA0, public pat0: NSBTP.PAT0) {
-        this.renderer = new MDL0Renderer(device, this.btx !== null ? this.btx.tex0 : this.bmd.tex0, this.bmd.models[0]);
-    }
-
-    public applyAnimations(device: GfxDevice): void {
-        if (this.bta !== null)
-            this.renderer.bindSRT0(this.bta.srt0);
-
-        if (this.pat0 !== null)
-            this.renderer.bindPAT0(device, this.pat0);
+class ObjectData {
+    constructor(public bmd: NSBMD.BMD0 | null, public btx: NSBTX.BTX0 | null, public bta: NSBTA.BTA0 | null, public btp: NSBTP.BTP0 | null) {
     }
 }
 

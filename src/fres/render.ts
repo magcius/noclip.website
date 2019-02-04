@@ -748,6 +748,7 @@ class FSHPMeshInstance {
 
         // TODO(jstpierre): Do we have to care about submeshes?
         const renderInst = renderInstBuilder.pushRenderInst();
+        renderInst.setSamplerBindingsInherit();
         renderInst.drawIndexes(mesh.count);
         renderInst.inputState = meshData.inputState;
         this.renderInsts.push(renderInst);
@@ -779,6 +780,7 @@ class FSHPInstance {
     constructor(renderInstBuilder: GfxRenderInstBuilder, public fshpData: FSHPData) {
         // TODO(jstpierre): Joints.
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
+        this.templateRenderInst.setSamplerBindingsInherit();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, AglProgram.ub_ShapeParams);
 
         // Only construct the first LOD mesh for now.
@@ -847,7 +849,7 @@ export class FMDLRenderer {
 
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [
             { numUniformBuffers: 1, numSamplers: 0 }, // Scene
-            { numUniformBuffers: 1, numSamplers: 8 }, // Material
+            { numUniformBuffers: 1, numSamplers: 4 }, // Material
             { numUniformBuffers: 1, numSamplers: 0 }, // Shape
         ];
         const uniformBuffers = [ this.sceneParamsBuffer, this.materialParamsBuffer, this.shapeParamsBuffer ];
@@ -904,8 +906,6 @@ export class FMDLRenderer {
         this.sceneParamsBuffer.destroy(device);
         this.materialParamsBuffer.destroy(device);
         this.shapeParamsBuffer.destroy(device);
-
-        
     }
 }
 

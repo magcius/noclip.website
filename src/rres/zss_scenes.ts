@@ -109,6 +109,11 @@ class ModelCache {
         this.cache.set(mdl0, mdl0Model);
         return mdl0Model;
     }
+
+    public destroy(device: GfxDevice): void {
+        for (const model of this.cache.values())
+            model.destroy(device);
+    }
 }
 
 const enum ZSSPass {
@@ -146,7 +151,7 @@ class SkywardSwordScene implements Viewer.SceneGfx {
     private modelCache = new ModelCache();
     private renderHelper: GXRenderHelperGfx;
 
-    private models: MDL0ModelInstance[] = [];
+    private mdl0Instances: MDL0ModelInstance[] = [];
 
     constructor(device: GfxDevice, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -199,7 +204,7 @@ class SkywardSwordScene implements Viewer.SceneGfx {
 
         outer:
         // Find any indirect scenes.
-        for (const modelRenderer of this.models) {
+        for (const modelRenderer of this.mdl0Instances) {
             for (const material of modelRenderer.mdl0Model.mdl0.materials) {
                 for (const sampler of material.samplers) {
                     if (sampler.name === 'DummyWater') {
@@ -217,13 +222,13 @@ class SkywardSwordScene implements Viewer.SceneGfx {
         const panels: UI.Panel[] = [];
 
         const layersPanel = new UI.LayerPanel();
-        layersPanel.setLayers(this.models);
+        layersPanel.setLayers(this.mdl0Instances);
         panels.push(layersPanel);
 
         // Construct a list of past/future models.
         const futureModels: MDL0ModelInstance[] = [];
         const pastModels: MDL0ModelInstance[] = [];
-        for (const modelRenderer of this.models) {
+        for (const modelRenderer of this.mdl0Instances) {
             if (modelRenderer.mdl0Model.mdl0.name.startsWith('model_obj'))
                 futureModels.push(modelRenderer);
 
@@ -258,14 +263,20 @@ class SkywardSwordScene implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.models.forEach((model) => model.destroy(device));
+        this.renderHelper.destroy(device);
+        this.modelCache.destroy(device);
+        this.viewRenderer.destroy(device);
+        this.mainRenderTarget.destroy(device);
+        this.opaqueSceneTexture.destroy(device);
+        for (let i = 0; i < this.mdl0Instances.length; i++)
+            this.mdl0Instances[i].destroy(device);
     }
 
     private prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(10, 500000);
         this.renderHelper.fillSceneParams(viewerInput);
-        for (let i = 0; i < this.models.length; i++)
-            this.models[i].prepareToRender(this.renderHelper, viewerInput);
+        for (let i = 0; i < this.mdl0Instances.length; i++)
+            this.mdl0Instances[i].prepareToRender(this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender(hostAccessPass);
     }
 
@@ -308,7 +319,7 @@ class SkywardSwordScene implements Viewer.SceneGfx {
         const model = this.modelCache.getModel(device, renderHelper, mdl0, materialHacks);
         const modelRenderer = new MDL0ModelInstance(device, renderHelper, this.textureHolder, model, namePrefix);
         modelRenderer.passMask = ZSSPass.OPAQUE;
-        this.models.push(modelRenderer);
+        this.mdl0Instances.push(modelRenderer);
 
         // Bind animations.
         for (const srt0 of rres.srt0) {

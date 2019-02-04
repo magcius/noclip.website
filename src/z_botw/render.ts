@@ -241,6 +241,8 @@ export class TerrainRenderer {
     public destroy(device: GfxDevice): void {
         this.sceneUniformBuffer.destroy(device);
         device.destroyProgram(this.gfxProgram);
+        for (let i = 0; i < this.areaRenderers.length; i++)
+            this.areaRenderers[i].destroy(device);
     }
 }
 
@@ -274,6 +276,9 @@ export class TerrainScene extends BasicRendererHelper implements Viewer.SceneGfx
     }
 
     public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.staticData.destroy(device);
+        this.terrainManager.destroy(device);
         this.terrainRenderer.destroy(device);
         this.textureHolder.destroy(device);
     }

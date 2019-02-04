@@ -59,6 +59,7 @@ import { atob, btoa } from './Ascii85';
 import { vec3, mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
+import { gfxDeviceGetImpl } from './gfx/platform/GfxPlatformWebGL2';
 
 const sceneGroups = [
     "Wii",
@@ -165,6 +166,7 @@ class SceneLoader {
 
     public loadSceneDesc(sceneDesc: SceneDesc): Progressable<SceneGfx> {
         this.viewer.setScene(null);
+        gfxDeviceGetImpl(this.viewer.gfxDevice).checkForLeaks();
 
         if (this.abortController !== null)
             this.abortController.abort();

@@ -139,7 +139,7 @@ export class Viewer {
         this.cameraController = null;
     }
 
-    public setScene(scene: SceneGfx): void {
+    public setScene(scene: SceneGfx | null): void {
         this.destroyScenes();
         this.scene = scene;
     }

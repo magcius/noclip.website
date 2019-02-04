@@ -534,7 +534,10 @@ class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice) {
+        this.renderHelper.destroy(device);
         this.textureHolder.destroy(device);
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
         if (this.vr_sky)
             this.vr_sky.destroy(device);
         if (this.vr_kasumi_mae)

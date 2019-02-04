@@ -29,7 +29,9 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
     private animationController = new AnimationController();
 
     private skyboxRenderer: MDL0ModelInstance;
+    private skyboxModel: MDL0Model;
     private courseRenderer: MDL0ModelInstance;
+    private courseModel: MDL0Model;
 
     constructor(device: GfxDevice, public courseRRES: BRRES.RRES, public skyboxRRES: BRRES.RRES) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -38,14 +40,14 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
         this.textureHolder.addRRESTextures(device, courseRRES);
 
         assert(skyboxRRES.mdl0.length === 1);
-        const skyboxModel = new MDL0Model(device, this.renderHelper, skyboxRRES.mdl0[0]);
-        this.skyboxRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, skyboxModel, 'vrbox');
+        this.skyboxModel = new MDL0Model(device, this.renderHelper, skyboxRRES.mdl0[0]);
+        this.skyboxRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, this.skyboxModel, 'vrbox');
         this.skyboxRenderer.isSkybox = true;
         this.skyboxRenderer.passMask = MKWiiPass.SKYBOX;
 
         assert(courseRRES.mdl0.length === 1);
-        const courseModel = new MDL0Model(device, this.renderHelper, courseRRES.mdl0[0]);
-        this.courseRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, courseModel, 'course');
+        this.courseModel = new MDL0Model(device, this.renderHelper, courseRRES.mdl0[0]);
+        this.courseRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, this.courseModel, 'course');
         this.courseRenderer.passMask = MKWiiPass.MAIN;
 
         // Mario Kart Wii courses appear to be very, very big. Scale them down a bit.
@@ -91,9 +93,13 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
         this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
+        this.renderHelper.destroy(device);
 
         this.courseRenderer.destroy(device);
         this.skyboxRenderer.destroy(device);
+
+        this.courseModel.destroy(device);
+        this.skyboxModel.destroy(device);
     }
 }
 

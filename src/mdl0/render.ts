@@ -155,6 +155,7 @@ class FancyGrid {
     public destroy(device: GfxDevice) {
         device.destroyProgram(this.gfxProgram);
         device.destroyBuffer(this.posBuffer);
+        device.destroyBuffer(this.idxBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         this.sceneParamsBuffer.destroy(device);

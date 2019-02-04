@@ -53,10 +53,13 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
+        this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].destroy(device);
+        if (this.skyboxRenderer !== null)
+            this.skyboxRenderer.destroy(device);
     }
 
     public createPanels(): UI.Panel[] {

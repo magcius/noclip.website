@@ -40,7 +40,10 @@ export class MDL0Model {
     }
 
     public destroy(device: GfxDevice): void {
-        this.materialData.forEach((cmd) => cmd.destroy(device));
+        for (let i = 0; i < this.shapeData.length; i++)
+            this.shapeData[i].destroy(device);
+        for (let i = 0; i < this.materialData.length; i++)
+            this.materialData[i].destroy(device);
         this.bufferCoalescer.destroy(device);
     }
 }
@@ -265,6 +268,10 @@ class MaterialInstance {
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
         this.materialHelper.fillMaterialParams(this.materialParams, renderHelper);
     }
+
+    public destroy(device: GfxDevice): void {
+        this.materialHelper.destroy(device);
+    }
 }
 
 export class MDL0ModelInstance {
@@ -363,7 +370,8 @@ export class MDL0ModelInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        this.mdl0Model.destroy(device);
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].destroy(device);
     }
 
     private execDrawOpList(renderHelper: GXRenderHelperGfx, opList: BRRES.DrawOp[], translucent: boolean): void {

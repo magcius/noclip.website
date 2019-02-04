@@ -164,6 +164,7 @@ const matrixScratch = mat4.create();
 const bboxScratch = new AABB();
 export class FLVERInstance {
     private templateRenderInst: GfxRenderInst;
+    private batchTemplateRenderInsts: GfxRenderInst[] = [];
     private renderInsts: GfxRenderInst[] = [];
     public modelMatrix = mat4.create();
     public visible = true;
@@ -231,6 +232,8 @@ export class FLVERInstance {
             }
 
             renderInstBuilder.popTemplateRenderInst();
+
+            this.batchTemplateRenderInsts.push(batchTemplateRenderInst);
         }
         assert(nextInputStateIndex === this.flverData.inputStates.length);
 
@@ -267,6 +270,8 @@ export class FLVERInstance {
     }
 
     public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.batchTemplateRenderInsts.length; i++)
+            device.destroyProgram(this.batchTemplateRenderInsts[i].gfxProgram);
     }
 }
 

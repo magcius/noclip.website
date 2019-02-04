@@ -29,6 +29,7 @@ class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         super.destroy(device);
+        this.textureHolder.destroy(device);
         for (let i = 0; i < this.scenes.length; i++)
             this.scenes[i].destroy(device);
     }

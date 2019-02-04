@@ -158,8 +158,10 @@ class MeshFragData {
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.posNrmBuffer);
-        device.destroyBuffer(this.colorBuffer);
-        device.destroyBuffer(this.uvBuffer);
+        if (this.colorBuffer !== null)
+            device.destroyBuffer(this.colorBuffer);
+        if (this.uvBuffer !== null)
+            device.destroyBuffer(this.uvBuffer);
         device.destroyBuffer(this.idxBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
@@ -398,5 +400,7 @@ export class PsychonautsRenderer extends BasicRendererHelper implements Viewer.S
     public destroy(device: GfxDevice): void {
         super.destroy(device);
         this.textureHolder.destroy(device);
+        for (let i = 0; i < this.sceneRenderers.length; i++)
+            this.sceneRenderers[i].destroy(device);
     }
 }
