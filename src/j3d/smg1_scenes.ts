@@ -3,7 +3,7 @@ import * as Viewer from '../viewer';
 import { SMGSceneDescBase } from "./smg_scenes";
 
 class SMG1SceneDesc extends SMGSceneDescBase {
-    protected pathBase: string = `data/j3d/smg`;
+    protected pathBase: string = `j3d/smg`;
     protected getZoneMapFilename(zoneName: string): string {
         return `${this.pathBase}/StageData/${zoneName}.arc`;
     }

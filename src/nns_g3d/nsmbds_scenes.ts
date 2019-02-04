@@ -135,7 +135,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        const basePath = `data/nsmbds`;
+        const basePath = `nsmbds`;
 
         // TODO(jstpierre): Stop the type system abuse.
         return Progressable.all<any>([

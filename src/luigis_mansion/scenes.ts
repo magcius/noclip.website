@@ -9,7 +9,7 @@ import { LuigisMansionRenderer } from './render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 function fetchBin(path: string, abortSignal: AbortSignal): Progressable<BIN.BIN> {
-    return fetchData(`data/luigis_mansion/${path}`, abortSignal).then((buffer: ArrayBufferSlice) => {
+    return fetchData(`luigis_mansion/${path}`, abortSignal).then((buffer: ArrayBufferSlice) => {
         let binBuffer;
         if (path.endsWith('.bin')) {
             binBuffer = buffer;

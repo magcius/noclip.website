@@ -55,7 +55,7 @@ const sceneDescs: SceneDesc[] = [
     'Meshes/TMZ/MonarchBG.bin',
     'Meshes/TMZ/OrbNet.bin',
 ].map((filename): SceneDesc => {
-    const path = `data/mdl0/${filename}`;
+    const path = `mdl0/${filename}`;
     const name = filename;
     return new SceneDesc(name, path);
 });

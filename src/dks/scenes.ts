@@ -19,7 +19,7 @@ import { FLVERData, SceneRenderer, FLVERInstance } from "./render";
 import { mat4 } from "gl-matrix";
 import { Panel, LayerPanel } from "../ui";
 
-const pathBase = `data/dks/`;
+const pathBase = `dks/`;
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };

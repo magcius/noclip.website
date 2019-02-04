@@ -77,8 +77,8 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
         const renderer = new SplatoonRenderer();
 
         return Progressable.all([
-            this._createRenderersFromPath(device, renderer, `data/spl/${this.path}`, false),
-            this._createRenderersFromPath(device, renderer, 'data/spl/VR_SkyDayCumulonimbus.szs', true),
+            this._createRenderersFromPath(device, renderer, `spl/${this.path}`, false),
+            this._createRenderersFromPath(device, renderer, 'spl/VR_SkyDayCumulonimbus.szs', true),
         ]).then(() => {
             return renderer;
         });

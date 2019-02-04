@@ -14,7 +14,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
 import { mat4, quat, vec3 } from 'gl-matrix';
 
-const basePath = `data/smo`;
+const basePath = `smo`;
 
 class ResourceSystem {
     public textureHolder = new BRTITextureHolder();

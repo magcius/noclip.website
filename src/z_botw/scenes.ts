@@ -15,7 +15,7 @@ function decodeFRES(buffer: ArrayBufferSlice): Progressable<BFRES.FRES> {
     return new Progressable(Yaz0.decompress(buffer)).then((d) => BFRES.parse(d));
 }
 
-const pathBase = `data/z_botw`;
+const pathBase = `z_botw`;
 export class TerrainSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }

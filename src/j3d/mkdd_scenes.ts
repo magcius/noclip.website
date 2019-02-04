@@ -79,7 +79,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        const path = `data/j3d/mkdd/Course/${this.path}`;
+        const path = `j3d/mkdd/Course/${this.path}`;
         return fetchData(path).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);
             // Find course name.

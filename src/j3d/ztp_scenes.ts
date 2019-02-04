@@ -218,7 +218,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        const basePath = `data/j3d/ztp/${this.folder}`;
+        const basePath = `j3d/ztp/${this.folder}`;
         const textureHolder = new ZTPTextureHolder();
 
         return this.fetchRarc(`${basePath}/STG_00.arc`).then((stageRarc: RARC.RARC) => {

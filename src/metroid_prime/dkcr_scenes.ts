@@ -20,7 +20,7 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        return fetchData(`data/dkcr/${this.filename}`).then((buffer: ArrayBufferSlice) => {
+        return fetchData(`dkcr/${this.filename}`).then((buffer: ArrayBufferSlice) => {
             const levelPak = PAK.parse(buffer);
             const resourceSystem = new ResourceSystem([levelPak], null);
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {

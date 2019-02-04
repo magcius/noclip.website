@@ -76,8 +76,8 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         return Progressable.all([
-            this.fetchCARC(`data/mkds/Course/${this.id}.carc`, abortSignal),
-            this.fetchCARC(`data/mkds/Course/${this.id}Tex.carc`, abortSignal),
+            this.fetchCARC(`mkds/Course/${this.id}.carc`, abortSignal),
+            this.fetchCARC(`mkds/Course/${this.id}Tex.carc`, abortSignal),
         ]).then(([courseNARC, textureNARC]) => {
             const courseBmdFile = courseNARC.files.find((file) => file.path === '/course_model.nsbmd');
             const courseBmd = NSBMD.parse(courseBmdFile.buffer);

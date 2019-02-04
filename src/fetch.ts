@@ -1,13 +1,28 @@
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
+import { assert } from './util';
+import { IS_DEVELOPMENT } from './BuildVersion';
 
 export interface NamedArrayBufferSlice extends ArrayBufferSlice {
     name: string;
 }
 
-export function fetchData(url: string, abortSignal: AbortSignal | null = null): Progressable<NamedArrayBufferSlice> {
+function getDataStorageBaseURL(): string {
+    if (IS_DEVELOPMENT)
+        return `/data`;
+    else
+        return `https://storage.googleapis.com/znoclip/z.noclip.website`;
+}
+
+function getDataURLForPath(url: string): string {
+    assert(!url.startsWith(`data/`));
+    return `${getDataStorageBaseURL()}/${url}`;
+}
+
+export function fetchData(path: string, abortSignal: AbortSignal | null = null): Progressable<NamedArrayBufferSlice> {
     const request = new XMLHttpRequest();
+    const url = getDataURLForPath(path);
     request.open("GET", url, true);
     request.responseType = "arraybuffer";
     request.send();

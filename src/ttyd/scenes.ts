@@ -13,8 +13,8 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        const pathBase = `data/ttyd/${this.id}`;
-        const bgPath = `data/ttyd/b/${this.id}.tpl`;
+        const pathBase = `ttyd/${this.id}`;
+        const bgPath = `ttyd/b/${this.id}.tpl`;
         return Progressable.all([fetchData(`${pathBase}/d.blob`, abortSignal), fetchData(`${pathBase}/t.blob`, abortSignal), fetchData(bgPath, abortSignal)]).then(([dBuffer, tBuffer, bgBuffer]) => {
             const d = World.parse(dBuffer);
             const textureHolder = new TPLTextureHolder();

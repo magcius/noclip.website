@@ -361,7 +361,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        const pathBase = `data/j3d/sms`;
+        const pathBase = `j3d/sms`;
         const path = `${pathBase}/${this.id}.szs`;
         return fetchData(path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);

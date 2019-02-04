@@ -10,7 +10,7 @@ import { assert } from '../util';
 import { SceneRenderer, SCNData, SCNInstance } from './render';
 import { BasicRendererHelper } from '../oot3d/render';
 
-const pathBase = `data/thug2`;
+const pathBase = `thug2`;
 
 class THUG2Renderer extends BasicRendererHelper implements Viewer.SceneGfx {
     private sceneRenderers: SceneRenderer[] = [];

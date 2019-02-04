@@ -578,7 +578,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        return fetchData('data/sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
+        return fetchData('sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
             const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
             const textureHolder = new NITROTextureHolder();
             return this._createSceneFromCRG1(device, textureHolder, crg1);
@@ -586,7 +586,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     private _createBMDRenderer(device: GfxDevice, modelCache: ModelCache, textureHolder: NITROTextureHolder, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): PromiseLike<BMDRenderer> {
-        return modelCache.fetchModel(device, `data/sm64ds/${filename}`).then((bmdData: BMDData) => {
+        return modelCache.fetchModel(device, `sm64ds/${filename}`).then((bmdData: BMDData) => {
             const renderer = new BMDRenderer(device, textureHolder, bmdData, level);
             mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
             renderer.isSkybox = isSkybox;
@@ -595,7 +595,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     }
 
     private _createBMDObjRenderer(device: GfxDevice, modelCache: ModelCache, textureHolder: NITROTextureHolder, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): PromiseLike<BMDRenderer> {
-        return modelCache.fetchModel(device, `data/sm64ds/${filename}`).then((bmdData: BMDData) => {
+        return modelCache.fetchModel(device, `sm64ds/${filename}`).then((bmdData: BMDData) => {
             const renderer = new BMDRenderer(device, textureHolder, bmdData);
             renderer.name = filename;
 

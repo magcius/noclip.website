@@ -11,7 +11,7 @@ class PsychonautsSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchPPF(id: string, hasScene: boolean): Progressable<PPF.PPAK> {
-        return fetchData(`data/psychonauts/${id}.ppf`).then((buffer) => {
+        return fetchData(`psychonauts/${id}.ppf`).then((buffer) => {
             const ppf = PPF.parse(buffer, hasScene);
             return ppf;
         })

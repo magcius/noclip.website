@@ -97,7 +97,7 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
 
 function makeElbPath(stg: string, room: number): string {
     let z = leftPad(''+room, 2);
-    return `data/elb/${stg}_${z}_disp01.brres`;
+    return `elb/${stg}_${z}_disp01.brres`;
 }
 
 class ElebitsSceneDesc implements Viewer.SceneDesc {

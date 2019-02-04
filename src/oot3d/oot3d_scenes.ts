@@ -44,8 +44,8 @@ class SceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         // Fetch the ZAR & info ZSI.
-        const path_zar = `data/oot3d/${this.id}.zar`;
-        const path_info_zsi = `data/oot3d/${this.id}_info.zsi`;
+        const path_zar = `oot3d/${this.id}.zar`;
+        const path_info_zsi = `oot3d/${this.id}_info.zsi`;
         return Progressable.all([fetchData(path_zar, abortSignal), fetchData(path_info_zsi, abortSignal)]).then(([zar, zsi]) => {
             return this._createSceneFromData(device, abortSignal, zar, zsi);
         });
@@ -60,7 +60,7 @@ class SceneDesc implements Viewer.SceneDesc {
         assert(zsi.rooms !== null);
         const roomFilenames = zsi.rooms.map((romPath) => {
             const filename = romPath.split('/').pop();
-            return `data/oot3d/${filename}`;
+            return `oot3d/${filename}`;
         });
 
         return Progressable.all(roomFilenames.map((filename, i) => {
