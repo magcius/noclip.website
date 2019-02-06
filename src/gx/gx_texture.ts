@@ -358,7 +358,7 @@ export function decodeTexture(texture: Texture): Promise<DecodedTexture> {
         case GX.TexFormat.RGBA8:
             return decode_Wasm(wasmInstance, texture, wasmInstance.decode_RGBA8);
         case GX.TexFormat.CMPR:
-            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_CMPR);
+            return decode_Wasm(wasmInstance, texture, wasmInstance.decode_CMPR, 0x10);
         case GX.TexFormat.C4:
             return decode_C4(texture);
         case GX.TexFormat.C8:
