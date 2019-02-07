@@ -155,10 +155,12 @@ export class FPSCameraController implements CameraController {
     private tmp1: vec3 = vec3.create();
     private tmp2: vec3 = vec3.create();
 
-    private keyMoveSpeed: number = 60;
+    private keyMoveSpeed = 60;
+    private keyMoveShiftMult = 5;
+    private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
 
-    private mouseLookSpeed: number = 500;
+    private mouseLookSpeed = 500;
     private mouseLookDragFast = 0;
     private mouseLookDragSlow = 0;
 
@@ -179,14 +181,16 @@ export class FPSCameraController implements CameraController {
         this.keyMoveSpeed += inputManager.dz;
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
 
-        let keyMoveSpeedCap = this.keyMoveSpeed;
+        let keyMoveMult = 1;
         if (inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight'))
-            keyMoveSpeedCap *= 5;
+            keyMoveMult = this.keyMoveShiftMult;
 
+        let keyMoveSpeedCap = this.keyMoveSpeed * keyMoveMult;
+        const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
+    
         const keyMovement = this.keyMovement;
         const tmp = this.tmp2;
 
-        const keyMoveVelocity = keyMoveSpeedCap / 5;
         const keyMoveLowSpeedCap = 0.01;
 
         if (inputManager.isKeyDown('KeyW')) {
