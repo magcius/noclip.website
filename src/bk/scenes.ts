@@ -1,10 +1,12 @@
 
 import * as Viewer from '../viewer';
+import * as UI from '../ui';
+import * as Geo from './geo';
+import * as BYML from '../byml';
+
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
-import * as Geo from './geo';
-import * as BYML from '../byml';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, N64Renderer, N64Data, BKPass } from './render';
 import { BasicRendererHelper } from '../oot3d/render';
@@ -13,12 +15,35 @@ import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDesc
 
 const pathBase = `bk`;
 
+const LAYER_ICON = `<svg viewBox="0 0 16 16" height="20" fill="white"><g transform="translate(0,-1036.3622)"><path d="m 8,1039.2486 -0.21875,0.125 -4.90625,2.4375 5.125,2.5625 5.125,-2.5625 L 8,1039.2486 z m -3,4.5625 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1043.8111 z m 0,3 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1046.8111 z"/></g></svg>`;
+
 class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     private sceneRenderers: N64Renderer[] = [];
     public n64Datas: N64Data[] = [];
 
     constructor(public textureHolder: TextureHolder<any>) {
         super();
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(LAYER_ICON, 'Render Hacks');
+        const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
+        enableCullingCheckbox.onchanged = () => {
+            for (let i = 0; i < this.sceneRenderers.length; i++)
+                this.sceneRenderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.sceneRenderers.length; i++)
+                this.sceneRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+
+        return [renderHacksPanel];
     }
 
     public addSceneRenderer(device: GfxDevice, sceneRenderer: N64Renderer): void {

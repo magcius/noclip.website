@@ -575,6 +575,64 @@ export class MultiSelect extends ScrollSelect {
     }
 }
 
+export class Checkbox implements Widget {
+    public elem: HTMLElement;
+    public checked: boolean = false;
+    public onchanged: (() => void) | null = null;
+
+    private toplevel: HTMLElement;
+    private label: HTMLElement;
+    private emblem: HTMLElement;
+
+    constructor(label: string = '', initiallyChecked: boolean = false) {
+        this.toplevel = document.createElement('div');
+        this.toplevel.style.display = 'grid';
+        this.toplevel.style.gridTemplateColumns = '1fr 1fr';
+        this.toplevel.style.alignItems = 'center';
+        this.toplevel.onclick = this._toggle.bind(this);
+
+        this.label = document.createElement('div');
+        this.label.style.fontWeight = 'bold';
+        this.label.style.userSelect = 'none';
+        this.toplevel.appendChild(this.label);
+
+        this.emblem = document.createElement('div');
+        this.emblem.style.width = '10px';
+        this.emblem.style.height = '10px';
+        this.emblem.style.justifySelf = 'center';
+        this.emblem.style.margin = '4px';
+        this.emblem.style.borderRadius = '16px';
+        this.emblem.style.border = '2px solid white';
+        this.toplevel.appendChild(this.emblem);
+
+        this.setLabel(label);
+        this.setChecked(initiallyChecked);
+
+        this.elem = this.toplevel;
+    }
+
+    public setChecked(v: boolean): void {
+        this.checked = v;
+
+        if (this.checked) {
+            this.emblem.style.backgroundColor = HIGHLIGHT_COLOR;
+            this.emblem.style.borderColor = 'white';
+        } else {
+            this.emblem.style.backgroundColor = 'transparent';
+            this.emblem.style.borderColor = '#aaa';
+        }
+    }
+
+    private _toggle(): void {
+        this.setChecked(!this.checked);
+        this.onchanged();
+    }
+
+    public setLabel(text: string): void {
+        this.label.textContent = text;
+    }
+}
+
 export class Panel implements Widget {
     public elem: HTMLElement;
 
@@ -1099,7 +1157,6 @@ export class SaveStatesPanel extends Panel {
         };
         this.contents.appendChild(this.currentSceneDescIdEntry.elem);
 
-
         const helpText = document.createElement('div');
         helpText.style.marginTop = '1em';
         helpText.innerHTML = `
@@ -1329,11 +1386,10 @@ export class TextureViewer extends Panel {
 const FRUSTUM_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><polygon points="48.2573,19.8589 33.8981,15.0724 5,67.8384 48.2573,90.3684" /><polygon points="51.5652,19.8738 51.5652,90.3734 95,67.8392 65.9366,15.2701" /><polygon points="61.3189,13.2756 49.9911,9.6265 38.5411,13.1331 49.9213,16.9268" /></svg>`;
 
 class ViewerSettings extends Panel {
-    private fovSlider: HTMLElement;
+    private fovSlider: HTMLInputElement;
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
-    private invertYOff: HTMLElement;
-    private invertYOn: HTMLElement;
+    private invertCheckbox: Checkbox;
 
     constructor(private viewer: Viewer.Viewer) {
         super();
@@ -1346,7 +1402,6 @@ class ViewerSettings extends Panel {
 .Slider {
     -webkit-appearance: none;
     width: 100%;
-    height: 24px;
     margin: 0;
 }
 .Slider::-moz-range-thumb {
@@ -1358,6 +1413,7 @@ class ViewerSettings extends Panel {
     border: none;
 }
 .Slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
     width: 16px;
     height: 24px;
     cursor: pointer;
@@ -1366,48 +1422,43 @@ class ViewerSettings extends Panel {
     border: none;
 }
 .Slider::-moz-range-track {
-    height: 24px;
     cursor: pointer;
     background: #444;
 }
 .Slider::-webkit-slider-runnable-track {
-    height: 24px;
     cursor: pointer;
     background: #444;
 }
-.Slider::-moz-range-progress {
-    height: 24px;
+.Slider::-moz-range-progress, .Slider::-webkit-slider-thumb {
     cursor: pointer;
     background: #aaa;
 }
 .SettingsHeader, .SettingsButton {
-    text-align: center;
     font-weight: bold;
-    line-height: 24px;
 }
 .SettingsButton {
     background: #444;
-    line-height: 32px;
+    text-align: center;
+    line-height: 24px;
     cursor: pointer;
 }
 </style>
-<div class="SettingsHeader">Field of View</div>
-<div><input class="Slider FoVSlider" type="range" min="1" max="100"></div>
 
+<div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center;">
+<div class="SettingsHeader">Field of View</div>
+<input class="Slider FoVSlider" type="range" min="1" max="100">
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center;">
 <div class="SettingsHeader">Camera Controller</div>
-<div style="display: grid; grid-template-columns: 1fr 1fr;">
 <div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div>
 </div>
-
-<div class="SettingsHeader">Invert Y-Axis?</div>
-<div style="display: grid; grid-template-columns: 1fr 1fr;">
-<div class="SettingsButton InvertYOff">No</div><div class="SettingsButton InvertYOn">Invert</div>
-</div>
-
-</div>
 `;
+        this.contents.style.lineHeight = '36px';
+
         this.fovSlider = this.contents.querySelector('.FoVSlider');
         this.fovSlider.oninput = this.onFovSliderChange.bind(this);
+        this.fovSlider.value = '25';
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
         this.cameraControllerWASD.onclick = () => {
@@ -1419,10 +1470,9 @@ class ViewerSettings extends Panel {
             this.setCameraControllerClass(OrbitCameraController);
         };
 
-        this.invertYOff = this.contents.querySelector('.InvertYOff');
-        this.invertYOff.onclick = () => { this.setInvertY(false); }
-        this.invertYOn = this.contents.querySelector('.InvertYOn');
-        this.invertYOn.onclick = () => { this.setInvertY(true); }
+        this.invertCheckbox = new Checkbox('Invert Y Axis?');
+        this.invertCheckbox.onchanged = () => { this.setInvertY(this.invertCheckbox.checked); };
+        this.contents.appendChild(this.invertCheckbox.elem);
         GlobalSaveManager.addSettingListener('InvertY', this.invertYChanged.bind(this));
     }
 
@@ -1452,8 +1502,7 @@ class ViewerSettings extends Panel {
 
     private invertYChanged(saveManager: SaveManager, key: string): void {
         const invertY = saveManager.loadSetting<boolean>(key, false);
-        setElementHighlighted(this.invertYOff, !invertY);
-        setElementHighlighted(this.invertYOn, invertY);
+        this.invertCheckbox.setChecked(invertY);
     }
 }
 

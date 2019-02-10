@@ -393,6 +393,7 @@ export class GfxRenderInstViewRenderer {
             if ((renderInst.getPassMask() & passMask) === 0)
                 continue;
 
+            renderInst.buildPipeline(device, this.gfxRenderCache);
             renderInst.buildBindings(device, this.gfxRenderCache);
 
             assert(renderInst._pipeline !== null);
@@ -541,13 +542,6 @@ export class GfxRenderInstBuilder {
 
         for (let i = 0; i < this.newRenderInsts.length; i++) {
             const renderInst = this.newRenderInsts[i];
-
-            // Construct a pipeline if we need one.
-            if (renderInst._pipeline !== null) {
-                assert(renderInst.gfxProgram === null);
-            } else {
-                renderInst.buildPipeline(device, viewRenderer.gfxRenderCache);
-            }
 
             this.allRenderInsts.push(renderInst);
             viewRenderer.renderInsts.push(renderInst);

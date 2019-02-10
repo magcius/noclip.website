@@ -6,10 +6,10 @@ import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode } from "./f3dex";
 import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { assert, nArray, hexzero } from '../util';
+import { assert, nArray } from '../util';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
@@ -173,35 +173,9 @@ class DrawCallInstance {
     private renderInst: GfxRenderInst;
     private textureEntry: Texture[] = [];
 
-    constructor(device: GfxDevice, n64Data: N64Data, renderInstBuilder: GfxRenderInstBuilder, private drawCall: DrawCall, private drawIndex: number) {
+    constructor(private device: GfxDevice, n64Data: N64Data, renderInstBuilder: GfxRenderInstBuilder, private drawCall: DrawCall, private drawIndex: number) {
         this.renderInst = renderInstBuilder.pushRenderInst();
         renderInstBuilder.newUniformBufferInstance(this.renderInst, F3DEX_Program.ub_DrawParams);
-
-        const program = new F3DEX_Program();
-        // TODO(jstpierre): texture combiners.
-        if (this.drawCall.textureIndices.length)
-            program.defines.set('USE_TEXTURE', '1');
-
-        const zUpd = !!(drawCall.DP_OtherModeL & 0x20);
-        const cullMode = translateCullMode(drawCall.SP_GeometryMode);
-        this.renderInst.setMegaStateFlags({
-            depthWrite: zUpd,
-            cullMode,
-        });
-
-        const shade = (drawCall.SP_GeometryMode & GeometryMode.G_SHADE) !== 0;
-        if (shade)
-            program.defines.set('USE_VERTEX_COLOR', '1');
-
-        const textFilt = (drawCall.DP_OtherModeH >>> 12) & 0x03;
-        if (textFilt === TextFilt.G_TF_POINT)
-            program.defines.set(`USE_TEXTFILT_POINT`, '1');
-        else if (textFilt === TextFilt.G_TF_AVERAGE)
-            program.defines.set(`USE_TEXTFILT_AVERAGE`, '1');
-        else if (textFilt === TextFilt.G_TF_BILERP)
-            program.defines.set(`USE_TEXTFILT_BILERP`, '1')
-
-        this.renderInst.gfxProgram = device.createProgram(program);
 
         for (let i = 0; i < textureMappings.length; i++) {
             textureMappings[i].reset();
@@ -214,9 +188,46 @@ class DrawCallInstance {
             }
         }
 
+        const zUpd = !!(this.drawCall.DP_OtherModeL & 0x20);
+        this.renderInst.setMegaStateFlags({ depthWrite: zUpd });
+        this.setBackfaceCullingEnabled(true);
+
+        this.createProgram(device, true);
+
         this.renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
 
         this.renderInst.drawIndexes(drawCall.indexCount, drawCall.firstIndex);
+    }
+
+    private createProgram(device: GfxDevice, vertexColorsEnabled: boolean): void {
+        const program = new F3DEX_Program();
+        // TODO(jstpierre): texture combiners.
+        if (this.drawCall.textureIndices.length)
+            program.defines.set('USE_TEXTURE', '1');
+
+        const shade = (this.drawCall.SP_GeometryMode & GeometryMode.G_SHADE) !== 0;
+        if (vertexColorsEnabled && shade)
+            program.defines.set('USE_VERTEX_COLOR', '1');
+
+        const textFilt = (this.drawCall.DP_OtherModeH >>> 12) & 0x03;
+        if (textFilt === TextFilt.G_TF_POINT)
+            program.defines.set(`USE_TEXTFILT_POINT`, '1');
+        else if (textFilt === TextFilt.G_TF_AVERAGE)
+            program.defines.set(`USE_TEXTFILT_AVERAGE`, '1');
+        else if (textFilt === TextFilt.G_TF_BILERP)
+            program.defines.set(`USE_TEXTFILT_BILERP`, '1')
+
+        this.renderInst.gfxProgram = device.createProgram(program);
+    }
+
+    public setBackfaceCullingEnabled(v: boolean): void {
+        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+        this.renderInst.setMegaStateFlags({ cullMode });
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.createProgram(this.device, v);
+        this.renderInst.rebuildPipeline();
     }
 
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
@@ -299,6 +310,16 @@ export class N64Renderer {
     public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
         this.renderInstBuilder.popTemplateRenderInst();
         this.renderInstBuilder.finish(device, viewRenderer);
+    }
+
+    public setBackfaceCullingEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setBackfaceCullingEnabled(v);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setVertexColorsEnabled(v);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
