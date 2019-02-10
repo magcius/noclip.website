@@ -239,7 +239,7 @@ export abstract class ScrollSelect implements Widget {
             return false;
         const selector = outer.querySelector('.selector') as HTMLElement;
         if (selector) {
-            selector.focus();
+            outer.focus();
             return true;
         } else {
             return false;

@@ -97,7 +97,7 @@ class Command_Material {
 
         this.viewerTextures.push(textureToCanvas(texture, pixels, fullTextureName));
     }
-    
+
     public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.srt0Animator !== null) {
             this.srt0Animator.calcTexMtx(scratchTexMatrix, this.material.texScaleS, this.material.texScaleT);

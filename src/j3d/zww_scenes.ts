@@ -666,7 +666,7 @@ const sceneDescs = [
     new SceneDesc("ma2room", "Interior (Second Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("ma3room", "Interior (Third  Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("Mjtower", "The Tower (First Visit)"),
-    new SceneDesc("M2Tower", "The Tower (Second Visit)"),
+    new SceneDesc("M2tower", "The Tower (Second Visit)"),
 
     "Windfall Island",
     new SceneDesc("sea", "Windfall Island", [11]),
@@ -719,7 +719,7 @@ const sceneDescs = [
     new SceneDesc("Ekaze", "Wind Temple Entrance"),
     new SceneDesc("kaze", "Wind Temple", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
     new SceneDesc("kazeB", "Boss Room"),
-    new SceneDesc("kazeMB", "Mini Boss Room"),
+    new SceneDesc("kazeMB", "Mini Boss Room", [6]),
 
     "Ganon's Tower",
     new SceneDesc("GanonA", "Entrance"),

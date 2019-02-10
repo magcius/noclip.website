@@ -131,11 +131,10 @@ export class NITROTextureHolder extends TextureHolder<NITRO_BMD.Texture> {
             width: texture.width, height: texture.height, depth: 1, numLevels: 1,
         });
         device.setResourceName(gfxTexture, texture.name);
-
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
-
         device.submitPass(hostAccessPass);
+
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };
     }

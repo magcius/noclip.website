@@ -32,11 +32,6 @@ export function align(n: number, multiple: number): number {
     return (n + mask) & ~mask;
 }
 
-let counter = 0;
-export function generateFormID() {
-    return `FormGeneratedID_${counter++}`;
-}
-
 export function nArray<T>(n: number, c: () => T): T[] {
     const d = new Array(n);
     while (n--)

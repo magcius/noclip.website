@@ -1,11 +1,10 @@
 
+// @ts-ignore
+import { readFileSync } from 'fs';
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
 import { MeshLodLevel, Mesh, SCN, Sector, SectorFlag, Material, MatFlag } from "./scn";
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
-
-// @ts-ignore
-import { readFileSync } from 'fs';
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { GfxRenderInstBuilder, GfxRenderInst, setSortKeyDepth, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
@@ -14,8 +13,8 @@ import { ViewerRenderInput } from "../viewer";
 import { mat4 } from "gl-matrix";
 import { computeViewMatrix, computeViewMatrixSkybox, computeViewSpaceDepthFromWorldSpaceAABB, Camera } from "../Camera";
 import { fillMatrix4x3, fillVec4, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { nArray } from "../util";
 import { TEXTextureHolder } from "./tex";
-import { nArray, assert } from "../util";
 import { TextureMapping } from "../TextureHolder";
 
 class THUG2Program extends DeviceProgram {

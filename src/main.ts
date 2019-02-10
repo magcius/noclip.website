@@ -16,6 +16,7 @@ import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs } from './viewer
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
 
+import * as BK from './bk/scenes';
 import * as THUG2 from './thug2/scenes';
 import * as ZTP from './j3d/ztp_scenes';
 import * as MKDD from './j3d/mkdd_scenes';
@@ -88,6 +89,7 @@ const sceneGroups = [
     "Other",
     DKSIV.sceneGroup,
     MDL0.sceneGroup,
+    BK.sceneGroup,
     "Experimental",
     PSY.sceneGroup,
     DKCR.sceneGroup,

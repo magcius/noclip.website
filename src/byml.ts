@@ -490,7 +490,7 @@ function writeValue(w: WriteContext, nodeType: NodeType, v: Node, valueOffs: num
 
     if (v === undefined || v === null) {
         stream.setUint32(valueOffs, 0x00, w.littleEndian);
-    } if (typeof v === 'boolean') {
+    } else if (typeof v === 'boolean') {
         stream.setUint32(valueOffs, v ? 0x01 : 0x00, w.littleEndian);
     } else if (typeof v === 'string') {
         stream.setUint32(valueOffs, strTableIndex(w.strValueTable, v), w.littleEndian);
